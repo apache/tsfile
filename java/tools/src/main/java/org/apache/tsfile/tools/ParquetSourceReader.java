@@ -37,6 +37,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -254,10 +256,27 @@ public class ParquetSourceReader implements SourceReader {
         }
         return group.getBinary(fieldIndex, 0).getBytes();
       case INT96:
-        return group.getBinary(fieldIndex, 0).getBytes();
+        // Use getInt96 — INT96 values are Int96Value, not BinaryValue, so getBinary throws CCE.
+        return int96ToEpochNanos(group.getInt96(fieldIndex, 0).getBytes());
       default:
         return group.getValueToString(fieldIndex, 0);
     }
+  }
+
+  /**
+   * Decode a legacy Parquet INT96 timestamp (12 bytes: 8-byte little-endian nanoseconds-of-day +
+   * 4-byte little-endian Julian day number) to nanoseconds since the Unix epoch.
+   */
+  static long int96ToEpochNanos(byte[] bytes) {
+    if (bytes == null || bytes.length != 12) {
+      throw new IllegalArgumentException(
+          "INT96 timestamp must be 12 bytes, got " + (bytes == null ? 0 : bytes.length));
+    }
+    ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+    long nanosOfDay = buf.getLong();
+    int julianDay = buf.getInt();
+    long daysSinceEpoch = (long) julianDay - 2440588L;
+    return Math.addExact(Math.multiplyExact(daysSinceEpoch, 86_400_000_000_000L), nanosOfDay);
   }
 
   static TSDataType mapParquetType(PrimitiveType pt) {
@@ -309,6 +328,9 @@ public class ParquetSourceReader implements SourceReader {
         default:
           return null;
       }
+    }
+    if (pt.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
+      return "ns";
     }
     return null;
   }

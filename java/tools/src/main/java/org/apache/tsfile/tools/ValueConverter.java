@@ -22,20 +22,31 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 
 public class ValueConverter {
 
   public static Object convert(Object value, TSDataType targetType, boolean isMeasurement) {
+    return convert(value, targetType, isMeasurement, "ms");
+  }
+
+  public static Object convert(
+      Object value, TSDataType targetType, boolean isMeasurement, String timePrecision) {
     if (value == null) {
       return null;
     }
     if (value instanceof String) {
-      return fromString((String) value, targetType, isMeasurement);
+      return fromString((String) value, targetType, isMeasurement, timePrecision);
     }
-    return fromObject(value, targetType, isMeasurement);
+    return fromObject(value, targetType, isMeasurement, timePrecision);
   }
 
-  private static Object fromString(String value, TSDataType targetType, boolean isMeasurement) {
+  private static Object fromString(
+      String value, TSDataType targetType, boolean isMeasurement, String timePrecision) {
     switch (targetType) {
       case BOOLEAN:
         return Boolean.valueOf(value);
@@ -55,12 +66,17 @@ public class ValueConverter {
         return value;
       case BLOB:
         return new Binary(value.getBytes(StandardCharsets.UTF_8));
+      case DATE:
+        return parseDate(value);
+      case TIMESTAMP:
+        return parseTimestamp(value, timePrecision);
       default:
         return value;
     }
   }
 
-  private static Object fromObject(Object value, TSDataType targetType, boolean isMeasurement) {
+  private static Object fromObject(
+      Object value, TSDataType targetType, boolean isMeasurement, String timePrecision) {
     switch (targetType) {
       case BOOLEAN:
         if (value instanceof Boolean) {
@@ -119,8 +135,89 @@ public class ValueConverter {
           return new Binary((byte[]) value);
         }
         return new Binary(value.toString().getBytes(StandardCharsets.UTF_8));
+      case DATE:
+        return toLocalDate(value);
+      case TIMESTAMP:
+        return toEpochLong(value, timePrecision);
       default:
         return value;
     }
+  }
+
+  private static LocalDate parseDate(String value) {
+    String s = value.trim();
+    try {
+      return LocalDate.parse(s, DateTimeUtils.ISO_LOCAL_DATE_WIDTH_1_2);
+    } catch (DateTimeParseException ignored) {
+      // try next format
+    }
+    try {
+      return LocalDate.parse(s, DateTimeUtils.ISO_LOCAL_DATE_WITH_SLASH);
+    } catch (DateTimeParseException ignored) {
+      // try next format
+    }
+    try {
+      return LocalDate.parse(s, DateTimeUtils.ISO_LOCAL_DATE_WITH_DOT);
+    } catch (DateTimeParseException ignored) {
+      // try LocalDate.parse default
+    }
+    try {
+      return LocalDate.parse(s);
+    } catch (DateTimeParseException e) {
+      throw new IllegalArgumentException("Cannot parse DATE value: " + value, e);
+    }
+  }
+
+  private static LocalDate toLocalDate(Object value) {
+    if (value instanceof LocalDate) {
+      return (LocalDate) value;
+    }
+    if (value instanceof LocalDateTime) {
+      return ((LocalDateTime) value).toLocalDate();
+    }
+    if (value instanceof Instant) {
+      return ((Instant) value).atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+    if (value instanceof Number) {
+      // Parquet/Arrow DATE is days since 1970-01-01
+      return LocalDate.ofEpochDay(((Number) value).longValue());
+    }
+    return parseDate(value.toString());
+  }
+
+  private static long parseTimestamp(String value, String timePrecision) {
+    String s = value.trim();
+    try {
+      return Long.parseLong(s);
+    } catch (NumberFormatException ignored) {
+      // not numeric — fall through to datetime parsing
+    }
+    return DateTimeUtils.convertDatetimeStrToLong(s, ZoneId.systemDefault(), timePrecision);
+  }
+
+  private static long toEpochLong(Object value, String timePrecision) {
+    if (value instanceof Long) {
+      return (Long) value;
+    }
+    if (value instanceof Number) {
+      return ((Number) value).longValue();
+    }
+    if (value instanceof Instant) {
+      Instant instant = (Instant) value;
+      switch (timePrecision) {
+        case "ns":
+          return Math.addExact(
+              Math.multiplyExact(instant.getEpochSecond(), 1_000_000_000L), instant.getNano());
+        case "us":
+          return Math.addExact(
+              Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000);
+        case "s":
+          return instant.getEpochSecond();
+        case "ms":
+        default:
+          return instant.toEpochMilli();
+      }
+    }
+    return parseTimestamp(value.toString(), timePrecision);
   }
 }

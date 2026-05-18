@@ -90,7 +90,9 @@ public class TabletBuilder {
         }
 
         boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
-        Object converted = ValueConverter.convert(rawValue, colSchema.getType(), isMeasurement);
+        Object converted =
+            ValueConverter.convert(
+                rawValue, colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
         tablet.addValue(colName, i, converted);
       }
     }

@@ -464,4 +464,49 @@ public class ParquetSourceReaderTest {
       assertNull(batch);
     }
   }
+
+  // --- INT96 timestamp decoding ---
+
+  @Test
+  public void testInt96UnixEpoch() {
+    // Julian day 2440588 = 1970-01-01; 0 nanos-of-day → 0 epoch nanos
+    byte[] bytes = makeInt96(2440588, 0L);
+    assertEquals(0L, ParquetSourceReader.int96ToEpochNanos(bytes));
+  }
+
+  @Test
+  public void testInt96KnownDateMillis() {
+    // 2024-01-15 00:00:00 UTC: epoch days = 19737, julian day = 19737 + 2440588 = 2460325
+    byte[] bytes = makeInt96(2460325, 0L);
+    long nanos = ParquetSourceReader.int96ToEpochNanos(bytes);
+    assertEquals(1705276800000L, nanos / 1_000_000L);
+  }
+
+  @Test
+  public void testInt96NanosOfDayPreserved() {
+    // 1970-01-01 + 12:34:56.123456789 of day
+    long nanosOfDay = ((12L * 3600 + 34 * 60 + 56) * 1_000_000_000L) + 123_456_789L;
+    byte[] bytes = makeInt96(2440588, nanosOfDay);
+    assertEquals(nanosOfDay, ParquetSourceReader.int96ToEpochNanos(bytes));
+  }
+
+  @Test
+  public void testInt96BeforeEpoch() {
+    // 1969-12-31 = julian day 2440587, 0 nanos-of-day → -86400 * 1e9
+    byte[] bytes = makeInt96(2440587, 0L);
+    assertEquals(-86_400_000_000_000L, ParquetSourceReader.int96ToEpochNanos(bytes));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testInt96WrongLength() {
+    ParquetSourceReader.int96ToEpochNanos(new byte[8]);
+  }
+
+  private static byte[] makeInt96(int julianDay, long nanosOfDay) {
+    java.nio.ByteBuffer buf =
+        java.nio.ByteBuffer.allocate(12).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+    buf.putLong(nanosOfDay);
+    buf.putInt(julianDay);
+    return buf.array();
+  }
 }

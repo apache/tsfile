@@ -20,6 +20,7 @@ package org.apache.tsfile.tools;
 
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -448,12 +449,56 @@ public class DateTimeUtils {
   }
 
   public static long convertDatetimeStrToLong(String str, ZoneId zoneId) {
-    return convertDatetimeStrToLong(str, toZoneOffset(zoneId), 0, "ms");
+    return convertDatetimeStrToLongWithZoneId(str, zoneId, 0, "ms");
   }
 
   public static long convertDatetimeStrToLong(
       String str, ZoneId zoneId, String timestampPrecision) {
-    return convertDatetimeStrToLong(str, toZoneOffset(zoneId), 0, timestampPrecision);
+    return convertDatetimeStrToLongWithZoneId(str, zoneId, 0, timestampPrecision);
+  }
+
+  /**
+   * Resolve the offset based on the actual local datetime in the string (so DST is honored),
+   * instead of collapsing the {@link ZoneId} to a single offset using {@code Instant.now()}.
+   */
+  private static long convertDatetimeStrToLongWithZoneId(
+      String str, ZoneId zoneId, int depth, String timestampPrecision) {
+    if (depth >= 2) {
+      throw new DateTimeException(
+          String.format(
+              "Failed to convert %s to millisecond, zone id is %s, "
+                  + "please input like 2011-12-03T10:15:30 or 2011-12-03T10:15:30+01:00",
+              str, zoneId));
+    }
+    if (str.contains("Z")) {
+      return convertDatetimeStrToLongWithZoneId(
+          str.substring(0, str.indexOf('Z')) + "+00:00", zoneId, depth, timestampPrecision);
+    } else if (str.length() == 10) {
+      return convertDatetimeStrToLongWithZoneId(
+          str + "T00:00:00", zoneId, depth, timestampPrecision);
+    } else if (str.length() - str.lastIndexOf('+') != 6
+        && str.length() - str.lastIndexOf('-') != 6) {
+      ZoneOffset offset = resolveLocalOffset(str, zoneId);
+      return convertDatetimeStrToLongWithZoneId(
+          str + offset, zoneId, depth + 1, timestampPrecision);
+    } else if (str.contains("[") || str.contains("]")) {
+      throw new DateTimeException(
+          String.format(
+              "%s with [time-region] at end is not supported now, "
+                  + "please input like 2011-12-03T10:15:30 or 2011-12-03T10:15:30+01:00",
+              str));
+    }
+    return getInstantWithPrecision(str, timestampPrecision);
+  }
+
+  private static ZoneOffset resolveLocalOffset(String str, ZoneId zoneId) {
+    String normalized = str.replace('/', '-').replace('.', '-').replace(' ', 'T');
+    try {
+      LocalDateTime ldt = LocalDateTime.parse(normalized);
+      return zoneId.getRules().getOffset(ldt);
+    } catch (DateTimeParseException e) {
+      return zoneId.getRules().getOffset(Instant.now());
+    }
   }
 
   public static long getInstantWithPrecision(String str, String timestampPrecision) {

@@ -432,4 +432,109 @@ public class CsvSourceReaderTest {
       assertEquals(50, totalRows);
     }
   }
+
+  // --- Quoted field tokenizer (RFC 4180-ish) ---
+
+  @Test
+  public void testSplitLineNoQuotesUsesFastPath() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000,2.5,hello");
+    assertEquals(3, tokens.length);
+    assertEquals("1000", tokens[0]);
+    assertEquals("2.5", tokens[1]);
+    assertEquals("hello", tokens[2]);
+  }
+
+  @Test
+  public void testSplitLineQuotedFieldWithEmbeddedComma() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000,\"hello,world\",2.5");
+    assertEquals(3, tokens.length);
+    assertEquals("1000", tokens[0]);
+    assertEquals("hello,world", tokens[1]);
+    assertEquals("2.5", tokens[2]);
+  }
+
+  @Test
+  public void testSplitLineEscapedDoubleQuotes() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000,\"she said \"\"hi\"\"\",done");
+    assertEquals(3, tokens.length);
+    assertEquals("1000", tokens[0]);
+    assertEquals("she said \"hi\"", tokens[1]);
+    assertEquals("done", tokens[2]);
+  }
+
+  @Test
+  public void testSplitLineEmptyQuotedField() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000,\"\",2.5");
+    assertEquals(3, tokens.length);
+    assertEquals("", tokens[1]);
+  }
+
+  @Test
+  public void testSplitLineTrailingEmptyField() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000,2.5,");
+    assertEquals(3, tokens.length);
+    assertEquals("", tokens[2]);
+  }
+
+  @Test
+  public void testSplitLineMultipleQuotedFields() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), ",", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("\"a,b\",\"c,d\",\"e\"");
+    assertEquals(3, tokens.length);
+    assertEquals("a,b", tokens[0]);
+    assertEquals("c,d", tokens[1]);
+    assertEquals("e", tokens[2]);
+  }
+
+  @Test
+  public void testSplitLineTabSeparator() throws Exception {
+    CsvSourceReader reader =
+        new CsvSourceReader(new File(testDir, "dummy.csv"), "\t", DEFAULT_CHUNK_SIZE_FOR_TEST);
+    String[] tokens = reader.splitLine("1000\t\"hello\tworld\"\t2.5");
+    assertEquals(3, tokens.length);
+    assertEquals("hello\tworld", tokens[1]);
+  }
+
+  @Test
+  public void testReadBatchWithQuotedFields() throws Exception {
+    File csv =
+        writeCsv(
+            "quoted.csv",
+            "time,note,value\n"
+                + "1000,\"hello, world\",1.5\n"
+                + "2000,\"she said \"\"hi\"\"\",2.5\n"
+                + "3000,plain,3.5\n");
+
+    ImportSchema schema =
+        buildSchema(
+            "time",
+            null,
+            new String[] {"time", "INT64"},
+            new String[] {"note", "STRING"},
+            new String[] {"value", "DOUBLE"});
+
+    try (CsvSourceReader reader = new CsvSourceReader(csv, schema)) {
+      SourceBatch batch = reader.readBatch();
+      assertNotNull(batch);
+      assertEquals(3, batch.getRowCount());
+      assertEquals("hello, world", batch.getValue(0, 1));
+      assertEquals("she said \"hi\"", batch.getValue(1, 1));
+      assertEquals("plain", batch.getValue(2, 1));
+      assertEquals("1.5", batch.getValue(0, 2));
+      assertEquals("2.5", batch.getValue(1, 2));
+    }
+  }
+
+  private static final long DEFAULT_CHUNK_SIZE_FOR_TEST = 1024 * 1024;
 }
