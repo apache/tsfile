@@ -30,6 +30,7 @@
 #include "common/thread_pool.h"
 #endif
 #include "utils/injection.h"
+#include "utils/util_define.h"  // strncasecmp and other platform-compat shims
 
 namespace common {
 

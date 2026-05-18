@@ -31,6 +31,7 @@
 #include "common/container/simple_vector.h"
 #include "common/device_id.h"
 #include "common/record.h"
+#include "utils/util_define.h"  // mode_t and other platform-compat shims
 #include "common/schema.h"
 #include "common/tablet.h"
 

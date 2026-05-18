@@ -21,10 +21,15 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "common/logger/elog.h"
 #include "common/tsfile_common.h"
+#include "utils/util_define.h"  // ssize_t and other platform-compat shims
 
 #ifdef _WIN32
 #include <io.h>

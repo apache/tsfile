@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <cctype>
 
 #include "common/datatype/value.h"
 #include "common/tsblock/tsblock.h"

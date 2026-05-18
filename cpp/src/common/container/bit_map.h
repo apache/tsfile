@@ -21,10 +21,79 @@
 
 #include <string.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 namespace common {
+
+// Cross-platform bit-twiddling helpers. GCC/Clang use their builtins; MSVC
+// uses the equivalent intrinsics from <intrin.h>; any other compiler falls
+// back to a portable loop.
+namespace bitops {
+// Population count of an 8-bit value.
+FORCE_INLINE int popcount8(uint8_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_popcount(v);
+#elif defined(_MSC_VER)
+    return static_cast<int>(__popcnt(static_cast<unsigned int>(v)));
+#else
+    int c = 0;
+    while (v) {
+        v = static_cast<uint8_t>(v & (v - 1));
+        ++c;
+    }
+    return c;
+#endif
+}
+// Count trailing zero bits. The argument must be non-zero.
+FORCE_INLINE int ctz_nonzero(uint32_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctz(v);
+#elif defined(_MSC_VER)
+    unsigned long idx;
+    _BitScanForward(&idx, v);
+    return static_cast<int>(idx);
+#else
+    int c = 0;
+    while (!(v & 1u)) {
+        v >>= 1;
+        ++c;
+    }
+    return c;
+#endif
+}
+// Count trailing zero bits of a 64-bit value. The argument must be non-zero.
+FORCE_INLINE int ctz64_nonzero(uint64_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctzll(v);
+#elif defined(_MSC_VER)
+    unsigned long idx;
+#if defined(_M_X64) || defined(_M_ARM64)
+    _BitScanForward64(&idx, v);
+#else
+    // 32-bit MSVC has no _BitScanForward64.
+    if (static_cast<uint32_t>(v) != 0) {
+        _BitScanForward(&idx, static_cast<uint32_t>(v));
+    } else {
+        _BitScanForward(&idx, static_cast<uint32_t>(v >> 32));
+        idx += 32;
+    }
+#endif
+    return static_cast<int>(idx);
+#else
+    int c = 0;
+    while (!(v & 1ull)) {
+        v >>= 1;
+        ++c;
+    }
+    return c;
+#endif
+}
+}  // namespace bitops
 
 class BitMap {
    public:
@@ -67,13 +136,11 @@ class BitMap {
     }
 
     // Count the number of bits set to 1 (i.e., number of null entries).
-    // __builtin_popcount is supported by GCC, Clang, and MinGW on Windows.
-    // TODO: add MSVC support if needed (e.g. __popcnt or manual bit count).
     FORCE_INLINE uint32_t count_set_bits() const {
         uint32_t count = 0;
         const uint8_t* p = reinterpret_cast<const uint8_t*>(bitmap_);
         for (uint32_t i = 0; i < size_; i++) {
-            count += __builtin_popcount(p[i]);
+            count += bitops::popcount8(p[i]);
         }
         return count;
     }
@@ -90,13 +157,13 @@ class BitMap {
         // Check remaining bits in the first (partial) byte
         uint8_t byte_val = p[byte_idx] >> (from & 7);
         if (byte_val) {
-            return from + __builtin_ctz(byte_val);
+            return from + bitops::ctz_nonzero(byte_val);
         }
         // Scan subsequent full bytes, skipping zeros
         const uint32_t byte_end = (total_bits + 7) >> 3;
         for (++byte_idx; byte_idx < byte_end; ++byte_idx) {
             if (p[byte_idx]) {
-                uint32_t pos = (byte_idx << 3) + __builtin_ctz(p[byte_idx]);
+                uint32_t pos = (byte_idx << 3) + bitops::ctz_nonzero(p[byte_idx]);
                 return pos < total_bits ? pos : total_bits;
             }
         }

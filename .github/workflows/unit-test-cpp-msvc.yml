@@ -1,0 +1,91 @@
+# This workflow builds and tests the C++ implementation of TsFile on Windows
+# using the MSVC toolchain (Visual Studio generator), as a complement to
+# unit-test-cpp.yml which builds the Windows target with MinGW.
+
+name: Unit-Test-Cpp-MSVC
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  # Enable manually starting builds.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  unit-test-msvc:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        # AddressSanitizer for MSVC requires Visual Studio 2019 16.9+, which
+        # the windows-latest runner provides.
+        enable_asan: [NoAsan, Asan]
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: corretto
+          java-version: 17
+
+      # Setup caching of the artifacts in the .m2 directory, so they don't have
+      # to all be downloaded again for every build.
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-msvc-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # Put the MSVC toolchain (and, importantly, the AddressSanitizer runtime
+      # clang_rt.asan_dynamic-*.dll) on PATH so the test executable can run
+      # during ctest discovery and execution.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Run the maven build, selecting the MSVC toolchain via -Dcpp.toolchain=msvc.
+      # spotless (clang-format) is already covered by unit-test-cpp.yml, so it is
+      # skipped here to keep this workflow focused on the MSVC build.
+      - name: Build and test with Maven (MSVC)
+        shell: bash
+        run: |
+          if [ "${{ matrix.enable_asan }}" = "Asan" ]; then
+            ASAN_VALUE="ON"
+          else
+            ASAN_VALUE="OFF"
+          fi
+          ./mvnw.cmd -P with-cpp \
+            -Dcpp.toolchain=msvc \
+            -Denable.asan=$ASAN_VALUE \
+            -Dbuild.type=${{ matrix.build_type }} \
+            -Dspotless.skip=true \
+            clean verify

@@ -88,6 +88,13 @@
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
                                 <option>-DENABLE_SIMDE=${enable.simde}</option>
+                                <!--
+                                    Target platform for the Visual Studio
+                                    generator (e.g. -DCMAKE_GENERATOR_PLATFORM=x64).
+                                    Empty for every other generator; the cmake
+                                    plugin drops empty options.
+                                -->
+                                <option>${cmake.generator.platform.arg}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -100,6 +107,14 @@
                         <goals>
                             <goal>compile</goal>
                         </goals>
+                        <configuration>
+                            <!--
+                                Build configuration for multi-config generators
+                                (Visual Studio). Ignored by single-config
+                                generators such as the Makefile generators.
+                            -->
+                            <config>${build.type}</config>
+                        </configuration>
                     </execution>
                     <!-- Execute the tests -->
                     <execution>
@@ -110,6 +125,8 @@
                         </goals>
                         <configuration>
                             <buildDirectory>${project.build.directory}/build/test</buildDirectory>
+                            <!-- Test configuration for multi-config generators (Visual Studio). -->
+                            <config>${build.type}</config>
                         </configuration>
                     </execution>
                 </executions>

@@ -3,6 +3,8 @@
  * can be found in the LICENSE.txt file in the project root.
  */
 
+#include <locale>
+
 #include "Token.h"
 
 #include "Vocabulary.h"

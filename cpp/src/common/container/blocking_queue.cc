@@ -21,36 +21,27 @@
 
 namespace common {
 
-BlockingQueue::BlockingQueue() : queue_(), mutex_(), cond_() {
-    pthread_mutex_init(&mutex_, NULL);
-    pthread_cond_init(&cond_, NULL);
-}
+BlockingQueue::BlockingQueue() : queue_(), mutex_(), cond_() {}
 
-BlockingQueue::~BlockingQueue() {
-    pthread_mutex_destroy(&mutex_);
-    pthread_cond_destroy(&cond_);
-}
+BlockingQueue::~BlockingQueue() {}
 
 void BlockingQueue::push(void* data) {
-    pthread_mutex_lock(&mutex_);
-    queue_.push(data);
-    pthread_mutex_unlock(&mutex_);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(data);
+    }
     /*
      * it is safe to signal after unlock.
-     * since pthread_cond_wait is guarantee to unlock and sleep atomically.
+     * std::condition_variable::wait unlocks and sleeps atomically.
      */
-    pthread_cond_signal(&cond_);
+    cond_.notify_one();
 }
 
 void* BlockingQueue::pop() {
-    void* ret_data = NULL;
-    pthread_mutex_lock(&mutex_);
-    while (queue_.empty()) {
-        pthread_cond_wait(&cond_, &mutex_);
-    }
-    ret_data = queue_.front();
+    std::unique_lock<std::mutex> lock(mutex_);
+    cond_.wait(lock, [this] { return !queue_.empty(); });
+    void* ret_data = queue_.front();
     queue_.pop();
-    pthread_mutex_unlock(&mutex_);
     return ret_data;
 }
 

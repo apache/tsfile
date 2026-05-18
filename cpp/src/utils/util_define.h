@@ -23,6 +23,67 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/* ======== platform compatibility ========
+ *
+ * MSVC does not provide several POSIX types/functions/macros used across the
+ * codebase. Provide drop-in equivalents so the same source compiles on both
+ * GCC/Clang (Linux) and MSVC (Windows) without scattering #ifdefs.
+ */
+#ifdef _WIN32
+#include <io.h>
+#include <string.h>
+
+#if defined(_MSC_VER)
+// ssize_t is a signed, pointer-sized integer; intptr_t (from <stdint.h>,
+// included above) is exactly that. We deliberately avoid <BaseTsd.h>/SSIZE_T
+// because that header also pollutes the global namespace with INT32/INT64
+// typedefs, which collide with the project's own INT32/INT64 enum values.
+typedef intptr_t ssize_t;
+typedef int mode_t;
+#endif  // _MSC_VER
+
+// access() mode flags (POSIX <unistd.h>); MSVC's _access uses the same bits.
+#ifndef F_OK
+#define F_OK 0
+#endif
+#ifndef X_OK
+#define X_OK 1
+#endif
+#ifndef W_OK
+#define W_OK 2
+#endif
+#ifndef R_OK
+#define R_OK 4
+#endif
+
+#ifndef strcasecmp
+#define strcasecmp _stricmp
+#endif
+#ifndef strncasecmp
+#define strncasecmp _strnicmp
+#endif
+#endif  // _WIN32
+
+/* ======== shared-library symbol visibility ========
+ *
+ * Functions are exported from tsfile.dll automatically via
+ * CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS, but global DATA symbols (plain variables,
+ * static class members) are not reliably auto-exported, and a consumer must
+ * see __declspec(dllimport) to reference them across the DLL boundary. Mark
+ * such symbols with TSFILE_API: it expands to dllexport while building the
+ * library (TSFILE_BUILDING is defined for its own translation units),
+ * dllimport for external consumers, and nothing on non-MSVC toolchains.
+ */
+#if defined(_MSC_VER)
+#if defined(TSFILE_BUILDING)
+#define TSFILE_API __declspec(dllexport)
+#else
+#define TSFILE_API __declspec(dllimport)
+#endif
+#else
+#define TSFILE_API
+#endif
+
 /* ======== unsued ======== */
 #define UNUSED(v) ((void)(v))
 #if __cplusplus >= 201703L
@@ -34,8 +95,10 @@
 #endif
 
 /* ======== inline ======== */
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #define FORCE_INLINE inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define FORCE_INLINE __forceinline
 #else
 #define FORCE_INLINE inline
 #endif  // __GNUC__
@@ -91,7 +154,19 @@
 #define STATIC_ASSERT(cond, msg) static_assert((cond), #msg)
 #endif  // __cplusplus < 201103L
 
-/* ======== atomic operation ======== */
+/* ======== atomic operation ========
+ *
+ * The ATOMIC_* macros operate on the address of a plain (non-std::atomic)
+ * scalar, matching the semantics of the GCC/Clang __atomic builtins.
+ *
+ * - On GCC/Clang the builtins are used directly (unchanged behaviour).
+ * - On other compilers (MSVC) they are implemented on top of C++11 <atomic>
+ *   via helper templates. Reinterpreting a plain scalar's address as a
+ *   std::atomic<T>* is well-defined in practice for lock-free integral types
+ *   (this is exactly what C++20 std::atomic_ref formalizes); all current call
+ *   sites use naturally-aligned integral members.
+ */
+#if defined(__GNUC__) || defined(__clang__)
 #define ATOMIC_FAA(val_addr, addv) \
     __atomic_fetch_add((val_addr), (addv), __ATOMIC_SEQ_CST)
 #define ATOMIC_AAF(val_addr, addv) \
@@ -112,9 +187,67 @@
 #define ATOMIC_LOAD(val_addr) __atomic_load_n((val_addr), __ATOMIC_SEQ_CST)
 #define ATOMIC_STORE(val_addr, val) \
     __atomic_store_n((val_addr), (val), __ATOMIC_SEQ_CST)
+#elif defined(__cplusplus)
+#include <atomic>
+namespace common {
+namespace util_atomic {
+template <typename T>
+inline std::atomic<T>* as_atomic(T* p) {
+    return reinterpret_cast<std::atomic<T>*>(p);
+}
+template <typename T>
+inline const std::atomic<T>* as_atomic(const T* p) {
+    return reinterpret_cast<const std::atomic<T>*>(p);
+}
+// fetch-and-add: returns the value held *before* the addition.
+template <typename T, typename V>
+inline T faa(T* p, V v) {
+    return as_atomic(p)->fetch_add(static_cast<T>(v),
+                                   std::memory_order_seq_cst);
+}
+// add-and-fetch: returns the value held *after* the addition.
+template <typename T, typename V>
+inline T aaf(T* p, V v) {
+    return static_cast<T>(as_atomic(p)->fetch_add(static_cast<T>(v),
+                                                  std::memory_order_seq_cst) +
+                          static_cast<T>(v));
+}
+// compare-and-swap: returns true on success; on failure writes the current
+// value into *expected (same contract as __atomic_compare_exchange_n).
+template <typename T, typename D>
+inline bool cas(T* p, T* expected, D desired) {
+    return as_atomic(p)->compare_exchange_strong(
+        *expected, static_cast<T>(desired), std::memory_order_seq_cst);
+}
+template <typename T>
+inline T load(const T* p) {
+    return as_atomic(p)->load(std::memory_order_seq_cst);
+}
+template <typename T, typename V>
+inline void store(T* p, V v) {
+    as_atomic(p)->store(static_cast<T>(v), std::memory_order_seq_cst);
+}
+}  // namespace util_atomic
+}  // namespace common
+#define ATOMIC_FAA(val_addr, addv) \
+    (::common::util_atomic::faa((val_addr), (addv)))
+#define ATOMIC_AAF(val_addr, addv) \
+    (::common::util_atomic::aaf((val_addr), (addv)))
+#define ATOMIC_CAS(val_addr, expected, desired) \
+    (::common::util_atomic::cas((val_addr), (expected), (desired)))
+#define ATOMIC_LOAD(val_addr) (::common::util_atomic::load((val_addr)))
+#define ATOMIC_STORE(val_addr, val) \
+    (::common::util_atomic::store((val_addr), (val)))
+#endif  // atomic operation
 
 /* ======== align ======== */
+#if defined(__GNUC__) || defined(__clang__)
 #define ALIGNED(a) __attribute__((aligned(a)))
+#elif defined(_MSC_VER)
+#define ALIGNED(a) __declspec(align(a))
+#else
+#define ALIGNED(a)
+#endif
 #define ALIGNED_4 ALIGNED(4)
 #define ALIGNED_8 ALIGNED(8)
 

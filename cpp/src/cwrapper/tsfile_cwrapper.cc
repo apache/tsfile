@@ -21,8 +21,12 @@
 
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
-#include <unistd.h>
 #include <writer/tsfile_table_writer.h>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #include <cstring>
 #include <set>

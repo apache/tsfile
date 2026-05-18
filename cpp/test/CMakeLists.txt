@@ -108,11 +108,16 @@ file(GLOB_RECURSE TEST_SRCS
         "encoding/*_test.cc"
         "utils/*_test.cc"
         "file/*_test.cc"
-        "parser/*_test.cc"
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
 )
+
+# Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.
+if (ENABLE_ANTLR4)
+    file(GLOB_RECURSE PARSER_TEST_SRCS "parser/*_test.cc")
+    list(APPEND TEST_SRCS ${PARSER_TEST_SRCS})
+endif()
 
 if (ENABLE_SNAPPY)
     file(GLOB_RECURSE SNAPPY_TEST_SRCS "compress/*snappy*_test.cc")
@@ -171,8 +176,13 @@ include(GoogleTest)
 # On Windows, delay test discovery until ctest runs (PRE_TEST) so the test exe
 # runs with the correct env (e.g. PATH has MinGW, libtsfile.dll is present).
 # Avoids 0xc0000139 when discovery runs at build time.
+#
+# DISCOVERY_TIMEOUT is raised well above the 5s default: the first execution of
+# the freshly-built test executable can be delayed by on-access antivirus
+# scanning (e.g. Windows Defender), which otherwise trips a spurious
+# "Process terminated due to timeout" while gtest_discover_tests enumerates it.
 if(WIN32)
-  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST)
+  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 120)
 else()
   gtest_discover_tests(TsFile_Test)
 endif()

@@ -26,8 +26,8 @@
 #include "common/config/config.h"
 namespace common {
 
-extern ConfigValue g_config_value_;
-extern ColumnSchema g_time_column_schema;
+extern TSFILE_API ConfigValue g_config_value_;
+extern TSFILE_API ColumnSchema g_time_column_schema;
 
 FORCE_INLINE int set_global_time_data_type(uint8_t data_type) {
     ASSERT(data_type >= BOOLEAN && data_type <= STRING);
@@ -184,7 +184,7 @@ FORCE_INLINE int set_write_thread_count(int32_t count) {
 #ifdef ENABLE_THREADS
 class ThreadPool;
 // Global write thread pool, created by init_common().
-extern ThreadPool* g_write_thread_pool_;
+extern TSFILE_API ThreadPool* g_write_thread_pool_;
 #endif
 
 extern int init_common();

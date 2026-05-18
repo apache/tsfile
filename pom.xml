@@ -43,6 +43,18 @@
         <black.version>26.3.1</black.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
         <groovy.version>4.0.22</groovy.version>
+        <!--
+            C++ Windows toolchain selection. By default Windows builds use the
+            MinGW generator (see the .os-windows-* profiles). Passing
+            -Dcpp.toolchain=msvc activates the cpp-msvc profile, which switches
+            the CMake generator to Visual Studio. The msvc.generator value may
+            be overridden, e.g. -Dmsvc.generator="Visual Studio 15 2017", to
+            match the Visual Studio version installed on the build machine.
+        -->
+        <msvc.generator>Visual Studio 17 2022</msvc.generator>
+        <msvc.platform>x64</msvc.platform>
+        <!-- Extra CMake generate-time argument; empty unless the MSVC profile sets it. -->
+        <cmake.generator.platform.arg/>
     </properties>
     <build>
         <pluginManagement>
@@ -775,6 +787,44 @@
                 <cmake.generator>MinGW Makefiles</cmake.generator>
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
+            </properties>
+        </profile>
+        <!--
+            C++ Windows toolchain: MinGW (explicit form of the default).
+            Activate with -Dcpp.toolchain=mingw or -P cpp-mingw. This keeps the
+            MinGW Makefiles generator that the .os-windows-* profiles already
+            select, and exists mainly as the explicit counterpart to cpp-msvc.
+        -->
+        <profile>
+            <id>cpp-mingw</id>
+            <activation>
+                <property>
+                    <name>cpp.toolchain</name>
+                    <value>mingw</value>
+                </property>
+            </activation>
+            <properties>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!--
+            C++ Windows toolchain: MSVC (Visual Studio generator).
+            Activate with -Dcpp.toolchain=msvc or -P cpp-msvc. Declared after
+            the .os-windows-* profiles so its cmake.generator value wins.
+            The Visual Studio generator is multi-config, so cpp/pom.xml passes
+            <config>${build.type}</config> to the compile and test goals.
+        -->
+        <profile>
+            <id>cpp-msvc</id>
+            <activation>
+                <property>
+                    <name>cpp.toolchain</name>
+                    <value>msvc</value>
+                </property>
+            </activation>
+            <properties>
+                <cmake.generator>${msvc.generator}</cmake.generator>
+                <cmake.generator.platform.arg>-DCMAKE_GENERATOR_PLATFORM=${msvc.platform}</cmake.generator.platform.arg>
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
