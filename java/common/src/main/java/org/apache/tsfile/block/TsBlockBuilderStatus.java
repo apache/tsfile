@@ -20,6 +20,7 @@
 package org.apache.tsfile.block;
 
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
+import org.apache.tsfile.i18n.Messages;
 
 public class TsBlockBuilderStatus {
 
@@ -49,7 +50,7 @@ public class TsBlockBuilderStatus {
 
   public void addBytes(int bytes) {
     if (bytes < 0) {
-      throw new IllegalArgumentException("bytes cannot be negative");
+      throw new IllegalArgumentException(Messages.get("error.common.bytes_cannot_be_negative"));
     }
     currentSize += bytes;
   }

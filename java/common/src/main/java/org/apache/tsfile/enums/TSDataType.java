@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.enums;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
@@ -193,7 +194,7 @@ public enum TSDataType {
       case 12:
         return TSDataType.OBJECT;
       default:
-        throw new IllegalArgumentException("Invalid input: " + type);
+        throw new IllegalArgumentException(Messages.format("error.common.invalid_input", type));
     }
   }
 
@@ -325,7 +326,7 @@ public enum TSDataType {
         break;
     }
     throw new ClassCastException(
-        String.format("Unsupported cast: from %s to %s", sourceType, this));
+        Messages.format("error.common.unsupported_cast", sourceType, this));
   }
 
   @SuppressWarnings({"java:S3012", "java:S3776", "java:S6541"})
@@ -472,7 +473,7 @@ public enum TSDataType {
         break;
     }
     throw new ClassCastException(
-        String.format("Unsupported cast: from %s to %s", sourceType, this));
+        Messages.format("error.common.unsupported_cast", sourceType, this));
   }
 
   public static TSDataType deserializeFrom(ByteBuffer buffer) {

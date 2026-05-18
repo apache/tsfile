@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -81,7 +83,8 @@ public class BitMap {
 
     if (startPosition < 0 || startPosition + length > size) {
       throw new IndexOutOfBoundsException(
-          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+          Messages.format(
+              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
     }
 
     int bitEnd = startPosition + length - 1;
@@ -118,7 +121,8 @@ public class BitMap {
 
     if (startPosition < 0 || startPosition + length > size) {
       throw new IndexOutOfBoundsException(
-          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+          Messages.format(
+              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
     }
 
     int bitEnd = startPosition + length - 1;
@@ -267,10 +271,10 @@ public class BitMap {
     BitMap other = (BitMap) obj;
     if (rangeSize > size || rangeSize > other.size) {
       throw new IllegalArgumentException(
-          "range size "
-              + rangeSize
-              + " should <= the minimal bitmap size "
-              + Math.min(this.size, other.size));
+          Messages.format(
+              "error.common.bitmap_range_size_exceeds",
+              rangeSize,
+              Math.min(this.size, other.size)));
     }
 
     int byteSize = rangeSize / Byte.SIZE;
@@ -314,10 +318,11 @@ public class BitMap {
   public static void copyOfRange(BitMap src, int srcPos, BitMap dest, int destPos, int length) {
     if (srcPos + length > src.size) {
       throw new IndexOutOfBoundsException(
-          (srcPos + length - 1) + " is out of src range " + src.size);
+          Messages.format("error.common.bitmap_out_of_src_range", (srcPos + length - 1), src.size));
     } else if (destPos + length > dest.size) {
       throw new IndexOutOfBoundsException(
-          (destPos + length - 1) + " is out of dest range " + dest.size);
+          Messages.format(
+              "error.common.bitmap_out_of_dest_range", (destPos + length - 1), dest.size));
     }
     for (int i = 0; i < length; ++i) {
       if (src.isMarked(srcPos + i)) {
