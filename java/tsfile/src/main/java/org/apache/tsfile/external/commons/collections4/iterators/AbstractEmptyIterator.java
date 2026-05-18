@@ -16,6 +16,8 @@
  */
 package org.apache.tsfile.external.commons.collections4.iterators;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.NoSuchElementException;
 
 /**
@@ -35,7 +37,7 @@ abstract class AbstractEmptyIterator<E> {
   }
 
   public E next() {
-    throw new NoSuchElementException("Iterator contains no elements");
+    throw new NoSuchElementException(Messages.get("error.external.empty_iterator_no_elements"));
   }
 
   public boolean hasPrevious() {
@@ -43,11 +45,11 @@ abstract class AbstractEmptyIterator<E> {
   }
 
   public E previous() {
-    throw new NoSuchElementException("Iterator contains no elements");
+    throw new NoSuchElementException(Messages.get("error.external.empty_iterator_no_elements"));
   }
 
   public void remove() {
-    throw new IllegalStateException("Iterator contains no elements");
+    throw new IllegalStateException(Messages.get("error.external.empty_iterator_no_elements"));
   }
 
   public void reset() {
