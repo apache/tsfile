@@ -1,0 +1,104 @@
+# This workflow builds and tests the Python implementation of TsFile on
+# Windows using the MSVC toolchain, as a complement to unit-test-python.yml
+# which builds the Windows target with MinGW.
+#
+# The C++ shared library (libtsfile) is built with the v141 toolset (the
+# Visual Studio 2017 compiler) to match the VS 2017 support this branch
+# targets. The Cython extension links to it through the plain C wrapper ABI,
+# so it builds cleanly with whichever MSVC toolset setuptools selects.
+
+name: Unit-Test-Py-MSVC
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  # Enable manually starting builds.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  unit-test-py-msvc:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.14"]
+    # Pinned to windows-2022 deliberately: it ships Visual Studio 2022, which
+    # the "Visual Studio 17 2022" CMake generator and the v141 toolset both
+    # require. See unit-test-cpp-msvc.yml for the full rationale.
+    runs-on: windows-2022
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: corretto
+          java-version: 17
+
+      # Setup caching of the artifacts in the .m2 directory, so they don't have
+      # to all be downloaded again for every build.
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-msvc-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # Make the MSVC toolchain available so setup.py can compile the Cython
+      # extension with cl.exe.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Build C++ (MSVC, v141 toolset) and the Python extension, then run the
+      # Python test-suite. -P with-python builds the cpp module first.
+      # spotless (black/clang-format) is already covered by the non-MSVC
+      # workflows, so it is skipped here to keep this workflow focused.
+      - name: Build and test with Maven (MSVC)
+        shell: bash
+        run: |
+          ./mvnw.cmd -P with-python \
+            -Dcpp.toolchain=msvc \
+            -Dmsvc.toolset=v141 \
+            -Denable.asan=OFF \
+            -Dbuild.type=Release \
+            -Dspotless.skip=true \
+            clean verify
+
+      - name: Upload whl Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-msvc-${{ runner.os }}-py${{ matrix.python-version }}-whl
+          path: python/dist/tsfile-*.whl
+          retention-days: 1
