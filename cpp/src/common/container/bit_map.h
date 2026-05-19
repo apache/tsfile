@@ -163,7 +163,8 @@ class BitMap {
         const uint32_t byte_end = (total_bits + 7) >> 3;
         for (++byte_idx; byte_idx < byte_end; ++byte_idx) {
             if (p[byte_idx]) {
-                uint32_t pos = (byte_idx << 3) + bitops::ctz_nonzero(p[byte_idx]);
+                uint32_t pos =
+                    (byte_idx << 3) + bitops::ctz_nonzero(p[byte_idx]);
                 return pos < total_bits ? pos : total_bits;
             }
         }

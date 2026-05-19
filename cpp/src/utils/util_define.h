@@ -208,9 +208,9 @@ inline T faa(T* p, V v) {
 // add-and-fetch: returns the value held *after* the addition.
 template <typename T, typename V>
 inline T aaf(T* p, V v) {
-    return static_cast<T>(as_atomic(p)->fetch_add(static_cast<T>(v),
-                                                  std::memory_order_seq_cst) +
-                          static_cast<T>(v));
+    return static_cast<T>(
+        as_atomic(p)->fetch_add(static_cast<T>(v), std::memory_order_seq_cst) +
+        static_cast<T>(v));
 }
 // compare-and-swap: returns true on success; on failure writes the current
 // value into *expected (same contract as __atomic_compare_exchange_n).
