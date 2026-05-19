@@ -134,13 +134,18 @@ if (ENABLE_ASAN)
         # /fsanitize=address is incompatible with the /RTC* runtime checks that
         # CMake injects into Debug builds, and with incremental linking. Strip
         # /RTC* from the per-config flags and force non-incremental linking.
-        add_compile_options(/fsanitize=address)
+        #
+        # ASan also needs debug info: /Zi (compile) + /DEBUG (link). Without it
+        # MSVC emits warning C5072 ("ASAN enabled without debug information
+        # emission"), which the bundled googletest build promotes to an error
+        # via /WX in Release builds, and ASan reports lose symbol/line info.
+        add_compile_options(/fsanitize=address /Zi)
         foreach (flagsVar
                  CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
                  CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
             string(REGEX REPLACE "/RTC[1csu]+" "" ${flagsVar} "${${flagsVar}}")
         endforeach ()
-        add_link_options(/INCREMENTAL:NO)
+        add_link_options(/INCREMENTAL:NO /DEBUG)
     elseif (NOT WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
 
