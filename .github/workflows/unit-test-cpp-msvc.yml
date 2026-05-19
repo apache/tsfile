@@ -104,13 +104,32 @@ jobs:
           $installerDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
           $installPath = & (Join-Path $installerDir "vswhere.exe") -latest -property installationPath
           Write-Host "Visual Studio install path: $installPath"
-          $argString = "modify --installPath `"$installPath`" " +
-            "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
-            "--quiet --norestart --nocache --wait"
-          $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
-            -ArgumentList $argString -Wait -PassThru
-          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
-            throw "vs_installer modify failed with exit code $($proc.ExitCode)"
+
+          # The v141 (VS 2017) toolset always installs as a 14.16.* directory.
+          function Test-V141Toolset {
+            [bool](Get-ChildItem -Path (Join-Path $installPath "VC\Tools\MSVC") `
+              -Directory -Filter "14.16.*" -ErrorAction SilentlyContinue)
+          }
+
+          if (Test-V141Toolset) {
+            Write-Host "v141 toolset already present."
+          } else {
+            # vs_installer.exe 'modify' accepts only a limited switch set;
+            # bootstrapper-only switches such as --wait / --nocache make it
+            # fail with exit code 87 (ERROR_INVALID_PARAMETER).
+            $argString = "modify --installPath `"$installPath`" " +
+              "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
+              "--quiet --norestart"
+            $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
+              -ArgumentList $argString -Wait -PassThru
+            Write-Host "vs_installer exit code: $($proc.ExitCode)"
+            # vs_installer may delegate to a background process; wait for it.
+            Get-Process -Name "vs_installer", "setup" -ErrorAction SilentlyContinue |
+              Wait-Process -Timeout 900 -ErrorAction SilentlyContinue
+            if (-not (Test-V141Toolset)) {
+              throw "v141 toolset not found after install (vs_installer exit code $($proc.ExitCode))"
+            }
+            Write-Host "v141 toolset installed."
           }
 
       # Run the maven build, selecting the MSVC toolchain via -Dcpp.toolchain=msvc.
