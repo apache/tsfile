@@ -89,19 +89,15 @@
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
                                 <option>-DENABLE_SIMDE=${enable.simde}</option>
                                 <!--
-                                    Target platform for the Visual Studio
-                                    generator (e.g. -DCMAKE_GENERATOR_PLATFORM=x64).
-                                    Empty for every other generator; the cmake
-                                    plugin drops empty options.
+                                    The Visual Studio generator additionally
+                                    needs -DCMAKE_GENERATOR_PLATFORM (and
+                                    optionally -DCMAKE_GENERATOR_TOOLSET). Those
+                                    options are appended by the cpp-msvc /
+                                    cpp-msvc-toolset profiles below rather than
+                                    listed here: an empty <option/> element is
+                                    deserialized as null, which makes the cmake
+                                    plugin's generate goal throw an NPE.
                                 -->
-                                <option>${cmake.generator.platform.arg}</option>
-                                <!--
-                                    Optional MSVC toolset for the Visual Studio
-                                    generator (e.g. -DCMAKE_GENERATOR_TOOLSET=v141
-                                    to build with the VS 2017 compiler). Empty
-                                    unless -Dmsvc.toolset is supplied.
-                                -->
-                                <option>${cmake.generator.toolset.arg}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -226,6 +222,73 @@
             <properties>
                 <coverage.enabled>ON</coverage.enabled>
             </properties>
+        </profile>
+        <!--
+            MSVC (Visual Studio generator) needs the target platform passed at
+            generate time. Activated by -Dcpp.toolchain=msvc, matching the
+            root pom cpp-msvc profile that switches cmake.generator. The option
+            is appended to the cmake-generate-test-compile execution so it is
+            only present for MSVC builds (an empty <option/> would be null).
+        -->
+        <profile>
+            <id>cpp-msvc</id>
+            <activation>
+                <property>
+                    <name>cpp.toolchain</name>
+                    <value>msvc</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DCMAKE_GENERATOR_PLATFORM=${msvc.platform}</option>
+                                    </options>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Pins the MSVC toolset when -Dmsvc.toolset is supplied (e.g.
+            -Dmsvc.toolset=v141 to build with the VS 2017 compiler). Self-
+            activating on the presence of the property, so it composes with
+            cpp-msvc regardless of how that profile was activated. Without the
+            property CMake uses the generator's default toolset.
+        -->
+        <profile>
+            <id>cpp-msvc-toolset</id>
+            <activation>
+                <property>
+                    <name>msvc.toolset</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DCMAKE_GENERATOR_TOOLSET=${msvc.toolset}</option>
+                                    </options>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <profile>
             <id>.java-9-and-above</id>
