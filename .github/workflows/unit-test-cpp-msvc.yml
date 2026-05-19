@@ -57,10 +57,11 @@ jobs:
             enable_asan: Asan
             toolset: default
     # Pinned to windows-2022 deliberately: it ships Visual Studio 2022, which
-    # the "Visual Studio 17 2022" CMake generator and the v141 toolset both
-    # require. The windows-latest image has since moved to a newer Visual
-    # Studio that the bundled CMake (3.30.x) does not yet recognise as a
-    # generator. Bump this (and msvc.generator) together when migrating.
+    # the "Visual Studio 17 2022" CMake generator requires. The windows-latest
+    # image has since moved to a newer Visual Studio that the bundled CMake
+    # (3.30.x) does not yet recognise as a generator. Bump this (and
+    # msvc.generator) together when migrating. The v141 (VS 2017) toolset is
+    # no longer bundled with the image and is installed by a step below.
     runs-on: windows-2022
 
     steps:
@@ -90,6 +91,27 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      # The windows-2022 image no longer ships the v141 (VS 2017) toolset, so
+      # install it on demand for the v141 jobs. With the component present the
+      # VS 2022 generator can build with the VS 2017 compiler via
+      # -DCMAKE_GENERATOR_TOOLSET=v141.
+      - name: Install MSVC v141 (VS 2017) toolset
+        if: matrix.toolset == 'v141'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+          $installPath = & (Join-Path $installerDir "vswhere.exe") -latest -property installationPath
+          Write-Host "Visual Studio install path: $installPath"
+          $argString = "modify --installPath `"$installPath`" " +
+            "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
+            "--quiet --norestart --nocache --wait"
+          $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
+            -ArgumentList $argString -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            throw "vs_installer modify failed with exit code $($proc.ExitCode)"
+          }
 
       # Run the maven build, selecting the MSVC toolchain via -Dcpp.toolchain=msvc.
       # spotless (clang-format) is already covered by unit-test-cpp.yml, so it is

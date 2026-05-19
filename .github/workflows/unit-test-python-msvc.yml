@@ -45,8 +45,9 @@ jobs:
       matrix:
         python-version: ["3.9", "3.11", "3.14"]
     # Pinned to windows-2022 deliberately: it ships Visual Studio 2022, which
-    # the "Visual Studio 17 2022" CMake generator and the v141 toolset both
-    # require. See unit-test-cpp-msvc.yml for the full rationale.
+    # the "Visual Studio 17 2022" CMake generator requires. The v141 (VS 2017)
+    # toolset is installed by a step below. See unit-test-cpp-msvc.yml for the
+    # full rationale.
     runs-on: windows-2022
 
     steps:
@@ -80,6 +81,26 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      # The windows-2022 image no longer ships the v141 (VS 2017) toolset that
+      # this build pins via -Dmsvc.toolset=v141, so install the component on
+      # demand. With it present the VS 2022 generator can build libtsfile with
+      # the VS 2017 compiler.
+      - name: Install MSVC v141 (VS 2017) toolset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+          $installPath = & (Join-Path $installerDir "vswhere.exe") -latest -property installationPath
+          Write-Host "Visual Studio install path: $installPath"
+          $argString = "modify --installPath `"$installPath`" " +
+            "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
+            "--quiet --norestart --nocache --wait"
+          $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
+            -ArgumentList $argString -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            throw "vs_installer modify failed with exit code $($proc.ExitCode)"
+          }
 
       # Build C++ (MSVC, v141 toolset) and the Python extension, then run the
       # Python test-suite. -P with-python builds the cpp module first.
