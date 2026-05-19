@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
@@ -186,7 +187,8 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
         Field.setTsPrimitiveValue((col.getVector())[0], field);
         break;
       default:
-        throw new UnSupportedDataTypeException("UnSupported" + col.getDataType());
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.read.dataset_unsupported_type", col.getDataType()));
     }
     return field;
   }

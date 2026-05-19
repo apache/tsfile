@@ -20,6 +20,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.external.commons.io.FilenameUtils;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -72,7 +73,7 @@ public class TsFileTool {
       try {
         importSchema = ImportSchemaParser.parse(schemaPathStr);
       } catch (Exception e) {
-        LOGGER.error("Failed to parse schema file: " + schemaPathStr, e);
+        LOGGER.error(Messages.format("log.tools.tool_parse_schema_failed", schemaPathStr), e);
         System.exit(1);
       }
     }
@@ -87,9 +88,9 @@ public class TsFileTool {
       try {
         executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
       } catch (InterruptedException e) {
-        LOGGER.error("Failed to await termination", e);
+        LOGGER.error(Messages.get("log.tools.tool_await_termination_failed"), e);
       }
-      LOGGER.info("The " + inputDirectoryStr + " directory or file has completed execution");
+      LOGGER.info(Messages.format("log.tools.tool_execution_completed", inputDirectoryStr));
     }
   }
 
@@ -155,7 +156,9 @@ public class TsFileTool {
               processAutoMode(inputFile, baseName, outputDir, format);
             }
           } catch (Exception e) {
-            LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+            LOGGER.error(
+                Messages.format("log.tools.tool_process_file_failed", inputFile.getAbsolutePath()),
+                e);
             cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
           }
         });
@@ -167,12 +170,13 @@ public class TsFileTool {
       ImportExecutor importExecutor = new ImportExecutor(importSchema);
       boolean success = importExecutor.execute(reader, outputDir, baseName);
       if (success) {
-        LOGGER.info(baseName + ".tsfile successfully generated");
+        LOGGER.info(Messages.format("log.tools.tool_file_generated", baseName));
       } else {
         cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
       }
     } catch (Exception e) {
-      LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+      LOGGER.error(
+          Messages.format("log.tools.tool_process_file_failed", inputFile.getAbsolutePath()), e);
       cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
     }
   }
@@ -184,12 +188,13 @@ public class TsFileTool {
       ImportExecutor importExecutor = new ImportExecutor(autoSchema);
       boolean success = importExecutor.execute(reader, outputDir, baseName);
       if (success) {
-        LOGGER.info(baseName + ".tsfile successfully generated");
+        LOGGER.info(Messages.format("log.tools.tool_file_generated", baseName));
       } else {
         cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
       }
     } catch (Exception e) {
-      LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+      LOGGER.error(
+          Messages.format("log.tools.tool_process_file_failed", inputFile.getAbsolutePath()), e);
       cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
     }
   }
@@ -248,7 +253,7 @@ public class TsFileTool {
       Path targetPath = Paths.get(relativeDir, sourcePath.getFileName().toString());
       Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
-      LOGGER.error("Failed to copy file: " + sourceFilePath, e);
+      LOGGER.error(Messages.format("log.tools.tool_copy_file_failed", sourceFilePath), e);
     }
   }
 
@@ -334,7 +339,7 @@ public class TsFileTool {
         failedDirectoryStr = "failed";
       }
     } catch (ParseException e) {
-      LOGGER.error("Error parsing command line options", e);
+      LOGGER.error(Messages.get("log.tools.tool_parse_cli_error"), e);
     }
   }
 
@@ -350,7 +355,7 @@ public class TsFileTool {
           * 1024
           * 1024;
     } else if (blockSizeValue.endsWith("T") || blockSizeValue.endsWith("B")) {
-      throw new IllegalArgumentException("block_size only supports units of K, M, G, or numbers");
+      throw new IllegalArgumentException(Messages.get("error.tools.block_size_unsupported_unit"));
     }
     return Long.parseLong(blockSizeValue);
   }
@@ -370,27 +375,27 @@ public class TsFileTool {
 
   private static boolean validateParams() {
     if (inputDirectoryStr == null || inputDirectoryStr.isEmpty()) {
-      LOGGER.error("Missing required parameters. --source/-s is required");
+      LOGGER.error(Messages.get("log.tools.tool_source_required"));
       return false;
     }
     if (outputDirectoryStr == null || outputDirectoryStr.isEmpty()) {
-      LOGGER.error("Missing required parameters. --target/-t is required");
+      LOGGER.error(Messages.get("log.tools.tool_target_required"));
       return false;
     }
     File sourceDir = new File(inputDirectoryStr);
     if (!sourceDir.exists()) {
-      LOGGER.error(sourceDir + " directory or file does not exist.");
+      LOGGER.error(Messages.format("log.tools.tool_source_not_exist", sourceDir));
       return false;
     }
     if (schemaPathStr != null && !schemaPathStr.isEmpty()) {
       File schemaFile = new File(schemaPathStr);
       if (!schemaFile.exists()) {
-        LOGGER.error(schemaPathStr + " schema file does not exist.");
+        LOGGER.error(Messages.format("log.tools.tool_schema_not_exist", schemaPathStr));
         return false;
       }
     }
     if (THREAD_COUNT <= 0) {
-      LOGGER.error("Invalid thread number. Thread number must be greater than 0.");
+      LOGGER.error(Messages.get("log.tools.tool_invalid_thread_num"));
       return false;
     }
     return true;

@@ -21,6 +21,7 @@ import org.apache.tsfile.external.commons.collections4.KeyValue;
 import org.apache.tsfile.external.commons.collections4.MapIterator;
 import org.apache.tsfile.external.commons.collections4.iterators.EmptyIterator;
 import org.apache.tsfile.external.commons.collections4.iterators.EmptyMapIterator;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -58,15 +59,15 @@ import java.util.Set;
  */
 public class AbstractHashedMap<K, V> extends AbstractMap<K, V> implements IterableMap<K, V> {
 
-  protected static final String NO_NEXT_ENTRY = "No next() entry in the iteration";
-  protected static final String NO_PREVIOUS_ENTRY = "No previous() entry in the iteration";
-  protected static final String REMOVE_INVALID = "remove() can only be called once after next()";
-  protected static final String GETKEY_INVALID =
-      "getKey() can only be called after next() and before remove()";
+  protected static final String NO_NEXT_ENTRY = Messages.get("error.external.map_no_next_entry");
+  protected static final String NO_PREVIOUS_ENTRY =
+      Messages.get("error.external.map_no_previous_entry");
+  protected static final String REMOVE_INVALID = Messages.get("error.external.map_remove_invalid");
+  protected static final String GETKEY_INVALID = Messages.get("error.external.map_getkey_invalid");
   protected static final String GETVALUE_INVALID =
-      "getValue() can only be called after next() and before remove()";
+      Messages.get("error.external.map_getvalue_invalid");
   protected static final String SETVALUE_INVALID =
-      "setValue() can only be called after next() and before remove()";
+      Messages.get("error.external.map_setvalue_invalid");
 
   /** The default capacity to use */
   protected static final int DEFAULT_CAPACITY = 16;
@@ -151,10 +152,12 @@ public class AbstractHashedMap<K, V> extends AbstractMap<K, V> implements Iterab
   protected AbstractHashedMap(int initialCapacity, final float loadFactor) {
     super();
     if (initialCapacity < 0) {
-      throw new IllegalArgumentException("Initial capacity must be a non negative number");
+      throw new IllegalArgumentException(
+          Messages.get("error.external.hashed_map_capacity_negative"));
     }
     if (loadFactor <= 0.0f || Float.isNaN(loadFactor)) {
-      throw new IllegalArgumentException("Load factor must be greater than 0");
+      throw new IllegalArgumentException(
+          Messages.get("error.external.hashed_map_load_factor_invalid"));
     }
     this.loadFactor = loadFactor;
     initialCapacity = calculateNewCapacity(initialCapacity);

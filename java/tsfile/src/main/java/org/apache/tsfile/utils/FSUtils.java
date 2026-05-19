@@ -22,6 +22,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.fileSystem.FSPath;
 import org.apache.tsfile.fileSystem.FSType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,11 +71,9 @@ public class FSUtils {
         fsFileClass[i] = Class.forName(fsFileClassName[i]);
       } catch (ClassNotFoundException e) {
         logger.error(
-            "Failed to get "
-                + fsTypes[i].name()
-                + " file system. Please check your dependency of "
-                + fsTypes[i].name()
-                + " module.",
+            Messages.get("log.fs.fsutils_load_class_error"),
+            fsTypes[i].name(),
+            fsTypes[i].name(),
             e);
       }
     }

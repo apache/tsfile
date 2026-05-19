@@ -20,12 +20,12 @@
 package org.apache.tsfile.block.column;
 
 import org.apache.tsfile.block.TsBlockBuilderStatus;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 public class ColumnBuilderStatus {
@@ -61,20 +61,22 @@ public class ColumnBuilderStatus {
   private static long deepInstanceSize(Class<?> clazz) {
     if (clazz.isArray()) {
       throw new IllegalArgumentException(
-          format(
-              "Cannot determine size of %s because it contains an array", clazz.getSimpleName()));
+          Messages.format("error.common.cannot_determine_size_array", clazz.getSimpleName()));
     }
     if (clazz.isInterface()) {
-      throw new IllegalArgumentException(format("%s is an interface", clazz.getSimpleName()));
+      throw new IllegalArgumentException(
+          Messages.format("error.common.class_is_interface", clazz.getSimpleName()));
     }
     if (Modifier.isAbstract(clazz.getModifiers())) {
-      throw new IllegalArgumentException(format("%s is abstract", clazz.getSimpleName()));
+      throw new IllegalArgumentException(
+          Messages.format("error.common.class_is_abstract", clazz.getSimpleName()));
     }
     if (!clazz.getSuperclass().equals(Object.class)) {
       throw new IllegalArgumentException(
-          format(
-              "Cannot determine size of a subclass. %s extends from %s",
-              clazz.getSimpleName(), clazz.getSuperclass().getSimpleName()));
+          Messages.format(
+              "error.common.cannot_determine_size_subclass",
+              clazz.getSimpleName(),
+              clazz.getSuperclass().getSimpleName()));
     }
 
     long size = RamUsageEstimator.shallowSizeOf(clazz);

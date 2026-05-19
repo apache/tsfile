@@ -20,6 +20,7 @@
 package org.apache.tsfile.fileSystem.fileInputFactory;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.reader.TsFileInput;
 
 import org.slf4j.Logger;
@@ -40,9 +41,7 @@ public class HDFSInputFactory implements FileInputFactory {
           Class.forName(TSFileDescriptor.getInstance().getConfig().getHdfsTsFileInput());
       constructor = clazz.getConstructor(String.class);
     } catch (ClassNotFoundException | NoSuchMethodException e) {
-      logger.error(
-          "Failed to get HDFSInput in Hadoop file system. Please check your dependency of Hadoop module.",
-          e);
+      logger.error(Messages.get("log.fs.hdfs_input_factory_init_error"), e);
     }
   }
 
@@ -51,11 +50,7 @@ public class HDFSInputFactory implements FileInputFactory {
     try {
       return (TsFileInput) constructor.newInstance(filePath);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      throw new IOException(
-          String.format(
-              "Failed to get TsFile input of file: %s. Please check your dependency of Hadoop module.",
-              filePath),
-          e);
+      throw new IOException(Messages.format("error.fs.hdfs_input_factory_get_error", filePath), e);
     }
   }
 }

@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.expression.util;
 
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.ExpressionType;
 import org.apache.tsfile.read.expression.IBinaryExpression;
@@ -80,7 +81,8 @@ public class ExpressionOptimizer {
           } else if (relation == ExpressionType.OR) {
             midRet = BinaryExpression.or(regularLeft, regularRight);
           } else {
-            throw new UnsupportedOperationException("unsupported IExpression type: " + relation);
+            throw new UnsupportedOperationException(
+                Messages.format("error.read.expression_unsupported_binary_type", relation));
           }
           if (midRet.getLeft().getType() == ExpressionType.GLOBAL_TIME
               || midRet.getRight().getType() == ExpressionType.GLOBAL_TIME) {
@@ -89,12 +91,13 @@ public class ExpressionOptimizer {
             return midRet;
           }
         } catch (StackOverflowError stackOverflowError) {
-          throw new QueryFilterOptimizationException("StackOverflowError is encountered.");
+          throw new QueryFilterOptimizationException(
+              Messages.get("error.read.expression_stack_overflow"));
         }
       }
     }
     throw new UnsupportedOperationException(
-        "unknown IExpression type: " + expression.getClass().getName());
+        Messages.format("error.read.expression_unknown_type", expression.getClass().getName()));
   }
 
   private IExpression handleOneGlobalTimeFilter(
@@ -116,7 +119,8 @@ public class ExpressionOptimizer {
           pushGlobalTimeFilterToAllSeries(globalTimeExpression, selectedSeries);
       return mergeSecondTreeToFirstTree(afterTransform, regularRightIExpression);
     }
-    throw new QueryFilterOptimizationException("unknown relation in IExpression:" + relation);
+    throw new QueryFilterOptimizationException(
+        Messages.format("error.read.expression_unknown_relation", relation));
   }
 
   /**
@@ -181,7 +185,8 @@ public class ExpressionOptimizer {
       GlobalTimeExpression timeFilter, List<Path> selectedSeries)
       throws QueryFilterOptimizationException {
     if (selectedSeries.isEmpty()) {
-      throw new QueryFilterOptimizationException("size of selectSeries could not be 0");
+      throw new QueryFilterOptimizationException(
+          Messages.get("error.read.expression_empty_select_series"));
     }
     IExpression expression =
         new SingleSeriesExpression(selectedSeries.get(0), timeFilter.getFilter());
@@ -203,8 +208,8 @@ public class ExpressionOptimizer {
       addTimeFilterToQueryFilter(timeFilter, ((BinaryExpression) expression).getRight());
     } else {
       throw new UnsupportedOperationException(
-          "IExpression should contains only SingleSeriesExpression but other type is found:"
-              + expression.getClass().getName());
+          Messages.format(
+              "error.read.expression_unexpected_type", expression.getClass().getName()));
     }
   }
 
@@ -230,7 +235,8 @@ public class ExpressionOptimizer {
     } else if (type == ExpressionType.OR) {
       return new GlobalTimeExpression(FilterFactory.or(left.getFilter(), right.getFilter()));
     }
-    throw new UnsupportedOperationException("unrecognized QueryFilterOperatorType :" + type);
+    throw new UnsupportedOperationException(
+        Messages.format("error.read.expression_unrecognized_operator", type));
   }
 
   private static class QueryFilterOptimizerHelper {

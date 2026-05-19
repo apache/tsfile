@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.BatchData;
@@ -89,7 +90,8 @@ public class TsFileLastReader
       try {
         init();
       } catch (IOException e) {
-        LOGGER.error("Cannot read timeseries metadata from {}", sequenceReader.getFileName(), e);
+        LOGGER.error(
+            Messages.get("log.read.last_reader_tsm_error"), sequenceReader.getFileName(), e);
         return false;
       }
     }
@@ -114,7 +116,8 @@ public class TsFileLastReader
       try {
         nextValue = new Pair<>(next.left, convertToLastPoints(next.right));
       } catch (IOException e) {
-        LOGGER.error("Cannot read timeseries metadata from {}", sequenceReader.getFileName(), e);
+        LOGGER.error(
+            Messages.get("log.read.last_reader_tsm_error"), sequenceReader.getFileName(), e);
         return false;
       }
     }
@@ -292,7 +295,7 @@ public class TsFileLastReader
                     } catch (InterruptedException e) {
                       Thread.currentThread().interrupt();
                     } catch (Exception e) {
-                      LOGGER.error("Error while reading timeseries metadata", e);
+                      LOGGER.error(Messages.get("log.read.last_reader_tsm_meta_error"), e);
                     } finally {
                       try {
                         lastValueQueue.put(new Pair<>(null, null));

@@ -21,6 +21,7 @@ package org.apache.tsfile.read.filter.factory;
 
 import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
 import org.apache.tsfile.read.filter.operator.BooleanFilterOperators;
@@ -74,7 +75,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueGt(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -101,7 +103,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -127,7 +130,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueLt(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -154,7 +158,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -180,7 +185,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueEq(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -207,7 +213,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -250,7 +257,8 @@ public class ValueFilterApi {
         return new StringFilterOperators.ValueBetweenAnd(
             measurementIndex, (Binary) value1, (Binary) value2);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -285,7 +293,8 @@ public class ValueFilterApi {
         return new StringFilterOperators.ValueNotBetweenAnd(
             measurementIndex, (Binary) value1, (Binary) value2);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -310,7 +319,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueLike(measurementIndex, pattern);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -335,7 +345,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueNotLike(measurementIndex, pattern);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -360,7 +371,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueRegexp(measurementIndex, pattern);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -385,7 +397,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueNotRegexp(measurementIndex, pattern);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -412,7 +425,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueIn(measurementIndex, (Set<Binary>) values);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 
@@ -439,7 +453,8 @@ public class ValueFilterApi {
       case STRING:
         return new StringFilterOperators.ValueNotIn(measurementIndex, (Set<Binary>) values);
       default:
-        throw new UnsupportedOperationException("Unsupported data type: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_api_unsupported_type", type));
     }
   }
 

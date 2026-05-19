@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,12 +54,11 @@ public class AutoSchemaInferer {
       }
     }
     if (matches.isEmpty()) {
-      throw new IllegalArgumentException(
-          "No time column found. Auto mode requires exactly one column named 'time' or 'TIME'.");
+      throw new IllegalArgumentException(Messages.get("error.tools.auto_no_time_column"));
     }
     if (matches.size() > 1) {
       throw new IllegalArgumentException(
-          "Ambiguous time column: found multiple columns matching 'time'/'TIME': " + matches);
+          Messages.format("error.tools.auto_ambiguous_time_column", matches));
     }
     return matches.get(0);
   }

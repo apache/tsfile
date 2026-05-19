@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -160,7 +162,8 @@ public class SchemaParser {
           if (has_header.equals("true") || has_header.equals("false")) {
             schema.hasHeader = Boolean.parseBoolean(has_header);
           } else {
-            throw new IllegalArgumentException("The data format of has_header is incorrect");
+            throw new IllegalArgumentException(
+                Messages.get("error.tools.schema_has_header_invalid"));
           }
         } else if (line.startsWith("separator=")) {
           schema.separator = extractValue(line);
@@ -204,7 +207,7 @@ public class SchemaParser {
     } else if (parts.length == 1) {
       schema.idColumns.add(new IDColumns(parts[0].trim()));
     } else {
-      throw new IllegalArgumentException("The data format of id_columns is incorrect");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_id_columns_invalid"));
     }
   }
 
@@ -242,7 +245,7 @@ public class SchemaParser {
       }
       schema.csvColumns.add(new Column(columnName));
     } else {
-      throw new IllegalArgumentException("The data format of csv_columns is incorrect");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_csv_columns_invalid"));
     }
   }
 
@@ -250,32 +253,33 @@ public class SchemaParser {
     if (!schema.timePrecision.equals("us")
         && !schema.timePrecision.equals("ms")
         && !schema.timePrecision.equals("ns")) {
-      throw new IllegalArgumentException("The time_precision parameter only supports ms,us,ns");
+      throw new IllegalArgumentException(
+          Messages.get("error.tools.schema_time_precision_unsupported"));
     }
     if (!schema.separator.equals(",")
         && !schema.separator.equals("tab")
         && !schema.separator.equals(";")) {
-      throw new IllegalArgumentException("separator must be \",\", tab, or \";\"");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_separator_invalid"));
     }
     if (schema.tableName.isEmpty()) {
-      throw new IllegalArgumentException("table_name is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_table_name_required"));
     }
     if (schema.idColumns.isEmpty()) {
-      throw new IllegalArgumentException("id_columns is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_id_columns_required"));
     }
     if (schema.csvColumns.isEmpty()) {
-      throw new IllegalArgumentException("csv_columns is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_csv_columns_required"));
     }
     if (schema.timeColumn.isEmpty()) {
-      throw new IllegalArgumentException("time_column is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.schema_time_column_required"));
     } else if (schema.timeColumnIndex < 0) {
       throw new IllegalArgumentException(
-          "The value " + schema.timeColumn + " of time_column is not in csv_columns");
+          Messages.format("error.tools.schema_time_column_not_in_csv", schema.timeColumn));
     }
     for (IDColumns idColumn : schema.idColumns) {
       if (idColumn.csvColumnIndex < 0 && !idColumn.isDefault) {
         throw new IllegalArgumentException(
-            "The value " + idColumn.name + " of id_columns is not in csv_columns");
+            Messages.format("error.tools.schema_id_column_not_in_csv", idColumn.name));
       }
     }
   }

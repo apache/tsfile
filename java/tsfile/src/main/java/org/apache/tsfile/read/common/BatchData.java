@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.Binary;
@@ -763,14 +764,16 @@ public class BatchData {
                   outputStream.writeInt(value.getInt());
                   break;
                 default:
-                  throw new IllegalArgumentException("Unknown data type for BatchData:" + dataType);
+                  throw new IllegalArgumentException(
+                      Messages.format("error.read.batch_data_unknown_type", dataType));
               }
             }
           }
         }
         break;
       default:
-        throw new IllegalArgumentException("Unknown data type for BatchData:" + dataType);
+        throw new IllegalArgumentException(
+            Messages.format("error.read.batch_data_unknown_type", dataType));
     }
   }
 
@@ -826,7 +829,8 @@ public class BatchData {
         case 2:
           return new DescReadWriteBatchData(dataType);
         default:
-          throw new IllegalArgumentException("Invalid input: " + type);
+          throw new IllegalArgumentException(
+              Messages.format("error.read.batch_data_invalid_input", type));
       }
     }
   }

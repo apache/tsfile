@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.example.data.Group;
@@ -78,7 +79,8 @@ public class ParquetSourceReader implements SourceReader {
   @Override
   public ImportSchema inferSchema() {
     if (schema != null) {
-      throw new UnsupportedOperationException("inferSchema() is only available in auto mode");
+      throw new UnsupportedOperationException(
+          Messages.get("error.tools.infer_schema_not_in_auto_mode"));
     }
 
     try {
@@ -127,7 +129,8 @@ public class ParquetSourceReader implements SourceReader {
               tableName, timeColumn, columnNames, types, timePrecision);
       return schema;
     } catch (IOException e) {
-      throw new RuntimeException("Failed to infer schema from: " + sourceFile.getAbsolutePath(), e);
+      throw new RuntimeException(
+          Messages.format("error.tools.infer_schema_failed", sourceFile.getAbsolutePath()), e);
     }
   }
 
@@ -184,7 +187,8 @@ public class ParquetSourceReader implements SourceReader {
 
       return SourceBatch.fromRows(schemaColumnNames, rows);
     } catch (IOException e) {
-      LOGGER.error("Error reading Parquet file: " + sourceFile.getAbsolutePath(), e);
+      LOGGER.error(
+          Messages.format("log.tools.parquet_read_error", sourceFile.getAbsolutePath()), e);
       exhausted = true;
       return null;
     }
@@ -196,7 +200,7 @@ public class ParquetSourceReader implements SourceReader {
       try {
         parquetReader.close();
       } catch (IOException e) {
-        LOGGER.error("Error closing Parquet reader", e);
+        LOGGER.error(Messages.get("log.tools.parquet_close_reader_error"), e);
       }
       parquetReader = null;
     }

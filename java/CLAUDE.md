@@ -92,6 +92,23 @@ Code generation: FreeMarker templates in `tsfile/src/main/codegen/` generate typ
 - Integration tests: `*IT.java` — run via `mvn verify`
 - Tests run in random order with `reuseForks=false`
 
+## Internationalization (i18n)
+
+All user-facing log messages and exception messages in `java/common`, `java/tsfile`, and `java/tools` go through `org.apache.tsfile.i18n.Messages`. Hardcoded English strings in `LOGGER.*` / `LOG.*` / `logger.*` or `throw new XxxException(...)` are not allowed for new code — add an entry to `java/common/src/main/resources/org/apache/tsfile/i18n/messages.properties` and reference it via:
+
+- `Messages.get(key)` for SLF4J patterns (containing `{}` placeholders)
+- `Messages.format(key, args)` for exception patterns (containing `%1$s` positional placeholders)
+
+Locale at runtime is chosen in this order:
+
+1. `-Dtsfile.locale=<tag>` system property (e.g. `zh`, `zh-CN`)
+2. `Locale.getDefault()`
+3. English fallback (root bundle)
+
+When adding a key, mirror it in `messages_zh.properties` with a Simplified Chinese translation. `MessagesTest` enforces key-set alignment between the two bundles — CI fails on drift.
+
+Technical terms (class names, method names, type names, codec names like `TsFile`, `Chunk`, `Page`, `Schema`, `RLE`, `GORILLA`) are kept in English in Chinese translations.
+
 ## License Header
 
 Every new file must include the Apache License 2.0 header at the top. For Java files, use the `/* */` block comment style. See any existing `.java` file for the exact wording.

@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
@@ -147,7 +148,8 @@ public class Field {
     if (dataType == null) {
       throw new NullFieldException();
     } else if (dataType == TSDataType.OBJECT) {
-      throw new UnsupportedOperationException("OBJECT Type only support getStringValue");
+      throw new UnsupportedOperationException(
+          Messages.get("error.read.field_object_type_no_binary"));
     }
     return binaryV;
   }
@@ -292,7 +294,8 @@ public class Field {
         field.setBinaryV(value.getBinary());
         break;
       default:
-        throw new UnSupportedDataTypeException("UnSupported" + value.getDataType());
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.common.unsupported_data_type", value.getDataType()));
     }
   }
 }

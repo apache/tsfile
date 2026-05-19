@@ -21,6 +21,7 @@ package org.apache.tsfile.external.commons.io.file;
 
 import org.apache.tsfile.external.commons.io.function.IOFunction;
 import org.apache.tsfile.external.commons.io.function.IOSupplier;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -130,9 +131,8 @@ public class PathUtils {
     if (!isPosix(
         parent, linkOptions)) { // Test parent because we may not the permissions to test the file.
       throw new IOException(
-          String.format(
-              "DOS or POSIX file operations not available for '%s', linkOptions %s",
-              path, Arrays.toString(linkOptions)));
+          Messages.format(
+              "error.external.path_file_ops_not_available", path, Arrays.toString(linkOptions)));
     }
     // POSIX
     if (readOnly) {

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.filter.operator;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
@@ -174,7 +175,8 @@ public final class ExtractTimeFilterOperators {
         case NS:
           return EXTRACT_TIMESTAMP_NS_PART;
         default:
-          throw new UnsupportedOperationException("Unexpected extract field: " + field);
+          throw new UnsupportedOperationException(
+              Messages.format("error.read.extract_unexpected_field", field));
       }
     }
 
@@ -263,7 +265,8 @@ public final class ExtractTimeFilterOperators {
                   .equals(
                       convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.MICROS));
         default:
-          throw new UnsupportedOperationException("Unexpected extract field: " + field);
+          throw new UnsupportedOperationException(
+              Messages.format("error.read.extract_unexpected_field", field));
       }
     }
 

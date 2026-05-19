@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.controller.IChunkLoader;
 
@@ -175,13 +176,13 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   @Override
   public TSDataType getNewType() {
     throw new UnsupportedOperationException(
-        "AlignedChunkMetadata doesn't support setNewType method");
+        Messages.get("error.file.aligned_chunk_metadata_new_type_unsupported"));
   }
 
   @Override
   public void setNewType(TSDataType type) {
     throw new UnsupportedOperationException(
-        "AlignedChunkMetadata doesn't support setNewType method");
+        Messages.get("error.file.aligned_chunk_metadata_new_type_unsupported"));
   }
 
   @Override
@@ -206,7 +207,8 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
 
   @Override
   public int serializeTo(OutputStream outputStream, boolean serializeStatistic) {
-    throw new UnsupportedOperationException("VectorChunkMetadata doesn't support serial method");
+    throw new UnsupportedOperationException(
+        Messages.get("error.file.aligned_chunk_metadata_serialize_unsupported"));
   }
 
   @Override

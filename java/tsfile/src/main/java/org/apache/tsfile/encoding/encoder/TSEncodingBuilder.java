@@ -24,6 +24,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.JsonFormatConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import org.slf4j.Logger;
@@ -44,7 +45,7 @@ public abstract class TSEncodingBuilder {
 
   private static final Logger logger = LoggerFactory.getLogger(TSEncodingBuilder.class);
   protected final TSFileConfig conf;
-  private static final String ERROR_MSG = "%s doesn't support data type: %s";
+  private static final String ERROR_MSG_KEY = "error.encoding.ts_encoding_builder_unsupported_type";
 
   protected TSEncodingBuilder() {
     this.conf = TSFileDescriptor.getInstance().getConfig();
@@ -81,7 +82,8 @@ public abstract class TSEncodingBuilder {
       case CAMEL:
         return new Camel();
       default:
-        throw new UnsupportedOperationException("Unsupported encoding: " + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.encoding.ts_encoding_builder_unsupported", type));
     }
   }
 
@@ -128,8 +130,7 @@ public abstract class TSEncodingBuilder {
         if (maxStringLength < 0) {
           maxStringLength = TSFileDescriptor.getInstance().getConfig().getMaxStringLength();
           logger.warn(
-              "cannot set max string length to negative value, replaced with default value:{}",
-              maxStringLength);
+              Messages.get("log.encoding.ts_encoding_max_string_length_negative"), maxStringLength);
         }
       }
     }
@@ -154,7 +155,8 @@ public abstract class TSEncodingBuilder {
         case DOUBLE:
           return new FloatEncoder(TSEncoding.RLE, type, maxPointNumber);
         default:
-          throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.RLE, type));
+          throw new UnSupportedDataTypeException(
+              Messages.format(ERROR_MSG_KEY, TSEncoding.RLE, type));
       }
     }
 
@@ -172,15 +174,13 @@ public abstract class TSEncodingBuilder {
           this.maxPointNumber = Integer.parseInt(props.get(Encoder.MAX_POINT_NUMBER));
         } catch (NumberFormatException e) {
           logger.warn(
-              "The format of max point number {} is not correct."
-                  + " Using default float precision.",
+              Messages.get("log.encoding.ts_encoding_max_point_number_format"),
               props.get(Encoder.MAX_POINT_NUMBER));
         }
         if (maxPointNumber < 0) {
           maxPointNumber = TSFileDescriptor.getInstance().getConfig().getFloatPrecision();
           logger.warn(
-              "cannot set max point number to negative value, replaced with default value:{}",
-              maxPointNumber);
+              Messages.get("log.encoding.ts_encoding_max_point_number_negative"), maxPointNumber);
         }
       }
     }
@@ -210,7 +210,7 @@ public abstract class TSEncodingBuilder {
           return new FloatEncoder(TSEncoding.TS_2DIFF, type, maxPointNumber);
         default:
           throw new UnSupportedDataTypeException(
-              String.format(ERROR_MSG, TSEncoding.TS_2DIFF, type));
+              Messages.format(ERROR_MSG_KEY, TSEncoding.TS_2DIFF, type));
       }
     }
 
@@ -228,15 +228,13 @@ public abstract class TSEncodingBuilder {
           this.maxPointNumber = Integer.parseInt(props.get(Encoder.MAX_POINT_NUMBER));
         } catch (NumberFormatException e) {
           logger.warn(
-              "The format of max point number {} is not correct."
-                  + " Using default float precision.",
+              Messages.get("log.encoding.ts_encoding_max_point_number_format"),
               props.get(Encoder.MAX_POINT_NUMBER));
         }
         if (maxPointNumber < 0) {
           maxPointNumber = TSFileDescriptor.getInstance().getConfig().getFloatPrecision();
           logger.warn(
-              "cannot set max point number to negative value, replaced with default value:{}",
-              maxPointNumber);
+              Messages.get("log.encoding.ts_encoding_max_point_number_negative"), maxPointNumber);
         }
       }
     }
@@ -259,7 +257,7 @@ public abstract class TSEncodingBuilder {
           return new DoublePrecisionEncoderV1();
         default:
           throw new UnSupportedDataTypeException(
-              String.format(ERROR_MSG, TSEncoding.GORILLA_V1, type));
+              Messages.format(ERROR_MSG_KEY, TSEncoding.GORILLA_V1, type));
       }
     }
 
@@ -277,7 +275,8 @@ public abstract class TSEncodingBuilder {
       if (Objects.requireNonNull(type) == TSDataType.DOUBLE) {
         return new CamelEncoder();
       }
-      throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.CAMEL, type));
+      throw new UnSupportedDataTypeException(
+          Messages.format(ERROR_MSG_KEY, TSEncoding.CAMEL, type));
     }
 
     @Override
@@ -300,7 +299,7 @@ public abstract class TSEncodingBuilder {
           return new RegularDataEncoder.LongRegularEncoder();
         default:
           throw new UnSupportedDataTypeException(
-              String.format(ERROR_MSG, TSEncoding.REGULAR, type));
+              Messages.format(ERROR_MSG_KEY, TSEncoding.REGULAR, type));
       }
     }
 
@@ -328,7 +327,7 @@ public abstract class TSEncodingBuilder {
           return new LongGorillaEncoder();
         default:
           throw new UnSupportedDataTypeException(
-              String.format(ERROR_MSG, TSEncoding.GORILLA, type));
+              Messages.format(ERROR_MSG_KEY, TSEncoding.GORILLA, type));
       }
     }
 
@@ -354,7 +353,7 @@ public abstract class TSEncodingBuilder {
           return new DoubleSprintzEncoder();
         default:
           throw new UnSupportedDataTypeException(
-              String.format(ERROR_MSG, TSEncoding.SPRINTZ, type));
+              Messages.format(ERROR_MSG_KEY, TSEncoding.SPRINTZ, type));
       }
     }
 
@@ -380,7 +379,8 @@ public abstract class TSEncodingBuilder {
         case DOUBLE:
           return new DoubleRLBE();
         default:
-          throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.RLBE, type));
+          throw new UnSupportedDataTypeException(
+              Messages.format(ERROR_MSG_KEY, TSEncoding.RLBE, type));
       }
     }
 
@@ -397,7 +397,8 @@ public abstract class TSEncodingBuilder {
       if (type == TSDataType.TEXT || type == TSDataType.STRING) {
         return new DictionaryEncoder();
       }
-      throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.DICTIONARY, type));
+      throw new UnSupportedDataTypeException(
+          Messages.format(ERROR_MSG_KEY, TSEncoding.DICTIONARY, type));
     }
 
     @Override
@@ -418,7 +419,8 @@ public abstract class TSEncodingBuilder {
         case TIMESTAMP:
           return new LongZigzagEncoder();
         default:
-          throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.ZIGZAG, type));
+          throw new UnSupportedDataTypeException(
+              Messages.format(ERROR_MSG_KEY, TSEncoding.ZIGZAG, type));
       }
     }
 
@@ -445,7 +447,8 @@ public abstract class TSEncodingBuilder {
         case TIMESTAMP:
           return new LongChimpEncoder();
         default:
-          throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.CHIMP, type));
+          throw new UnSupportedDataTypeException(
+              Messages.format(ERROR_MSG_KEY, TSEncoding.CHIMP, type));
       }
     }
 

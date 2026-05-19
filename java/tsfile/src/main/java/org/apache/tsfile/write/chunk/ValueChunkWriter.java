@@ -31,6 +31,7 @@ import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -227,7 +228,7 @@ public class ValueChunkWriter {
       numOfPages++;
       this.statistics.mergeStatistics(pageWriter.getStatistics());
     } catch (IOException e) {
-      logger.error("meet error in pageWriter.writePageHeaderAndDataIntoBuff,ignore this page:", e);
+      logger.error(Messages.get("log.write.chunk_writer_page_error"), e);
     } finally {
       // clear start time stamp for next initializing
       pageWriter.reset(dataType);
@@ -238,8 +239,7 @@ public class ValueChunkWriter {
       throws PageException {
     // write the page header to pageBuffer
     try {
-      logger.debug(
-          "start to flush a page header into buffer, buffer position {} ", pageBuffer.size());
+      logger.debug(Messages.get("log.write.page_header_flush_start"), pageBuffer.size());
       // serialize pageHeader  see writePageToPageBuffer method
       if (numOfPages == 0) { // record the firstPageStatistics
 
@@ -276,15 +276,13 @@ public class ValueChunkWriter {
         }
       }
       logger.debug(
-          "finish to flush a page header {} of time page into buffer, buffer position {} ",
-          header,
-          pageBuffer.size());
+          Messages.get("log.write.page_header_flush_done_time"), header, pageBuffer.size());
 
       if (header.getStatistics() != null) {
         statistics.mergeStatistics(header.getStatistics());
       }
     } catch (IOException e) {
-      throw new PageException("IO Exception in writeDataPageHeader,ignore this page", e);
+      throw new PageException(Messages.get("error.write.page_write_header_io_exception"), e);
     }
     numOfPages++;
     // write page content to temp PBAOS
@@ -342,7 +340,7 @@ public class ValueChunkWriter {
 
   public boolean checkPageSizeAndMayOpenANewPage() {
     if (pageWriter.getPointNumber() == maxNumberOfPointsInPage) {
-      logger.debug("current line count reaches the upper bound, write page {}", measurementId);
+      logger.debug(Messages.get("log.write.chunk_writer_write_page"), measurementId);
       return true;
     } else if (pageWriter.getPointNumber()
         >= valueCountInOnePageForNextCheck) { // need to check memory size
@@ -351,7 +349,7 @@ public class ValueChunkWriter {
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
         // we will write the current page
         logger.debug(
-            "enough size, write page {}, pageSizeThreshold:{}, currentPageSize:{}, valueCountInOnePage:{}",
+            Messages.get("log.write.page_enough_size_value"),
             measurementId,
             pageSizeThreshold,
             currentPageSize,
@@ -442,11 +440,7 @@ public class ValueChunkWriter {
     int dataSize = (int) (writer.getPos() - dataOffset);
     if (dataSize != pageBuffer.size()) {
       throw new IOException(
-          "Bytes written is inconsistent with the size of data: "
-              + dataSize
-              + " !="
-              + " "
-              + pageBuffer.size());
+          Messages.format("error.write.chunk_bytes_inconsistent", dataSize, pageBuffer.size()));
     }
 
     writer.endCurrentChunk();

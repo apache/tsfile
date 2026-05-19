@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -60,7 +61,8 @@ public class ImportSchemaParser {
         } else if (line.startsWith("has_header=")) {
           String val = extractValue(line);
           if (!"true".equals(val) && !"false".equals(val)) {
-            throw new IllegalArgumentException("has_header must be true or false");
+            throw new IllegalArgumentException(
+                Messages.get("error.tools.import_has_header_invalid"));
           }
           schema.setHasHeader(Boolean.parseBoolean(val));
           section = Section.NONE;
@@ -108,7 +110,8 @@ public class ImportSchemaParser {
     } else if (parts.length == 1) {
       return new ImportSchema.TagColumn(parts[0].trim());
     }
-    throw new IllegalArgumentException("Invalid tag_columns format: " + line);
+    throw new IllegalArgumentException(
+        Messages.format("error.tools.import_tag_columns_invalid", line));
   }
 
   private static ImportSchema.SourceColumn parseSourceColumn(String line) {
@@ -133,7 +136,8 @@ public class ImportSchemaParser {
       }
       return new ImportSchema.SourceColumn(name, TSDataType.STRING);
     }
-    throw new IllegalArgumentException("Invalid source_columns format: " + line);
+    throw new IllegalArgumentException(
+        Messages.format("error.tools.import_source_columns_invalid", line));
   }
 
   private static TSDataType resolveDataType(String typeStr) {
@@ -159,31 +163,34 @@ public class ImportSchemaParser {
       case "TIMESTAMP":
         return TSDataType.TIMESTAMP;
       default:
-        throw new IllegalArgumentException("Unknown data type: " + typeStr);
+        throw new IllegalArgumentException(
+            Messages.format("error.tools.import_unknown_data_type", typeStr));
     }
   }
 
   private static void validate(ImportSchema schema) {
     String tp = schema.getTimePrecision();
     if (!"ms".equals(tp) && !"us".equals(tp) && !"ns".equals(tp) && !"s".equals(tp)) {
-      throw new IllegalArgumentException("time_precision must be ms, us, ns, or s");
+      throw new IllegalArgumentException(
+          Messages.get("error.tools.import_time_precision_unsupported"));
     }
 
     String sep = schema.getSeparator();
     if (!",".equals(sep) && !"\t".equals(sep) && !";".equals(sep)) {
-      throw new IllegalArgumentException("separator must be \",\", tab, or \";\"");
+      throw new IllegalArgumentException(Messages.get("error.tools.import_separator_invalid"));
     }
 
     if (schema.getTableName().isEmpty()) {
-      throw new IllegalArgumentException("table_name is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.import_table_name_required"));
     }
 
     if (schema.getTimeColumnName().isEmpty()) {
-      throw new IllegalArgumentException("time_column is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.import_time_column_required"));
     }
 
     if (schema.getSourceColumns().isEmpty()) {
-      throw new IllegalArgumentException("source_columns is required");
+      throw new IllegalArgumentException(
+          Messages.get("error.tools.import_source_columns_required"));
     }
 
     boolean timeFound = false;
@@ -195,7 +202,7 @@ public class ImportSchemaParser {
     }
     if (!timeFound) {
       throw new IllegalArgumentException(
-          "time_column '" + schema.getTimeColumnName() + "' not found in source_columns");
+          Messages.format("error.tools.import_time_column_not_found", schema.getTimeColumnName()));
     }
 
     Set<String> sourceNames = new HashSet<>();
@@ -207,7 +214,7 @@ public class ImportSchemaParser {
     for (ImportSchema.TagColumn tag : schema.getTagColumns()) {
       if (!tag.isVirtual() && !sourceNames.contains(tag.getName())) {
         throw new IllegalArgumentException(
-            "tag_columns '" + tag.getName() + "' not found in source_columns");
+            Messages.format("error.tools.import_tag_column_not_found", tag.getName()));
       }
     }
   }

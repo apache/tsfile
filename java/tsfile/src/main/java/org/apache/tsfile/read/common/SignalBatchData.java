@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.i18n.Messages;
+
 /** It is an empty signal to notify the caller that there is no more batch data after it. */
 public class SignalBatchData extends BatchData {
 
@@ -39,6 +41,7 @@ public class SignalBatchData extends BatchData {
 
   @Override
   public boolean hasCurrent() {
-    throw new UnsupportedOperationException("hasCurrent is not supported for SignalBatchData");
+    throw new UnsupportedOperationException(
+        Messages.get("error.read.signal_batch_data_no_has_current"));
   }
 }

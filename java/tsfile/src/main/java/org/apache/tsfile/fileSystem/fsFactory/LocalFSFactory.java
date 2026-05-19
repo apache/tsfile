@@ -20,6 +20,7 @@
 package org.apache.tsfile.fileSystem.fsFactory;
 
 import org.apache.tsfile.external.commons.io.FileUtils;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.NoSyncBufferedInputStream;
 import org.apache.tsfile.utils.NoSyncBufferedOutputStream;
 
@@ -78,7 +79,7 @@ public class LocalFSFactory implements FSFactory {
     try {
       return new BufferedReader(new FileReader(filePath));
     } catch (IOException e) {
-      logger.error("Failed to get buffered reader for {}. ", filePath, e);
+      logger.error(Messages.get("log.fs.local_factory_get_reader_error"), filePath, e);
       return null;
     }
   }
@@ -88,7 +89,7 @@ public class LocalFSFactory implements FSFactory {
     try {
       return new BufferedWriter(new FileWriter(filePath, append));
     } catch (IOException e) {
-      logger.error("Failed to get buffered writer for {}. ", filePath, e);
+      logger.error(Messages.get("log.fs.local_factory_get_writer_error"), filePath, e);
       return null;
     }
   }
@@ -98,7 +99,7 @@ public class LocalFSFactory implements FSFactory {
     try {
       return new NoSyncBufferedInputStream(new FileInputStream(filePath));
     } catch (IOException e) {
-      logger.error("Failed to get buffered input stream for {}. ", filePath, e);
+      logger.error(Messages.get("log.fs.local_factory_get_input_stream_error"), filePath, e);
       return null;
     }
   }
@@ -108,7 +109,7 @@ public class LocalFSFactory implements FSFactory {
     try {
       return new NoSyncBufferedOutputStream(new FileOutputStream(filePath));
     } catch (IOException e) {
-      logger.error("Failed to get buffered output stream for {}. ", filePath, e);
+      logger.error(Messages.get("log.fs.local_factory_get_output_stream_error"), filePath, e);
       return null;
     }
   }

@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Accountable;
 
 import org.slf4j.Logger;
@@ -69,13 +70,12 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   Object segment(int i);
 
   default int serializedSize() {
-    LOGGER.debug(
-        "Using default inefficient implementation of serialized size by {}", this.getClass());
+    LOGGER.debug(Messages.get("log.file.device_id_default_serialized_size"), this.getClass());
     try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
       serialize(baos);
       return baos.size();
     } catch (IOException e) {
-      LOGGER.error("Failed to serialize device ID: {}", this, e);
+      LOGGER.error(Messages.get("log.file.device_id_serialize_failed"), this, e);
       return -1;
     }
   }

@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 public class ColumnFactory {
   public static Column create(TSDataType dataType, int initialCapacity) {
@@ -44,7 +45,8 @@ public class ColumnFactory {
       case BOOLEAN:
         return new BooleanColumn(initialCapacity);
       default:
-        throw new IllegalArgumentException("Unsupported data type: " + dataType);
+        throw new IllegalArgumentException(
+            Messages.format("error.read.column_factory_unsupported_type", dataType));
     }
   }
 }

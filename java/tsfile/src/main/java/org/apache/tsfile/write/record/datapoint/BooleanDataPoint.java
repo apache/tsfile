@@ -19,6 +19,7 @@
 package org.apache.tsfile.write.record.datapoint;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 
 import org.slf4j.Logger;
@@ -45,7 +46,7 @@ public class BooleanDataPoint extends DataPoint {
   @Override
   public void writeTo(long time, ChunkWriterImpl writer) {
     if (writer == null) {
-      LOG.warn("given IChunkWriter is null, do nothing and return");
+      LOG.warn(Messages.get("log.write.datapoint_chunk_writer_null"));
       return;
     }
     writer.write(time, value);

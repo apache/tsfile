@@ -24,6 +24,7 @@ import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -100,8 +101,7 @@ public class TableSchema {
       columnPosIndex.put(measurementName, i);
     }
     if (measurementSchemas.size() != columnPosIndex.size()) {
-      throw new IllegalArgumentException(
-          "Each column name in the table should be unique(case insensitive).");
+      throw new IllegalArgumentException(Messages.get("error.file.table_schema_duplicate_column"));
     }
     this.columnCategories = columnCategories;
     this.updatable = false;
@@ -116,8 +116,7 @@ public class TableSchema {
     this.measurementSchemas = columnSchemas;
     this.columnPosIndex = columnPosIndex;
     if (measurementSchemas.size() != columnPosIndex.size()) {
-      throw new IllegalArgumentException(
-          "Each column name in the table should be unique(case insensitive).");
+      throw new IllegalArgumentException(Messages.get("error.file.table_schema_duplicate_column"));
     }
     this.columnCategories = columnCategories;
     this.updatable = false;
@@ -137,8 +136,7 @@ public class TableSchema {
       columnPosIndex.put(columnName, i);
     }
     if (columnNameList.size() != columnPosIndex.size()) {
-      throw new IllegalArgumentException(
-          "Each column name in the table should be unique(case insensitive).");
+      throw new IllegalArgumentException(Messages.get("error.file.table_schema_duplicate_column"));
     }
     this.columnCategories = categoryList;
     this.updatable = false;
@@ -158,8 +156,7 @@ public class TableSchema {
       this.columnPosIndex.put(columnName, i);
     }
     if (columnSchemaList.size() != columnPosIndex.size()) {
-      throw new IllegalArgumentException(
-          "Each column name in the table should be unique(case insensitive).");
+      throw new IllegalArgumentException(Messages.get("error.file.table_schema_duplicate_column"));
     }
     this.updatable = false;
   }

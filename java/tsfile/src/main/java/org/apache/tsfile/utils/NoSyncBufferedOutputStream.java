@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -58,7 +60,7 @@ public class NoSyncBufferedOutputStream extends FilterOutputStream {
   public NoSyncBufferedOutputStream(OutputStream out, int size) {
     super(out);
     if (size <= 0) {
-      throw new IllegalArgumentException("Buffer size <= 0");
+      throw new IllegalArgumentException(Messages.get("error.utils.buffer_size_not_positive"));
     }
     buf = new byte[size];
   }

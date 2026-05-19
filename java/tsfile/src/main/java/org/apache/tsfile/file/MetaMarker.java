@@ -20,6 +20,7 @@
 package org.apache.tsfile.file;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 
@@ -69,6 +70,6 @@ public class MetaMarker {
   private MetaMarker() {}
 
   public static void handleUnexpectedMarker(byte marker) throws IOException {
-    throw new IOException("Unexpected marker " + marker);
+    throw new IOException(Messages.format("error.file.unexpected_marker", marker));
   }
 }

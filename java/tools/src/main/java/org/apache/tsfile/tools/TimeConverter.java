@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.time.Instant;
 
 public class TimeConverter {
@@ -34,7 +36,7 @@ public class TimeConverter {
 
   public long convert(Object value) {
     if (value == null) {
-      throw new IllegalArgumentException("Time value cannot be null");
+      throw new IllegalArgumentException(Messages.get("error.tools.time_value_null"));
     }
     if (value instanceof Instant) {
       return fromInstant((Instant) value);
@@ -47,7 +49,7 @@ public class TimeConverter {
 
   public long convert(Object value, String sourcePrecision) {
     if (value == null) {
-      throw new IllegalArgumentException("Time value cannot be null");
+      throw new IllegalArgumentException(Messages.get("error.tools.time_value_null"));
     }
     if (value instanceof Instant) {
       return fromInstant((Instant) value);
@@ -128,7 +130,8 @@ public class TimeConverter {
       case "ns":
         return value;
       default:
-        throw new IllegalArgumentException("Unknown precision: " + precision);
+        throw new IllegalArgumentException(
+            Messages.format("error.tools.unknown_precision", precision));
     }
   }
 
@@ -143,7 +146,8 @@ public class TimeConverter {
       case "ns":
         return nanos;
       default:
-        throw new IllegalArgumentException("Unknown precision: " + precision);
+        throw new IllegalArgumentException(
+            Messages.format("error.tools.unknown_precision", precision));
     }
   }
 }

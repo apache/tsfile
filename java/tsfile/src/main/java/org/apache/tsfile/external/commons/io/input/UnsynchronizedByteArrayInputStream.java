@@ -18,6 +18,7 @@ package org.apache.tsfile.external.commons.io.input;
 
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractStreamBuilder;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -103,7 +104,7 @@ public class UnsynchronizedByteArrayInputStream extends InputStream {
 
     public Builder setLength(final int length) {
       if (length < 0) {
-        throw new IllegalArgumentException("length cannot be negative");
+        throw new IllegalArgumentException(Messages.get("error.external.ubais_length_negative"));
       }
       this.length = length;
       return this;
@@ -111,7 +112,7 @@ public class UnsynchronizedByteArrayInputStream extends InputStream {
 
     public Builder setOffset(final int offset) {
       if (offset < 0) {
-        throw new IllegalArgumentException("offset cannot be negative");
+        throw new IllegalArgumentException(Messages.get("error.external.ubais_offset_negative"));
       }
       this.offset = offset;
       return this;
@@ -172,7 +173,7 @@ public class UnsynchronizedByteArrayInputStream extends InputStream {
   public UnsynchronizedByteArrayInputStream(final byte[] data, final int offset) {
     Objects.requireNonNull(data, "data");
     if (offset < 0) {
-      throw new IllegalArgumentException("offset cannot be negative");
+      throw new IllegalArgumentException(Messages.get("error.external.ubais_offset_negative"));
     }
     this.data = data;
     this.offset = min(offset, data.length > 0 ? data.length : offset);
@@ -192,10 +193,10 @@ public class UnsynchronizedByteArrayInputStream extends InputStream {
   @Deprecated
   public UnsynchronizedByteArrayInputStream(final byte[] data, final int offset, final int length) {
     if (offset < 0) {
-      throw new IllegalArgumentException("offset cannot be negative");
+      throw new IllegalArgumentException(Messages.get("error.external.ubais_offset_negative"));
     }
     if (length < 0) {
-      throw new IllegalArgumentException("length cannot be negative");
+      throw new IllegalArgumentException(Messages.get("error.external.ubais_length_negative"));
     }
     this.data = Objects.requireNonNull(data, "data");
     this.offset = min(offset, data.length > 0 ? data.length : offset);
@@ -262,7 +263,7 @@ public class UnsynchronizedByteArrayInputStream extends InputStream {
   @Override
   public long skip(final long n) {
     if (n < 0) {
-      throw new IllegalArgumentException("Skipping backward is not supported");
+      throw new IllegalArgumentException(Messages.get("error.external.ubais_skip_backward"));
     }
 
     long actualSkip = eod - offset;

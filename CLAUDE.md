@@ -58,6 +58,10 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 ./mvnw spotless:check    # Check formatting without modifying
 ```
 
+## Internationalization
+
+Java logs and exception messages use a runtime `ResourceBundle` approach so the same JAR can emit English or Simplified Chinese based on a JVM startup property. See `java/CLAUDE.md` for the convention. Switch language with `-Dtsfile.locale=zh`.
+
 ## License Header
 
 Every new file must include the Apache License 2.0 header at the top. Use the comment style appropriate for the file type (e.g., `<!-- -->` for Markdown, `/* */` for Java/C++, `#` for Python). See any existing file for the exact wording.

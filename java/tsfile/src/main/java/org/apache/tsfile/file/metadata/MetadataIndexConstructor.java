@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.writer.TsFileOutput;
 
 import java.io.IOException;
@@ -38,7 +39,7 @@ public class MetadataIndexConstructor {
   private static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
 
   private MetadataIndexConstructor() {
-    throw new IllegalStateException("Utility class");
+    throw new IllegalStateException(Messages.get("error.file.utility_class"));
   }
 
   /**

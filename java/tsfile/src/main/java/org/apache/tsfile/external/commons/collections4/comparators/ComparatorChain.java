@@ -16,6 +16,8 @@
  */
 package org.apache.tsfile.external.commons.collections4.comparators;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.Serializable;
 import java.util.BitSet;
 import java.util.Comparator;
@@ -98,7 +100,7 @@ public class ComparatorChain<E> implements Comparator<E>, Serializable {
   private void checkChainIntegrity() {
     if (comparatorChain.size() == 0) {
       throw new UnsupportedOperationException(
-          "ComparatorChains must contain at least one Comparator");
+          Messages.get("error.external.comparator_chain_empty"));
     }
   }
 

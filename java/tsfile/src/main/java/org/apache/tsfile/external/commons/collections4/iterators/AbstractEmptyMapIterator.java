@@ -16,6 +16,8 @@
  */
 package org.apache.tsfile.external.commons.collections4.iterators;
 
+import org.apache.tsfile.i18n.Messages;
+
 /**
  * Provides an implementation of an empty map iterator.
  *
@@ -31,14 +33,14 @@ public abstract class AbstractEmptyMapIterator<K, V> extends AbstractEmptyIterat
   }
 
   public K getKey() {
-    throw new IllegalStateException("Iterator contains no elements");
+    throw new IllegalStateException(Messages.get("error.external.empty_map_iterator_no_elements"));
   }
 
   public V getValue() {
-    throw new IllegalStateException("Iterator contains no elements");
+    throw new IllegalStateException(Messages.get("error.external.empty_map_iterator_no_elements"));
   }
 
   public V setValue(final V value) {
-    throw new IllegalStateException("Iterator contains no elements");
+    throw new IllegalStateException(Messages.get("error.external.empty_map_iterator_no_elements"));
   }
 }

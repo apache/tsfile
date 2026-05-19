@@ -16,6 +16,8 @@
  */
 package org.apache.tsfile.external.commons.io.output;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -44,7 +46,8 @@ public class ByteArrayOutputStream extends AbstractByteArrayOutputStream {
    */
   public ByteArrayOutputStream(final int size) {
     if (size < 0) {
-      throw new IllegalArgumentException("Negative initial size: " + size);
+      throw new IllegalArgumentException(
+          Messages.format("error.external.ubaos_negative_initial_size", size));
     }
     synchronized (this) {
       needNewBuffer(size);

@@ -42,6 +42,7 @@ import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.BloomFilter;
@@ -269,7 +270,7 @@ public class TsFileIOWriter implements AutoCloseable {
     updateTableSize(deviceId);
     this.currentChunkGroupDeviceId = deviceId;
     if (logger.isDebugEnabled()) {
-      logger.debug("start chunk group:{}, file position {}", deviceId, out.getPosition());
+      logger.debug(Messages.get("log.write.start_chunk_group"), deviceId, out.getPosition());
     }
     chunkMetadataList = new ArrayList<>();
     ChunkGroupHeader chunkGroupHeader = new ChunkGroupHeader(currentChunkGroupDeviceId);
@@ -365,7 +366,7 @@ public class TsFileIOWriter implements AutoCloseable {
     endCurrentChunk();
     if (logger.isDebugEnabled()) {
       logger.debug(
-          "end flushing a chunk:{}, totalvalue:{}",
+          Messages.get("log.write.end_flush_chunk"),
           chunkHeader.getMeasurementID(),
           chunkMetadata.getNumOfPoints());
     }
@@ -441,7 +442,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
     long footerIndex = out.getPosition();
     if (logger.isDebugEnabled()) {
-      logger.debug("start to flush the footer,file pos:{}", footerIndex);
+      logger.debug(Messages.get("log.write.start_flush_footer"), footerIndex);
     }
 
     // write magic string
@@ -717,7 +718,7 @@ public class TsFileIOWriter implements AutoCloseable {
               .computeIfAbsent(device, x -> new ArrayList<>())
               .add(TSMIterator.constructOneTimeseriesMetadata(entry.getKey(), entry.getValue()));
         } catch (IOException e) {
-          logger.error("Failed to get device timeseries metadata map", e);
+          logger.error(Messages.get("log.write.tsm_device_metadata_error"), e);
           return null;
         }
       }
@@ -770,14 +771,14 @@ public class TsFileIOWriter implements AutoCloseable {
       try {
         if (logger.isDebugEnabled()) {
           logger.debug(
-              "Flushing chunk metadata, total size is {}, count is {}, avg size is {}",
+              Messages.get("log.write.flush_chunk_metadata"),
               currentChunkMetadataSize,
               chunkMetadataCount,
               currentChunkMetadataSize / chunkMetadataCount);
         }
         return sortAndFlushChunkMetadata();
       } catch (IOException e) {
-        logger.error("Meets exception when flushing metadata to temp file for {}", file, e);
+        logger.error(Messages.get("log.write.flush_metadata_exception"), file, e);
         throw e;
       }
     } else {
@@ -821,7 +822,7 @@ public class TsFileIOWriter implements AutoCloseable {
           new Pair<>(
               new Pair<>(seriesPath.getIDeviceID(), seriesPath.getMeasurement()),
               iChunkMetadataList));
-      logger.debug("Flushing {}", seriesPath);
+      logger.debug(Messages.get("log.write.flushing_series"), seriesPath);
     }
 
     // notify the listeners

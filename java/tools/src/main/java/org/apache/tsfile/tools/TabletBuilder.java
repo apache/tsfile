@@ -21,6 +21,7 @@ package org.apache.tsfile.tools;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -160,7 +161,7 @@ public class TabletBuilder {
       }
     }
     throw new IllegalArgumentException(
-        "Time column '" + timeName + "' not found in source columns");
+        Messages.format("error.tools.tablet_time_column_not_found", timeName));
   }
 
   private String[] findSourceColumnNames() {

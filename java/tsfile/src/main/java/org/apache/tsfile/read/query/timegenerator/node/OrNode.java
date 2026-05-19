@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.query.timegenerator.node;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.IOException;
 
 public class OrNode implements Node {
@@ -95,7 +97,7 @@ public class OrNode implements Node {
       return popAndFillNextCache(
           leftValue > rightValue, leftValue < rightValue, leftValue, rightValue);
     }
-    throw new IOException("no more data");
+    throw new IOException(Messages.get("error.read.node_no_more_data"));
   }
 
   private long popAndFillNextCache(boolean popLeft, boolean popRight, long left, long right) {
