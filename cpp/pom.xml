@@ -95,6 +95,13 @@
                                     plugin drops empty options.
                                 -->
                                 <option>${cmake.generator.platform.arg}</option>
+                                <!--
+                                    Optional MSVC toolset for the Visual Studio
+                                    generator (e.g. -DCMAKE_GENERATOR_TOOLSET=v141
+                                    to build with the VS 2017 compiler). Empty
+                                    unless -Dmsvc.toolset is supplied.
+                                -->
+                                <option>${cmake.generator.toolset.arg}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>

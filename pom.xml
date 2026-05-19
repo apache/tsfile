@@ -50,11 +50,18 @@
             the CMake generator to Visual Studio. The msvc.generator value may
             be overridden, e.g. -Dmsvc.generator="Visual Studio 15 2017", to
             match the Visual Studio version installed on the build machine.
+
+            msvc.toolset optionally pins the MSVC toolset, e.g. -Dmsvc.toolset=v141
+            builds with the Visual Studio 2017 compiler while still using a
+            Visual Studio 2022 generator (useful on machines / CI runners that
+            only ship VS 2022 but need to verify VS 2017 compatibility).
+            When unset, CMake uses the generator's default toolset.
         -->
         <msvc.generator>Visual Studio 17 2022</msvc.generator>
         <msvc.platform>x64</msvc.platform>
-        <!-- Extra CMake generate-time argument; empty unless the MSVC profile sets it. -->
+        <!-- Extra CMake generate-time arguments; empty unless an MSVC profile sets them. -->
         <cmake.generator.platform.arg/>
+        <cmake.generator.toolset.arg/>
     </properties>
     <build>
         <pluginManagement>
@@ -825,6 +832,24 @@
             <properties>
                 <cmake.generator>${msvc.generator}</cmake.generator>
                 <cmake.generator.platform.arg>-DCMAKE_GENERATOR_PLATFORM=${msvc.platform}</cmake.generator.platform.arg>
+            </properties>
+        </profile>
+        <!--
+            Pins the MSVC toolset when -Dmsvc.toolset is supplied (e.g.
+            -Dmsvc.toolset=v141 to build with the VS 2017 compiler). Self-
+            activating on the presence of the property, so it composes with
+            cpp-msvc regardless of how that profile was activated. Without the
+            property the toolset arg stays empty and CMake uses the default.
+        -->
+        <profile>
+            <id>.cpp-msvc-toolset</id>
+            <activation>
+                <property>
+                    <name>msvc.toolset</name>
+                </property>
+            </activation>
+            <properties>
+                <cmake.generator.toolset.arg>-DCMAKE_GENERATOR_TOOLSET=${msvc.toolset}</cmake.generator.toolset.arg>
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->

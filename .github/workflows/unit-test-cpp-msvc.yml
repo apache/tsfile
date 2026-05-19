@@ -37,11 +37,26 @@ jobs:
   unit-test-msvc:
     strategy:
       fail-fast: false
+      # The windows-latest runner ships Visual Studio 2022. To exercise the
+      # VS 2017 compatibility this branch targets, the non-ASan jobs build with
+      # the v141 toolset (the VS 2017 compiler, cl.exe 19.16) via a VS 2022
+      # generator. AddressSanitizer is not supported by v141, so the ASan jobs
+      # use the default v143 toolset (VS 2022), which fully supports
+      # /fsanitize=address.
       matrix:
-        build_type: [Release, Debug]
-        # AddressSanitizer for MSVC requires Visual Studio 2019 16.9+, which
-        # the windows-latest runner provides.
-        enable_asan: [NoAsan, Asan]
+        include:
+          - build_type: Release
+            enable_asan: NoAsan
+            toolset: v141
+          - build_type: Debug
+            enable_asan: NoAsan
+            toolset: v141
+          - build_type: Release
+            enable_asan: Asan
+            toolset: default
+          - build_type: Debug
+            enable_asan: Asan
+            toolset: default
     runs-on: windows-latest
 
     steps:
@@ -75,6 +90,9 @@ jobs:
       # Run the maven build, selecting the MSVC toolchain via -Dcpp.toolchain=msvc.
       # spotless (clang-format) is already covered by unit-test-cpp.yml, so it is
       # skipped here to keep this workflow focused on the MSVC build.
+      #
+      # For the v141 jobs, -Dmsvc.toolset=v141 pins the VS 2017 compiler; the
+      # ASan jobs pass no toolset and so use the generator's default (v143).
       - name: Build and test with Maven (MSVC)
         shell: bash
         run: |
@@ -83,8 +101,14 @@ jobs:
           else
             ASAN_VALUE="OFF"
           fi
+          if [ "${{ matrix.toolset }}" = "default" ]; then
+            TOOLSET_ARG=""
+          else
+            TOOLSET_ARG="-Dmsvc.toolset=${{ matrix.toolset }}"
+          fi
           ./mvnw.cmd -P with-cpp \
             -Dcpp.toolchain=msvc \
+            $TOOLSET_ARG \
             -Denable.asan=$ASAN_VALUE \
             -Dbuild.type=${{ matrix.build_type }} \
             -Dspotless.skip=true \
