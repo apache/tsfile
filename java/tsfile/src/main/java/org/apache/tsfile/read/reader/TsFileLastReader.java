@@ -226,7 +226,7 @@ public class TsFileLastReader
 
   private Pair<String, TimeValuePair> convertToLastPoint(
       TimeseriesMetadata seriesMeta, boolean isAligned) throws IOException {
-    if (seriesMeta.getTsDataType() != TSDataType.BLOB) {
+    if (!seriesMeta.getTsDataType().hasNoValueInStatistics()) {
       return new Pair<>(
           seriesMeta.getMeasurementId(),
           new TimeValuePair(
