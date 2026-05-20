@@ -138,6 +138,9 @@
                             <exclude>**/third_party/**</exclude>
                             <exclude>**/.python-version</exclude>
                             <exclude>**/**venv-py**/**</exclude>
+                            <exclude>AGENTS.md</exclude>
+                            <exclude>cpp/AGENTS.md</exclude>
+                            <exclude>python/AGENTS.md</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
