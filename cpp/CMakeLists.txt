@@ -32,7 +32,11 @@ endif ()
 set(TsFile_CPP_VERSION 2.2.1.dev)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus")
+    # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
+    # The lowest explicitly settable standard is /std:c++14. Without this flag,
+    # the default varies by VS version (VS2017+ defaults to C++14 mode with some
+    # C++17 extensions), so we pin it explicitly for reproducibility.
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
     add_definitions(-DNOMINMAX -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
                     -D_SCL_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
     # Export all symbols of the tsfile shared library automatically so that
@@ -228,7 +232,11 @@ set(THIRD_PARTY_INCLUDE ${PROJECT_BINARY_DIR}/third_party)
 
 set(SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus")
+    # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
+    # The lowest explicitly settable standard is /std:c++14. Without this flag,
+    # the default varies by VS version (VS2017+ defaults to C++14 mode with some
+    # C++17 extensions), so we pin it explicitly for reproducibility.
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
 else ()
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
 endif ()
