@@ -129,8 +129,11 @@ elif sys.platform == "win32":
             f"missing tsfile import library (*.lib or *.dll.a) in {CPP_LIB}"
         )
 
-    # Copy the DLL with a unified name regardless of toolchain.
-    dll_dst = PKG / "tsfile.dll"
+    # For MSVC the DLL is already named tsfile.dll.  For MinGW, keep the original
+    # name (libtsfile.dll): the import library (libtsfile.dll.a) has that name
+    # baked in, so Cython .pyd files record "libtsfile.dll" in their PE import
+    # table and Windows must find it by that exact name at runtime.
+    dll_dst = PKG / dll_src.name
     shutil.copy2(dll_src, dll_dst)
 
     # Copy import library with a name matching the DLL.
@@ -141,7 +144,7 @@ elif sys.platform == "win32":
     shutil.copy2(imp_src, imp_dst)
     print(f"setup.py: Windows toolchain = {win_toolchain}")
     print(
-        f"setup.py: copied {dll_src.name} -> tsfile.dll and {imp_src.name} -> {imp_dst.name}"
+        f"setup.py: copied {dll_src.name} -> {dll_dst.name} and {imp_src.name} -> {imp_dst.name}"
     )
 
     if win_toolchain == "mingw":
