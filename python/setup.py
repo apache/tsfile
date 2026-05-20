@@ -140,7 +140,9 @@ elif sys.platform == "win32":
         imp_dst = PKG / "tsfile.lib"
     shutil.copy2(imp_src, imp_dst)
     print(f"setup.py: Windows toolchain = {win_toolchain}")
-    print(f"setup.py: copied {dll_src.name} -> tsfile.dll and {imp_src.name} -> {imp_dst.name}")
+    print(
+        f"setup.py: copied {dll_src.name} -> tsfile.dll and {imp_src.name} -> {imp_dst.name}"
+    )
 
     if win_toolchain == "mingw":
         # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
