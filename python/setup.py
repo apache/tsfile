@@ -129,17 +129,23 @@ elif sys.platform == "win32":
             f"missing tsfile import library (*.lib or *.dll.a) in {CPP_LIB}"
         )
 
-    # Copy the DLL keeping its original base name: the import library embeds
-    # that name, so the .pyd extensions must find a DLL with the same name.
-    shutil.copy2(dll_src, PKG / dll_src.name)
-    shutil.copy2(imp_src, PKG / imp_src.name)
+    # Copy the DLL with a unified name regardless of toolchain.
+    dll_dst = PKG / "tsfile.dll"
+    shutil.copy2(dll_src, dll_dst)
+
+    # Copy import library with a name matching the DLL.
+    if win_toolchain == "mingw":
+        imp_dst = PKG / "tsfile.dll.a"
+    else:
+        imp_dst = PKG / "tsfile.lib"
+    shutil.copy2(imp_src, imp_dst)
     print(f"setup.py: Windows toolchain = {win_toolchain}")
-    print(f"setup.py: copied {dll_src.name} and {imp_src.name}")
+    print(f"setup.py: copied {dll_src.name} -> tsfile.dll and {imp_src.name} -> {imp_dst.name}")
 
     if win_toolchain == "mingw":
-        # Copy MinGW runtime DLLs next to libtsfile.dll so Python can find
-        # them. Python 3.8+ does not search PATH for DLLs; they must sit in
-        # the same directory as the .pyd extensions (os.add_dll_directory).
+        # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
+        # Python 3.8+ does not search PATH for DLLs; they must sit in the
+        # same directory as the .pyd extensions (os.add_dll_directory).
         for _mingw_dll in (
             "libstdc++-6.dll",
             "libgcc_s_seh-1.dll",

@@ -184,7 +184,7 @@ FORCE_INLINE int set_write_thread_count(int32_t count) {
 #ifdef ENABLE_THREADS
 class ThreadPool;
 // Global write thread pool, created by init_common().
-extern TSFILE_API ThreadPool* g_write_thread_pool_;
+extern ThreadPool* g_write_thread_pool_;
 #endif
 
 extern int init_common();
