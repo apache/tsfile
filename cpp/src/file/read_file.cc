@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <io.h>
+#include <windows.h>
+ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
 #else
 #include <unistd.h>
 #endif
@@ -30,13 +32,6 @@
 #include "common/logger/elog.h"
 #include "common/tsfile_common.h"
 #include "utils/util_define.h"  // ssize_t and other platform-compat shims
-
-#ifdef _WIN32
-#include <io.h>
-#include <windows.h>
-
-ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
-#endif
 
 using namespace common;
 namespace storage {
