@@ -17,6 +17,12 @@ specific language governing permissions and limitations
 under the License.
 ]]
 if (ENABLE_ANTLR4)
+    # Build the ANTLR4 runtime against the dynamic CRT (/MD) so it links the
+    # same C runtime as the rest of the project (avoiding LNK2038 mismatches).
+    # ANTLR4's own option is named WITH_STATIC_CRT and defaults to ON (=> /MT);
+    # pre-seeding it in the cache makes its option() call a no-op.
+    set(WITH_STATIC_CRT OFF CACHE BOOL
+        "Link the ANTLR4 runtime against the dynamic CRT" FORCE)
     add_subdirectory(antlr4-cpp-runtime-4)
     message("ANTLR4 runtime is enabled")
 else()

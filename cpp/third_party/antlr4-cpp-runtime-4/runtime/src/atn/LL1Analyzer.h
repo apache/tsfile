@@ -17,7 +17,7 @@ namespace atn {
   public:
     /// Special value added to the lookahead sets to indicate that we hit
     ///  a predicate during analysis if {@code seeThruPreds==false}.
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t HIT_PRED = Token::INVALID_TYPE;
 #else
     enum : size_t {

@@ -23,12 +23,24 @@ import sys
 _pkg_dir = os.path.dirname(os.path.abspath(__file__))
 
 if sys.platform == "win32":
-    os.add_dll_directory(_pkg_dir)
-    # Preload libtsfile.dll with absolute path to bypass DLL search issues.
-    # This ensures it's already in memory when .pyd extensions reference it.
-    _tsfile_dll = os.path.join(_pkg_dir, "libtsfile.dll")
-    if os.path.isfile(_tsfile_dll):
-        ctypes.CDLL(_tsfile_dll)
+    # Keep the handle alive for the lifetime of this module. CPython's reference
+    # counting frees the object immediately if not stored, which calls
+    # RemoveDllDirectory and undoes the registration before any .pyd is loaded.
+    _dll_dir = os.add_dll_directory(_pkg_dir)
+    # Preload the tsfile DLL so Windows finds it by base-name when loading the
+    # Cython extensions. Store the handle to prevent the DLL from being
+    # unloaded prematurely.
+    # MSVC builds produce "tsfile.dll"; MinGW builds produce "libtsfile.dll".
+    for _dll_name in ("tsfile.dll", "libtsfile.dll"):
+        _tsfile_dll = os.path.join(_pkg_dir, _dll_name)
+        if os.path.isfile(_tsfile_dll):
+            _tsfile_cdll = ctypes.CDLL(_tsfile_dll)
+            break
+    else:
+        raise FileNotFoundError(
+            f"tsfile DLL (tsfile.dll or libtsfile.dll) not found in {_pkg_dir}. "
+            "Re-build the C++ module and reinstall the Python package."
+        )
 elif sys.platform == "darwin":
     _tsfile_dylib = os.path.join(_pkg_dir, "libtsfile.dylib")
     if os.path.isfile(_tsfile_dylib):

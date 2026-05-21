@@ -14,7 +14,7 @@ namespace antlr4 {
   /// we obtained this token.
   class ANTLR4CPP_PUBLIC Token {
   public:
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t INVALID_TYPE = 0;
 #else
     enum : size_t {
@@ -24,7 +24,7 @@ namespace antlr4 {
 
     /// During lookahead operations, this "token" signifies we hit rule end ATN state
     /// and did not follow it despite needing to.
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t EPSILON = std::numeric_limits<size_t>::max() - 1;
     static constexpr size_t MIN_USER_TOKEN_TYPE = 1;
     static constexpr size_t EOF = IntStream::EOF;
@@ -41,7 +41,7 @@ namespace antlr4 {
     /// All tokens go to the parser (unless skip() is called in that rule)
     /// on a particular "channel".  The parser tunes to a particular channel
     /// so that whitespace etc... can go to the parser on a "hidden" channel.
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t DEFAULT_CHANNEL = 0;
 #else
     enum : size_t {
@@ -51,7 +51,7 @@ namespace antlr4 {
 
     /// Anything on different channel than DEFAULT_CHANNEL is not parsed
     /// by parser.
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t HIDDEN_CHANNEL = 1;
 #else
     enum : size_t {
@@ -70,7 +70,7 @@ namespace antlr4 {
      *
      * @see Token#getChannel()
      */
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || defined(_MSC_VER)
     static constexpr size_t MIN_USER_CHANNEL_VALUE = 2;
 #else
     enum : size_t {

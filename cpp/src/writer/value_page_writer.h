@@ -229,7 +229,7 @@ class ValuePageWriter {
     std::vector<uint8_t> col_notnull_bitmap_;
     uint32_t size_;
 
-    static uint32_t MASK;
+    static TSFILE_API uint32_t MASK;
 };
 
 }  // end namespace storage

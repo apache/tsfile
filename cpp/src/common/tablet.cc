@@ -565,7 +565,7 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
     for (uint32_t w = 0; w < nwords; w++) {
         uint64_t bits = boundary[w];
         while (bits) {
-            uint32_t bit = __builtin_ctzll(bits);
+            uint32_t bit = bitops::ctz64_nonzero(bits);
             uint32_t idx = w * 64 + bit;
             if (idx > 0 && idx < row_count) {
                 result.push_back(idx);
