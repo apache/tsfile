@@ -41,8 +41,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ParquetSourceReader implements SourceReader {
 
@@ -53,6 +55,7 @@ public class ParquetSourceReader implements SourceReader {
   private ParquetFileReader parquetReader;
   private MessageType parquetSchema;
   private boolean exhausted;
+  private boolean schemaValidated;
 
   private String overrideTableName;
   private String overrideTimePrecision;
@@ -141,6 +144,7 @@ public class ParquetSourceReader implements SourceReader {
 
     try {
       ensureReaderOpen();
+      validateSchema();
 
       PageReadStore rowGroup = parquetReader.readNextRowGroup();
       if (rowGroup == null) {
@@ -208,6 +212,49 @@ public class ParquetSourceReader implements SourceReader {
     if (parquetReader == null) {
       parquetReader = ParquetFileReader.open(new LocalInputFile(sourceFile.toPath()));
       parquetSchema = parquetReader.getFooter().getFileMetaData().getSchema();
+    }
+  }
+
+  private void validateSchema() {
+    if (schemaValidated) {
+      return;
+    }
+    schemaValidated = true;
+
+    List<String> fileColumnNames = new ArrayList<>();
+    for (Type field : parquetSchema.getFields()) {
+      fileColumnNames.add(field.getName());
+    }
+    Set<String> fileColumnSet = new HashSet<>(fileColumnNames);
+
+    List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
+    if (fileColumnNames.size() != srcCols.size()) {
+      throw new IllegalArgumentException(
+          "Column count mismatch: schema defines "
+              + srcCols.size()
+              + " columns but Parquet file has "
+              + fileColumnNames.size()
+              + " columns in "
+              + sourceFile.getAbsolutePath());
+    }
+
+    for (int i = 0; i < srcCols.size(); i++) {
+      ImportSchema.SourceColumn col = srcCols.get(i);
+      if (col.isSkip() && col.getName() == null) {
+        throw new IllegalArgumentException(
+            "Unnamed SKIP is not supported for Parquet (name-based matching). "
+                + "Use 'columnName SKIP' to skip a specific column at position "
+                + i
+                + " in "
+                + sourceFile.getAbsolutePath());
+      }
+      if (!fileColumnSet.contains(col.getName())) {
+        throw new IllegalArgumentException(
+            (col.isSkip() ? "SKIP column '" : "Source column '")
+                + col.getName()
+                + "' not found in Parquet file: "
+                + sourceFile.getAbsolutePath());
+      }
     }
   }
 

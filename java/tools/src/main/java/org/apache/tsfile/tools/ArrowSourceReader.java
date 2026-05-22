@@ -49,8 +49,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ArrowSourceReader implements SourceReader {
 
@@ -65,6 +67,7 @@ public class ArrowSourceReader implements SourceReader {
   private List<ArrowBlock> recordBatches;
   private int currentBatchIndex;
   private boolean exhausted;
+  private boolean schemaValidated;
 
   private String overrideTableName;
   private String overrideTimePrecision;
@@ -149,6 +152,7 @@ public class ArrowSourceReader implements SourceReader {
 
     try {
       ensureReaderOpen();
+      validateSchema();
 
       if (currentBatchIndex >= recordBatches.size()) {
         exhausted = true;
@@ -230,6 +234,49 @@ public class ArrowSourceReader implements SourceReader {
       arrowReader = new ArrowFileReader(fileInputStream.getChannel(), allocator);
       arrowSchema = arrowReader.getVectorSchemaRoot().getSchema();
       recordBatches = arrowReader.getRecordBlocks();
+    }
+  }
+
+  private void validateSchema() {
+    if (schemaValidated) {
+      return;
+    }
+    schemaValidated = true;
+
+    List<String> fileColumnNames = new ArrayList<>();
+    for (Field field : arrowSchema.getFields()) {
+      fileColumnNames.add(field.getName());
+    }
+    Set<String> fileColumnSet = new HashSet<>(fileColumnNames);
+
+    List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
+    if (fileColumnNames.size() != srcCols.size()) {
+      throw new IllegalArgumentException(
+          "Column count mismatch: schema defines "
+              + srcCols.size()
+              + " columns but Arrow file has "
+              + fileColumnNames.size()
+              + " columns in "
+              + sourceFile.getAbsolutePath());
+    }
+
+    for (int i = 0; i < srcCols.size(); i++) {
+      ImportSchema.SourceColumn col = srcCols.get(i);
+      if (col.isSkip() && col.getName() == null) {
+        throw new IllegalArgumentException(
+            "Unnamed SKIP is not supported for Arrow (name-based matching). "
+                + "Use 'columnName SKIP' to skip a specific column at position "
+                + i
+                + " in "
+                + sourceFile.getAbsolutePath());
+      }
+      if (!fileColumnSet.contains(col.getName())) {
+        throw new IllegalArgumentException(
+            (col.isSkip() ? "SKIP column '" : "Source column '")
+                + col.getName()
+                + "' not found in Arrow file: "
+                + sourceFile.getAbsolutePath());
+      }
     }
   }
 
