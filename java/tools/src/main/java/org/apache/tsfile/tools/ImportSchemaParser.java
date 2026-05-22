@@ -21,8 +21,11 @@ package org.apache.tsfile.tools;
 import org.apache.tsfile.enums.TSDataType;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -41,7 +44,10 @@ public class ImportSchemaParser {
     List<ImportSchema.TagColumn> tagColumns = new ArrayList<>();
     List<ImportSchema.SourceColumn> sourceColumns = new ArrayList<>();
 
-    try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+    try (BufferedReader reader =
+        new BufferedReader(
+            new InputStreamReader(
+                Files.newInputStream(Paths.get(filePath)), StandardCharsets.UTF_8))) {
       String line;
       Section section = Section.NONE;
 
