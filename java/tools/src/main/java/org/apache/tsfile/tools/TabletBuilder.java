@@ -91,7 +91,9 @@ public class TabletBuilder {
         }
 
         boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
-        Object converted = ValueConverter.convert(rawValue, colSchema.getType(), isMeasurement);
+        Object converted =
+            ValueConverter.convert(
+                rawValue, colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
         tablet.addValue(colName, i, converted);
       }
     }
@@ -128,12 +130,12 @@ public class TabletBuilder {
 
     for (ImportSchema.TagColumn tag : importSchema.getTagColumns()) {
       if (tag.hasDefault()) {
-        tagDefaults.put(tag.getName(), tag.getDefaultValue());
+        tagDefaults.put(tag.getName().toLowerCase(), tag.getDefaultValue());
       }
       schemas.add(
           new MeasurementSchema(
               tag.getName(),
-              TSDataType.TEXT,
+              TSDataType.STRING,
               org.apache.tsfile.file.metadata.enums.TSEncoding.PLAIN,
               org.apache.tsfile.file.metadata.enums.CompressionType.UNCOMPRESSED));
       categories.add(ColumnCategory.TAG);
@@ -156,7 +158,7 @@ public class TabletBuilder {
     String[] colNames = findSourceColumnNames();
     String timeName = importSchema.getTimeColumnName();
     for (int i = 0; i < colNames.length; i++) {
-      if (colNames[i] != null && colNames[i].equals(timeName)) {
+      if (colNames[i] != null && colNames[i].equalsIgnoreCase(timeName)) {
         return i;
       }
     }
@@ -171,7 +173,7 @@ public class TabletBuilder {
       ImportSchema.SourceColumn col = srcCols.get(i);
       names[i] = col.isSkip() ? null : col.getName();
       if (!col.isSkip()) {
-        sourceColumnIndex.put(col.getName(), i);
+        sourceColumnIndex.put(col.getName().toLowerCase(), i);
       }
     }
     return names;

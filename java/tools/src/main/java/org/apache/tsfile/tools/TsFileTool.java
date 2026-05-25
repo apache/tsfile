@@ -113,29 +113,34 @@ public class TsFileTool {
 
   private static boolean isAcceptedFormat(String fileName) {
     String lower = fileName.toLowerCase();
-    String fmt = resolveFormat(fileName);
+    String detected = detectFormatByExtension(lower);
     if (formatStr != null) {
-      return fmt.equals(formatStr);
+      return formatStr.equals(detected);
     }
-    return lower.endsWith(".csv")
-        || lower.endsWith(".parquet")
-        || lower.endsWith(".arrow")
-        || lower.endsWith(".ipc")
-        || lower.endsWith(".feather");
+    return detected != null;
+  }
+
+  private static String detectFormatByExtension(String lowerName) {
+    if (lowerName.endsWith(".csv")) {
+      return "csv";
+    }
+    if (lowerName.endsWith(".parquet")) {
+      return "parquet";
+    }
+    if (lowerName.endsWith(".arrow")
+        || lowerName.endsWith(".ipc")
+        || lowerName.endsWith(".feather")) {
+      return "arrow";
+    }
+    return null;
   }
 
   private static String resolveFormat(String fileName) {
     if (formatStr != null) {
       return formatStr;
     }
-    String lower = fileName.toLowerCase();
-    if (lower.endsWith(".parquet")) {
-      return "parquet";
-    }
-    if (lower.endsWith(".arrow") || lower.endsWith(".ipc") || lower.endsWith(".feather")) {
-      return "arrow";
-    }
-    return "csv";
+    String detected = detectFormatByExtension(fileName.toLowerCase());
+    return detected != null ? detected : "csv";
   }
 
   private static void processFile(File inputFile, ExecutorService executor) {

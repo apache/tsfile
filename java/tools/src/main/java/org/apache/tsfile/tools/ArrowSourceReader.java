@@ -25,10 +25,13 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DateMilliVector;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -44,10 +47,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ArrowSourceReader implements SourceReader {
 
@@ -62,6 +68,7 @@ public class ArrowSourceReader implements SourceReader {
   private List<ArrowBlock> recordBatches;
   private int currentBatchIndex;
   private boolean exhausted;
+  private boolean schemaValidated;
 
   private String overrideTableName;
   private String overrideTimePrecision;
@@ -148,6 +155,7 @@ public class ArrowSourceReader implements SourceReader {
 
     try {
       ensureReaderOpen();
+      validateSchema();
 
       if (currentBatchIndex >= recordBatches.size()) {
         exhausted = true;
@@ -232,6 +240,49 @@ public class ArrowSourceReader implements SourceReader {
     }
   }
 
+  private void validateSchema() {
+    if (schemaValidated) {
+      return;
+    }
+    schemaValidated = true;
+
+    List<String> fileColumnNames = new ArrayList<>();
+    for (Field field : arrowSchema.getFields()) {
+      fileColumnNames.add(field.getName());
+    }
+    Set<String> fileColumnSet = new HashSet<>(fileColumnNames);
+
+    List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
+    if (fileColumnNames.size() != srcCols.size()) {
+      throw new IllegalArgumentException(
+          "Column count mismatch: schema defines "
+              + srcCols.size()
+              + " columns but Arrow file has "
+              + fileColumnNames.size()
+              + " columns in "
+              + sourceFile.getAbsolutePath());
+    }
+
+    for (int i = 0; i < srcCols.size(); i++) {
+      ImportSchema.SourceColumn col = srcCols.get(i);
+      if (col.isSkip() && col.getName() == null) {
+        throw new IllegalArgumentException(
+            "Unnamed SKIP is not supported for Arrow (name-based matching). "
+                + "Use 'columnName SKIP' to skip a specific column at position "
+                + i
+                + " in "
+                + sourceFile.getAbsolutePath());
+      }
+      if (!fileColumnSet.contains(col.getName())) {
+        throw new IllegalArgumentException(
+            (col.isSkip() ? "SKIP column '" : "Source column '")
+                + col.getName()
+                + "' not found in Arrow file: "
+                + sourceFile.getAbsolutePath());
+      }
+    }
+  }
+
   private List<String> getSchemaColumnNames() {
     List<String> names = new ArrayList<>();
     List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
@@ -243,7 +294,22 @@ public class ArrowSourceReader implements SourceReader {
   }
 
   private Object extractValue(FieldVector vec, int row) {
-    if (vec instanceof BigIntVector) {
+    // Date / Timestamp checks must come BEFORE the BigIntVector/IntVector branches: although
+    // they hold int/long underneath, DateDayVector / TimeStampVector do NOT extend
+    // IntVector / BigIntVector, so without these branches Date columns fall through to the
+    // generic getObject().toString() path and produce strings that don't match TSDataType.DATE.
+    if (vec instanceof DateDayVector) {
+      // Days since 1970-01-01. ValueConverter.toLocalDate handles Integer → LocalDate.
+      return ((DateDayVector) vec).get(row);
+    } else if (vec instanceof DateMilliVector) {
+      // Millis since 1970-01-01; collapse to date.
+      long millis = ((DateMilliVector) vec).get(row);
+      return LocalDate.ofEpochDay(Math.floorDiv(millis, 86_400_000L));
+    } else if (vec instanceof TimeStampVector) {
+      // Long in the vector's native precision; matches the precision detected by
+      // detectTimestampPrecision() and stored on the schema.
+      return ((TimeStampVector) vec).get(row);
+    } else if (vec instanceof BigIntVector) {
       return ((BigIntVector) vec).get(row);
     } else if (vec instanceof IntVector) {
       return ((IntVector) vec).get(row);

@@ -66,10 +66,15 @@ mvn install -P with-java -DskipTests
 
 - **time_column**：每个表有且仅有一个时间列，写入 TsFile 后列名固定为 `time`，类型为 `TIMESTAMP`。
 - **tag_columns**：设备标识列（联合主键），可以为 0 到多个。支持通过 `DEFAULT` 关键字定义不在源文件中的虚拟列。
+  - **数据类型固定为 `STRING`**，不可指定其他类型。即使在 `source_columns` 中为 TAG 列声明了类型，也会被忽略；推荐在 `source_columns` 里 TAG 列只写名字，不写类型。
 - **source_columns**：映射源文件中的所有列，CSV 按位置对应，Parquet / Arrow 按列名匹配。使用 `SKIP` 跳过不需要的列。
 - **FIELD**（推导结果，非配置项）：`source_columns` 中去掉 `time_column`、`tag_columns`、`SKIP` 后的剩余列，即为测点列，其值随时间变化。
 
+> **列名大小写**：TsFile 表模型下列名/表名大小写不敏感，统一以小写存储。`import.schema` 中无论写 `Time` / `TIME` / `time`，落盘与读取均为 `time`。
+
 ### Schema 示例
+
+> 同一设备内重复时间戳不支持 —— tag 列值相同且时间戳相同的行无法写入。
 
 CSV 文件内容：
 ```
@@ -96,9 +101,9 @@ DeviceNumber
 time_column=Time
 
 source_columns
-Region TEXT,
-FactoryNumber TEXT,
-DeviceNumber TEXT,
+Region,
+FactoryNumber,
+DeviceNumber,
 SKIP,
 SKIP,
 Time INT64,
@@ -108,7 +113,7 @@ Emission DOUBLE,
 
 说明：
 - `Group` 是虚拟标签列（不在 CSV 中），默认值为 `Datang`
-- `Region`、`FactoryNumber`、`DeviceNumber` 是从 CSV 中读取的标签列
+- `Region`、`FactoryNumber`、`DeviceNumber` 是从 CSV 中读取的标签列，类型固定为 `STRING`，无需声明
 - `Model` 和 `MaintenanceCycle` 通过 `SKIP` 跳过
 - `Temperature` 和 `Emission` 自动推导为 FIELD 列
 
@@ -120,6 +125,12 @@ unused_col SKIP,
 Temperature FLOAT,
 Emission DOUBLE,
 ```
+
+**Parquet / Arrow schema 模式校验规则**（强制校验，不通过则报错并将源文件移至 `--fail_dir`）：
+
+- **列数必须严格一致**：`source_columns` 的条目数必须等于 Parquet / Arrow 文件的列数。不需要导入的列请使用 `SKIP`。
+- **每个名称都必须存在于源文件中**：所有非 SKIP 列名和所有命名 SKIP 都必须能在文件列中找到。
+- **不允许匿名 `SKIP`**：按名匹配下，单独的 `SKIP` 无法定位具体列,必须写成 `columnName SKIP`。
 
 ## 命令行参数
 
@@ -161,11 +172,19 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed --s
 不传 `--schema`，自动推断列类型并识别时间列。
 
 **Auto 模式规则：**
-- 时间列：必须严格命名为 `time` 或 `TIME`（区分大小写）
+- **时间列**：必须严格命名为 `time` 或 `TIME`（区分大小写）。
+  - Parquet / Arrow：若源文件中存在多个 Timestamp 类型的列，**只有名为 `time` / `TIME` 的那一列被选为时间轴**;其余 Timestamp 列会作为 FIELD 列写入,类型为 `INT64`(原值保留,但 TIMESTAMP 语义丢失)。如需保留 TIMESTAMP 类型,请改用 schema 模式显式声明。
 - 其余所有列自动成为 FIELD（不自动推断标签列）
-- CSV 类型推断基于前 100 行采样。提升规则：INT64 和 DOUBLE 混合提升为 DOUBLE；其他任何混合对（包括 BOOLEAN 与数字类型）直接提升为 STRING。
+- **CSV 类型推断** 基于每列前 100 行采样。每个非空单元格先归类到一个基础类型(BOOLEAN / INT64 / DOUBLE / STRING)。
+  - 一列在采样里只出现一种基础类型时,该列就用该类型。
+  - **当同一列里出现不同基础类型时**触发提升:INT64 + DOUBLE → DOUBLE;其他任何混合组合(包括 BOOLEAN 与任意数字类型)→ STRING。
 - Parquet / Arrow 直接使用原生 schema 类型
-- 默认表名：从源文件名推导（如 `sensor.csv` → 表名 `sensor`）
+- **默认表名**：从源文件名推导（如 `sensor.csv` → 表名 `sensor`）。清洗规则按顺序执行:
+  1. 去掉文件扩展名(`.csv` / `.parquet` / `.arrow` / `.ipc` / `.feather`,无法匹配时去掉最后一个 `.` 之后的内容)。
+  2. 只保留 ASCII 字母(`a–z`、`A–Z`)、数字(`0–9`)、下划线(`_`)和点(`.`),其余字符全部替换为 `_`。
+  3. 连续的 `_` 合并为一个;去掉首尾的 `_`。
+  4. 若结果为空,使用按格式区分的默认名:`csv_data` / `parquet_data` / `arrow_data`。
+  5. 若结果以数字开头,前面补 `t_`(TsFile 表名不允许以数字开头)。
 - 默认 null 识别（仅 CSV）：空单元格和 `\N`
 
 **Auto 模式示例：**

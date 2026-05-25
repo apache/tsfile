@@ -25,6 +25,9 @@ import org.apache.tsfile.utils.Binary;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -183,5 +186,104 @@ public class ValueConverterTest {
   public void testObjectToStringForText() {
     Object result = ValueConverter.convert(12345, TSDataType.TEXT, false);
     assertEquals("12345", result);
+  }
+
+  // --- DATE ---
+
+  @Test
+  public void testStringDashToDate() {
+    Object result = ValueConverter.convert("2024-01-15", TSDataType.DATE, true);
+    assertEquals(LocalDate.of(2024, 1, 15), result);
+  }
+
+  @Test
+  public void testStringSlashToDate() {
+    Object result = ValueConverter.convert("2024/01/15", TSDataType.DATE, true);
+    assertEquals(LocalDate.of(2024, 1, 15), result);
+  }
+
+  @Test
+  public void testStringDotToDate() {
+    Object result = ValueConverter.convert("2024.01.15", TSDataType.DATE, true);
+    assertEquals(LocalDate.of(2024, 1, 15), result);
+  }
+
+  @Test
+  public void testLocalDatePassthrough() {
+    LocalDate d = LocalDate.of(2030, 6, 1);
+    assertEquals(d, ValueConverter.convert(d, TSDataType.DATE, true));
+  }
+
+  @Test
+  public void testLocalDateTimeToDate() {
+    LocalDateTime ldt = LocalDateTime.of(2024, 3, 10, 5, 30);
+    assertEquals(LocalDate.of(2024, 3, 10), ValueConverter.convert(ldt, TSDataType.DATE, true));
+  }
+
+  @Test
+  public void testEpochDayIntegerToDate() {
+    // 1970-01-01 = epoch day 0; 2024-01-15 = day 19737
+    Object result = ValueConverter.convert(19737, TSDataType.DATE, true);
+    assertEquals(LocalDate.of(2024, 1, 15), result);
+  }
+
+  @Test
+  public void testEpochDayLongToDate() {
+    Object result = ValueConverter.convert(0L, TSDataType.DATE, true);
+    assertEquals(LocalDate.ofEpochDay(0), result);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testInvalidDateThrows() {
+    ValueConverter.convert("not-a-date", TSDataType.DATE, true);
+  }
+
+  // --- TIMESTAMP ---
+
+  @Test
+  public void testStringNumericToTimestamp() {
+    Object result = ValueConverter.convert("1700000000000", TSDataType.TIMESTAMP, true, "ms");
+    assertEquals(1700000000000L, result);
+  }
+
+  @Test
+  public void testLongPassthroughToTimestamp() {
+    Object result = ValueConverter.convert(1700000000000L, TSDataType.TIMESTAMP, true, "ms");
+    assertEquals(1700000000000L, result);
+  }
+
+  @Test
+  public void testIntegerWidenedToTimestamp() {
+    Object result = ValueConverter.convert(123, TSDataType.TIMESTAMP, true, "ms");
+    assertEquals(123L, result);
+  }
+
+  @Test
+  public void testInstantToTimestampMs() {
+    Instant i = Instant.ofEpochSecond(1700000000L, 500_000_000);
+    Object result = ValueConverter.convert(i, TSDataType.TIMESTAMP, true, "ms");
+    assertEquals(1700000000_500L, result);
+  }
+
+  @Test
+  public void testInstantToTimestampUs() {
+    Instant i = Instant.ofEpochSecond(1700000000L, 500_000_000);
+    Object result = ValueConverter.convert(i, TSDataType.TIMESTAMP, true, "us");
+    assertEquals(1700000000_500_000L, result);
+  }
+
+  @Test
+  public void testInstantToTimestampNs() {
+    Instant i = Instant.ofEpochSecond(1700000000L, 123_456_789);
+    Object result = ValueConverter.convert(i, TSDataType.TIMESTAMP, true, "ns");
+    assertEquals(1700000000_123_456_789L, result);
+  }
+
+  @Test
+  public void testIsoDateStringToTimestampMs() {
+    // 2024-01-15T00:00:00 in UTC = 1705276800000ms
+    Object result =
+        ValueConverter.convert("2024-01-15T00:00:00+00:00", TSDataType.TIMESTAMP, true, "ms");
+    assertEquals(1705276800000L, result);
   }
 }

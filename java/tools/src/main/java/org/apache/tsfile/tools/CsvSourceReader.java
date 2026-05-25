@@ -228,8 +228,57 @@ public class CsvSourceReader implements SourceReader {
     }
   }
 
-  private String[] splitLine(String line) {
-    return line.split(separator, -1);
+  /**
+   * RFC 4180-style tokenizer that handles quoted fields with embedded delimiters and escaped quotes
+   * ({@code ""}). Multi-line quoted records are not supported — quoted values must not contain line
+   * breaks, since the surrounding read loop is line-oriented.
+   */
+  String[] splitLine(String line) {
+    if (line.indexOf('"') < 0) {
+      return line.split(separator, -1);
+    }
+    List<String> tokens = new ArrayList<>();
+    StringBuilder cur = new StringBuilder();
+    boolean inQuotes = false;
+    boolean fieldStart = true;
+    int sepLen = separator.length();
+    int i = 0;
+    while (i < line.length()) {
+      char c = line.charAt(i);
+      if (inQuotes) {
+        if (c == '"') {
+          if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
+            cur.append('"');
+            i += 2;
+            continue;
+          }
+          inQuotes = false;
+          i++;
+          continue;
+        }
+        cur.append(c);
+        i++;
+      } else {
+        if (fieldStart && c == '"') {
+          inQuotes = true;
+          fieldStart = false;
+          i++;
+          continue;
+        }
+        if (line.regionMatches(i, separator, 0, sepLen)) {
+          tokens.add(cur.toString());
+          cur.setLength(0);
+          fieldStart = true;
+          i += sepLen;
+          continue;
+        }
+        cur.append(c);
+        fieldStart = false;
+        i++;
+      }
+    }
+    tokens.add(cur.toString());
+    return tokens.toArray(new String[0]);
   }
 
   private Object[] parseLine(String line) {

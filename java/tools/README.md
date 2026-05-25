@@ -65,10 +65,15 @@ mvn install -P with-java -DskipTests
 
 - **time_column**: Exactly one per table. Written as `time` column with type `TIMESTAMP` in TsFile.
 - **tag_columns**: Device identifiers (composite primary key), 0 or more. Supports virtual columns not present in the source file via `DEFAULT` keyword.
+  - **Data type is always `STRING`** and cannot be changed. Any type declared for a tag column in `source_columns` is ignored. We recommend writing tag columns in `source_columns` with the column name only (no type).
 - **source_columns**: Maps every column in the source file by position (CSV) or by name (Parquet / Arrow). Use `SKIP` to ignore a column.
 - **FIELD** (derived, not configured): All columns in `source_columns` that are not `time_column`, not in `tag_columns`, and not `SKIP`. These are the measurement columns whose values change over time.
 
+> **Column name case**: TsFile table-model column and table names are case-insensitive and stored as lowercase. Regardless of whether you write `Time` / `TIME` / `time` in `import.schema`, the on-disk and read-back name is `time`.
+
 ### Schema Example
+
+> Duplicate timestamps within the same device are not supported — rows sharing identical tag column values and the same timestamp will fail to write.
 
 CSV file content:
 ```
@@ -95,9 +100,9 @@ DeviceNumber
 time_column=Time
 
 source_columns
-Region TEXT,
-FactoryNumber TEXT,
-DeviceNumber TEXT,
+Region,
+FactoryNumber,
+DeviceNumber,
 SKIP,
 SKIP,
 Time INT64,
@@ -107,7 +112,7 @@ Emission DOUBLE,
 
 In this example:
 - `Group` is a virtual tag column (not in CSV) with default value `Datang`
-- `Region`, `FactoryNumber`, `DeviceNumber` are tag columns read from CSV
+- `Region`, `FactoryNumber`, `DeviceNumber` are tag columns read from CSV; their type is fixed as `STRING` and need not be declared
 - `Model` and `MaintenanceCycle` are skipped via `SKIP`
 - `Temperature` and `Emission` are automatically derived as FIELD columns
 
@@ -119,6 +124,12 @@ unused_col SKIP,
 Temperature FLOAT,
 Emission DOUBLE,
 ```
+
+**Validation rules for Parquet / Arrow schema mode** (enforced — mismatches raise an error and the source file is moved to `--fail_dir`):
+
+- **Column count must match exactly.** The number of entries in `source_columns` must equal the number of columns in the Parquet / Arrow file. Use `SKIP` for any file column you don't want to import.
+- **Every name must exist in the source file.** Each non-SKIP column name and every named SKIP must resolve to an actual column in the file.
+- **Unnamed `SKIP` is not allowed.** Because matching is by name, an unqualified `SKIP` cannot identify a column. Always use `columnName SKIP`.
 
 ## CLI Parameters
 
@@ -160,11 +171,19 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed --s
 Omit `--schema` to automatically infer column types and detect the time column.
 
 **Auto mode rules:**
-- Time column: must be named exactly `time` or `TIME` (case-sensitive, strict match)
+- **Time column**: must be named exactly `time` or `TIME` (case-sensitive, strict match).
+  - Parquet / Arrow: if the source file contains multiple Timestamp-typed columns, only the one named `time` / `TIME` is selected as the time axis. The remaining Timestamp columns become FIELD columns and are stored as `INT64` (raw value preserved, TIMESTAMP semantic dropped). To keep them as `TIMESTAMP`, switch to schema mode and declare them explicitly.
 - All other columns become FIELD (no tag inference)
-- CSV type inference uses a 100-row sampling window. Promotion rules: INT64 and DOUBLE promote to DOUBLE; any other mixed pair (including BOOLEAN with numeric) promotes to STRING.
+- **CSV type inference** uses a 100-row sampling window per column. Each non-null cell is classified into a base type (BOOLEAN / INT64 / DOUBLE / STRING).
+  - If only one base type appears across the sampled rows for a column, that type is used.
+  - When **different base types appear in the same column**, the column is promoted: INT64 + DOUBLE → DOUBLE; any other mixed combination (including BOOLEAN with any numeric type) → STRING.
 - Parquet / Arrow use native schema types directly
-- Default table name: derived from source filename (e.g. `sensor.csv` → table `sensor`)
+- **Default table name**: derived from the source filename (e.g. `sensor.csv` → table `sensor`). Sanitization rules applied in order:
+  1. Strip the file extension (`.csv` / `.parquet` / `.arrow` / `.ipc` / `.feather`, or the last `.`-suffix as a fallback).
+  2. Keep only ASCII letters (`a–z`, `A–Z`), digits (`0–9`), underscore (`_`), and dot (`.`). Every other character is replaced with `_`.
+  3. Collapse consecutive `_` into a single `_`; strip leading and trailing `_`.
+  4. If the result is empty, use a format-specific default: `csv_data` / `parquet_data` / `arrow_data`.
+  5. If the result starts with a digit, prefix `t_` (TsFile table names cannot start with a digit).
 - Default null tokens (CSV only): empty cell and `\N`
 
 **Auto mode example:**

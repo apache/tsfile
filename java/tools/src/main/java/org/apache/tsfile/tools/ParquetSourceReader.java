@@ -38,10 +38,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ParquetSourceReader implements SourceReader {
 
@@ -52,6 +56,7 @@ public class ParquetSourceReader implements SourceReader {
   private ParquetFileReader parquetReader;
   private MessageType parquetSchema;
   private boolean exhausted;
+  private boolean schemaValidated;
 
   private String overrideTableName;
   private String overrideTimePrecision;
@@ -142,6 +147,7 @@ public class ParquetSourceReader implements SourceReader {
 
     try {
       ensureReaderOpen();
+      validateSchema();
 
       PageReadStore rowGroup = parquetReader.readNextRowGroup();
       if (rowGroup == null) {
@@ -213,6 +219,49 @@ public class ParquetSourceReader implements SourceReader {
     }
   }
 
+  private void validateSchema() {
+    if (schemaValidated) {
+      return;
+    }
+    schemaValidated = true;
+
+    List<String> fileColumnNames = new ArrayList<>();
+    for (Type field : parquetSchema.getFields()) {
+      fileColumnNames.add(field.getName());
+    }
+    Set<String> fileColumnSet = new HashSet<>(fileColumnNames);
+
+    List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
+    if (fileColumnNames.size() != srcCols.size()) {
+      throw new IllegalArgumentException(
+          "Column count mismatch: schema defines "
+              + srcCols.size()
+              + " columns but Parquet file has "
+              + fileColumnNames.size()
+              + " columns in "
+              + sourceFile.getAbsolutePath());
+    }
+
+    for (int i = 0; i < srcCols.size(); i++) {
+      ImportSchema.SourceColumn col = srcCols.get(i);
+      if (col.isSkip() && col.getName() == null) {
+        throw new IllegalArgumentException(
+            "Unnamed SKIP is not supported for Parquet (name-based matching). "
+                + "Use 'columnName SKIP' to skip a specific column at position "
+                + i
+                + " in "
+                + sourceFile.getAbsolutePath());
+      }
+      if (!fileColumnSet.contains(col.getName())) {
+        throw new IllegalArgumentException(
+            (col.isSkip() ? "SKIP column '" : "Source column '")
+                + col.getName()
+                + "' not found in Parquet file: "
+                + sourceFile.getAbsolutePath());
+      }
+    }
+  }
+
   private List<String> getSchemaColumnNames() {
     List<String> names = new ArrayList<>();
     List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
@@ -258,10 +307,27 @@ public class ParquetSourceReader implements SourceReader {
         }
         return group.getBinary(fieldIndex, 0).getBytes();
       case INT96:
-        return group.getBinary(fieldIndex, 0).getBytes();
+        // Use getInt96 — INT96 values are Int96Value, not BinaryValue, so getBinary throws CCE.
+        return int96ToEpochNanos(group.getInt96(fieldIndex, 0).getBytes());
       default:
         return group.getValueToString(fieldIndex, 0);
     }
+  }
+
+  /**
+   * Decode a legacy Parquet INT96 timestamp (12 bytes: 8-byte little-endian nanoseconds-of-day +
+   * 4-byte little-endian Julian day number) to nanoseconds since the Unix epoch.
+   */
+  static long int96ToEpochNanos(byte[] bytes) {
+    if (bytes == null || bytes.length != 12) {
+      throw new IllegalArgumentException(
+          "INT96 timestamp must be 12 bytes, got " + (bytes == null ? 0 : bytes.length));
+    }
+    ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+    long nanosOfDay = buf.getLong();
+    int julianDay = buf.getInt();
+    long daysSinceEpoch = (long) julianDay - 2440588L;
+    return Math.addExact(Math.multiplyExact(daysSinceEpoch, 86_400_000_000_000L), nanosOfDay);
   }
 
   static TSDataType mapParquetType(PrimitiveType pt) {
@@ -313,6 +379,9 @@ public class ParquetSourceReader implements SourceReader {
         default:
           return null;
       }
+    }
+    if (pt.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
+      return "ns";
     }
     return null;
   }

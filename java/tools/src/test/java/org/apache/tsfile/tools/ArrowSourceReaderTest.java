@@ -25,13 +25,19 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DateMilliVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.TimeStampMilliVector;
+import org.apache.arrow.vector.TimeStampNanoVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileWriter;
+import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
@@ -495,5 +501,176 @@ public class ArrowSourceReaderTest {
 
       assertNull(reader.readBatch());
     }
+  }
+
+  // --- Date / Timestamp vectors are NOT subclasses of IntVector / BigIntVector ---
+  // Before the fix, these fell through to vec.getObject().toString() — producing a String
+  // representation that did not match the schema's inferred TSDataType.
+
+  @Test
+  public void testDateDayVectorReturnsEpochDayInteger() throws Exception {
+    List<Field> fields = new ArrayList<>();
+    fields.add(new Field("time", FieldType.notNullable(new ArrowType.Int(64, true)), null));
+    fields.add(
+        new Field("birthday", FieldType.notNullable(new ArrowType.Date(DateUnit.DAY)), null));
+    Schema arrowSchema = new Schema(fields);
+
+    File file =
+        writeArrowFile(
+            "date_day.arrow",
+            arrowSchema,
+            (root, writer) -> {
+              BigIntVector tv = (BigIntVector) root.getVector("time");
+              DateDayVector dv = (DateDayVector) root.getVector("birthday");
+              tv.allocateNew(2);
+              dv.allocateNew(2);
+              tv.set(0, 1000L);
+              tv.set(1, 2000L);
+              dv.set(0, 19737); // 2024-01-15
+              dv.set(1, 0); // 1970-01-01
+              root.setRowCount(2);
+              writer.writeBatch();
+            });
+
+    try (ArrowSourceReader reader = new ArrowSourceReader(file)) {
+      ImportSchema schema = reader.inferSchema();
+      assertEquals(TSDataType.DATE, findField(schema.fieldColumns(), "birthday").getDataType());
+
+      SourceBatch batch = reader.readBatch();
+      assertNotNull(batch);
+      assertEquals(2, batch.getRowCount());
+      // Must be an Integer (epoch days), not a stringified value.
+      assertTrue(batch.getValue(0, 1) instanceof Integer);
+      assertEquals(19737, batch.getValue(0, 1));
+      assertEquals(0, batch.getValue(1, 1));
+    }
+  }
+
+  @Test
+  public void testDateMilliVectorCollapsesToLocalDate() throws Exception {
+    List<Field> fields = new ArrayList<>();
+    fields.add(new Field("time", FieldType.notNullable(new ArrowType.Int(64, true)), null));
+    fields.add(
+        new Field("dob", FieldType.notNullable(new ArrowType.Date(DateUnit.MILLISECOND)), null));
+    Schema arrowSchema = new Schema(fields);
+
+    long jan15 = 19737L * 86_400_000L; // 2024-01-15 UTC midnight in epoch ms
+    File file =
+        writeArrowFile(
+            "date_milli.arrow",
+            arrowSchema,
+            (root, writer) -> {
+              BigIntVector tv = (BigIntVector) root.getVector("time");
+              DateMilliVector dv = (DateMilliVector) root.getVector("dob");
+              tv.allocateNew(1);
+              dv.allocateNew(1);
+              tv.set(0, 1000L);
+              dv.set(0, jan15);
+              root.setRowCount(1);
+              writer.writeBatch();
+            });
+
+    try (ArrowSourceReader reader = new ArrowSourceReader(file)) {
+      reader.inferSchema();
+      SourceBatch batch = reader.readBatch();
+      assertNotNull(batch);
+      // DateMilli is collapsed to LocalDate so downstream DATE handling treats it consistently.
+      assertTrue(batch.getValue(0, 1) instanceof java.time.LocalDate);
+      assertEquals(java.time.LocalDate.of(2024, 1, 15), batch.getValue(0, 1));
+    }
+  }
+
+  @Test
+  public void testTimeStampMilliVectorReturnsLong() throws Exception {
+    List<Field> fields = new ArrayList<>();
+    fields.add(
+        new Field(
+            "time",
+            FieldType.notNullable(new ArrowType.Timestamp(TimeUnit.MILLISECOND, null)),
+            null));
+    fields.add(
+        new Field(
+            "value",
+            FieldType.notNullable(new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)),
+            null));
+    Schema arrowSchema = new Schema(fields);
+
+    File file =
+        writeArrowFile(
+            "ts_milli.arrow",
+            arrowSchema,
+            (root, writer) -> {
+              TimeStampMilliVector tv = (TimeStampMilliVector) root.getVector("time");
+              Float8Vector vv = (Float8Vector) root.getVector("value");
+              tv.allocateNew(2);
+              vv.allocateNew(2);
+              tv.set(0, 1705276800000L); // 2024-01-15T00:00:00Z
+              tv.set(1, 1705280400000L); // 2024-01-15T01:00:00Z
+              vv.set(0, 10.0);
+              vv.set(1, 20.0);
+              root.setRowCount(2);
+              writer.writeBatch();
+            });
+
+    try (ArrowSourceReader reader = new ArrowSourceReader(file)) {
+      ImportSchema schema = reader.inferSchema();
+      assertEquals("ms", schema.getTimePrecision());
+
+      SourceBatch batch = reader.readBatch();
+      assertNotNull(batch);
+      assertEquals(2, batch.getRowCount());
+      assertTrue(batch.getValue(0, 0) instanceof Long);
+      assertEquals(1705276800000L, batch.getValue(0, 0));
+      assertEquals(1705280400000L, batch.getValue(1, 0));
+    }
+  }
+
+  @Test
+  public void testTimeStampNanoVectorReturnsLongNanos() throws Exception {
+    List<Field> fields = new ArrayList<>();
+    fields.add(
+        new Field(
+            "time",
+            FieldType.notNullable(new ArrowType.Timestamp(TimeUnit.NANOSECOND, null)),
+            null));
+    fields.add(
+        new Field(
+            "value",
+            FieldType.notNullable(new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)),
+            null));
+    Schema arrowSchema = new Schema(fields);
+
+    File file =
+        writeArrowFile(
+            "ts_nano.arrow",
+            arrowSchema,
+            (root, writer) -> {
+              TimeStampNanoVector tv = (TimeStampNanoVector) root.getVector("time");
+              Float8Vector vv = (Float8Vector) root.getVector("value");
+              tv.allocateNew(1);
+              vv.allocateNew(1);
+              tv.set(0, 1705276800123456789L);
+              vv.set(0, 1.5);
+              root.setRowCount(1);
+              writer.writeBatch();
+            });
+
+    try (ArrowSourceReader reader = new ArrowSourceReader(file)) {
+      ImportSchema schema = reader.inferSchema();
+      assertEquals("ns", schema.getTimePrecision());
+
+      SourceBatch batch = reader.readBatch();
+      assertNotNull(batch);
+      assertEquals(1705276800123456789L, batch.getValue(0, 0));
+    }
+  }
+
+  private ImportSchema.SourceColumn findField(List<ImportSchema.SourceColumn> fields, String name) {
+    for (ImportSchema.SourceColumn f : fields) {
+      if (f.getName().equals(name)) {
+        return f;
+      }
+    }
+    throw new AssertionError("Field not found: " + name);
   }
 }
