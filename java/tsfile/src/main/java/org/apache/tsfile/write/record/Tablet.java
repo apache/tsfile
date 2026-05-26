@@ -748,11 +748,24 @@ public class Tablet implements Accountable {
 
   /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
-    try (PublicBAOS byteArrayOutputStream = new PublicBAOS();
+    final int serializedSize = serializedSize();
+    try (PublicBAOS byteArrayOutputStream = new PublicBAOS(serializedSize);
         DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream)) {
       serialize(outputStream);
       return ByteBuffer.wrap(byteArrayOutputStream.getBuf(), 0, byteArrayOutputStream.size());
     }
+  }
+
+  /** Return the exact serialized byte size of this tablet. */
+  public int serializedSize() {
+    int size = 0;
+    size += ReadWriteIOUtils.sizeToWrite(insertTargetName);
+    size += Integer.BYTES;
+    size += serializedSizeOfMeasurementSchemas();
+    size += serializedSizeOfTimes();
+    size += serializedSizeOfBitMaps();
+    size += serializedSizeOfValues();
+    return size;
   }
 
   public void serialize(DataOutputStream stream) throws IOException {
@@ -762,6 +775,104 @@ public class Tablet implements Accountable {
     writeTimes(stream);
     writeBitMaps(stream);
     writeValues(stream);
+  }
+
+  private int serializedSizeOfMeasurementSchemas() {
+    int size = Byte.BYTES;
+    if (schemas != null) {
+      size += Integer.BYTES;
+      for (int i = 0; i < schemas.size(); i++) {
+        size += Byte.BYTES;
+        final IMeasurementSchema schema = schemas.get(i);
+        if (schema != null) {
+          size += schema.serializedSize();
+          size += Byte.BYTES;
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfTimes() {
+    int size = Byte.BYTES;
+    if (timestamps != null) {
+      size += (long) Long.BYTES * rowSize;
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBitMaps() {
+    int size = Byte.BYTES;
+    if (bitMaps != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        if (bitMaps[i] == null || bitMaps[i].isAllUnmarked(rowSize)) {
+          size += Byte.BYTES;
+        } else {
+          size += Byte.BYTES;
+          size += Integer.BYTES;
+          size +=
+              ReadWriteIOUtils.sizeToWrite(new Binary(bitMaps[i].getTruncatedByteArray(rowSize)));
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfValues() {
+    int size = Byte.BYTES;
+    if (values != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        size += serializedSizeOfColumn(schemas.get(i).getType(), values[i]);
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfColumn(final TSDataType dataType, final Object column) {
+    int size = Byte.BYTES;
+    if (column == null) {
+      return size;
+    }
+    switch (dataType) {
+      case INT32:
+        return size + Integer.BYTES * rowSize;
+      case DATE:
+        return size + Integer.BYTES * rowSize;
+      case INT64:
+      case TIMESTAMP:
+        return size + Long.BYTES * rowSize;
+      case FLOAT:
+        return size + Float.BYTES * rowSize;
+      case DOUBLE:
+        return size + Double.BYTES * rowSize;
+      case BOOLEAN:
+        return size + rowSize;
+      case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
+        return size + serializedSizeOfBinaryValues((Binary[]) column);
+      default:
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", dataType));
+    }
+  }
+
+  private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
+    int size = 0;
+    for (int j = 0; j < rowSize; j++) {
+      size += Byte.BYTES;
+      if (binaryValues[j] != null) {
+        size += ReadWriteIOUtils.sizeToWrite(binaryValues[j]);
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBinaryValues(final Binary[] binaryValues) {
+    return serializedSizeOfBinaryValues(binaryValues, rowSize);
   }
 
   /** Serialize {@link MeasurementSchema}s */
