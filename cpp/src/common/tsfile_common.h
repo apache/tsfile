@@ -41,14 +41,14 @@
 
 namespace storage {
 
-extern TSFILE_API const char* MAGIC_STRING_TSFILE;
+extern const char* MAGIC_STRING_TSFILE;
 constexpr int MAGIC_STRING_TSFILE_LEN = 6;
-extern TSFILE_API const char VERSION_NUM_BYTE;
-extern TSFILE_API const char CHUNK_GROUP_HEADER_MARKER;
-extern TSFILE_API const char CHUNK_HEADER_MARKER;
-extern TSFILE_API const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
-extern TSFILE_API const char SEPARATOR_MARKER;
-extern TSFILE_API const char OPERATION_INDEX_RANGE;
+extern const char VERSION_NUM_BYTE;
+extern const char CHUNK_GROUP_HEADER_MARKER;
+extern const char CHUNK_HEADER_MARKER;
+extern const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+extern const char SEPARATOR_MARKER;
+extern const char OPERATION_INDEX_RANGE;
 
 // TODO review the String.len_ used
 
@@ -314,6 +314,11 @@ class ITimeseriesIndex {
     virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const {
         return nullptr;
     }
+    virtual uint32_t get_value_column_count() const { return 1; }
+    virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const {
+        return col_index == 0 ? get_value_chunk_meta_list() : nullptr;
+    }
 
     virtual common::String get_measurement_name() const {
         return common::String();
@@ -321,7 +326,6 @@ class ITimeseriesIndex {
     virtual common::TSDataType get_data_type() const {
         return common::INVALID_DATATYPE;
     }
-    virtual bool is_aligned() const { return false; }
     virtual Statistic* get_statistic() const { return nullptr; }
 };
 
@@ -590,10 +594,8 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return value_ts_idx_->get_measurement_name();
     }
     virtual common::TSDataType get_data_type() const {
-        return value_ts_idx_ == nullptr ? common::INVALID_DATATYPE
-                                        : value_ts_idx_->get_data_type();
+        return time_ts_idx_->get_data_type();
     }
-    virtual bool is_aligned() const { return true; }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
@@ -606,6 +608,47 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return os;
     }
 #endif
+};
+
+class MultiAlignedTimeseriesIndex : public ITimeseriesIndex {
+   public:
+    TimeseriesIndex* time_ts_idx_ = nullptr;
+    std::vector<TimeseriesIndex*> value_ts_idxs_;
+
+    MultiAlignedTimeseriesIndex() {}
+    ~MultiAlignedTimeseriesIndex() {}
+
+    common::SimpleList<ChunkMeta*>* get_time_chunk_meta_list() const override {
+        return time_ts_idx_ ? time_ts_idx_->get_chunk_meta_list() : nullptr;
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const override {
+        return value_ts_idxs_.empty()
+                   ? nullptr
+                   : value_ts_idxs_[0]->get_chunk_meta_list();
+    }
+    uint32_t get_value_column_count() const override {
+        return value_ts_idxs_.size();
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const override {
+        return col_index < value_ts_idxs_.size()
+                   ? value_ts_idxs_[col_index]->get_chunk_meta_list()
+                   : nullptr;
+    }
+    common::String get_measurement_name() const override {
+        return value_ts_idxs_.empty()
+                   ? common::String()
+                   : value_ts_idxs_[0]->get_measurement_name();
+    }
+    common::TSDataType get_data_type() const override {
+        return time_ts_idx_ ? time_ts_idx_->get_data_type()
+                            : common::INVALID_DATATYPE;
+    }
+    Statistic* get_statistic() const override { return nullptr; }
+
+    const std::vector<TimeseriesIndex*>& get_value_indices() const {
+        return value_ts_idxs_;
+    }
 };
 
 class TSMIterator {
@@ -631,14 +674,13 @@ class TSMIterator {
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>,
-             IDeviceIDComparator>
+             std::map<common::String, std::vector<ChunkMeta*>>>
         tsm_chunk_meta_info_;
 
     // device iterator
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>,
-             IDeviceIDComparator>::iterator tsm_device_iter_;
+             std::map<common::String, std::vector<ChunkMeta*>>>::iterator
+        tsm_device_iter_;
 
     // measurement iterator
     std::map<common::String, std::vector<ChunkMeta*>>::iterator

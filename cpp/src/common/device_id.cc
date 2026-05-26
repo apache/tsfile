@@ -144,7 +144,7 @@ int StringArrayDeviceID::deserialize(common::ByteStream& read_stream) {
 
     segments_.clear();
     for (uint32_t i = 0; i < num_segments; ++i) {
-        std::string* segment;
+        std::string* segment = nullptr;
         if (RET_FAIL(common::SerializationUtil::read_var_char_ptr(
                 segment, read_stream))) {
             delete segment;
@@ -209,10 +209,10 @@ std::vector<std::string> StringArrayDeviceID::split_device_id_string(
     const std::string& device_id_string) {
 #ifdef ENABLE_ANTLR4
     auto splits = storage::PathNodesGenerator::invokeParser(device_id_string);
-#else
-    auto splits = split_string(device_id_string, '.');
-#endif
     return split_device_id_string(splits);
+#else
+    return split_string(device_id_string, '.');
+#endif
 }
 
 std::vector<std::string> StringArrayDeviceID::split_device_id_string(

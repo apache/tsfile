@@ -51,6 +51,8 @@ void TsFileIOReader::reset() {
         }
         read_file_ = nullptr;
         tsfile_meta_page_arena_.destroy();
+        device_node_cache_.clear();
+        device_node_cache_pa_.destroy();
         tsfile_meta_ready_ = false;
     }
 }
@@ -61,6 +63,9 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                               common::PageArena& pa, Filter* time_filter) {
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) {
+    } else if (!bloom_filter_contains(device_id->get_device_name(),
+                                      measurement_name)) {
+        return E_NO_MORE_DATA;
     } else {
         ssi = new TsFileSeriesScanIterator;
         ssi->init(device_id, measurement_name, read_file_, time_filter, pa);
@@ -76,6 +81,95 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
             delete ssi;
             ssi = nullptr;
         }
+    }
+    return ret;
+}
+
+int TsFileIOReader::alloc_multi_ssi(
+    std::shared_ptr<IDeviceID> device_id,
+    const std::vector<std::string>& measurement_names,
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+    Filter* time_filter) {
+    int ret = E_OK;
+    if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
+
+    ssi = new TsFileSeriesScanIterator;
+    ssi->init(device_id, measurement_names.empty() ? "" : measurement_names[0],
+              read_file_, time_filter, pa);
+
+    auto& ssi_pa = ssi->timeseries_index_pa_;
+
+    // Use cached device measurement node (avoids repeated file I/O)
+    CachedDeviceNode* cached = get_cached_device_node(device_id, ssi_pa);
+    if (cached == nullptr) {
+        delete ssi;
+        ssi = nullptr;
+        return E_NOT_EXIST;
+    }
+    auto top_node = cached->top_node;
+    if (!cached->is_aligned) {
+        delete ssi;
+        ssi = nullptr;
+        return E_NOT_SUPPORT;
+    }
+
+    // Get time column metadata
+    TimeseriesIndex* time_ts_idx = nullptr;
+    if (RET_FAIL(get_time_column_metadata(top_node, time_ts_idx, ssi_pa))) {
+        delete ssi;
+        ssi = nullptr;
+        return ret;
+    }
+
+    // Create MultiAlignedTimeseriesIndex
+    void* multi_buf = ssi_pa.alloc(sizeof(MultiAlignedTimeseriesIndex));
+    if (IS_NULL(multi_buf)) {
+        delete ssi;
+        ssi = nullptr;
+        return E_OOM;
+    }
+    auto* multi_idx = new (multi_buf) MultiAlignedTimeseriesIndex;
+    multi_idx->time_ts_idx_ = time_ts_idx;
+
+    // Load each measurement's TimeseriesIndex
+    for (const auto& meas_name : measurement_names) {
+        std::shared_ptr<IMetaIndexEntry> meas_entry;
+        int64_t meas_end_offset = 0;
+        if (RET_FAIL(load_measurement_index_entry(
+                meas_name, top_node, meas_entry, meas_end_offset))) {
+            // Measurement not found — abort multi path
+            delete ssi;
+            ssi = nullptr;
+            return ret;
+        }
+
+        ITimeseriesIndex* ts_idx = nullptr;
+        if (RET_FAIL(do_load_timeseries_index(
+                meas_name, meas_entry->get_offset(), meas_end_offset, ssi_pa,
+                ts_idx, /*is_aligned=*/true))) {
+            delete ssi;
+            ssi = nullptr;
+            return ret;
+        }
+
+        auto* aligned_idx = dynamic_cast<AlignedTimeseriesIndex*>(ts_idx);
+        if (aligned_idx && aligned_idx->value_ts_idx_) {
+            multi_idx->value_ts_idxs_.push_back(aligned_idx->value_ts_idx_);
+        } else {
+            delete ssi;
+            ssi = nullptr;
+            return E_NOT_EXIST;
+        }
+    }
+
+    ssi->itimeseries_index_ = multi_idx;
+
+    // Skip global statistic filter for multi — per-chunk filtering still works.
+
+    if (RET_FAIL(ssi->init_chunk_reader())) {
+        ssi->destroy();
+        delete ssi;
+        ssi = nullptr;
     }
     return ret;
 }
@@ -96,47 +190,64 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     int64_t end_offset;
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
         meta_index_entry_list;
-    std::shared_ptr<MetaIndexNode> top_node;
-    bool is_aligned = false;
-    TimeseriesIndex* time_timeseries_index = nullptr;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
             end_offset))) {
-    } else {
-        int64_t start_offset = meta_index_entry->get_offset();
-        ASSERT(start_offset < end_offset);
-        const int32_t read_size = end_offset - start_offset;
-        int32_t ret_read_len = 0;
-        char* data_buf = (char*)pa.alloc(read_size);
-        void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
-        if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
-            return E_OOM;
-        }
-        auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
-        top_node = std::shared_ptr<MetaIndexNode>(top_node_ptr,
-                                                  MetaIndexNode::self_deleter);
-        if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
-                                      ret_read_len))) {
-        } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
-        } else {
-            is_aligned = is_aligned_device(top_node);
-            if (is_aligned) {
-                if (RET_FAIL(get_time_column_metadata(
-                        top_node, time_timeseries_index, pa))) {
-                    return ret;
-                }
-            }
-        }
-    }
-    if (RET_FAIL(ret)) {
-        return ret;
-    }
-    if (RET_FAIL(load_all_measurement_index_entry(
-            meta_index_entry->get_offset(), end_offset, pa,
-            meta_index_entry_list))) {
+    } else if (RET_FAIL(load_all_measurement_index_entry(
+                   meta_index_entry->get_offset(), end_offset, pa,
+                   meta_index_entry_list))) {
     } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
                                                      timeseries_indexs))) {
-    } else if (is_aligned && time_timeseries_index != nullptr) {
+    }
+    return ret;
+}
+
+int TsFileIOReader::get_device_timeseries_meta_by_offset(
+    int64_t start_offset, int64_t end_offset,
+    std::vector<ITimeseriesIndex*>& timeseries_indexs, PageArena& pa) {
+    int ret = E_OK;
+    load_tsfile_meta_if_necessary();
+
+    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
+        meta_index_entry_list;
+    bool is_aligned = false;
+    TimeseriesIndex* time_timeseries_index = nullptr;
+
+    ASSERT(start_offset < end_offset);
+    const int32_t read_size = end_offset - start_offset;
+    int32_t ret_read_len = 0;
+    char* data_buf = (char*)pa.alloc(read_size);
+    void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+        return E_OOM;
+    }
+    auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+    auto top_node = std::shared_ptr<MetaIndexNode>(top_node_ptr,
+                                                   MetaIndexNode::self_deleter);
+    if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
+                                  ret_read_len))) {
+        return ret;
+    }
+    if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+        return ret;
+    }
+
+    is_aligned = is_aligned_device(top_node);
+    if (is_aligned) {
+        if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index,
+                                              pa))) {
+            return ret;
+        }
+    }
+
+    get_all_leaf(top_node, meta_index_entry_list);
+
+    if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
+                                              timeseries_indexs))) {
+        return ret;
+    }
+
+    if (is_aligned && time_timeseries_index != nullptr) {
         for (size_t i = 0; i < timeseries_indexs.size(); i++) {
             void* buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
             if (IS_NULL(buf)) {
@@ -159,6 +270,20 @@ bool TsFileIOReader::filter_stasify(ITimeseriesIndex* ts_index,
                                     Filter* time_filter) {
     ASSERT(ts_index->get_statistic() != nullptr);
     return time_filter->satisfy(ts_index->get_statistic());
+}
+
+bool TsFileIOReader::bloom_filter_contains(
+    const std::string& device_name, const std::string& measurement_name) {
+    BloomFilter* bf = tsfile_meta_.bloom_filter_;
+    if (bf == nullptr || bf->is_empty()) {
+        return true;  // no bloom filter — assume present
+    }
+    common::String dev_str, meas_str;
+    dev_str.buf_ = const_cast<char*>(device_name.c_str());
+    dev_str.len_ = static_cast<uint32_t>(device_name.size());
+    meas_str.buf_ = const_cast<char*>(measurement_name.c_str());
+    meas_str.len_ = static_cast<uint32_t>(measurement_name.size());
+    return bf->contains(dev_str, meas_str);
 }
 
 int TsFileIOReader::load_tsfile_meta_if_necessary() {
@@ -259,44 +384,68 @@ int TsFileIOReader::load_tsfile_meta() {
     return ret;
 }
 
-int TsFileIOReader::load_timeseries_index_for_ssi(
-    std::shared_ptr<IDeviceID> device_id, const std::string& measurement_name,
-    TsFileSeriesScanIterator*& ssi) {
+TsFileIOReader::CachedDeviceNode* TsFileIOReader::get_cached_device_node(
+    std::shared_ptr<IDeviceID> device_id, common::PageArena& pa) {
+    std::string dev_name = device_id->get_device_name();
+    auto it = device_node_cache_.find(dev_name);
+    if (it != device_node_cache_.end()) {
+        return &it->second;
+    }
+
     int ret = E_OK;
     std::shared_ptr<IMetaIndexEntry> device_index_entry;
     int64_t device_ie_end_offset = 0;
-    std::shared_ptr<IMetaIndexEntry> measurement_index_entry;
-    int64_t measurement_ie_end_offset = 0;
-    // bool is_aligned = false;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), device_index_entry,
             device_ie_end_offset))) {
-        return ret;
+        return nullptr;
     }
-    auto& pa = ssi->timeseries_index_pa_;
 
     int64_t start_offset = device_index_entry->get_offset(),
             end_offset = device_ie_end_offset;
     ASSERT(start_offset < end_offset);
     const int32_t read_size = end_offset - start_offset;
     int32_t ret_read_len = 0;
-    char* data_buf = (char*)pa.alloc(read_size);
-    void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+    // Allocate from the reader's cache arena so the node outlives any SSI
+    char* data_buf = (char*)device_node_cache_pa_.alloc(read_size);
+    void* m_idx_node_buf = device_node_cache_pa_.alloc(sizeof(MetaIndexNode));
     if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
-        return E_OOM;
+        return nullptr;
     }
-    auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+    auto* top_node_ptr =
+        new (m_idx_node_buf) MetaIndexNode(&device_node_cache_pa_);
     auto top_node = std::shared_ptr<MetaIndexNode>(top_node_ptr,
                                                    MetaIndexNode::self_deleter);
 
     if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                   ret_read_len))) {
-        return ret;
-    } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
-        return ret;
+        return nullptr;
+    }
+    if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+        return nullptr;
     }
 
-    bool is_aligned = is_aligned_device(top_node);
+    CachedDeviceNode cached;
+    cached.top_node = top_node;
+    cached.is_aligned = is_aligned_device(top_node);
+    auto insert_result =
+        device_node_cache_.emplace(std::move(dev_name), cached);
+    return &insert_result.first->second;
+}
+
+int TsFileIOReader::load_timeseries_index_for_ssi(
+    std::shared_ptr<IDeviceID> device_id, const std::string& measurement_name,
+    TsFileSeriesScanIterator*& ssi) {
+    int ret = E_OK;
+    auto& pa = ssi->timeseries_index_pa_;
+
+    CachedDeviceNode* cached = get_cached_device_node(device_id, pa);
+    if (cached == nullptr) {
+        return E_NOT_EXIST;
+    }
+    auto top_node = cached->top_node;
+    bool is_aligned = cached->is_aligned;
+
     TimeseriesIndex* timeseries_index = nullptr;
     if (is_aligned) {
         if (RET_FAIL(
@@ -305,6 +454,8 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
         }
     }
 
+    std::shared_ptr<IMetaIndexEntry> measurement_index_entry;
+    int64_t measurement_ie_end_offset = 0;
     if (RET_FAIL(load_measurement_index_entry(measurement_name, top_node,
                                               measurement_index_entry,
                                               measurement_ie_end_offset))) {
@@ -347,12 +498,15 @@ int TsFileIOReader::load_device_index_entry(
     }
     std::string table_name = device_id_comparable->device_id_->get_table_name();
     auto it = tsfile_meta_.table_metadata_index_node_map_.find(table_name);
-    if (it == tsfile_meta_.table_metadata_index_node_map_.end() ||
-        it->second == nullptr) {
+    if (it == tsfile_meta_.table_metadata_index_node_map_.end()) {
         return E_DEVICE_NOT_EXIST;
     }
     auto index_node = it->second;
+    if (index_node == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
     if (index_node->node_type_ == LEAF_DEVICE) {
+        // FIXME
         ret = index_node->binary_search_children(
             device_name, true, device_index_entry, end_offset);
     } else {
@@ -613,6 +767,9 @@ int TsFileIOReader::search_from_internal_node(
 
 bool TsFileIOReader::is_aligned_device(
     std::shared_ptr<MetaIndexNode> measurement_node) {
+    if (measurement_node->children_.empty()) {
+        return false;
+    }
     auto entry = measurement_node->children_[0];
     return entry->get_name().is_null() ||
            entry->get_name().to_std_string() == "";

@@ -20,6 +20,7 @@
 #ifndef FILE_TSFILE_IO_REAER_H
 #define FILE_TSFILE_IO_REAER_H
 
+#include <unordered_map>
 #include <unordered_set>
 
 #include "common/tsblock/tsblock.h"
@@ -46,6 +47,7 @@ class TsFileIOReader {
           tsfile_meta_ready_(false),
           read_file_created_(false) {
         tsfile_meta_page_arena_.init(512, common::MOD_TSFILE_READER);
+        device_node_cache_pa_.init(512, common::MOD_TSFILE_READER);
     }
 
     int init(const std::string& file_path);
@@ -58,6 +60,11 @@ class TsFileIOReader {
                   const std::string& measurement_name,
                   TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
                   Filter* time_filter = nullptr);
+
+    int alloc_multi_ssi(std::shared_ptr<IDeviceID> device_id,
+                        const std::vector<std::string>& measurement_names,
+                        TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+                        Filter* time_filter = nullptr);
 
     void revert_ssi(TsFileSeriesScanIterator* ssi);
 
@@ -81,6 +88,11 @@ class TsFileIOReader {
     int get_timeseries_indexes(
         std::shared_ptr<IDeviceID> device_id,
         const std::unordered_set<std::string>& measurement_names,
+        std::vector<ITimeseriesIndex*>& timeseries_indexs,
+        common::PageArena& pa);
+
+    int get_device_timeseries_meta_by_offset(
+        int64_t start_offset, int64_t end_offset,
         std::vector<ITimeseriesIndex*>& timeseries_indexs,
         common::PageArena& pa);
 
@@ -142,10 +154,21 @@ class TsFileIOReader {
 
     bool filter_stasify(ITimeseriesIndex* ts_index, Filter* time_filter);
 
+    bool bloom_filter_contains(const std::string& device_name,
+                               const std::string& measurement_name);
+
     int get_all_leaf(
         std::shared_ptr<MetaIndexNode> index_node,
         std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>&
             index_node_entry_list);
+
+    struct CachedDeviceNode {
+        std::shared_ptr<MetaIndexNode> top_node;
+        bool is_aligned;
+    };
+
+    CachedDeviceNode* get_cached_device_node(
+        std::shared_ptr<IDeviceID> device_id, common::PageArena& pa);
 
    private:
     ReadFile* read_file_;
@@ -153,6 +176,9 @@ class TsFileIOReader {
     TsFileMeta tsfile_meta_;
     bool tsfile_meta_ready_;
     bool read_file_created_;
+    // Cache: device_name → deserialized measurement MetaIndexNode
+    common::PageArena device_node_cache_pa_;
+    std::unordered_map<std::string, CachedDeviceNode> device_node_cache_;
 };
 
 }  // end namespace storage

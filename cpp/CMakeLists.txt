@@ -1,4 +1,4 @@
-#[[
+﻿#[[
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
@@ -26,38 +26,16 @@ else()
     message(STATUS "Not using ToolChain")
 endif ()
 
-if (POLICY CMP0079)
-    cmake_policy(SET CMP0079 NEW)
-endif ()
+cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION 2.2.1.dev)
-
-if (MSVC)
-    # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
-    # The lowest explicitly settable standard is /std:c++14. Without this flag,
-    # the default varies by VS version (VS2017+ defaults to C++14 mode with some
-    # C++17 extensions), so we pin it explicitly for reproducibility.
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
-    add_definitions(-DNOMINMAX -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
-                    -D_SCL_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
-    # Export all symbols of the tsfile shared library automatically so that
-    # consumers do not need __declspec(dllexport) annotations.
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-else ()
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
-endif ()
+set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused -Wuninitialized -D__STDC_FORMAT_MACROS")
 endif ()
 
 message("cmake using: USE_CPP11=${USE_CPP11}")
-# MSVC has no /std:c++11; CMake maps this to the closest supported standard
-# (C++14 default on MSVC), which compiles the C++11 codebase fine.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED OFF)
-if (NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-endif ()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 if (DEFINED ENV{CXX})
     set(CMAKE_CXX_COMPILER $ENV{CXX})
@@ -80,13 +58,6 @@ if (${COV_ENABLED})
     message("add_definitions -DCOV_ENABLED=1")
 endif ()
 
-option(ENABLE_MEM_STAT "Enable memory status" ON)
-
-if (ENABLE_MEM_STAT)
-    add_definitions(-DENABLE_MEM_STAT)
-    message("add_definitions -DENABLE_MEM_STAT")
-endif ()
-
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
@@ -105,52 +76,25 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
-# MSVC provides sensible per-configuration optimization flags by default; the
-# GCC-style flags below would be rejected by cl.exe, so skip them on MSVC.
-if (NOT MSVC)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-        set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
-    endif ()
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
+elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
 endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 # disable asan by default.
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-if (ENABLE_ASAN)
-    message("Address Sanitizer is enabled.")
-    if (MSVC)
-        # MSVC ships AddressSanitizer; it requires Visual Studio 2019 16.9 or
-        # newer (MSVC_VERSION >= 1928). Only the address sanitizer is available
-        # (there is no UndefinedBehaviorSanitizer for MSVC).
-        if (MSVC_VERSION LESS 1928)
-            message(FATAL_ERROR
-                "ENABLE_ASAN requires MSVC 19.28+ (Visual Studio 2019 16.9); "
-                "detected MSVC_VERSION=${MSVC_VERSION}.")
-        endif ()
-        # /fsanitize=address is incompatible with the /RTC* runtime checks that
-        # CMake injects into Debug builds, and with incremental linking. Strip
-        # /RTC* from the per-config flags and force non-incremental linking.
-        #
-        # ASan also needs debug info: /Zi (compile) + /DEBUG (link). Without it
-        # MSVC emits warning C5072 ("ASAN enabled without debug information
-        # emission"), which the bundled googletest build promotes to an error
-        # via /WX in Release builds, and ASan reports lose symbol/line info.
-        add_compile_options(/fsanitize=address /Zi)
-        foreach (flagsVar
-                 CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
-                 CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-            string(REGEX REPLACE "/RTC[1csu]+" "" ${flagsVar} "${${flagsVar}}")
-        endforeach ()
-        add_link_options(/INCREMENTAL:NO /DEBUG)
-    elseif (NOT WIN32)
+if (NOT WIN32)
+    if (ENABLE_ASAN)
+        message("Address Sanitizer is enabled.")
+
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
 
         if (NOT APPLE)
@@ -160,12 +104,8 @@ if (ENABLE_ASAN)
             set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
         endif ()
     else ()
-        message(WARNING
-            "ENABLE_ASAN on Windows is only supported with the MSVC toolchain; "
-            "ignoring it for the current generator.")
+        message("Address Sanitizer is disabled.")
     endif ()
-else ()
-    message("Address Sanitizer is disabled.")
 endif ()
 
 option(BUILD_TEST "Build tests" ON)
@@ -203,20 +143,21 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
+option(ENABLE_SIMD "Enable SIMD acceleration via SIMDe" ON)
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
+
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 
 if (ENABLE_THREADS)
     add_definitions(-DENABLE_THREADS)
-    find_package(Threads REQUIRED)
-    link_libraries(Threads::Threads)
 endif()
 
-option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
-message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+option(ENABLE_MEM_STAT "Enable per-module memory allocation statistics" ON)
+message("cmake using: ENABLE_MEM_STAT=${ENABLE_MEM_STAT}")
 
-if (ENABLE_SIMDE)
-    add_definitions(-DENABLE_SIMDE)
+if (ENABLE_MEM_STAT)
+    add_definitions(-DENABLE_MEM_STAT)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
@@ -231,15 +172,7 @@ set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include CACHE STRING "TsFile inclu
 set(THIRD_PARTY_INCLUDE ${PROJECT_BINARY_DIR}/third_party)
 
 set(SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-if (MSVC)
-    # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
-    # The lowest explicitly settable standard is /std:c++14. Without this flag,
-    # the default varies by VS version (VS2017+ defaults to C++14 mode with some
-    # C++17 extensions), so we pin it explicitly for reproducibility.
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
-else ()
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
-endif ()
+set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
 add_subdirectory(third_party)
 set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
@@ -253,5 +186,12 @@ else()
     message("BUILD_TEST is OFF, skipping test directory")
 endif ()
 
-add_subdirectory(examples)
+option(BUILD_EXAMPLES "Build examples (requires Arrow/Parquet)" OFF)
+if (BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
+    add_subdirectory(experiment)
+endif()
 

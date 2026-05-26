@@ -50,6 +50,18 @@ class OrFilter : public BinaryFilter {
                right_->contain_start_end_time(start_time, end_time);
     }
 
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask) {
+        bool mask_right[129];
+        left_->satisfy_batch_time(times, count, mask);
+        right_->satisfy_batch_time(times, count, mask_right);
+        int pass = 0;
+        for (int i = 0; i < count; ++i) {
+            mask[i] = mask[i] || mask_right[i];
+            if (mask[i]) ++pass;
+        }
+        return pass;
+    }
+
     std::vector<TimeRange*>* get_time_ranges() {
         std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
         std::vector<TimeRange*>* left_time_ranges = left_->get_time_ranges();

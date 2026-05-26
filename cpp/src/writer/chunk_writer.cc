@@ -138,6 +138,9 @@ int ChunkWriter::seal_cur_page(bool end_chunk) {
 void ChunkWriter::save_first_page_data(PageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
+    // See ValueChunkWriter::save_first_page_data: avoid double-free on the
+    // shallow-copied buffer pointers.
+    first_page_writer.release_cur_page_data();
 }
 
 int ChunkWriter::write_first_page_data(ByteStream& pages_data,

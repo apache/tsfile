@@ -18,11 +18,7 @@
  */
 
 #include <gtest/gtest.h>
-#ifdef _WIN32
-#include <io.h>
-#else
 #include <unistd.h>
-#endif
 #include <utils/db_utils.h>
 
 #include <cstring>
@@ -40,6 +36,7 @@ class CReleaseTest : public testing::Test {};
 
 TEST_F(CReleaseTest, TestCreateFile) {
     ERRNO error_no = RET_OK;
+    remove("create_file1.tsfile");
     // Create File and Get RET_OK
     WriteFile file = write_file_new("create_file1.tsfile", &error_no);
     ASSERT_EQ(RET_OK, error_no);
@@ -52,8 +49,7 @@ TEST_F(CReleaseTest, TestCreateFile) {
 
     // Folder
     file = write_file_new("test/", &error_no);
-    ASSERT_TRUE(error_no == RET_FILRET_OPEN_ERR ||
-                error_no == RET_ALREADY_EXIST);
+    ASSERT_EQ(RET_FILRET_OPEN_ERR, error_no);
 
     remove("create_file1.tsfile");
     free_write_file(&file);
@@ -101,9 +97,13 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     table_schema.column_schemas =
         static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 2));
     table_schema.column_schemas[0] =
-        ColumnSchema{strdup("col1"), TS_DATATYPE_STRING, TAG};
+        (ColumnSchema){.column_name = strdup("col1"),
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
     table_schema.column_schemas[1] =
-        ColumnSchema{strdup("col2"), TS_DATATYPE_INT32, FIELD};
+        (ColumnSchema){.column_name = strdup("col2"),
+                       .data_type = TS_DATATYPE_INT32,
+                       .column_category = FIELD};
 
     writer = tsfile_writer_new(file, &table_schema, &error_code);
     ASSERT_EQ(RET_OK, error_code);
@@ -128,15 +128,21 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     abnormal_schema.column_schemas =
         static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 4));
     abnormal_schema.column_schemas[0] =
-        ColumnSchema{strdup("!@#$%^*()_+-="), TS_DATATYPE_STRING, TAG};
+        (ColumnSchema){.column_name = strdup("!@#$%^*()_+-="),
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
 
     // TAG's datatype is not correct
     abnormal_schema.column_schemas[1] =
-        ColumnSchema{strdup("TAG2"), TS_DATATYPE_INT32, TAG};
+        (ColumnSchema){.column_name = strdup("TAG2"),
+                       .data_type = TS_DATATYPE_INT32,
+                       .column_category = TAG};
 
     // same column name with column[0]
     abnormal_schema.column_schemas[2] =
-        ColumnSchema{strdup("!@#$%^*()_+-="), TS_DATATYPE_DOUBLE, FIELD};
+        (ColumnSchema){.column_name = strdup("!@#$%^*()_+-="),
+                       .data_type = TS_DATATYPE_DOUBLE,
+                       .column_category = FIELD};
 
     // column name conflict
     TsFileWriter writer =
@@ -145,7 +151,9 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free(abnormal_schema.column_schemas[2].column_name);
 
     abnormal_schema.column_schemas[2] =
-        ColumnSchema{strdup("!@#$%^*()_+-=1"), TS_DATATYPE_DOUBLE, FIELD};
+        (ColumnSchema){.column_name = strdup("!@#$%^*()_+-=1"),
+                       .data_type = TS_DATATYPE_DOUBLE,
+                       .column_category = FIELD};
 
     // datatype conflict
     writer = tsfile_writer_new(file, &abnormal_schema, &error_code);
@@ -153,7 +161,9 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
 
     free(abnormal_schema.column_schemas[1].column_name);
     abnormal_schema.column_schemas[1] =
-        ColumnSchema{strdup("TAG2"), TS_DATATYPE_STRING, TAG};
+        (ColumnSchema){.column_name = strdup("TAG2"),
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
 
     writer = tsfile_writer_new(file, &abnormal_schema, &error_code);
     ASSERT_EQ(RET_OK, error_code);
@@ -225,17 +235,29 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     all_type_schema.column_schemas =
         static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 6));
     all_type_schema.column_schemas[0] =
-        ColumnSchema{strdup("TAG"), TS_DATATYPE_STRING, TAG};
+        (ColumnSchema){.column_name = strdup("TAG"),
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
     all_type_schema.column_schemas[1] =
-        ColumnSchema{strdup("INT32"), TS_DATATYPE_INT32, FIELD};
+        (ColumnSchema){.column_name = strdup("INT32"),
+                       .data_type = TS_DATATYPE_INT32,
+                       .column_category = FIELD};
     all_type_schema.column_schemas[2] =
-        ColumnSchema{strdup("INT64"), TS_DATATYPE_INT64, FIELD};
+        (ColumnSchema){.column_name = strdup("INT64"),
+                       .data_type = TS_DATATYPE_INT64,
+                       .column_category = FIELD};
     all_type_schema.column_schemas[3] =
-        ColumnSchema{strdup("FLOAT"), TS_DATATYPE_FLOAT, FIELD};
+        (ColumnSchema){.column_name = strdup("FLOAT"),
+                       .data_type = TS_DATATYPE_FLOAT,
+                       .column_category = FIELD};
     all_type_schema.column_schemas[4] =
-        ColumnSchema{strdup("DOUBLE"), TS_DATATYPE_DOUBLE, FIELD};
+        (ColumnSchema){.column_name = strdup("DOUBLE"),
+                       .data_type = TS_DATATYPE_DOUBLE,
+                       .column_category = FIELD};
     all_type_schema.column_schemas[5] =
-        ColumnSchema{strdup("BOOLEAN"), TS_DATATYPE_BOOLEAN, FIELD};
+        (ColumnSchema){.column_name = strdup("BOOLEAN"),
+                       .data_type = TS_DATATYPE_BOOLEAN,
+                       .column_category = FIELD};
 
     TsFileWriter writer =
         tsfile_writer_new(file, &all_type_schema, &error_code);

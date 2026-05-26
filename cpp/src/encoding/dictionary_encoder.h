@@ -83,7 +83,7 @@ class DictionaryEncoder : public Encoder {
         if (entry_index_.count(value) == 0) {
             index_entry_.push_back(value);
             map_size_ = map_size_ + value.length();
-            entry_index_[value] = static_cast<int>(index_entry_.size()) - 1;
+            entry_index_[value] = entry_index_.size();
         }
         values_encoder_.encode(entry_index_[value], out);
         return common::E_OK;

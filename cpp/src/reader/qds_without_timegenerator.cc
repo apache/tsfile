@@ -19,7 +19,6 @@
 
 #include "qds_without_timegenerator.h"
 
-#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 using namespace common;
@@ -67,25 +66,17 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         TsFileSeriesScanIterator* ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
-        if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_DEVICE_NOT_EXIST ||
-            ret == E_NOT_EXIST) {
-            continue;
-        }
-        if (ret != E_OK) {
-            for (size_t j = 0; j < ssi_vec_.size(); j++) {
-                io_reader_->revert_ssi(ssi_vec_[j]);
-            }
-            ssi_vec_.clear();
+        if (ret != 0) {
             return ret;
+        } else {
+            index_lookup_.insert({paths[i].measurement_, i + 1});
+            if (paths[i].full_path_ != paths[i].measurement_) {
+                index_lookup_.insert({paths[i].full_path_, i + 1});
+            }
+            ssi_vec_.push_back(ssi);
+            valid_paths.push_back(paths[i]);
+            column_names.push_back(paths[i].full_path_);
         }
-        size_t col_idx = ssi_vec_.size();
-        index_lookup_.insert({paths[i].measurement_, col_idx + 1});
-        if (paths[i].full_path_ != paths[i].measurement_) {
-            index_lookup_.insert({paths[i].full_path_, col_idx + 1});
-        }
-        ssi_vec_.push_back(ssi);
-        valid_paths.push_back(paths[i]);
-        column_names.push_back(paths[i].full_path_);
     }
 
     size_t path_count = valid_paths.size();
@@ -144,7 +135,6 @@ void QDSWithoutTimeGenerator::close() {
         io_reader_->revert_ssi(ssi);
     }
     ssi_vec_.clear();
-    tsblocks_.clear();
     if (qe_ != nullptr) {
         delete qe_;
         qe_ = nullptr;
@@ -177,14 +167,11 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
 
             uint32_t len = 0;
             uint32_t idx = heap_time_.begin()->second;
-            bool is_null_val = false;
             auto val_datatype = value_iters_[idx]->get_data_type();
-            void* val_ptr = value_iters_[idx]->read(&len, &is_null_val);
+            void* val_ptr = value_iters_[idx]->read(&len);
             if (!skip_row) {
-                if (!is_null_val) {
-                    row_record_->get_field(idx + 1)->set_value(
-                        val_datatype, val_ptr, len, pa_);
-                }
+                row_record_->get_field(idx + 1)->set_value(val_datatype,
+                                                           val_ptr, len, pa_);
             }
             value_iters_[idx]->next();
 
@@ -232,14 +219,10 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
         std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
         for (uint32_t i = 0; i < count; ++i) {
             uint32_t len = 0;
-            bool is_null_val = false;
             auto val_datatype = value_iters_[iter->second]->get_data_type();
-            void* val_ptr =
-                value_iters_[iter->second]->read(&len, &is_null_val);
-            if (!is_null_val) {
-                row_record_->get_field(iter->second + 1)
-                    ->set_value(val_datatype, val_ptr, len, pa_);
-            }
+            void* val_ptr = value_iters_[iter->second]->read(&len);
+            row_record_->get_field(iter->second + 1)
+                ->set_value(val_datatype, val_ptr, len, pa_);
             value_iters_[iter->second]->next();
             if (!time_iters_[iter->second]->end()) {
                 int64_t timev =

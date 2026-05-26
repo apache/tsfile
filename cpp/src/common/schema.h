@@ -23,7 +23,6 @@
 #include <writer/chunk_writer.h>
 
 #include <algorithm>
-#include <climits>
 #include <map>  // use unordered_map instead
 #include <memory>
 #include <string>
@@ -166,7 +165,6 @@ struct MeasurementSchemaGroup {
     MeasurementSchemaMap measurement_schema_map_;
     bool is_aligned_ = false;
     TimeChunkWriter* time_chunk_writer_ = nullptr;
-    int64_t last_time_ = INT64_MIN;
 
     ~MeasurementSchemaGroup() {
         if (time_chunk_writer_ != nullptr) {

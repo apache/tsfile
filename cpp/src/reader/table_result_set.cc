@@ -79,10 +79,9 @@ int TableResultSet::next(bool& has_next) {
             if (!null) {
                 row_record_->get_field(i)->set_value(
                     row_iterator_->get_data_type(i), value, len, pa_);
-                row_iterator_->next(i);
             }
         }
-        row_iterator_->update_row_id();
+        row_iterator_->next();
     }
     return ret;
 }
@@ -138,7 +137,13 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
 }
 
 void TableResultSet::close() {
-    tsblock_reader_->close();
+    if (closed_) {
+        return;
+    }
+    closed_ = true;
+    if (tsblock_reader_) {
+        tsblock_reader_->close();
+    }
     pa_.destroy();
     if (row_record_) {
         delete row_record_;

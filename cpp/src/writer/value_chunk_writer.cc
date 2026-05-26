@@ -110,7 +110,7 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
                 /*stat*/ false, /*data*/ false);
             if (IS_SUCC(ret)) {
                 save_first_page_data(value_page_writer_);
-                value_page_writer_.clear_page_data();
+                // value_page_writer_.destroy_page_data();
                 value_page_writer_.reset();
             }
         }
@@ -145,6 +145,11 @@ void ValueChunkWriter::save_first_page_data(
     ValuePageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
+    // Take ownership of the heap buffers: get_cur_page_data() returned a
+    // shallow copy, so without this we'd alias compressed_buf_ /
+    // uncompressed_buf_ between cur_page_data_ and first_page_data_ and
+    // double-free at destroy() time.
+    first_page_writer.release_cur_page_data();
 }
 
 int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
@@ -161,8 +166,7 @@ int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
 
 int ValueChunkWriter::end_encode_chunk() {
     int ret = E_OK;
-    if (value_page_writer_.get_point_numer() > 0 ||
-        (has_current_page_data() && num_of_pages_ == 0)) {
+    if (value_page_writer_.get_statistic()->count_ > 0) {
         ret = seal_cur_page(/*end_chunk*/ true);
         if (E_OK == ret) {
             chunk_header_.data_size_ = chunk_data_.total_size();
@@ -175,9 +179,6 @@ int ValueChunkWriter::end_encode_chunk() {
             chunk_header_.data_size_ = chunk_data_.total_size();
             chunk_header_.num_of_pages_ = num_of_pages_;
         }
-    } else if (num_of_pages_ > 0) {
-        chunk_header_.data_size_ = chunk_data_.total_size();
-        chunk_header_.num_of_pages_ = num_of_pages_;
     }
 #if DEBUG_SE
     std::cout << "end_encode_chunk: num_of_pages_=" << num_of_pages_
@@ -197,7 +198,9 @@ int64_t ValueChunkWriter::estimate_max_series_mem_size() {
 }
 
 bool ValueChunkWriter::hasData() {
-    return num_of_pages_ > 0 || has_current_page_data();
+    return num_of_pages_ > 0 ||
+           (value_page_writer_.get_statistic() != nullptr &&
+            value_page_writer_.get_statistic()->count_ > 0);
 }
 
 }  // end namespace storage

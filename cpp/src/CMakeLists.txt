@@ -37,6 +37,9 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
 message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 
+# ENABLE_SIMD is defined in the top-level CMakeLists.txt
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
+
 message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
@@ -75,10 +78,7 @@ endif()
 
 if (ENABLE_ZLIB)
     list(APPEND PROJECT_INCLUDE_DIR
-            # zlib.h ships in the source tree; zconf.h is generated into the
-            # build tree by zlib's own CMake, so both directories are needed.
-            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
-            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
     )
 endif()
 
@@ -89,12 +89,14 @@ if (ENABLE_ANTLR4)
     message("Adding ANTLR4 include directory")
 endif()
 
-include_directories(${PROJECT_INCLUDE_DIR})
+if (ENABLE_SIMD)
+    add_definitions(-DENABLE_SIMD)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3
+    )
+endif()
 
-# Mark every translation unit that is compiled into the tsfile library so that
-# TSFILE_API (see utils/util_define.h) resolves to an export-side (empty)
-# decoration here, and to __declspec(dllimport) for external consumers.
-add_definitions(-DTSFILE_BUILDING)
+include_directories(${PROJECT_INCLUDE_DIR})
 
 if (ENABLE_ANTLR4)
     add_subdirectory(parser)
@@ -142,6 +144,8 @@ target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
 add_library(tsfile SHARED)
 
+find_package(Threads REQUIRED)
+
 if (${COV_ENABLED})
     message("Enable code cov...")
     if (ENABLE_ANTLR4)
@@ -158,6 +162,7 @@ else()
     endif()
 endif()
 
+target_link_libraries(tsfile Threads::Threads)
 add_dependencies(tsfile utils_obj encoding_obj)
 
 set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
@@ -165,10 +170,4 @@ set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
 set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 
-# On Windows a SHARED library produces a .dll (RUNTIME) plus an import .lib
-# (ARCHIVE); on Unix it produces a .so (LIBRARY). Cover all three so the
-# install step works for every platform.
-install(TARGETS tsfile
-        RUNTIME DESTINATION ${LIBRARY_OUTPUT_PATH}
-        LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH}
-        ARCHIVE DESTINATION ${LIBRARY_OUTPUT_PATH})
+install(TARGETS tsfile LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH})

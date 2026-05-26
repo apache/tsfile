@@ -124,9 +124,7 @@ class Int64SprintzDecoder : public SprintzDecoder {
             decode_size_ = bit_width_ & ~(1 << 7);
             Int64RleDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
-                if (RET_FAIL(decoder.read_int(current_buffer_[i], input))) {
-                    return ret;
-                }
+                current_buffer_[i] = decoder.read_int(input);
             }
         } else {
             decode_size_ = block_size_ + 1;

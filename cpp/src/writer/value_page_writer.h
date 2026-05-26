@@ -51,6 +51,7 @@ struct ValuePageData {
              common::ByteStream& value_bs, Compressor* compressor,
              uint32_t size);
     void destroy() {
+        // Be careful about the memory
         if (uncompressed_buf_ != nullptr) {
             common::mem_free(uncompressed_buf_);
             uncompressed_buf_ = nullptr;
@@ -59,19 +60,6 @@ struct ValuePageData {
             compressor_->after_compress(compressed_buf_);
             compressed_buf_ = nullptr;
         }
-        compressor_ = nullptr;
-    }
-
-    /** Clear pointers without freeing (transfer ownership to another holder).
-     */
-    void clear() {
-        col_notnull_bitmap_buf_size_ = 0;
-        value_buf_size_ = 0;
-        uncompressed_size_ = 0;
-        compressed_size_ = 0;
-        uncompressed_buf_ = nullptr;
-        compressed_buf_ = nullptr;
-        compressor_ = nullptr;
     }
 };
 
@@ -163,6 +151,124 @@ class ValuePageWriter {
         VPW_DO_WRITE_FOR_TYPE(isnull);
     }
 
+    // Batch write for aligned/table model.
+    // In the tablet bitmap: bit=1 means null, bit=0 means not null.
+    // In VPW_DO_WRITE_FOR_TYPE: ISNULL=true skips encoding.
+    // So: tablet bitmap.test(r)=true -> isnull=true (null value)
+    //     tablet bitmap.test(r)=false -> isnull=false (valid value)
+    template <typename T>
+    int write_batch(const int64_t* timestamps, const T* values,
+                    const common::BitMap& col_notnull_bitmap,
+                    uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            // bit=1 in tablet bitmap means null; bit=0 means not null
+            bool is_null =
+                const_cast<common::BitMap&>(col_notnull_bitmap).test(row);
+            if (!is_null) {
+                // Mark as not-null in page bitmap
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+                valid_count++;
+            }
+            size_++;
+        }
+
+        if (valid_count == 0) return ret;
+
+        // If all values are valid, we can encode the batch directly
+        if (valid_count == count) {
+            if (RET_FAIL(value_encoder_->encode_batch(values + start_idx, count,
+                                                      value_out_stream_))) {
+                return ret;
+            }
+            statistic_->update_batch(timestamps + start_idx, values + start_idx,
+                                     count);
+        } else {
+            // Encode only non-null values one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    if (RET_FAIL(value_encoder_->encode(values[row],
+                                                        value_out_stream_))) {
+                        return ret;
+                    }
+                    statistic_->update(timestamps[row], values[row]);
+                }
+            }
+        }
+        return ret;
+    }
+
+    // Batch write strings from Arrow-style offset+buffer layout with null
+    // bitmap.
+    int write_string_batch(const int64_t* timestamps, const char* buffer,
+                           const uint32_t* offsets,
+                           const common::BitMap& col_notnull_bitmap,
+                           uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        // Phase 1: bitmap + count valid rows
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            bool is_null =
+                const_cast<common::BitMap&>(col_notnull_bitmap).test(row);
+            if (!is_null) {
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+                valid_count++;
+            }
+            size_++;
+        }
+
+        if (valid_count == 0) return ret;
+
+        // Phase 2: encode non-null strings
+        if (valid_count == count) {
+            // All valid — batch encode directly
+            if (RET_FAIL(value_encoder_->encode_string_batch(
+                    buffer, offsets, start_idx, count, value_out_stream_))) {
+                return ret;
+            }
+        } else {
+            // Mixed — encode only non-null strings one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    uint32_t len = offsets[row + 1] - offsets[row];
+                    common::String val(buffer + offsets[row], len);
+                    if (RET_FAIL(
+                            value_encoder_->encode(val, value_out_stream_))) {
+                        return ret;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: update statistics for non-null rows
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                uint32_t len = offsets[row + 1] - offsets[row];
+                common::String val(buffer + offsets[row], len);
+                statistic_->update(timestamps[row], val);
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_total_write_count() const { return size_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
@@ -195,9 +301,16 @@ class ValuePageWriter {
     }
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     ValuePageData get_cur_page_data() { return cur_page_data_; }
+    // Transfer ownership of cur_page_data_'s heap buffers (uncompressed_buf_
+    // and compressed_buf_) out of this writer. Callers use this together with
+    // get_cur_page_data() to keep a long-lived copy of the data (e.g. as the
+    // first-page snapshot) without leaving an alias here that would cause a
+    // double free on destroy.
+    void release_cur_page_data() {
+        cur_page_data_.uncompressed_buf_ = nullptr;
+        cur_page_data_.compressed_buf_ = nullptr;
+    }
     void destroy_page_data() { cur_page_data_.destroy(); }
-    /** Clear cur_page_data_ without freeing (after ownership transferred). */
-    void clear_page_data() { cur_page_data_.clear(); }
 
    private:
     FORCE_INLINE int prepare_end_page() {
@@ -214,7 +327,7 @@ class ValuePageWriter {
                           common::ByteStream& pages_data);
 
    private:
-    static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
+    static const uint32_t OUT_STREAM_PAGE_SIZE = 65536;
 
    private:
     common::TSDataType data_type_;
@@ -229,7 +342,7 @@ class ValuePageWriter {
     std::vector<uint8_t> col_notnull_bitmap_;
     uint32_t size_;
 
-    static TSFILE_API uint32_t MASK;
+    static uint32_t MASK;
 };
 
 }  // end namespace storage

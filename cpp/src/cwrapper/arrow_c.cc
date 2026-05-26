@@ -714,43 +714,6 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     return common::E_OK;
 }
 
-// Allocate and return a TsFile null bitmap (bit=1=null) by inverting an Arrow
-// validity bitmap (bit=1=valid). bit_offset is the Arrow array's offset field;
-// bits [bit_offset, bit_offset+n_rows) are extracted and inverted.
-// Returns nullptr if validity is nullptr (all rows valid, no allocation needed)
-// or on OOM. Caller must mem_free the result.
-// To distinguish OOM from "no validity": OOM only when validity!=nullptr &&
-// result==nullptr.
-static uint8_t* InvertArrowBitmap(const uint8_t* validity, int64_t bit_offset,
-                                  uint32_t n_rows) {
-    if (validity == nullptr) {
-        return nullptr;
-    }
-    uint32_t bm_bytes = (n_rows + 7) / 8;
-    uint8_t* null_bm =
-        static_cast<uint8_t*>(common::mem_alloc(bm_bytes, common::MOD_TSBLOCK));
-    if (null_bm == nullptr) {
-        return nullptr;
-    }
-    if (bit_offset == 0) {
-        // Fast path: byte-level invert when there is no bit misalignment.
-        for (uint32_t b = 0; b < bm_bytes; b++) {
-            null_bm[b] = ~validity[b];
-        }
-    } else {
-        // Sliced array: extract one bit at a time starting at bit_offset.
-        std::memset(null_bm, 0, bm_bytes);
-        for (uint32_t i = 0; i < n_rows; i++) {
-            int64_t src = bit_offset + i;
-            uint8_t valid = (validity[src / 8] >> (src % 8)) & 1;
-            if (!valid) {
-                null_bm[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-            }
-        }
-    }
-    return null_bm;
-}
-
 // Check if Arrow row is valid (non-null) based on validity bitmap
 static bool ArrowIsValid(const ArrowArray* arr, int64_t row) {
     if (arr->null_count == 0 || arr->buffers[0] == nullptr) return true;
@@ -851,13 +814,6 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
         const ArrowArray* col_arr = in_array->children[data_col_indices[ci]];
         common::TSDataType dtype = read_modes[ci];
         uint32_t tcol = static_cast<uint32_t>(ci);
-        // ArrowArray::offset is non-zero when the array is a slice of a larger
-        // buffer — for example, when Python pandas/PyArrow passes a column that
-        // was created via slice(), take(), or filter() without a copy, or when
-        // RecordBatch::Slice() is used to split a batch. In those cases the
-        // underlying buffer starts at element 0 of the original allocation, so
-        // all buffer accesses (data, offsets, validity bitmap) must be shifted
-        // by `off` before reading the `length` visible elements.
         int64_t off = col_arr->offset;
 
         const uint8_t* validity =
@@ -881,21 +837,26 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             case common::INT64:
             case common::FLOAT:
             case common::DOUBLE: {
-                size_t elem_size =
-                    (dtype == common::INT64 || dtype == common::DOUBLE) ? 8 : 4;
-                const void* data =
-                    static_cast<const char*>(col_arr->buffers[1]) +
-                    off * elem_size;
-                uint8_t* null_bm = InvertArrowBitmap(
-                    validity, off, static_cast<uint32_t>(n_rows));
-                if (validity != nullptr && null_bm == nullptr) {
-                    delete tablet;
-                    return common::E_OOM;
+                // Invert Arrow bitmap (1=valid) to TsFile bitmap (1=null)
+                const uint8_t* null_bm = nullptr;
+                uint8_t* inverted_bm = nullptr;
+                if (validity != nullptr) {
+                    uint32_t bm_bytes = (static_cast<uint32_t>(n_rows) + 7) / 8;
+                    inverted_bm = static_cast<uint8_t*>(
+                        common::mem_alloc(bm_bytes, common::MOD_TSBLOCK));
+                    if (inverted_bm == nullptr) {
+                        delete tablet;
+                        return common::E_OOM;
+                    }
+                    for (uint32_t b = 0; b < bm_bytes; b++) {
+                        inverted_bm[b] = ~validity[b];
+                    }
+                    null_bm = inverted_bm;
                 }
-                tablet->set_column_values(tcol, data, null_bm,
+                tablet->set_column_values(tcol, col_arr->buffers[1], null_bm,
                                           static_cast<uint32_t>(n_rows));
-                if (null_bm != nullptr) {
-                    common::mem_free(null_bm);
+                if (inverted_bm != nullptr) {
+                    common::mem_free(inverted_bm);
                 }
                 break;
             }
@@ -916,45 +877,16 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             case common::TEXT:
             case common::STRING:
             case common::BLOB: {
-                // set_column_string_values requires offsets[0] == 0.
-                // When off > 0 (sliced Arrow array), normalize here: shift
-                // offsets down by base and advance the data pointer
-                // accordingly.
-                const int32_t* raw_offsets =
-                    static_cast<const int32_t*>(col_arr->buffers[1]) + off;
-                const char* raw_data =
+                const int32_t* offsets =
+                    static_cast<const int32_t*>(col_arr->buffers[1]);
+                const char* data =
                     static_cast<const char*>(col_arr->buffers[2]);
-                uint32_t nrows = static_cast<uint32_t>(n_rows);
-                const int32_t* offsets = raw_offsets;
-                const char* data = raw_data;
-                int32_t* norm_offsets = nullptr;
-                if (off > 0) {
-                    int32_t base = raw_offsets[0];
-                    norm_offsets = static_cast<int32_t*>(common::mem_alloc(
-                        (nrows + 1) * sizeof(int32_t), common::MOD_TSBLOCK));
-                    if (norm_offsets == nullptr) {
-                        delete tablet;
-                        return common::E_OOM;
-                    }
-                    for (uint32_t i = 0; i <= nrows; i++) {
-                        norm_offsets[i] = raw_offsets[i] - base;
-                    }
-                    offsets = norm_offsets;
-                    data = raw_data + base;
-                }
-                uint8_t* null_bm = InvertArrowBitmap(validity, off, nrows);
-                if (validity != nullptr && null_bm == nullptr) {
-                    common::mem_free(norm_offsets);
-                    delete tablet;
-                    return common::E_OOM;
-                }
-                tablet->set_column_string_values(tcol, offsets, data, null_bm,
-                                                 nrows);
-                if (null_bm != nullptr) {
-                    common::mem_free(null_bm);
-                }
-                if (norm_offsets != nullptr) {
-                    common::mem_free(norm_offsets);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (!ArrowIsValid(col_arr, r)) continue;
+                    int32_t start = offsets[off + r];
+                    int32_t len = offsets[off + r + 1] - start;
+                    tablet->add_value(static_cast<uint32_t>(r), tcol,
+                                      common::String(data + start, len));
                 }
                 break;
             }

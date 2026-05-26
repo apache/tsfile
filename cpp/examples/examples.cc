@@ -18,16 +18,12 @@
  */
 
 #include "c_examples/c_examples.h"
+#include "cpp_examples/bench_read.h"
 #include "cpp_examples/cpp_examples.h"
 
 int main() {
     // C++ examples
-    // std::cout << "begin write and read tsfile by cpp" << std::endl;
     demo_write();
     demo_read();
-    std::cout << "begin write and read tsfile by c" << std::endl;
-    // C examples
-    write_tsfile();
-    read_tsfile();
     return 0;
 }

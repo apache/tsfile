@@ -33,7 +33,9 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
-#include "utils/util_define.h"  // mode_t and other platform-compat shims
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 
 namespace storage {
 class WriteFile;
@@ -48,7 +50,6 @@ extern int libtsfile_init();
 extern void libtsfile_destroy();
 extern void set_page_max_point_count(uint32_t page_max_ponint_count);
 extern void set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
-extern void set_strict_page_size(bool strict_page_size);
 
 class TsFileWriter {
    public:
@@ -98,6 +99,7 @@ class TsFileWriter {
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name) const;
     int64_t calculate_mem_size_for_all_group();
+    int64_t calculate_meta_mem_size() const;
     int check_memory_size_and_may_flush_chunks();
     /*
      * Flush buffer to disk file, but do not writer file index part.
@@ -119,12 +121,9 @@ class TsFileWriter {
     int write_point_aligned(ValueChunkWriter* value_chunk_writer,
                             int64_t timestamp, common::TSDataType data_type,
                             const DataPoint& point);
-    int maybe_seal_aligned_pages_together(
-        TimeChunkWriter* time_chunk_writer,
-        common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
-        int32_t time_pages_before,
-        const std::vector<int32_t>& value_pages_before);
     int flush_chunk_group(MeasurementSchemaGroup* chunk_group, bool is_aligned);
+    int flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
+                                  bool is_aligned);
 
     int write_typed_column(storage::ChunkWriter* chunk_writer,
                            int64_t* timestamps, bool* col_values,
@@ -196,7 +195,11 @@ class TsFileWriter {
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
-    bool enforce_recovered_last_time_order_;
+    bool table_aligned_ = true;
+#ifdef ENABLE_THREADS
+    common::ThreadPool thread_pool_{
+        (size_t)common::g_config_value_.write_thread_count_};
+#endif
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
                            int64_t* timestamps, bool* col_values,
@@ -231,6 +234,16 @@ class TsFileWriter {
     int value_write_column(ValueChunkWriter* value_chunk_writer,
                            const Tablet& tablet, int col_idx,
                            uint32_t start_idx, uint32_t end_idx);
+
+    int write_column_batch(storage::ChunkWriter* chunk_writer,
+                           const Tablet& tablet, int col_idx,
+                           uint32_t start_idx, uint32_t end_idx);
+    int time_write_column_batch(TimeChunkWriter* time_chunk_writer,
+                                const Tablet& tablet, uint32_t start_idx,
+                                uint32_t end_idx);
+    int value_write_column_batch(ValueChunkWriter* value_chunk_writer,
+                                 const Tablet& tablet, int col_idx,
+                                 uint32_t start_idx, uint32_t end_idx);
 };
 
 }  // end namespace storage

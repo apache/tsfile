@@ -150,6 +150,43 @@ class PageWriter {
         PW_DO_WRITE_FOR_TYPE();
     }
 
+    template <typename T>
+    FORCE_INLINE int write_batch(const int64_t* timestamps, const T* values,
+                                 uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                 time_out_stream_))) {
+        } else if (RET_FAIL(value_encoder_->encode_batch(values, count,
+                                                         value_out_stream_))) {
+        } else {
+            statistic_->update_batch(timestamps, values, count);
+        }
+        return ret;
+    }
+
+    // Batch write strings from Arrow-style offset+buffer layout.
+    FORCE_INLINE int write_string_batch(const int64_t* timestamps,
+                                        const char* buffer,
+                                        const uint32_t* offsets,
+                                        uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                 time_out_stream_))) {
+        } else if (RET_FAIL(value_encoder_->encode_string_batch(
+                       buffer, offsets, start_idx, count, value_out_stream_))) {
+        } else {
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t idx = start_idx + i;
+                uint32_t len = offsets[idx + 1] - offsets[idx];
+                common::String val(buffer + offsets[idx], len);
+                statistic_->update(timestamps[i], val);
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_time_out_stream_size() const {
         return time_out_stream_.total_size();
@@ -179,6 +216,11 @@ class PageWriter {
     }
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     PageData get_cur_page_data() { return cur_page_data_; }
+    // See ValuePageWriter::release_cur_page_data for rationale.
+    void release_cur_page_data() {
+        cur_page_data_.uncompressed_buf_ = nullptr;
+        cur_page_data_.compressed_buf_ = nullptr;
+    }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
    private:
@@ -194,7 +236,7 @@ class PageWriter {
 
    private:
     // static const uint32_t OUT_STREAM_PAGE_SIZE = 48;
-    static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
+    static const uint32_t OUT_STREAM_PAGE_SIZE = 65536;
 
    private:
     common::TSDataType data_type_;

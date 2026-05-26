@@ -45,7 +45,7 @@ TsFileTableWriter::TsFileTableWriter(
 
 }  // namespace storage
 
-storage::TsFileTableWriter::~TsFileTableWriter() = default;
+storage::TsFileTableWriter::~TsFileTableWriter() { close(); }
 
 int storage::TsFileTableWriter::register_table(
     const std::shared_ptr<TableSchema>& table_schema) {
@@ -66,21 +66,38 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
                tablet.get_table_name() != exclusive_table_name_) {
         return common::E_TABLE_NOT_EXIST;
     }
-    tablet.set_table_name(to_lower(tablet.get_table_name()));
-    for (size_t i = 0; i < tablet.get_column_count(); i++) {
-        tablet.set_column_name(i, to_lower(tablet.get_column_name(i)));
-    }
+    if (!names_lowered_) {
+        tablet.set_table_name(to_lower(tablet.get_table_name()));
+        for (size_t i = 0; i < tablet.get_column_count(); i++) {
+            tablet.set_column_name(i, to_lower(tablet.get_column_name(i)));
+        }
 
-    auto schema_map = tablet.get_schema_map();
-    std::map<std::string, int> schema_map_;
-    for (auto iter = schema_map.begin(); iter != schema_map.end(); iter++) {
-        schema_map_[to_lower(iter->first)] = iter->second;
+        auto schema_map = tablet.get_schema_map();
+        std::map<std::string, int> new_schema_map;
+        for (auto iter = schema_map.begin(); iter != schema_map.end(); iter++) {
+            new_schema_map[to_lower(iter->first)] = iter->second;
+        }
+        tablet.set_schema_map(new_schema_map);
+        names_lowered_ = true;
     }
-    tablet.set_schema_map(schema_map_);
 
     return tsfile_writer_->write_table(tablet);
 }
 
-int storage::TsFileTableWriter::flush() { return tsfile_writer_->flush(); }
+int storage::TsFileTableWriter::flush() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    return tsfile_writer_->flush();
+}
 
-int storage::TsFileTableWriter::close() { return tsfile_writer_->close(); }
+int storage::TsFileTableWriter::close() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    closed_ = true;
+    if (!tsfile_writer_) {
+        return common::E_OK;
+    }
+    return tsfile_writer_->close();
+}

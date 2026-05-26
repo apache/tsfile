@@ -328,12 +328,8 @@ static int recover_chunk_statistic(
     uint32_t value_buf_size = 0;
     std::vector<int64_t> time_decode_buf;
     const std::vector<int64_t>* times = nullptr;
-    std::vector<uint8_t> aligned_value_notnull_bitmap;
-    uint32_t aligned_num_values = 0;
-    const bool is_aligned_value_chunk =
-        (time_batch != nullptr && !time_batch->empty());
 
-    if (is_aligned_value_chunk) {
+    if (time_batch != nullptr && !time_batch->empty()) {
         // Aligned value page: uncompressed layout = uint32(num_values) + bitmap
         // + value_buf
         if (uncompressed_size < 4) {
@@ -341,7 +337,7 @@ static int recover_chunk_statistic(
             CompressorFactory::free(compressor);
             return E_OK;
         }
-        aligned_num_values =
+        uint32_t num_values =
             (static_cast<uint32_t>(
                  static_cast<unsigned char>(uncompressed_buf[0]))
              << 24) |
@@ -353,16 +349,11 @@ static int recover_chunk_statistic(
              << 8) |
             (static_cast<uint32_t>(
                 static_cast<unsigned char>(uncompressed_buf[3])));
-        uint32_t bitmap_size = (aligned_num_values + 7) / 8;
+        uint32_t bitmap_size = (num_values + 7) / 8;
         if (uncompressed_size < 4 + bitmap_size) {
             compressor->after_uncompress(uncompressed_buf);
             CompressorFactory::free(compressor);
             return E_OK;
-        }
-        aligned_value_notnull_bitmap.resize(bitmap_size);
-        if (bitmap_size > 0) {
-            std::memcpy(aligned_value_notnull_bitmap.data(),
-                        uncompressed_buf + 4, bitmap_size);
         }
         value_buf = uncompressed_buf + 4 + bitmap_size;
         value_buf_size = uncompressed_size - 4 - bitmap_size;
@@ -419,25 +410,8 @@ static int recover_chunk_statistic(
     value_decoder->reset();
     size_t idx = 0;
     const size_t num_times = times->size();
-    while (idx < num_times) {
+    while (idx < num_times && value_decoder->has_remaining(value_in)) {
         int64_t t = (*times)[idx];
-        bool has_value = true;
-        if (is_aligned_value_chunk) {
-            has_value = false;
-            const uint32_t byte_idx = static_cast<uint32_t>(idx / 8);
-            const uint32_t bit_shift = static_cast<uint32_t>(idx % 8);
-            if (byte_idx < aligned_value_notnull_bitmap.size()) {
-                has_value = ((aligned_value_notnull_bitmap[byte_idx] & 0xFF) &
-                             (0x80 >> bit_shift)) != 0;
-            }
-        }
-        if (!has_value) {
-            idx++;
-            continue;
-        }
-        if (!value_decoder->has_remaining(value_in)) {
-            break;
-        }
         switch (chdr.data_type_) {
             case common::BOOLEAN: {
                 bool v;
@@ -518,7 +492,6 @@ void RestorableTsFileIOWriter::close() {
         write_file_ = nullptr;
         write_file_owned_ = false;
     }
-    TsFileIOWriter::destroy();
     for (ChunkGroupMeta* cgm : self_check_recovered_cgm_) {
         cgm->device_id_.reset();
     }
@@ -842,12 +815,9 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         }
     }
 
-    // --- Attach recovered ChunkGroupMeta to writer; record per-CGM prefix
-    // length so destroy() can free stats appended later. ---
-    recovery_chunk_meta_prefix_.clear();
+    // --- Attach recovered ChunkGroupMeta to writer; destroy() will not free
+    // them ---
     for (ChunkGroupMeta* cgm : recovered_cgm_list) {
-        recovery_chunk_meta_prefix_[cgm] =
-            static_cast<uint32_t>(cgm->chunk_meta_list_.size());
         push_chunk_group_meta(cgm);
     }
     chunk_group_meta_from_recovery_ = true;

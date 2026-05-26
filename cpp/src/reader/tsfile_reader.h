@@ -143,13 +143,11 @@ class TsFileReader {
      * @param offset         Number of leading rows to skip (>= 0).
      * @param limit          Maximum rows to return. < 0 means unlimited.
      * @param[out] result_set  The result set containing query results.
-     * @param tag_filter     Optional tag filter for filtering by tag columns.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int queryByRow(const std::string& table_name,
                    const std::vector<std::string>& column_names, int offset,
-                   int limit, ResultSet*& result_set,
-                   Filter* tag_filter = nullptr, int batch_size = 0);
+                   int limit, ResultSet*& result_set);
 
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,
@@ -233,7 +231,6 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
    private:
-    int ensure_table_query_executor(int batch_size);
     int get_timeseries_metadata_impl(
         std::shared_ptr<IDeviceID> device_id,
         std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
@@ -243,7 +240,6 @@ class TsFileReader {
     storage::ReadFile* read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
-    int table_query_executor_batch_size_;
     common::PageArena tsfile_reader_meta_pa_;
 };
 

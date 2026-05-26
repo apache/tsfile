@@ -104,135 +104,6 @@ typedef struct device_schema {
     int timeseries_num;
 } DeviceSchema;
 
-/**
- * @brief Common header for all statistic variants (first member of each
- * TsFile*Statistic struct; also aliases the start of TimeseriesStatistic::u).
- *
- * When @p has_statistic is false, @p type is undefined. Otherwise @p type
- * selects which @ref TimeseriesStatisticUnion member is active (INT32/DATE/
- * INT64/TIMESTAMP share @c int_s). @c sum exists only on @c bool_s, @c int_s,
- * and @c float_s. Heap strings in string_s/text_s are
- * freed by tsfile_free_device_timeseries_metadata_map only.
- */
-typedef struct TsFileStatisticBase {
-    bool has_statistic;
-    TSDataType type;
-    int32_t row_count;
-    int64_t start_time;
-    int64_t end_time;
-} TsFileStatisticBase;
-
-typedef struct TsFileBoolStatistic {
-    TsFileStatisticBase base;
-    double sum;
-    bool first_bool;
-    bool last_bool;
-} TsFileBoolStatistic;
-
-typedef struct TsFileIntStatistic {
-    TsFileStatisticBase base;
-    double sum;
-    int64_t min_int64;
-    int64_t max_int64;
-    int64_t first_int64;
-    int64_t last_int64;
-} TsFileIntStatistic;
-
-typedef struct TsFileFloatStatistic {
-    TsFileStatisticBase base;
-    double sum;
-    double min_float64;
-    double max_float64;
-    double first_float64;
-    double last_float64;
-} TsFileFloatStatistic;
-
-typedef struct TsFileStringStatistic {
-    TsFileStatisticBase base;
-    char* str_min;
-    char* str_max;
-    char* str_first;
-    char* str_last;
-} TsFileStringStatistic;
-
-typedef struct TsFileTextStatistic {
-    TsFileStatisticBase base;
-    char* str_first;
-    char* str_last;
-} TsFileTextStatistic;
-
-/**
- * @brief One of the typed layouts; active member follows @c base.type.
- */
-typedef union TimeseriesStatisticUnion {
-    TsFileBoolStatistic bool_s;
-    TsFileIntStatistic int_s;
-    TsFileFloatStatistic float_s;
-    TsFileStringStatistic string_s;
-    TsFileTextStatistic text_s;
-} TimeseriesStatisticUnion;
-
-/**
- * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
- *
- * Read common fields via @c tsfile_statistic_base(s). Type-specific fields
- * via @c s->u.int_s, @c s->u.float_s, etc., per @c base.type.
- */
-typedef struct TimeseriesStatistic {
-    TimeseriesStatisticUnion u;
-} TimeseriesStatistic;
-
-/** Pointer to the common header at the start of @p s->u (any active arm). */
-#define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
-
-/**
- * @brief One measurement's metadata as exposed to C.
- */
-typedef struct TimeseriesMetadata {
-    char* measurement_name;
-    TSDataType data_type;
-    int32_t chunk_meta_count;
-    TimeseriesStatistic statistic;
-    TimeseriesStatistic timeline_statistic;
-} TimeseriesMetadata;
-
-/**
- * @brief Device identity from IDeviceID (path, table name, segments).
- *
- * Heap fields are freed by tsfile_device_id_free_contents or
- * tsfile_free_device_id_array, or as part of
- * tsfile_free_device_timeseries_metadata_map for entries.
- */
-typedef struct DeviceID {
-    char* path;
-    char* table_name;
-    uint32_t segment_count;
-    char** segments;
-} DeviceID;
-
-/**
- * @brief One device's timeseries metadata list plus DeviceID.
- *
- * @p device heap fields freed by tsfile_free_device_timeseries_metadata_map.
- */
-typedef struct DeviceTimeseriesMetadataEntry {
-    DeviceID device;
-    TimeseriesMetadata* timeseries;
-    uint32_t timeseries_count;
-} DeviceTimeseriesMetadataEntry;
-
-/**
- * @brief Map device -> list of TimeseriesMetadata (C layout with explicit
- * counts).
- */
-typedef struct DeviceTimeseriesMetadataMap {
-    DeviceTimeseriesMetadataEntry* entries;
-    uint32_t device_count;
-} DeviceTimeseriesMetadataMap;
-
-/** Frees path, table_name, and segments inside @p d; zeros @p d. */
-void tsfile_device_id_free_contents(DeviceID* d);
-
 typedef struct result_set_meta_data {
     char** column_names;
     TSDataType* data_types;
@@ -253,7 +124,6 @@ typedef void* Tablet;
 typedef void* TsRecord;
 
 typedef void* ResultSet;
-typedef void* TagFilterHandle;
 
 typedef struct arrow_schema {
     // Array type description
@@ -445,37 +315,6 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
  * @return ERRNO - E_OK(0) on success, or check error code in errno_define_c.h.
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
-
-/**
- * @brief Lists all devices (path, table name, segments from IDeviceID).
- *
- * @param out_devices [out] Allocated array; caller frees with
- * tsfile_free_device_id_array.
- */
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
-                                    uint32_t* out_length);
-
-void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
-
-/**
- * @brief Timeseries metadata for all devices in the file.
- */
-ERRNO tsfile_reader_get_timeseries_metadata_all(
-    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
-
-/**
- * @brief Timeseries metadata for a subset of devices.
- *
- * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
- * (E_OK); @p devices is not read.
- * For each entry, @p path must be non-NULL (canonical device path).
- */
-ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
-    TsFileReader reader, const DeviceID* devices, uint32_t length,
-    DeviceTimeseriesMetadataMap* out_map);
-
-void tsfile_free_device_timeseries_metadata_map(
-    DeviceTimeseriesMetadataMap* map);
 
 /*--------------------------Tablet API------------------------ */
 
@@ -677,16 +516,16 @@ ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
  * @param err_code [out] Error code. E_OK(0) on success.
  * @return ResultSet handle on success; NULL on failure.
  */
-ResultSet tsfile_reader_query_table_by_row(
-    TsFileReader reader, const char* table_name, char** column_names,
-    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
-    int batch_size, ERRNO* err_code);
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code);
 
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
-                                   TagFilterHandle tag_filter, int batch_size,
-                                   ERRNO* err_code);
+                                   int batch_size, ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
 //                                      char** sensor_name, uint32_t
@@ -861,82 +700,6 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                        uint32_t* size);
 
-// ---------- Tag Filter API ----------
-
-/**
- * @brief Tag filter comparison operators.
- */
-typedef enum {
-    TAG_FILTER_EQ = 0,
-    TAG_FILTER_NEQ = 1,
-    TAG_FILTER_LT = 2,
-    TAG_FILTER_LTEQ = 3,
-    TAG_FILTER_GT = 4,
-    TAG_FILTER_GTEQ = 5,
-    TAG_FILTER_REGEXP = 6,
-    TAG_FILTER_NOT_REGEXP = 7,
-} TagFilterOp;
-
-/**
- * @brief Create a tag filter with a comparison operator.
- *
- * @param reader [in] TsFileReader handle (used to resolve column name to
- * index).
- * @param table_name [in] Table name whose schema defines the TAG columns.
- * @param column_name [in] Name of the TAG column to filter on.
- * @param value [in] Comparison value (string).
- * @param op [in] Comparison operator (TagFilterOp).
- * @param err_code [out] Error code. E_OK(0) on success.
- * @return TagFilterHandle on success; NULL on failure.
- */
-TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
-                                         const char* table_name,
-                                         const char* column_name,
-                                         const char* value, TagFilterOp op,
-                                         ERRNO* err_code);
-
-/**
- * @brief Create a BETWEEN tag filter (lower <= column <= upper).
- */
-TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
-                                          const char* table_name,
-                                          const char* column_name,
-                                          const char* lower, const char* upper,
-                                          bool is_not, ERRNO* err_code);
-
-/**
- * @brief Combine two tag filters with AND.
- */
-TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
-                                      TagFilterHandle right);
-
-/**
- * @brief Combine two tag filters with OR.
- */
-TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
-                                     TagFilterHandle right);
-
-/**
- * @brief Negate a tag filter.
- */
-TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
-
-/**
- * @brief Free a tag filter and all its children.
- */
-void tsfile_tag_filter_free(TagFilterHandle filter);
-
-/**
- * @brief Query table with tag filter.
- *
- * @param batch_size <= 0 means row-by-row return mode,
- *                   > 0 means return TsBlock with the specified block size.
- */
-ResultSet tsfile_query_table_with_tag_filter(
-    TsFileReader reader, const char* table_name, char** columns,
-    uint32_t column_num, Timestamp start_time, Timestamp end_time,
-    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
-
 // Close and free resource.
 void free_tablet(Tablet* tablet);
 void free_tsfile_result_set(ResultSet* result_set);
@@ -1025,6 +788,79 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
 
 // Free row record.
 void _free_tsfile_ts_record(TsRecord* record);
+
+// ============== Tag Filter API ==============
+
+typedef void* TagFilterHandle;
+
+/**
+ * @brief Create a tag equality filter: column == value.
+ *
+ * @param reader [in] Valid TsFileReader handle (used to resolve column index).
+ * @param table_name [in] Target table name.
+ * @param column_name [in] Tag column name.
+ * @param value [in] Value to compare against.
+ * @return TagFilterHandle on success, NULL on failure.
+ */
+TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
+                                      const char* table_name,
+                                      const char* column_name,
+                                      const char* value);
+
+TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+/**
+ * @brief Logical AND of two tag filters. Takes ownership of left and right.
+ */
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                      TagFilterHandle right);
+
+/**
+ * @brief Logical OR of two tag filters. Takes ownership of left and right.
+ */
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                     TagFilterHandle right);
+
+/**
+ * @brief Logical NOT of a tag filter. Takes ownership of filter.
+ */
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+
+/**
+ * @brief Free a tag filter handle.
+ */
+void tsfile_tag_filter_free(TagFilterHandle filter);
+
+/**
+ * @brief Batch query with tag filter support.
+ */
+ResultSet tsfile_query_table_batch_with_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    int batch_size, TagFilterHandle tag_filter, ERRNO* err_code);
 
 #ifdef __cplusplus
 }

@@ -73,9 +73,16 @@ int SnappyCompressor::compress(char* uncompressed_buf,
 }
 
 void SnappyCompressor::after_compress(char* compressed_buf) {
+    // Free the buffer the caller is releasing, not whatever we last cached in
+    // compressed_buf_. The member is only kept so destroy() can clean up if
+    // after_compress is never called. When the same compressor is reused
+    // across pages, compressed_buf_ may point to a different (live) allocation
+    // or be null by the time the caller releases an earlier page's buffer.
     if (compressed_buf != nullptr) {
-        mem_free(compressed_buf_);
-        compressed_buf_ = nullptr;
+        mem_free(compressed_buf);
+        if (compressed_buf_ == compressed_buf) {
+            compressed_buf_ = nullptr;
+        }
     }
 }
 

@@ -17,18 +17,7 @@ specific language governing permissions and limitations
 under the License.
 ]]
 
-message("Running in examples/cpp_examples directory")
-
-add_library(cpp_examples_obj OBJECT
-    demo_read.cpp
-    demo_write.cpp
-    bench_read.cpp)
-
-# bench_read.cpp requires C++17 (TsFile headers use [[maybe_unused]])
-# and Arrow/Parquet headers. Both are provided by the parent scope.
-set_target_properties(cpp_examples_obj PROPERTIES
-    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-target_compile_options(cpp_examples_obj PRIVATE -std=c++17)
-target_link_libraries(cpp_examples_obj PRIVATE
-    Arrow::arrow_shared
-    Parquet::parquet_shared)
+# bench_read.cpp and bench_read.h live here for organisation.
+# The parent examples/CMakeLists.txt is responsible for compiling
+# bench_read.cpp into the single `examples` executable.
+# No separate executable is built from this directory.

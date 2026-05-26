@@ -103,13 +103,8 @@ int TSMIterator::init() {
             chunk_meta_iter_++;
         }
         if (!tmp.empty()) {
-            auto& merged =
-                tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_id_];
-            for (auto& m_entry : tmp) {
-                auto& vec = merged[m_entry.first];
-                vec.insert(vec.end(), m_entry.second.begin(),
-                           m_entry.second.end());
-            }
+            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_id_] =
+                tmp;
         }
 
         chunk_group_meta_iter_++;

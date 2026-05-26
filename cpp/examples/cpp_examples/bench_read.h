@@ -16,23 +16,23 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#pragma once
+#include <cstdint>
 
-#include "reader/task/device_query_task.h"
+/**
+ * TsFile vs Parquet+Arrow baseline read benchmark.
+ * Writes bench files to cwd, then measures TAG_FILTER and TIME_FILTER.
+ * row_count must be a positive multiple of 10 (default: 1,000,000).
+ */
+// Write TsFile (and optionally Parquet) bench files to cwd.
+int bench_write(int64_t row_count = 1000000, bool run_parquet = true);
 
-namespace storage {
-DeviceQueryTask* DeviceQueryTask::create_device_query_task(
-    std::shared_ptr<IDeviceID> device_id, std::vector<std::string> column_names,
-    std::shared_ptr<ColumnMapping> column_mapping, MetaIndexNode* index_root,
-    std::shared_ptr<TableSchema> table_schema, common::PageArena& pa) {
-    void* buf = pa.alloc(sizeof(DeviceQueryTask));
-    if (UNLIKELY(buf == nullptr)) {
-        return nullptr;
-    }
-    DeviceQueryTask* task = new (buf) DeviceQueryTask(
-        device_id, column_names, column_mapping, index_root, table_schema);
-    return task;
-}
+// Best-effort OS page cache drop for the bench files.
+// On macOS: calls `purge` (requires sudo; harmless if it fails).
+// On Linux: writes to /proc/sys/vm/drop_caches (requires root).
+void bench_drop_cache();
 
-DeviceQueryTask::~DeviceQueryTask() = default;
-
-}  // namespace storage
+// Run read benchmarks against already-written bench files.
+// run_parquet: include Parquet+Arrow comparison (set false for TsFile-only
+// profiling).
+int bench_read(int64_t row_count = 1000000, bool run_parquet = true);

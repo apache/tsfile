@@ -25,12 +25,76 @@
 using namespace common;
 using namespace storage;
 
+namespace {
+
+struct DeviceMetaEntry {
+    std::shared_ptr<IDeviceID> device_id;
+    int64_t start_offset;
+    int64_t end_offset;
+};
+
+int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
+                           std::shared_ptr<MetaIndexNode> index_node,
+                           ReadFile* read_file, PageArena& pa) {
+    int ret = E_OK;
+    if (index_node == nullptr) {
+        return ret;
+    }
+    if (index_node->node_type_ == LEAF_DEVICE) {
+        for (size_t i = 0; i < index_node->children_.size(); i++) {
+            DeviceMetaEntry entry;
+            entry.device_id = index_node->children_[i]->get_device_id();
+            entry.start_offset = index_node->children_[i]->get_offset();
+            entry.end_offset = (i + 1 < index_node->children_.size())
+                                   ? index_node->children_[i + 1]->get_offset()
+                                   : index_node->end_offset_;
+            entries.push_back(entry);
+        }
+    } else {
+        for (size_t idx = 0; idx < index_node->children_.size(); idx++) {
+            auto meta_index_entry = index_node->children_[idx];
+            int64_t start_offset = meta_index_entry->get_offset();
+            int64_t end_offset = index_node->end_offset_;
+            if (idx + 1 < index_node->children_.size()) {
+                end_offset = index_node->children_[idx + 1]->get_offset();
+            }
+            ASSERT(end_offset - start_offset > 0);
+            const int32_t read_size = (int32_t)(end_offset - start_offset);
+            int32_t ret_read_len = 0;
+            char* data_buf = (char*)pa.alloc(read_size);
+            void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+            if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+                return E_OOM;
+            }
+            auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+            auto top_node = std::shared_ptr<MetaIndexNode>(
+                top_node_ptr, [](MetaIndexNode* ptr) {
+                    if (ptr) {
+                        ptr->~MetaIndexNode();
+                    }
+                });
+            if (RET_FAIL(read_file->read(start_offset, data_buf, read_size,
+                                         ret_read_len))) {
+            } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
+                                                                  read_size))) {
+            } else {
+                ret = get_all_device_entries(entries, top_node, read_file, pa);
+            }
+            if (ret != E_OK) {
+                return ret;
+            }
+        }
+    }
+    return ret;
+}
+
+}  // namespace
+
 namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr),
-      table_query_executor_batch_size_(0) {
+      table_query_executor_(nullptr) {
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 }
 
@@ -58,29 +122,12 @@ int TsFileReader::close() {
         delete table_query_executor_;
         table_query_executor_ = nullptr;
     }
-    table_query_executor_batch_size_ = 0;
     if (read_file_ != nullptr) {
         read_file_->close();
         delete read_file_;
         read_file_ = nullptr;
     }
     return ret;
-}
-
-int TsFileReader::ensure_table_query_executor(int batch_size) {
-    if (table_query_executor_ != nullptr &&
-        table_query_executor_batch_size_ == batch_size) {
-        return E_OK;
-    }
-
-    if (table_query_executor_ != nullptr) {
-        delete table_query_executor_;
-        table_query_executor_ = nullptr;
-    }
-
-    table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
-    table_query_executor_batch_size_ = batch_size;
-    return E_OK;
 }
 
 int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
@@ -128,7 +175,9 @@ int TsFileReader::query(const std::string& table_name,
     }
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ensure_table_query_executor(batch_size);
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
+    }
     ret = table_query_executor_->query(to_lower(table_name), columns_names,
                                        time_filter, tag_filter, nullptr,
                                        result_set);
@@ -151,8 +200,7 @@ int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
 
 int TsFileReader::queryByRow(const std::string& table_name,
                              const std::vector<std::string>& column_names,
-                             int offset, int limit, ResultSet*& result_set,
-                             Filter* tag_filter, int batch_size) {
+                             int offset, int limit, ResultSet*& result_set) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
@@ -163,9 +211,12 @@ int TsFileReader::queryByRow(const std::string& table_name,
         return E_TABLE_NOT_EXIST;
     }
 
-    ensure_table_query_executor(batch_size);
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_);
+    }
     ret = table_query_executor_->query(to_lower(table_name), column_names,
-                                       /*time_filter=*/nullptr, tag_filter,
+                                       /*time_filter=*/nullptr,
+                                       /*tag_filter=*/nullptr,
                                        /*field_filter=*/nullptr, offset, limit,
                                        result_set);
     return ret;
@@ -242,7 +293,9 @@ int TsFileReader::query_table_on_tree(
         columns_names[i] = "col_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);
-    ensure_table_query_executor(-1);
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_);
+    }
     ret = table_query_executor_->query_on_tree(
         satisfied_device_ids, columns_names, measurement_names_to_query,
         time_filter, result_set);
@@ -346,16 +399,9 @@ int TsFileReader::get_timeseries_schema(
                          device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
-            auto* aligned_timeseries_index =
-                dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
-            auto data_type =
-                aligned_timeseries_index != nullptr &&
-                        aligned_timeseries_index->value_ts_idx_ != nullptr
-                    ? aligned_timeseries_index->value_ts_idx_->get_data_type()
-                    : timeseries_index->get_data_type();
             MeasurementSchema ms(
                 timeseries_index->get_measurement_name().to_std_string(),
-                data_type);
+                timeseries_index->get_data_type());
             result.push_back(ms);
         }
     }
@@ -367,8 +413,6 @@ int TsFileReader::get_timeseries_metadata_impl(
     std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
     int ret = E_OK;
     std::vector<ITimeseriesIndex*> timeseries_indexs;
-    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
-    // Pointers are owned by tsfile_reader_meta_pa_; shared_ptr must not delete
     auto noop_deleter = [](ITimeseriesIndex*) {};
     if (RET_FAIL(
             tsfile_executor_->get_tsfile_io_reader()
@@ -397,13 +441,36 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
 }
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
-    // Collect metadata for all devices present in the file
     DeviceTimeseriesMetadataMap result;
-    auto device_ids = get_all_device_ids();
-    for (const auto& device_id : device_ids) {
-        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
-            result.insert(std::make_pair(device_id, std::move(list)));
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return result;
+    }
+
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+    std::vector<DeviceMetaEntry> entries;
+    for (auto& table_entry : tsfile_meta->table_metadata_index_node_map_) {
+        if (get_all_device_entries(entries, table_entry.second, read_file_,
+                                   pa) != E_OK) {
+            return result;
+        }
+    }
+
+    auto noop_deleter = [](ITimeseriesIndex*) {};
+    for (auto& device_entry : entries) {
+        std::vector<ITimeseriesIndex*> raw_ts_indexes;
+        if (tsfile_executor_->get_tsfile_io_reader()
+                ->get_device_timeseries_meta_by_offset(
+                    device_entry.start_offset, device_entry.end_offset,
+                    raw_ts_indexes, tsfile_reader_meta_pa_) == E_OK) {
+            std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+            for (auto ts_idx : raw_ts_indexes) {
+                list.emplace_back(
+                    std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
+            }
+            result.insert(
+                std::make_pair(device_entry.device_id, std::move(list)));
         }
     }
     return result;

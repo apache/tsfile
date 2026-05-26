@@ -16,23 +16,29 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#ifndef COMMON_CONTAINER_BLOCKING_QUEUE_H
+#define COMMON_CONTAINER_BLOCKING_QUEUE_H
 
-#include "reader/task/device_query_task.h"
+#include <pthread.h>
 
-namespace storage {
-DeviceQueryTask* DeviceQueryTask::create_device_query_task(
-    std::shared_ptr<IDeviceID> device_id, std::vector<std::string> column_names,
-    std::shared_ptr<ColumnMapping> column_mapping, MetaIndexNode* index_root,
-    std::shared_ptr<TableSchema> table_schema, common::PageArena& pa) {
-    void* buf = pa.alloc(sizeof(DeviceQueryTask));
-    if (UNLIKELY(buf == nullptr)) {
-        return nullptr;
-    }
-    DeviceQueryTask* task = new (buf) DeviceQueryTask(
-        device_id, column_names, column_mapping, index_root, table_schema);
-    return task;
-}
+#include <queue>
 
-DeviceQueryTask::~DeviceQueryTask() = default;
+namespace common {
 
-}  // namespace storage
+class BlockingQueue {
+   public:
+    BlockingQueue();
+    ~BlockingQueue();
+
+    void push(void* data);
+    // if empty, blocking
+    void* pop();
+
+   private:
+    std::queue<void*> queue_;
+    pthread_mutex_t mutex_;
+    pthread_cond_t cond_;
+};
+
+}  // end namespace common
+#endif  // COMMON_CONTAINER_BLOCKING_QUEUE_H

@@ -21,7 +21,6 @@
 
 #include <string.h>
 
-#include <algorithm>
 #include <iostream>
 
 #include "common/allocator/page_arena.h"

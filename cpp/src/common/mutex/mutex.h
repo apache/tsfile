@@ -20,28 +20,46 @@
 #ifndef COMMON_MUTEX_MUTEX_H
 #define COMMON_MUTEX_MUTEX_H
 
-#include <mutex>
+#include <errno.h>
+#include <pthread.h>
 
 #include "utils/util_define.h"
 
 namespace common {
 
-// Thin wrapper over std::mutex. Implemented with the C++11 standard library
-// (instead of pthreads directly) so it builds on every platform, including
-// MSVC where pthreads is not available.
 class Mutex {
    public:
-    Mutex() {}
-    ~Mutex() {}
+    Mutex() : mutex_() { pthread_mutex_init(&mutex_, NULL); }
+    ~Mutex() { pthread_mutex_destroy(&mutex_); }
 
-    void lock() { mutex_.lock(); }
+    void lock() {
+        int ret = EBUSY;
+        do {
+            ret = pthread_mutex_lock(&mutex_);
+        } while (UNLIKELY(ret == EBUSY || ret == EAGAIN));
+        ASSERT(ret == 0);
+    }
 
-    void unlock() { mutex_.unlock(); }
+    void unlock() {
+        int ret = pthread_mutex_unlock(&mutex_);
+        ASSERT(ret == 0);
+        (void)ret;
+    }
 
-    bool try_lock() { return mutex_.try_lock(); }
+    bool try_lock() {
+        int ret = pthread_mutex_trylock(&mutex_);
+        if (ret == 0) {
+            return true;
+        } else if (ret == EBUSY || ret == EAGAIN) {
+            return false;
+        } else {
+            ASSERT(false);
+            return false;
+        }
+    }
 
    private:
-    std::mutex mutex_;
+    pthread_mutex_t mutex_;
 };
 
 class MutexGuard {

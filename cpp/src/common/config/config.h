@@ -36,7 +36,7 @@ typedef struct ConfigValue {
     TSEncoding time_encoding_type_;
     TSDataType time_data_type_;
     CompressionType time_compress_type_;
-    int32_t chunk_group_size_threshold_;
+    int64_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;
     bool encrypt_flag_ = false;
     TSEncoding boolean_encoding_type_;
@@ -46,14 +46,11 @@ typedef struct ConfigValue {
     TSEncoding double_encoding_type_;
     TSEncoding string_encoding_type_;
     CompressionType default_compression_type_;
+    bool parallel_read_enabled_;
     bool parallel_write_enabled_;
+    int32_t read_thread_count_;
     int32_t write_thread_count_;
-    // When true, aligned writer enforces page size limit strictly by
-    // interleaving time/value writes and sealing pages together when any side
-    // becomes full.
-    // When false, aligned writer may disable some page-size checks to improve
-    // write performance.
-    bool strict_page_size_ = true;
+    bool sync_on_close_ = true;
 } ConfigValue;
 
 extern void init_config_value();
@@ -65,7 +62,6 @@ extern void set_config_value();
 extern void config_set_page_max_point_count(uint32_t page_max_point_count);
 extern void config_set_max_degree_of_index_node(
     uint32_t max_degree_of_index_node);
-extern void config_set_strict_page_size(bool strict_page_size);
 
 }  // namespace common
 

@@ -26,13 +26,27 @@ namespace storage {
 
 class UncompressedCompressor : public Compressor {
    public:
-    UncompressedCompressor() {}
-    virtual ~UncompressedCompressor() {}
+    UncompressedCompressor() : uncompressed_buf_(nullptr) {}
+    virtual ~UncompressedCompressor() {
+        if (uncompressed_buf_ != nullptr) {
+            common::mem_free(uncompressed_buf_);
+            uncompressed_buf_ = nullptr;
+        }
+    }
     int reset(bool for_compress) {
         UNUSED(for_compress);
+        if (uncompressed_buf_ != nullptr) {
+            common::mem_free(uncompressed_buf_);
+            uncompressed_buf_ = nullptr;
+        }
         return common::E_OK;
     }
-    void destroy() {}
+    void destroy() {
+        if (uncompressed_buf_ != nullptr) {
+            common::mem_free(uncompressed_buf_);
+            uncompressed_buf_ = nullptr;
+        }
+    }
     int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
                  char*& compressed_buf, uint32_t& compressed_buf_len) {
         compressed_buf = uncompressed_buf;
@@ -43,11 +57,26 @@ class UncompressedCompressor : public Compressor {
 
     int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                    char*& uncompressed_buf, uint32_t& uncompressed_buf_len) {
-        uncompressed_buf = compressed_buf;
+        char* buf = static_cast<char*>(
+            common::mem_alloc(compressed_buf_len, common::MOD_COMPRESSOR_OBJ));
+        if (buf == nullptr) {
+            return common::E_OOM;
+        }
+        memcpy(buf, compressed_buf, compressed_buf_len);
+        uncompressed_buf = buf;
+        uncompressed_buf_ = buf;
         uncompressed_buf_len = compressed_buf_len;
         return common::E_OK;
     }
-    void after_uncompress(char* uncompressed_buf) { UNUSED(uncompressed_buf); }
+    void after_uncompress(char* uncompressed_buf) {
+        if (uncompressed_buf != nullptr) {
+            common::mem_free(uncompressed_buf_);
+            uncompressed_buf_ = nullptr;
+        }
+    }
+
+   private:
+    char* uncompressed_buf_;
 };
 
 }  // end namespace storage
