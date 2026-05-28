@@ -45,8 +45,8 @@ set ARROW_OPTS=
 "%JAVA_HOME%\bin\java" --add-opens=java.base/java.nio=ALL-UNNAMED -version >nul 2>&1
 if not errorlevel 1 set ARROW_OPTS=--add-opens=java.base/java.nio=ALL-UNNAMED
 
-start /B /WAIT "" cmd /C "("%JAVA_HOME%\bin\java" -DTSFILE_HOME=!TSFILE_HOME! !tsfile_params! !ARROW_OPTS! !JAVA_OPTS! -cp !CLASSPATH! !MAIN_CLASS! --format arrow %*)"
-exit /b
+"%JAVA_HOME%\bin\java" -DTSFILE_HOME=!TSFILE_HOME! !tsfile_params! !ARROW_OPTS! !JAVA_OPTS! -cp !CLASSPATH! !MAIN_CLASS! --format arrow %*
+exit /b %ERRORLEVEL%
 
 :err
 echo JAVA_HOME environment variable must be set!
