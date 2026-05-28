@@ -660,15 +660,29 @@ int TsFileIOReader::get_timeseries_indexes(
 
     int64_t idx = 0;
     for (const auto& measurement_name : measurement_names) {
-        if (RET_FAIL(load_measurement_index_entry(measurement_name, top_node,
-                                                  measurement_index_entry,
-                                                  measurement_ie_end_offset))) {
-        } else if (do_load_timeseries_index(
-                       measurement_name, measurement_index_entry->get_offset(),
-                       measurement_ie_end_offset, pa, timeseries_indexs[idx],
-                       is_aligned) == E_NOT_EXIST) {
+        timeseries_indexs[idx] = nullptr;
+        ret = load_measurement_index_entry(measurement_name, top_node,
+                                           measurement_index_entry,
+                                           measurement_ie_end_offset);
+        if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_NOT_EXIST) {
+            ret = E_OK;
             idx++;
             continue;
+        }
+        if (RET_FAIL(ret)) {
+            return ret;
+        }
+
+        ret = do_load_timeseries_index(
+            measurement_name, measurement_index_entry->get_offset(),
+            measurement_ie_end_offset, pa, timeseries_indexs[idx], is_aligned);
+        if (ret == E_NOT_EXIST) {
+            ret = E_OK;
+            idx++;
+            continue;
+        }
+        if (RET_FAIL(ret)) {
+            return ret;
         }
         if (is_aligned) {
             AlignedTimeseriesIndex* aligned_timeseries_index =

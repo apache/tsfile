@@ -43,7 +43,7 @@ int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
     }
-    if (col_notnull_bitmap_buf_size_ == 0 || value_buf_size_ == 0) {
+    if (col_notnull_bitmap_buf_size_ == 0) {
         return E_INVALID_ARG;
     }
     uncompressed_buf_[0] = (unsigned char)((size >> 24) & 0xFF);
@@ -119,6 +119,8 @@ void ValuePageWriter::reset() {
     }
     col_notnull_bitmap_out_stream_.reset();
     value_out_stream_.reset();
+    col_notnull_bitmap_.clear();
+    size_ = 0;
 }
 
 void ValuePageWriter::destroy() {

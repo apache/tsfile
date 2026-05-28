@@ -27,6 +27,10 @@
 
 namespace storage {
 
+namespace {
+const char* kTimeOnlyContextName = "__time_only_aligned_context__";
+}
+
 SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
     DeviceQueryTask* device_query_task, uint32_t block_size,
     IMetadataQuerier* metadata_querier, TsFileIOReader* tsfile_io_reader,
@@ -195,63 +199,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     // more than once.
     bool used_multi = false;
     std::set<std::string> multi_names;
-    {
-        bool can_multi = true;
-        auto& meas_cols =
-            device_query_task->get_column_mapping()->get_measurement_columns();
-        for (const auto& ts_idx : time_series_indexs) {
-            if (ts_idx == nullptr ||
-                ts_idx->get_data_type() != common::VECTOR) {
-                can_multi = false;
-                break;
-            }
-        }
-        if (can_multi) {
-            std::vector<std::string> meas_names(meas_cols.begin(),
-                                                meas_cols.end());
-            std::sort(
-                meas_names.begin(), meas_names.end(),
-                [device_query_task](const std::string& lhs,
-                                    const std::string& rhs) {
-                    const auto& lhs_pos =
-                        device_query_task->get_column_mapping()->get_column_pos(
-                            lhs);
-                    const auto& rhs_pos =
-                        device_query_task->get_column_mapping()->get_column_pos(
-                            rhs);
-                    const int lhs_first =
-                        lhs_pos.empty() ? INT32_MAX : lhs_pos.front();
-                    const int rhs_first =
-                        rhs_pos.empty() ? INT32_MAX : rhs_pos.front();
-                    if (lhs_first != rhs_first) {
-                        return lhs_first < rhs_first;
-                    }
-                    return lhs < rhs;
-                });
-            std::vector<std::vector<int32_t>> pos_list;
-            pos_list.reserve(meas_names.size());
-            for (const auto& name : meas_names) {
-                const auto& pos =
-                    device_query_task->get_column_mapping()->get_column_pos(
-                        name);
-                pos_list.push_back(
-                    std::vector<int32_t>(pos.begin(), pos.end()));
-            }
-
-            auto* ctx = new VectorMeasurementColumnContext(tsfile_io_reader_);
-            if (common::E_OK == ctx->init(device_query_task_, meas_names,
-                                          time_filter, pos_list, pa_)) {
-                for (const auto& name : meas_names) {
-                    field_column_contexts_.insert(std::make_pair(name, ctx));
-                    multi_names.insert(name);
-                }
-                aligned_col_count_ = meas_names.size();
-                used_multi = true;
-            } else {
-                delete ctx;
-            }
-        }
-    }
 
     for (const auto& time_series_index : time_series_indexs) {
         if (time_series_index == nullptr) {
@@ -263,6 +210,22 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             continue;
         }
         construct_column_context(time_series_index, time_filter, 0, -1);
+    }
+
+    if (field_column_contexts_.empty()) {
+        std::vector<std::string> empty_measurements;
+        std::vector<std::vector<int32_t>> empty_positions;
+        auto* time_only_ctx =
+            new VectorMeasurementColumnContext(tsfile_io_reader_);
+        int time_only_ret =
+            time_only_ctx->init(device_query_task_, empty_measurements,
+                                time_filter, empty_positions, pa_);
+        if (common::E_OK == time_only_ret) {
+            field_column_contexts_.insert(
+                std::make_pair(kTimeOnlyContextName, time_only_ctx));
+        } else {
+            delete time_only_ctx;
+        }
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
@@ -648,6 +611,13 @@ int SingleDeviceTsBlockReader::construct_column_context(
         if (aligned_time_series_index == nullptr) {
             assert(false);
         }
+        if (aligned_time_series_index->value_ts_idx_ != nullptr &&
+            aligned_time_series_index->value_ts_idx_->get_statistic() !=
+                nullptr &&
+            aligned_time_series_index->value_ts_idx_->get_statistic()->count_ ==
+                0) {
+            return ret;
+        }
         SingleMeasurementColumnContext* column_context =
             new SingleMeasurementColumnContext(tsfile_io_reader_);
         if (RET_FAIL(column_context->init(
@@ -986,6 +956,18 @@ void VectorMeasurementColumnContext::fill_into(
 
 void VectorMeasurementColumnContext::remove_from(
     std::map<std::string, MeasurementColumnContext*>& column_context_map) {
+    if (column_names_.empty()) {
+        for (auto it = column_context_map.begin();
+             it != column_context_map.end();) {
+            if (it->second == this) {
+                it = column_context_map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        delete this;
+        return;
+    }
     for (const auto& name : column_names_) {
         column_context_map.erase(name);
     }

@@ -166,7 +166,7 @@ int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
 
 int ValueChunkWriter::end_encode_chunk() {
     int ret = E_OK;
-    if (value_page_writer_.get_statistic()->count_ > 0) {
+    if (has_current_page_data()) {
         ret = seal_cur_page(/*end_chunk*/ true);
         if (E_OK == ret) {
             chunk_header_.data_size_ = chunk_data_.total_size();
@@ -198,9 +198,7 @@ int64_t ValueChunkWriter::estimate_max_series_mem_size() {
 }
 
 bool ValueChunkWriter::hasData() {
-    return num_of_pages_ > 0 ||
-           (value_page_writer_.get_statistic() != nullptr &&
-            value_page_writer_.get_statistic()->count_ > 0);
+    return num_of_pages_ > 0 || has_current_page_data();
 }
 
 }  // end namespace storage

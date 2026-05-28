@@ -493,8 +493,18 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
         const StringColumn& sc = *value_matrix_[col_idx].string_col;
         const uint32_t* off = sc.offsets;
         const char* buf = sc.buffer;
+        common::BitMap& bitmap = const_cast<common::BitMap&>(bitmaps_[col_idx]);
         for (uint32_t i = 1; i < row_count; i++) {
             if (boundary[i >> 6] & (1ULL << (i & 63))) continue;
+            const bool prev_null = bitmap.test(i - 1);
+            const bool curr_null = bitmap.test(i);
+            if (prev_null != curr_null) {
+                boundary[i >> 6] |= (1ULL << (i & 63));
+                continue;
+            }
+            if (prev_null) {
+                continue;
+            }
             uint32_t len_a = off[i] - off[i - 1];
             uint32_t len_b = off[i + 1] - off[i];
             if (len_a != len_b ||

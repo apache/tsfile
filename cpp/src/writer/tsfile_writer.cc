@@ -912,170 +912,180 @@ int TsFileWriter::write_table(Tablet& tablet) {
     auto device_id_end_index_pairs = split_tablet_by_device(tablet);
 
     if (table_aligned_) {
-        // Per-device write context persisted across Phase 1 → Phase 2 so
-        // that lambdas can safely capture references.
         struct ValueTask {
             ValueChunkWriter* vcw;
             uint32_t col_idx;
         };
+        struct SegmentRange {
+            uint32_t si;
+            uint32_t ei;
+        };
         struct DeviceWriteCtx {
             TimeChunkWriter* tcw;
             std::vector<ValueTask> value_tasks;
-            std::vector<uint32_t> page_boundaries;
-            uint32_t si;
-            uint32_t ei;
+            std::vector<SegmentRange> segments;
+            uint32_t initial_page_points;
         };
 
         const uint32_t page_max_points =
             std::max<uint32_t>(1, g_config_value_.page_writer_max_point_num_);
 
-        // Phase 1 (serial): schema check + page boundary computation
-        // for every device.
         std::vector<DeviceWriteCtx> device_ctxs;
+        std::map<std::shared_ptr<IDeviceID>, size_t, IDeviceIDComparator>
+            device_ctx_index;
         int start_idx = 0;
         for (auto& pair : device_id_end_index_pairs) {
             auto device_id = pair.first;
             int end_idx = pair.second;
             if (end_idx == 0) continue;
 
-            SimpleVector<ValueChunkWriter*> value_chunk_writers;
-            TimeChunkWriter* time_chunk_writer = nullptr;
-            if (RET_FAIL(do_check_schema_table(device_id, tablet,
-                                               time_chunk_writer,
-                                               value_chunk_writers))) {
-                return ret;
-            }
-
-            // Seal if the current page is already at capacity from a
-            // previous write_table call.
-            uint32_t time_cur_points = time_chunk_writer->get_point_numer();
-            if (time_cur_points >= page_max_points) {
-                if (time_chunk_writer->has_current_page_data()) {
-                    if (RET_FAIL(time_chunk_writer->seal_current_page())) {
-                        return ret;
-                    }
+            const uint32_t si = static_cast<uint32_t>(start_idx);
+            const uint32_t ei = static_cast<uint32_t>(end_idx);
+            auto idx_it = device_ctx_index.find(device_id);
+            if (idx_it == device_ctx_index.end()) {
+                SimpleVector<ValueChunkWriter*> value_chunk_writers;
+                TimeChunkWriter* time_chunk_writer = nullptr;
+                if (RET_FAIL(do_check_schema_table(device_id, tablet,
+                                                   time_chunk_writer,
+                                                   value_chunk_writers))) {
+                    return ret;
                 }
-                for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                    if (!IS_NULL(value_chunk_writers[k]) &&
-                        value_chunk_writers[k]->has_current_page_data()) {
-                        if (RET_FAIL(
-                                value_chunk_writers[k]->seal_current_page())) {
+
+                uint32_t time_cur_points = time_chunk_writer->get_point_numer();
+                if (time_cur_points >= page_max_points) {
+                    if (time_chunk_writer->has_current_page_data()) {
+                        if (RET_FAIL(time_chunk_writer->seal_current_page())) {
                             return ret;
                         }
                     }
-                }
-                time_cur_points = 0;
-            }
-
-            const uint32_t si = static_cast<uint32_t>(start_idx);
-            const uint32_t ei = static_cast<uint32_t>(end_idx);
-
-            // Precompute page boundaries.
-            const uint32_t first_seg_cap =
-                (time_cur_points > 0 && time_cur_points < page_max_points)
-                    ? (page_max_points - time_cur_points)
-                    : page_max_points;
-            std::vector<uint32_t> page_boundaries;
-            {
-                uint32_t pos = si;
-                uint32_t seg_cap = first_seg_cap;
-                while (pos < ei) {
-                    uint32_t seg_end = std::min(pos + seg_cap, ei);
-                    if (seg_end < ei) {
-                        page_boundaries.push_back(seg_end);
+                    for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                        if (!IS_NULL(value_chunk_writers[k]) &&
+                            value_chunk_writers[k]->has_current_page_data()) {
+                            if (RET_FAIL(value_chunk_writers[k]
+                                             ->seal_current_page())) {
+                                return ret;
+                            }
+                        }
                     }
-                    pos = seg_end;
-                    seg_cap = page_max_points;
+                    time_cur_points = 0;
                 }
+
+                DeviceWriteCtx ctx;
+                ctx.tcw = time_chunk_writer;
+                ctx.initial_page_points = time_cur_points;
+                uint32_t field_col_count = 0;
+                for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
+                    if (tablet.column_categories_[i] ==
+                        common::ColumnCategory::FIELD) {
+                        ValueChunkWriter* vcw =
+                            value_chunk_writers[field_col_count];
+                        if (!IS_NULL(vcw)) {
+                            ctx.value_tasks.push_back({vcw, i});
+                        }
+                        field_col_count++;
+                    }
+                }
+                device_ctxs.push_back(std::move(ctx));
+                idx_it = device_ctx_index
+                             .insert(std::make_pair(device_id,
+                                                    device_ctxs.size() - 1))
+                             .first;
             }
 
-            DeviceWriteCtx ctx;
-            ctx.tcw = time_chunk_writer;
-            ctx.si = si;
-            ctx.ei = ei;
-            ctx.page_boundaries = std::move(page_boundaries);
-            uint32_t field_col_count = 0;
-            for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
-                if (tablet.column_categories_[i] ==
-                    common::ColumnCategory::FIELD) {
-                    ValueChunkWriter* vcw =
-                        value_chunk_writers[field_col_count];
-                    if (!IS_NULL(vcw)) {
-                        ctx.value_tasks.push_back({vcw, i});
-                    }
-                    field_col_count++;
-                }
-            }
-            device_ctxs.push_back(std::move(ctx));
+            device_ctxs[idx_it->second].segments.push_back({si, ei});
             start_idx = end_idx;
         }
 
-        // Segmented write helpers: write data in segments aligned to
-        // precomputed page boundaries, with auto-seal disabled to prevent
-        // double-sealing.
-        auto write_time_segments = [this, &tablet](
-                                       TimeChunkWriter* tcw,
-                                       const std::vector<uint32_t>& boundaries,
-                                       uint32_t si, uint32_t ei) -> int {
+        auto write_time_segments =
+            [this, &tablet, page_max_points](
+                TimeChunkWriter* tcw, const std::vector<SegmentRange>& segments,
+                uint32_t initial_page_points) -> int {
             int r = E_OK;
             tcw->set_enable_page_seal_if_full(false);
-            uint32_t seg_start = si;
-            for (uint32_t boundary : boundaries) {
-                if ((r = time_write_column_batch(tcw, tablet, seg_start,
-                                                 boundary)) != E_OK)
-                    return r;
-                if ((r = tcw->seal_current_page()) != E_OK) return r;
-                seg_start = boundary;
-            }
-            if (seg_start < ei) {
-                r = time_write_column_batch(tcw, tablet, seg_start, ei);
+            uint32_t page_remaining =
+                (initial_page_points > 0 &&
+                 initial_page_points < page_max_points)
+                    ? (page_max_points - initial_page_points)
+                    : page_max_points;
+            for (const auto& segment : segments) {
+                uint32_t seg_pos = segment.si;
+                while (seg_pos < segment.ei) {
+                    uint32_t batch =
+                        std::min(page_remaining, segment.ei - seg_pos);
+                    if ((r = time_write_column_batch(
+                             tcw, tablet, seg_pos, seg_pos + batch)) != E_OK) {
+                        tcw->set_enable_page_seal_if_full(true);
+                        return r;
+                    }
+                    seg_pos += batch;
+                    page_remaining -= batch;
+                    if (page_remaining == 0) {
+                        if ((r = tcw->seal_current_page()) != E_OK) {
+                            tcw->set_enable_page_seal_if_full(true);
+                            return r;
+                        }
+                        page_remaining = page_max_points;
+                    }
+                }
             }
             tcw->set_enable_page_seal_if_full(true);
             return r;
         };
 
-        auto write_value_segments = [this, &tablet](
-                                        ValueChunkWriter* vcw, uint32_t col_idx,
-                                        const std::vector<uint32_t>& boundaries,
-                                        uint32_t si, uint32_t ei) -> int {
+        auto write_value_segments =
+            [this, &tablet, page_max_points](
+                ValueChunkWriter* vcw, uint32_t col_idx,
+                const std::vector<SegmentRange>& segments,
+                uint32_t initial_page_points) -> int {
             int r = E_OK;
             vcw->set_enable_page_seal_if_full(false);
-            uint32_t seg_start = si;
-            for (uint32_t boundary : boundaries) {
-                if ((r = value_write_column_batch(vcw, tablet, col_idx,
-                                                  seg_start, boundary)) != E_OK)
-                    return r;
-                if (vcw->has_current_page_data() &&
-                    (r = vcw->seal_current_page()) != E_OK)
-                    return r;
-                seg_start = boundary;
-            }
-            if (seg_start < ei) {
-                r = value_write_column_batch(vcw, tablet, col_idx, seg_start,
-                                             ei);
+            uint32_t page_remaining =
+                (initial_page_points > 0 &&
+                 initial_page_points < page_max_points)
+                    ? (page_max_points - initial_page_points)
+                    : page_max_points;
+            for (const auto& segment : segments) {
+                uint32_t seg_pos = segment.si;
+                while (seg_pos < segment.ei) {
+                    uint32_t batch =
+                        std::min(page_remaining, segment.ei - seg_pos);
+                    if ((r = value_write_column_batch(
+                             vcw, tablet, col_idx, seg_pos, seg_pos + batch)) !=
+                        E_OK) {
+                        vcw->set_enable_page_seal_if_full(true);
+                        return r;
+                    }
+                    seg_pos += batch;
+                    page_remaining -= batch;
+                    if (page_remaining == 0) {
+                        if (vcw->has_current_page_data() &&
+                            (r = vcw->seal_current_page()) != E_OK) {
+                            vcw->set_enable_page_seal_if_full(true);
+                            return r;
+                        }
+                        page_remaining = page_max_points;
+                    }
+                }
             }
             vcw->set_enable_page_seal_if_full(true);
             return r;
         };
 
-        // Phase 2: encode — submit ALL chunk writers across ALL devices
-        // to the thread pool.  Each ChunkWriter is independent.
-        // Total tasks = n_devices * (1 time + n_field_cols).
 #ifdef ENABLE_THREADS
         if (g_config_value_.parallel_write_enabled_) {
             std::vector<std::future<int>> futures;
             for (auto& ctx : device_ctxs) {
                 futures.push_back(
                     thread_pool_.submit([&write_time_segments, &ctx]() {
-                        return write_time_segments(ctx.tcw, ctx.page_boundaries,
-                                                   ctx.si, ctx.ei);
+                        return write_time_segments(ctx.tcw, ctx.segments,
+                                                   ctx.initial_page_points);
                     }));
                 for (auto& vt : ctx.value_tasks) {
                     futures.push_back(thread_pool_.submit(
                         [&write_value_segments, &vt, &ctx]() {
-                            return write_value_segments(vt.vcw, vt.col_idx,
-                                                        ctx.page_boundaries,
-                                                        ctx.si, ctx.ei);
+                            return write_value_segments(
+                                vt.vcw, vt.col_idx, ctx.segments,
+                                ctx.initial_page_points);
                         }));
                 }
             }
@@ -1088,14 +1098,14 @@ int TsFileWriter::write_table(Tablet& tablet) {
 #endif
         {
             for (auto& ctx : device_ctxs) {
-                if (RET_FAIL(write_time_segments(ctx.tcw, ctx.page_boundaries,
-                                                 ctx.si, ctx.ei))) {
+                if (RET_FAIL(write_time_segments(ctx.tcw, ctx.segments,
+                                                 ctx.initial_page_points))) {
                     return ret;
                 }
                 for (auto& vt : ctx.value_tasks) {
-                    if (RET_FAIL(write_value_segments(vt.vcw, vt.col_idx,
-                                                      ctx.page_boundaries,
-                                                      ctx.si, ctx.ei))) {
+                    if (RET_FAIL(write_value_segments(
+                            vt.vcw, vt.col_idx, ctx.segments,
+                            ctx.initial_page_points))) {
                         return ret;
                     }
                 }
@@ -1428,13 +1438,16 @@ int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
                                      uint32_t start_idx, uint32_t end_idx) {
     int ret = E_OK;
     for (uint32_t r = start_idx; r < end_idx; r++) {
-        common::String val(string_col->buffer + string_col->offsets[r],
-                           string_col->offsets[r + 1] - string_col->offsets[r]);
         if (LIKELY(col_notnull_bitmap.test(r))) {
-            if (RET_FAIL(value_chunk_writer->write(timestamps[r], val, true))) {
+            common::String empty;
+            if (RET_FAIL(
+                    value_chunk_writer->write(timestamps[r], empty, true))) {
                 return ret;
             }
         } else {
+            common::String val(
+                string_col->buffer + string_col->offsets[r],
+                string_col->offsets[r + 1] - string_col->offsets[r]);
             if (RET_FAIL(
                     value_chunk_writer->write(timestamps[r], val, false))) {
                 return ret;
@@ -1562,9 +1575,9 @@ int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
                 start_idx, count);
             break;
         case common::FLOAT:
-            ret = value_chunk_writer->write_batch(
-                timestamps, col_values.float_data, col_notnull_bitmap,
-                start_idx, count);
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     col_values.float_data, col_notnull_bitmap,
+                                     start_idx, end_idx);
             break;
         case common::DOUBLE:
             ret = value_chunk_writer->write_batch(
@@ -1698,7 +1711,8 @@ int TsFileWriter::flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
                 chunk_writer, io_writer_, m_schema->measurement_name_,
                 m_schema->data_type_, m_schema->encoding_,
                 m_schema->compression_type_, chunk_writer->num_of_pages())
-        } else if (m_schema->value_chunk_writer_ != nullptr) {
+        } else if (m_schema->value_chunk_writer_ != nullptr &&
+                   m_schema->value_chunk_writer_->hasData()) {
             ValueChunkWriter*& value_chunk_writer =
                 m_schema->value_chunk_writer_;
             FLUSH_CHUNK_ENCODED(
@@ -1734,7 +1748,8 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
                         m_schema->data_type_, m_schema->encoding_,
                         m_schema->compression_type_,
                         chunk_writer->num_of_pages())
-        } else if (m_schema->value_chunk_writer_ != nullptr) {
+        } else if (m_schema->value_chunk_writer_ != nullptr &&
+                   m_schema->value_chunk_writer_->hasData()) {
             ValueChunkWriter*& value_chunk_writer =
                 m_schema->value_chunk_writer_;
             FLUSH_CHUNK(value_chunk_writer, io_writer_,

@@ -118,10 +118,13 @@ class TsFileSeriesScanIterator {
     int init_chunk_reader_multi();
     FORCE_INLINE bool has_next_chunk() const {
         if (is_multi_value_) {
-            // All value cursors advance in lockstep; check first one
-            return !value_chunk_meta_cursors_.empty() &&
-                   value_chunk_meta_cursors_[0] !=
-                       itimeseries_index_->get_value_chunk_meta_list(0)->end();
+            if (value_chunk_meta_cursors_.empty()) {
+                return time_chunk_meta_cursor_ !=
+                       itimeseries_index_->get_time_chunk_meta_list()->end();
+            }
+            // All value cursors advance in lockstep; check first one.
+            return value_chunk_meta_cursors_[0] !=
+                   itimeseries_index_->get_value_chunk_meta_list(0)->end();
         }
         if (is_aligned_) {
             return value_chunk_meta_cursor_ !=
