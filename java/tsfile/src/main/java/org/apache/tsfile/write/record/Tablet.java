@@ -759,12 +759,12 @@ public class Tablet implements Accountable {
   /** Return the exact serialized byte size of this tablet. */
   public int serializedSize() {
     int size = 0;
-    size += ReadWriteIOUtils.sizeToWrite(insertTargetName);
-    size += Integer.BYTES;
-    size += serializedSizeOfMeasurementSchemas();
-    size += serializedSizeOfTimes();
-    size += serializedSizeOfBitMaps();
-    size += serializedSizeOfValues();
+    size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(insertTargetName));
+    size = Math.addExact(size, Integer.BYTES);
+    size = Math.addExact(size, serializedSizeOfMeasurementSchemas());
+    size = Math.addExact(size, serializedSizeOfTimes());
+    size = Math.addExact(size, serializedSizeOfBitMaps());
+    size = Math.addExact(size, serializedSizeOfValues());
     return size;
   }
 
@@ -780,13 +780,13 @@ public class Tablet implements Accountable {
   private int serializedSizeOfMeasurementSchemas() {
     int size = Byte.BYTES;
     if (schemas != null) {
-      size += Integer.BYTES;
+      size = Math.addExact(size, Integer.BYTES);
       for (int i = 0; i < schemas.size(); i++) {
-        size += Byte.BYTES;
+        size = Math.addExact(size, Byte.BYTES);
         final IMeasurementSchema schema = schemas.get(i);
         if (schema != null) {
-          size += schema.serializedSize();
-          size += Byte.BYTES;
+          size = Math.addExact(size, schema.serializedSize());
+          size = Math.addExact(size, Byte.BYTES);
         }
       }
     }
@@ -796,7 +796,7 @@ public class Tablet implements Accountable {
   private int serializedSizeOfTimes() {
     int size = Byte.BYTES;
     if (timestamps != null) {
-      size += (long) Long.BYTES * rowSize;
+      size = Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
     }
     return size;
   }
@@ -807,12 +807,15 @@ public class Tablet implements Accountable {
       final int columnCount = schemas == null ? 0 : schemas.size();
       for (int i = 0; i < columnCount; i++) {
         if (bitMaps[i] == null || bitMaps[i].isAllUnmarked(rowSize)) {
-          size += Byte.BYTES;
+          size = Math.addExact(size, Byte.BYTES);
         } else {
-          size += Byte.BYTES;
-          size += Integer.BYTES;
-          size +=
-              ReadWriteIOUtils.sizeToWrite(new Binary(bitMaps[i].getTruncatedByteArray(rowSize)));
+          size = Math.addExact(size, Byte.BYTES);
+          size = Math.addExact(size, Integer.BYTES);
+          size =
+              Math.addExact(
+                  size,
+                  ReadWriteIOUtils.sizeToWrite(
+                      new Binary(bitMaps[i].getTruncatedByteArray(rowSize))));
         }
       }
     }
@@ -824,7 +827,7 @@ public class Tablet implements Accountable {
     if (values != null) {
       final int columnCount = schemas == null ? 0 : schemas.size();
       for (int i = 0; i < columnCount; i++) {
-        size += serializedSizeOfColumn(schemas.get(i).getType(), values[i]);
+        size = Math.addExact(size, serializedSizeOfColumn(schemas.get(i).getType(), values[i]));
       }
     }
     return size;
@@ -837,23 +840,23 @@ public class Tablet implements Accountable {
     }
     switch (dataType) {
       case INT32:
-        return size + Integer.BYTES * rowSize;
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
       case DATE:
-        return size + Integer.BYTES * rowSize;
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
       case INT64:
       case TIMESTAMP:
-        return size + Long.BYTES * rowSize;
+        return Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
       case FLOAT:
-        return size + Float.BYTES * rowSize;
+        return Math.addExact(size, Math.multiplyExact(Float.BYTES, rowSize));
       case DOUBLE:
-        return size + Double.BYTES * rowSize;
+        return Math.addExact(size, Math.multiplyExact(Double.BYTES, rowSize));
       case BOOLEAN:
-        return size + rowSize;
+        return Math.addExact(size, rowSize);
       case TEXT:
       case STRING:
       case BLOB:
       case OBJECT:
-        return size + serializedSizeOfBinaryValues((Binary[]) column);
+        return Math.addExact(size, serializedSizeOfBinaryValues((Binary[]) column));
       default:
         throw new UnSupportedDataTypeException(
             Messages.format("error.write.type_not_supported", dataType));
@@ -863,9 +866,9 @@ public class Tablet implements Accountable {
   private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
     int size = 0;
     for (int j = 0; j < rowSize; j++) {
-      size += Byte.BYTES;
+      size = Math.addExact(size, Byte.BYTES);
       if (binaryValues[j] != null) {
-        size += ReadWriteIOUtils.sizeToWrite(binaryValues[j]);
+        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[j]));
       }
     }
     return size;

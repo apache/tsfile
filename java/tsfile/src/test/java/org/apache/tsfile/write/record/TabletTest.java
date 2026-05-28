@@ -22,6 +22,7 @@ package org.apache.tsfile.write.record;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
@@ -41,10 +42,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -364,20 +369,13 @@ public class TabletTest {
     Assert.assertTrue(deserializeTablet.isNull(1, 0));
   }
 
-  /** Data types supported by {@link Tablet#serialize()}. */
-  private static final TSDataType[] SERIALIZABLE_DATA_TYPES = {
-    TSDataType.BOOLEAN,
-    TSDataType.INT32,
-    TSDataType.INT64,
-    TSDataType.FLOAT,
-    TSDataType.DOUBLE,
-    TSDataType.TEXT,
-    TSDataType.STRING,
-    TSDataType.BLOB,
-    TSDataType.TIMESTAMP,
-    TSDataType.DATE,
-    TSDataType.OBJECT
-  };
+  private static final Set<TSDataType> NON_SERIALIZABLE_DATA_TYPES =
+      EnumSet.of(TSDataType.VECTOR, TSDataType.UNKNOWN);
+
+  private static final List<TSDataType> SERIALIZABLE_DATA_TYPES =
+      Arrays.stream(TSDataType.values())
+          .filter(dataType -> !NON_SERIALIZABLE_DATA_TYPES.contains(dataType))
+          .collect(Collectors.toList());
 
   private static final int[] ROW_COUNTS_FOR_SIZE_TEST = {0, 1, 7, 50};
 
@@ -417,7 +415,7 @@ public class TabletTest {
     }
 
     // all types combined
-    final List<TSDataType> treeTypes = Arrays.asList(SERIALIZABLE_DATA_TYPES);
+    final List<TSDataType> treeTypes = SERIALIZABLE_DATA_TYPES;
     final List<TSDataType> tableTypes = new ArrayList<>();
     tableTypes.add(TSDataType.STRING);
     tableTypes.addAll(treeTypes);
@@ -482,9 +480,9 @@ public class TabletTest {
     tagColumnNames.add("region");
     tagDataTypes.add(TSDataType.STRING);
     tagCategories.add(ColumnCategory.TAG);
-    for (int i = 0; i < SERIALIZABLE_DATA_TYPES.length; i++) {
+    for (int i = 0; i < SERIALIZABLE_DATA_TYPES.size(); i++) {
       tagColumnNames.add("m" + i);
-      tagDataTypes.add(SERIALIZABLE_DATA_TYPES[i]);
+      tagDataTypes.add(SERIALIZABLE_DATA_TYPES.get(i));
       tagCategories.add(ColumnCategory.FIELD);
     }
     assertSerializedSizeMatches(
@@ -530,6 +528,37 @@ public class TabletTest {
     for (int i = 0; i < 5; i++) {
       assertEquals(objectTablet.getValue(i, 0), deserializedObject.getValue(i, 0));
     }
+
+    final Map<String, String> propsWithNonAscii = new HashMap<>();
+    propsWithNonAscii.put("编码", "字典");
+    final Tablet nonAsciiTreeTablet =
+        new Tablet(
+            "root.测试.设备1",
+            Arrays.asList(
+                new MeasurementSchema(
+                    "温度",
+                    TSDataType.TEXT,
+                    TSEncoding.PLAIN,
+                    CompressionType.UNCOMPRESSED,
+                    propsWithNonAscii)),
+            3);
+    for (int i = 0; i < 3; i++) {
+      nonAsciiTreeTablet.addTimestamp(i, i);
+      nonAsciiTreeTablet.addValue("温度", i, "值" + i);
+    }
+    assertSerializedSizeMatches(nonAsciiTreeTablet, "tree non-ASCII names and schema props");
+
+    final Tablet nonAsciiTableTablet =
+        createAndFillTableTablet(
+            "表一",
+            Arrays.asList("标签", "数值"),
+            Arrays.asList(TSDataType.STRING, TSDataType.DOUBLE),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD),
+            3,
+            0,
+            false,
+            true);
+    assertSerializedSizeMatches(nonAsciiTableTablet, "table non-ASCII names");
   }
 
   private static List<ColumnCategory> buildTableColumnCategories(int columnCount) {
