@@ -41,14 +41,14 @@
 
 namespace storage {
 
-extern const char* MAGIC_STRING_TSFILE;
+extern TSFILE_API const char* MAGIC_STRING_TSFILE;
 constexpr int MAGIC_STRING_TSFILE_LEN = 6;
-extern const char VERSION_NUM_BYTE;
-extern const char CHUNK_GROUP_HEADER_MARKER;
-extern const char CHUNK_HEADER_MARKER;
-extern const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
-extern const char SEPARATOR_MARKER;
-extern const char OPERATION_INDEX_RANGE;
+extern TSFILE_API const char VERSION_NUM_BYTE;
+extern TSFILE_API const char CHUNK_GROUP_HEADER_MARKER;
+extern TSFILE_API const char CHUNK_HEADER_MARKER;
+extern TSFILE_API const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+extern TSFILE_API const char SEPARATOR_MARKER;
+extern TSFILE_API const char OPERATION_INDEX_RANGE;
 
 // TODO review the String.len_ used
 

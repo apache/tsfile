@@ -23,8 +23,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>  // memcpy
-#include <sys/time.h>
 
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -195,12 +195,9 @@ struct ColumnSchema {
 };
 
 FORCE_INLINE int64_t get_cur_timestamp() {
-    int64_t timestamp = 0;
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) >= 0) {
-        timestamp = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-    }
-    return timestamp;
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 }  // end namespace common
 

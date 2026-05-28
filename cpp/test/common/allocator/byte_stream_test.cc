@@ -87,7 +87,7 @@ TEST_F(ByteStreamTest, WriteReadLargeQuantities) {
         write_to_stream(&data, 1);
     }
 
-    uint8_t read_buffer[1024 * 1024];
+    static uint8_t read_buffer[1024 * 1024];
     for (int i = 0; i < 1024 * 1024; i++) {
         uint32_t read_len = 0;
         read_from_stream(read_buffer + i, 1, read_len);

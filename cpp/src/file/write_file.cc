@@ -24,17 +24,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-#include "common/config/config.h"
-#include "common/logger/elog.h"
-#include "utils/errno_define.h"
 
 #ifdef _WIN32
 #include <io.h>
 int fsync(int);
+#else
+#include <sys/time.h>
+#include <unistd.h>
 #endif
+
+#include "common/config/config.h"
+#include "common/logger/elog.h"
+#include "utils/errno_define.h"
 
 using namespace common;
 

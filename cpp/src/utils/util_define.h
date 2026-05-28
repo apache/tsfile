@@ -23,6 +23,48 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/* ======== platform compatibility ======== */
+#ifdef _WIN32
+#include <io.h>
+#include <string.h>
+
+#if defined(_MSC_VER)
+typedef intptr_t ssize_t;
+typedef int mode_t;
+#endif  // _MSC_VER
+
+#ifndef F_OK
+#define F_OK 0
+#endif
+#ifndef X_OK
+#define X_OK 1
+#endif
+#ifndef W_OK
+#define W_OK 2
+#endif
+#ifndef R_OK
+#define R_OK 4
+#endif
+
+#ifndef strcasecmp
+#define strcasecmp _stricmp
+#endif
+#ifndef strncasecmp
+#define strncasecmp _strnicmp
+#endif
+#endif  // _WIN32
+
+/* ======== shared-library symbol visibility ======== */
+#if defined(_MSC_VER)
+#if defined(TSFILE_BUILDING)
+#define TSFILE_API __declspec(dllexport)
+#else
+#define TSFILE_API __declspec(dllimport)
+#endif
+#else
+#define TSFILE_API
+#endif
+
 /* ======== unsued ======== */
 #define UNUSED(v) ((void)(v))
 #if __cplusplus >= 201703L
@@ -34,8 +76,10 @@
 #endif
 
 /* ======== inline ======== */
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #define FORCE_INLINE inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define FORCE_INLINE __forceinline
 #else
 #define FORCE_INLINE inline
 #endif  // __GNUC__
@@ -92,6 +136,7 @@
 #endif  // __cplusplus < 201103L
 
 /* ======== atomic operation ======== */
+#if defined(__GNUC__) || defined(__clang__)
 #define ATOMIC_FAA(val_addr, addv) \
     __atomic_fetch_add((val_addr), (addv), __ATOMIC_SEQ_CST)
 #define ATOMIC_AAF(val_addr, addv) \
@@ -112,9 +157,63 @@
 #define ATOMIC_LOAD(val_addr) __atomic_load_n((val_addr), __ATOMIC_SEQ_CST)
 #define ATOMIC_STORE(val_addr, val) \
     __atomic_store_n((val_addr), (val), __ATOMIC_SEQ_CST)
+#elif defined(__cplusplus)
+#include <atomic>
+namespace common {
+namespace util_atomic {
+template <typename T>
+inline std::atomic<T>* as_atomic(T* p) {
+    return reinterpret_cast<std::atomic<T>*>(p);
+}
+template <typename T>
+inline const std::atomic<T>* as_atomic(const T* p) {
+    return reinterpret_cast<const std::atomic<T>*>(p);
+}
+template <typename T, typename V>
+inline T faa(T* p, V v) {
+    return as_atomic(p)->fetch_add(static_cast<T>(v),
+                                   std::memory_order_seq_cst);
+}
+template <typename T, typename V>
+inline T aaf(T* p, V v) {
+    return static_cast<T>(
+        as_atomic(p)->fetch_add(static_cast<T>(v), std::memory_order_seq_cst) +
+        static_cast<T>(v));
+}
+template <typename T, typename D>
+inline bool cas(T* p, T* expected, D desired) {
+    return as_atomic(p)->compare_exchange_strong(
+        *expected, static_cast<T>(desired), std::memory_order_seq_cst);
+}
+template <typename T>
+inline T load(const T* p) {
+    return as_atomic(p)->load(std::memory_order_seq_cst);
+}
+template <typename T, typename V>
+inline void store(T* p, V v) {
+    as_atomic(p)->store(static_cast<T>(v), std::memory_order_seq_cst);
+}
+}  // namespace util_atomic
+}  // namespace common
+#define ATOMIC_FAA(val_addr, addv) \
+    (::common::util_atomic::faa((val_addr), (addv)))
+#define ATOMIC_AAF(val_addr, addv) \
+    (::common::util_atomic::aaf((val_addr), (addv)))
+#define ATOMIC_CAS(val_addr, expected, desired) \
+    (::common::util_atomic::cas((val_addr), (expected), (desired)))
+#define ATOMIC_LOAD(val_addr) (::common::util_atomic::load((val_addr)))
+#define ATOMIC_STORE(val_addr, val) \
+    (::common::util_atomic::store((val_addr), (val)))
+#endif  // atomic operation
 
 /* ======== align ======== */
+#if defined(__GNUC__) || defined(__clang__)
 #define ALIGNED(a) __attribute__((aligned(a)))
+#elif defined(_MSC_VER)
+#define ALIGNED(a) __declspec(align(a))
+#else
+#define ALIGNED(a)
+#endif
 #define ALIGNED_4 ALIGNED(4)
 #define ALIGNED_8 ALIGNED(8)
 

@@ -19,8 +19,8 @@
 #ifndef COMMON_CONTAINER_BLOCKING_QUEUE_H
 #define COMMON_CONTAINER_BLOCKING_QUEUE_H
 
-#include <pthread.h>
-
+#include <condition_variable>
+#include <mutex>
 #include <queue>
 
 namespace common {
@@ -36,8 +36,8 @@ class BlockingQueue {
 
    private:
     std::queue<void*> queue_;
-    pthread_mutex_t mutex_;
-    pthread_cond_t cond_;
+    std::mutex mutex_;
+    std::condition_variable cond_;
 };
 
 }  // end namespace common

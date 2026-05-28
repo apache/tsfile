@@ -1,5 +1,5 @@
-﻿#[[
-Licensed to the Apache Software Foundation (ASF) under one
+#[[
+Licensed to the Apache Software Foundation(ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
 regarding copyright ownership.  The ASF licenses this file
@@ -26,16 +26,31 @@ else()
     message(STATUS "Not using ToolChain")
 endif ()
 
-cmake_policy(SET CMP0079 NEW)
+if (POLICY CMP0079)
+    cmake_policy(SET CMP0079 NEW)
+endif ()
 set(TsFile_CPP_VERSION 2.2.1.dev)
-set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
+
+if (MSVC)
+    # MSVC has no /std:c++11 flag; pin the closest supported standard mode.
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
+    add_definitions(-DNOMINMAX -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
+                    -D_SCL_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+else ()
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
+endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused -Wuninitialized -D__STDC_FORMAT_MACROS")
 endif ()
 
 message("cmake using: USE_CPP11=${USE_CPP11}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED OFF)
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif ()
 
 if (DEFINED ENV{CXX})
     set(CMAKE_CXX_COMPILER $ENV{CXX})
@@ -76,25 +91,40 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
-elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
-elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+if (NOT MSVC)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+    elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+    elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
+    elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+        set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+    endif ()
 endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 # disable asan by default.
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-if (NOT WIN32)
-    if (ENABLE_ASAN)
-        message("Address Sanitizer is enabled.")
-
+if (ENABLE_ASAN)
+    message("Address Sanitizer is enabled.")
+    if (MSVC)
+        if (MSVC_VERSION LESS 1928)
+            message(FATAL_ERROR
+                "ENABLE_ASAN requires MSVC 19.28+ (Visual Studio 2019 16.9); "
+                "detected MSVC_VERSION=${MSVC_VERSION}.")
+        endif ()
+        add_compile_options(/fsanitize=address /Zi)
+        foreach (flagsVar
+                 CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
+                 CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+            string(REGEX REPLACE "/RTC[1csu]+" "" ${
+    flagsVar} "${${flagsVar}}")
+        endforeach ()
+        add_link_options(/INCREMENTAL:NO /DEBUG)
+    elseif (NOT WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
 
         if (NOT APPLE)
@@ -104,8 +134,12 @@ if (NOT WIN32)
             set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
         endif ()
     else ()
-        message("Address Sanitizer is disabled.")
+        message(WARNING
+            "ENABLE_ASAN on Windows is only supported with the MSVC toolchain; "
+            "ignoring it for the current generator.")
     endif ()
+else ()
+    message("Address Sanitizer is disabled.")
 endif ()
 
 option(BUILD_TEST "Build tests" ON)
@@ -145,12 +179,15 @@ endif()
 
 option(ENABLE_SIMD "Enable SIMD acceleration via SIMDe" ON)
 message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
+set(ENABLE_SIMDE ${ENABLE_SIMD} CACHE BOOL "Enable SIMDe (SIMD Everywhere)" FORCE)
 
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 
 if (ENABLE_THREADS)
     add_definitions(-DENABLE_THREADS)
+    find_package(Threads REQUIRED)
+    link_libraries(Threads::Threads)
 endif()
 
 option(ENABLE_MEM_STAT "Enable per-module memory allocation statistics" ON)
@@ -172,7 +209,11 @@ set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include CACHE STRING "TsFile inclu
 set(THIRD_PARTY_INCLUDE ${PROJECT_BINARY_DIR}/third_party)
 
 set(SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
+if (MSVC)
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
+else ()
+    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
+endif ()
 add_subdirectory(third_party)
 set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
@@ -194,4 +235,3 @@ endif()
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
     add_subdirectory(experiment)
 endif()
-

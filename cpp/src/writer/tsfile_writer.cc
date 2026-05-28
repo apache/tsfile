@@ -19,7 +19,11 @@
 
 #include "tsfile_writer.h"
 
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <iomanip>

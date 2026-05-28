@@ -20,14 +20,18 @@ cmake_minimum_required(VERSION 3.10)
 project(examples)
 message("Running in examples directory")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif ()
 
 # TsFile include dirs
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
 include_directories(${SDK_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/runtime/src)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
+endif ()
 
 # Arrow + Parquet are required (for bench_read)
 if(APPLE)

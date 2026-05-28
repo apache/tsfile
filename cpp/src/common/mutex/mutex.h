@@ -20,8 +20,7 @@
 #ifndef COMMON_MUTEX_MUTEX_H
 #define COMMON_MUTEX_MUTEX_H
 
-#include <errno.h>
-#include <pthread.h>
+#include <mutex>
 
 #include "utils/util_define.h"
 
@@ -29,37 +28,17 @@ namespace common {
 
 class Mutex {
    public:
-    Mutex() : mutex_() { pthread_mutex_init(&mutex_, NULL); }
-    ~Mutex() { pthread_mutex_destroy(&mutex_); }
+    Mutex() {}
+    ~Mutex() {}
 
-    void lock() {
-        int ret = EBUSY;
-        do {
-            ret = pthread_mutex_lock(&mutex_);
-        } while (UNLIKELY(ret == EBUSY || ret == EAGAIN));
-        ASSERT(ret == 0);
-    }
+    void lock() { mutex_.lock(); }
 
-    void unlock() {
-        int ret = pthread_mutex_unlock(&mutex_);
-        ASSERT(ret == 0);
-        (void)ret;
-    }
+    void unlock() { mutex_.unlock(); }
 
-    bool try_lock() {
-        int ret = pthread_mutex_trylock(&mutex_);
-        if (ret == 0) {
-            return true;
-        } else if (ret == EBUSY || ret == EAGAIN) {
-            return false;
-        } else {
-            ASSERT(false);
-            return false;
-        }
-    }
+    bool try_lock() { return mutex_.try_lock(); }
 
    private:
-    pthread_mutex_t mutex_;
+    std::mutex mutex_;
 };
 
 class MutexGuard {

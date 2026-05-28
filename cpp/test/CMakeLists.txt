@@ -1,5 +1,5 @@
 #[[
-Licensed to the Apache Software Foundation (ASF) under one
+Licensed to the Apache Software Foundation(ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
 regarding copyright ownership.  The ASF licenses this file
@@ -44,7 +44,8 @@ endif ()
 if (NOT DOWNLOADED)
     foreach (URL ${GTEST_URL_LIST})
         message(STATUS "Trying to download from ${URL}")
-        file(DOWNLOAD ${URL} "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
+        file(DOWNLOAD ${
+    URL} "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
 
         list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
         if (${DOWNLOAD_RESULT} EQUAL 0)
@@ -94,7 +95,8 @@ if (ENABLE_LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1)
+    include_directories(${THIRD_PARTY_INCLUDE}/zlib-1.3.1)
 endif()
 
 if (ENABLE_ANTLR4)
@@ -108,11 +110,16 @@ file(GLOB_RECURSE TEST_SRCS
         "encoding/*_test.cc"
         "utils/*_test.cc"
         "file/*_test.cc"
-        "parser/*_test.cc"
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
 )
+
+# Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.
+if (ENABLE_ANTLR4)
+    file(GLOB_RECURSE PARSER_TEST_SRCS "parser/*_test.cc")
+    list(APPEND TEST_SRCS ${PARSER_TEST_SRCS})
+endif()
 
 if (ENABLE_SNAPPY)
     file(GLOB_RECURSE SNAPPY_TEST_SRCS "compress/*snappy*_test.cc")
@@ -171,8 +178,13 @@ include(GoogleTest)
 # On Windows, delay test discovery until ctest runs (PRE_TEST) so the test exe
 # runs with the correct env (e.g. PATH has MinGW, libtsfile.dll is present).
 # Avoids 0xc0000139 when discovery runs at build time.
+#
+# DISCOVERY_TIMEOUT is raised well above the 5s default: the first execution of
+# the freshly-built test executable can be delayed by on-access antivirus
+# scanning (e.g. Windows Defender), which otherwise trips a spurious
+# "Process terminated due to timeout" while gtest_discover_tests enumerates it.
 if(WIN32)
-  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST)
+  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 120)
 else()
   gtest_discover_tests(TsFile_Test)
 endif()

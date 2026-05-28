@@ -39,6 +39,7 @@ int BitMap::init(uint32_t item_size, bool init_as_zero, AllocModID mod_id) {
     memset(bitmap_, initial_char, size);
     size_ = size;
     init_as_zero_ = init_as_zero;
+    has_set_bits_ = !init_as_zero;
     return common::E_OK;
 }
 

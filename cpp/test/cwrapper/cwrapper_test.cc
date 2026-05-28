@@ -17,7 +17,11 @@
  * under the License.
  */
 #include <gtest/gtest.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 #include <utils/db_utils.h>
 
 #include <cstring>
