@@ -21,11 +21,45 @@
 #define ENCODING_PLAIN_DECODER_H
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#include <stdlib.h>
+#endif
 
 #include "encoding/decoder.h"
 
 namespace storage {
+
+FORCE_INLINE uint32_t plain_bswap32(uint32_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap32(v);
+#elif defined(_MSC_VER)
+    return _byteswap_ulong(v);
+#else
+    return ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8) |
+           ((v & 0x00FF0000u) >> 8) | ((v & 0xFF000000u) >> 24);
+#endif
+}
+
+FORCE_INLINE uint64_t plain_bswap64(uint64_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap64(v);
+#elif defined(_MSC_VER)
+    return _byteswap_uint64(v);
+#else
+    return ((v & 0x00000000000000FFull) << 56) |
+           ((v & 0x000000000000FF00ull) << 40) |
+           ((v & 0x0000000000FF0000ull) << 24) |
+           ((v & 0x00000000FF000000ull) << 8) |
+           ((v & 0x000000FF00000000ull) >> 8) |
+           ((v & 0x0000FF0000000000ull) >> 24) |
+           ((v & 0x00FF000000000000ull) >> 40) |
+           ((v & 0xFF00000000000000ull) >> 56);
+#endif
+}
 
 class PlainDecoder : public Decoder {
    public:
@@ -108,7 +142,7 @@ class PlainDecoder : public Decoder {
         for (int i = 0; i < n; ++i) {
             uint64_t v;
             memcpy(&v, src + i * 8, 8);
-            out[i] = static_cast<int64_t>(__builtin_bswap64(v));
+            out[i] = static_cast<int64_t>(plain_bswap64(v));
         }
         return common::E_OK;
     }
@@ -161,7 +195,7 @@ class PlainDecoder : public Decoder {
         for (int i = 0; i < n; ++i) {
             uint32_t v;
             memcpy(&v, src + i * 4, 4);
-            v = __builtin_bswap32(v);
+            v = plain_bswap32(v);
             memcpy(&out[i], &v, 4);
         }
         return common::E_OK;
@@ -182,7 +216,7 @@ class PlainDecoder : public Decoder {
         for (int i = 0; i < n; ++i) {
             uint64_t v;
             memcpy(&v, src + i * 8, 8);
-            v = __builtin_bswap64(v);
+            v = plain_bswap64(v);
             memcpy(&out[i], &v, 8);
         }
         return common::E_OK;

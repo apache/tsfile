@@ -63,6 +63,23 @@ FORCE_INLINE int ctz_nonzero(uint32_t v) {
     return c;
 #endif
 }
+
+FORCE_INLINE int ctz_nonzero(uint64_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctzll(v);
+#elif defined(_MSC_VER)
+    unsigned long idx;
+    _BitScanForward64(&idx, v);
+    return static_cast<int>(idx);
+#else
+    int c = 0;
+    while (!(v & 1ull)) {
+        v >>= 1;
+        ++c;
+    }
+    return c;
+#endif
+}
 }  // namespace bitops
 
 class BitMap {
@@ -131,13 +148,14 @@ class BitMap {
         uint32_t byte_idx = from >> 3;
         uint8_t byte_val = p[byte_idx] >> (from & 7);
         if (byte_val) {
-            return from + bitops::ctz_nonzero(byte_val);
+            return from + bitops::ctz_nonzero(static_cast<uint32_t>(byte_val));
         }
         const uint32_t byte_end = (total_bits + 7) >> 3;
         for (++byte_idx; byte_idx < byte_end; ++byte_idx) {
             if (p[byte_idx]) {
                 uint32_t pos =
-                    (byte_idx << 3) + bitops::ctz_nonzero(p[byte_idx]);
+                    (byte_idx << 3) +
+                    bitops::ctz_nonzero(static_cast<uint32_t>(p[byte_idx]));
                 return pos < total_bits ? pos : total_bits;
             }
         }

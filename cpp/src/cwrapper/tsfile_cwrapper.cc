@@ -103,8 +103,12 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
 
     struct stat path_stat {};
     if (stat(pathname, &path_stat) == 0) {
-        *err_code = S_ISDIR(path_stat.st_mode) ? common::E_FILE_OPEN_ERR
-                                               : common::E_ALREADY_EXIST;
+#ifdef _WIN32
+        const bool is_dir = (path_stat.st_mode & _S_IFDIR) != 0;
+#else
+        const bool is_dir = S_ISDIR(path_stat.st_mode);
+#endif
+        *err_code = is_dir ? common::E_FILE_OPEN_ERR : common::E_ALREADY_EXIST;
         return nullptr;
     }
 
