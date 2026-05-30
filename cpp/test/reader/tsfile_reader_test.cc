@@ -267,7 +267,8 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
 static const int64_t kLargeFileNumRecords = 300000000;
 static const int64_t kLargeFileFlushBatch = 100000;
 
-TEST_F(TsFileReaderTest, DISABLED_LargeFileNoEncodingNoCompression_WriteAndRead) {
+TEST_F(TsFileReaderTest,
+       DISABLED_LargeFileNoEncodingNoCompression_WriteAndRead) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
     common::TSDataType data_type = common::TSDataType::INT64;
