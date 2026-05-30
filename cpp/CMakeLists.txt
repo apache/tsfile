@@ -95,7 +95,16 @@ if (NOT MSVC)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
     elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+        # -flto + MinGW gcc + statically-linked antlr4_static produces
+        # unresolved-reference errors at link time (LTO intermediate objects
+        # can't see the .a's vtable thunks). -march=native is also a poor
+        # default for CI binaries shipped to other machines. Keep both on
+        # Linux/macOS where the optimization actually pays off.
+        if (MINGW OR WIN32)
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+        else ()
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+        endif ()
     elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
     elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
@@ -120,8 +129,7 @@ if (ENABLE_ASAN)
         foreach (flagsVar
                  CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
                  CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-            string(REGEX REPLACE "/RTC[1csu]+" "" ${
-    flagsVar} "${${flagsVar}}")
+            string(REGEX REPLACE "/RTC[1csu]+" "" ${flagsVar} "${${flagsVar}}")
         endforeach ()
         add_link_options(/INCREMENTAL:NO /DEBUG)
     elseif (NOT WIN32)
