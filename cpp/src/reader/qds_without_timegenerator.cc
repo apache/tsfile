@@ -19,6 +19,7 @@
 
 #include "qds_without_timegenerator.h"
 
+#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 using namespace common;
@@ -66,17 +67,30 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         TsFileSeriesScanIterator* ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
-        if (ret != 0) {
-            return ret;
-        } else {
-            index_lookup_.insert({paths[i].measurement_, i + 1});
-            if (paths[i].full_path_ != paths[i].measurement_) {
-                index_lookup_.insert({paths[i].full_path_, i + 1});
-            }
-            ssi_vec_.push_back(ssi);
-            valid_paths.push_back(paths[i]);
-            column_names.push_back(paths[i].full_path_);
+        if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_DEVICE_NOT_EXIST ||
+            ret == E_NOT_EXIST || ret == E_NO_MORE_DATA) {
+            // Java-aligned: silently skip paths whose device or measurement
+            // doesn't exist in this file. The bloom-filter optimization in
+            // alloc_ssi reports a missing series as E_NO_MORE_DATA, so treat
+            // that the same as the not-found codes.
+            ret = E_OK;
+            continue;
         }
+        if (ret != E_OK) {
+            for (size_t j = 0; j < ssi_vec_.size(); j++) {
+                io_reader_->revert_ssi(ssi_vec_[j]);
+            }
+            ssi_vec_.clear();
+            return ret;
+        }
+        size_t col_idx = ssi_vec_.size();
+        index_lookup_.insert({paths[i].measurement_, col_idx + 1});
+        if (paths[i].full_path_ != paths[i].measurement_) {
+            index_lookup_.insert({paths[i].full_path_, col_idx + 1});
+        }
+        ssi_vec_.push_back(ssi);
+        valid_paths.push_back(paths[i]);
+        column_names.push_back(paths[i].full_path_);
     }
 
     size_t path_count = valid_paths.size();

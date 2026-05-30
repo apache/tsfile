@@ -21,6 +21,7 @@
 
 #include <string>
 
+#include "common/constant/tsfile_constant.h"
 #include "common/device_id.h"
 #ifdef ENABLE_ANTLR4
 #include "parser/generated/PathParser.h"
@@ -57,9 +58,20 @@ struct Path {
                     IDeviceID::split_string(path_sc, '.');
 #endif
                 if (nodes.size() > 1) {
-                    device_id_ = std::make_shared<StringArrayDeviceID>(
-                        std::vector<std::string>(nodes.begin(),
-                                                 nodes.end() - 1));
+                    // Join nodes, then parse like write path / Java Path
+                    // (route through the interpretive string ctor instead of
+                    // the literal per-segment vector ctor, so a stored
+                    // "root.sg.d1" device matches a query path
+                    // "root.sg.d1.s1").
+                    std::string device_joined;
+                    for (size_t i = 0; i + 1 < nodes.size(); ++i) {
+                        if (i > 0) {
+                            device_joined += PATH_SEPARATOR_CHAR;
+                        }
+                        device_joined += nodes[i];
+                    }
+                    device_id_ =
+                        std::make_shared<StringArrayDeviceID>(device_joined);
                     measurement_ = nodes[nodes.size() - 1];
                     full_path_ =
                         device_id_->get_device_name() + "." + measurement_;
