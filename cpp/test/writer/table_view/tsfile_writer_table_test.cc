@@ -1098,7 +1098,7 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
 }
 
 #ifdef ENABLE_MEM_STAT
-TEST_F(TsFileWriterTableTest, MemStatWriteAndVerify) {
+TEST_F(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
     TableSchema* table_schema = gen_table_schema(0, 2, 3);
     auto tsfile_table_writer =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);

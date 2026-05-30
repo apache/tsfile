@@ -953,6 +953,47 @@ void _free_tsfile_ts_record(TsRecord* record);
 // ============== Tag Filter API ==============
 
 /**
+ * @brief Tag filter comparison operators.
+ */
+typedef enum {
+    TAG_FILTER_EQ = 0,
+    TAG_FILTER_NEQ = 1,
+    TAG_FILTER_LT = 2,
+    TAG_FILTER_LTEQ = 3,
+    TAG_FILTER_GT = 4,
+    TAG_FILTER_GTEQ = 5,
+    TAG_FILTER_REGEXP = 6,
+    TAG_FILTER_NOT_REGEXP = 7,
+} TagFilterOp;
+
+/**
+ * @brief Create a tag filter with a comparison operator.
+ *
+ * @param reader [in] TsFileReader handle (used to resolve column name to
+ * index).
+ * @param table_name [in] Table name whose schema defines the TAG columns.
+ * @param column_name [in] Name of the TAG column to filter on.
+ * @param value [in] Comparison value (string).
+ * @param op [in] Comparison operator (TagFilterOp).
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return TagFilterHandle on success; NULL on failure.
+ */
+TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value, TagFilterOp op,
+                                         ERRNO* err_code);
+
+/**
+ * @brief Create a BETWEEN tag filter (lower <= column <= upper).
+ */
+TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* lower, const char* upper,
+                                          bool is_not, ERRNO* err_code);
+
+/**
  * @brief Create a tag equality filter: column == value.
  *
  * @param reader [in] Valid TsFileReader handle (used to resolve column index).
