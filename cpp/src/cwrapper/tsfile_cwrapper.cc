@@ -419,11 +419,10 @@ ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
     return result_set;
 }
 
-ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
-                                           const char* table_name,
-                                           char** column_names,
-                                           int column_names_len, int offset,
-                                           int limit, ERRNO* err_code) {
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code) {
     auto* r = static_cast<storage::TsFileReader*>(reader);
     storage::ResultSet* result_set = nullptr;
 
@@ -436,15 +435,17 @@ ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
         columns.emplace_back(name == nullptr ? "" : std::string(name));
     }
 
-    *err_code = r->queryByRow(table_name == nullptr ? "" : table_name, columns,
-                              offset, limit, result_set);
+    *err_code = r->queryByRow(
+        table_name == nullptr ? "" : table_name, columns, offset, limit,
+        result_set, static_cast<storage::Filter*>(tag_filter), batch_size);
     return result_set;
 }
 
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
-                                   int batch_size, ERRNO* err_code) {
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code) {
     auto* r = static_cast<storage::TsFileReader*>(reader);
     storage::ResultSet* table_result_set = nullptr;
     std::vector<std::string> column_names;
@@ -452,7 +453,8 @@ ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
         column_names.emplace_back(columns[i]);
     }
     *err_code = r->query(table_name, column_names, start_time, end_time,
-                         table_result_set, batch_size);
+                         table_result_set,
+                         static_cast<storage::Filter*>(tag_filter), batch_size);
     return table_result_set;
 }
 
@@ -978,10 +980,10 @@ void tsfile_tag_filter_free(TagFilterHandle filter) {
     }
 }
 
-ResultSet tsfile_query_table_batch_with_filter(
+ResultSet tsfile_query_table_with_tag_filter(
     TsFileReader reader, const char* table_name, char** columns,
     uint32_t column_num, Timestamp start_time, Timestamp end_time,
-    int batch_size, TagFilterHandle tag_filter, ERRNO* err_code) {
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code) {
     auto* r = static_cast<storage::TsFileReader*>(reader);
     storage::ResultSet* table_result_set = nullptr;
     std::vector<std::string> column_names;

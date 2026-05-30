@@ -253,6 +253,7 @@ typedef void* Tablet;
 typedef void* TsRecord;
 
 typedef void* ResultSet;
+typedef void* TagFilterHandle;
 
 typedef struct arrow_schema {
     // Array type description
@@ -676,16 +677,16 @@ ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
  * @param err_code [out] Error code. E_OK(0) on success.
  * @return ResultSet handle on success; NULL on failure.
  */
-ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
-                                           const char* table_name,
-                                           char** column_names,
-                                           int column_names_len, int offset,
-                                           int limit, ERRNO* err_code);
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
 
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
-                                   int batch_size, ERRNO* err_code);
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
 //                                      char** sensor_name, uint32_t
@@ -951,8 +952,6 @@ void _free_tsfile_ts_record(TsRecord* record);
 
 // ============== Tag Filter API ==============
 
-typedef void* TagFilterHandle;
-
 /**
  * @brief Create a tag equality filter: column == value.
  *
@@ -1017,10 +1016,10 @@ void tsfile_tag_filter_free(TagFilterHandle filter);
 /**
  * @brief Batch query with tag filter support.
  */
-ResultSet tsfile_query_table_batch_with_filter(
+ResultSet tsfile_query_table_with_tag_filter(
     TsFileReader reader, const char* table_name, char** columns,
     uint32_t column_num, Timestamp start_time, Timestamp end_time,
-    int batch_size, TagFilterHandle tag_filter, ERRNO* err_code);
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
 
 #ifdef __cplusplus
 }
