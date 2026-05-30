@@ -44,8 +44,7 @@ endif ()
 if (NOT DOWNLOADED)
     foreach (URL ${GTEST_URL_LIST})
         message(STATUS "Trying to download from ${URL}")
-        file(DOWNLOAD ${
-    URL} "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
+        file(DOWNLOAD ${URL} "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
 
         list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
         if (${DOWNLOAD_RESULT} EQUAL 0)

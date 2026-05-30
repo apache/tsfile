@@ -104,6 +104,135 @@ typedef struct device_schema {
     int timeseries_num;
 } DeviceSchema;
 
+/**
+ * @brief Common header for all statistic variants (first member of each
+ * TsFile*Statistic struct; also aliases the start of TimeseriesStatistic::u).
+ *
+ * When @p has_statistic is false, @p type is undefined. Otherwise @p type
+ * selects which @ref TimeseriesStatisticUnion member is active (INT32/DATE/
+ * INT64/TIMESTAMP share @c int_s). @c sum exists only on @c bool_s, @c int_s,
+ * and @c float_s. Heap strings in string_s/text_s are
+ * freed by tsfile_free_device_timeseries_metadata_map only.
+ */
+typedef struct TsFileStatisticBase {
+    bool has_statistic;
+    TSDataType type;
+    int32_t row_count;
+    int64_t start_time;
+    int64_t end_time;
+} TsFileStatisticBase;
+
+typedef struct TsFileBoolStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    bool first_bool;
+    bool last_bool;
+} TsFileBoolStatistic;
+
+typedef struct TsFileIntStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    int64_t min_int64;
+    int64_t max_int64;
+    int64_t first_int64;
+    int64_t last_int64;
+} TsFileIntStatistic;
+
+typedef struct TsFileFloatStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    double min_float64;
+    double max_float64;
+    double first_float64;
+    double last_float64;
+} TsFileFloatStatistic;
+
+typedef struct TsFileStringStatistic {
+    TsFileStatisticBase base;
+    char* str_min;
+    char* str_max;
+    char* str_first;
+    char* str_last;
+} TsFileStringStatistic;
+
+typedef struct TsFileTextStatistic {
+    TsFileStatisticBase base;
+    char* str_first;
+    char* str_last;
+} TsFileTextStatistic;
+
+/**
+ * @brief One of the typed layouts; active member follows @c base.type.
+ */
+typedef union TimeseriesStatisticUnion {
+    TsFileBoolStatistic bool_s;
+    TsFileIntStatistic int_s;
+    TsFileFloatStatistic float_s;
+    TsFileStringStatistic string_s;
+    TsFileTextStatistic text_s;
+} TimeseriesStatisticUnion;
+
+/**
+ * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
+ *
+ * Read common fields via @c tsfile_statistic_base(s). Type-specific fields
+ * via @c s->u.int_s, @c s->u.float_s, etc., per @c base.type.
+ */
+typedef struct TimeseriesStatistic {
+    TimeseriesStatisticUnion u;
+} TimeseriesStatistic;
+
+/** Pointer to the common header at the start of @p s->u (any active arm). */
+#define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
+
+/**
+ * @brief One measurement's metadata as exposed to C.
+ */
+typedef struct TimeseriesMetadata {
+    char* measurement_name;
+    TSDataType data_type;
+    int32_t chunk_meta_count;
+    TimeseriesStatistic statistic;
+    TimeseriesStatistic timeline_statistic;
+} TimeseriesMetadata;
+
+/**
+ * @brief Device identity from IDeviceID (path, table name, segments).
+ *
+ * Heap fields are freed by tsfile_device_id_free_contents or
+ * tsfile_free_device_id_array, or as part of
+ * tsfile_free_device_timeseries_metadata_map for entries.
+ */
+typedef struct DeviceID {
+    char* path;
+    char* table_name;
+    uint32_t segment_count;
+    char** segments;
+} DeviceID;
+
+/**
+ * @brief One device's timeseries metadata list plus DeviceID.
+ *
+ * @p device heap fields freed by tsfile_free_device_timeseries_metadata_map.
+ */
+typedef struct DeviceTimeseriesMetadataEntry {
+    DeviceID device;
+    TimeseriesMetadata* timeseries;
+    uint32_t timeseries_count;
+} DeviceTimeseriesMetadataEntry;
+
+/**
+ * @brief Map device -> list of TimeseriesMetadata (C layout with explicit
+ * counts).
+ */
+typedef struct DeviceTimeseriesMetadataMap {
+    DeviceTimeseriesMetadataEntry* entries;
+    uint32_t device_count;
+} DeviceTimeseriesMetadataMap;
+
+/** Frees path, table_name, and segments inside @p d; zeros @p d. */
+void tsfile_device_id_free_contents(DeviceID* d);
+
 typedef struct result_set_meta_data {
     char** column_names;
     TSDataType* data_types;
@@ -315,6 +444,37 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
  * @return ERRNO - E_OK(0) on success, or check error code in errno_define_c.h.
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
+
+/**
+ * @brief Lists all devices (path, table name, segments from IDeviceID).
+ *
+ * @param out_devices [out] Allocated array; caller frees with
+ * tsfile_free_device_id_array.
+ */
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
+                                    uint32_t* out_length);
+
+void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
+
+/**
+ * @brief Timeseries metadata for all devices in the file.
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_all(
+    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
+
+/**
+ * @brief Timeseries metadata for a subset of devices.
+ *
+ * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
+ * (E_OK); @p devices is not read.
+ * For each entry, @p path must be non-NULL (canonical device path).
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
+    TsFileReader reader, const DeviceID* devices, uint32_t length,
+    DeviceTimeseriesMetadataMap* out_map);
+
+void tsfile_free_device_timeseries_metadata_map(
+    DeviceTimeseriesMetadataMap* map);
 
 /*--------------------------Tablet API------------------------ */
 
