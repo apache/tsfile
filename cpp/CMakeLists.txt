@@ -135,6 +135,13 @@ if (ENABLE_ASAN)
     elseif (NOT WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
 
+        # -flto + libstdc++ <regex> produces spurious ODR-violation reports
+        # under ASan (globals like __classnames / __collatenames in
+        # bits/regex.tcc show up once per LTO partition). Strip -flto from
+        # the Release flags whenever ASan is on; the rest of -O3 / native
+        # arch is fine.
+        string(REGEX REPLACE "(^| )-flto( |$)" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+
         if (NOT APPLE)
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libasan")
             set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined -static-libasan -static-libubsan")
