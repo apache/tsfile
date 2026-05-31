@@ -160,6 +160,16 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         return ret;
     }
     dense_row_count_ = compute_dense_row_count(time_series_indexs);
+    // If the device is dense (all selected columns have equal row count) and
+    // the remaining offset already exceeds this device, consume the whole
+    // device worth of offset and return — chunks are skipped via ChunkMeta
+    // only, no IO/decompress.
+    if (dense_row_count_ >= 0 && remaining_offset_ >= dense_row_count_) {
+        remaining_offset_ -= dense_row_count_;
+        delete current_block_;
+        current_block_ = nullptr;
+        return common::E_OK;
+    }
     // Table queries allow sparse aligned fields. Until dense-ness can be
     // proven robustly for a device, fall back to the per-column merge path.
     const bool enable_dense_aligned_fast_path = false;
@@ -200,6 +210,15 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     bool used_multi = false;
     std::set<std::string> multi_names;
 
+    // When the device is dense, push device-level offset/limit down to each
+    // SSI so chunk-meta skip (count_-based) can avoid loading whole chunks.
+    int ssi_offset = 0;
+    int ssi_limit = -1;
+    if (dense_row_count_ >= 0) {
+        ssi_offset = remaining_offset_;
+        ssi_limit = remaining_limit_;
+    }
+
     for (const auto& time_series_index : time_series_indexs) {
         if (time_series_index == nullptr) {
             continue;
@@ -209,7 +228,17 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         if (used_multi && multi_names.count(measurement_name) > 0) {
             continue;
         }
-        construct_column_context(time_series_index, time_filter, 0, -1);
+        construct_column_context(time_series_index, time_filter, ssi_offset,
+                                 ssi_limit);
+    }
+
+    // SSIs consumed some prefix of offset/limit via chunk-meta + page-level
+    // skip; the residual goes back to device-level counters so has_next()
+    // does not double-skip.
+    if (dense_row_count_ >= 0 && !field_column_contexts_.empty()) {
+        auto* first_ctx = field_column_contexts_.begin()->second;
+        remaining_offset_ = first_ctx->get_ssi_row_offset();
+        remaining_limit_ = first_ctx->get_ssi_row_limit();
     }
 
     if (field_column_contexts_.empty()) {
