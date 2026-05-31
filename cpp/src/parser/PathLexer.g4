@@ -52,7 +52,7 @@ TIMESTAMP
  * 3. Operators
  */
 
-// Operators. Arithmetics
+// Operators. Arithmetic
 
 MINUS : '-';
 PLUS : '+';
@@ -60,7 +60,7 @@ DIV : '/';
 MOD : '%';
 
 
-// Operators. Comparation
+// Operators. Comparison
 
 OPERATOR_DEQ : '==';
 OPERATOR_SEQ : '=';

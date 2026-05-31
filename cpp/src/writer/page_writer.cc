@@ -56,7 +56,7 @@ int PageData::init(ByteStream& time_bs, ByteStream& value_bs,
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
-        // Be carefull about the memory.
+        // Be careful about the memory.
         if (RET_FAIL(compressor->reset(true))) {
         } else if (RET_FAIL(compressor->compress(
                        uncompressed_buf_, uncompressed_size_, compressed_buf_,
