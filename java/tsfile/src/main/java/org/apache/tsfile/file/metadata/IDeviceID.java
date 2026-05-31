@@ -58,7 +58,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
 
   /**
    * @return how many segments this DeviceId consists of. For a path-DeviceId, like "root.a.b.c.d",
-   *     it is 5; fot a tuple-DeviceId, like "(table1, beijing, turbine)", it is 3.
+   *     it is 5; for a tuple-DeviceId, like "(table1, beijing, turbine)", it is 3.
    */
   int segmentNum();
 

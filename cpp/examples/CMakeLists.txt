@@ -18,7 +18,7 @@ under the License.
 ]]
 cmake_minimum_required(VERSION 3.10)
 project(examples)
-message("Running in exampes directory")
+message("Running in examples directory")
 
 if (NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")

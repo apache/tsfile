@@ -178,9 +178,9 @@ public interface Column {
   Column subColumnCopy(int fromIndex);
 
   /**
-   * Create a new colum from the current colum by keeping the same elements only with respect to
+   * Create a new column from the current column by keeping the same elements only with respect to
    * {@code positions} that starts at {@code offset} and has length of {@code length}. The
-   * implementation may return a view over the data in this colum or may return a copy, and the
+   * implementation may return a view over the data in this column or may return a copy, and the
    * implementation is allowed to retain the positions array for use in the view.
    */
   Column getPositions(int[] positions, int offset, int length);

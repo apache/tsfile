@@ -157,7 +157,7 @@ int init_common() {
 }
 
 bool is_timestamp_column_name(const char* time_col_name) {
-    // both "time" and "timestamp" refer to timestmap column.
+    // both "time" and "timestamp" refer to timestamp column.
     int32_t len = strlen(time_col_name);
     if (len == 4) {
         return strncasecmp(time_col_name, "time", 4) == 0;

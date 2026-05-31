@@ -30,7 +30,7 @@ public class SDTEncoder {
   private int lastReadInt;
   private float lastReadFloat;
 
-  // the last stored time and vlaue we compare current point against lastStoredPair
+  // the last stored time and value we compare current point against lastStoredPair
   private long lastStoredTimestamp;
 
   private long lastStoredLong;

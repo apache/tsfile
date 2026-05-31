@@ -660,7 +660,7 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
             break;
         }
         record = qds->get_row_record();
-        // if empty chunk is writen, the timestamp should be NULL
+        // if empty chunk is written, the timestamp should be NULL
         if (!record) {
             break;
         }

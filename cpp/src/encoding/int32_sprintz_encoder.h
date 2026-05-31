@@ -164,7 +164,7 @@ class Int32SprintzEncoder : public SprintzEncoder {
         } else if (predict_method_ == "fire") {
             pred = fire(value, prev);
         } else {
-            // unsupport
+            // unsupported
             ASSERT(false);
         }
 

@@ -96,7 +96,7 @@ public class IntZigzagEncoder extends Encoder {
     if (values == null) {
       return 0;
     }
-    // try to caculate max value
+    // try to calculate max value
     return (long) 8 + values.size() * 4;
   }
 }

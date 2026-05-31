@@ -55,7 +55,7 @@ TEST(FieldTest, IsLiteral) {
 
 TEST(FieldTest, SetValue) {
     Field field;
-    common::PageArena pa;  // dosen't matter
+    common::PageArena pa;  // doesn't matter
     int32_t i32_val = 123;
     field.set_value(common::INT32, &i32_val, common::get_len(common::INT32),
                     pa);

@@ -84,7 +84,7 @@ typedef int mode_t;
 #define TSFILE_API
 #endif
 
-/* ======== unsued ======== */
+/* ======== unused ======== */
 #define UNUSED(v) ((void)(v))
 #if __cplusplus >= 201703L
 #define MAYBE_UNUSED [[maybe_unused]]
