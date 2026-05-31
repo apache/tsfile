@@ -38,7 +38,7 @@ highlights:
         details: TsFile employs advanced compression techniques to minimize storage requirements, resulting in reduced disk space consumption and improved system efficiency.
 
       - title: Flexible Schema and Metadata Management
-        details: TsFile allows for directly write data without pre defining the schema, which is flexible for data aquisition.
+        details: TsFile allows for directly write data without pre defining the schema, which is flexible for data acquisition.
 
       - title: High Query Performance with time range
         details: TsFile has indexed devices, sensors and time dimensions to accelerate query performance, enabling fast filtering and retrieval of time series data.
