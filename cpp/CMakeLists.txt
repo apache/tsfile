@@ -98,27 +98,36 @@ message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 #     binary that gets shipped to a different machine (e.g. an Ice Lake
 #     build host emits AVX-512 VBMI/VPOPCNTDQ that SIGILL on Skylake).
 #
-#   - The intended deployment target is Skylake-SP / Cascade Lake servers
-#     (AVX-512 F/CD/BW/DQ/VL, no VBMI, no VPOPCNTDQ), so the Linux x86_64
-#     default targets that explicitly. This also defines __AVX2__ and
-#     __AVX512F__ at compile time, which lets simde's batch-decode
-#     intrinsics (simde_mm256_*) fall through to real SIMD instructions
-#     instead of scalar emulation.
+#   - The default target is "haswell" (AVX2 + FMA + BMI2 + POPCNT),
+#     which is what every server CPU since 2013 supports. That's the
+#     lowest level at which simde batch decoders compile to real SIMD
+#     (the codebase has 78 simde_mm256_* / simde__m256 sites and no
+#     512-bit ones, so AVX-512 isn't needed for the hand-written
+#     vector paths). It also matches manylinux_2_28 / cibuildwheel
+#     test runners, which often only have AVX2 -- a higher target
+#     would SIGILL during the wheel's import smoke test.
 #
-#   - Anyone who wants host-specific codegen can flip ENABLE_NATIVE_ARCH
-#     on; that overrides TSFILE_TARGET_ARCH.
+#   - Anyone with a stricter deployment target (e.g. Skylake-SP /
+#     Cascade Lake with full AVX-512 baseline, or AMD Zen 4 with
+#     AVX-512 + VNNI) can pass -DTSFILE_TARGET_ARCH=skylake-avx512 to
+#     widen what gcc autovectorizes; that's strictly faster on those
+#     hosts but won't run on AVX2-only test runners.
 #
-#   - Setting TSFILE_TARGET_ARCH to an empty string falls back to the
-#     compiler's portable baseline (-march=x86-64), which only emits
-#     SSE2.
+#   - ENABLE_NATIVE_ARCH=ON forces -march=native, overriding the value
+#     above. Only safe when the build host's ISA is a subset of every
+#     machine the artifact will be loaded on (i.e. local dev builds).
+#
+#   - TSFILE_TARGET_ARCH="" disables -march entirely, falling back to
+#     the compiler's portable baseline (typically SSE2 on x86-64);
+#     simde then emulates AVX2 paths with scalar code.
 option(ENABLE_NATIVE_ARCH
     "Add -march=native (binary will run only on the build host's CPU family)"
     OFF)
 option(ENABLE_LTO
     "Add -flto to Release builds (link-time optimisation)"
     ON)
-set(TSFILE_TARGET_ARCH "skylake-avx512" CACHE STRING
-    "x86_64 -march= target used when ENABLE_NATIVE_ARCH is OFF (e.g. skylake-avx512, haswell). Empty for portable baseline.")
+set(TSFILE_TARGET_ARCH "haswell" CACHE STRING
+    "x86_64 -march= target used when ENABLE_NATIVE_ARCH is OFF (e.g. haswell, skylake-avx512). Empty for portable baseline.")
 
 if (NOT MSVC)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
