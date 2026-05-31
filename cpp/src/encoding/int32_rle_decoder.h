@@ -37,6 +37,8 @@ class Int32RleDecoder : public Decoder {
     int bitpacking_num_;
     bool is_length_and_bitwidth_readed_;
     int current_count_;
+    bool is_rle_run_;
+    int32_t rle_value_;
     common::ByteStream byte_cache_{common::MOD_DECODER_OBJ};
     int32_t* current_buffer_;
     Int32Packer* packer_;
@@ -49,6 +51,8 @@ class Int32RleDecoder : public Decoder {
           bitpacking_num_(0),
           is_length_and_bitwidth_readed_(false),
           current_count_(0),
+          is_rle_run_(false),
+          rle_value_(0),
           byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
@@ -60,13 +64,14 @@ class Int32RleDecoder : public Decoder {
     }
     int read_boolean(bool& ret_value, common::ByteStream& in) override {
         int32_t bool_value;
-        read_int32(bool_value, in);
-        ret_value = bool_value == 0 ? false : true;
-        return common::E_OK;
+        int ret = read_int32(bool_value, in);
+        if (ret == common::E_OK) {
+            ret_value = bool_value != 0;
+        }
+        return ret;
     }
     int read_int32(int32_t& ret_value, common::ByteStream& in) override {
-        ret_value = static_cast<int32_t>(read_int(in));
-        return common::E_OK;
+        return read_int(ret_value, in);
     }
     int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
@@ -89,6 +94,8 @@ class Int32RleDecoder : public Decoder {
         bit_width_ = 0;
         bitpacking_num_ = 0;
         current_count_ = 0;
+        is_rle_run_ = false;
+        rle_value_ = 0;
     }
 
     bool has_next(common::ByteStream& buffer) {
@@ -103,30 +110,69 @@ class Int32RleDecoder : public Decoder {
         return current_count_ > 0 || byte_cache_.remaining_size() > 0;
     }
 
-    int32_t read_int(common::ByteStream& buffer) {
+    int read_int(int32_t& result, common::ByteStream& buffer) {
+        int ret = common::E_OK;
         if (!is_length_and_bitwidth_readed_) {
             // start to reader a new rle+bit-packing pattern
-            read_length_and_bitwidth(buffer);
-        }
-        if (current_count_ == 0) {
-            uint8_t header;
-            int ret = common::E_OK;
-            if (RET_FAIL(
-                    common::SerializationUtil::read_ui8(header, byte_cache_))) {
+            if (RET_FAIL(read_length_and_bitwidth(buffer))) {
                 return ret;
             }
-            call_read_bit_packing_buffer(header);
+        }
+        if (current_count_ == 0) {
+            // The header is encoded as an unsigned varint where:
+            //   low bit = 0  => RLE run:      header_value >> 1 is the run
+            //   count low bit = 1  => bit-packing:  header_value >> 1 is the
+            //   group count
+            uint32_t header_value = 0;
+            if (RET_FAIL(common::SerializationUtil::read_var_uint(
+                    header_value, byte_cache_))) {
+                return ret;
+            }
+            if (header_value & 1) {
+                if (RET_FAIL(call_read_bit_packing_buffer(header_value))) {
+                    return ret;
+                }
+            } else {
+                if (RET_FAIL(call_read_rle_run(header_value))) {
+                    return ret;
+                }
+            }
         }
         --current_count_;
-        int32_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
+        result = is_rle_run_
+                     ? rle_value_
+                     : current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }
-        return result;
+        return ret;
     }
 
-    int call_read_bit_packing_buffer(uint8_t header) {
-        int bit_packed_group_count = (int)(header >> 1);
+    int call_read_rle_run(uint32_t header_value) {
+        int ret = common::E_OK;
+        int run_length = (int)(header_value >> 1);
+        if (run_length <= 0) {
+            return common::E_DECODE_ERR;
+        }
+        int byte_width = (bit_width_ + 7) / 8;
+        // Read the repeated value (stored as byte_width bytes, little-endian)
+        int32_t value = 0;
+        for (int i = 0; i < byte_width; i++) {
+            uint8_t b;
+            if (RET_FAIL(common::SerializationUtil::read_ui8(b, byte_cache_))) {
+                return ret;
+            }
+            value |= ((int32_t)b) << (i * 8);
+        }
+        rle_value_ = value;
+        is_rle_run_ = true;
+        current_count_ = run_length;
+        bitpacking_num_ = run_length;
+        return ret;
+    }
+
+    int call_read_bit_packing_buffer(uint32_t header_value) {
+        int bit_packed_group_count = (int)(header_value >> 1);
         // in last bit-packing group, there may be some useless value,
         // lastBitPackedNum indicates how many values is useful
         uint8_t last_bit_packed_num;
@@ -139,6 +185,7 @@ class Int32RleDecoder : public Decoder {
             current_count_ =
                 (bit_packed_group_count - 1) * 8 + last_bit_packed_num;
             bitpacking_num_ = current_count_;
+            is_rle_run_ = false;
         } else {
             return common::E_DECODE_ERR;
         }
@@ -236,8 +283,10 @@ class Int32RleDecoder : public Decoder {
         bitpacking_num_ = 0;
         is_length_and_bitwidth_readed_ = false;
         current_count_ = 0;
+        is_rle_run_ = false;
+        rle_value_ = 0;
         if (current_buffer_) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
         }
         if (packer_) {

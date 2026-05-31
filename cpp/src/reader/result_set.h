@@ -21,6 +21,7 @@
 #define READER_QUERY_DATA_SET_H
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <unordered_map>
 
