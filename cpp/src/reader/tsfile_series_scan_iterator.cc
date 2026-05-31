@@ -33,6 +33,11 @@ namespace storage {
 void TsFileSeriesScanIterator::destroy() {
     timeseries_index_pa_.destroy();
     if (chunk_reader_ != nullptr) {
+        // destroy() already runs manual destructors on internal members
+        // (chunk_header_, decoders, compressor, ...), so calling
+        // chunk_reader_->~IChunkReader() here would double-destruct them.
+        // The vector-buffer leaks (e.g. chunk_pages_) are released inside
+        // AlignedChunkReader::destroy() via vector<>{}.swap().
         chunk_reader_->destroy();
         common::mem_free(chunk_reader_);
         chunk_reader_ = nullptr;

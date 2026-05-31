@@ -120,7 +120,12 @@ void AlignedChunkReader::reset() {
 }
 
 void AlignedChunkReader::destroy() {
-    chunk_pages_.clear();
+    // .clear() leaves the vector's internal heap buffer allocated, which
+    // mem_free can't reach because we placement-new the reader. swap with
+    // an empty vector to actually release the backing storage so ASan's
+    // LeakSanitizer doesn't flag the (rather large) ChunkPageInfo buffers.
+    std::vector<ChunkPageInfo>{}.swap(chunk_pages_);
+    std::vector<int64_t>{}.swap(page_all_times_);
     if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
         time_compressor_->after_uncompress(time_uncompressed_buf_);
         time_uncompressed_buf_ = nullptr;

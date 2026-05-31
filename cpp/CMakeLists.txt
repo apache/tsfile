@@ -137,10 +137,16 @@ if (ENABLE_ASAN)
 
         # -flto + libstdc++ <regex> produces spurious ODR-violation reports
         # under ASan (globals like __classnames / __collatenames in
-        # bits/regex.tcc show up once per LTO partition). Strip -flto from
-        # the Release flags whenever ASan is on; the rest of -O3 / native
-        # arch is fine.
+        # bits/regex.tcc show up once per LTO partition).
+        #
+        # -march=native lets gcc autovectorize tight byte-stride loops
+        # (e.g. Int64Packer::unpack_8values) into AVX2 32-byte gathers
+        # that overread by up to one SIMD lane past the end of the input
+        # buffer; the read sits inside ASan's redzone and ASan traps it
+        # as SEGV. The non-vectorized scalar code is correct, so just
+        # drop the aggressive flags whenever ASan is on.
         string(REGEX REPLACE "(^| )-flto( |$)" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+        string(REGEX REPLACE "(^| )-march=native( |$)" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 
         if (NOT APPLE)
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libasan")
