@@ -306,3 +306,45 @@ def test_lru_close_all_drains_pool(tmp_path):
     assert reader._reader is not None
     df.close()
     assert reader._reader is None
+
+
+def test_manifest_uses_columnar_series_stats(tmp_path):
+    path = tmp_path / "columnar.tsfile"
+    _write_weather_file(path)
+    TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
+
+    with open(manifest_path([str(path)]), "r") as fh:
+        payload = json.load(fh)
+
+    series_stats = payload["shards"][str(path)]["catalog"]["series_stats"]
+    assert isinstance(series_stats, dict)
+    expected_columns = {
+        "device_index",
+        "field_index",
+        "length",
+        "min_time",
+        "max_time",
+        "timeline_length",
+        "timeline_min_time",
+        "timeline_max_time",
+    }
+    assert set(series_stats.keys()) == expected_columns
+    lengths = {len(series_stats[col]) for col in expected_columns}
+    assert len(lengths) == 1
+
+
+def test_manifest_version_bump_invalidates_old_payload(tmp_path):
+    path = tmp_path / "old_version.tsfile"
+    _write_weather_file(path)
+
+    TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
+    mp = manifest_path([str(path)])
+
+    # Forge a manifest that uses the previous schema (cache_version=2).
+    with open(mp, "r") as fh:
+        payload = json.load(fh)
+    payload["cache_version"] = 2
+    with open(mp, "w") as fh:
+        json.dump(payload, fh)
+
+    assert read_manifest(mp) is None

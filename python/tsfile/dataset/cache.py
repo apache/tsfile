@@ -34,7 +34,21 @@ from ..constants import TSDataType
 from .metadata import MetadataCatalog
 
 _MANIFEST_FILENAME = "tsfile_dataset.metacache.json"
-_MANIFEST_VERSION = 2
+# v3: series_stats stored as 8 parallel columns instead of a list of dicts.
+# JSON parsing time is roughly proportional to the number of objects allocated,
+# so flattening per-series dicts into long primitive lists cuts the dominant
+# cost when rehydrating large shards.
+_MANIFEST_VERSION = 3
+_SERIES_STATS_COLUMNS = (
+    "device_index",
+    "field_index",
+    "length",
+    "min_time",
+    "max_time",
+    "timeline_length",
+    "timeline_min_time",
+    "timeline_max_time",
+)
 
 
 def manifest_path(paths: List[str]) -> str:
@@ -56,6 +70,25 @@ def manifest_path(paths: List[str]) -> str:
 
 
 def catalog_to_dict(catalog: MetadataCatalog) -> dict:
+    n_series = len(catalog.series_stats_by_ref)
+    device_index = [0] * n_series
+    field_index = [0] * n_series
+    length = [0] * n_series
+    min_time = [None] * n_series
+    max_time = [None] * n_series
+    timeline_length = [0] * n_series
+    timeline_min_time = [None] * n_series
+    timeline_max_time = [None] * n_series
+    for i, ((d, f), stats) in enumerate(catalog.series_stats_by_ref.items()):
+        device_index[i] = d
+        field_index[i] = f
+        length[i] = stats["length"]
+        min_time[i] = stats["min_time"]
+        max_time[i] = stats["max_time"]
+        timeline_length[i] = stats["timeline_length"]
+        timeline_min_time[i] = stats["timeline_min_time"]
+        timeline_max_time[i] = stats["timeline_max_time"]
+
     return {
         "tables": [
             {
@@ -75,19 +108,16 @@ def catalog_to_dict(catalog: MetadataCatalog) -> dict:
             }
             for d in catalog.device_entries
         ],
-        "series_stats": [
-            {
-                "device_index": device_id,
-                "field_index": field_idx,
-                "length": stats["length"],
-                "min_time": stats["min_time"],
-                "max_time": stats["max_time"],
-                "timeline_length": stats["timeline_length"],
-                "timeline_min_time": stats["timeline_min_time"],
-                "timeline_max_time": stats["timeline_max_time"],
-            }
-            for (device_id, field_idx), stats in catalog.series_stats_by_ref.items()
-        ],
+        "series_stats": {
+            "device_index": device_index,
+            "field_index": field_index,
+            "length": length,
+            "min_time": min_time,
+            "max_time": max_time,
+            "timeline_length": timeline_length,
+            "timeline_min_time": timeline_min_time,
+            "timeline_max_time": timeline_max_time,
+        },
     }
 
 
@@ -107,15 +137,34 @@ def catalog_from_dict(data: dict) -> MetadataCatalog:
             device["min_time"],
             device["max_time"],
         )
-    for stats in data["series_stats"]:
-        catalog.series_stats_by_ref[(stats["device_index"], stats["field_index"])] = {
-            "length": stats["length"],
-            "min_time": stats["min_time"],
-            "max_time": stats["max_time"],
-            "timeline_length": stats["timeline_length"],
-            "timeline_min_time": stats["timeline_min_time"],
-            "timeline_max_time": stats["timeline_max_time"],
-        }
+
+    stats = data["series_stats"]
+    device_index = stats["device_index"]
+    field_index = stats["field_index"]
+    length = stats["length"]
+    min_time = stats["min_time"]
+    max_time = stats["max_time"]
+    timeline_length = stats["timeline_length"]
+    timeline_min_time = stats["timeline_min_time"]
+    timeline_max_time = stats["timeline_max_time"]
+    series_stats_by_ref = catalog.series_stats_by_ref
+    # Tight loop: all hot locals are bound and the per-row dict is built via
+    # one C-level call (`dict(zip(...))`) instead of six bytecode setitems.
+    keys = _SERIES_STATS_COLUMNS[2:]
+    for i, d in enumerate(device_index):
+        series_stats_by_ref[(d, field_index[i])] = dict(
+            zip(
+                keys,
+                (
+                    length[i],
+                    min_time[i],
+                    max_time[i],
+                    timeline_length[i],
+                    timeline_min_time[i],
+                    timeline_max_time[i],
+                ),
+            )
+        )
     return catalog
 
 

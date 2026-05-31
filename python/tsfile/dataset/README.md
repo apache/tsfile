@@ -70,12 +70,12 @@ The on-disk payload is a single JSON object:
 
 ```json
 {
-  "cache_version": 2,
+  "cache_version": 3,
   "shards": {
     "/abs/path/data/part_0.tsfile": {
       "size": 1234567,
       "mtime_ns": 1717050000000000000,
-      "catalog": { "tables": [...], "devices": [...], "series_stats": [...] }
+      "catalog": { "tables": [...], "devices": [...], "series_stats": {...} }
     },
     "/abs/path/data/part_1.tsfile": { ... }
   }
@@ -138,21 +138,24 @@ Tag values are stored using their natural JSON representation:
 The position of a device in this array is its `device_index`, referenced by
 `series_stats[].device_index` below.
 
-### `shards[<abs_path>].catalog.series_stats[]`
+### `shards[<abs_path>].catalog.series_stats`
 
-Each entry mirrors one `(device_id, field_idx) → stats` entry in
-`MetadataCatalog.series_stats_by_ref`:
+A columnar table: every key maps to a list of the same length, and the
+``i``-th element across all eight lists describes one series. This shape
+exists because JSON parsing time is dominated by the number of objects
+allocated; folding ``N`` per-series dicts into eight long primitive lists
+reduces a hot rehydrate path from O(N) Python dicts to O(1) Python lists.
 
-| Field                | Type         | Notes                                                                              |
-|----------------------|--------------|------------------------------------------------------------------------------------|
-| `device_index`       | int          | Index into the same shard's `catalog.devices[]`.                                   |
-| `field_index`        | int          | Index into the device's table's `field_columns`.                                   |
-| `length`             | int          | Row count derived from the value column's statistic.                               |
-| `min_time`           | int \| null  | Minimum timestamp from the value column statistic. `null` when no statistic.       |
-| `max_time`           | int \| null  | Maximum timestamp from the value column statistic. `null` when no statistic.       |
-| `timeline_length`    | int          | Row count from the device's shared timeline statistic. Used for display + reads.   |
-| `timeline_min_time`  | int \| null  | Minimum timestamp from the device's shared timeline statistic.                     |
-| `timeline_max_time`  | int \| null  | Maximum timestamp from the device's shared timeline statistic.                     |
+| Column               | Element type   | Notes                                                                              |
+|----------------------|----------------|------------------------------------------------------------------------------------|
+| `device_index`       | int            | Index into the same shard's `catalog.devices[]`.                                   |
+| `field_index`        | int            | Index into the device's table's `field_columns`.                                   |
+| `length`             | int            | Row count derived from the value column's statistic.                               |
+| `min_time`           | int \| null    | Minimum timestamp from the value column statistic. `null` when no statistic.       |
+| `max_time`           | int \| null    | Maximum timestamp from the value column statistic. `null` when no statistic.       |
+| `timeline_length`    | int            | Row count from the device's shared timeline statistic. Used for display + reads.   |
+| `timeline_min_time`  | int \| null    | Minimum timestamp from the device's shared timeline statistic.                     |
+| `timeline_max_time`  | int \| null    | Maximum timestamp from the device's shared timeline statistic.                     |
 
 For series with no data, every stat field is `0` or `null` — the slot is
 present so that `(device_index, field_index)` resolution always succeeds.
@@ -165,7 +168,7 @@ Validation happens at two levels.
 
 1. The manifest file exists and parses as JSON.
 2. The top-level value is an object.
-3. `cache_version` equals `_MANIFEST_VERSION` (currently `2`).
+3. `cache_version` equals `_MANIFEST_VERSION` (currently `3`).
 4. `shards` is an object.
 
 A manifest-level failure throws away the entire cache; every shard becomes
@@ -267,7 +270,7 @@ field, three rows:
 
 ```json
 {
-  "cache_version": 2,
+  "cache_version": 3,
   "shards": {
     "/abs/path/data/weather.tsfile": {
       "size": 4096,
@@ -289,18 +292,16 @@ field, three rows:
             "max_time": 2
           }
         ],
-        "series_stats": [
-          {
-            "device_index": 0,
-            "field_index": 0,
-            "length": 3,
-            "min_time": 0,
-            "max_time": 2,
-            "timeline_length": 3,
-            "timeline_min_time": 0,
-            "timeline_max_time": 2
-          }
-        ]
+        "series_stats": {
+          "device_index":      [0],
+          "field_index":       [0],
+          "length":            [3],
+          "min_time":          [0],
+          "max_time":          [2],
+          "timeline_length":   [3],
+          "timeline_min_time": [0],
+          "timeline_max_time": [2]
+        }
       }
     }
   }
