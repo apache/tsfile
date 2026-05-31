@@ -948,14 +948,14 @@
                                 <rule implementation="org.jacoco.maven.RuleConfiguration">
                                     <element>BUNDLE</element>
                                     <limits>　　
-                                        <!-- Cover methodes >=30%. (the plugin does not support
+                                        <!-- Cover methods >=30%. (the plugin does not support
                                         ignore getter and setter and toString etc..) -->
                                         <limit implementation="org.jacoco.report.check.Limit">
                                             <counter>METHOD</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.00</minimum>
                                         </limit>
-                                        <!-- if-else, swtich etc.. >=70% -->
+                                        <!-- if-else, switch etc.. >=70% -->
                                         <limit implementation="org.jacoco.report.check.Limit">
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
