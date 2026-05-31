@@ -18,6 +18,7 @@
 
 """Single-file reader backend used by TsFileDataFrame."""
 
+from collections import defaultdict
 import os
 import sys
 from typing import Dict, Iterator, List, Tuple
@@ -68,7 +69,13 @@ def _build_exact_tag_filter(tag_values: Dict[str, object]):
 class TsFileSeriesReader:
     """Wrap ``TsFileReaderPy`` with numeric dataset discovery and batch reads."""
 
-    def __init__(self, file_path: str, show_progress: bool = True):
+    def __init__(
+        self,
+        file_path: str,
+        show_progress: bool = True,
+        *,
+        catalog: "MetadataCatalog | None" = None,
+    ):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"TsFile not found: {file_path}")
 
@@ -80,8 +87,11 @@ class TsFileSeriesReader:
         except Exception as e:
             raise ValueError(f"Failed to open TsFile: {e}") from e
 
-        self._catalog = MetadataCatalog()
-        self._cache_metadata()
+        if catalog is not None:
+            self._catalog = catalog
+        else:
+            self._catalog = MetadataCatalog()
+            self._cache_metadata()
 
     def __del__(self):
         self.close()
@@ -134,6 +144,9 @@ class TsFileSeriesReader:
         self._catalog = MetadataCatalog()
         table_names = list(table_schemas.keys())
         metadata_groups = self._reader.get_timeseries_metadata(None)
+        groups_by_table = defaultdict(list)
+        for group in metadata_groups.values():
+            groups_by_table[(group.table_name or "").lower()].append(group)
         if self.show_progress:
             sys.stderr.write(f"\rReading TsFile metadata: 0/{len(table_names)}")
             sys.stderr.flush()
@@ -166,11 +179,7 @@ class TsFileSeriesReader:
             table_id = self._catalog.add_table(
                 table_name, tag_columns, tag_types, field_columns
             )
-            table_groups = [
-                group
-                for group in metadata_groups.values()
-                if (group.table_name or "").lower() == table_name.lower()
-            ]
+            table_groups = list(groups_by_table.get(table_name.lower(), ()))
             table_groups.sort(
                 key=lambda group: tuple(
                     "" if value is None else str(value) for value in group.segments

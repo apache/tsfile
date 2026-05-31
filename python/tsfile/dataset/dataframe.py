@@ -28,6 +28,7 @@ import warnings
 
 import numpy as np
 
+from .cache import read_sidecar, write_sidecar
 from .formatting import format_dataframe_table
 from .metadata import (
     TableEntry,
@@ -37,6 +38,8 @@ from .metadata import (
 )
 from .merge import build_aligned_matrix, merge_time_value_parts, merge_timestamp_parts
 from .timeseries import AlignedTimeseries, Timeseries
+
+_CACHE_MODES = ("auto", "off", "rebuild")
 
 DeviceKey = Tuple[str, tuple]
 SeriesRefKey = Tuple[int, int]
@@ -200,9 +203,14 @@ def _build_device_entry(refs: List[DeviceRef]) -> dict:
     Duplicate detection stays on the logical-series paths that materialize or
     merge one field's timestamps.
     """
-    infos = [reader.get_device_info(device_id) for reader, device_id in refs]
-    min_time = min(info["min_time"] for info in infos)
-    max_time = max(info["max_time"] for info in infos)
+    min_time = None
+    max_time = None
+    for reader, device_id in refs:
+        device_entry = reader.catalog.device_entries[device_id]
+        shard_min = device_entry.min_time
+        shard_max = device_entry.max_time
+        min_time = shard_min if min_time is None else min(min_time, shard_min)
+        max_time = shard_max if max_time is None else max(max_time, shard_max)
 
     return {
         "min_time": min_time,
@@ -438,14 +446,12 @@ def _build_field_stats(refs: List[SeriesRef]) -> dict:
     count = 0
 
     for reader, device_id, field_idx in refs:
-        info = reader.get_series_info_by_ref(device_id, field_idx)
-        shard_min = info["timeline_min_time"]
-        shard_max = info["timeline_max_time"]
-        shard_count = info["timeline_length"]
-
+        stats = reader.catalog.series_stats_by_ref[(device_id, field_idx)]
+        shard_count = stats["timeline_length"]
         if shard_count == 0:
             continue
-
+        shard_min = stats["timeline_min_time"]
+        shard_max = stats["timeline_max_time"]
         count += shard_count
         min_time = shard_min if min_time is None else min(min_time, shard_min)
         max_time = shard_max if max_time is None else max(max_time, shard_max)
@@ -571,9 +577,18 @@ class _LocIndexer:
 class TsFileDataFrame:
     """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
 
-    def __init__(self, paths: Union[str, List[str]], show_progress: bool = True):
+    def __init__(
+        self,
+        paths: Union[str, List[str]],
+        show_progress: bool = True,
+        *,
+        cache: str = "auto",
+    ):
+        if cache not in _CACHE_MODES:
+            raise ValueError(f"cache must be one of {_CACHE_MODES}, got {cache!r}")
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
+        self._cache_mode = cache
         self._readers: Dict[str, object] = {}
         self._index = _LogicalIndex()
         self._cache = _DerivedCache()
@@ -592,6 +607,7 @@ class TsFileDataFrame:
         obj._is_view = True
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
+        obj._cache_mode = parent._cache_mode
         obj._readers = parent._readers
         obj._index = _LogicalIndex(
             table_entries=parent._index.table_entries,
@@ -648,19 +664,37 @@ class TsFileDataFrame:
             )
         sys.stderr.flush()
 
+    def _open_with_cache(self, reader_class, file_path: str, show_progress: bool):
+        """Open one shard reader, injecting a sidecar catalog when available.
+
+        Returns ``(reader, was_cache_miss)``. ``was_cache_miss`` is True when
+        the catalog had to be materialized from the file rather than loaded
+        from the JSON sidecar.
+        """
+        catalog = None
+        if self._cache_mode == "auto":
+            catalog = read_sidecar(file_path)
+        reader = reader_class(file_path, show_progress=show_progress, catalog=catalog)
+        return reader, catalog is None
+
+    def _maybe_write_sidecar(self, file_path: str, reader) -> None:
+        if self._cache_mode == "off":
+            return
+        write_sidecar(file_path, reader.catalog)
+
     def _load_metadata_serial(self, reader_class):
         total = len(self._paths)
         self._show_loading_progress(0, total)
 
         for index, file_path in enumerate(self._paths, start=1):
-            _register_reader(
-                self._readers,
-                self._index,
+            reader, was_miss = self._open_with_cache(
+                reader_class,
                 file_path,
-                reader_class(
-                    file_path, show_progress=self._show_progress and total == 1
-                ),
+                self._show_progress and total == 1,
             )
+            _register_reader(self._readers, self._index, file_path, reader)
+            if was_miss:
+                self._maybe_write_sidecar(file_path, reader)
             if total > 1:
                 self._show_loading_progress(index, total)
 
@@ -672,7 +706,8 @@ class TsFileDataFrame:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def open_file(file_path):
-            return file_path, reader_class(file_path, show_progress=False)
+            reader, was_miss = self._open_with_cache(reader_class, file_path, False)
+            return file_path, reader, was_miss
 
         total = len(self._paths)
         self._show_loading_progress(0, total)
@@ -681,10 +716,13 @@ class TsFileDataFrame:
         ) as executor:
             futures = {executor.submit(open_file, path): path for path in self._paths}
             results = {}
+            misses = []
             done = 0
             for future in as_completed(futures):
-                file_path, reader = future.result()
+                file_path, reader, was_miss = future.result()
                 results[file_path] = reader
+                if was_miss:
+                    misses.append(file_path)
                 done += 1
                 self._show_loading_progress(done, total)
 
@@ -699,6 +737,9 @@ class TsFileDataFrame:
                 file_path,
                 results[file_path],
             )
+
+        for file_path in misses:
+            self._maybe_write_sidecar(file_path, results[file_path])
 
     def _get_series_components(
         self, series_ref: SeriesRefKey
