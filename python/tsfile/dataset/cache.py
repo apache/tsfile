@@ -16,28 +16,43 @@
 # under the License.
 #
 
-"""Per-shard JSON sidecar cache for :class:`MetadataCatalog`.
+"""Per-dataset JSON manifest cache for :class:`MetadataCatalog`.
 
-The dataframe's expensive init step is reading TsFile footer + materializing
-every device's TimeseriesIndex into Python objects. Opening the C++ reader
-itself is just one ``open(2)``. So we cache the materialized catalog next to
-each .tsfile and skip the metadata path on subsequent loads.
+One JSON file describes the catalogs of every shard the dataframe was
+constructed from. The manifest lives in the common parent directory of the
+input paths and is keyed by each shard's absolute path. Each shard entry
+carries its own ``(size, mtime_ns)`` fingerprint so that a single stale
+shard does not invalidate the rest of the manifest.
 """
 
 import json
 import os
 import tempfile
-from typing import Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from ..constants import TSDataType
 from .metadata import MetadataCatalog
 
-_CACHE_SUFFIX = ".metacache.json"
-_CACHE_FORMAT_VERSION = 1
+_MANIFEST_FILENAME = "tsfile_dataset.metacache.json"
+_MANIFEST_VERSION = 2
 
 
-def cache_path(tsfile_path: str) -> str:
-    return tsfile_path + _CACHE_SUFFIX
+def manifest_path(paths: List[str]) -> str:
+    """Return the dataset manifest path for a list of absolute shard paths.
+
+    The manifest sits in the common parent directory of all shards. When the
+    paths span unrelated trees (no common parent exists), we fall back to the
+    first path's directory so we always have a writable location.
+    """
+    if not paths:
+        raise ValueError("Cannot compute manifest path for empty paths.")
+    try:
+        common = os.path.commonpath(paths)
+    except ValueError:
+        common = os.path.dirname(paths[0])
+    if os.path.isfile(common):
+        common = os.path.dirname(common)
+    return os.path.join(common, _MANIFEST_FILENAME)
 
 
 def catalog_to_dict(catalog: MetadataCatalog) -> dict:
@@ -104,55 +119,84 @@ def catalog_from_dict(data: dict) -> MetadataCatalog:
     return catalog
 
 
-def read_sidecar(tsfile_path: str) -> Optional[MetadataCatalog]:
-    """Read and validate the sidecar cache for one shard.
-
-    Returns ``None`` for any of: missing/unreadable cache file, schema
-    mismatch, size/mtime mismatch, or corrupt JSON.
-    """
+def _shard_entry(file_path: str, catalog: MetadataCatalog) -> Optional[dict]:
+    """Build a shard manifest entry by stat'ing the file right before write."""
     try:
-        tsfile_stat = os.stat(tsfile_path)
+        stat = os.stat(file_path)
     except OSError:
         return None
+    return {
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "catalog": catalog_to_dict(catalog),
+    }
+
+
+def _entry_matches_file(entry: dict, file_path: str) -> bool:
     try:
-        with open(cache_path(tsfile_path), "r") as fh:
+        stat = os.stat(file_path)
+    except OSError:
+        return False
+    return (
+        entry.get("size") == stat.st_size and entry.get("mtime_ns") == stat.st_mtime_ns
+    )
+
+
+def read_manifest(path: str) -> Optional[Dict[str, dict]]:
+    """Load and shallow-validate the manifest. Returns the shards dict, or None."""
+    try:
+        with open(path, "r") as fh:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict):
         return None
-    if data.get("cache_version") != _CACHE_FORMAT_VERSION:
+    if data.get("cache_version") != _MANIFEST_VERSION:
         return None
-    file_meta = data.get("file") or {}
-    if file_meta.get("size") != tsfile_stat.st_size:
+    shards = data.get("shards")
+    if not isinstance(shards, dict):
         return None
-    if file_meta.get("mtime_ns") != tsfile_stat.st_mtime_ns:
+    return shards
+
+
+def extract_catalog(
+    shards: Dict[str, dict], file_path: str
+) -> Optional[MetadataCatalog]:
+    """Return the cached catalog for one shard iff its fingerprint still matches."""
+    entry = shards.get(file_path)
+    if entry is None or not isinstance(entry, dict):
+        return None
+    if not _entry_matches_file(entry, file_path):
         return None
     try:
-        return catalog_from_dict(data["catalog"])
+        return catalog_from_dict(entry["catalog"])
     except (KeyError, ValueError, TypeError):
         return None
 
 
-def write_sidecar(tsfile_path: str, catalog: MetadataCatalog) -> None:
-    """Atomically write the sidecar cache. Disk errors are swallowed."""
-    try:
-        tsfile_stat = os.stat(tsfile_path)
-    except OSError:
-        return
-    payload = {
-        "cache_version": _CACHE_FORMAT_VERSION,
-        "file": {
-            "size": tsfile_stat.st_size,
-            "mtime_ns": tsfile_stat.st_mtime_ns,
-        },
-        "catalog": catalog_to_dict(catalog),
-    }
-    target = cache_path(tsfile_path)
-    target_dir = os.path.dirname(target) or "."
+def write_manifest(
+    path: str,
+    fresh_catalogs: Iterable[Tuple[str, MetadataCatalog]],
+) -> None:
+    """Atomically merge fresh catalogs into the manifest at ``path``.
+
+    Reads the existing manifest first (if any), overwrites the entries for
+    the shards in ``fresh_catalogs``, and writes the result back via temp
+    file + ``os.replace``. Other shards' entries are preserved. OS errors
+    (read-only filesystem, no space) are swallowed silently.
+    """
+    existing = read_manifest(path) or {}
+    merged = dict(existing)
+    for file_path, catalog in fresh_catalogs:
+        entry = _shard_entry(file_path, catalog)
+        if entry is not None:
+            merged[file_path] = entry
+
+    payload = {"cache_version": _MANIFEST_VERSION, "shards": merged}
+    target_dir = os.path.dirname(path) or "."
     try:
         fd, tmp_path = tempfile.mkstemp(
-            prefix=os.path.basename(target) + ".",
+            prefix=_MANIFEST_FILENAME + ".",
             suffix=".tmp",
             dir=target_dir,
         )
@@ -161,16 +205,9 @@ def write_sidecar(tsfile_path: str, catalog: MetadataCatalog) -> None:
     try:
         with os.fdopen(fd, "w") as fh:
             json.dump(payload, fh)
-        os.replace(tmp_path, target)
+        os.replace(tmp_path, path)
     except OSError:
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
-
-
-def remove_sidecar(tsfile_path: str) -> None:
-    try:
-        os.unlink(cache_path(tsfile_path))
-    except OSError:
-        pass

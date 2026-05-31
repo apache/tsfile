@@ -28,7 +28,7 @@ import warnings
 
 import numpy as np
 
-from .cache import read_sidecar, write_sidecar
+from .cache import extract_catalog, manifest_path, read_manifest, write_manifest
 from .formatting import format_dataframe_table
 from .metadata import (
     TableEntry,
@@ -37,9 +37,11 @@ from .metadata import (
     split_logical_series_path,
 )
 from .merge import build_aligned_matrix, merge_time_value_parts, merge_timestamp_parts
+from .pool import _FdPool
 from .timeseries import AlignedTimeseries, Timeseries
 
 _CACHE_MODES = ("auto", "off", "rebuild")
+_DEFAULT_MAX_OPEN_FILES = 1024
 
 DeviceKey = Tuple[str, tuple]
 SeriesRefKey = Tuple[int, int]
@@ -583,12 +585,16 @@ class TsFileDataFrame:
         show_progress: bool = True,
         *,
         cache: str = "auto",
+        max_open_files: int = _DEFAULT_MAX_OPEN_FILES,
     ):
         if cache not in _CACHE_MODES:
             raise ValueError(f"cache must be one of {_CACHE_MODES}, got {cache!r}")
+        if max_open_files < 1:
+            raise ValueError(f"max_open_files must be >= 1, got {max_open_files}")
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
         self._cache_mode = cache
+        self._fd_pool = _FdPool(max_open_files)
         self._readers: Dict[str, object] = {}
         self._index = _LogicalIndex()
         self._cache = _DerivedCache()
@@ -608,6 +614,7 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._cache_mode = parent._cache_mode
+        obj._fd_pool = parent._fd_pool
         obj._readers = parent._readers
         obj._index = _LogicalIndex(
             table_entries=parent._index.table_entries,
@@ -635,10 +642,20 @@ class TsFileDataFrame:
         """Build the logical cross-file index and the derived per-series caches."""
         from .reader import TsFileSeriesReader
 
+        shards: Dict[str, dict] = {}
+        if self._cache_mode == "auto":
+            shards = read_manifest(manifest_path(self._paths)) or {}
+
         if len(self._paths) >= 2:
-            self._load_metadata_parallel(TsFileSeriesReader)
+            misses = self._load_metadata_parallel(TsFileSeriesReader, shards)
         else:
-            self._load_metadata_serial(TsFileSeriesReader)
+            misses = self._load_metadata_serial(TsFileSeriesReader, shards)
+
+        if self._cache_mode != "off" and misses:
+            write_manifest(
+                manifest_path(self._paths),
+                [(file_path, self._readers[file_path].catalog) for file_path in misses],
+            )
 
         self._cache.devices = [
             _build_device_entry(refs) for refs in self._index.device_refs
@@ -664,49 +681,61 @@ class TsFileDataFrame:
             )
         sys.stderr.flush()
 
-    def _open_with_cache(self, reader_class, file_path: str, show_progress: bool):
-        """Open one shard reader, injecting a sidecar catalog when available.
+    def _open_with_cache(
+        self,
+        reader_class,
+        file_path: str,
+        show_progress: bool,
+        shards: Dict[str, dict],
+    ):
+        """Open one shard reader, injecting a cached catalog when available.
 
         Returns ``(reader, was_cache_miss)``. ``was_cache_miss`` is True when
-        the catalog had to be materialized from the file rather than loaded
-        from the JSON sidecar.
+        the catalog had to be materialized from the file rather than rehydrated
+        from the dataset manifest. The reader is registered in ``self._fd_pool``
+        so eager opens beyond ``max_open_files`` evict older live handles.
         """
         catalog = None
         if self._cache_mode == "auto":
-            catalog = read_sidecar(file_path)
-        reader = reader_class(file_path, show_progress=show_progress, catalog=catalog)
+            catalog = extract_catalog(shards, file_path)
+        reader = reader_class(
+            file_path,
+            show_progress=show_progress,
+            catalog=catalog,
+            pool=self._fd_pool,
+        )
         return reader, catalog is None
 
-    def _maybe_write_sidecar(self, file_path: str, reader) -> None:
-        if self._cache_mode == "off":
-            return
-        write_sidecar(file_path, reader.catalog)
-
-    def _load_metadata_serial(self, reader_class):
+    def _load_metadata_serial(self, reader_class, shards: Dict[str, dict]):
         total = len(self._paths)
         self._show_loading_progress(0, total)
+        misses: List[str] = []
 
         for index, file_path in enumerate(self._paths, start=1):
             reader, was_miss = self._open_with_cache(
                 reader_class,
                 file_path,
                 self._show_progress and total == 1,
+                shards,
             )
             _register_reader(self._readers, self._index, file_path, reader)
             if was_miss:
-                self._maybe_write_sidecar(file_path, reader)
+                misses.append(file_path)
             if total > 1:
                 self._show_loading_progress(index, total)
 
         self._show_loading_progress(
             total, total, sum(reader.series_count for reader in self._readers.values())
         )
+        return misses
 
-    def _load_metadata_parallel(self, reader_class):
+    def _load_metadata_parallel(self, reader_class, shards: Dict[str, dict]):
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def open_file(file_path):
-            reader, was_miss = self._open_with_cache(reader_class, file_path, False)
+            reader, was_miss = self._open_with_cache(
+                reader_class, file_path, False, shards
+            )
             return file_path, reader, was_miss
 
         total = len(self._paths)
@@ -716,7 +745,7 @@ class TsFileDataFrame:
         ) as executor:
             futures = {executor.submit(open_file, path): path for path in self._paths}
             results = {}
-            misses = []
+            misses: List[str] = []
             done = 0
             for future in as_completed(futures):
                 file_path, reader, was_miss = future.result()
@@ -738,8 +767,7 @@ class TsFileDataFrame:
                 results[file_path],
             )
 
-        for file_path in misses:
-            self._maybe_write_sidecar(file_path, results[file_path])
+        return misses
 
     def _get_series_components(
         self, series_ref: SeriesRefKey
@@ -1029,6 +1057,7 @@ class TsFileDataFrame:
         for reader in self._readers.values():
             reader.close()
         self._readers.clear()
+        self._fd_pool.close_all()
         self._closed = True
 
     def __del__(self):

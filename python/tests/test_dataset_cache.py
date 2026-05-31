@@ -16,6 +16,7 @@
 # under the License.
 #
 
+import json
 import os
 
 import pandas as pd
@@ -31,11 +32,11 @@ from tsfile import (
 )
 from tsfile.dataset import reader as reader_module
 from tsfile.dataset.cache import (
-    cache_path,
     catalog_from_dict,
     catalog_to_dict,
-    read_sidecar,
-    write_sidecar,
+    extract_catalog,
+    manifest_path,
+    read_manifest,
 )
 
 
@@ -67,8 +68,7 @@ def test_catalog_round_trip(tmp_path):
     reader = next(iter(df._readers.values()))
     catalog = reader.catalog
 
-    data = catalog_to_dict(catalog)
-    rebuilt = catalog_from_dict(data)
+    rebuilt = catalog_from_dict(catalog_to_dict(catalog))
 
     assert [t.table_name for t in rebuilt.table_entries] == [
         t.table_name for t in catalog.table_entries
@@ -93,16 +93,25 @@ def test_catalog_round_trip(tmp_path):
     df.close()
 
 
+def test_manifest_path_uses_common_parent(tmp_path):
+    paths = [str(tmp_path / f"shard_{i}.tsfile") for i in range(3)]
+    assert manifest_path(paths) == str(tmp_path / "tsfile_dataset.metacache.json")
+
+
+def test_manifest_path_falls_back_for_single_file(tmp_path):
+    path = tmp_path / "single.tsfile"
+    _write_weather_file(path)
+    expected = str(tmp_path / "tsfile_dataset.metacache.json")
+    assert manifest_path([str(path)]) == expected
+
+
 def test_cache_auto_hit_skips_native_metadata(tmp_path, monkeypatch):
     path = tmp_path / "cache_hit.tsfile"
     _write_weather_file(path)
 
-    # First load: cold cache — populates the sidecar.
-    df_cold = TsFileDataFrame(str(path), show_progress=False, cache="auto")
-    df_cold.close()
-    assert os.path.exists(cache_path(str(path)))
+    TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
+    assert os.path.exists(manifest_path([str(path)]))
 
-    # Spy on the heavy native metadata fetch. A cache hit must not call it.
     calls = {"count": 0}
     original = reader_module.TsFileSeriesReader._cache_metadata_table_model
 
@@ -117,7 +126,6 @@ def test_cache_auto_hit_skips_native_metadata(tmp_path, monkeypatch):
     df_hot = TsFileDataFrame(str(path), show_progress=False, cache="auto")
     try:
         assert calls["count"] == 0
-        # The cached dataframe is functionally equivalent.
         assert df_hot.list_timeseries() == [
             "weather.device_a.temperature",
             "weather.device_a.humidity",
@@ -131,12 +139,12 @@ def test_cache_invalidated_by_mtime_change(tmp_path):
     _write_weather_file(path)
 
     TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
-    assert read_sidecar(str(path)) is not None
+    shards = read_manifest(manifest_path([str(path)]))
+    assert extract_catalog(shards, str(path)) is not None
 
-    # Bump mtime so the cached fingerprint no longer matches.
     stat = os.stat(str(path))
     os.utime(str(path), ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
-    assert read_sidecar(str(path)) is None
+    assert extract_catalog(shards, str(path)) is None
 
 
 def test_cache_invalidated_by_size_change(tmp_path):
@@ -144,46 +152,36 @@ def test_cache_invalidated_by_size_change(tmp_path):
     _write_weather_file(path)
 
     TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
-    assert read_sidecar(str(path)) is not None
-
-    # Pretend the sidecar was written for a different file size, preserving mtime.
-    stat_before = os.stat(str(path))
-    import json
-
-    cp = cache_path(str(path))
-    with open(cp, "r") as fh:
+    mp = manifest_path([str(path)])
+    with open(mp, "r") as fh:
         payload = json.load(fh)
-    payload["file"]["size"] = stat_before.st_size + 1
-    with open(cp, "w") as fh:
+    payload["shards"][str(path)]["size"] += 1
+    with open(mp, "w") as fh:
         json.dump(payload, fh)
 
-    assert read_sidecar(str(path)) is None
+    assert extract_catalog(read_manifest(mp), str(path)) is None
 
 
 def test_cache_off_does_not_write(tmp_path):
     path = tmp_path / "cache_off.tsfile"
     _write_weather_file(path)
-
     df = TsFileDataFrame(str(path), show_progress=False, cache="off")
     df.close()
-
-    assert not os.path.exists(cache_path(str(path)))
+    assert not os.path.exists(manifest_path([str(path)]))
 
 
 def test_cache_rebuild_overwrites_stale(tmp_path):
     path = tmp_path / "rebuild.tsfile"
     _write_weather_file(path)
-
-    # Seed a corrupt sidecar to prove rebuild does not read it.
-    with open(cache_path(str(path)), "w") as fh:
+    mp = manifest_path([str(path)])
+    with open(mp, "w") as fh:
         fh.write("not json")
 
     df = TsFileDataFrame(str(path), show_progress=False, cache="rebuild")
     try:
-        # After rebuild the sidecar must be valid again.
-        rebuilt = read_sidecar(str(path))
-        assert rebuilt is not None
-        # And functionally the dataframe works.
+        shards = read_manifest(mp)
+        assert shards is not None
+        assert extract_catalog(shards, str(path)) is not None
         assert df.list_timeseries()
     finally:
         df.close()
@@ -196,18 +194,115 @@ def test_invalid_cache_mode_rejected(tmp_path):
         TsFileDataFrame(str(path), show_progress=False, cache="bogus")
 
 
-def test_multi_shard_cache(tmp_path):
+def test_invalid_max_open_files_rejected(tmp_path):
+    path = tmp_path / "bad_cap.tsfile"
+    _write_weather_file(path)
+    with pytest.raises(ValueError):
+        TsFileDataFrame(str(path), show_progress=False, max_open_files=0)
+
+
+def test_single_manifest_for_multiple_shards(tmp_path):
     paths = [tmp_path / f"shard_{i}.tsfile" for i in range(3)]
     for i, p in enumerate(paths):
         _write_weather_file(p, start=i * 100)
+    str_paths = [str(p) for p in paths]
+    mp = manifest_path(str_paths)
 
-    df = TsFileDataFrame([str(p) for p in paths], show_progress=False, cache="auto")
+    df = TsFileDataFrame(str_paths, show_progress=False, cache="auto")
     df.close()
+    assert os.path.exists(mp)
+    shards = read_manifest(mp)
+    assert set(shards.keys()) == set(str_paths)
     for p in paths:
-        assert os.path.exists(cache_path(str(p)))
+        assert not os.path.exists(str(p) + ".metacache.json")
 
-    df_hot = TsFileDataFrame([str(p) for p in paths], show_progress=False, cache="auto")
+
+def test_adding_shard_keeps_existing_entries(tmp_path):
+    initial = [tmp_path / "shard_0.tsfile", tmp_path / "shard_1.tsfile"]
+    for i, p in enumerate(initial):
+        _write_weather_file(p, start=i * 100)
+    initial_paths = [str(p) for p in initial]
+    TsFileDataFrame(initial_paths, show_progress=False, cache="auto").close()
+
+    new_shard = tmp_path / "shard_2.tsfile"
+    _write_weather_file(new_shard, start=200)
+    expanded_paths = initial_paths + [str(new_shard)]
+    TsFileDataFrame(expanded_paths, show_progress=False, cache="auto").close()
+
+    shards = read_manifest(manifest_path(expanded_paths))
+    assert set(shards.keys()) == set(expanded_paths)
+
+
+def test_manifest_skipped_on_full_hit(tmp_path):
+    path = tmp_path / "no_rewrite.tsfile"
+    _write_weather_file(path)
+
+    TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
+    mp = manifest_path([str(path)])
+    before = os.stat(mp).st_mtime_ns
+
+    TsFileDataFrame(str(path), show_progress=False, cache="auto").close()
+    after = os.stat(mp).st_mtime_ns
+    assert before == after
+
+
+def test_lru_evicts_older_reader_when_over_cap(tmp_path):
+    paths = [tmp_path / f"lru_{i}.tsfile" for i in range(3)]
+    for i, p in enumerate(paths):
+        _write_weather_file(p, start=i * 100)
+    str_paths = [str(p) for p in paths]
+
+    df = TsFileDataFrame(str_paths, show_progress=False, cache="auto", max_open_files=2)
     try:
-        assert len(df_hot.list_timeseries()) == 2
+        # After eager init with cap=2, the LRU shard's native handle is closed
+        # but its Python wrapper + catalog stay valid.
+        first = df._readers[str_paths[0]]
+        second = df._readers[str_paths[1]]
+        third = df._readers[str_paths[2]]
+
+        assert first._reader is None
+        assert second._reader is not None
+        assert third._reader is not None
+        assert df._fd_pool.capacity == 2
+        assert len(df._fd_pool) == 2
+
+        # Touching the evicted reader reopens its native handle and pushes the
+        # current LRU (`second`) out.
+        first._ensure_open()
+
+        assert first._reader is not None
+        assert third._reader is not None
+        assert second._reader is None
+        assert len(df._fd_pool) == 2
     finally:
-        df_hot.close()
+        df.close()
+
+
+def test_lru_disabled_when_cap_exceeds_shard_count(tmp_path):
+    paths = [tmp_path / f"all_open_{i}.tsfile" for i in range(3)]
+    for i, p in enumerate(paths):
+        _write_weather_file(p, start=i * 100)
+
+    df = TsFileDataFrame(
+        [str(p) for p in paths],
+        show_progress=False,
+        cache="auto",
+        max_open_files=16,
+    )
+    try:
+        for p in paths:
+            assert df._readers[str(p)]._reader is not None
+        assert len(df._fd_pool) == 3
+    finally:
+        df.close()
+
+
+def test_lru_close_all_drains_pool(tmp_path):
+    path = tmp_path / "drain.tsfile"
+    _write_weather_file(path)
+
+    df = TsFileDataFrame(str(path), show_progress=False, cache="auto")
+    reader = next(iter(df._readers.values()))
+    assert reader._reader is not None
+    df.close()
+    assert reader._reader is None

@@ -697,8 +697,10 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
     class _FakeResultSet:
         def __init__(self, times, values):
             self._batch = pa.table(
-                {"time": pa.array(times, type=pa.int64()),
-                 "totalcloudcover": pa.array(values, type=pa.float64())}
+                {
+                    "time": pa.array(times, type=pa.int64()),
+                    "totalcloudcover": pa.array(values, type=pa.float64()),
+                }
             )
             self._delivered = False
 

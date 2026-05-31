@@ -75,12 +75,14 @@ class TsFileSeriesReader:
         show_progress: bool = True,
         *,
         catalog: "MetadataCatalog | None" = None,
+        pool: "object | None" = None,
     ):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"TsFile not found: {file_path}")
 
         self.file_path = file_path
         self.show_progress = show_progress
+        self._pool = pool
 
         try:
             self._reader = TsFileReaderPy(file_path)
@@ -93,8 +95,28 @@ class TsFileSeriesReader:
             self._catalog = MetadataCatalog()
             self._cache_metadata()
 
+        if self._pool is not None:
+            self._pool.touch(self)
+
     def __del__(self):
         self.close()
+
+    def _ensure_open(self) -> None:
+        """Reopen the native reader if it was evicted; mark MRU in the pool."""
+        if getattr(self, "_reader", None) is None:
+            self._reader = TsFileReaderPy(self.file_path)
+        pool = getattr(self, "_pool", None)
+        if pool is not None:
+            pool.touch(self)
+
+    def _close_native(self) -> None:
+        """Close the native handle but keep the Python wrapper + catalog usable."""
+        if getattr(self, "_reader", None) is not None:
+            try:
+                self._reader.close()
+            except Exception:
+                pass
+            self._reader = None
 
     @property
     def catalog(self) -> MetadataCatalog:
@@ -119,11 +141,14 @@ class TsFileSeriesReader:
             ), device_id, field_idx
 
     def close(self):
-        if hasattr(self, "_reader"):
+        if getattr(self, "_pool", None) is not None:
+            self._pool.discard(self)
+        if getattr(self, "_reader", None) is not None:
             try:
                 self._reader.close()
             except Exception:
                 pass
+            self._reader = None
 
     def _cache_metadata(self):
         """Wrap metadata discovery so reader construction surfaces one stable error shape."""
@@ -368,6 +393,7 @@ class TsFileSeriesReader:
         if limit <= 0:
             return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
+        self._ensure_open()
         table_entry, device_entry, field_name = self._resolve_series_ref(
             device_id, field_idx
         )
@@ -448,6 +474,7 @@ class TsFileSeriesReader:
         end_time: int,
     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         """Execute the underlying table query with exact tag filter pushdown."""
+        self._ensure_open()
         tag_columns = list(tag_columns)
         field_columns = list(field_columns)
         query_columns = list(field_columns)
