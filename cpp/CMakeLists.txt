@@ -91,19 +91,31 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
+
+# -march=native bakes the build host's exact ISA into the binary. That is
+# fine for a single-machine build, but it is a footgun for any shared
+# artifact: an Ice Lake / Sapphire Rapids host emits AVX-512 VBMI
+# (vpermi2b/vpermt2b) and VPOPCNTDQ (vpopcnt[dq]) instructions that crash
+# with SIGILL on an older Skylake/Cascade Lake target. -flto interacts
+# badly with statically linked antlr4 on MinGW gcc as well. Gate both
+# behind opt-in options so the default build produces a portable binary.
+option(ENABLE_NATIVE_ARCH
+    "Add -march=native (binary will run only on the build host's CPU family)"
+    OFF)
+option(ENABLE_LTO
+    "Add -flto to Release builds (link-time optimisation)"
+    OFF)
+
 if (NOT MSVC)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
     elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        # -flto + MinGW gcc + statically-linked antlr4_static produces
-        # unresolved-reference errors at link time (LTO intermediate objects
-        # can't see the .a's vtable thunks). -march=native is also a poor
-        # default for CI binaries shipped to other machines. Keep both on
-        # Linux/macOS where the optimization actually pays off.
-        if (MINGW OR WIN32)
-            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-        else ()
-            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+        if (ENABLE_NATIVE_ARCH AND NOT (MINGW OR WIN32))
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+        endif ()
+        if (ENABLE_LTO AND NOT (MINGW OR WIN32))
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
         endif ()
     elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
