@@ -47,7 +47,7 @@ public abstract class SprintzEncoder extends Encoder {
   /** output stream to buffer {@code <bitwidth> <encoded-data>}. */
   protected ByteArrayOutputStream byteCache;
 
-  // selecet the predict method
+  // select the predict method
   protected String predictMethod =
       TSFileDescriptor.getInstance().getConfig().getSprintzPredictScheme();
 

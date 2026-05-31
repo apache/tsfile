@@ -103,7 +103,7 @@ public class TsFileLastReaderTest {
     }
   }
 
-  // the second half measurements will have an emtpy last chunk each
+  // the second half measurements will have an empty last chunk each
   private void createFileWithLastEmptyChunks(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(file)) {

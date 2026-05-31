@@ -209,7 +209,7 @@ public class ChunkHeader {
   public static ChunkHeader deserializeFrom(
       TsFileInput input, long offset, LongConsumer ioSizeRecorder) throws IOException {
 
-    // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining raed
+    // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining read
     // operation
     ByteBuffer buffer = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + 1);
     input.read(buffer, offset);
