@@ -19,6 +19,8 @@
 
 #include "reader/task/device_query_task.h"
 
+#include "common/tsfile_common.h"
+
 namespace storage {
 DeviceQueryTask* DeviceQueryTask::create_device_query_task(
     std::shared_ptr<IDeviceID> device_id, std::vector<std::string> column_names,
@@ -33,6 +35,16 @@ DeviceQueryTask* DeviceQueryTask::create_device_query_task(
     return task;
 }
 
-DeviceQueryTask::~DeviceQueryTask() = default;
+DeviceQueryTask::~DeviceQueryTask() {
+    // index_root_ was placement-new'd into DeviceMetaIterator's PageArena and
+    // ownership transferred here via DeviceMetaIterator::next; the arena only
+    // frees raw bytes, so we must invoke the destructor explicitly to release
+    // the heap-allocated children_ vector and its nested shared_ptr graph
+    // (DeviceMetaIndexEntry -> StringArrayDeviceID).
+    if (index_root_ != nullptr) {
+        index_root_->~MetaIndexNode();
+        index_root_ = nullptr;
+    }
+}
 
 }  // namespace storage
