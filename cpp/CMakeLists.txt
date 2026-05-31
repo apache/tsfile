@@ -92,27 +92,45 @@ endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 
-# -march=native bakes the build host's exact ISA into the binary. That is
-# fine for a single-machine build, but it is a footgun for any shared
-# artifact: an Ice Lake / Sapphire Rapids host emits AVX-512 VBMI
-# (vpermi2b/vpermt2b) and VPOPCNTDQ (vpopcnt[dq]) instructions that crash
-# with SIGILL on an older Skylake/Cascade Lake target. -flto interacts
-# badly with statically linked antlr4 on MinGW gcc as well. Gate both
-# behind opt-in options so the default build produces a portable binary.
+# Target ISA selection:
+#
+#   - -march=native bakes the build host's ISA, which is wrong for any
+#     binary that gets shipped to a different machine (e.g. an Ice Lake
+#     build host emits AVX-512 VBMI/VPOPCNTDQ that SIGILL on Skylake).
+#
+#   - The intended deployment target is Skylake-SP / Cascade Lake servers
+#     (AVX-512 F/CD/BW/DQ/VL, no VBMI, no VPOPCNTDQ), so the Linux x86_64
+#     default targets that explicitly. This also defines __AVX2__ and
+#     __AVX512F__ at compile time, which lets simde's batch-decode
+#     intrinsics (simde_mm256_*) fall through to real SIMD instructions
+#     instead of scalar emulation.
+#
+#   - Anyone who wants host-specific codegen can flip ENABLE_NATIVE_ARCH
+#     on; that overrides TSFILE_TARGET_ARCH.
+#
+#   - Setting TSFILE_TARGET_ARCH to an empty string falls back to the
+#     compiler's portable baseline (-march=x86-64), which only emits
+#     SSE2.
 option(ENABLE_NATIVE_ARCH
     "Add -march=native (binary will run only on the build host's CPU family)"
     OFF)
 option(ENABLE_LTO
     "Add -flto to Release builds (link-time optimisation)"
-    OFF)
+    ON)
+set(TSFILE_TARGET_ARCH "skylake-avx512" CACHE STRING
+    "x86_64 -march= target used when ENABLE_NATIVE_ARCH is OFF (e.g. skylake-avx512, haswell). Empty for portable baseline.")
 
 if (NOT MSVC)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
     elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-        if (ENABLE_NATIVE_ARCH AND NOT (MINGW OR WIN32))
-            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+        if (NOT (MINGW OR WIN32) AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+            if (ENABLE_NATIVE_ARCH)
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+            elseif (TSFILE_TARGET_ARCH)
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=${TSFILE_TARGET_ARCH}")
+            endif ()
         endif ()
         if (ENABLE_LTO AND NOT (MINGW OR WIN32))
             set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
