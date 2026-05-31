@@ -374,37 +374,44 @@ class TsFileSeriesReader:
         tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
-        # Some native row-query paths stop at an internal block boundary even
-        # when the requested window extends further. Re-issue from the advanced
-        # offset until we fill the caller's logical row window or reach EOF.
+        # Pull whole TsBlocks via the Arrow C-Data interface instead of
+        # iterating row-by-row in Python. Each result_set.next() +
+        # get_value_by_name() pair would be a Python<->C round-trip per row
+        # and dominates wall time on long slices; read_arrow_batch() returns
+        # a column-oriented batch in one call and lands directly in numpy.
         timestamp_parts = []
         value_parts = []
         remaining = limit
         next_offset = offset
 
         while remaining > 0:
-            batch_timestamps = []
-            batch_values = []
+            produced_this_call = 0
             with self._reader.query_table_by_row(
                 table_entry.table_name,
                 [field_name],
                 offset=next_offset,
                 limit=remaining,
                 tag_filter=tag_filter,
+                batch_size=65536,
             ) as result_set:
-                while result_set.next():
-                    batch_timestamps.append(result_set.get_value_by_name("time"))
-                    value = result_set.get_value_by_name(field_name)
-                    batch_values.append(np.nan if value is None else float(value))
+                while True:
+                    arrow_table = result_set.read_arrow_batch()
+                    if arrow_table is None:
+                        break
+                    if arrow_table.num_rows == 0:
+                        continue
+                    timestamp_parts.append(arrow_table.column("time").to_numpy())
+                    raw_values = arrow_table.column(field_name).to_numpy(
+                        zero_copy_only=False
+                    )
+                    value_parts.append(np.asarray(raw_values, dtype=np.float64))
+                    produced_this_call += arrow_table.num_rows
 
-            if not batch_timestamps:
+            if produced_this_call == 0:
                 break
 
-            timestamp_parts.append(np.asarray(batch_timestamps, dtype=np.int64))
-            value_parts.append(np.asarray(batch_values, dtype=np.float64))
-            read_count = len(batch_timestamps)
-            next_offset += read_count
-            remaining -= read_count
+            next_offset += produced_this_call
+            remaining -= produced_this_call
 
         if not timestamp_parts:
             return np.array([], dtype=np.int64), np.array([], dtype=np.float64)

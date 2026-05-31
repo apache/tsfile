@@ -688,10 +688,19 @@ def test_reader_catalog_shares_device_metadata_and_resolves_paths(tmp_path):
 
 
 def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
+    """read_series_by_row pulls TsBlocks via read_arrow_batch and must keep
+    re-issuing query_table_by_row when the underlying native call stops at
+    an internal block boundary before the caller's window is filled."""
+
+    import pyarrow as pa
+
     class _FakeResultSet:
-        def __init__(self, rows):
-            self._rows = rows
-            self._index = -1
+        def __init__(self, times, values):
+            self._batch = pa.table(
+                {"time": pa.array(times, type=pa.int64()),
+                 "totalcloudcover": pa.array(values, type=pa.float64())}
+            )
+            self._delivered = False
 
         def __enter__(self):
             return self
@@ -699,12 +708,11 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
         def __exit__(self, exc_type, exc_val, exc_tb):
             return False
 
-        def next(self):
-            self._index += 1
-            return self._index < len(self._rows)
-
-        def get_value_by_name(self, name):
-            return self._rows[self._index][name]
+        def read_arrow_batch(self):
+            if self._delivered or self._batch.num_rows == 0:
+                return None
+            self._delivered = True
+            return self._batch
 
     class _FakeNativeReader:
         def __init__(self, timestamps, values, boundary):
@@ -713,28 +721,31 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
             self._boundary = boundary
 
         def query_table_by_row(
-            self, table_name, column_names, offset=0, limit=-1, tag_filter=None
+            self,
+            table_name,
+            column_names,
+            offset=0,
+            limit=-1,
+            tag_filter=None,
+            batch_size=0,
         ):
             assert table_name == "pvf"
             assert column_names == ["totalcloudcover"]
             assert tag_filter is None
+            assert batch_size > 0, "row reads should use batch (Arrow) mode"
             if limit < 0:
                 stop = len(self._timestamps)
             else:
                 stop = min(offset + limit, len(self._timestamps))
 
-            # Simulate the current native bug: one row query cannot cross the
-            # next internal boundary, so callers must re-issue from the
+            # Simulate the native quirk where one query stops at the next
+            # internal block boundary; callers must re-issue from the
             # advanced offset to complete a large logical window.
             chunk_stop = min(stop, ((offset // self._boundary) + 1) * self._boundary)
-            rows = [
-                {
-                    "time": int(self._timestamps[idx]),
-                    "totalcloudcover": float(self._values[idx]),
-                }
-                for idx in range(offset, chunk_stop)
-            ]
-            return _FakeResultSet(rows)
+            return _FakeResultSet(
+                self._timestamps[offset:chunk_stop],
+                self._values[offset:chunk_stop],
+            )
 
     reader = object.__new__(TsFileSeriesReader)
     reader._reader = _FakeNativeReader(
