@@ -18,6 +18,19 @@
     under the License.
 
 -->
+# Apache TsFile 2.3.1
+
+## New Features
+
+- Added scripts to convert CSV, Parquet and Arrow formats to TsFile.
+- Adapted TsFile for the MSVC compiler.
+
+## Bugs
+
+- Fixed the issue that the format conversion scripts did not support date and timestamp data types.
+- Fixed garbled characters when using Chinese table names in the conversion scripts.
+- Fixed the issue where TsFile displayed empty when converting with uppercase column names.
+
 # Apache TsFile 2.3.0
 
 ## New Features
