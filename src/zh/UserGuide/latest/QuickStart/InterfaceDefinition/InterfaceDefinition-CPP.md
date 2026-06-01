@@ -252,7 +252,7 @@ public:
 ```
 
 ### RestorableTsFileIOWriter
-> V2.3.0
+> V2.3.1
 
 ```cpp
 namespace storage {
