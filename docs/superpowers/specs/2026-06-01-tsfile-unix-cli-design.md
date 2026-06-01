@@ -127,8 +127,8 @@ All verbs are read-only and backed by the existing reader API.
 | Command | Purpose | Backed by |
 |---|---|---|
 | `ls` | list devices (tree) or tables (table), one name per line | `get_all_device_ids()` / `get_all_table_schemas()` |
-| `schema` | per-measurement data type / encoding / compression | `get_timeseries_schema()` / `get_table_schema()` |
-| `stats` | per-series row count, time range, chunk count | `get_timeseries_metadata()` (`Statistics`) |
+| `schema` | per-measurement data type / encoding / compression | `get_timeseries_schema()` (tree) / `get_table_schema()` + `get_timeseries_metadata()` (table) |
+| `stats` | per-series row count and time range | `get_timeseries_metadata()` (`Statistic`) |
 | `head` | first N rows | `queryByRow(..., offset=0, limit=N)` |
 | `cat` | all rows of a device/table | `query()` / `queryByRow(..., limit=-1)` |
 | `select` | chosen columns + time range + limit/offset | `query(table, cols, start, end, ...)` / tree `query(paths, start, end)` |
@@ -160,6 +160,12 @@ adapts:
 - **Column semantics differ** (tree: device path + measurement; table: table +
   columns), but **the time column is always column 1** in row output
   (`ResultSetMetadata` guarantees this).
+- **`schema` field availability:** tree-model files expose data type, encoding,
+  and compression per measurement (via `get_timeseries_schema`). Table-model
+  files expose column name and data type (via `get_timeseries_metadata`), but
+  `TableSchema` has no public encoding/compression getter, so those two columns
+  are emitted blank for table-model files. The output keeps a uniform 5-column
+  shape (`target, measurement, datatype, encoding, compression`) across models.
 
 ## Output formats
 
