@@ -42,7 +42,7 @@
         <clang.format.version>17.0.6</clang.format.version>
         <black.version>26.3.1</black.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
-        <groovy.version>4.0.22</groovy.version>
+        <groovy.version>5.0.6</groovy.version>
         <!--
             C++ Windows toolchain selection. By default Windows builds use the
             MinGW generator (see the .os-windows-* profiles). Passing
