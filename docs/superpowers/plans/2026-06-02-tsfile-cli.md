@@ -45,12 +45,21 @@ Google Test 1.12.1，现有 `storage::TsFileReader`、`storage::Statistic`、`Ro
 - 每个新建 `.h`/`.cc` 文件都以 Apache 2.0 块注释头（`/* ... */`）开头——从任一现有
   `cpp/tools/**` 文件原样复制。下文代码块为简洁省略了该头，**新建文件时务必前置**。
 - 所有 CLI 代码在 `namespace tsfile_cli` 内。
+- **构建环境注意（本机 CMake 4.3.2）**：bundled `third_party/antlr4-cpp-runtime-4`
+  把已被移除的旧 CMake policy 设为 OLD，CMake 4.x 直接报错；必须 `--disable-antlr4`
+  绕开（reader/CLI 不依赖 ANTLR4，已验证可编译可测试）。另外 `build.sh` 默认
+  `build_test=0` 且无命令行开关，执行期间已临时改为 `build_test=1`（Task 6 收尾时
+  `git checkout cpp/build.sh` 还原）。测试可执行文件落在 `build/Debug/test/lib/`。
 - C++ 验证命令从 `cpp/` 目录运行：
 
 ```bash
-bash build.sh -t=Debug
-./build/Debug/lib/TsFile_Test --gtest_filter=CliE2E.*:ParseArgsTest.*:RunCliTest.*:RowWriterTest.*:ResolveFormatTest.*:CsvEscapeTest.*:JsonEscapeTest.*:TypeNameTest.*:EncodingNameTest.*:CompressionNameTest.*:StatTableTest.*
+bash build.sh -t=Debug --disable-antlr4
+./build/Debug/test/lib/TsFile_Test --gtest_filter=CliE2E.*:ParseArgsTest.*:RunCliTest.*:RowWriterTest.*:ResolveFormatTest.*:CsvEscapeTest.*:JsonEscapeTest.*:TypeNameTest.*:EncodingNameTest.*:CompressionNameTest.*:StatTableTest.*
 ```
+
+> 计划各 Task 内 `Run:` 行仍写的是旧的 `bash build.sh -t=Debug` 和
+> `./build/Debug/lib/TsFile_Test`，请按上面这条「环境注意」统一替换为
+> `--disable-antlr4` 构建命令与 `build/Debug/test/lib/TsFile_Test` 测试路径。
 
 ## 起点：当前工作树状态（2026-06-02）
 
