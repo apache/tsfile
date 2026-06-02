@@ -125,7 +125,7 @@ public class TsFileTableStatisticsReader implements ITsFileTableStatisticsReader
     if (length > Integer.MAX_VALUE) {
       synchronized (reader) {
         TsFileInput tsFileInput = reader.getTsFileInput();
-        tsFileInput.position(tableStatisticsOffset + Long.BYTES);
+        tsFileInput.position(tableStatisticsOffset);
         InputStream inputStream = tsFileInput.wrapAsInputStream();
         return TableStatistics.deserialize(inputStream, queriedColumns);
       }

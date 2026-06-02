@@ -122,6 +122,31 @@ public class TsFileTableStatisticsTest {
   }
 
   @Test
+  public void testSingleDeviceTableStatistics() throws IOException {
+    try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
+      for (int i = 1; i <= 3; i++) {
+        String tableName = "table" + i;
+        registerTableSchema(writer, tableName, 1);
+        generateDevice(writer, tableName, 1, 1);
+      }
+      writer.endFile();
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+      Assert.assertTrue(reader.hasTableStatistics());
+      Optional<ITsFileTableStatisticsReader> optional = reader.getTsFileTableStatisticsReader();
+      Assert.assertTrue(optional.isPresent());
+      Map<String, TableStatistics> allTableStatistics = optional.get().getAllTableStatistics();
+      Assert.assertEquals(3, allTableStatistics.size());
+      for (int i = 1; i <= 3; i++) {
+        TableStatistics tableStatistics = allTableStatistics.get("table" + i);
+        Assert.assertNotNull(tableStatistics);
+        Assert.assertEquals(1, tableStatistics.getTimeStatistics().getCount());
+        Assert.assertEquals(1, tableStatistics.getStatistics("s0").getCount());
+      }
+    }
+  }
+
+  @Test
   public void testTableAndTreeTsFile() throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(new File(FILE_PATH))) {
       writer.registerTimeseries("root.test.d1", new MeasurementSchema("s1", TSDataType.INT64));
