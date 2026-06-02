@@ -811,11 +811,8 @@ public class Tablet implements Accountable {
         } else {
           size = Math.addExact(size, Byte.BYTES);
           size = Math.addExact(size, Integer.BYTES);
-          size =
-              Math.addExact(
-                  size,
-                  ReadWriteIOUtils.sizeToWrite(
-                      new Binary(bitMaps[i].getTruncatedByteArray(rowSize))));
+          size = Math.addExact(size, Integer.BYTES);
+          size = Math.addExact(size, BitMap.getSizeOfBytes(rowSize));
         }
       }
     }
