@@ -21,6 +21,7 @@
 
 #include <cstdio>
 #include <ctime>
+#include <random>
 #include <sstream>
 #include <vector>
 
@@ -102,6 +103,80 @@ int write_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
         }
         writer.write(cells, nulls);
         ++emitted;
+    }
+    writer.finish();
+    return code;
+}
+
+namespace {
+
+struct BufferedRow {
+    std::vector<std::string> cells;
+    std::vector<bool> nulls;
+};
+
+BufferedRow read_current_row(storage::ResultSet* rs,
+                             const std::vector<common::TSDataType>& types) {
+    BufferedRow row;
+    const uint32_t ncol = static_cast<uint32_t>(types.size());
+    row.cells.assign(ncol, "");
+    row.nulls.assign(ncol, false);
+    for (uint32_t i = 1; i <= ncol; ++i) {
+        if (rs->is_null(i)) {
+            row.nulls[i - 1] = true;
+        } else {
+            row.cells[i - 1] = cell_to_string(rs, i, types[i - 1]);
+        }
+    }
+    return row;
+}
+
+}  // namespace
+
+int write_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
+                             bool no_header, std::ostream& out, long long limit,
+                             unsigned long long seed) {
+    if (limit < 0) {
+        limit = 10;
+    }
+    auto meta = rs->get_metadata();
+    const uint32_t ncol = meta->get_column_count();
+    std::vector<std::string> header;
+    std::vector<common::TSDataType> types;
+    header.reserve(ncol);
+    types.reserve(ncol);
+    for (uint32_t i = 1; i <= ncol; ++i) {
+        header.push_back(meta->get_column_name(i));
+        types.push_back(meta->get_column_type(i));
+    }
+
+    std::vector<BufferedRow> reservoir;
+    reservoir.reserve(static_cast<size_t>(limit));
+    std::mt19937_64 rng(seed);
+    bool has_next = false;
+    int code = common::E_OK;
+    long long seen = 0;
+    while ((code = rs->next(has_next)) == common::E_OK && has_next) {
+        BufferedRow row = read_current_row(rs, types);
+        if (limit == 0) {
+            ++seen;
+            continue;
+        }
+        if (static_cast<long long>(reservoir.size()) < limit) {
+            reservoir.push_back(row);
+        } else {
+            std::uniform_int_distribution<long long> dist(0, seen);
+            long long idx = dist(rng);
+            if (idx < limit) {
+                reservoir[static_cast<size_t>(idx)] = row;
+            }
+        }
+        ++seen;
+    }
+
+    RowWriter writer(out, fmt, header, types, no_header);
+    for (const BufferedRow& row : reservoir) {
+        writer.write(row.cells, row.nulls);
     }
     writer.finish();
     return code;

@@ -36,6 +36,10 @@ int write_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                      std::ostream& out, long long offset = 0,
                      long long limit = -1);
 
+int write_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
+                             bool no_header, std::ostream& out, long long limit,
+                             unsigned long long seed);
+
 }  // namespace tsfile_cli
 
 #endif  // TSFILE_CLI_RESULT_SET_FORMAT_H

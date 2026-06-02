@@ -180,3 +180,26 @@ TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
     EXPECT_NE(out.str().find("\ts1\t5"), std::string::npos);
     EXPECT_NE(out.str().find("total\t\t"), std::string::npos);
 }
+
+TEST(CliE2E, SampleIsReproducibleWithSeed) {
+    Fixture f;
+    std::ostringstream out1;
+    std::ostringstream err1;
+    std::ostringstream out2;
+    std::ostringstream err2;
+
+    int code1 = tsfile_cli::run_cli(
+        {"sample", "-m", "s1", "-n", "3", "--seed", "7", "-f", "tsv", f.path},
+        out1, err1);
+    int code2 = tsfile_cli::run_cli(
+        {"sample", "-m", "s1", "-n", "3", "--seed", "7", "-f", "tsv", f.path},
+        out2, err2);
+
+    EXPECT_EQ(code1, 0);
+    EXPECT_EQ(code2, 0);
+    EXPECT_TRUE(err1.str().empty());
+    EXPECT_TRUE(err2.str().empty());
+    EXPECT_EQ(out1.str(), out2.str());
+    EXPECT_EQ(count_lines(out1.str()), 4u);
+    EXPECT_NE(out1.str().find("time\ts1\n"), std::string::npos);
+}

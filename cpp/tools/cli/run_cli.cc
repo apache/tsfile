@@ -69,11 +69,6 @@ bool is_known_command(const std::string& c) {
     return kCmds.count(c) != 0;
 }
 
-bool is_unimplemented_command(const std::string& c) {
-    static const std::set<std::string> kCmds = {"sample"};
-    return kCmds.count(c) != 0;
-}
-
 bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
     if (p.has_seed && p.command != "sample") {
         err << "Error: --seed is only valid for sample\n";
@@ -139,11 +134,6 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         print_usage(err);
         return kExitUsage;
     }
-    if (is_unimplemented_command(p.command)) {
-        err << "Error: command not implemented yet: " << p.command << "\n";
-        print_usage(err);
-        return kExitUsage;
-    }
 
     storage::libtsfile_init();
     storage::TsFileReader reader;
@@ -171,6 +161,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         code = cmd_cat(p, reader, fmt, out, err);
     } else if (p.command == "count") {
         code = cmd_count(p, reader, fmt, out, err);
+    } else if (p.command == "sample") {
+        code = cmd_sample(p, reader, fmt, out, err);
     } else {
         err << "Unknown command: " << p.command << "\n";
         code = kExitUsage;

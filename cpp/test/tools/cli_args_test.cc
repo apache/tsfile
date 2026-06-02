@@ -142,17 +142,3 @@ TEST(RunCliTest, OffsetOnSampleIsUsageError) {
     EXPECT_NE(err.str().find("--offset is not valid for sample"),
               std::string::npos);
 }
-
-TEST(RunCliTest, NewCommandsAreExplicitlyUnimplementedBeforeReaderOpen) {
-    for (const char* command : {"sample"}) {
-        std::ostringstream out;
-        std::ostringstream err;
-        int code = tsfile_cli::run_cli(
-            {command, "definitely_missing.tsfile"}, out, err);
-        EXPECT_EQ(code, 1) << command;
-        EXPECT_NE(err.str().find("command not implemented yet"),
-                  std::string::npos)
-            << command;
-        EXPECT_NE(err.str().find(command), std::string::npos) << command;
-    }
-}
