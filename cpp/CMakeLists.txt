@@ -171,6 +171,9 @@ endif ()
 option(BUILD_TEST "Build tests" ON)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
 
+option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
+message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
+
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
@@ -244,6 +247,9 @@ add_subdirectory(third_party)
 set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
 add_subdirectory(src)
+if (BUILD_TOOLS)
+    add_subdirectory(tools)
+endif ()
 if (BUILD_TEST)
     add_subdirectory(test)
     if (TESTS_ENABLED)
@@ -254,4 +260,3 @@ else()
 endif ()
 
 add_subdirectory(examples)
-

@@ -64,8 +64,7 @@ TEST(ParseArgsTest, FormatFlagParsed) {
 }
 
 TEST(ParseArgsTest, MeasurementsSplitOnComma) {
-    auto p =
-        tsfile_cli::parse_args({"select", "-m", "s1,s2,s3", "data.tsfile"});
+    auto p = tsfile_cli::parse_args({"cat", "-m", "s1,s2,s3", "data.tsfile"});
     ASSERT_EQ(p.measurements.size(), 3u);
     EXPECT_EQ(p.measurements[1], "s2");
 }

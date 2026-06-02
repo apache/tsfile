@@ -63,6 +63,26 @@ if (${DOWNLOADED})
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
+    # AppleClang searches /usr/local/include before CMake's generated -isystem
+    # paths. Force the vendored GTest headers ahead of any system installation.
+    foreach (GTEST_TARGET gtest gtest_main gmock gmock_main)
+        if (TARGET ${GTEST_TARGET})
+            set_target_properties(${GTEST_TARGET} PROPERTIES SYSTEM OFF)
+            target_include_directories(${GTEST_TARGET} BEFORE PRIVATE
+                    ${googletest_SOURCE_DIR}/googletest/include
+                    ${googletest_SOURCE_DIR}/googletest
+                    ${googletest_SOURCE_DIR}/googlemock/include
+                    ${googletest_SOURCE_DIR}/googlemock)
+            if (APPLE AND NOT MSVC)
+                target_compile_options(${GTEST_TARGET} BEFORE PRIVATE
+                        -iquote${googletest_SOURCE_DIR}/googletest/include
+                        -iquote${googletest_SOURCE_DIR}/googletest
+                        -I${googletest_SOURCE_DIR}/googletest/include
+                        -I${googletest_SOURCE_DIR}/googletest
+                        -std=c++14)
+            endif ()
+        endif ()
+    endforeach ()
     set(TESTS_ENABLED ON PARENT_SCOPE)
 else ()
     message(WARNING "Failed to download googletest from all provided URLs, setting TESTS_ENABLED to OFF")
@@ -139,6 +159,11 @@ if (ENABLE_ZLIB)
     list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
 endif()
 
+if (BUILD_TOOLS)
+    file(GLOB_RECURSE TOOLS_TEST_SRCS "tools/*_test.cc")
+    list(APPEND TEST_SRCS ${TOOLS_TEST_SRCS})
+endif ()
+
 if (${COV_ENABLED})
     message("Enable code cov...")
     add_compile_options(-fprofile-arcs -ftest-coverage)
@@ -150,12 +175,21 @@ if (ENABLE_ANTLR4)
 endif()
 
 add_executable(TsFile_Test ${TEST_SRCS})
+if (BUILD_TOOLS)
+    target_include_directories(TsFile_Test PRIVATE ${CMAKE_SOURCE_DIR}/tools)
+endif ()
+if (APPLE AND NOT MSVC)
+    target_compile_options(TsFile_Test PRIVATE -std=c++14)
+endif ()
 target_link_libraries(
         TsFile_Test
         GTest::gtest_main
         GTest::gmock
         tsfile
 )
+if (BUILD_TOOLS)
+    target_link_libraries(TsFile_Test tsfile_cli_obj)
+endif ()
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
 
