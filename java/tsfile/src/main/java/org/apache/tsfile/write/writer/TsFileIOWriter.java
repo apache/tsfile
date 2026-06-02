@@ -511,6 +511,10 @@ public class TsFileIOWriter implements AutoCloseable {
       // construct the index tree node for the series
       currentDevice = currentPath.getIDeviceID();
       boolean isTableModel = schema.getTableSchemaMap().containsKey(currentDevice.getTableName());
+      String currentTableName = isTableModel ? currentDevice.getTableName() : null;
+      if (prevDevice == null && currentTableName != null) {
+        prevTableName = currentTableName;
+      }
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {
           addCurrentIndexNodeToQueue(currentIndexNode, measurementMetadataIndexQueue, out);
@@ -519,8 +523,6 @@ public class TsFileIOWriter implements AutoCloseable {
               generateRootNode(
                   measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
           currentIndexNode = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
-
-          String currentTableName = isTableModel ? currentDevice.getTableName() : null;
 
           if (!Objects.equals(currentTableName, prevTableName)) {
             if (prevTableName != null) {
