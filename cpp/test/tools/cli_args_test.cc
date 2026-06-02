@@ -144,7 +144,7 @@ TEST(RunCliTest, OffsetOnSampleIsUsageError) {
 }
 
 TEST(RunCliTest, NewCommandsAreExplicitlyUnimplementedBeforeReaderOpen) {
-    for (const char* command : {"count", "sample"}) {
+    for (const char* command : {"sample"}) {
         std::ostringstream out;
         std::ostringstream err;
         int code = tsfile_cli::run_cli(

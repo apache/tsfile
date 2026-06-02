@@ -43,6 +43,8 @@ int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
                OutputFormat fmt, std::ostream& out, std::ostream& err);
 int cmd_meta(const ParsedArgs& args, storage::TsFileReader& reader,
              OutputFormat fmt, std::ostream& out, std::ostream& err);
+int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
+              OutputFormat fmt, std::ostream& out, std::ostream& err);
 int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err);
 int cmd_head(const ParsedArgs& args, storage::TsFileReader& reader,

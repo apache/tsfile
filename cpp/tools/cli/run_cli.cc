@@ -70,7 +70,7 @@ bool is_known_command(const std::string& c) {
 }
 
 bool is_unimplemented_command(const std::string& c) {
-    static const std::set<std::string> kCmds = {"count", "sample"};
+    static const std::set<std::string> kCmds = {"sample"};
     return kCmds.count(c) != 0;
 }
 
@@ -169,6 +169,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         code = cmd_head(p, reader, fmt, out, err);
     } else if (p.command == "cat") {
         code = cmd_cat(p, reader, fmt, out, err);
+    } else if (p.command == "count") {
+        code = cmd_count(p, reader, fmt, out, err);
     } else {
         err << "Unknown command: " << p.command << "\n";
         code = kExitUsage;

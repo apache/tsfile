@@ -168,3 +168,15 @@ TEST(CliE2E, MetaReportsFileSummary) {
               std::string::npos);
     EXPECT_NE(out.str().find("\ttable\t"), std::string::npos);
 }
+
+TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"count", "-f", "tsv", f.path}, out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("target\tmeasurement\tcount"), std::string::npos);
+    EXPECT_NE(out.str().find("\ts1\t5"), std::string::npos);
+    EXPECT_NE(out.str().find("total\t\t"), std::string::npos);
+}
