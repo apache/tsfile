@@ -184,8 +184,7 @@ FileSummary collect_file_summary(const ParsedArgs& args,
     FileSummary s;
     s.file = args.file;
     s.model = is_table_model(args, reader) ? "table" : "tree";
-    s.device_count =
-        static_cast<long long>(reader.get_all_device_ids().size());
+    s.device_count = static_cast<long long>(reader.get_all_device_ids().size());
     s.table_count =
         static_cast<long long>(reader.get_all_table_schemas().size());
     s.file_size_bytes = file_size(args.file);

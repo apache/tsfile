@@ -64,8 +64,7 @@ void print_usage(std::ostream& os) {
 
 bool is_known_command(const std::string& c) {
     static const std::set<std::string> kCmds = {
-        "ls",   "schema", "meta",  "stats",
-        "head", "cat",    "count", "sample"};
+        "ls", "schema", "meta", "stats", "head", "cat", "count", "sample"};
     return kCmds.count(c) != 0;
 }
 

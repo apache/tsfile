@@ -137,9 +137,9 @@ TEST(CliE2E, CatWithTimeRange) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"cat", "-m", "s1", "--start", "2", "--end",
-                                    "3", "-f", "tsv", f.path},
-                                   out, err);
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--start", "2", "--end", "3", "-f", "tsv", f.path},
+        out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
 }
@@ -148,9 +148,9 @@ TEST(CliE2E, CatJsonIsNdjson) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"cat", "-m", "s1", "--start", "0", "--end",
-                                    "0", "-f", "json", f.path},
-                                   out, err);
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--start", "0", "--end", "0", "-f", "json", f.path},
+        out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "{\"time\":0,\"s1\":0}\n");
 }
