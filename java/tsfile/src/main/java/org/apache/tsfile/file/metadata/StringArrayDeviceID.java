@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.exception.IllegalDeviceIDException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -102,7 +103,7 @@ public class StringArrayDeviceID implements IDeviceID {
       }
     }
     if (i < 0) {
-      throw new IllegalDeviceIDException("All segments are null");
+      throw new IllegalDeviceIDException(Messages.get("error.file.device_id_all_segments_null"));
     }
     if (i != segments.length - 1) {
       segments = Arrays.copyOf(segments, i + 1);

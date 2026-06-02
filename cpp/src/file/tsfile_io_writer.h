@@ -70,7 +70,6 @@ class TsFileIOWriter {
           use_prev_alloc_cgm_(false),
           cur_device_name_(),
           file_(nullptr),
-          ts_time_index_vector_(),
           write_file_created_(false),
           generate_table_schema_(false),
           schema_(std::make_shared<Schema>()) {
@@ -86,11 +85,6 @@ class TsFileIOWriter {
         }
     }
     ~TsFileIOWriter() { destroy(); }
-
-#ifndef LIBTSFILE_SDK
-    int init();
-    FORCE_INLINE common::FileID get_file_id() { return file_->get_file_id(); }
-#endif
     int init(WriteFile* write_file);
     void destroy();
 
@@ -112,10 +106,6 @@ class TsFileIOWriter {
     int end_flush_chunk_group(bool is_aligned = false);
     int end_file();
 
-    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry>&
-    get_ts_time_index_vector() {
-        return ts_time_index_vector_;
-    }
     FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }
     FORCE_INLINE std::shared_ptr<Schema> get_schema() { return schema_; }
 
@@ -127,7 +117,7 @@ class TsFileIOWriter {
     int flush_stream_to_file();
     int write_chunk_data(common::ByteStream& chunk_data);
     FORCE_INLINE int64_t cur_file_position() const {
-        return write_stream_.total_size();
+        return file_base_offset_ + write_stream_.total_size();
     }
     FORCE_INLINE int write_buf(const char* buf, uint32_t len) {
         return write_stream_.write_buf(buf, len);
@@ -197,9 +187,28 @@ class TsFileIOWriter {
     // for open file
     void add_ts_time_index_entry(TimeseriesIndex& ts_index);
 
+   protected:
+    /** For RestorableTsFileIOWriter: append a recovered ChunkGroupMeta. */
+    void push_chunk_group_meta(ChunkGroupMeta* cgm) {
+        chunk_group_meta_list_.push_back(cgm);
+    }
+    /** True when chunk_group_meta_list_ has a prefix loaded from recovery;
+     * destroy() must not free device_id_/statistic_ for that prefix only. */
+    bool chunk_group_meta_from_recovery_ = false;
+    /** Recovered ChunkGroupMeta* -> chunk_meta_list_.size() at attach (pointer
+     * keys avoid idx skew). */
+    std::map<ChunkGroupMeta*, uint32_t> recovery_chunk_meta_prefix_;
+    /**
+     * Recovery only: set file_base_offset_ so that cur_file_position() returns
+     * correct absolute offsets.  After recovery the writer behaves as if the
+     * file was just flushed — write_stream_ starts empty and only holds new
+     * data.
+     */
+    int restore_recovered_file_position(int64_t recovered_size);
+
    private:
     common::PageArena meta_allocator_;
-    common::ByteStream write_stream_;
+    common::ByteStream write_stream_{common::MOD_TSFILE_WRITE_STREAM};
     common::ByteStream::Consumer write_stream_consumer_;
     ChunkMeta* cur_chunk_meta_;
     ChunkGroupMeta* cur_chunk_group_meta_;
@@ -208,7 +217,6 @@ class TsFileIOWriter {
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
     WriteFile* file_;
-    std::vector<TimeseriesTimeIndexEntry> ts_time_index_vector_;
     bool write_file_created_;
     bool generate_table_schema_;
     std::shared_ptr<Schema> schema_;
@@ -216,6 +224,15 @@ class TsFileIOWriter {
     std::string encrypt_type_;
     std::string encrypt_key_;
     bool is_aligned_;
+    /** Recovery only: absolute file offset at which write_stream_ logically
+     * begins.  Normal (non-recovery) path keeps this at 0. */
+    int64_t file_base_offset_ = 0;
+    /** Set after destroy() completes; avoids double cleanup when
+     * RestorableTsFileIOWriter::close() calls destroy() before
+     * self_check_arena_.destroy(), then ~TsFileIOWriter runs again. */
+    bool destroyed_ = false;
+
+    friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta
 };
 
 }  // end namespace storage

@@ -20,6 +20,7 @@
 
 #include <random>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -31,10 +32,11 @@
 using namespace storage;
 using namespace common;
 
-class TsFileWriterTableTest : public ::testing::Test {
+class TsFileWriterTableTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_write_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_table_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -133,7 +135,7 @@ class TsFileWriterTableTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileWriterTableTest, WriteTableTest) {
+TEST_P(TsFileWriterTableTest, WriteTableTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -144,7 +146,7 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
+TEST_P(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(1);
@@ -192,7 +194,7 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
+TEST_P(TsFileWriterTableTest, WriteDisorderTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -242,7 +244,7 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
+TEST_P(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 2 * 1024);
@@ -255,7 +257,7 @@ TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteNonExistColumnTest) {
+TEST_P(TsFileWriterTableTest, WriteNonExistColumnTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -283,7 +285,7 @@ TEST_F(TsFileWriterTableTest, WriteNonExistColumnTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
+TEST_P(TsFileWriterTableTest, WriteNonExistTableTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -295,7 +297,7 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
+TEST_P(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 256 * 1024 * 1024);
@@ -305,7 +307,7 @@ TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, EmptyTagWrite) {
+TEST_P(TsFileWriterTableTest, EmptyTagWrite) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(3);
@@ -361,7 +363,7 @@ TEST_F(TsFileWriterTableTest, EmptyTagWrite) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
+TEST_P(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 256 * 1024 * 1024);
@@ -412,7 +414,7 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     tsfile_table_writer_->close();
 }
 
-TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
+TEST_P(TsFileWriterTableTest, WriteAndReadSimple) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(2);
@@ -447,7 +449,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     ASSERT_EQ(ret_value, 0);
     auto* table_result_set = (TableResultSet*)ret;
     auto metadata = ret->get_metadata();
-    ASSERT_EQ(metadata->get_column_name(column_names.size() + 1), "VALUE");
+    ASSERT_EQ(metadata->get_column_name(column_names.size() + 1), "value");
     bool has_next = false;
     int cur_line = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
@@ -467,7 +469,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
+TEST_P(TsFileWriterTableTest, DuplicateColumnName) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(3);
@@ -505,7 +507,7 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
+TEST_P(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     for (int i = 0; i < 3; i++) {
@@ -637,7 +639,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
+TEST_P(TsFileWriterTableTest, MultiDeviceMultiFields) {
     common::config_set_max_degree_of_index_node(5);
     auto table_schema = gen_table_schema(0, 1, 100);
     auto tsfile_table_writer_ =
@@ -696,7 +698,7 @@ TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
+TEST_P(TsFileWriterTableTest, WriteDataWithEmptyField) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     for (int i = 0; i < 3; i++) {
@@ -773,7 +775,7 @@ TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_F(TsFileWriterTableTest, MultiDatatypes) {
+TEST_P(TsFileWriterTableTest, MultiDatatypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -877,7 +879,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     delete[] literal;
 }
 
-TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
+TEST_P(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -985,7 +987,7 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     delete[] literal;
 }
 
-TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
+TEST_P(TsFileWriterTableTest, EncodingConfigIntegration) {
     // 1. Test setting global compression type
     ASSERT_EQ(E_OK, set_global_compression(SNAPPY));
 
@@ -1096,3 +1098,85 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     delete[] text_literal;
     delete table_schema;
 }
+
+#ifdef ENABLE_MEM_STAT
+TEST_P(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
+    TableSchema* table_schema = gen_table_schema(0, 2, 3);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    const int num_devices = 10;
+    const int num_timestamps = 100;
+
+    for (int flush = 0; flush < 10; flush++) {
+        Tablet tablet =
+            gen_tablet(table_schema, flush * num_devices * num_timestamps,
+                       num_devices, num_timestamps);
+        ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
+        std::cout << "--- After write, before flush " << flush << " ---"
+                  << std::endl;
+        ModStat::get_instance().print_stat();
+        ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
+
+        std::cout << "--- After flush " << flush << " ---" << std::endl;
+        ModStat::get_instance().print_stat();
+    }
+
+    ASSERT_EQ(tsfile_table_writer->close(), E_OK);
+
+    std::cout << "--- After writer close ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+
+    std::cout << "--- After reader open ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    ResultSet* result_set = nullptr;
+    ASSERT_EQ(reader.query(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(), 0, INT64_MAX,
+                           result_set),
+              E_OK);
+
+    std::cout << "--- After query init ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    int row_count = 0;
+    bool has_next = false;
+    const int total_rows = num_devices * num_timestamps * 10;
+    const int sample_interval = total_rows / 5;
+    int next_sample = sample_interval;
+    auto* table_result_set = static_cast<TableResultSet*>(result_set);
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        row_count++;
+        if (row_count == next_sample) {
+            std::cout << "--- Reading row " << row_count << "/" << total_rows
+                      << " ---" << std::endl;
+            ModStat::get_instance().print_stat();
+            next_sample += sample_interval;
+        }
+    }
+    EXPECT_EQ(row_count, total_rows);
+
+    std::cout << "--- After read complete ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    reader.destroy_query_data_set(table_result_set);
+
+    std::cout << "--- After destroy result set ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    ASSERT_EQ(reader.close(), E_OK);
+
+    std::cout << "--- After reader close ---" << std::endl;
+    ModStat::get_instance().print_stat();
+
+    delete table_schema;
+}
+#endif
+
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileWriterTableTest,
+                         ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileWriterTableTest,
+                         ::testing::Values(true));

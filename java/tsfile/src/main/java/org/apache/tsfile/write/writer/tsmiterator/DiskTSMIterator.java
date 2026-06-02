@@ -26,6 +26,7 @@ import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.reader.LocalTsFileInput;
 import org.apache.tsfile.read.reader.TsFileInput;
@@ -88,7 +89,7 @@ public class DiskTSMIterator extends TSMIterator {
       }
     } catch (IOException e) {
       if (!Thread.currentThread().isInterrupted()) {
-        LOG.error("Meets IOException when reading timeseries metadata from disk", e);
+        LOG.error(Messages.get("log.write.tsm_disk_read_error"), e);
       }
       throw e;
     }
@@ -111,8 +112,7 @@ public class DiskTSMIterator extends TSMIterator {
     int readSize = ReadWriteIOUtils.readAsPossible(input, chunkBuffer);
     if (readSize < chunkBufferSize) {
       throw new IOException(
-          String.format(
-              "Expected to read %s bytes, but actually read %s bytes", chunkBufferSize, readSize));
+          Messages.format("error.write.disk_tsm_read_size_mismatch", chunkBufferSize, readSize));
     }
     chunkBuffer.flip();
 

@@ -24,12 +24,6 @@
 #include "utils/db_utils.h"
 
 namespace common {
-enum ConfigLevel {
-    INIT,     // Unchangeable, initialized during database init
-    RESTART,  // Can be changed, but the database must be restarted to take
-              // effect
-    USERSET   // Session level update
-};
 
 typedef struct ConfigValue {
     uint32_t
@@ -52,6 +46,14 @@ typedef struct ConfigValue {
     TSEncoding double_encoding_type_;
     TSEncoding string_encoding_type_;
     CompressionType default_compression_type_;
+    bool parallel_write_enabled_;
+    int32_t write_thread_count_;
+    // When true, aligned writer enforces page size limit strictly by
+    // interleaving time/value writes and sealing pages together when any side
+    // becomes full.
+    // When false, aligned writer may disable some page-size checks to improve
+    // write performance.
+    bool strict_page_size_ = true;
 } ConfigValue;
 
 extern void init_config_value();
@@ -63,6 +65,7 @@ extern void set_config_value();
 extern void config_set_page_max_point_count(uint32_t page_max_point_count);
 extern void config_set_max_degree_of_index_node(
     uint32_t max_degree_of_index_node);
+extern void config_set_strict_page_size(bool strict_page_size);
 
 }  // namespace common
 

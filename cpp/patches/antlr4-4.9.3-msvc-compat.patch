@@ -1,0 +1,126 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# antlr4-4.9.3-msvc-compat.patch
+#
+# Purpose : Make the bundled ANTLR4 C++ runtime (v4.9.3) compile under MSVC
+#           (Visual Studio 2017 / v141) while keeping the project on C++11.
+# Scope   : third_party/antlr4-cpp-runtime-4 only. No version change, no
+#           generated-parser change, no impact on the Java module (also 4.9.3)
+#           or on embedded/C++11 builds.
+# Apply   : from the cpp/ directory:  git apply patches/antlr4-4.9.3-msvc-compat.patch
+#                                or:  patch -p1 < patches/antlr4-4.9.3-msvc-compat.patch
+#
+# --- Why this is needed -------------------------------------------------------
+#
+# 1) Token.h / LL1Analyzer.h  (overload-resolution ambiguity, error C2668)
+#    These headers define EPSILON/EOF/HIT_PRED/etc. as either
+#    `static constexpr size_t` (when __cplusplus >= 201703L) or as members of an
+#    unnamed `enum : size_t` (otherwise). IntervalSet has both contains(size_t)
+#    and contains(ssize_t) overloads. Per [conv.prom], converting an unnamed
+#    enum with a fixed underlying type to that underlying type is an integral
+#    PROMOTION (a strictly better match than a conversion to ssize_t). GCC
+#    implements this correctly, so the enum branch compiles there. MSVC 2017
+#    does NOT -- it ranks both overloads equally and reports an ambiguous call.
+#    MSVC also reports __cplusplus as 199711L by default, so it always took the
+#    enum branch. `static constexpr size_t` is fully usable in MSVC 2017's
+#    C++11 mode, so we let MSVC take the constexpr branch: the constants become
+#    plain size_t values and the ambiguity disappears with no call-site changes.
+#    This is ODR-safe: the constants are currently enumerators (which cannot be
+#    ODR-used), proving the runtime never takes their address.
+#    NOTE: only the headers whose constants reach IntervalSet::contains/remove
+#    are patched. The std::string_view guards in ANTLRInputStream.{h,cpp} use
+#    the same `#if` and are deliberately left untouched (string_view is C++17).
+#
+# 2) Vocabulary.cpp  (error C2039/C2660: isupper)
+#    Vocabulary.cpp calls the two-argument std::isupper(charT, const locale&)
+#    from <locale> but never includes <locale>; it relied on a transitive
+#    include that libstdc++ happens to provide and MSVC's STL does not.
+#    Fix: add the missing #include <locale>.
+#
+# ------------------------------------------------------------------------------
+--- a/third_party/antlr4-cpp-runtime-4/runtime/src/Token.h
++++ b/third_party/antlr4-cpp-runtime-4/runtime/src/Token.h
+@@ -14,7 +14,7 @@
+   /// we obtained this token.
+   class ANTLR4CPP_PUBLIC Token {
+   public:
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t INVALID_TYPE = 0;
+ #else
+     enum : size_t {
+@@ -24,7 +24,7 @@
+ 
+     /// During lookahead operations, this "token" signifies we hit rule end ATN state
+     /// and did not follow it despite needing to.
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t EPSILON = std::numeric_limits<size_t>::max() - 1;
+     static constexpr size_t MIN_USER_TOKEN_TYPE = 1;
+     static constexpr size_t EOF = IntStream::EOF;
+@@ -41,7 +41,7 @@
+     /// All tokens go to the parser (unless skip() is called in that rule)
+     /// on a particular "channel".  The parser tunes to a particular channel
+     /// so that whitespace etc... can go to the parser on a "hidden" channel.
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t DEFAULT_CHANNEL = 0;
+ #else
+     enum : size_t {
+@@ -51,7 +51,7 @@
+ 
+     /// Anything on different channel than DEFAULT_CHANNEL is not parsed
+     /// by parser.
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t HIDDEN_CHANNEL = 1;
+ #else
+     enum : size_t {
+@@ -70,7 +70,7 @@
+      *
+      * @see Token#getChannel()
+      */
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t MIN_USER_CHANNEL_VALUE = 2;
+ #else
+     enum : size_t {
+--- a/third_party/antlr4-cpp-runtime-4/runtime/src/atn/LL1Analyzer.h
++++ b/third_party/antlr4-cpp-runtime-4/runtime/src/atn/LL1Analyzer.h
+@@ -17,7 +17,7 @@
+   public:
+     /// Special value added to the lookahead sets to indicate that we hit
+     ///  a predicate during analysis if {@code seeThruPreds==false}.
+-#if __cplusplus >= 201703L
++#if __cplusplus >= 201703L || defined(_MSC_VER)
+     static constexpr size_t HIT_PRED = Token::INVALID_TYPE;
+ #else
+     enum : size_t {
+--- a/third_party/antlr4-cpp-runtime-4/runtime/src/Vocabulary.cpp
++++ b/third_party/antlr4-cpp-runtime-4/runtime/src/Vocabulary.cpp
+@@ -3,6 +3,8 @@
+  * can be found in the LICENSE.txt file in the project root.
+  */
+ 
++#include <locale>
++
+ #include "Token.h"
+ 
+ #include "Vocabulary.h"

@@ -55,7 +55,7 @@ class Int32SprintzDecoder : public SprintzDecoder {
         predict_scheme_ = method;
     }
 
-    bool has_remaining(const common::ByteStream& in) {
+    bool has_remaining(const common::ByteStream& in) override {
         uint32_t min_len = sizeof(int32_t) + 1;
         return (is_block_read_ && current_count_ < block_size_) ||
                in.remaining_size() >= min_len;
@@ -79,7 +79,7 @@ class Int32SprintzDecoder : public SprintzDecoder {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    int read_int32(int32_t& ret_value, common::ByteStream& in) {
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override {
         int ret = common::E_OK;
         if (!is_block_read_) {
             if (RET_FAIL(decode_block(in))) {
@@ -125,7 +125,9 @@ class Int32SprintzDecoder : public SprintzDecoder {
             decode_size_ = bit_width_ & ~(1 << 7);
             Int32RleDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
-                current_buffer_[i] = decoder.read_int(input);
+                if (RET_FAIL(decoder.read_int(current_buffer_[i], input))) {
+                    return ret;
+                }
             }
         } else {
             decode_size_ = block_size_ + 1;

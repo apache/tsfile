@@ -79,7 +79,13 @@ class AlignedChunkReader : public IChunkReader {
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
 
+    int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
+                      common::PageArena& pa, int64_t min_time_hint,
+                      int& row_offset, int& row_limit) override;
+
    private:
+    bool should_skip_page_by_time(int64_t min_time_hint);
+    bool should_skip_page_by_offset(int& row_offset);
     FORCE_INLINE bool chunk_has_only_one_page(
         const ChunkHeader& chunk_header) const {
         return (chunk_header.chunk_type_ & ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
@@ -156,8 +162,8 @@ class AlignedChunkReader : public IChunkReader {
      * also refer to offset within the chunk (including chunk header).
      * It advanced by step of a page header or a page tv data.
      */
-    common::ByteStream time_in_stream_;
-    common::ByteStream value_in_stream_;
+    common::ByteStream time_in_stream_{common::MOD_CHUNK_READER};
+    common::ByteStream value_in_stream_{common::MOD_CHUNK_READER};
     int32_t file_data_time_buf_size_;
     int32_t file_data_value_buf_size_;
     uint32_t time_chunk_visit_offset_;
@@ -170,8 +176,8 @@ class AlignedChunkReader : public IChunkReader {
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
-    common::ByteStream time_in_;
-    common::ByteStream value_in_;
+    common::ByteStream time_in_{common::MOD_CHUNK_READER};
+    common::ByteStream value_in_{common::MOD_CHUNK_READER};
     char* time_uncompressed_buf_;
     char* value_uncompressed_buf_;
     std::vector<uint8_t> value_page_col_notnull_bitmap_;

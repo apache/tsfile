@@ -19,6 +19,8 @@
 
 #include "aligned_chunk_reader.h"
 
+#include <limits>
+
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
@@ -67,6 +69,16 @@ void AlignedChunkReader::reset() {
 }
 
 void AlignedChunkReader::destroy() {
+    if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
+        time_compressor_->after_uncompress(time_uncompressed_buf_);
+        time_uncompressed_buf_ = nullptr;
+    }
+    if (value_uncompressed_buf_ != nullptr && value_compressor_ != nullptr) {
+        value_compressor_->after_uncompress(value_uncompressed_buf_);
+        value_uncompressed_buf_ = nullptr;
+    }
+    value_page_col_notnull_bitmap_.clear();
+    value_page_col_notnull_bitmap_.shrink_to_fit();
     if (time_decoder_ != nullptr) {
         time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);
@@ -538,19 +550,19 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 ((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
-                ret = time_decoder_->read_int64(time, time_in);                \
-                if (ret != E_OK) {                                             \
-                    break;                                                     \
-                }                                                              \
                 if (UNLIKELY(!row_appender.add_row())) {                       \
                     ret = E_OVERFLOW;                                          \
+                    cur_value_index--;                                         \
+                    break;                                                     \
+                }                                                              \
+                ret = time_decoder_->read_int64(time, time_in);                \
+                if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
                 row_appender.append(0, (char*)&time, sizeof(time));            \
                 row_appender.append_null(1);                                   \
                 continue;                                                      \
             }                                                                  \
-            assert(value_decoder_->has_remaining(value_in));                   \
             if (!value_decoder_->has_remaining(value_in)) {                    \
                 return common::E_DATA_INCONSISTENCY;                           \
             }                                                                  \
@@ -585,19 +597,19 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
         if (value_page_col_notnull_bitmap_.empty() ||
             ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
              (mask >> (cur_value_index % 8))) == 0) {
-            ret = time_decoder_->read_int64(time, time_in);
-            if (ret != E_OK) {
-                break;
-            }
             if (UNLIKELY(!row_appender.add_row())) {
                 ret = E_OVERFLOW;
+                cur_value_index--;
+                break;
+            }
+            ret = time_decoder_->read_int64(time, time_in);
+            if (ret != E_OK) {
                 break;
             }
             row_appender.append(0, (char*)&time, sizeof(time));
             row_appender.append_null(1);
             continue;
         }
-        assert(value_decoder_->has_remaining(value_in));
         if (!value_decoder_->has_remaining(value_in)) {
             return common::E_DATA_INCONSISTENCY;
         }
@@ -683,7 +695,6 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
         }
 
         if (should_read_data) {
-            assert(value_decoder_->has_remaining(value_in));
             if (!value_decoder_->has_remaining(value_in)) {
                 return E_DATA_INCONSISTENCY;
             }
@@ -707,6 +718,100 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
                 row_appender.append(1, value.buf_, value.len_);
             }
         }
+    }
+    return ret;
+}
+
+bool AlignedChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min()) {
+        return false;
+    }
+    // Use time page statistic for time-based skipping.
+    if (cur_time_page_header_.statistic_ != nullptr) {
+        return cur_time_page_header_.statistic_->end_time_ < min_time_hint;
+    }
+    if (cur_value_page_header_.statistic_ != nullptr) {
+        return cur_value_page_header_.statistic_->end_time_ < min_time_hint;
+    }
+    return false;
+}
+
+bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    // Aligned TV pages: only skip a whole page by count when both page headers
+    // expose the same positive row count. Using a single side (or min) when
+    // the other is missing or unequal can desynchronize row_offset from
+    // decoded row order vs. the paired time/value stream.
+    Statistic* ts = cur_time_page_header_.statistic_;
+    Statistic* vs = cur_value_page_header_.statistic_;
+    if (ts == nullptr || vs == nullptr) {
+        return false;
+    }
+    int32_t tc = ts->count_;
+    int32_t vc = vs->count_;
+    if (tc <= 0 || vc <= 0 || tc != vc) {
+        return false;
+    }
+    int32_t count = tc;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
+}
+
+int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
+                                      Filter* oneshoot_filter, PageArena& pa,
+                                      int64_t min_time_hint, int& row_offset,
+                                      int& row_limit) {
+    int ret = E_OK;
+    Filter* filter =
+        (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
+
+    if (row_limit == 0) {
+        return E_NO_MORE_DATA;
+    }
+
+    if (prev_time_page_not_finish() && prev_value_page_not_finish()) {
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
+                                                 &pa);
+        return ret;
+    }
+    if (!prev_time_page_not_finish() && !prev_value_page_not_finish()) {
+        while (IS_SUCC(ret)) {
+            if (RET_FAIL(get_cur_page_header(
+                    time_chunk_meta_, time_in_stream_, cur_time_page_header_,
+                    time_chunk_visit_offset_, time_chunk_header_))) {
+            } else if (RET_FAIL(get_cur_page_header(
+                           value_chunk_meta_, value_in_stream_,
+                           cur_value_page_header_, value_chunk_visit_offset_,
+                           value_chunk_header_))) {
+            } else if (!cur_page_statisify_filter(filter)) {
+                if (RET_FAIL(skip_cur_page())) {
+                }
+            } else if (should_skip_page_by_time(min_time_hint)) {
+                if (RET_FAIL(skip_cur_page())) {
+                }
+            } else if (should_skip_page_by_offset(row_offset)) {
+                if (RET_FAIL(skip_cur_page())) {
+                }
+            } else {
+                break;
+            }
+            if (!has_more_data()) {
+                ret = E_NO_MORE_DATA;
+                break;
+            }
+        }
+        if (IS_SUCC(ret)) {
+            ret = decode_cur_time_page_data() || decode_cur_value_page_data();
+        }
+    }
+    if (IS_SUCC(ret)) {
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
+                                                 &pa);
     }
     return ret;
 }

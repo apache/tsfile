@@ -226,7 +226,7 @@ public class TSFileConfig implements Serializable {
   /** full path of kerberos keytab file. */
   private String kerberosKeytabFilePath = "/path";
 
-  /** kerberos pricipal. */
+  /** kerberos principal. */
   private String kerberosPrincipal = "principal";
 
   /** The acceptable error rate of bloom filter. */

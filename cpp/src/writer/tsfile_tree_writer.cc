@@ -19,12 +19,24 @@
 
 #include "writer/tsfile_tree_writer.h"
 
+#include "file/restorable_tsfile_io_writer.h"
+
 namespace storage {
 
 TsFileTreeWriter::TsFileTreeWriter(storage::WriteFile* writer_file,
                                    uint64_t memory_threshold) {
     tsfile_writer_ = std::make_shared<TsFileWriter>();
     tsfile_writer_->init(writer_file);
+    common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
+}
+
+// Constructor for appending after recovery: schema and alignment from restored
+// file.
+TsFileTreeWriter::TsFileTreeWriter(
+    storage::RestorableTsFileIOWriter* restorable_writer,
+    uint64_t memory_threshold) {
+    tsfile_writer_ = std::make_shared<TsFileWriter>();
+    tsfile_writer_->init(restorable_writer);
     common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
 }
 

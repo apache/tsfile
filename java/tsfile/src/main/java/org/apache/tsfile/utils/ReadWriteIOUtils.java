@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.reader.TsFileInput;
 
 import java.io.DataOutputStream;
@@ -48,6 +49,7 @@ import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.DOUBLE;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.FLOAT;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.INTEGER;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.LONG;
+import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NONE;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NULL;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.STRING;
 
@@ -68,7 +70,7 @@ public class ReadWriteIOUtils {
 
   private static final byte[] magicStringBytes;
 
-  private static final String RETURN_ERROR = "Intend to read %d bytes but %d are actually returned";
+  private static final String RETURN_ERROR_KEY = "error.utils.rwio_short_read";
 
   static {
     magicStringBytes = BytesUtils.stringToBytes(TSFileConfig.MAGIC_STRING);
@@ -520,7 +522,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[SHORT_LEN];
     int readLen = inputStream.read(bytes);
     if (readLen != SHORT_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, SHORT_LEN, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, SHORT_LEN, readLen));
     }
     return BytesUtils.bytesToShort(bytes);
   }
@@ -535,7 +537,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[FLOAT_LEN];
     int readLen = inputStream.read(bytes);
     if (readLen != FLOAT_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, FLOAT_LEN, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, FLOAT_LEN, readLen));
     }
     return BytesUtils.bytesToFloat(bytes);
   }
@@ -552,7 +554,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[DOUBLE_LEN];
     int readLen = inputStream.read(bytes);
     if (readLen != DOUBLE_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, DOUBLE_LEN, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, DOUBLE_LEN, readLen));
     }
     return BytesUtils.bytesToDouble(bytes);
   }
@@ -569,7 +571,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[INT_LEN];
     int readLen = inputStream.read(bytes);
     if (readLen != INT_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, INT_LEN, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, INT_LEN, readLen));
     }
     return BytesUtils.bytesToInt(bytes);
   }
@@ -596,7 +598,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[LONG_LEN];
     int readLen = inputStream.read(bytes);
     if (readLen != LONG_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, LONG_LEN, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
     }
     return BytesUtils.bytesToLong(bytes);
   }
@@ -617,7 +619,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[strLength];
     int readLen = inputStream.read(bytes, 0, strLength);
     if (readLen != strLength) {
-      throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, strLength, readLen));
     }
     return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
@@ -633,7 +635,7 @@ public class ReadWriteIOUtils {
     byte[] bytes = new byte[strLength];
     int readLen = inputStream.read(bytes, 0, strLength);
     if (readLen != strLength) {
-      throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
+      throw new IOException(Messages.format(RETURN_ERROR_KEY, strLength, readLen));
     }
     return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
@@ -886,7 +888,7 @@ public class ReadWriteIOUtils {
   /** write string list with self define length. */
   public static void writeStringList(List<String> list, ByteBuffer buffer) {
     if (list == null) {
-      throw new IllegalArgumentException("stringList must not be null!");
+      throw new IllegalArgumentException(Messages.get("error.utils.rwio_stringlist_null"));
     }
     int size = list.size();
     buffer.putInt(size);
@@ -899,7 +901,7 @@ public class ReadWriteIOUtils {
   public static void writeStringList(List<String> list, OutputStream outputStream)
       throws IOException {
     if (list == null) {
-      throw new IllegalArgumentException("stringList must not be null!");
+      throw new IllegalArgumentException(Messages.get("error.utils.rwio_stringlist_null"));
     }
     int size = list.size();
     write(size, outputStream);
@@ -921,13 +923,13 @@ public class ReadWriteIOUtils {
     return set;
   }
 
-  private static final String SET_NOT_NULL_MSG = "set must not be null!";
+  private static final String SET_NOT_NULL_KEY = "error.utils.rwio_set_null";
 
   // write integer set with self define length
   public static void writeIntegerSet(Set<Integer> set, OutputStream outputStream)
       throws IOException {
     if (set == null) {
-      throw new IllegalArgumentException(SET_NOT_NULL_MSG);
+      throw new IllegalArgumentException(Messages.get(SET_NOT_NULL_KEY));
     }
     int size = set.size();
     write(size, outputStream);
@@ -1026,7 +1028,7 @@ public class ReadWriteIOUtils {
   public static <T> void writeObjectSet(Set<T> set, DataOutputStream outputStream)
       throws IOException {
     if (set == null) {
-      throw new IllegalArgumentException(SET_NOT_NULL_MSG);
+      throw new IllegalArgumentException(Messages.get(SET_NOT_NULL_KEY));
     }
     write(set.size(), outputStream);
     for (T e : set) {
@@ -1168,7 +1170,8 @@ public class ReadWriteIOUtils {
     BOOLEAN,
     STRING,
     TAG,
-    NULL
+    NULL,
+    NONE,
   }
 
   public static void writeObject(Object value, DataOutputStream outputStream) {
@@ -1195,6 +1198,8 @@ public class ReadWriteIOUtils {
         outputStream.write(Boolean.TRUE.equals(value) ? 1 : 0);
       } else if (value == null) {
         outputStream.write(NULL.ordinal());
+      } else if (value == Constants.NONE) {
+        outputStream.write(NONE.ordinal());
       } else {
         outputStream.write(STRING.ordinal());
         byte[] bytes = value.toString().getBytes();
@@ -1229,6 +1234,8 @@ public class ReadWriteIOUtils {
       byteBuffer.put(Boolean.TRUE.equals(value) ? (byte) 1 : (byte) 0);
     } else if (value == null) {
       byteBuffer.putInt(NULL.ordinal());
+    } else if (value == Constants.NONE) {
+      byteBuffer.putInt(NONE.ordinal());
     } else {
       byteBuffer.putInt(STRING.ordinal());
       byte[] bytes = value.toString().getBytes();
@@ -1257,6 +1264,8 @@ public class ReadWriteIOUtils {
         return new Binary(bytes);
       case NULL:
         return null;
+      case NONE:
+        return Constants.NONE;
       case STRING:
       default:
         length = buffer.getInt();

@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.external.commons.lang3;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.lang.reflect.Array;
 import java.util.function.Supplier;
 
@@ -122,7 +124,8 @@ public class ArrayUtils {
   private static Object remove(final Object array, final int index) {
     final int length = getLength(array);
     if (index < 0 || index >= length) {
-      throw new IndexOutOfBoundsException("Index: " + index + ", Length: " + length);
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.external.array_index_out_of_bounds", index, length));
     }
     final Object result = Array.newInstance(array.getClass().getComponentType(), length - 1);
     System.arraycopy(array, 0, result, 0, index);
@@ -266,7 +269,9 @@ public class ArrayUtils {
       final Class<?> type2 = array2.getClass().getComponentType();
       if (!type1.isAssignableFrom(type2)) {
         throw new IllegalArgumentException(
-            "Cannot store " + type2.getName() + " in an array of " + type1.getName(), ase);
+            Messages.format(
+                "error.external.array_incompatible_types", type2.getName(), type1.getName()),
+            ase);
       }
       throw ase; // No, so rethrow original
     }

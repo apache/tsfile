@@ -55,7 +55,7 @@ ERRNO read_tsfile() {
         // Timestamp at column 1 and column index begin from 1.
         Timestamp timestamp =
             tsfile_result_set_get_value_by_index_int64_t(ret, 1);
-        printf("%ld\n", timestamp);
+        printf("%lld\n", (long long)timestamp);
         for (int i = 1; i <= column_num; i++) {
             if (tsfile_result_set_is_null_by_index(ret, i)) {
                 printf(" null ");
@@ -72,9 +72,10 @@ ERRNO read_tsfile() {
                                                                             i));
                         break;
                     case TS_DATATYPE_INT64:
-                        printf("%ld\n",
-                               tsfile_result_set_get_value_by_index_int64_t(ret,
-                                                                            i));
+                        printf("%lld\n",
+                               (long long)
+                                   tsfile_result_set_get_value_by_index_int64_t(
+                                       ret, i));
                         break;
                     case TS_DATATYPE_FLOAT:
                         printf(

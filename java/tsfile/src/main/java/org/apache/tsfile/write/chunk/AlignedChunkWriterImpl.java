@@ -29,6 +29,7 @@ import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -392,7 +393,8 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
           chunkWriter.write(times, column.getFloats(), column.isNull(), batchSize, arrayOffset);
           break;
         default:
-          throw new UnsupportedOperationException("Unknown data type " + tsDataType);
+          throw new UnsupportedOperationException(
+              Messages.format("error.write.chunk_unknown_type", tsDataType));
       }
     }
 

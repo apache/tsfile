@@ -44,17 +44,23 @@ jobs:
       max-parallel: 15
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: ["3.9", "3.11", "3.14"]
     runs-on: ${{ matrix.os }}
 
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
 
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
       - name: Cache Maven packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -63,7 +69,7 @@ jobs:
       # On Windows systems the 'mvnw' script needs an additional ".cmd" appended.
       - name: Calculate platform suffix
         id: platform_suffix
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v9.0.0
         env:
           OS: ${{ matrix.os }}
         with:
@@ -96,11 +102,20 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify -Dspotless.skip=true
+          # On Windows, prepend MinGW bin so CTest/test exe uses the correct
+          # runtime DLLs instead of Git-for-Windows mingw runtime from PATH.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            export PATH="/c/mingw64/bin:$PATH"
+          fi
+          BLACK_VER_PROP=""
+          if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
+            BLACK_VER_PROP="-Dblack.version=25.11.0"
+          fi
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify ${BLACK_VER_PROP}
 
       - name: Upload whl Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: tsfile-${{ runner.os }}-whl
+          name: tsfile-${{ runner.os }}-py${{ matrix.python-version }}-whl
           path: python/dist/tsfile-*.whl
           retention-days: 1

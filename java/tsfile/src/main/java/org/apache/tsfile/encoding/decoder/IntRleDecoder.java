@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.bitpacking.IntPacker;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -71,12 +72,7 @@ public class IntRleDecoder extends RleDecoder {
       try {
         readNext();
       } catch (IOException e) {
-        logger.error(
-            "tsfile-encoding IntRleDecoder: error occurs when reading all encoding number,"
-                + " length is {}, bit width is {}",
-            length,
-            bitWidth,
-            e);
+        logger.error(Messages.get("log.encoding.int_rle_decoder_read_error"), length, bitWidth, e);
       }
     }
     --currentCount;
@@ -90,7 +86,7 @@ public class IntRleDecoder extends RleDecoder {
         break;
       default:
         throw new TsFileDecodingException(
-            String.format("tsfile-encoding IntRleDecoder: not a valid mode %s", mode));
+            Messages.format("error.encoding.rle_decoder_invalid_mode_int", mode));
     }
 
     if (!hasNextPackage()) {

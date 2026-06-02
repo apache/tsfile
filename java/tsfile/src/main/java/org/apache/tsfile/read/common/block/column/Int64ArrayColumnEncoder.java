@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -70,7 +71,8 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
         }
         return new DoubleColumn(0, positionCount, nullIndicators, doubleValues);
       default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+        throw new IllegalArgumentException(
+            Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
   }
 
@@ -98,7 +100,8 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
         }
         break;
       default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+        throw new IllegalArgumentException(
+            Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
   }
 }

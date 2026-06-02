@@ -23,9 +23,11 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "common/allocator/my_string.h"
 #include "common/allocator/page_arena.h"
@@ -39,16 +41,14 @@
 
 namespace storage {
 
-extern const char* MAGIC_STRING_TSFILE;
+extern TSFILE_API const char* MAGIC_STRING_TSFILE;
 constexpr int MAGIC_STRING_TSFILE_LEN = 6;
-extern const char VERSION_NUM_BYTE;
-extern const char CHUNK_GROUP_HEADER_MARKER;
-extern const char CHUNK_HEADER_MARKER;
-extern const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
-extern const char SEPARATOR_MARKER;
-extern const char OPERATION_INDEX_RANGE;
-
-typedef int64_t TsFileID;
+extern TSFILE_API const char VERSION_NUM_BYTE;
+extern TSFILE_API const char CHUNK_GROUP_HEADER_MARKER;
+extern TSFILE_API const char CHUNK_HEADER_MARKER;
+extern TSFILE_API const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+extern TSFILE_API const char SEPARATOR_MARKER;
+extern TSFILE_API const char OPERATION_INDEX_RANGE;
 
 // TODO review the String.len_ used
 
@@ -321,8 +321,15 @@ class ITimeseriesIndex {
     virtual common::TSDataType get_data_type() const {
         return common::INVALID_DATATYPE;
     }
+    virtual bool is_aligned() const { return false; }
     virtual Statistic* get_statistic() const { return nullptr; }
 };
+
+/** Map: IDeviceID -> list of timeseries metadata (ITimeseriesIndex). */
+using DeviceTimeseriesMetadataMap =
+    std::map<std::shared_ptr<IDeviceID>,
+             std::vector<std::shared_ptr<ITimeseriesIndex>>,
+             IDeviceIDComparator>;
 
 /*
  * A TimeseriesIndex may have one or more chunk metas,
@@ -340,7 +347,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         : timeseries_meta_type_((char)255),
           chunk_meta_list_data_size_(0),
           measurement_name_(),
-          ts_id_(),
           data_type_(common::INVALID_DATATYPE),
           statistic_(nullptr),
           statistic_from_pa_(false),
@@ -359,7 +365,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         timeseries_meta_type_ = 0;
         chunk_meta_list_data_size_ = 0;
         measurement_name_.reset();
-        ts_id_.reset();
         data_type_ = common::VECTOR;
         chunk_meta_list_serialized_buf_.reset();
         if (statistic_ != nullptr && !statistic_from_pa_) {
@@ -405,8 +410,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         return common::E_OK;
     }
     virtual Statistic* get_statistic() const { return statistic_; }
-    common::TsID get_ts_id() const { return ts_id_; }
-
     FORCE_INLINE void finish() {
         chunk_meta_list_data_size_ =
             chunk_meta_list_serialized_buf_.total_size();
@@ -480,7 +483,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         int ret = common::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
-        ts_id_ = that.ts_id_;
         data_type_ = that.data_type_;
 
         statistic_ = StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
@@ -523,7 +525,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         os << "{meta_type=" << (int)tsi.timeseries_meta_type_
            << ", chunk_meta_list_data_size=" << tsi.chunk_meta_list_data_size_
            << ", measurement_name=" << tsi.measurement_name_
-           << ", ts_id=" << tsi.ts_id_.to_string()
            << ", data_type=" << common::get_data_type_name(tsi.data_type_)
            << ", statistic=" << tsi.statistic_->to_string();
 
@@ -556,7 +557,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
 
     // std::string measurement_name_;
     common::String measurement_name_;
-    common::TsID ts_id_;
     common::TSDataType data_type_;
 
     /*
@@ -566,7 +566,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
      */
     Statistic* statistic_;
     bool statistic_from_pa_;
-    common::ByteStream chunk_meta_list_serialized_buf_;
+    common::ByteStream chunk_meta_list_serialized_buf_{
+        common::MOD_TSFILE_WRITER_META};
     // common::PageArena page_arena_;
     common::SimpleList<ChunkMeta*>* chunk_meta_list_;  // for deserialize_from
 };
@@ -589,8 +590,10 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return value_ts_idx_->get_measurement_name();
     }
     virtual common::TSDataType get_data_type() const {
-        return time_ts_idx_->get_data_type();
+        return value_ts_idx_ == nullptr ? common::INVALID_DATATYPE
+                                        : value_ts_idx_->get_data_type();
     }
+    virtual bool is_aligned() const { return true; }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
@@ -628,13 +631,14 @@ class TSMIterator {
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>>
+             std::map<common::String, std::vector<ChunkMeta*>>,
+             IDeviceIDComparator>
         tsm_chunk_meta_info_;
 
     // device iterator
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>>::iterator
-        tsm_device_iter_;
+             std::map<common::String, std::vector<ChunkMeta*>>,
+             IDeviceIDComparator>::iterator tsm_device_iter_;
 
     // measurement iterator
     std::map<common::String, std::vector<ChunkMeta*>>::iterator
@@ -1132,12 +1136,6 @@ struct TsFileMeta {
         return os;
     }
 #endif
-};
-
-// Timeseries ID and its [start_time, end_time] in a tsfile
-struct TimeseriesTimeIndexEntry {
-    common::TsID ts_id_;
-    TimeRange time_range_;
 };
 
 }  // end namespace storage

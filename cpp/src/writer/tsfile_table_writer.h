@@ -22,6 +22,7 @@
 #include "writer/tsfile_writer.h"
 
 namespace storage {
+class RestorableTsFileIOWriter;
 
 /**
  * @brief Facilitates writing structured table data into a TsFile with a
@@ -65,6 +66,19 @@ class TsFileTableWriter {
         exclusive_table_name_ = table_schema->get_table_name();
         common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
     }
+
+    /**
+     * Constructs a TsFileTableWriter from a RestorableTsFileIOWriter so that
+     * table data can be appended after recovery. Schema is taken from the
+     * restored file; do not pass a TableSchema.
+     *
+     * @param restorable_writer Restored I/O writer; must not be null and must
+     * have been opened with truncate so that can_write() is true.
+     * @param memory_threshold Optional memory threshold for buffered data.
+     */
+    explicit TsFileTableWriter(
+        storage::RestorableTsFileIOWriter* restorable_writer,
+        uint64_t memory_threshold = 128 * 1024 * 1024);
 
     ~TsFileTableWriter();
     /**

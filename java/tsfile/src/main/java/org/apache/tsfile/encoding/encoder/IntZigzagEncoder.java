@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -43,7 +44,7 @@ public class IntZigzagEncoder extends Encoder {
   public IntZigzagEncoder() {
     super(TSEncoding.ZIGZAG);
     this.values = new ArrayList<>();
-    logger.debug("tsfile-encoding IntZigzagEncoder: int zigzag encoder");
+    logger.debug(Messages.get("log.encoding.int_zigzag_encoder_init"));
   }
 
   /** encoding and bit packing. */
@@ -95,7 +96,7 @@ public class IntZigzagEncoder extends Encoder {
     if (values == null) {
       return 0;
     }
-    // try to caculate max value
+    // try to calculate max value
     return (long) 8 + values.size() * 4;
   }
 }

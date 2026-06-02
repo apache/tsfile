@@ -20,6 +20,7 @@ package org.apache.tsfile.fileSystem.fsFactory;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.fileSystem.FSType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.FSUtils;
 
 import org.slf4j.Logger;
@@ -73,9 +74,7 @@ public class OSFSFactory implements FSFactory {
       copyTo = clazz.getMethod("copyTo", File.class);
       deleteObjectsByPrefix = clazz.getMethod("deleteObjectsByPrefix");
     } catch (ClassNotFoundException | NoSuchMethodException e) {
-      logger.error(
-          "Failed to get object storage. Please check your dependency of object storage module.",
-          e);
+      logger.error(Messages.get("log.fs.os_factory_init_error"), e);
     }
   }
 
@@ -84,10 +83,7 @@ public class OSFSFactory implements FSFactory {
     try {
       return (File) constructorWithPathname.newInstance(pathname);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get file: {}. Please check your dependency of object storage module.",
-          pathname,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_get_file_with_parent_error"), pathname, e);
       return null;
     }
   }
@@ -97,8 +93,7 @@ public class OSFSFactory implements FSFactory {
     try {
       return (File) constructorWithPathname.newInstance(pathname);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get file: {}. Please check your dependency of Hadoop module.", pathname, e);
+      logger.error(Messages.get("log.fs.os_factory_get_file_error"), pathname, e);
       return null;
     }
   }
@@ -109,9 +104,7 @@ public class OSFSFactory implements FSFactory {
       return (File) constructorWithParentStringAndChild.newInstance(parent, child);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
       logger.error(
-          "Failed to get file: {}. Please check your dependency of Hadoop module.",
-          parent + File.separator + child,
-          e);
+          Messages.get("log.fs.os_factory_get_file2_error"), parent + File.separator + child, e);
       return null;
     }
   }
@@ -122,7 +115,7 @@ public class OSFSFactory implements FSFactory {
       return (File) constructorWithParentFileAndChild.newInstance(parent, child);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
       logger.error(
-          "Failed to get file: {}. Please check your dependency of Hadoop module.",
+          Messages.get("log.fs.os_factory_get_file3_error"),
           parent.getAbsolutePath() + File.separator + child,
           e);
       return null;
@@ -134,8 +127,7 @@ public class OSFSFactory implements FSFactory {
     try {
       return (File) constructorWithUri.newInstance(uri);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get file: {}. Please check your dependency of object storage module.", uri, e);
+      logger.error(Messages.get("log.fs.os_factory_get_file_uri_error"), uri, e);
       return null;
     }
   }
@@ -146,10 +138,7 @@ public class OSFSFactory implements FSFactory {
       return (BufferedReader)
           getBufferedReader.invoke(constructorWithPathname.newInstance(filePath));
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get buffered reader for {}. Please check your dependency of object storage module.",
-          filePath,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_get_reader_error"), filePath, e);
       return null;
     }
   }
@@ -160,10 +149,7 @@ public class OSFSFactory implements FSFactory {
       return (BufferedWriter)
           getBufferedWriter.invoke(constructorWithPathname.newInstance(filePath), append);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get buffered writer for {}. Please check your dependency of object storage module.",
-          filePath,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_get_writer_error"), filePath, e);
       return null;
     }
   }
@@ -174,10 +160,7 @@ public class OSFSFactory implements FSFactory {
       return (BufferedInputStream)
           getBufferedInputStream.invoke(constructorWithPathname.newInstance(filePath));
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get buffered input stream for {}. Please check your dependency of object storage module.",
-          filePath,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_get_input_stream_error"), filePath, e);
       return null;
     }
   }
@@ -188,10 +171,7 @@ public class OSFSFactory implements FSFactory {
       return (BufferedOutputStream)
           getBufferedOutputStream.invoke(constructorWithPathname.newInstance(filePath));
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get buffered output stream for {}. Please check your dependency of object storage module.",
-          filePath,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_get_output_stream_error"), filePath, e);
       return null;
     }
   }
@@ -215,8 +195,8 @@ public class OSFSFactory implements FSFactory {
         copyTo.invoke(srcFile, destFile);
       } else {
         throw new IOException(
-            String.format(
-                "Doesn't support copy file from %s to %s.", srcType, FSType.OBJECT_STORAGE));
+            Messages.format(
+                "error.fs.os_factory_copy_unsupported", srcType, FSType.OBJECT_STORAGE));
       }
     } catch (InvocationTargetException | IllegalAccessException e) {
       throw new IOException(e);
@@ -230,11 +210,7 @@ public class OSFSFactory implements FSFactory {
           listFilesBySuffix.invoke(
               constructorWithPathname.newInstance(fileFolder), fileFolder, suffix);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to list files in {} with SUFFIX {}. Please check your dependency of object storage module.",
-          fileFolder,
-          suffix,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_list_suffix_error"), fileFolder, suffix, e);
       return null;
     }
   }
@@ -246,11 +222,7 @@ public class OSFSFactory implements FSFactory {
           listFilesByPrefix.invoke(
               constructorWithPathname.newInstance(fileFolder), fileFolder, prefix);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to list files in {} with PREFIX {}. Please check your dependency of object storage module.",
-          fileFolder,
-          prefix,
-          e);
+      logger.error(Messages.get("log.fs.os_factory_list_prefix_error"), fileFolder, prefix, e);
       return null;
     }
   }

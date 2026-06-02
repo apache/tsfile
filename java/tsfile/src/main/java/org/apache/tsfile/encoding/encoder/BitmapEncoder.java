@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -59,7 +60,7 @@ public class BitmapEncoder extends Encoder {
   public BitmapEncoder() {
     super(TSEncoding.BITMAP);
     this.values = new ArrayList<>();
-    logger.debug("tsfile-encoding BitmapEncoder: init bitmap encoder");
+    logger.debug(Messages.get("log.encoding.bitmap_encoder_init"));
   }
 
   /**

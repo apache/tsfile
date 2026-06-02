@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata.statistics;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -94,13 +95,13 @@ public class BinaryStatistics extends Statistics<Binary> {
   @Override
   public Binary getMinValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.TEXT, "min"));
+        Messages.format("error.file.stats_unsupported", TSDataType.TEXT, "min"));
   }
 
   @Override
   public Binary getMaxValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.TEXT, "max"));
+        Messages.format("error.file.stats_unsupported", TSDataType.TEXT, "max"));
   }
 
   @Override
@@ -116,13 +117,13 @@ public class BinaryStatistics extends Statistics<Binary> {
   @Override
   public double getSumDoubleValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.TEXT, "double sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.TEXT, "double sum"));
   }
 
   @Override
   public long getSumLongValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.TEXT, "long sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.TEXT, "long sum"));
   }
 
   @SuppressWarnings("rawtypes")

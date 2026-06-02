@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.reader;
 
+import org.apache.tsfile.i18n.Messages;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +50,7 @@ public class LocalTsFileInput implements TsFileInput {
     try {
       return channel.size();
     } catch (IOException e) {
-      logger.warn("Error happened while getting {} size", filePath);
+      logger.warn(Messages.get("log.read.local_input_size_error"), filePath);
       throw e;
     }
   }
@@ -58,7 +60,7 @@ public class LocalTsFileInput implements TsFileInput {
     try {
       return channel.position();
     } catch (IOException e) {
-      logger.warn("Error happened while getting {} current position", filePath);
+      logger.warn(Messages.get("log.read.local_input_position_error"), filePath);
       throw e;
     }
   }
@@ -69,7 +71,8 @@ public class LocalTsFileInput implements TsFileInput {
       channel.position(newPosition);
       return this;
     } catch (IOException e) {
-      logger.warn("Error happened while changing {} position to {}", filePath, newPosition);
+      logger.warn(
+          Messages.get("log.read.local_input_position_change_error"), filePath, newPosition);
       throw e;
     }
   }
@@ -79,11 +82,10 @@ public class LocalTsFileInput implements TsFileInput {
     try {
       return channel.read(dst);
     } catch (ClosedByInterruptException e) {
-      logger.warn(
-          "Current thread is interrupted by another thread when it is blocked in an I/O operation upon a channel.");
+      logger.warn(Messages.get("log.read.local_input_interrupted"));
       return -1;
     } catch (IOException e) {
-      logger.error("Error happened while reading {} from current position", filePath);
+      logger.error(Messages.get("log.read.local_input_read_current_error"), filePath);
       throw e;
     }
   }
@@ -93,11 +95,10 @@ public class LocalTsFileInput implements TsFileInput {
     try {
       return channel.read(dst, position);
     } catch (ClosedByInterruptException e) {
-      logger.warn(
-          "Current thread is interrupted by another thread when it is blocked in an I/O operation upon a channel.");
+      logger.warn(Messages.get("log.read.local_input_interrupted"));
       return -1;
     } catch (IOException e) {
-      logger.error("Error happened while reading {} from position {}", filePath, position);
+      logger.error(Messages.get("log.read.local_input_read_position_error"), filePath, position);
       throw e;
     }
   }
@@ -112,7 +113,7 @@ public class LocalTsFileInput implements TsFileInput {
     try {
       channel.close();
     } catch (IOException e) {
-      logger.error("Error happened while closing {}", filePath);
+      logger.error(Messages.get("log.read.local_input_close_error"), filePath);
       throw e;
     }
   }

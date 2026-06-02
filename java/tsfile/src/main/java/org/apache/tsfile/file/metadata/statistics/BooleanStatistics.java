@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -106,13 +107,13 @@ public class BooleanStatistics extends Statistics<Boolean> {
   @Override
   public Boolean getMinValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.BOOLEAN, "min"));
+        Messages.format("error.file.stats_unsupported", TSDataType.BOOLEAN, "min"));
   }
 
   @Override
   public Boolean getMaxValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.BOOLEAN, "max"));
+        Messages.format("error.file.stats_unsupported", TSDataType.BOOLEAN, "max"));
   }
 
   @Override

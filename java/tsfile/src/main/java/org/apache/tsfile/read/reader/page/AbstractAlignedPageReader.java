@@ -40,7 +40,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.LongConsumer;
 
+import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.read.reader.series.PaginationController.UNLIMITED_PAGINATION_CONTROLLER;
 
 public abstract class AbstractAlignedPageReader implements IPageReader {
@@ -215,6 +217,55 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
         unFilteredBlock, builder, pushDownFilter, paginationController);
   }
 
+  /**
+   * get all satisfied data while record the number of filter rows. if one tuple is not satisfy by
+   * the filter and is deleted at the same time, the tuple cannot be considered as a filtered data.
+   */
+  @Override
+  public TsBlock getAllSatisfiedData(LongConsumer filterRowsRecorder) throws IOException {
+    requireNonNull(filterRowsRecorder, "filterRowsRecorder is null");
+    long[] timeBatch = timePageReader.getNextTimeBatch();
+
+    if (allPageDataSatisfy()) {
+      buildResultWithoutAnyFilterAndDelete(timeBatch);
+      return builder.build();
+    }
+
+    long allFilteredRows = 0;
+    // if !filter.satisfy, discard this row
+    boolean[] keepCurrentRow = new boolean[timeBatch.length];
+    boolean globalTimeFilterAllSatisfy = globalTimeFilterAllSatisfy();
+    if (globalTimeFilterAllSatisfy) {
+      Arrays.fill(keepCurrentRow, true);
+    } else {
+      // record the filtered rows number
+      long filteredRows =
+          updateKeepCurrentRowThroughGlobalTimeFilterWithRecord(keepCurrentRow, timeBatch);
+      allFilteredRows += filteredRows;
+    }
+
+    if (timePageReader.isModified()) {
+      //  if one row is deleted, it can't be considered as the filtered row
+      long deletedAndFilteredRows =
+          updateKeepCurrentRowThroughDeletionWithRecord(keepCurrentRow, timeBatch);
+      allFilteredRows -= deletedAndFilteredRows;
+    }
+    if (allFilteredRows != 0) {
+      filterRowsRecorder.accept(allFilteredRows);
+    }
+    boolean pushDownFilterAllSatisfy = pushDownFilterAllSatisfy();
+    constructResult(keepCurrentRow, timeBatch, pushDownFilterAllSatisfy);
+
+    TsBlock unFilteredBlock = builder.build();
+    if (pushDownFilterAllSatisfy) {
+      // OFFSET & LIMIT has been consumed in buildTimeColumn
+      return unFilteredBlock;
+    }
+    builder.reset();
+    return TsBlockUtil.applyFilterAndLimitOffsetToTsBlock(
+        unFilteredBlock, builder, pushDownFilter, paginationController, filterRowsRecorder);
+  }
+
   private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) throws IOException {
     if (paginationController.hasCurOffset(timeBatch.length)) {
       paginationController.consumeOffset(timeBatch.length);
@@ -264,12 +315,36 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
     }
   }
 
+  private long updateKeepCurrentRowThroughGlobalTimeFilterWithRecord(
+      boolean[] keepCurrentRow, long[] timeBatch) {
+
+    long filteredRows = 0;
+    for (int i = 0, n = timeBatch.length; i < n; i++) {
+      keepCurrentRow[i] = globalTimeFilter.satisfy(timeBatch[i], null);
+      filteredRows += keepCurrentRow[i] ? 0 : 1;
+    }
+    return filteredRows;
+  }
+
   private void updateKeepCurrentRowThroughDeletion(boolean[] keepCurrentRow, long[] timeBatch) {
     for (int i = 0, n = timeBatch.length; i < n; i++) {
       if (keepCurrentRow[i]) {
         keepCurrentRow[i] = !timePageReader.isDeleted(timeBatch[i]);
       }
     }
+  }
+
+  private long updateKeepCurrentRowThroughDeletionWithRecord(
+      boolean[] keepCurrentRow, long[] timeBatch) {
+    long deletedAndFilteredRows = 0;
+    for (int i = 0, n = timeBatch.length; i < n; i++) {
+      if (keepCurrentRow[i]) {
+        keepCurrentRow[i] = !timePageReader.isDeleted(timeBatch[i]);
+      } else {
+        deletedAndFilteredRows += timePageReader.isDeleted(timeBatch[i]) ? 1 : 0;
+      }
+    }
+    return deletedAndFilteredRows;
   }
 
   protected int buildTimeColumn(

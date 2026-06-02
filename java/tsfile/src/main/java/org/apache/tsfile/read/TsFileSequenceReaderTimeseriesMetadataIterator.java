@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -113,11 +114,8 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
               .addAll(deserializeTimeseriesMetadataUsingTsFileInput(currentEndOffset));
         } catch (IOException e) {
           throw new TsFileSequenceReaderTimeseriesMetadataIteratorException(
-              String.format(
-                  "TsFileSequenceReaderTimeseriesMetadataIterator: deserializeTimeseriesMetadataUsingTsFileInput failed, "
-                      + "currentEndOffset: %d, "
-                      + e.getMessage(),
-                  currentEndOffset));
+              Messages.format(
+                  "error.read.tsm_iterator_tsfinput_failed", currentEndOffset, e.getMessage()));
         }
       }
 
@@ -133,11 +131,8 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
         deserializeMetadataIndexEntry(indexEntryInfo, timeseriesMetadataMap);
       } catch (IOException e) {
         throw new TsFileSequenceReaderTimeseriesMetadataIteratorException(
-            String.format(
-                "TsFileSequenceReaderTimeseriesMetadataIterator: deserializeMetadataIndexEntry failed, "
-                    + "MetadataIndexEntryInfo: %s, "
-                    + e.getMessage(),
-                indexEntryInfo));
+            Messages.format(
+                "error.read.tsm_iterator_index_entry_failed", indexEntryInfo, e.getMessage()));
       }
     }
 
@@ -176,7 +171,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
       throws IOException {
     if (currentBuffer != null && currentBuffer.hasRemaining()) {
       throw new TsFileSequenceReaderTimeseriesMetadataIteratorException(
-          "currentBuffer still has some data left before deserializeLeafMeasurement");
+          Messages.get("error.read.tsm_iterator_buffer_not_empty"));
     }
     if (endOffset - metadataIndexEntry.getOffset() < Integer.MAX_VALUE) {
       currentBuffer = reader.readData(metadataIndexEntry.getOffset(), endOffset);

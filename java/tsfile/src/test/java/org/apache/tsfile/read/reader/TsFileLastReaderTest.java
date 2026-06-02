@@ -103,7 +103,7 @@ public class TsFileLastReaderTest {
     }
   }
 
-  // the second half measurements will have an emtpy last chunk each
+  // the second half measurements will have an empty last chunk each
   private void createFileWithLastEmptyChunks(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(file)) {
@@ -160,6 +160,25 @@ public class TsFileLastReaderTest {
         }
         writer.writeTree(tablet);
       }
+    }
+  }
+
+  private void createAlignedFileWithObject(int seriesPointNum)
+      throws IOException, WriteProcessException {
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      List<IMeasurementSchema> measurementSchemaList =
+          Arrays.asList(
+              new MeasurementSchema("s0", TSDataType.INT64),
+              new MeasurementSchema("s1", TSDataType.OBJECT));
+      writer.registerAlignedTimeseries("device0", measurementSchemaList);
+
+      Tablet tablet = new Tablet("device0", measurementSchemaList, seriesPointNum);
+      for (int i = 0; i < seriesPointNum; i++) {
+        tablet.addTimestamp(i, i);
+        tablet.addValue(i, 0, (long) i);
+        tablet.addObjectPathValue(i, 1, "object-" + i);
+      }
+      writer.writeTree(tablet);
     }
   }
 
@@ -343,6 +362,43 @@ public class TsFileLastReaderTest {
   public void testIgnoreBlob() throws Exception {
     createFile(10, 10, 10);
     doReadLast(10, 10, 10, true);
+    file.delete();
+  }
+
+  @Test
+  public void testReadObjectLastPoint() throws Exception {
+    createAlignedFileWithObject(10);
+
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true, false)) {
+      assertTrue(lastReader.hasNext());
+      Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
+      assertEquals(Factory.DEFAULT_FACTORY.create("device0"), next.getLeft());
+      assertEquals(3, next.getRight().size());
+      assertEquals("", next.getRight().get(0).left);
+      assertEquals("s0", next.getRight().get(1).left);
+      assertEquals("s1", next.getRight().get(2).left);
+      assertEquals(9, next.getRight().get(2).right.getTimestamp());
+      assertEquals(
+          new Binary("object-9", StandardCharsets.UTF_8),
+          next.getRight().get(2).right.getValue().getBinary());
+    }
+
+    file.delete();
+  }
+
+  @Test
+  public void testIgnoreObject() throws Exception {
+    createAlignedFileWithObject(10);
+
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true, true)) {
+      assertTrue(lastReader.hasNext());
+      Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
+      assertEquals(Factory.DEFAULT_FACTORY.create("device0"), next.getLeft());
+      assertEquals(3, next.getRight().size());
+      assertEquals(9, next.getRight().get(1).right.getTimestamp());
+      assertNull(next.getRight().get(2).right);
+    }
+
     file.delete();
   }
 

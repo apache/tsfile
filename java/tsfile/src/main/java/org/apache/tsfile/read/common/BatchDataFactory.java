@@ -20,11 +20,12 @@
 package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 public class BatchDataFactory {
 
   private BatchDataFactory() {
-    throw new IllegalStateException("Factory class");
+    throw new IllegalStateException(Messages.get("error.read.factory_class"));
   }
 
   public static BatchData createBatchData(

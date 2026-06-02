@@ -173,6 +173,9 @@ int TimeChunkWriter::end_encode_chunk() {
             chunk_header_.data_size_ = chunk_data_.total_size();
             chunk_header_.num_of_pages_ = num_of_pages_;
         }
+    } else if (num_of_pages_ > 0) {
+        chunk_header_.data_size_ = chunk_data_.total_size();
+        chunk_header_.num_of_pages_ = num_of_pages_;
     }
 #if DEBUG_SE
     std::cout << "end_encode_time_chunk: num_of_pages_=" << num_of_pages_

@@ -73,7 +73,8 @@ class DictionaryDecoder : public Decoder {
         if (entry_index_.empty()) {
             init_map(buffer);
         }
-        int code = value_decoder_.read_int(buffer);
+        int32_t code = 0;
+        value_decoder_.read_int(code, buffer);
         return entry_index_[code];
     }
 

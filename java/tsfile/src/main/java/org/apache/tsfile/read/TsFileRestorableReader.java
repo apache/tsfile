@@ -22,6 +22,7 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.writer.RestorableTsFileIOWriter;
 
@@ -81,7 +82,7 @@ public class TsFileRestorableReader extends TsFileSequenceReader {
     // Check if file is damaged
     if (!isComplete()) {
       // Try to close it
-      logger.info("File {} has no correct tail magic, try to repair...", file);
+      logger.info(Messages.get("log.read.file_repair"), file);
       try (RestorableTsFileIOWriter rWriter =
               new RestorableTsFileIOWriter(
                   FSFactoryProducer.getFSFactory().getFile(file), getFirstEncryptParam());

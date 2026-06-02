@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -114,7 +115,7 @@ public abstract class DeltaBinaryEncoder extends Encoder {
     try {
       flushBlockBuffer(out);
     } catch (IOException e) {
-      logger.error("flush data to stream failed!", e);
+      logger.error(Messages.get("log.encoding.flush_data_failed"), e);
     }
   }
 

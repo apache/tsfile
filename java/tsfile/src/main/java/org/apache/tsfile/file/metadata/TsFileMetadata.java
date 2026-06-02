@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -140,13 +141,16 @@ public class TsFileMetadata {
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("1")) {
         if (!propertiesMap.containsKey("encryptType")) {
-          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 1");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_no_encrypt_type", 1));
         }
         if (!propertiesMap.containsKey("encryptKey")) {
-          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 1");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_no_encrypt_key", 1));
         }
         if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
-          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_null_encrypt_key", 1));
         }
         String str = propertiesMap.get("encryptKey");
         fileMetaData.encryptLevel = 1;
@@ -154,13 +158,16 @@ public class TsFileMetadata {
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
-          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_no_encrypt_type", 2));
         }
         if (!propertiesMap.containsKey("encryptKey")) {
-          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_no_encrypt_key", 2));
         }
         if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
-          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+          throw new EncryptException(
+              Messages.format("error.file.tsfile_metadata_null_encrypt_key", 2));
         }
         fileMetaData.encryptLevel = 2;
         String str = propertiesMap.get("encryptKey");
@@ -168,7 +175,9 @@ public class TsFileMetadata {
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(
-            "Unsupported encryptLevel: " + propertiesMap.get("encryptLevel"));
+            Messages.format(
+                "error.file.tsfile_metadata_unsupported_encrypt_level",
+                propertiesMap.get("encryptLevel")));
       }
       fileMetaData.tsFileProperties = propertiesMap;
     }

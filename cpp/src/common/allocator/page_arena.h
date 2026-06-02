@@ -31,9 +31,10 @@ namespace common {
  */
 class PageArena {
    public:
-    explicit PageArena(BaseAllocator& base_allocator = g_base_allocator)
+    explicit PageArena(AllocModID mid = __FIRST_MOD_ID,
+                       BaseAllocator& base_allocator = g_base_allocator)
         : page_size_(0),
-          mid_(__FIRST_MOD_ID),
+          mid_(mid),
           base_allocator_(base_allocator),
           dummy_head_() {}
     ~PageArena() { destroy(); }

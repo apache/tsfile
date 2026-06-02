@@ -21,6 +21,7 @@ package org.apache.tsfile.encrypt;
 
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,11 +45,14 @@ public interface IEncryptor {
       IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(key)).getEncryptor();
     } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get encryptor class failed, class not found: " + type, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encryptor_class_not_found", type), e);
     } catch (NoSuchMethodException e) {
-      throw new EncryptException("Get constructor for encryptor failed: " + type, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encryptor_no_constructor", type), e);
     } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-      throw new EncryptException("New encryptor instance failed: " + type, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encryptor_instantiation_failed", type), e);
     }
   }
 

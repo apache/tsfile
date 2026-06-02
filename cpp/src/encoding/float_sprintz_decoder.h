@@ -56,20 +56,20 @@ class FloatSprintzDecoder : public SprintzDecoder {
         predict_scheme_ = method;
     }
 
-    int read_boolean(bool& ret_value, common::ByteStream& in) {
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_int32(int32_t& ret_value, common::ByteStream& in) {
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_int64(int64_t& ret_value, common::ByteStream& in) {
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_double(double& ret_value, common::ByteStream& in) {
+    int read_double(double& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_String(common::String& ret_value, common::PageArena& pa,
-                    common::ByteStream& in) {
+                    common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 

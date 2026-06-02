@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.ColumnEncoding;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -44,7 +45,8 @@ public class ColumnEncoderFactory {
   public static ColumnEncoder get(ColumnEncoding columnEncoding) {
     ColumnEncoder res = encodingToEncoder.get(columnEncoding);
     if (res == null) {
-      throw new IllegalArgumentException("Unsupported column encoding: " + columnEncoding);
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_unsupported", columnEncoding));
     }
     return res;
   }

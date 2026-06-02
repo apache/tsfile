@@ -19,6 +19,7 @@
 package org.apache.tsfile.fileSystem.fileOutputFactory;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.writer.TsFileOutput;
 
 import org.slf4j.Logger;
@@ -37,9 +38,7 @@ public class OSFileOutputFactory implements FileOutputFactory {
           Class.forName(TSFileDescriptor.getInstance().getConfig().getObjectStorageTsFileOutput());
       constructor = clazz.getConstructor(String.class, boolean.class);
     } catch (ClassNotFoundException | NoSuchMethodException e) {
-      logger.error(
-          "Failed to get OSInput in object storage. Please check your dependency of object storage module.",
-          e);
+      logger.error(Messages.get("log.fs.os_output_factory_init_error"), e);
     }
   }
 
@@ -48,10 +47,7 @@ public class OSFileOutputFactory implements FileOutputFactory {
     try {
       return (TsFileOutput) constructor.newInstance(filePath, !append);
     } catch (InstantiationException | InvocationTargetException | IllegalAccessException e) {
-      logger.error(
-          "Failed to get TsFile output of file: {}. Please check your dependency of object storage module.",
-          filePath,
-          e);
+      logger.error(Messages.get("log.fs.os_output_factory_get_error"), filePath, e);
       return null;
     }
   }

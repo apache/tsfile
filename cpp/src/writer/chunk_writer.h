@@ -139,10 +139,7 @@ class ChunkWriter {
     FORCE_INLINE void free_first_writer_data() {
         // free memory
         first_page_data_.destroy();
-        if (first_page_statistic_ != nullptr) {
-            StatisticFactory::free(first_page_statistic_);
-            first_page_statistic_ = nullptr;
-        }
+        first_page_statistic_->reset();
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(PageWriter& first_page_writer);
@@ -153,7 +150,7 @@ class ChunkWriter {
     common::TSDataType data_type_;
     PageWriter page_writer_;
     Statistic* chunk_statistic_;
-    common::ByteStream chunk_data_;
+    common::ByteStream chunk_data_{common::MOD_CW_PAGES_DATA};
 
     // to save first page data
     PageData first_page_data_;

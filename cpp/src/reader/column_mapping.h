@@ -36,8 +36,10 @@ class ColumnMapping {
 
         if (column_category == common::ColumnCategory::TAG) {
             tag_columns_.insert(column_name);
-        } else {
+        } else if (column_category == common::ColumnCategory::FIELD) {
             field_columns_.insert(column_name);
+        } else if (column_category == common::ColumnCategory::TIME) {
+            time_column_ = column_name;
         }
 
         return common::E_OK;
@@ -64,6 +66,10 @@ class ColumnMapping {
         return field_columns_.find(column_name) != field_columns_.end();
     }
 
+    bool is_time(const std::string& column_name) const {
+        return time_column_ == column_name;
+    }
+
     const std::unordered_set<std::string>& get_id_columns() const {
         return tag_columns_;
     }
@@ -72,8 +78,11 @@ class ColumnMapping {
         return field_columns_;
     }
 
+    const std::string get_time_column() const { return time_column_; }
+
    private:
     std::unordered_map<std::string, std::vector<int>> column_pos_map;
+    std::string time_column_;
     std::unordered_set<std::string> tag_columns_;
     std::unordered_set<std::string> field_columns_;
 };

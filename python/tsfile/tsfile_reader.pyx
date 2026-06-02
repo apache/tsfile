@@ -19,13 +19,18 @@
 #cython: language_level=3
 
 import weakref
-from email.contentmanager import raw_data_manager
-from typing import List
+from typing import List, Optional, Dict
 
 import pandas as pd
-from libc.stdint cimport INT64_MIN, INT64_MAX
+from libc.string cimport strlen
+from cpython.bytes cimport PyBytes_FromStringAndSize
+from libc.string cimport memset
+import pyarrow as pa
+from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
+from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
+from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -43,6 +48,9 @@ cdef class ResultSetPy:
     cdef ResultSet result
     cdef object metadata
 
+    # Tag filter handle owned by this result set (freed on close).
+    cdef TagFilterHandle _tag_filter_handle
+
     # ResultSet is valid or not, if the reader is closed, valid will be False.
     cdef object valid
     # The reader
@@ -54,6 +62,7 @@ cdef class ResultSetPy:
         self.valid = True
         self.tsfile_reader = weakref.ref(tsfile_reader)
         self.is_tree = is_tree
+        self._tag_filter_handle = NULL
 
     cdef init_c(self, ResultSet result, object device_name):
         """
@@ -142,6 +151,40 @@ cdef class ResultSetPy:
         df = df.astype(data_type_dict)
         return df
 
+    def read_arrow_batch(self):
+        self.check_result_set_invalid()
+        
+        cdef ArrowArray arrow_array
+        cdef ArrowSchema arrow_schema
+        cdef ErrorCode code = 0
+        cdef ErrorCode err_code = 0
+
+        memset(&arrow_array, 0, sizeof(ArrowArray))
+        memset(&arrow_schema, 0, sizeof(ArrowSchema))
+
+        code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
+
+        if code == 21:  # E_NO_MORE_DATA
+            return None
+        if code != 0:
+            check_error(code)
+
+        if arrow_schema.release == NULL or arrow_array.release == NULL:
+            raise RuntimeError("Arrow conversion returned invalid schema or array")
+
+        try:
+            schema_ptr = <uintptr_t>&arrow_schema
+            array_ptr = <uintptr_t>&arrow_array
+            batch = pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
+            table = pa.Table.from_batches([batch])
+            return table
+        except Exception as e:
+            if arrow_array.release != NULL:
+                arrow_array.release(&arrow_array)
+            if arrow_schema.release != NULL:
+                arrow_schema.release(&arrow_schema)
+            raise e
+
     def get_value_by_index(self, index : int):
         """
         Get value by index from query result set.
@@ -152,7 +195,6 @@ cdef class ResultSetPy:
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
             return None
-        # data type in metadata is an array, id from 0.
         data_type = self.metadata.get_data_type(index)
         if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
@@ -166,12 +208,20 @@ cdef class ResultSetPy:
             return tsfile_result_set_get_value_by_index_double(self.result, index)
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
-        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT or data_type == TSDataTypePy.BLOB:
+        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
                 if string == NULL:
                     return None
                 return string.decode('utf-8')
+            finally:
+                pass
+        elif data_type == TSDataTypePy.BLOB:
+            try:
+                string = tsfile_result_set_get_value_by_index_string(self.result, index)
+                if string == NULL:
+                    return None
+                return PyBytes_FromStringAndSize(string, strlen(string))
             finally:
                 pass
 
@@ -227,6 +277,10 @@ cdef class ResultSetPy:
         if self.result != NULL:
             free_tsfile_result_set(&self.result)
 
+        if self._tag_filter_handle != NULL:
+            tsfile_tag_filter_free(self._tag_filter_handle)
+            self._tag_filter_handle = NULL
+
         if self.tsfile_reader is not None:
             reader = self.tsfile_reader()
             if reader is not None:
@@ -272,22 +326,80 @@ cdef class TsFileReaderPy:
         self.reader = tsfile_reader_new_c(pathname)
 
     def query_table(self, table_name : str, column_names : List[str],
-                    start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
+                    start_time : int = INT64_MIN, end_time : int = INT64_MAX,
+                    tag_filter = None, batch_size : int = 0) -> ResultSetPy:
         """
         Execute a time range query on specified table and columns.
+        :param tag_filter: Optional TagFilter to filter by TAG column values.
+        :param batch_size: <= 0 for row-by-row mode; > 0 for batch (TsBlock) mode.
         :return: query result handler.
         """
-        cdef ResultSet result;
-        result = tsfile_reader_query_table_c(self.reader, table_name.lower(),
-                                             [column_name.lower() for column_name in column_names], start_time,
-                                             end_time)
+        cdef ResultSet result
+        cdef TagFilterHandle c_tag_filter = NULL
+        if tag_filter is not None:
+            c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        if batch_size <= 0:
+            result = tsfile_reader_query_table_with_tag_filter_c(
+                self.reader, table_name.lower(),
+                [column_name.lower() for column_name in column_names],
+                start_time, end_time, c_tag_filter, batch_size)
+        else:
+            result = tsfile_reader_query_table_batch_c(
+                self.reader, table_name.lower(),
+                [column_name.lower() for column_name in column_names],
+                start_time, end_time, c_tag_filter, batch_size)
         pyresult = ResultSetPy(self)
+        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
+    cdef TagFilterHandle _build_c_tag_filter(self, str table_name, object tag_filter):
+        """Recursively build C TagFilterHandle from Python TagFilter tree."""
+        cdef ErrorCode code = 0
+        cdef TagFilterHandle handle = NULL
+        cdef bytes table_bytes
+        cdef bytes col_bytes
+        cdef bytes val_bytes
+        cdef bytes lower_bytes
+        cdef bytes upper_bytes
+
+        if isinstance(tag_filter, ComparisonTagFilter):
+            table_bytes = table_name.encode('utf-8')
+            col_bytes = tag_filter.column_name.encode('utf-8')
+            val_bytes = tag_filter.value.encode('utf-8')
+            handle = tsfile_tag_filter_create(
+                self.reader, <const char*>table_bytes,
+                <const char*>col_bytes, <const char*>val_bytes,
+                <TagFilterOp>tag_filter.op, &code)
+            check_error(code)
+            return handle
+        elif isinstance(tag_filter, BetweenTagFilter):
+            table_bytes = table_name.encode('utf-8')
+            col_bytes = tag_filter.column_name.encode('utf-8')
+            lower_bytes = tag_filter.lower.encode('utf-8')
+            upper_bytes = tag_filter.upper.encode('utf-8')
+            handle = tsfile_tag_filter_between(
+                self.reader, <const char*>table_bytes,
+                <const char*>col_bytes, <const char*>lower_bytes,
+                <const char*>upper_bytes, tag_filter.is_not, &code)
+            check_error(code)
+            return handle
+        elif isinstance(tag_filter, AndTagFilter):
+            left = self._build_c_tag_filter(table_name, tag_filter.left)
+            right = self._build_c_tag_filter(table_name, tag_filter.right)
+            return tsfile_tag_filter_and(left, right)
+        elif isinstance(tag_filter, OrTagFilter):
+            left = self._build_c_tag_filter(table_name, tag_filter.left)
+            right = self._build_c_tag_filter(table_name, tag_filter.right)
+            return tsfile_tag_filter_or(left, right)
+        elif isinstance(tag_filter, NotTagFilter):
+            inner = self._build_c_tag_filter(table_name, tag_filter.filter)
+            return tsfile_tag_filter_not(inner)
+        else:
+            raise TypeError(f"Unknown tag filter type: {type(tag_filter)}")
     def query_table_on_tree(self, column_names : List[str],
-                    start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
+                            start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
         """
         Execute a time range query on specified columns on tree structure.
         :return: query result handler.
@@ -297,6 +409,44 @@ cdef class TsFileReaderPy:
         result = tsfile_reader_query_table_on_tree_c(self.reader, column_names, start_time, end_time)
         pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, "root")
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_tree_by_row(self, device_ids : List[str], measurement_names : List[str],
+                           offset : int = 0, limit : int = -1) -> ResultSetPy:
+        """
+        Execute tree-model query by row with offset/limit.
+        """
+        if len(device_ids) == 0:
+            raise ValueError("device_ids must not be empty")
+        if len(measurement_names) == 0:
+            raise ValueError("measurement_names must not be empty")
+
+        cdef ResultSet result
+        result = tsfile_reader_query_tree_by_row_c(self.reader, device_ids,
+                                                     measurement_names, offset, limit)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, device_ids[0])
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_table_by_row(self, table_name : str, column_names : List[str],
+                             offset : int = 0, limit : int = -1,
+                             tag_filter = None, batch_size : int = 0
+                             ) -> ResultSetPy:
+        """
+        Execute table-model query by row with offset/limit.
+        """
+        cdef ResultSet result
+        cdef TagFilterHandle c_tag_filter = NULL
+        if tag_filter is not None:
+            c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        result = tsfile_reader_query_table_by_row_c(self.reader, table_name.lower(),
+                                                      [column_name.lower() for column_name in column_names],
+                                                      offset, limit, c_tag_filter, batch_size)
+        pyresult = ResultSetPy(self)
+        pyresult._tag_filter_handle = c_tag_filter
+        pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
@@ -337,6 +487,25 @@ cdef class TsFileReaderPy:
         Get all timeseries schemas
         """
         return get_all_timeseries_schema(self.reader)
+
+    def get_all_devices(self) -> List[DeviceID]:
+        """
+        Return all devices (path, table name, segments) as
+        :class:`tsfile.schema.DeviceID`. NULL C fields become None.
+        """
+        return reader_get_all_devices_c(self.reader)
+
+    def get_timeseries_metadata(
+            self, device_ids: Optional[List] = None
+    ) -> Dict[str, DeviceTimeseriesMetadataGroup]:
+        """
+        Return map device path -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
+        (table name, segments, and list of :class:`tsfile.schema.TimeseriesMetadata`).
+
+        ``device_ids is None``: all devices. ``device_ids == []``: empty map.
+        Non-empty list restricts to those devices (only existing devices appear).
+        """
+        return reader_get_timeseries_metadata_c(self.reader, device_ids)
 
     def close(self):
         """

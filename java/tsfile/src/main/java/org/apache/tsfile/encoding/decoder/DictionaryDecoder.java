@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -52,7 +53,7 @@ public class DictionaryDecoder extends Decoder {
     try {
       return valueDecoder.hasNext(buffer);
     } catch (IOException e) {
-      logger.error("tsfile-decoding DictionaryDecoder: error occurs when decoding", e);
+      logger.error(Messages.get("log.encoding.dictionary_decoder_error"), e);
     }
 
     return false;

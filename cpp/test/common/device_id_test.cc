@@ -31,6 +31,16 @@ TEST(DeviceIdTest, NormalTest) {
     ASSERT_EQ("root.db.tb.device1", device_id.get_device_name());
 }
 
+TEST(DeviceIdTest, DeviceIdStringFallbackSemantic) {
+    std::string device_id_string = "root.sg1.FeederA";
+    StringArrayDeviceID device_id = StringArrayDeviceID(device_id_string);
+
+    // For a 3-level identifier, table name should be merged as "root.sg1".
+    ASSERT_EQ("root.sg1", device_id.get_table_name());
+    ASSERT_EQ(2, device_id.segment_num());
+    ASSERT_EQ("root.sg1.FeederA", device_id.get_device_name());
+}
+
 TEST(DeviceIdTest, TabletDeviceId) {
     std::vector<TSDataType> measurement_types{
         TSDataType::STRING, TSDataType::STRING, TSDataType::STRING,

@@ -102,4 +102,12 @@ public final class Constants {
       JVM_MAJOR_VERSION > 1 || (JVM_MAJOR_VERSION == 1 && JVM_MINOR_VERSION >= 9);
   public static final boolean JRE_IS_MINIMUM_JAVA11 =
       JVM_MAJOR_VERSION > 1 || (JVM_MAJOR_VERSION == 1 && JVM_MINOR_VERSION >= 11);
+
+  public static class None {
+    private None() {
+      // Singleton
+    }
+  }
+
+  public static final None NONE = new None();
 }

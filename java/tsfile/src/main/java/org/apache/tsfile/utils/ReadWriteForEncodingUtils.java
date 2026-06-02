@@ -19,6 +19,7 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -29,8 +30,7 @@ import java.util.List;
 
 /** Utils to read/write stream. */
 public class ReadWriteForEncodingUtils {
-  private static final String TOO_LONG_BYTE_FORMAT =
-      "tsfile-common BytesUtils: encountered value (%d) that requires more than 4 bytes";
+  private static final String TOO_LONG_BYTE_KEY = "error.utils.too_long_byte_format";
 
   private ReadWriteForEncodingUtils() {}
 
@@ -276,7 +276,7 @@ public class ReadWriteForEncodingUtils {
       throws IOException {
     int paddedByteNum = (bitWidth + 7) / 8;
     if (paddedByteNum > 4) {
-      throw new IOException(String.format(TOO_LONG_BYTE_FORMAT, paddedByteNum));
+      throw new IOException(Messages.format(TOO_LONG_BYTE_KEY, paddedByteNum));
     }
     int offset = 0;
     while (paddedByteNum > 0) {
@@ -298,7 +298,7 @@ public class ReadWriteForEncodingUtils {
       long value, OutputStream out, int bitWidth) throws IOException {
     int paddedByteNum = (bitWidth + 7) / 8;
     if (paddedByteNum > 8) {
-      throw new IOException(String.format(TOO_LONG_BYTE_FORMAT, paddedByteNum));
+      throw new IOException(Messages.format(TOO_LONG_BYTE_KEY, paddedByteNum));
     }
     out.write(BytesUtils.longToBytes(value, paddedByteNum));
   }
@@ -315,7 +315,7 @@ public class ReadWriteForEncodingUtils {
       throws IOException {
     int paddedByteNum = (bitWidth + 7) / 8;
     if (paddedByteNum > 4) {
-      throw new IOException(String.format(TOO_LONG_BYTE_FORMAT, paddedByteNum));
+      throw new IOException(Messages.format(TOO_LONG_BYTE_KEY, paddedByteNum));
     }
     int result = 0;
     int offset = 0;
@@ -340,7 +340,7 @@ public class ReadWriteForEncodingUtils {
       throws IOException {
     int paddedByteNum = (bitWidth + 7) / 8;
     if (paddedByteNum > 8) {
-      throw new IOException(String.format(TOO_LONG_BYTE_FORMAT, paddedByteNum));
+      throw new IOException(Messages.format(TOO_LONG_BYTE_KEY, paddedByteNum));
     }
     long result = 0;
     for (int i = 0; i < paddedByteNum; i++) {

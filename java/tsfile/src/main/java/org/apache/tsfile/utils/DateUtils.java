@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -39,28 +41,31 @@ public class DateUtils {
 
   public static Integer parseDateExpressionToInt(String dateExpression) {
     if (dateExpression == null || dateExpression.isEmpty()) {
-      throw new DateTimeParseException("Date expression is null or empty.", "", 0);
+      throw new DateTimeParseException(
+          Messages.get("error.utils.date_expression_null_or_empty"), "", 0);
     }
     LocalDate date;
     try {
       date = LocalDate.parse(dateExpression);
     } catch (DateTimeParseException e) {
       throw new DateTimeParseException(
-          "Invalid date format. Please use YYYY-MM-DD format.", dateExpression, 0);
+          Messages.get("error.utils.date_invalid_format"), dateExpression, 0);
     }
     if (date.getYear() < 1000 || date.getYear() > 9999) {
-      throw new DateTimeParseException("Year must be between 1000 and 9999.", dateExpression, 0);
+      throw new DateTimeParseException(
+          Messages.get("error.utils.date_year_out_of_range"), dateExpression, 0);
     }
     return date.getYear() * 10000 + date.getMonthValue() * 100 + date.getDayOfMonth();
   }
 
   public static Integer parseDateExpressionToInt(LocalDate localDate) {
     if (localDate == null) {
-      throw new DateTimeParseException("Date expression is null or empty.", "", 0);
+      throw new DateTimeParseException(
+          Messages.get("error.utils.date_expression_null_or_empty"), "", 0);
     }
     if (localDate.getYear() < 1000 || localDate.getYear() > 9999) {
       throw new DateTimeParseException(
-          "Year must be between 1000 and 9999.",
+          Messages.get("error.utils.date_year_out_of_range"),
           localDate.format(DateTimeFormatter.ISO_LOCAL_DATE),
           0);
     }
@@ -78,7 +83,8 @@ public class DateUtils {
     try {
       return LocalDate.of(date / 10000, (date / 100) % 100, date % 100);
     } catch (Exception e) {
-      throw new DateTimeParseException("Invalid date format.", "", 0);
+      throw new DateTimeParseException(
+          Messages.get("error.utils.date_invalid_format_local"), "", 0);
     }
   }
 

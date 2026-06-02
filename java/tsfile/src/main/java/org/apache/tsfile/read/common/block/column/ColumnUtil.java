@@ -20,11 +20,11 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.Arrays;
 
 import static java.lang.Math.ceil;
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 public class ColumnUtil {
@@ -41,34 +41,31 @@ public class ColumnUtil {
     requireNonNull(array, "array is null");
     if (offset < 0 || length < 0 || offset + length > array.length) {
       throw new IndexOutOfBoundsException(
-          format(
-              "Invalid offset %s and length %s in array with %s elements",
-              offset, length, array.length));
+          Messages.format(
+              "error.read.col_util_invalid_offset_length", offset, length, array.length));
     }
   }
 
   static void checkValidRegion(int positionCount, int positionOffset, int length) {
     if (positionOffset < 0 || length < 0 || positionOffset + length > positionCount) {
       throw new IndexOutOfBoundsException(
-          format(
-              "Invalid position %s and length %s in block with %s positions",
-              positionOffset, length, positionCount));
+          Messages.format(
+              "error.read.col_util_invalid_pos_length", positionOffset, length, positionCount));
     }
   }
 
   static void checkValidPositions(boolean[] positions, int positionCount) {
     if (positions.length != positionCount) {
       throw new IllegalArgumentException(
-          format(
-              "Invalid positions array size %d, actual position count is %d",
-              positions.length, positionCount));
+          Messages.format(
+              "error.read.col_util_invalid_positions_size", positions.length, positionCount));
     }
   }
 
   static void checkValidPosition(int position, int positionCount) {
     if (position < 0 || position >= positionCount) {
       throw new IllegalArgumentException(
-          format("Invalid position %s in block with %s positions", position, positionCount));
+          Messages.format("error.read.col_util_invalid_position", position, positionCount));
     }
   }
 
@@ -93,7 +90,8 @@ public class ColumnUtil {
     } else if (newSize > MAX_ARRAY_SIZE) {
       newSize = MAX_ARRAY_SIZE;
       if (newSize == currentSize) {
-        throw new IllegalArgumentException(format("Cannot grow array beyond '%s'", MAX_ARRAY_SIZE));
+        throw new IllegalArgumentException(
+            Messages.format("error.read.col_util_cannot_grow", MAX_ARRAY_SIZE));
       }
     }
     return (int) newSize;

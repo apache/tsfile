@@ -52,6 +52,12 @@ class IChunkReader {
         return common::E_OK;
     }
 
+    virtual int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
+                              common::PageArena& pa, int64_t min_time_hint,
+                              int& row_offset, int& row_limit) {
+        return get_next_page(tsblock, oneshoot_filter, pa);
+    }
+
     virtual ChunkHeader& get_chunk_header() { return chunk_header_; }
 
    protected:

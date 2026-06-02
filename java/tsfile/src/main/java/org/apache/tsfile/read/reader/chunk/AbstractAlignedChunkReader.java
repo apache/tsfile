@@ -39,6 +39,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
   // chunk header of the time column
@@ -59,9 +60,13 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
 
   @SuppressWarnings("unchecked")
   AbstractAlignedChunkReader(
-      Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
+      Chunk timeChunk,
+      List<Chunk> valueChunkList,
+      long readStopTime,
+      Filter queryFilter,
+      LongConsumer filterRowsRecorder)
       throws IOException {
-    super(readStopTime, queryFilter);
+    super(readStopTime, queryFilter, filterRowsRecorder);
     this.timeChunkHeader = timeChunk.getHeader();
     this.timeChunkDataBuffer = timeChunk.getData();
     this.timeDeleteIntervalList = timeChunk.getDeleteIntervalList();
@@ -163,8 +168,14 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
   }
 
   protected boolean pageCanSkip(PageHeader pageHeader) {
-    return queryFilter != null
-        && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime());
+    if (queryFilter != null
+        && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime())) {
+      if (filterRowsRecorder != null) {
+        this.filterRowsRecorder.accept(pageHeader.getStatistics().getCount());
+      }
+      return true;
+    }
+    return false;
   }
 
   private void skipCurrentPage(PageHeader timePageHeader, List<PageHeader> valuePageHeader) {

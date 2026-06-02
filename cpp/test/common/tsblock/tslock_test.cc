@@ -46,7 +46,6 @@ TEST(TsBlockTest, RowAppender_AddRow) {
 
 TEST(TsBlockTest, ColAppender_AddRowAndAppend) {
     TupleDesc tuple_desc;
-    TsID ts_id(1, 2, 3);
     ColumnSchema col("test_col", INT32, SNAPPY, RLE);
     tuple_desc.push_back(col);
     TsBlock ts_block(&tuple_desc, 50);

@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -132,10 +133,7 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
         writeRleRun();
       } catch (IOException e) {
         logger.error(
-            "tsfile-encoding RleEncoder : error occurs when writing nums to OutputStram "
-                + "when flushing left nums. "
-                + "numBufferedValues {}, repeatCount {}, bitPackedGroupCount{}, "
-                + "isBitPackRun {}, isBitWidthSaved {}",
+            Messages.get("log.encoding.rle_flush_rle_run_error"),
             numBufferedValues,
             repeatCount,
             bitPackedGroupCount,
@@ -215,7 +213,7 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
   protected void encodeValue(T value) {
     if (!isBitWidthSaved) {
       // save bit width in header,
-      // perpare for read
+      // prepare for read
       byteCache.write(bitWidth);
       isBitWidthSaved = true;
     }
@@ -234,12 +232,10 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
         repeatCount = TSFileConfig.RLE_MAX_REPEATED_NUM;
         try {
           writeRleRun();
-          logger.debug("tsfile-encoding RleEncoder : write full rle run to stream");
+          logger.debug(Messages.get("log.encoding.rle_write_full_rle_run"));
         } catch (IOException e) {
           logger.error(
-              " error occurs when writing full rle run to OutputStram when repeatCount = {}."
-                  + "numBufferedValues {}, repeatCount {}, bitPackedGroupCount{}, "
-                  + "isBitPackRun {}, isBitWidthSaved {}",
+              Messages.get("log.encoding.rle_full_rle_run_error"),
               TSFileConfig.RLE_MAX_REPEATED_NUM + 1,
               numBufferedValues,
               repeatCount,
@@ -253,16 +249,13 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
       }
 
     } else {
-      // we encounter a differnt value
+      // we encounter a different value
       if (repeatCount >= TSFileConfig.RLE_MIN_REPEATED_NUM) {
         try {
           writeRleRun();
         } catch (IOException e) {
           logger.error(
-              "tsfile-encoding RleEncoder : error occurs when writing num to OutputStram "
-                  + "when repeatCount > {}."
-                  + "numBufferedValues {}, repeatCount {}, bitPackedGroupCount{}, isBitPackRun {}, "
-                  + "isBitWidthSaved {}",
+              Messages.get("log.encoding.rle_write_num_error"),
               TSFileConfig.RLE_MIN_REPEATED_NUM,
               numBufferedValues,
               repeatCount,

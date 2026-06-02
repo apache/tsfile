@@ -51,7 +51,6 @@ struct ValuePageData {
              common::ByteStream& value_bs, Compressor* compressor,
              uint32_t size);
     void destroy() {
-        // Be careful about the memory
         if (uncompressed_buf_ != nullptr) {
             common::mem_free(uncompressed_buf_);
             uncompressed_buf_ = nullptr;
@@ -60,6 +59,19 @@ struct ValuePageData {
             compressor_->after_compress(compressed_buf_);
             compressed_buf_ = nullptr;
         }
+        compressor_ = nullptr;
+    }
+
+    /** Clear pointers without freeing (transfer ownership to another holder).
+     */
+    void clear() {
+        col_notnull_bitmap_buf_size_ = 0;
+        value_buf_size_ = 0;
+        uncompressed_size_ = 0;
+        compressed_size_ = 0;
+        uncompressed_buf_ = nullptr;
+        compressed_buf_ = nullptr;
+        compressor_ = nullptr;
     }
 };
 
@@ -152,6 +164,7 @@ class ValuePageWriter {
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
+    FORCE_INLINE uint32_t get_total_write_count() const { return size_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
         return col_notnull_bitmap_out_stream_.total_size();
     }
@@ -183,6 +196,8 @@ class ValuePageWriter {
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     ValuePageData get_cur_page_data() { return cur_page_data_; }
     void destroy_page_data() { cur_page_data_.destroy(); }
+    /** Clear cur_page_data_ without freeing (after ownership transferred). */
+    void clear_page_data() { cur_page_data_.clear(); }
 
    private:
     FORCE_INLINE int prepare_end_page() {
@@ -205,15 +220,16 @@ class ValuePageWriter {
     common::TSDataType data_type_;
     Encoder* value_encoder_;
     Statistic* statistic_;
-    common::ByteStream col_notnull_bitmap_out_stream_;
-    common::ByteStream value_out_stream_;
+    common::ByteStream col_notnull_bitmap_out_stream_{
+        common::MOD_PAGE_WRITER_OUTPUT_STREAM};
+    common::ByteStream value_out_stream_{common::MOD_PAGE_WRITER_OUTPUT_STREAM};
     ValuePageData cur_page_data_;
     Compressor* compressor_;
     bool is_inited_;
     std::vector<uint8_t> col_notnull_bitmap_;
     uint32_t size_;
 
-    static uint32_t MASK;
+    static TSFILE_API uint32_t MASK;
 };
 
 }  // end namespace storage

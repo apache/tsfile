@@ -160,7 +160,7 @@ int ChunkWriter::end_encode_chunk() {
             chunk_header_.data_size_ = chunk_data_.total_size();
             chunk_header_.num_of_pages_ = num_of_pages_;
         }
-    } else if (first_page_statistic_ != nullptr) {
+    } else if (first_page_statistic_->count_ != 0) {
         ret = write_first_page_data(chunk_data_, false);
         if (E_OK == ret) {
             free_first_writer_data();

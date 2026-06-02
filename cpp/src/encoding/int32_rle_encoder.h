@@ -36,7 +36,7 @@ class Int32RleEncoder : public Encoder {
     int num_buffered_values_;
     int bit_width_;
     Int32Packer* packer_;
-    common::ByteStream byte_cache_;
+    common::ByteStream byte_cache_{common::MOD_ENCODER_OBJ};
     std::vector<int32_t> values_;  // all data tobe encoded
     int32_t buffered_values_[8];   // encode each 8 values
     std::vector<unsigned char> bytes_buffer_;
@@ -146,7 +146,7 @@ class Int32RleEncoder : public Encoder {
     void convert_buffer() {
         // TODO: put the bytes on the stack instead on the heap
         unsigned char* bytes = (unsigned char*)common::mem_alloc(
-            bit_width_, common::MOD_BITENCODE_OBJ);
+            bit_width_, common::MOD_ENCODER_OBJ);
         int32_t tmp_buffer[8];
         for (int i = 0; i < 8; i++) {
             tmp_buffer[i] = (int64_t)buffered_values_[i];

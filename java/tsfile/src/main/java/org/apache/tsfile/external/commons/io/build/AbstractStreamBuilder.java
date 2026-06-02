@@ -20,6 +20,7 @@ package org.apache.tsfile.external.commons.io.build;
 import org.apache.tsfile.external.commons.io.Charsets;
 import org.apache.tsfile.external.commons.io.IOUtils;
 import org.apache.tsfile.external.commons.io.file.PathUtils;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.Writer;
@@ -172,6 +173,7 @@ public abstract class AbstractStreamBuilder<T, B extends AbstractStreamBuilder<T
   }
 
   private int throwIae(final int size, final int max) {
-    throw new IllegalArgumentException(String.format("Request %,d exceeds maximum %,d", size, max));
+    throw new IllegalArgumentException(
+        Messages.format("error.external.stream_builder_request_exceeds_max", size, max));
   }
 }

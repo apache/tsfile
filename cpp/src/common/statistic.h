@@ -1002,21 +1002,32 @@ class StringStatistic : public Statistic {
     common::String first_value_;
     common::String last_value_;
     StringStatistic()
-        : min_value_(), max_value_(), first_value_(), last_value_() {
+        : min_value_(),
+          max_value_(),
+          first_value_(),
+          last_value_(),
+          pa_(nullptr),
+          owns_pa_(true) {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
     StringStatistic(common::PageArena* pa)
-        : min_value_(), max_value_(), first_value_(), last_value_(), pa_(pa) {}
+        : min_value_(),
+          max_value_(),
+          first_value_(),
+          last_value_(),
+          pa_(pa),
+          owns_pa_(false) {}
 
     ~StringStatistic() { destroy(); }
 
     void destroy() {
-        if (pa_) {
+        if (owns_pa_ && pa_) {
             delete pa_;
             pa_ = nullptr;
         }
+        owns_pa_ = false;
     }
 
     FORCE_INLINE void reset() {
@@ -1079,27 +1090,30 @@ class StringStatistic : public Statistic {
 
    private:
     common::PageArena* pa_;
+    bool owns_pa_;
 };
 
 class TextStatistic : public Statistic {
    public:
     common::String first_value_;
     common::String last_value_;
-    TextStatistic() : first_value_(), last_value_() {
+    TextStatistic()
+        : first_value_(), last_value_(), pa_(nullptr), owns_pa_(true) {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
     TextStatistic(common::PageArena* pa)
-        : first_value_(), last_value_(), pa_(pa) {}
+        : first_value_(), last_value_(), pa_(pa), owns_pa_(false) {}
 
     ~TextStatistic() { destroy(); }
 
     void destroy() {
-        if (pa_) {
+        if (owns_pa_ && pa_) {
             delete pa_;
             pa_ = nullptr;
         }
+        owns_pa_ = false;
     }
 
     FORCE_INLINE void reset() {
@@ -1150,24 +1164,26 @@ class TextStatistic : public Statistic {
 
    private:
     common::PageArena* pa_;
+    bool owns_pa_;
 };
 
 class BlobStatistic : public Statistic {
    public:
-    BlobStatistic() {
+    BlobStatistic() : pa_(nullptr), owns_pa_(true) {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
-    BlobStatistic(common::PageArena* pa) {}
+    BlobStatistic(common::PageArena* pa) : pa_(pa), owns_pa_(false) {}
 
     ~BlobStatistic() { destroy(); }
 
     void destroy() {
-        if (pa_) {
+        if (owns_pa_ && pa_) {
             delete pa_;
             pa_ = nullptr;
         }
+        owns_pa_ = false;
     }
 
     FORCE_INLINE void reset() {
@@ -1198,6 +1214,7 @@ class BlobStatistic : public Statistic {
 
    private:
     common::PageArena* pa_;
+    bool owns_pa_;
 };
 
 FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {

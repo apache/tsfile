@@ -30,6 +30,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -51,20 +52,20 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
-  private static final Logger LOG = LoggerFactory.getLogger(AlignedChunkGroupWriterImpl.class);
+  protected static final Logger LOG = LoggerFactory.getLogger(AlignedChunkGroupWriterImpl.class);
 
-  private final IDeviceID deviceId;
+  protected final IDeviceID deviceId;
 
   // measurementID -> ValueChunkWriter
-  private final Map<String, ValueChunkWriter> valueChunkWriterMap = new LinkedHashMap<>();
+  protected final Map<String, ValueChunkWriter> valueChunkWriterMap = new LinkedHashMap<>();
 
-  private final TimeChunkWriter timeChunkWriter;
+  protected final TimeChunkWriter timeChunkWriter;
 
-  private final EncryptParameter encryprParam;
+  protected final EncryptParameter encryprParam;
 
-  private long lastTime = Long.MIN_VALUE;
-  private boolean isInitLastTime = false;
-  private boolean convertColumnNameToLowerCase = false;
+  protected long lastTime = Long.MIN_VALUE;
+  protected boolean isInitLastTime = false;
+  protected boolean convertColumnNameToLowerCase = false;
 
   public AlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
@@ -200,10 +201,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 String.format("Data type %s is not supported.", point.getType()));
         }
       } catch (ClassCastException e) {
-        throw new UnsupportedOperationException(
-            String.format(
-                "Registered data type is %s, data point type is %s.",
-                valueChunkWriter.getDataType(), point.getType()));
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", point.getType()));
       }
     }
     if (!emptyValueChunkWriters.isEmpty()) {
@@ -296,8 +295,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             break;
           default:
             throw new UnSupportedDataTypeException(
-                String.format(
-                    "Data type %s is not supported.",
+                Messages.format(
+                    "error.write.type_not_supported",
                     measurementSchemas.get(columnIndex).getType()));
         }
       }
@@ -319,7 +318,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public long flushToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
-    LOG.debug("start flush device id:{}", deviceId);
+    LOG.debug(Messages.get("log.write.flush_device"), deviceId);
     // make sure all the pages have been compressed into buffers, so that we can get correct
     // groupWriter.getCurrentChunkGroupSize().
     sealAllChunks();
@@ -390,7 +389,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", dataType));
+              Messages.format("error.write.type_not_supported", dataType));
       }
     }
   }
@@ -399,7 +398,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
    * check occupied memory size, if it exceeds the PageSize threshold, construct a page and put it
    * to pageBuffer
    */
-  private boolean checkPageSizeAndMayOpenANewPage() {
+  protected boolean checkPageSizeAndMayOpenANewPage() {
     if (timeChunkWriter.checkPageSizeAndMayOpenANewPage()) {
       return true;
     }
@@ -411,29 +410,29 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     return false;
   }
 
-  private void writePageToPageBuffer() {
+  protected void writePageToPageBuffer() {
     timeChunkWriter.writePageToPageBuffer();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterMap.values()) {
       valueChunkWriter.writePageToPageBuffer();
     }
   }
 
-  private void sealAllChunks() {
+  protected void sealAllChunks() {
     timeChunkWriter.sealCurrentPage();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterMap.values()) {
       valueChunkWriter.sealCurrentPage();
     }
   }
 
-  private void checkIsHistoryData(long time) throws WriteProcessException {
+  protected void checkIsHistoryData(long time) throws WriteProcessException {
     if (isInitLastTime && time <= lastTime) {
       throw new WriteProcessException(
-          "Not allowed to write out-of-order data in timeseries "
-              + deviceId
-              + TsFileConstant.PATH_SEPARATOR
-              + ""
-              + ", time should later than "
-              + lastTime);
+          Messages.format(
+              "error.write.chunk_group_aligned_out_of_order",
+              deviceId,
+              TsFileConstant.PATH_SEPARATOR,
+              "",
+              lastTime));
     }
   }
 

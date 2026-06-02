@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.filter.basic;
 
 import org.apache.tsfile.file.metadata.IMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
@@ -43,6 +44,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * A Filter is an executable expression tree describing the criteria for which records to keep when
@@ -116,6 +118,26 @@ public abstract class Filter {
    * @return for each row, true if the row is satisfied with the filter, false otherwise
    */
   public abstract boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock);
+
+  public final boolean[] satisfyTsBlock(
+      boolean[] selection, TsBlock tsBlock, LongConsumer filterRowsRecorder) {
+
+    int inputCount = countSelectedRows(selection);
+    boolean[] result = satisfyTsBlock(selection, tsBlock);
+    int outputCount = countSelectedRows(result);
+    if (inputCount > outputCount) {
+      filterRowsRecorder.accept((inputCount - outputCount));
+    }
+
+    return result;
+  }
+
+  private static int countSelectedRows(boolean[] selection) {
+    if (selection == null) return 0;
+    int count = 0;
+    for (boolean b : selection) count += b ? 1 : 0;
+    return count;
+  }
 
   /**
    * To examine whether the block can be skipped.
@@ -277,7 +299,8 @@ public abstract class Filter {
       case EXTRACT_VALUE_LTEQ:
         return new ExtractValueFilterOperators.ExtractValueLtEq(buffer);
       default:
-        throw new UnsupportedOperationException("Unsupported operator type:" + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_unsupported_operator", type));
     }
   }
 }

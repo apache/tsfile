@@ -26,6 +26,7 @@ import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
 
 import org.slf4j.Logger;
@@ -55,7 +56,7 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
 
   public ForceAppendTsFileWriter(File file, EncryptParameter param) throws IOException {
     if (logger.isDebugEnabled()) {
-      logger.debug("{} writer is opened.", file.getName());
+      logger.debug(Messages.get("log.write.writer_opened"), file.getName());
     }
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
     this.file = file;
@@ -63,7 +64,8 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
 
     // file doesn't exist
     if (file.length() == 0 || !file.exists()) {
-      throw new TsFileNotCompleteException("File " + file.getPath() + " is not a complete TsFile");
+      throw new TsFileNotCompleteException(
+          Messages.format("error.write.force_append_not_complete", file.getPath()));
     }
 
     try (TsFileSequenceReader reader =
@@ -72,7 +74,7 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
       // this tsfile is not complete
       if (!reader.isComplete()) {
         throw new TsFileNotCompleteException(
-            "File " + file.getPath() + " is not a complete TsFile");
+            Messages.format("error.write.force_append_not_complete", file.getPath()));
       }
       TsFileMetadata tsFileMetadata = reader.readFileMetadata();
       // truncate metadata and marker

@@ -21,14 +21,11 @@
 
 [English](./README.md) | [中文](./README-zh.md)
 # TsFile Java Document
-<pre>
-___________    ___________.__.__          
-\__    ___/____\_   _____/|__|  |   ____  
-  |    | /  ___/|    __)  |  |  | _/ __ \ 
-  |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
-             \/     \/                 \/  
-</pre>
+<p align="center">
+  <img src="https://www.apache.org/logos/originals/tsfile.svg"
+       alt="TsFile Logo"
+       width="400"/>
+</p>
 
 ## Use TsFile
 
@@ -150,7 +147,7 @@ Read TsFile Example
 
 ### Prerequisites
 
-To build TsFile wirh Java, you need to have:
+To build TsFile with Java, you need to have:
 
 1. Java >= 1.8 (1.8, 11 to 17 are verified. Please make sure the environment path has been set accordingly).
 2. Maven >= 3.6.3 (If you want to compile TsFile from source code).

@@ -37,30 +37,40 @@ class Tablet(object):
     for numeric types.
     """
 
-    def __init__(self, column_name_list: list[str], type_list: list[TSDataType],
-                 max_row_num: int = 1024):
+    def __init__(
+        self,
+        column_name_list: list[str],
+        type_list: list[TSDataType],
+        max_row_num: int = 1024,
+    ):
         self.timestamp_list = [None for _ in range(max_row_num)]
         self.data_list: List[List[Union[int, float, bool, str, bytes, date, None]]] = [
             [None for _ in range(max_row_num)] for _ in range(len(column_name_list))
         ]
         self.target_name = None
-        self.column_name_list = [column_name.lower() for column_name in column_name_list]
+        self.column_name_list = [
+            column_name.lower() for column_name in column_name_list
+        ]
         self.type_list = type_list
         self.max_row_num = max_row_num
 
         self._type_ranges = {
-            TSDataType.INT32: (-2 ** 31, 2 ** 31 - 1),
-            TSDataType.INT64: (-2 ** 63, 2 ** 63 - 1),
+            TSDataType.INT32: (-(2**31), 2**31 - 1),
+            TSDataType.INT64: (-(2**63), 2**63 - 1),
             TSDataType.FLOAT: (np.finfo(np.float32).min, np.finfo(np.float32).max),
             TSDataType.DOUBLE: (np.finfo(np.float64).min, np.finfo(np.float64).max),
         }
 
     def _check_index(self, col_index: int, row_index: int):
         if not (0 <= col_index < len(self.column_name_list)):
-            raise IndexError(f"column index {col_index} out of range [0, {len(self.column_name_list) - 1}]")
+            raise IndexError(
+                f"column index {col_index} out of range [0, {len(self.column_name_list) - 1}]"
+            )
 
         if not (0 <= row_index < self.max_row_num):
-            raise IndexError(f"Row index {row_index} out of range [0, {self.max_row_num - 1}]")
+            raise IndexError(
+                f"Row index {row_index} out of range [0, {self.max_row_num - 1}]"
+            )
 
     def set_table_name(self, table_name: str):
         self.target_name = table_name
@@ -101,14 +111,21 @@ class Tablet(object):
     def _check_numeric_range(self, value: Union[int, float], data_type: TSDataType):
         if math.isnan(value) or math.isinf(value):
             if data_type == TSDataType.INT32 or data_type == TSDataType.INT64:
-                raise ValueError(f"NaN/Inf is invalid for integer type {data_type.name}")
+                raise ValueError(
+                    f"NaN/Inf is invalid for integer type {data_type.name}"
+                )
             else:
                 return
         min_val, max_val = self._type_ranges[data_type]
         if not (min_val <= value <= max_val):
             raise OverflowError(f"data:{value} out of range ({min_val}, {max_val})")
 
-    def add_value_by_name(self, column_name: str, row_index: int, value: Union[int, float, bool, str, bytes]):
+    def add_value_by_name(
+        self,
+        column_name: str,
+        row_index: int,
+        value: Union[int, float, bool, str, bytes],
+    ):
         try:
             col_index = self.column_name_list.index(column_name.lower())
         except ValueError:
@@ -124,18 +141,30 @@ class Tablet(object):
         if not isinstance(value, expected_type.to_py_type()):
             raise TypeError(f"Expected {expected_type.to_py_type()} got {type(value)}")
 
-        if expected_type in (TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE):
+        if expected_type in (
+            TSDataType.INT32,
+            TSDataType.INT64,
+            TSDataType.FLOAT,
+            TSDataType.DOUBLE,
+        ):
             self._check_numeric_range(value, expected_type)
 
         self.data_list[col_index][row_index] = value
 
-    def add_value_by_index(self, col_index: int, row_index: int, value: Union[int, float, bool, str, bytes]):
+    def add_value_by_index(
+        self, col_index: int, row_index: int, value: Union[int, float, bool, str, bytes]
+    ):
         self._check_index(col_index, row_index)
         expected_type = self.type_list[col_index]
         if not isinstance(value, expected_type.to_py_type()):
             raise TypeError(f"Expected {expected_type.to_py_type()} got {type(value)}")
 
-        if expected_type in (TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE):
+        if expected_type in (
+            TSDataType.INT32,
+            TSDataType.INT64,
+            TSDataType.FLOAT,
+            TSDataType.DOUBLE,
+        ):
             self._check_numeric_range(value, expected_type)
 
         self.data_list[col_index][row_index] = value

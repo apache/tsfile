@@ -26,7 +26,7 @@ namespace storage {
 
 // TagFilter base class implementation
 TagFilter::TagFilter(int col_idx, std::string tag_value)
-    : col_idx_(col_idx), value_(std::move(tag_value)), value2_("") {}
+    : value_(std::move(tag_value)), value2_(""), col_idx_(col_idx) {}
 
 TagFilter::~TagFilter() = default;
 

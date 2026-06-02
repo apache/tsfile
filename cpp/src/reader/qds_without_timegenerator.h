@@ -39,9 +39,14 @@ class QDSWithoutTimeGenerator : public ResultSet {
           tsblocks_(),
           time_iters_(),
           value_iters_(),
-          heap_time_() {}
+          heap_time_(),
+          remaining_offset_(0),
+          remaining_limit_(-1),
+          is_single_path_(false) {}
     ~QDSWithoutTimeGenerator() { close(); }
     int init(TsFileIOReader* io_reader, QueryExpression* qe);
+    int init(TsFileIOReader* io_reader, QueryExpression* qe, int offset,
+             int limit);
     void close();
     int next(bool& has_next);
     bool is_null(const std::string& column_name);
@@ -50,7 +55,10 @@ class QDSWithoutTimeGenerator : public ResultSet {
     std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
+    int init_internal(TsFileIOReader* io_reader, QueryExpression* qe);
     int get_next_tsblock(uint32_t index, bool alloc_mem);
+    int get_next_tsblock_with_hint(uint32_t index, bool alloc_mem,
+                                   int64_t min_time_hint);
 
    private:
     std::shared_ptr<ResultSetMetadata> result_set_metadata_;
@@ -62,6 +70,9 @@ class QDSWithoutTimeGenerator : public ResultSet {
     std::vector<common::ColIterator*> value_iters_;
     std::multimap<int64_t, uint32_t>
         heap_time_;  // key-->time, value-->path_index
+    int remaining_offset_;
+    int remaining_limit_;
+    bool is_single_path_;
 };
 
 }  // namespace storage

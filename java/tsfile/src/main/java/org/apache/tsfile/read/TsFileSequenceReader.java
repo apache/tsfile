@@ -62,6 +62,7 @@ import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
@@ -117,7 +118,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   private static final Logger resourceLogger = LoggerFactory.getLogger("FileMonitor");
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
   private static final String METADATA_INDEX_NODE_DESERIALIZE_ERROR =
-      "Something error happened while deserializing MetadataIndexNode of file {}";
+      Messages.get("log.read.sequence_reader_metadata_index_node_error");
   private static final int MAX_READ_BUFFER_SIZE = 4 * 1024 * 1024;
   protected String file;
   protected TsFileInput tsFileInput;
@@ -221,7 +222,7 @@ public class TsFileSequenceReader implements AutoCloseable {
             break;
 
           default:
-            throw new IOException("Unexpected marker " + marker);
+            throw new IOException(Messages.format("error.read.unexpected_marker", marker));
         }
       }
 
@@ -575,7 +576,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file, e);
+      logger.error(Messages.get("log.read.sequence_reader_file_metadata_error"), file, e);
       throw e;
     }
     return tsFileMetaData;
@@ -762,7 +763,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ignoreNotExistDevice) {
         return null;
       }
-      throw new IOException("Device {" + device + "} is not in tsFileMetaData of " + file);
+      throw new IOException(
+          Messages.format("error.read.device_not_in_metadata_file", device, file));
     }
     ByteBuffer buffer =
         readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right, ioSizeConsumer);
@@ -791,8 +793,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         try {
           timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(buffer, true));
         } catch (Exception e) {
-          logger.error(
-              "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+          logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
           throw e;
         }
       }
@@ -808,8 +809,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           try {
             timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(tsFileInput, true));
           } catch (Exception e1) {
-            logger.error(
-                "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+            logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
             throw e1;
           }
         }
@@ -834,7 +834,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         return null;
       }
       throw new IOException(
-          "Device {" + path.getDeviceString() + "} is not in tsFileMetaData of " + file);
+          Messages.format("error.read.device_not_in_metadata_file", path.getDeviceString(), file));
     }
     ByteBuffer buffer = readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right);
     MetadataIndexNode metadataIndexNode;
@@ -862,8 +862,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       try {
         timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(buffer, true));
       } catch (Exception e) {
-        logger.error(
-            "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+        logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
         throw e;
       }
     }
@@ -905,7 +904,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ignoreNotExistDevice) {
         return Collections.emptyList();
       }
-      throw new IOException("Device {" + device + "} is not in tsFileMetaData of " + file);
+      throw new IOException(
+          Messages.format("error.read.device_not_in_metadata_file", device, file));
     }
     List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>();
 
@@ -917,8 +917,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         try {
           timeseriesMetadata = TimeseriesMetadata.deserializeFrom(buffer, true);
         } catch (Exception e) {
-          logger.error(
-              "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+          logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
           throw e;
         }
         if (allSensors.contains(timeseriesMetadata.getMeasurementId())) {
@@ -940,8 +939,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           } catch (StopReadTsFileByInterruptException e) {
             throw e;
           } catch (Exception e1) {
-            logger.error(
-                "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+            logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
             throw e1;
           }
           if (allSensors.contains(timeseriesMetadata.getMeasurementId())) {
@@ -1071,8 +1069,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       try {
         timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(buffer, true));
       } catch (Exception e) {
-        logger.error(
-            "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+        logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
         throw e;
       }
     }
@@ -1355,8 +1352,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           }
           return paths;
         } catch (IOException e) {
-          throw new TsFileRuntimeException(
-              "Error occurred while reading a time series metadata block.");
+          throw new TsFileRuntimeException(Messages.get("error.read.metadata_block_read_error"));
         }
       }
     };
@@ -1400,7 +1396,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while getting all paths of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_paths_error"), file);
       throw e;
     }
   }
@@ -1663,7 +1659,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while generating MetadataIndex of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_metadata_index_error"), file);
       throw e;
     }
   }
@@ -1741,7 +1737,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while generating MetadataIndex of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_metadata_index_error"), file);
       throw e;
     }
   }
@@ -1881,7 +1877,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while deserializing MetadataIndex of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_deserialize_metadata_error"), file);
       throw e;
     }
   }
@@ -1924,7 +1920,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while deserializing MetadataIndex of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_deserialize_metadata_error"), file);
       throw e;
     }
   }
@@ -1958,13 +1954,13 @@ public class TsFileSequenceReader implements AutoCloseable {
   public void readPlanIndex() throws IOException {
     ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
     if (ReadWriteIOUtils.readAsPossible(tsFileInput, buffer) == 0) {
-      throw new IOException("reach the end of the file.");
+      throw new IOException(Messages.get("error.read.reach_end_of_file"));
     }
     buffer.flip();
     minPlanIndex = buffer.getLong();
     buffer.clear();
     if (ReadWriteIOUtils.readAsPossible(tsFileInput, buffer) == 0) {
-      throw new IOException("reach the end of the file.");
+      throw new IOException(Messages.get("error.read.reach_end_of_file"));
     }
     buffer.flip();
     maxPlanIndex = buffer.getLong();
@@ -1983,7 +1979,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading chunk header of {}", t.getMessage(), file);
+      logger.warn(
+          Messages.get("log.read.sequence_reader_chunk_header_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2001,7 +1998,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading chunk header of {}", t.getMessage(), file);
+      logger.warn(
+          Messages.get("log.read.sequence_reader_chunk_header_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2032,7 +2030,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading chunk of {}", t.getMessage(), file);
+      logger.warn(Messages.get("log.read.sequence_reader_chunk_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2058,7 +2056,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading chunk of {}", t.getMessage(), file);
+      logger.warn(Messages.get("log.read.sequence_reader_chunk_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2084,7 +2082,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading chunk of {}", t.getMessage(), file);
+      logger.warn(Messages.get("log.read.sequence_reader_chunk_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2155,7 +2153,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading page header of {}", t.getMessage(), file);
+      logger.warn(Messages.get("log.read.sequence_reader_page_header_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2212,11 +2210,8 @@ public class TsFileSequenceReader implements AutoCloseable {
           0);
     } catch (Exception e) {
       throw new IOException(
-          "Uncompress error! uncompress size: "
-              + uncompressedSize
-              + "compressed size: "
-              + buffer.remaining()
-              + e.getMessage(),
+          Messages.format(
+              "error.read.uncompress_error", uncompressedSize, buffer.remaining(), e.getMessage()),
           e);
     }
 
@@ -2230,7 +2225,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   public byte readMarker() throws IOException {
     markerBuffer.clear();
     if (ReadWriteIOUtils.readAsPossible(tsFileInput, markerBuffer) == 0) {
-      throw new IOException("reach the end of the file.");
+      throw new IOException(Messages.get("error.read.reach_end_of_file"));
     }
     markerBuffer.flip();
     return markerBuffer.get();
@@ -2296,17 +2291,15 @@ public class TsFileSequenceReader implements AutoCloseable {
       buffer.limit(bufferLimit);
       if (position < 0) {
         if (ReadWriteIOUtils.readAsPossible(tsFileInput, buffer) != allocateSize) {
-          throw new IOException("reach the end of the data");
+          throw new IOException(Messages.get("error.read.reach_end_of_data"));
         }
       } else {
         long actualReadSize =
             ReadWriteIOUtils.readAsPossible(tsFileInput, buffer, position, allocateSize);
         if (actualReadSize != allocateSize) {
           throw new IOException(
-              String.format(
-                  "reach the end of the data. Size of data that want to read: %s,"
-                      + "actual read size: %s, position: %s",
-                  allocateSize, actualReadSize, position));
+              Messages.format(
+                  "error.read.reach_end_of_data_detail", allocateSize, actualReadSize, position));
         }
         position += allocateSize;
       }
@@ -2345,7 +2338,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
-      logger.warn("Exception {} happened while reading data of {}", t.getMessage(), file);
+      logger.warn(Messages.get("log.read.sequence_reader_data_error"), t.getMessage(), file);
       throw t;
     }
   }
@@ -2532,7 +2525,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                           chunkStatistics.update(timeStamp, value.getBinary());
                           break;
                         default:
-                          throw new IOException("Unexpected type " + dataType);
+                          throw new IOException(
+                              Messages.format("error.read.unexpected_type", dataType));
                       }
                     }
                   }
@@ -2572,7 +2566,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                         chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
                         break;
                       default:
-                        throw new IOException("Unexpected type " + dataType);
+                        throw new IOException(
+                            Messages.format("error.read.unexpected_type", dataType));
                     }
                     batchData.next();
                   }
@@ -2636,7 +2631,7 @@ public class TsFileSequenceReader implements AutoCloseable {
             break;
           default:
             // the disk file is corrupted, using this file may be dangerous
-            throw new IOException("Unexpected marker " + marker);
+            throw new IOException(Messages.format("error.read.unexpected_marker", marker));
         }
       }
       // now we read the tail of the data section, so we are sure that the last
@@ -2658,7 +2653,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
     } catch (Exception e) {
       logger.warn(
-          "TsFile {} self-check cannot proceed at position {} " + "recovered, because : {}",
+          Messages.get("log.read.sequence_reader_self_check_warn"),
           file,
           this.position(),
           e.getMessage());
@@ -2691,7 +2686,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       return TsFileCheckStatus.FILE_NOT_FOUND;
     }
     long fileSize = checkFile.length();
-    logger.info("file length: " + fileSize);
+    logger.info(Messages.get("log.read.sequence_reader_file_length"), fileSize);
 
     int headerLength = TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES;
     if (fileSize < headerLength) {
@@ -2712,7 +2707,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (IOException e) {
-      logger.error("Error occurred while fast checking TsFile.");
+      logger.error(Messages.get("log.read.sequence_reader_fast_check_error"));
       throw e;
     }
     for (Map.Entry<Long, Pair<Path, TimeseriesMetadata>> entry : timeseriesMetadataMap.entrySet()) {
@@ -2727,19 +2722,20 @@ public class TsFileSequenceReader implements AutoCloseable {
         } catch (StopReadTsFileByInterruptException e) {
           throw e;
         } catch (IOException e) {
-          logger.error("Error occurred while checking the statistics of chunk and its pages");
+          logger.error(Messages.get("log.read.sequence_reader_stats_check_error"));
           throw e;
         }
         if (tscheckStatus == TsFileCheckStatus.FILE_EXISTS_MISTAKES) {
           throw new TsFileStatisticsMistakesException(
-              "Chunk" + message + chunkMetadata.getOffsetOfChunkHeader());
+              Messages.format(
+                  "error.read.stats_mistakes_chunk", chunkMetadata.getOffsetOfChunkHeader()));
         }
         chunkMetadatasSta.mergeStatistics(chunkMetadata.getStatistics());
       }
       if (!timeseriesMetadataSta.equals(chunkMetadatasSta)) {
         long timeseriesMetadataPos = entry.getKey();
         throw new TsFileStatisticsMistakesException(
-            "TimeseriesMetadata" + message + timeseriesMetadataPos);
+            Messages.format("error.read.stats_mistakes_tsm", timeseriesMetadataPos));
       }
     }
     return TsFileCheckStatus.COMPLETE_FILE;
@@ -2803,7 +2799,7 @@ public class TsFileSequenceReader implements AutoCloseable {
             chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
             break;
           default:
-            throw new IOException("Unexpected type " + dataType);
+            throw new IOException(Messages.format("error.read.unexpected_type", dataType));
         }
         batchData.next();
       }
@@ -2922,7 +2918,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =
         getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, true);
     if (metadataIndexPair == null) {
-      throw new IOException("Device {" + device + "} is not in tsFileMetaData");
+      throw new IOException(Messages.format("error.read.device_not_in_metadata", device));
     }
     ByteBuffer buffer = readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right);
     MetadataIndexNode metadataIndexNode;
@@ -2951,7 +2947,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       throws IOException {
     TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode, null);
     if (firstTimeseriesMetadata == null) {
-      throw new IOException("Timeseries of device {" + device + "} are not aligned");
+      throw new IOException(Messages.format("error.read.timeseries_not_aligned", device));
     }
 
     Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap = new TreeMap<>();
@@ -2985,9 +2981,11 @@ public class TsFileSequenceReader implements AutoCloseable {
 
     if (timeseriesMetadataMap.values().size() != 1) {
       throw new IOException(
-          String.format(
-              "Error when reading timeseriesMetadata of device %s in file %s: should only one timeseriesMetadataList in one device, actual: %d",
-              device, file, timeseriesMetadataMap.values().size()));
+          Messages.format(
+              "error.read.aligned_chunk_metadata_one_device",
+              device,
+              file,
+              timeseriesMetadataMap.values().size()));
     }
 
     List<TimeseriesMetadata> timeseriesMetadataList =
@@ -3272,8 +3270,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           }
           return measurementChunkMetadataList;
         } catch (IOException e) {
-          throw new TsFileRuntimeException(
-              "Error occurred while reading a time series metadata block.");
+          throw new TsFileRuntimeException(Messages.get("error.read.metadata_block_read_error"));
         }
       }
     };
@@ -3302,8 +3299,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error(
-          "Error occurred while collecting offset ranges of measurement nodes of file {}", file);
+      logger.error(Messages.get("log.read.sequence_reader_collect_offset_error"), file);
       throw e;
     }
   }
@@ -3363,7 +3359,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       try {
         loadNextValue();
       } catch (IOException e) {
-        logger.warn("Cannot read timeseries metadata from {},", file, e);
+        logger.warn(Messages.get("log.read.sequence_reader_tsm_warn"), file, e);
         return false;
       }
       return nextValue != null;

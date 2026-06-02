@@ -27,6 +27,7 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
@@ -299,7 +300,7 @@ public class Chunk {
                 convertedValue == null);
             break;
           default:
-            throw new IOException("Unsupported data type: " + newType);
+            throw new IOException(Messages.format("error.read.chunk_unsupported_type", newType));
         }
       }
       chunkWriter.sealCurrentPage();
@@ -343,7 +344,7 @@ public class Chunk {
             newType.castFromSingleValue(chunkHeader.getDataType(), point.getValue().getValue());
         long timestamp = point.getTimestamp();
         if (convertedValue == null) {
-          throw new IOException("NonAlignedChunk contains null, timestamp: " + timestamp);
+          throw new IOException(Messages.format("error.read.chunk_non_aligned_null", timestamp));
         }
         switch (newType) {
           case BOOLEAN:
@@ -370,7 +371,7 @@ public class Chunk {
             chunkWriter.write(timestamp, (Binary) convertedValue);
             break;
           default:
-            throw new IOException("Unsupported data type: " + newType);
+            throw new IOException(Messages.format("error.read.chunk_unsupported_type", newType));
         }
       }
       chunkWriter.sealCurrentPage();

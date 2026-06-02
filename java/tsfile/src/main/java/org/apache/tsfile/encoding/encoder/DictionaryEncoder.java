@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -78,7 +79,7 @@ public class DictionaryEncoder extends Encoder {
       writeMap(out);
       writeEncodedData(out);
     } catch (IOException e) {
-      logger.error("tsfile-encoding DictionaryEncoder: error occurs when flushing", e);
+      logger.error(Messages.get("log.encoding.dictionary_encoder_flush_error"), e);
     }
     reset();
   }

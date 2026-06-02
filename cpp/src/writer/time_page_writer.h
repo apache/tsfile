@@ -121,7 +121,7 @@ class TimePageWriter {
     common::TSDataType data_type_;
     Encoder* time_encoder_;
     Statistic* statistic_;
-    common::ByteStream time_out_stream_;
+    common::ByteStream time_out_stream_{common::MOD_PAGE_WRITER_OUTPUT_STREAM};
     TimePageData cur_page_data_;
     Compressor* compressor_;
     bool is_inited_;

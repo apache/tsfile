@@ -60,6 +60,8 @@ class DeviceTaskIterator {
 
     ~DeviceTaskIterator() { pa_.destroy(); }
 
+    void flush_remaining_device_meta_cache();
+
     bool has_next() const;
 
     int next(DeviceQueryTask*& task);

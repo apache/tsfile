@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -93,7 +94,7 @@ public class BinaryColumnBuilder implements ColumnBuilder {
       writeBinary((Binary) value);
       return this;
     }
-    throw new UnSupportedDataTypeException("BinaryColumn only support Binary data type");
+    throw new UnSupportedDataTypeException(Messages.get("error.read.col_builder_binary_type"));
   }
 
   @Override

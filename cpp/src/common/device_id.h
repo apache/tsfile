@@ -148,8 +148,9 @@ class StringArrayDeviceID : public IDeviceID {
         if (prefix_segments_.size() == 0 || prefix_segments_.size() == 1) {
             return segments_[pos];
         } else {
-            if (pos < prefix_segments_.size()) {
-                return prefix_segments_[pos];
+            if (pos >= 0 &&
+                static_cast<size_t>(pos) < prefix_segments_.size()) {
+                return prefix_segments_[static_cast<size_t>(pos)];
             } else {
                 return segments_[pos - prefix_segments_.size() + 1];
             }

@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.block.column;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -66,7 +68,8 @@ public enum ColumnEncoding {
       case 5:
         return DICTIONARY;
       default:
-        throw new IllegalArgumentException("Invalid value: " + value);
+        throw new IllegalArgumentException(
+            Messages.format("error.common.invalid_column_encoding_value", value));
     }
   }
 }

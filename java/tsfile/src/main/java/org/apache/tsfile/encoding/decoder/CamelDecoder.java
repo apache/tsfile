@@ -23,6 +23,7 @@ import org.apache.tsfile.common.bitStream.BitInputStream;
 import org.apache.tsfile.common.bitStream.ByteBufferBackedInputStream;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.IOException;
@@ -112,7 +113,7 @@ public class CamelDecoder extends Decoder {
       if (cacheIndex >= cacheSize) {
         if (in == null || in.availableBits() == 0) {
           if (!buffer.hasRemaining()) {
-            throw new TsFileDecodingException("No more data to decode");
+            throw new TsFileDecodingException(Messages.get("error.encoding.camel_no_more_data"));
           }
           // read next chunk
           ByteBuffer slice = buffer.slice();
@@ -128,7 +129,8 @@ public class CamelDecoder extends Decoder {
           // decode current block
           double[] newValues = getValues();
           if (newValues.length == 0) {
-            throw new TsFileDecodingException("Unexpected empty block");
+            throw new TsFileDecodingException(
+                Messages.get("error.encoding.camel_unexpected_empty_block"));
           }
           valueCache = newValues;
           cacheSize = newValues.length;

@@ -18,6 +18,61 @@
     under the License.
 
 -->
+# Apache TsFile 2.3.1
+
+## New Features
+
+- Added scripts to convert CSV, Parquet and Arrow formats to TsFile.
+- Adapted TsFile for the MSVC compiler.
+
+## Bugs
+
+- Fixed the issue that the format conversion scripts did not support date and timestamp data types.
+- Fixed garbled characters when using Chinese table names in the conversion scripts.
+- Fixed the issue where TsFile displayed empty when converting with uppercase column names.
+
+# Apache TsFile 2.3.0
+
+## New Features
+
+- Added C++ interfaces to obtain the start timestamp, end timestamp and record count of each series-level data in TSFile files.
+- Added a C++ interface to sequentially read processed data from corrupted TSFile files.
+- Added row number-based data query capability for TSFile, supporting pagination with limit and offset.
+- Added the capability to read massive TSFile files in DataFrame format.
+- Extended TSFile DataFrame reading to support traversal and reading of nested directories.
+- Optimized the performance of the Python TSFile interface: TsFile-Cpp returns Arrow-compatible query results, enabling TsFile-Python to directly provide Arrow-backed DataFrame.
+
+## Bugs
+
+- Implemented synchronized sealing of time pages and value pages under the aligned model in C++ interfaces to ensure consistent behavior with the Java side.
+- Fixed null value handling defects in the write and read paths of TSFile.
+
+# Apache TsFile 2.2.1
+
+## New Feature
+
+- [Java] Support modifying schema during the write process.
+- [Java] Support memory usage estimation for Tablet and related classes.
+- [Java] Support I/O size recording during file reading.
+- [Java] Support encryption configuration for read and write operations.
+- [Python] Support converting DataFrame to TsFile.
+- [Python] Support DATE, TIMESTAMP and other new data types.
+
+## Improvement
+
+- [Java] Optimize memory usage calculation for aligned data.
+- [Java] Support JDK-25.
+- [C++] Upgrade zlib to latest version.
+
+## Bugfix
+
+- [Java] Fixed incorrect query results when reading DATE type in table model.
+- [Java] Fixed data corruption when rewriting chunks with time deletion.
+- [Java] Fixed chunk metadata loss when deserializing from temporary files.
+- [C++] Fixed inability to read files exceeding 2GB.
+- [C++] Fixed aligned chunk reader producing wrong output.
+- [Python] Fixed DataFrame validation and column name handling issues.
+
 # Apache TsFile 2.2.0
 
 ## New Feature
@@ -145,7 +200,7 @@
 * Added accountable function to measurementSchema by @Caideyipi in #509
 * Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @JackieTien97 in #514
 * add switch to disable native lz4 (#480) by @jt2594838 in #515
-* Correct the memroy calculation of BinaryColumnBuilder by @JackieTien97 in #530
+* Correct the memory calculation of BinaryColumnBuilder by @JackieTien97 in #530
 * Fetch max tsblock line number each time from TSFileConfig by @JackieTien97 in #535
 * Support set default compression by data type & Bump org.apache.commons:commons-lang3 from 3.15.0 to 3.18.0 by @jt2594838 in #547
 * Avoid calculating shallow size of map by @shuwenwei in #566

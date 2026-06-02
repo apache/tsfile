@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.file.metadata.enums;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -68,7 +70,7 @@ public enum MetadataIndexNodeType {
       case 3:
         return MetadataIndexNodeType.LEAF_MEASUREMENT;
       default:
-        throw new IllegalArgumentException("Invalid input: " + i);
+        throw new IllegalArgumentException(Messages.format("error.common.invalid_input", i));
     }
   }
 

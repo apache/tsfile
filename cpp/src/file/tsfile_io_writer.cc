@@ -40,50 +40,62 @@ namespace storage {
 #define OFFSET_DEBUG(msg) void(msg)
 #endif
 
-#ifndef LIBTSFILE_SDK
-int TsFileIOWriter::init() {
-    int ret = E_OK;
-    const uint32_t page_size = 1024;
-    meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
-    chunk_meta_count_ = 0;
-    file_ = new WriteFile;
-    write_file_created_ = true;
-
-    FileID file_id;
-    file_id.seq_ = get_cur_timestamp();
-    file_id.version_ = 0;
-    file_id.merge_ = 0;
-    if (RET_FAIL(file_->create(file_id, O_RDWR | O_CREAT, 0644))) {
-        // log_err("file open error, ret=%d", ret);
-    }
-    return ret;
-}
-#endif
-
 int TsFileIOWriter::init(WriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;
     meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
     chunk_meta_count_ = 0;
+    recovery_chunk_meta_prefix_.clear();
+    destroyed_ = false;
     file_ = write_file;
     return ret;
 }
 
 void TsFileIOWriter::destroy() {
+    if (destroyed_) {
+        return;
+    }
+    // Recovery attaches a prefix of ChunkGroupMeta; device_id and chunk stats
+    // in that snapshot live in reader/recovery memory. After open, new chunks
+    // may be pushed into the same ChunkGroupMeta (same device); only those
+    // appended ChunkMeta need statistic_->destroy() (see
+    // recovery_chunk_meta_prefix_).
     for (auto iter = chunk_group_meta_list_.begin();
          iter != chunk_group_meta_list_.end(); iter++) {
-        if (iter.get() && iter.get()->device_id_) {
-            iter.get()->device_id_.reset();
-        }
-        if (iter.get()) {
-            for (auto chunk_meta = iter.get()->chunk_meta_list_.begin();
-                 chunk_meta != iter.get()->chunk_meta_list_.end();
-                 chunk_meta++) {
-                if (chunk_meta.get()) {
-                    chunk_meta.get()->statistic_->destroy();
-                }
+        ChunkGroupMeta* cgm = iter.get();
+        auto prefix_it = recovery_chunk_meta_prefix_.find(cgm);
+        const bool is_recovery_cgm =
+            chunk_group_meta_from_recovery_ && cgm != nullptr &&
+            prefix_it != recovery_chunk_meta_prefix_.end();
+        uint32_t recovered_cm_count = is_recovery_cgm ? prefix_it->second : 0;
+
+        if (!is_recovery_cgm) {
+            if (cgm != nullptr && cgm->device_id_) {
+                cgm->device_id_.reset();
             }
         }
+
+        if (cgm == nullptr) {
+            continue;
+        }
+        uint32_t cm_idx = 0;
+        for (auto chunk_meta = cgm->chunk_meta_list_.begin();
+             chunk_meta != cgm->chunk_meta_list_.end();
+             chunk_meta++, cm_idx++) {
+            if (chunk_meta.get() == nullptr ||
+                chunk_meta.get()->statistic_ == nullptr) {
+                continue;
+            }
+            if (is_recovery_cgm && cm_idx < recovered_cm_count) {
+                continue;
+            }
+            chunk_meta.get()->statistic_->destroy();
+        }
+    }
+
+    if (cur_chunk_meta_ != nullptr && cur_chunk_meta_->statistic_ != nullptr) {
+        cur_chunk_meta_->statistic_->destroy();
+        cur_chunk_meta_ = nullptr;
     }
 
     meta_allocator_.destroy();
@@ -92,6 +104,7 @@ void TsFileIOWriter::destroy() {
         delete file_;
         file_ = nullptr;
     }
+    destroyed_ = true;
 }
 
 int TsFileIOWriter::start_file() {
@@ -786,7 +799,7 @@ int TsFileIOWriter::generate_root(
                 if (RET_FAIL(to->push_back(cur_index_node))) {
                 }
 #if DEBUG_SE
-                std::cout << "genereate root 2, "
+                std::cout << "generate root 2, "
                              "alloc_and_init_meta_index_node. cur_index_node="
                           << *cur_index_node << std::endl;
 #endif
@@ -832,6 +845,14 @@ int TsFileIOWriter::clone_node_list(
     return ret;
 }
 
+int TsFileIOWriter::restore_recovered_file_position(int64_t recovered_size) {
+    if (recovered_size < 0) {
+        return E_INVALID_ARG;
+    }
+    file_base_offset_ = recovered_size;
+    return E_OK;
+}
+
 // #if DEBUG_SE
 // void DEBUG_print_byte_stream_buf(const char *tag,
 //                                  const char *buf,
@@ -864,26 +885,15 @@ int TsFileIOWriter::flush_stream_to_file() {
             write_stream_consumer_.get_next_buf(write_stream_);
         if (b.buf_ == nullptr) {
             break;
-        } else {
-            if (RET_FAIL(file_->write(b.buf_, b.len_))) {
-                break;
-            }
+        }
+        if (b.len_ > 0 && RET_FAIL(file_->write(b.buf_, b.len_))) {
+            break;
         }
     }
 
     write_stream_.purge_prev_pages();
 
     return ret;
-}
-
-void TsFileIOWriter::add_ts_time_index_entry(TimeseriesIndex& ts_index) {
-    TimeseriesTimeIndexEntry time_index_entry;
-    time_index_entry.ts_id_ = ts_index.get_ts_id();
-    time_index_entry.time_range_.start_time_ =
-        ts_index.get_statistic()->start_time_;
-    time_index_entry.time_range_.end_time_ =
-        ts_index.get_statistic()->end_time_;
-    ts_time_index_vector_.push_back(time_index_entry);
 }
 
 }  // namespace storage

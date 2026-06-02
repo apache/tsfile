@@ -22,6 +22,7 @@ package org.apache.tsfile.read.reader.block;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -163,7 +164,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         fillMeasurements(minTimeColumns);
         nextTime = null;
       } catch (IOException e) {
-        LOGGER.error("Cannot fill measurements", e);
+        LOGGER.error(Messages.get("log.read.block_reader_fill_measurements_error"), e);
         return false;
       }
 
@@ -233,6 +234,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   private void fillIdColumn(Column column, Object val, int startPos, int endPos) {
     switch (column.getDataType()) {
       case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
         if (val instanceof String) {
           val = new Binary(((String) val), StandardCharsets.UTF_8);
         }
@@ -242,9 +246,11 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         Arrays.fill(column.getBooleans(), startPos, endPos, ((boolean) val));
         break;
       case INT32:
+      case DATE:
         Arrays.fill(column.getInts(), startPos, endPos, ((int) val));
         break;
       case INT64:
+      case TIMESTAMP:
         Arrays.fill(column.getLongs(), startPos, endPos, ((long) val));
         break;
       case FLOAT:
@@ -254,7 +260,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         Arrays.fill(column.getDoubles(), startPos, endPos, ((double) val));
         break;
       default:
-        throw new IllegalArgumentException("Unsupported data type: " + column.getDataType());
+        throw new IllegalArgumentException(
+            Messages.format("error.read.block_reader_unsupported_type", column.getDataType()));
     }
     column.setPositionCount(endPos);
   }
@@ -271,16 +278,22 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         column.getFloats()[pos] = batchData.getFloat();
         break;
       case INT32:
+      case DATE:
         column.getInts()[pos] = batchData.getInt();
         break;
       case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
         column.getBinaries()[pos] = batchData.getBinary();
         break;
       case INT64:
+      case TIMESTAMP:
         column.getLongs()[pos] = batchData.getLong();
         break;
       default:
-        throw new IllegalArgumentException("Unsupported data type: " + batchData.getDataType());
+        throw new IllegalArgumentException(
+            Messages.format("error.read.block_reader_unsupported_type", batchData.getDataType()));
     }
     column.setPositionCount(pos + 1);
   }
@@ -372,12 +385,17 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
           if (value != null) {
             switch (value.getDataType()) {
               case TEXT:
+              case STRING:
+              case BLOB:
+              case OBJECT:
                 block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
                 break;
               case INT32:
+              case DATE:
                 block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
                 break;
               case INT64:
+              case TIMESTAMP:
                 block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
                 break;
               case BOOLEAN:
@@ -390,7 +408,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
                 block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
                 break;
               default:
-                throw new IllegalArgumentException("Unsupported data type: " + value.getDataType());
+                throw new IllegalArgumentException(
+                    Messages.format(
+                        "error.read.block_reader_unsupported_type", value.getDataType()));
             }
           } else {
             block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);

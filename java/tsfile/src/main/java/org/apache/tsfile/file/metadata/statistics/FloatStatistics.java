@@ -20,6 +20,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -157,7 +158,7 @@ public class FloatStatistics extends Statistics<Float> {
   @Override
   public long getSumLongValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.FLOAT, "long sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.FLOAT, "long sum"));
   }
 
   @SuppressWarnings("rawtypes")

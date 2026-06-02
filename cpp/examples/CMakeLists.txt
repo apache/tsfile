@@ -18,9 +18,11 @@ under the License.
 ]]
 cmake_minimum_required(VERSION 3.10)
 project(examples)
-message("Running in exampes directory")
+message("Running in examples directory")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif ()
 
 # TsFile include dir
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
@@ -37,8 +39,9 @@ include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/ru
 set(BUILD_TYPE "Release")
 include_directories(${SDK_INCLUDE_DIR})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
-set(CMAKE_CXX_FLAGS_DEBUG" ${CMAKE_CXX_FLAGS} -O0 -g")
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+endif ()
 
 add_subdirectory(cpp_examples)
 add_subdirectory(c_examples)

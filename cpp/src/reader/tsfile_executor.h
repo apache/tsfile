@@ -35,6 +35,8 @@ class TsFileExecutor  // : public QueryExecutor
     int init(ReadFile* read_file);
     int init(const std::string& file_path);
     int execute(QueryExpression* query_expr, ResultSet*& ret_qds);
+    int execute(QueryExpression* query_expr, ResultSet*& ret_qds, int offset,
+                int limit);
     void destroy_query_data_set(ResultSet* qds);
     TsFileMeta* get_tsfile_meta() { return io_reader_.get_tsfile_meta(); }
     TsFileIOReader* get_tsfile_io_reader() { return &io_reader_; }
