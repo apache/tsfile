@@ -136,9 +136,6 @@ BufferedRow read_current_row(storage::ResultSet* rs,
 int write_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
                              bool no_header, std::ostream& out, long long limit,
                              unsigned long long seed) {
-    if (limit < 0) {
-        limit = 10;
-    }
     auto meta = rs->get_metadata();
     const uint32_t ncol = meta->get_column_count();
     std::vector<std::string> header;
@@ -158,10 +155,6 @@ int write_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
     long long seen = 0;
     while ((code = rs->next(has_next)) == common::E_OK && has_next) {
         BufferedRow row = read_current_row(rs, types);
-        if (limit == 0) {
-            ++seen;
-            continue;
-        }
         if (static_cast<long long>(reservoir.size()) < limit) {
             reservoir.push_back(row);
         } else {
