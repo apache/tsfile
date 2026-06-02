@@ -70,7 +70,7 @@ bool is_known_command(const std::string& c) {
 }
 
 bool is_unimplemented_command(const std::string& c) {
-    static const std::set<std::string> kCmds = {"meta", "count", "sample"};
+    static const std::set<std::string> kCmds = {"count", "sample"};
     return kCmds.count(c) != 0;
 }
 
@@ -161,6 +161,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         code = cmd_ls(p, reader, fmt, out, err);
     } else if (p.command == "schema") {
         code = cmd_schema(p, reader, fmt, out, err);
+    } else if (p.command == "meta") {
+        code = cmd_meta(p, reader, fmt, out, err);
     } else if (p.command == "stats") {
         code = cmd_stats(p, reader, fmt, out, err);
     } else if (p.command == "head") {

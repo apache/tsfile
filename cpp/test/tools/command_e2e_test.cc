@@ -154,3 +154,17 @@ TEST(CliE2E, CatJsonIsNdjson) {
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "{\"time\":0,\"s1\":0}\n");
 }
+
+TEST(CliE2E, MetaReportsFileSummary) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"meta", "-f", "tsv", f.path}, out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("file\tmodel\tversion\tdevice_count\ttable_"
+                             "count\tseries_count\tstart_time\tend_time\tbloom_"
+                             "filter\tfile_size_bytes"),
+              std::string::npos);
+    EXPECT_NE(out.str().find("\ttable\t"), std::string::npos);
+}
