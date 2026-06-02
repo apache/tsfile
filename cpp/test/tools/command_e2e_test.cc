@@ -105,10 +105,11 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"stats", "-f", "tsv", f.path}, out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_NE(
-        out.str().find("target\tmeasurement\tcount\tstart_time\tend_time"),
-        std::string::npos);
-    EXPECT_NE(out.str().find("s1\t5\t0\t4"), std::string::npos);
+    EXPECT_NE(out.str().find("target\tmeasurement\tcount\tstart_time\tend_"
+                             "time\tmin\tmax\tfirst\tlast\tsum"),
+              std::string::npos);
+    EXPECT_NE(out.str().find("s1\t5\t0\t4\t0\t40\t0\t40\t100"),
+              std::string::npos);
 }
 
 TEST(CliE2E, HeadProjectsAndLimits) {

@@ -17,56 +17,38 @@
  * under the License.
  */
 
-#include <algorithm>
 #include <string>
+#include <vector>
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
-#include "common/statistic.h"
-#include "reader/tsfile_reader.h"
+#include "commands/stat_table.h"
 
 namespace tsfile_cli {
 
 int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
     RowWriter w(out, fmt,
-                {"target", "measurement", "count", "start_time", "end_time"},
+                {"target", "measurement", "count", "start_time", "end_time",
+                 "min", "max", "first", "last", "sum"},
                 {common::STRING, common::STRING, common::INT64, common::INT64,
-                 common::INT64},
+                 common::INT64, common::STRING, common::STRING, common::STRING,
+                 common::STRING, common::STRING},
                 args.no_header);
 
-    storage::DeviceTimeseriesMetadataMap meta =
-        reader.get_timeseries_metadata();
-    for (auto& kv : meta) {
-        std::string target = kv.first ? kv.first->get_device_name() : "";
-        if (!args.device.empty() && target != args.device) {
-            continue;
-        }
-        if (!args.table.empty() && kv.first &&
-            kv.first->get_table_name() != args.table) {
-            continue;
-        }
-        for (auto& ts : kv.second) {
-            if (!ts) {
-                continue;
-            }
-            std::string m = ts->get_measurement_name().to_std_string();
-            if (!args.measurements.empty() &&
-                std::find(args.measurements.begin(), args.measurements.end(),
-                          m) == args.measurements.end()) {
-                continue;
-            }
-            storage::Statistic* st = ts->get_statistic();
-            if (st != nullptr) {
-                w.write({target, m, std::to_string(st->get_count()),
-                         std::to_string(st->start_time_),
-                         std::to_string(st->end_time_)},
-                        {false, false, false, false, false});
-            } else {
-                w.write({target, m, "", "", ""},
-                        {false, false, true, true, true});
-            }
-        }
+    std::vector<SeriesStatRow> rows = collect_series_stats(args, reader);
+    for (const SeriesStatRow& row : rows) {
+        std::vector<std::string> cells = {
+            row.target, row.measurement, std::to_string(row.count),
+            std::to_string(row.start_time), std::to_string(row.end_time)};
+        cells.insert(cells.end(), row.value_cells.values.begin(),
+                     row.value_cells.values.end());
+
+        std::vector<bool> nulls = {false, false, false, row.count == 0,
+                                   row.count == 0};
+        nulls.insert(nulls.end(), row.value_cells.is_null.begin(),
+                     row.value_cells.is_null.end());
+        w.write(cells, nulls);
     }
     w.finish();
     return kExitOk;
