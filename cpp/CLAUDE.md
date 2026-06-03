@@ -92,6 +92,7 @@ cpp/src/
 ## Code Style
 
 - **Formatter**: clang-format (Google style), configured in `.clang-format`
+- After modifying C++ code, run from the repo root to format: `./mvnw spotless:apply -P with-cpp`
 
 ## Testing
 

@@ -43,6 +43,16 @@ bool DeviceMetaIterator::has_next() {
         return true;
     }
 
+    if (direct_device_id_ != nullptr) {
+        if (direct_lookup_done_) {
+            return false;
+        }
+        if (load_results_direct() != common::E_OK) {
+            return false;
+        }
+        return !result_cache_.empty();
+    }
+
     if (load_results() != common::E_OK) {
         return false;
     }
@@ -63,9 +73,6 @@ int DeviceMetaIterator::next(
 int DeviceMetaIterator::load_results() {
     int root_num = meta_index_nodes_.size();
     while (!meta_index_nodes_.empty()) {
-        // To avoid ASan overflow.
-        // using `const auto&` creates a reference
-        // to a queue element that may become invalid.
         auto meta_data_index_node = meta_index_nodes_.front();
         meta_index_nodes_.pop();
         const auto& node_type = meta_data_index_node->node_type_;
@@ -80,7 +87,6 @@ int DeviceMetaIterator::load_results() {
             meta_data_index_node->~MetaIndexNode();
         }
     }
-
     return common::E_OK;
 }
 
@@ -135,4 +141,69 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
     }
     return ret;
 }
+
+void DeviceMetaIterator::try_setup_direct_lookup(MetaIndexNode* root_node) {
+    if (id_filter_ == nullptr) return;
+
+    const auto* eq = dynamic_cast<const TagEq*>(id_filter_);
+    if (eq == nullptr) return;
+
+    if (root_node->children_.empty()) return;
+
+    auto first_device = root_node->children_[0]->get_device_id();
+    if (first_device == nullptr) return;
+
+    auto first_segments = first_device->get_segments();
+    int actual_segment_count = static_cast<int>(first_segments.size());
+
+    if (actual_segment_count != 2) return;
+
+    std::string table_name = first_device->get_table_name();
+    std::vector<std::string> segs(actual_segment_count);
+    segs[0] = table_name;
+    for (int i = 1; i < actual_segment_count; i++) {
+        segs[i] = "";
+    }
+    segs[eq->col_idx_] = eq->value_;
+    direct_device_id_ = std::make_shared<StringArrayDeviceID>(segs);
+    direct_root_node_ = root_node;
+}
+
+int DeviceMetaIterator::load_results_direct() {
+    int ret = common::E_OK;
+    direct_lookup_done_ = true;
+
+    if (direct_device_id_ == nullptr) {
+        return common::E_OK;
+    }
+
+    auto device_comparable =
+        std::make_shared<DeviceIDComparable>(direct_device_id_);
+
+    std::shared_ptr<IMetaIndexEntry> device_index_entry;
+    int64_t end_offset = 0;
+
+    ret = io_reader_->load_device_index_entry(device_comparable,
+                                              device_index_entry, end_offset);
+
+    if (ret != common::E_OK || device_index_entry == nullptr) {
+        return common::E_OK;
+    }
+
+    int64_t start_offset = device_index_entry->get_offset();
+    MetaIndexNode* child_node = nullptr;
+    if (RET_FAIL(io_reader_->read_device_meta_index(start_offset, end_offset,
+                                                    pa_, child_node, true))) {
+        return ret;
+    }
+
+    auto device_id = device_index_entry->get_device_id();
+    if (should_split_device_name) {
+        device_id->split_table_name();
+    }
+    result_cache_.push(std::make_pair(device_id, child_node));
+
+    return common::E_OK;
+}
+
 }  // namespace storage
