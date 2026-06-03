@@ -46,7 +46,7 @@ namespace tsfile_cli {
 namespace {
 
 void print_usage(std::ostream& os) {
-    os << "Usage: tsfile <command> [options] <file.tsfile>\n"
+    os << "Usage: tsfile-cli <command> [options] <file.tsfile>\n"
           "Commands:\n"
           "  ls       list devices (tree) or tables (table)\n"
           "  schema   per-measurement data type/encoding/compression\n"
@@ -103,7 +103,7 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     ParsedArgs p = parse_args(args);
 
     if (p.version) {
-        out << "tsfile (Apache TsFile C++) " << TSFILE_CLI_VERSION << "\n";
+        out << "tsfile-cli (Apache TsFile C++) " << TSFILE_CLI_VERSION << "\n";
         return kExitOk;
     }
     if (args.empty()) {

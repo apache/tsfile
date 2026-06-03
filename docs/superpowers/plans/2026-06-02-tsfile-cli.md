@@ -181,7 +181,7 @@ Expected: 构建成功；选定测试全部通过。其中 `RunCliTest.SelectIsN
 `count`/`sample` 此时仍是 stub）。
 
 > 若 `CliE2E.SchemaTableMeasurementFilterOnlyShowsRequestedColumn` 等已有断言因字符串
-> 细节失败，先用 `./build/Debug/bin/tsfile <cmd> -f tsv <fixture>` 打印实际输出再对齐，
+> 细节失败，先用 `./build/Debug/bin/tsfile-cli <cmd> -f tsv <fixture>` 打印实际输出再对齐，
 > fixture 的数值（ts 0..4，s1=ts*10）是固定的。
 
 - [ ] **Step 6: 手动确认 `select` 已不可用、help 不含 select**
@@ -189,7 +189,7 @@ Expected: 构建成功；选定测试全部通过。其中 `RunCliTest.SelectIsN
 Run:
 
 ```bash
-cd cpp && ./build/Debug/bin/tsfile --help | grep -i select; echo "rc=$?"
+cd cpp && ./build/Debug/bin/tsfile-cli --help | grep -i select; echo "rc=$?"
 ```
 
 Expected: 无输出，`rc=1`（grep 未命中）；help 列出 `ls schema meta stats head cat
@@ -1206,7 +1206,7 @@ Expected: 全部通过。若有与本计划无关的既有测试失败，记录�
 Run:
 
 ```bash
-cd cpp && ./build/Debug/bin/tsfile --help
+cd cpp && ./build/Debug/bin/tsfile-cli --help
 ```
 
 Expected: stdout 含 `ls schema meta stats head cat count sample`；不含 `select`、
@@ -1218,7 +1218,7 @@ Run（样例为 table 模型）：
 
 ```bash
 cd cpp
-BIN=./build/Debug/bin/tsfile
+BIN=./build/Debug/bin/tsfile-cli
 F=examples/test_cpp.tsfile
 $BIN ls -f tsv $F
 $BIN meta -f tsv $F

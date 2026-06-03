@@ -37,9 +37,9 @@
 为 TsFile 提供一个单二进制、可组合、适合管道使用的 C++ 命令行工具：
 
 ```sh
-tsfile <command> [options] <file.tsfile>
-tsfile --help | --version
-tsfile help <command>
+tsfile-cli <command> [options] <file.tsfile>
+tsfile-cli --help | --version
+tsfile-cli help <command>
 ```
 
 让用户能像查看其他自描述数据文件一样查看 `.tsfile`：发现命名空间、查看 schema 和
@@ -78,7 +78,7 @@ HDF5 和 netCDF 提供命名空间与 header 经验：`h5ls`、`h5dump -H`、`nc
 
 包含：
 
-- 一个名为 `tsfile` 的多命令二进制。
+- 一个名为 `tsfile-cli` 的多命令二进制。
 - 只读命令：`ls`、`schema`、`meta`、`stats`、`head`、`cat`、`count`、`sample`。
 - 输出格式、模型选择、列投影、行数限制、offset、时间范围、抽样种子等共享参数。
 - 基于现有 `storage::TsFileReader` 读路径实现，不修改存储引擎。
@@ -247,7 +247,7 @@ null 在 CSV/TSV 中输出为空字段。时间戳输出存储中的 epoch milli
 
 ```text
 cpp/tools/
-├── CMakeLists.txt              # OBJECT 库 tsfile_cli_obj + 可执行文件 tsfile
+├── CMakeLists.txt              # OBJECT 库 tsfile_cli_obj + 可执行文件 tsfile-cli
 ├── tools_main.cc               # main(): 转发 argv 给 run_cli
 ├── cli/
 │   ├── exit_codes.h            # kExitOk/kExitUsage/kExitFile/kExitRuntime

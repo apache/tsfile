@@ -41,7 +41,7 @@ add_executable(tsfile_cli tools_main.cc $<TARGET_OBJECTS:tsfile_cli_obj>)
 target_include_directories(tsfile_cli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tsfile_cli tsfile)
 set_target_properties(tsfile_cli PROPERTIES
-        OUTPUT_NAME tsfile
+        OUTPUT_NAME tsfile-cli
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
 install(TARGETS tsfile_cli RUNTIME DESTINATION bin)

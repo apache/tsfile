@@ -16,12 +16,12 @@ It is **read-only**: there is no write/convert verb (see [Writing](#writing-a-ts
 
 ## Locating / building the binary
 
-The executable is named **`tsfile`** (the CMake *target* is `tsfile_cli`, but the file is
-`tsfile`). Look first, build only if missing:
+The executable is named **`tsfile-cli`** (the CMake *target* is `tsfile_cli`). Look first,
+build only if missing:
 
 ```sh
-ls cpp/build/*/bin/tsfile           # prebuilt? e.g. cpp/build/Debug/bin/tsfile
-cd cpp && bash build.sh -t=Debug    # build if absent (binary in build/Debug/bin/tsfile)
+ls cpp/build/*/bin/tsfile-cli         # prebuilt? e.g. cpp/build/Debug/bin/tsfile-cli
+cd cpp && bash build.sh -t=Debug      # build if absent (binary in build/Debug/bin/tsfile-cli)
 ```
 
 If CMake ≥ 4 aborts configuring the bundled ANTLR4 (`Policy CMP00xx may not be set to
@@ -34,8 +34,8 @@ cd cpp && bash build.sh -t=Debug --disable-antlr4
 ## Commands
 
 ```
-tsfile <command> [options] <file.tsfile>
-tsfile --help | --version | help <command>
+tsfile-cli <command> [options] <file.tsfile>
+tsfile-cli --help | --version | help <command>
 ```
 
 | Command | Output | Scans data pages? |
@@ -72,7 +72,7 @@ Exit codes: `0` ok · `1` usage/argument error · `2` file open/corrupt · `3` q
 ## Examples
 
 ```sh
-BIN=cpp/build/Debug/bin/tsfile
+BIN=cpp/build/Debug/bin/tsfile-cli
 $BIN ls -f tsv data.tsfile                          # namespaces, one per line
 $BIN meta data.tsfile                               # quick file overview
 $BIN count -t table1 -f tsv data.tsfile             # row counts, no page scan
