@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -202,4 +203,46 @@ TEST(CliE2E, SampleIsReproducibleWithSeed) {
     EXPECT_EQ(out1.str(), out2.str());
     EXPECT_EQ(count_lines(out1.str()), 4u);
     EXPECT_NE(out1.str().find("time\ts1\n"), std::string::npos);
+}
+
+TEST(CliE2E, WriteThenReadRoundTrip) {
+    std::string csv_path = "tsfile_cli_write_in.csv";
+    {
+        std::ofstream o(csv_path.c_str());
+        o << "time,id1,s1\n0,dev,0\n1,dev,10\n2,dev,20\n";
+    }
+    std::string out_path = "tsfile_cli_write_out.tsfile";
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "--columns", "id1:STRING:tag,s1:INT64:field",
+         "-o", out_path, csv_path},
+        wout, werr);
+    EXPECT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream cout_;
+    std::ostringstream cerr_;
+    int cc = tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_);
+    EXPECT_EQ(cc, 0);
+    EXPECT_NE(cout_.str().find("\ts1\t3"), std::string::npos) << cout_.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    int rc = tsfile_cli::run_cli({"cat", "-m", "s1", "-f", "tsv", out_path},
+                                 rout, rerr);
+    EXPECT_EQ(rc, 0);
+    EXPECT_EQ(rout.str(), "time\ts1\n0\t0\n1\t10\n2\t20\n");
+
+    std::remove(csv_path.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteMissingColumnsIsUsageError) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "-o", "x.tsfile", "in.csv"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("--columns"), std::string::npos);
 }

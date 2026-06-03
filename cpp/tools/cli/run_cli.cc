@@ -56,15 +56,21 @@ void print_usage(std::ostream& os) {
           "  cat      all rows of a device/table\n"
           "  count    row count\n"
           "  sample   deterministic sample rows (use -n and --seed)\n"
+          "  write    import CSV/TSV rows into a new table tsfile "
+          "(--table, --columns, -o)\n"
           "Options: -f/--format csv|tsv|json|table, -d/--device, -t/--table,\n"
           "         -m/--measurements a,b, -n/--limit, --offset, --seed,\n"
           "         --start, --end,\n"
-          "         --no-header, --model tree|table, -h/--help, --version\n";
+          "         --no-header, --model tree|table, -h/--help, --version\n"
+          "Write options: --table, --columns name:TYPE:tag|field,..., "
+          "-o/--output,\n"
+          "         --header-match, -v/--verbose\n";
 }
 
 bool is_known_command(const std::string& c) {
     static const std::set<std::string> kCmds = {
-        "ls", "schema", "meta", "stats", "head", "cat", "count", "sample"};
+        "ls",  "schema", "meta",   "stats", "head",
+        "cat", "count",  "sample", "write"};
     return kCmds.count(c) != 0;
 }
 
@@ -91,6 +97,32 @@ bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
     }
     if (p.has_start && p.has_end && p.start > p.end) {
         err << "Error: --start must be <= --end\n";
+        return false;
+    }
+    return true;
+}
+
+bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
+    if (p.table.empty()) {
+        err << "Error: write requires --table\n";
+        return false;
+    }
+    if (p.columns.empty()) {
+        err << "Error: write requires --columns\n";
+        return false;
+    }
+    if (p.output.empty()) {
+        err << "Error: write requires -o/--output\n";
+        return false;
+    }
+    if (p.format == ParsedArgs::Format::kJson ||
+        p.format == ParsedArgs::Format::kTable) {
+        err << "Error: write input format must be csv or tsv\n";
+        return false;
+    }
+    if (!p.measurements.empty() || !p.device.empty() || p.has_start ||
+        p.has_end || p.has_seed || p.limit != -1 || p.offset != 0) {
+        err << "Error: read-only flags are not valid for write\n";
         return false;
     }
     return true;
@@ -125,13 +157,22 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         print_usage(err);
         return kExitUsage;
     }
-    if (p.file.empty()) {
+    if (p.command != "write" && p.file.empty()) {
         err << "Error: missing <file.tsfile> argument\n";
         return kExitUsage;
     }
     if (!validate_command_flags(p, err)) {
         print_usage(err);
         return kExitUsage;
+    }
+
+    if (p.command == "write") {
+        if (!validate_write_flags(p, err)) {
+            print_usage(err);
+            return kExitUsage;
+        }
+        storage::libtsfile_init();
+        return cmd_write(p, out, err);
     }
 
     storage::libtsfile_init();
