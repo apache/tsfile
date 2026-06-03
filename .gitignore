@@ -59,3 +59,7 @@ cpp/tsfile_writer_*.tsfile
 cpp/*.dat
 /*.tsfile
 /*.dat
+
+# AI workflow artifacts (kept local, not uploaded)
+docs/superpowers/
+/QA_Log.md
