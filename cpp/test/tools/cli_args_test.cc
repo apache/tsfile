@@ -118,8 +118,9 @@ TEST(ParseArgsTest, OutputFlagNeedsValue) {
 }
 
 TEST(ParseArgsTest, DashIsStdinPositional) {
-    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
-                                     "s1:INT64:field", "-o", "out.tsfile", "-"});
+    auto p =
+        tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
+                                "s1:INT64:field", "-o", "out.tsfile", "-"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.file, "-");
 }

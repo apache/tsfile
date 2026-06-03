@@ -179,8 +179,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         char* e = nullptr;
         long long ts = std::strtoll(fields[0].c_str(), &e, 10);
         if (e == nullptr || *e != '\0') {
-            err << "Error: bad timestamp '" << fields[0] << "' (line " << line_no
-                << ")\n";
+            err << "Error: bad timestamp '" << fields[0] << "' (line "
+                << line_no << ")\n";
             return kExitRuntime;
         }
         DataRow r;

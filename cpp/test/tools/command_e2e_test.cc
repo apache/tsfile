@@ -223,7 +223,8 @@ TEST(CliE2E, WriteThenReadRoundTrip) {
 
     std::ostringstream cout_;
     std::ostringstream cerr_;
-    int cc = tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_);
+    int cc =
+        tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_);
     EXPECT_EQ(cc, 0);
     EXPECT_NE(cout_.str().find("\ts1\t3"), std::string::npos) << cout_.str();
 
