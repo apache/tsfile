@@ -61,7 +61,7 @@ tsfile-cli cat -m s1 -f csv in.tsfile | tsfile-cli write --table t1 \
 
 ```
 tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
-                 [-f csv|tsv] [--no-header] [<input> | -]
+                 [-f csv|tsv] [--no-header] [--header-match] [-v] [<input> | -]
 ```
 
 | 参数 | 含义 | 必填 |
@@ -72,6 +72,8 @@ tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
 | `--columns <spec>` | 数据列规格（见 §5），按序描述**除时间列外**的列 | 是 |
 | `-f, --format csv\|tsv` | 输入分隔符，默认 `csv`；`json`/`table` 视为 usage error | 否 |
 | `--no-header` | 输入无表头行（默认认为首行是表头并跳过） | 否 |
+| `--header-match` | 校验首行表头列名与 `--columns`（及首列 `time`）一致，不符即报错 | 否 |
+| `-v, --verbose` | 成功后向 stderr 打印一行摘要；默认静默 | 否 |
 
 `write` 只使用上述参数；读侧的 `-d/--device`、`-m/--measurements`、`-n/--limit`、
 `--offset`、`--start/--end`、`--seed` 对 `write` 无意义，**出现即按 usage error 处理**
@@ -83,8 +85,9 @@ tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
 - **第一列固定是时间戳**：epoch 毫秒整数（`INT64`）。它不出现在 `--columns` 里。
 - 其余字段按 `--columns` 的顺序一一对应；每条数据行的字段数必须等于
   `1 + len(--columns)`，否则报错（§7）。
-- 默认首行为表头并跳过；表头内容**不做校验**（列身份完全由 `--columns` 决定）。
-  `--no-header` 时不跳过首行。
+- 默认首行为表头并跳过；表头内容**默认不校验**（列身份完全由 `--columns` 决定）。
+  `--no-header` 时不跳过首行。加 `--header-match` 时校验首行：首列名任意（约定为 `time`），
+  其余列名须与 `--columns` 顺序逐一相等，不符即报错（§7）。
 - **空单元格 = null**：该行该列不写入（`Tablet` 不 `add_value`，留 null）。
 - CSV 解析遵循 RFC 4180 引号规则（字段含分隔符/引号时用 `"` 包裹，内部 `"` 双写）；
   TSV 按 `\t` 切分、不做引号处理。引号字段内不支持换行（v1）。
@@ -125,10 +128,11 @@ category 非法都按 usage error 处理（退出码 `1`，stderr 给出错误�
 | `0` | 成功 |
 | `1` | usage / 参数错误（缺 `--table`/`--columns`/`-o`，`--columns` 语法错，`-f json|table`，混入读侧 flag） |
 | `2` | 输入打不开 / 输出创建失败 |
-| `3` | 行级错误：字段数不符、单元格类型解析失败、写库返回错误（stderr 标出行号） |
+| `3` | 行级错误：字段数不符、`--header-match` 下表头不符、单元格类型解析失败、写库返回错误（stderr 标出行号） |
 
-`write` 不向 stdout 输出数据；进度/诊断/错误一律走 stderr。成功时 stdout 为空，并向
-stderr 打印一行摘要：`wrote <N> rows to <out.tsfile>`。
+`write` 不向 stdout 输出数据；进度/诊断/错误一律走 stderr。**成功时默认全静默**（无 stdout、
+无 stderr 输出，遵循 Unix「silence is golden」）；仅当加 `-v/--verbose` 时向 stderr 打印一行
+摘要：`wrote <N> rows to <out.tsfile>`。
 
 ## 8. 架构
 
@@ -137,7 +141,7 @@ stderr 打印一行摘要：`wrote <N> rows to <out.tsfile>`。
 ```text
 cpp/tools/
 ├── cli/
-│   ├── cli_args.h / .cc        # 新增 output(-o/--output)、columns(--columns) 字段与解析
+│   ├── cli_args.h / .cc        # 新增 output(-o)、columns(--columns)、verbose(-v)、header_match(--header-match)
 │   └── run_cli.cc              # 注册 write；在 reader.open 之前特判 write 并分发
 ├── commands/
 │   ├── commands.h              # 声明 cmd_write
@@ -176,7 +180,8 @@ writer。复用现有 `cli/exit_codes.h`。
 - **E2E**（追加到 `command_e2e_test.cc`）：把一段 CSV 写到临时文件，`run_cli({"write",
   "--table","t1","--columns","s1:INT64:field","-o",out,csv})`，断言退出 0；随后在进程内
   用读路径 `run_cli({"schema"/"count"/"cat", out})` 回读，断言表名、列、行数、行值与输入
-  一致（往返）。另覆盖：缺 `--columns` → 1；行字段数不符 → 3；输出到不可写路径 → 2。
+  一致（往返）。另覆盖：缺 `--columns` → 1；行字段数不符 → 3；`--header-match` 下表头不符
+  → 3；输出到不可写路径 → 2；成功默认静默、仅 `-v` 才有摘要。
 
 只验证 CLI/写库行为，不新增存储引擎行为。
 
