@@ -21,7 +21,14 @@
 #define TSFILE_CLI_TEST_UTIL_H
 
 #include <fcntl.h>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
+#include <atomic>
+#include <sstream>
 #include <string>
 
 #include "common/schema.h"
@@ -31,9 +38,25 @@
 
 namespace tsfile_cli_test {
 
-inline std::string write_table_fixture(
-    const std::string& path = "tsfile_cli_fixture.tsfile") {
+// Unique per-process path so tests stay isolated when ctest runs the
+// gtest-discovered cases in parallel processes.
+inline std::string unique_temp_path(const std::string& stem,
+                                    const std::string& ext) {
+    static std::atomic<unsigned> counter(0);
+#ifdef _WIN32
+    long pid = static_cast<long>(_getpid());
+#else
+    long pid = static_cast<long>(getpid());
+#endif
+    std::ostringstream ss;
+    ss << stem << "_" << pid << "_" << counter.fetch_add(1) << ext;
+    return ss.str();
+}
+
+inline std::string write_table_fixture(const std::string& path = "") {
     storage::libtsfile_init();
+    std::string out_path =
+        path.empty() ? unique_temp_path("tsfile_cli_fixture", ".tsfile") : path;
     std::string table_name = "table1";
 
     storage::WriteFile file;
@@ -41,7 +64,7 @@ inline std::string write_table_fixture(
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
-    file.create(path, flags, 0666);
+    file.create(out_path, flags, 0666);
 
     auto* schema = new storage::TableSchema(
         table_name,
@@ -75,7 +98,7 @@ inline std::string write_table_fixture(
 
     delete writer;
     delete schema;
-    return path;
+    return out_path;
 }
 
 }  // namespace tsfile_cli_test

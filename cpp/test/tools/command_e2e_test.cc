@@ -206,12 +206,14 @@ TEST(CliE2E, SampleIsReproducibleWithSeed) {
 }
 
 TEST(CliE2E, WriteThenReadRoundTrip) {
-    std::string csv_path = "tsfile_cli_write_in.csv";
+    std::string csv_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_write_in", ".csv");
     {
         std::ofstream o(csv_path.c_str());
         o << "time,id1,s1\n0,dev,0\n1,dev,10\n2,dev,20\n";
     }
-    std::string out_path = "tsfile_cli_write_out.tsfile";
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_write_out", ".tsfile");
 
     std::ostringstream wout;
     std::ostringstream werr;
