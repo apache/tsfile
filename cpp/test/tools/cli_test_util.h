@@ -27,7 +27,6 @@
 #include <unistd.h>
 #endif
 
-#include <atomic>
 #include <sstream>
 #include <string>
 
@@ -42,21 +41,20 @@ namespace tsfile_cli_test {
 // gtest-discovered cases in parallel processes.
 inline std::string unique_temp_path(const std::string& stem,
                                     const std::string& ext) {
-    static std::atomic<unsigned> counter(0);
+    static unsigned counter = 0;
 #ifdef _WIN32
     long pid = static_cast<long>(_getpid());
 #else
     long pid = static_cast<long>(getpid());
 #endif
     std::ostringstream ss;
-    ss << stem << "_" << pid << "_" << counter.fetch_add(1) << ext;
+    ss << stem << "_" << pid << "_" << counter++ << ext;
     return ss.str();
 }
 
-inline std::string write_table_fixture(const std::string& path = "") {
+inline std::string write_table_fixture() {
     storage::libtsfile_init();
-    std::string out_path =
-        path.empty() ? unique_temp_path("tsfile_cli_fixture", ".tsfile") : path;
+    std::string out_path = unique_temp_path("tsfile_cli_fixture", ".tsfile");
     std::string table_name = "table1";
 
     storage::WriteFile file;
