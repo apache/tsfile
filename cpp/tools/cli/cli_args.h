@@ -45,6 +45,10 @@ struct ParsedArgs {
     Format format = Format::kAuto;
     bool no_header = false;
     std::string model;
+    std::string output;
+    std::string columns;
+    bool verbose = false;
+    bool header_match = false;
     bool help = false;
     bool version = false;
     std::string error;

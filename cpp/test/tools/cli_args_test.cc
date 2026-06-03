@@ -98,6 +98,25 @@ TEST(ParseArgsTest, MissingFileIsAllowedAtParseTime) {
     EXPECT_TRUE(p.file.empty());
 }
 
+TEST(ParseArgsTest, WriteFlagsParsed) {
+    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
+                                     "s1:INT64:field", "-o", "out.tsfile", "-v",
+                                     "--header-match", "in.csv"});
+    EXPECT_TRUE(p.error.empty());
+    EXPECT_EQ(p.command, "write");
+    EXPECT_EQ(p.table, "t1");
+    EXPECT_EQ(p.columns, "s1:INT64:field");
+    EXPECT_EQ(p.output, "out.tsfile");
+    EXPECT_TRUE(p.verbose);
+    EXPECT_TRUE(p.header_match);
+    EXPECT_EQ(p.file, "in.csv");
+}
+
+TEST(ParseArgsTest, OutputFlagNeedsValue) {
+    auto p = tsfile_cli::parse_args({"write", "-o"});
+    EXPECT_FALSE(p.error.empty());
+}
+
 TEST(ParseArgsTest, SeedFlagParsed) {
     auto p = tsfile_cli::parse_args(
         {"sample", "-m", "s1", "-n", "3", "--seed", "42", "data.tsfile"});

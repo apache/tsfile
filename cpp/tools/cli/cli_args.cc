@@ -158,6 +158,18 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 return p;
             }
             p.has_seed = true;
+        } else if (a == "-o" || a == "--output") {
+            if (!need_value(a, p.output)) {
+                return p;
+            }
+        } else if (a == "--columns") {
+            if (!need_value(a, p.columns)) {
+                return p;
+            }
+        } else if (a == "-v" || a == "--verbose") {
+            p.verbose = true;
+        } else if (a == "--header-match") {
+            p.header_match = true;
         } else if (a == "--model") {
             if (!need_value(a, val)) {
                 return p;
