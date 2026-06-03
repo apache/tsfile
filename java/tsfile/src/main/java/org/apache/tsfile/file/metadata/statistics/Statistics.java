@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata.statistics;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
 import org.apache.tsfile.exception.write.UnknownColumnTypeException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
@@ -255,7 +256,7 @@ public abstract class Statistics<T extends Serializable> {
     } else {
       Class<?> thisClass = this.getClass();
       Class<?> statsClass = stats.getClass();
-      LOG.warn("Statistics classes mismatched,no merge: {} v.s. {}", thisClass, statsClass);
+      LOG.warn(Messages.get("log.file.stats_classes_mismatched"), thisClass, statsClass);
 
       throw new StatisticsClassException(thisClass, statsClass);
     }

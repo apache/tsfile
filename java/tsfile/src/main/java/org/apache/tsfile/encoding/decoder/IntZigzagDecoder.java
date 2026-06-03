@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -47,7 +48,7 @@ public class IntZigzagDecoder extends Decoder {
   public IntZigzagDecoder() {
     super(TSEncoding.ZIGZAG);
     this.reset();
-    logger.debug("tsfile-decoding IntZigzagDecoder: int zigzag decoder");
+    logger.debug(Messages.get("log.encoding.int_zigzag_decoder_init"));
   }
 
   /** decoding */

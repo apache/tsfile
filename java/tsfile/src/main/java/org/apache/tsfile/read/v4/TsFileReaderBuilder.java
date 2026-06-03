@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.v4;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.File;
 import java.io.IOException;
@@ -43,7 +44,7 @@ public class TsFileReaderBuilder {
   @TsFileApi
   private void validateParameters() {
     if (file == null || !file.exists() || file.isDirectory()) {
-      throw new IllegalArgumentException("The file must be a non-null and non-directory File.");
+      throw new IllegalArgumentException(Messages.get("error.read.reader_builder_file_non_null"));
     }
   }
 }

@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileCheckStatus;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
@@ -121,7 +122,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
   public RestorableTsFileIOWriter(File file, boolean truncate, EncryptParameter param)
       throws IOException {
     if (logger.isDebugEnabled()) {
-      logger.debug("{} is opened.", file.getName());
+      logger.debug(Messages.get("log.write.writer_opened"), file.getName());
     }
     this.file = file;
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
@@ -151,7 +152,8 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
           } else if (truncatedSize == TsFileCheckStatus.INCOMPATIBLE_FILE) {
             out.close();
             throw new NotCompatibleTsFileException(
-                String.format("%s is not in TsFile format.", file.getAbsolutePath()));
+                Messages.format(
+                    "error.write.restorable_writer_not_compatible", file.getAbsolutePath()));
           } else {
             crashed = true;
             canWrite = true;

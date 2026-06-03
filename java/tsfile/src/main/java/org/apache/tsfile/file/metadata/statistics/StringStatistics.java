@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata.statistics;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -134,13 +135,13 @@ public class StringStatistics extends Statistics<Binary> {
   @Override
   public double getSumDoubleValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.STRING, "double sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.STRING, "double sum"));
   }
 
   @Override
   public long getSumLongValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.STRING, "long sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.STRING, "long sum"));
   }
 
   @SuppressWarnings("rawtypes")

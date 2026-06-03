@@ -20,6 +20,7 @@ package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 
 import java.io.ByteArrayOutputStream;
@@ -50,35 +51,43 @@ public abstract class Encoder {
   }
 
   public void encode(boolean value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode boolean is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "boolean"));
   }
 
   public void encode(short value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode short is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "short"));
   }
 
   public void encode(int value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode int is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "int"));
   }
 
   public void encode(long value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode long is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "long"));
   }
 
   public void encode(float value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode float is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "float"));
   }
 
   public void encode(double value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode double is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "double"));
   }
 
   public void encode(Binary value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode Binary is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "Binary"));
   }
 
   public void encode(BigDecimal value, ByteArrayOutputStream out) {
-    throw new TsFileEncodingException("Method encode BigDecimal is not supported by Encoder");
+    throw new TsFileEncodingException(
+        Messages.format("error.encoding.encoder_method_not_supported", "BigDecimal"));
   }
 
   /**

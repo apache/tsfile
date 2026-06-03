@@ -25,6 +25,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.fileSystem.fsFactory.FSFactory;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
@@ -467,7 +468,8 @@ public class TsFileGeneratorUtils {
       case 5:
         return TSDataType.TEXT;
       default:
-        throw new IllegalArgumentException("Invalid input: " + num % 6);
+        throw new IllegalArgumentException(
+            Messages.format("error.utils.generator_invalid_input", num % 6));
     }
   }
 

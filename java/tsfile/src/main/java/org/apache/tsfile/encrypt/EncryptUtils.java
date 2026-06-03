@@ -21,6 +21,7 @@ package org.apache.tsfile.encrypt;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +88,7 @@ public class EncryptUtils {
     try {
       return deriveKeyInternal(token.getBytes(), salt, ITERATION_COUNT, dkLen);
     } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-      throw new EncryptException("Error deriving key from token", e);
+      throw new EncryptException(Messages.get("error.encrypt.key_derivation_failed"), e);
     }
   }
 
@@ -97,10 +98,10 @@ public class EncryptUtils {
     int hLen = getPRFLength();
 
     if (dkLen < 1) {
-      throw new EncryptException("main key's dkLen must be positive integer: " + dkLen);
+      throw new EncryptException(Messages.format("error.encrypt.dklen_not_positive", dkLen));
     }
     if ((long) dkLen > (long) (Math.pow(2, 32) - 1) * hLen) {
-      throw new EncryptException("main key's dkLen is too long: " + dkLen);
+      throw new EncryptException(Messages.format("error.encrypt.dklen_too_long", dkLen));
     }
 
     int n = (int) Math.ceil((double) dkLen / hLen);
@@ -198,8 +199,7 @@ public class EncryptUtils {
     try {
       md = MessageDigest.getInstance("SHA-256");
     } catch (NoSuchAlgorithmException e) {
-      throw new EncryptException(
-          "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
+      throw new EncryptException(Messages.get("error.encrypt.sha256_not_found"), e);
     }
     md.update("IoTDB is the best".getBytes());
     md.update(conf.getEncryptKey());
@@ -269,8 +269,7 @@ public class EncryptUtils {
       try {
         md = MessageDigest.getInstance("SHA-256");
       } catch (NoSuchAlgorithmException e) {
-        throw new EncryptException(
-            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
+        throw new EncryptException(Messages.get("error.encrypt.sha256_not_found"), e);
       }
       md.update("IoTDB is the best".getBytes());
       md.update(param.getKey());
@@ -298,11 +297,14 @@ public class EncryptUtils {
       IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(dataEncryptKey));
     } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get encryptor class failed: " + encryptType, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encrypt_class_not_found", encryptType), e);
     } catch (NoSuchMethodException e) {
-      throw new EncryptException("Get constructor for encryptor failed: " + encryptType, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encrypt_no_constructor", encryptType), e);
     } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-      throw new EncryptException("New encryptor instance failed: " + encryptType, e);
+      throw new EncryptException(
+          Messages.format("error.encrypt.encrypt_instantiation_failed", encryptType), e);
     }
   }
 
@@ -316,8 +318,7 @@ public class EncryptUtils {
       try {
         md = MessageDigest.getInstance("SHA-256");
       } catch (NoSuchAlgorithmException e) {
-        throw new EncryptException(
-            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
+        throw new EncryptException(Messages.get("error.encrypt.sha256_not_found"), e);
       }
       md.update("IoTDB is the best".getBytes());
       md.update(conf.getEncryptKey());

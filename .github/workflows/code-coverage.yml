@@ -19,7 +19,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'apache/tsfile' || github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache Maven packages
         uses: actions/cache@v5
         with:
@@ -36,7 +36,7 @@ jobs:
           rm -rf cpp/target/build/test/CMakeFiles/TsFile_Test.dir
           rm -rf cpp/target/build/test/coverage.info
       - name: Upload coverage reports to codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: java/tsfile/target/jacoco-merged-reports/jacoco.xml,cpp/target/build/test/coverage_report/index.html

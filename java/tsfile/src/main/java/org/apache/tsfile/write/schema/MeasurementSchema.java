@@ -25,6 +25,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
@@ -247,22 +248,26 @@ public class MeasurementSchema
 
   @Override
   public List<String> getSubMeasurementsList() {
-    throw new UnsupportedOperationException("unsupported method for MeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_measurement_method_unsupported"));
   }
 
   @Override
   public List<TSDataType> getSubMeasurementsTSDataTypeList() {
-    throw new UnsupportedOperationException("unsupported method for MeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_measurement_method_unsupported"));
   }
 
   @Override
   public List<TSEncoding> getSubMeasurementsTSEncodingList() {
-    throw new UnsupportedOperationException("unsupported method for MeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_measurement_method_unsupported"));
   }
 
   @Override
   public List<Encoder> getSubMeasurementsEncoderList() {
-    throw new UnsupportedOperationException("unsupported method for MeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_measurement_method_unsupported"));
   }
 
   /**
@@ -314,15 +319,15 @@ public class MeasurementSchema
   @Override
   public int serializedSize() {
     int byteLen = 0;
-    byteLen += ReadWriteIOUtils.sizeToWrite(measurementName);
-    byteLen += 3 * Byte.BYTES;
+    byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(measurementName));
+    byteLen = Math.addExact(byteLen, 3 * Byte.BYTES);
     if (props == null) {
-      byteLen += Integer.BYTES;
+      byteLen = Math.addExact(byteLen, Integer.BYTES);
     } else {
-      byteLen += Integer.BYTES;
+      byteLen = Math.addExact(byteLen, Integer.BYTES);
       for (Map.Entry<String, String> entry : props.entrySet()) {
-        byteLen += ReadWriteIOUtils.sizeToWrite(entry.getKey());
-        byteLen += ReadWriteIOUtils.sizeToWrite(entry.getValue());
+        byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(entry.getKey()));
+        byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(entry.getValue()));
       }
     }
 

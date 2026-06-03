@@ -19,6 +19,7 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +75,7 @@ public class BytesUtils {
    */
   public static byte[] intToBytes(int i, byte[] desc, int offset) {
     if (desc.length - offset < 4) {
-      throw new IllegalArgumentException("Invalid input: desc.length - offset < 4");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_desc_offset_too_short"));
     }
     desc[0 + offset] = (byte) ((i >> 24) & 0xFF);
     desc[1 + offset] = (byte) ((i >> 16) & 0xFF);
@@ -112,13 +113,7 @@ public class BytesUtils {
         }
       }
     } catch (Exception e) {
-      LOG.error(
-          "tsfile-common BytesUtils: cannot convert an integer {} to a byte array, "
-              + "pos {}, width {}",
-          srcNum,
-          pos,
-          width,
-          e);
+      LOG.error(Messages.get("log.utils.bytes_int_to_bytes_error"), srcNum, pos, width, e);
     }
   }
 
@@ -130,7 +125,7 @@ public class BytesUtils {
    */
   public static byte[] intToTwoBytes(int i) {
     if (i > 0xFFFF) {
-      throw new IllegalArgumentException("Invalid input: " + i + " > 0xFFFF");
+      throw new IllegalArgumentException(Messages.format("error.utils.bytes_int_too_large", i));
     }
     byte[] ret = new byte[2];
     ret[1] = (byte) (i & 0xFF);
@@ -146,7 +141,7 @@ public class BytesUtils {
    */
   public static int twoBytesToInt(byte[] ret) {
     if (ret.length != 2) {
-      throw new IllegalArgumentException("Invalid input: ret.length != 2");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_ret_length_not_two"));
     }
     int value = 0;
     value |= ret[0];
@@ -171,7 +166,7 @@ public class BytesUtils {
     }
 
     if (r > Integer.MAX_VALUE) {
-      throw new RuntimeException("Row count is larger than Integer.MAX_VALUE");
+      throw new RuntimeException(Messages.get("error.utils.bytes_row_count_too_large"));
     }
 
     return (int) r;
@@ -186,7 +181,7 @@ public class BytesUtils {
    */
   public static int bytesToInt(byte[] bytes, int offset) {
     if (bytes.length - offset < 4) {
-      throw new IllegalArgumentException("Invalid input: bytes.length - offset < 4");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_offset_too_short_4"));
     }
 
     int value = 0;
@@ -251,7 +246,7 @@ public class BytesUtils {
    */
   public static void floatToBytes(float x, byte[] desc, int offset) {
     if (desc.length - offset < 4) {
-      throw new IllegalArgumentException("Invalid input: desc.length - offset < 4");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_desc_offset_too_short"));
     }
     int l = Float.floatToIntBits(x);
     for (int i = 3 + offset; i >= offset; i--) {
@@ -268,7 +263,7 @@ public class BytesUtils {
    */
   public static float bytesToFloat(byte[] b) {
     if (b.length != 4) {
-      throw new IllegalArgumentException("Invalid input: b.length != 4");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_b_length_not_four"));
     }
 
     int l;
@@ -291,7 +286,7 @@ public class BytesUtils {
    */
   public static float bytesToFloat(byte[] b, int offset) {
     if (b.length - offset < 4) {
-      throw new IllegalArgumentException("Invalid input: b.length - offset < 4");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_b_offset_too_short_4"));
     }
 
     int l;
@@ -330,7 +325,7 @@ public class BytesUtils {
    */
   public static void doubleToBytes(double d, byte[] bytes, int offset) {
     if (bytes.length - offset < 8) {
-      throw new IllegalArgumentException("Invalid input: bytes.length - offset < 8");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_offset_too_short_8"));
     }
 
     long value = Double.doubleToLongBits(d);
@@ -374,7 +369,7 @@ public class BytesUtils {
    */
   public static double bytesToDouble(byte[] bytes, int offset) {
     if (bytes.length - offset < 8) {
-      throw new IllegalArgumentException("Invalid input: bytes.length - offset < 8");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_offset_too_short_8"));
     }
     long value = bytes[offset + 7];
     value &= 0xff;
@@ -447,7 +442,7 @@ public class BytesUtils {
    */
   public static boolean bytesToBool(byte[] b) {
     if (b.length != 1) {
-      throw new IllegalArgumentException("Invalid input: b.length != 1");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_b_length_not_one"));
     }
 
     return b[0] != 0;
@@ -462,7 +457,7 @@ public class BytesUtils {
    */
   public static boolean bytesToBool(byte[] b, int offset) {
     if (b.length - offset < 1) {
-      throw new IllegalArgumentException("Invalid input: b.length - offset < 1");
+      throw new IllegalArgumentException(Messages.get("error.utils.bytes_b_offset_too_short_1"));
     }
     return b[offset] != 0;
   }
@@ -552,13 +547,7 @@ public class BytesUtils {
         }
       }
     } catch (Exception e) {
-      LOG.error(
-          "tsfile-common BytesUtils: cannot convert a long {} to a byte array, "
-              + "pos {}, width {}",
-          srcNum,
-          pos,
-          width,
-          e);
+      LOG.error(Messages.get("log.utils.bytes_long_to_bytes_error"), srcNum, pos, width, e);
     }
   }
 
@@ -630,7 +619,8 @@ public class BytesUtils {
    */
   public static long bytesToLongFromOffset(byte[] byteNum, int len, int offset) {
     if (byteNum.length - offset < len) {
-      throw new IllegalArgumentException("Invalid input: byteNum.length - offset < len");
+      throw new IllegalArgumentException(
+          Messages.get("error.utils.bytes_bytenum_offset_too_short"));
     }
     long num = 0;
     for (int ix = 0; ix < len; ix++) {

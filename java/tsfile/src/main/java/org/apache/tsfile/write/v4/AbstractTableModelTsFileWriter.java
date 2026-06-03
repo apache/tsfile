@@ -26,6 +26,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
@@ -119,11 +120,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     this.pageSize = conf.getPageSizeInByte();
     this.chunkGroupSizeThreshold = chunkGroupSizeThreshold;
     if (this.pageSize >= chunkGroupSizeThreshold) {
-      LOG.warn(
-          "TsFile's page size {} is greater than chunk group size {}, please enlarge the chunk group"
-              + " size or decrease page size. ",
-          pageSize,
-          chunkGroupSizeThreshold);
+      LOG.warn(Messages.get("log.write.page_size_warn"), pageSize, chunkGroupSizeThreshold);
     }
 
     this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
@@ -192,7 +189,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     if (recordCount >= recordCountForNextMemCheck) {
       long memSize = calculateMemSizeForAllGroup();
       if (memSize > chunkGroupSizeThreshold) {
-        LOG.debug("start to flush chunk groups, memory space occupy:{}", memSize);
+        LOG.debug(Messages.get("log.write.flush_chunk_groups"), memSize);
         recordCountForNextMemCheck = recordCount * chunkGroupSizeThreshold / memSize;
         flush();
       } else {
@@ -218,9 +215,10 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
         long dataSize = groupWriter.flushToFileWriter(fileWriter);
         if (fileWriter.getPos() - pos != dataSize) {
           throw new IOException(
-              String.format(
-                  "Flushed data size is inconsistent with computation! Estimated: %d, Actual: %d",
-                  dataSize, fileWriter.getPos() - pos));
+              Messages.format(
+                  "error.write.tsfile_writer_flush_inconsistent",
+                  dataSize,
+                  fileWriter.getPos() - pos));
         }
         fileWriter.endChunkGroup();
         if (groupWriter instanceof AlignedChunkGroupWriterImpl) {
@@ -268,12 +266,12 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   @Override
   @TsFileApi
   public void close() {
-    LOG.info("start close file");
+    LOG.info(Messages.get("log.write.close_file"));
     try {
       flush();
       fileWriter.endFile();
     } catch (IOException e) {
-      LOG.warn("Meet exception when close file writer. ", e);
+      LOG.warn(Messages.get("log.write.close_file_exception"), e);
     }
   }
 }

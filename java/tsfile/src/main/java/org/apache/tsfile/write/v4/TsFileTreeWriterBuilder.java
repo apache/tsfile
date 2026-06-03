@@ -20,6 +20,7 @@
 package org.apache.tsfile.write.v4;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,7 +61,7 @@ public class TsFileTreeWriterBuilder {
    */
   public TsFileTreeWriter build() throws IOException {
     if (file == null) {
-      throw new IllegalArgumentException("Output file must be specified");
+      throw new IllegalArgumentException(Messages.get("error.write.v4_output_file_required"));
     }
 
     return new TsFileTreeWriter(file, memoryThreshold);

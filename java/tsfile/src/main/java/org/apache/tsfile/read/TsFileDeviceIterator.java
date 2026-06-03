@@ -22,6 +22,7 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Pair;
 
 import java.io.IOException;
@@ -62,8 +63,7 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
       // get the first measurement node of this device, to know if the device is aligned
       return new Pair<>(deviceId, lazyTsFileDeviceIterator.isCurrentDeviceAligned());
     } catch (IOException e) {
-      throw new TsFileRuntimeException(
-          "Error occurred while reading a time series metadata block.");
+      throw new TsFileRuntimeException(Messages.get("error.read.metadata_block_read_error"));
     }
   }
 

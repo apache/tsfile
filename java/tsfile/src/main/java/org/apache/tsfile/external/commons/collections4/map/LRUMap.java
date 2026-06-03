@@ -17,6 +17,7 @@
 package org.apache.tsfile.external.commons.collections4.map;
 
 import org.apache.tsfile.external.commons.collections4.BoundedMap;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -174,10 +175,10 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
 
     super(initialSize, loadFactor);
     if (maxSize < 1) {
-      throw new IllegalArgumentException("LRUMap max size must be greater than 0");
+      throw new IllegalArgumentException(Messages.get("error.external.lrumap_max_size_positive"));
     }
     if (initialSize > maxSize) {
-      throw new IllegalArgumentException("LRUMap initial size must not be greather than max size");
+      throw new IllegalArgumentException(Messages.get("error.external.lrumap_initial_exceeds_max"));
     }
     this.maxSize = maxSize;
     this.scanUntilRemovable = scanUntilRemovable;
@@ -263,9 +264,7 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
       modCount++;
       // remove
       if (entry.before == null) {
-        throw new IllegalStateException(
-            "Entry.before is null."
-                + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+        throw new IllegalStateException(Messages.get("error.external.lrumap_entry_before_null"));
       }
       entry.before.after = entry.after;
       entry.after.before = entry.before;
@@ -275,9 +274,7 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
       header.before.after = entry;
       header.before = entry;
     } else if (entry == header) {
-      throw new IllegalStateException(
-          "Can't move header to MRU"
-              + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+      throw new IllegalStateException(Messages.get("error.external.lrumap_cannot_move_header"));
     }
   }
 
@@ -326,19 +323,14 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
         }
         if (reuse == null) {
           throw new IllegalStateException(
-              "Entry.after=null, header.after="
-                  + header.after
-                  + " header.before="
-                  + header.before
-                  + " key="
-                  + key
-                  + " value="
-                  + value
-                  + " size="
-                  + size
-                  + " maxSize="
-                  + maxSize
-                  + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+              Messages.format(
+                  "error.external.lrumap_entry_after_null",
+                  header.after,
+                  header.before,
+                  key,
+                  value,
+                  size,
+                  maxSize));
         }
       } else {
         removeLRUEntry = removeLRU(reuse);
@@ -347,19 +339,14 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
       if (removeLRUEntry) {
         if (reuse == null) {
           throw new IllegalStateException(
-              "reuse=null, header.after="
-                  + header.after
-                  + " header.before="
-                  + header.before
-                  + " key="
-                  + key
-                  + " value="
-                  + value
-                  + " size="
-                  + size
-                  + " maxSize="
-                  + maxSize
-                  + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+              Messages.format(
+                  "error.external.lrumap_reuse_null",
+                  header.after,
+                  header.before,
+                  key,
+                  value,
+                  size,
+                  maxSize));
         }
         reuseMapping(reuse, hashIndex, hashCode, key, value);
       } else {
@@ -401,19 +388,14 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
       }
       if (loop == null) {
         throw new IllegalStateException(
-            "Entry.next=null, data[removeIndex]="
-                + data[removeIndex]
-                + " previous="
-                + previous
-                + " key="
-                + key
-                + " value="
-                + value
-                + " size="
-                + size
-                + " maxSize="
-                + maxSize
-                + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+            Messages.format(
+                "error.external.lrumap_loop_null",
+                data[removeIndex],
+                previous,
+                key,
+                value,
+                size,
+                maxSize));
       }
 
       // reuse the entry
@@ -423,19 +405,8 @@ public class LRUMap<K, V> extends AbstractLinkedMap<K, V>
       addEntry(entry, hashIndex);
     } catch (final NullPointerException ex) {
       throw new IllegalStateException(
-          "NPE, entry="
-              + entry
-              + " entryIsHeader="
-              + (entry == header)
-              + " key="
-              + key
-              + " value="
-              + value
-              + " size="
-              + size
-              + " maxSize="
-              + maxSize
-              + " This should not occur if your keys are immutable, and you have used synchronization properly.");
+          Messages.format(
+              "error.external.lrumap_npe", entry, (entry == header), key, value, size, maxSize));
     }
   }
 

@@ -25,6 +25,7 @@ import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -118,7 +119,7 @@ public class DeviceTableModelReader implements ITsFileReader {
     try {
       this.fileReader.close();
     } catch (IOException e) {
-      LOG.warn("Meet exception when close file reader: ", e);
+      LOG.warn(Messages.get("log.read.v4_close_reader_error"), e);
     }
   }
 }

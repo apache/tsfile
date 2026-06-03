@@ -21,6 +21,7 @@ package org.apache.tsfile.read.filter.basic;
 
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.utils.Binary;
@@ -175,7 +176,7 @@ public abstract class ValueFilter extends Filter {
 
   @Override
   public List<TimeRange> getTimeRanges() {
-    throw new UnsupportedOperationException("Value filter does not support getTimeRanges()");
+    throw new UnsupportedOperationException(Messages.get("error.read.value_filter_no_time_ranges"));
   }
 
   protected abstract ClassSerializeId getClassSerializeId();

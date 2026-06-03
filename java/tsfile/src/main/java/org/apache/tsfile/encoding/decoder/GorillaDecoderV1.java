@@ -19,6 +19,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
@@ -70,7 +71,7 @@ public abstract class GorillaDecoderV1 extends Decoder {
       fillBuffer(buffer);
     }
     if (isEmpty()) {
-      throw new IOException("Reading from empty buffer");
+      throw new IOException(Messages.get("error.encoding.gorilla_empty_buffer"));
     }
     numberLeftInBuffer--;
     return ((this.buffer >> numberLeftInBuffer) & 1) == 1;
@@ -86,7 +87,7 @@ public abstract class GorillaDecoderV1 extends Decoder {
       this.buffer = ReadWriteIOUtils.read(buffer);
       numberLeftInBuffer = 8;
     } else {
-      logger.error("Failed to fill a new buffer, because there is no byte to read");
+      logger.error(Messages.get("log.encoding.gorilla_fill_buffer_failed"));
       this.buffer = EOF;
       numberLeftInBuffer = -1;
     }

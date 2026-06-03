@@ -25,6 +25,7 @@ import org.apache.tsfile.external.commons.io.output.ByteArrayOutputStream;
 import org.apache.tsfile.external.commons.io.output.StringBuilderWriter;
 import org.apache.tsfile.external.commons.io.output.ThresholdingOutputStream;
 import org.apache.tsfile.external.commons.io.output.UnsynchronizedByteArrayOutputStream;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -165,8 +166,8 @@ public class IOUtils {
                 Integer.MAX_VALUE,
                 os -> {
                   throw new IllegalArgumentException(
-                      String.format(
-                          "Cannot read more than %,d into a byte array", Integer.MAX_VALUE));
+                      Messages.format(
+                          "error.external.io_cannot_read_max_bytes", Integer.MAX_VALUE));
                 },
                 os -> ubaOutput)) {
       copy(inputStream, thresholdOutput);
@@ -416,7 +417,8 @@ public class IOUtils {
       throws IOException {
 
     if (size < 0) {
-      throw new IllegalArgumentException("Size must be equal or greater than zero: " + size);
+      throw new IllegalArgumentException(
+          Messages.format("error.external.io_size_non_negative", size));
     }
 
     if (size == 0) {
@@ -432,7 +434,8 @@ public class IOUtils {
     }
 
     if (offset != size) {
-      throw new IOException("Unexpected read size, current: " + offset + ", expected: " + size);
+      throw new IOException(
+          Messages.format("error.external.io_unexpected_read_size", offset, size));
     }
 
     return data;
@@ -482,7 +485,7 @@ public class IOUtils {
         input,
         charset,
         () -> {
-          throw new NullPointerException("input");
+          throw new NullPointerException(Messages.get("error.external.io_null_input"));
         });
   }
 

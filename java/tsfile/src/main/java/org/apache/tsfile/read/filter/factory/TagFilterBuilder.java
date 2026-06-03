@@ -22,6 +22,7 @@ package org.apache.tsfile.read.filter.factory;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.operator.And;
 import org.apache.tsfile.read.filter.operator.Not;
@@ -43,7 +44,8 @@ public class TagFilterBuilder {
   private int getIdColumnIndex(String columnName) {
     int idColumnOrder = tableSchema.findIdColumnOrder(columnName);
     if (idColumnOrder == -1) {
-      throw new IllegalArgumentException("Column '" + columnName + "' is not a tag column");
+      throw new IllegalArgumentException(
+          Messages.format("error.read.tag_not_a_tag_column", columnName));
     }
     return idColumnOrder + 1;
   }

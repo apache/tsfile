@@ -49,4 +49,7 @@
     </root>
     <logger name="org.apache.tsfile.common.conf.TSFileDescriptor" level="OFF"/>
     <logger name="org.apache.tsfile.write.TsFileWriter" level="OFF"/>
+    <logger name="org.apache.arrow" level="WARN"/>
+    <logger name="org.apache.hadoop.io.compress.CodecPool" level="WARN"/>
+    <logger name="org.apache.parquet" level="WARN"/>
 </configuration>

@@ -983,7 +983,7 @@ public class TsFileIOWriterMemoryControlTest {
         Encoder encoder = TSEncodingBuilder.getEncodingBuilder(timeEncoding).getEncoder(timeType);
         for (int chunkIdx = 0; chunkIdx < 10; ++chunkIdx) {
           TimeChunkWriter timeChunkWriter =
-              new TimeChunkWriter("", CompressionType.SNAPPY, TSEncoding.PLAIN, encoder);
+              new TimeChunkWriter("", CompressionType.SNAPPY, timeEncoding, encoder);
           for (long j = TEST_CHUNK_SIZE * chunkIdx; j < TEST_CHUNK_SIZE * (chunkIdx + 1); ++j) {
             timeChunkWriter.write(j);
           }
@@ -1141,7 +1141,7 @@ public class TsFileIOWriterMemoryControlTest {
         TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
         Encoder encoder = TSEncodingBuilder.getEncodingBuilder(timeEncoding).getEncoder(timeType);
         TimeChunkWriter timeChunkWriter =
-            new TimeChunkWriter("", CompressionType.SNAPPY, TSEncoding.PLAIN, encoder);
+            new TimeChunkWriter("", CompressionType.SNAPPY, timeEncoding, encoder);
         for (int j = 0; j < TEST_CHUNK_SIZE; ++j) {
           timeChunkWriter.write(j);
         }
@@ -1197,7 +1197,7 @@ public class TsFileIOWriterMemoryControlTest {
         Encoder encoder = TSEncodingBuilder.getEncodingBuilder(timeEncoding).getEncoder(timeType);
         for (int chunkIdx = 0; chunkIdx < 10; ++chunkIdx) {
           TimeChunkWriter timeChunkWriter =
-              new TimeChunkWriter("", CompressionType.SNAPPY, TSEncoding.PLAIN, encoder);
+              new TimeChunkWriter("", CompressionType.SNAPPY, timeEncoding, encoder);
           for (long j = TEST_CHUNK_SIZE * chunkIdx; j < TEST_CHUNK_SIZE * (chunkIdx + 1); ++j) {
             timeChunkWriter.write(j);
           }

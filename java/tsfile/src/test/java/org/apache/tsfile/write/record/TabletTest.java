@@ -22,26 +22,34 @@ package org.apache.tsfile.write.record;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.Pair;
+import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -147,6 +155,7 @@ public class TabletTest {
     measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s10", TSDataType.OBJECT, TSEncoding.PLAIN));
 
     final int rowSize = 1000;
     final Tablet tablet = new Tablet(deviceId, measurementSchemas);
@@ -170,6 +179,7 @@ public class TabletTest {
           measurementSchemas.get(9).getMeasurementName(),
           i,
           LocalDate.of(2000 + i, i / 100 + 1, i / 100 + 1));
+      tablet.addValue(i, 10, i % 2 == 0, (long) i, new byte[] {(byte) i, (byte) (i + 1)});
 
       tablet.getBitMaps()[i % measurementSchemas.size()].mark(i);
     }
@@ -186,9 +196,11 @@ public class TabletTest {
     tablet.addValue(measurementSchemas.get(7).getMeasurementName(), rowSize - 1, null);
     tablet.addValue(measurementSchemas.get(8).getMeasurementName(), rowSize - 1, null);
     tablet.addValue(measurementSchemas.get(9).getMeasurementName(), rowSize - 1, null);
+    tablet.addValue(measurementSchemas.get(10).getMeasurementName(), rowSize - 1, null);
 
     try {
       final ByteBuffer byteBuffer = tablet.serialize();
+      assertEquals(tablet.serializedSize(), byteBuffer.remaining());
       final Tablet newTablet = Tablet.deserialize(byteBuffer);
       assertEquals(tablet, newTablet);
       for (int i = 0; i < rowSize; i++) {
@@ -357,6 +369,390 @@ public class TabletTest {
     Assert.assertTrue(deserializeTablet.isNull(1, 0));
   }
 
+  private static final Set<TSDataType> NON_SERIALIZABLE_DATA_TYPES =
+      EnumSet.of(TSDataType.VECTOR, TSDataType.UNKNOWN);
+
+  private static final List<TSDataType> SERIALIZABLE_DATA_TYPES =
+      Arrays.stream(TSDataType.values())
+          .filter(dataType -> !NON_SERIALIZABLE_DATA_TYPES.contains(dataType))
+          .collect(Collectors.toList());
+
+  private static final int[] ROW_COUNTS_FOR_SIZE_TEST = {0, 1, 7, 50};
+
+  @Test
+  public void testSerializedSizeMatchesActualSize() throws IOException {
+    // tree model: single column per type
+    for (final TSDataType type : SERIALIZABLE_DATA_TYPES) {
+      for (final int rowCount : ROW_COUNTS_FOR_SIZE_TEST) {
+        assertSerializedSizeMatches(
+            createAndFillTreeTablet(
+                "root.sg.d1",
+                columnNamesForType(type),
+                Arrays.asList(type),
+                rowCount,
+                0,
+                false,
+                false),
+            "tree single column " + type + " rows=" + rowCount);
+      }
+    }
+
+    // table model: single column per type
+    for (final TSDataType type : SERIALIZABLE_DATA_TYPES) {
+      for (final int rowCount : ROW_COUNTS_FOR_SIZE_TEST) {
+        assertSerializedSizeMatches(
+            createAndFillTableTablet(
+                "table1",
+                columnNamesForType(type),
+                Arrays.asList(type),
+                ColumnCategory.nCopy(ColumnCategory.FIELD, 1),
+                rowCount,
+                0,
+                false,
+                false),
+            "table single column " + type + " rows=" + rowCount);
+      }
+    }
+
+    // all types combined
+    final List<TSDataType> treeTypes = SERIALIZABLE_DATA_TYPES;
+    final List<TSDataType> tableTypes = new ArrayList<>();
+    tableTypes.add(TSDataType.STRING);
+    tableTypes.addAll(treeTypes);
+    for (final int rowCount : new int[] {1, 25, 100}) {
+      assertSerializedSizeMatches(
+          createAndFillTreeTablet(
+              "root.sg.d1", buildColumnNames(treeTypes), treeTypes, rowCount, 100, false, false),
+          "tree all types combined rows=" + rowCount);
+      assertSerializedSizeMatches(
+          createAndFillTableTablet(
+              "table1",
+              buildColumnNames(tableTypes),
+              tableTypes,
+              buildTableColumnCategories(tableTypes.size()),
+              rowCount,
+              100,
+              false,
+              false),
+          "table all types combined rows=" + rowCount);
+    }
+
+    // variable-length binary columns
+    final List<TSDataType> binaryTypes =
+        Arrays.asList(TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT);
+    assertSerializedSizeMatches(
+        createAndFillTreeTablet(
+            "root.sg.d1", buildColumnNames(binaryTypes), binaryTypes, 30, 0, false, true),
+        "tree variable binary lengths");
+    assertSerializedSizeMatches(
+        createAndFillTableTablet(
+            "table1",
+            buildColumnNames(binaryTypes),
+            binaryTypes,
+            ColumnCategory.nCopy(ColumnCategory.FIELD, binaryTypes.size()),
+            30,
+            0,
+            false,
+            true),
+        "table variable binary lengths");
+
+    // sparse null values
+    assertSerializedSizeMatches(
+        createAndFillTreeTablet(
+            "root.sg.d1", buildColumnNames(treeTypes), treeTypes, 40, 0, true, false),
+        "tree with null values");
+    assertSerializedSizeMatches(
+        createAndFillTableTablet(
+            "table1",
+            buildColumnNames(tableTypes),
+            tableTypes,
+            buildTableColumnCategories(tableTypes.size()),
+            40,
+            0,
+            true,
+            false),
+        "table with null values");
+
+    // table model with TAG columns
+    final List<String> tagColumnNames = new ArrayList<>();
+    final List<TSDataType> tagDataTypes = new ArrayList<>();
+    final List<ColumnCategory> tagCategories = new ArrayList<>();
+    tagColumnNames.add("region");
+    tagDataTypes.add(TSDataType.STRING);
+    tagCategories.add(ColumnCategory.TAG);
+    for (int i = 0; i < SERIALIZABLE_DATA_TYPES.size(); i++) {
+      tagColumnNames.add("m" + i);
+      tagDataTypes.add(SERIALIZABLE_DATA_TYPES.get(i));
+      tagCategories.add(ColumnCategory.FIELD);
+    }
+    assertSerializedSizeMatches(
+        createAndFillTableTablet(
+            "metrics_table", tagColumnNames, tagDataTypes, tagCategories, 20, 0, false, true),
+        "table model with TAG columns");
+
+    // mixed fixed-length and variable-length columns
+    final List<TSDataType> mixedTypes =
+        Arrays.asList(
+            TSDataType.INT32,
+            TSDataType.TEXT,
+            TSDataType.STRING,
+            TSDataType.BLOB,
+            TSDataType.DOUBLE);
+    assertSerializedSizeMatches(
+        createAndFillTreeTablet(
+            "root.sg.d1", buildColumnNames(mixedTypes), mixedTypes, 15, 5, false, true),
+        "tree mixed column payload lengths");
+    assertSerializedSizeMatches(
+        createAndFillTableTablet(
+            "table1",
+            buildColumnNames(mixedTypes),
+            mixedTypes,
+            ColumnCategory.nCopy(ColumnCategory.FIELD, mixedTypes.size()),
+            15,
+            5,
+            false,
+            true),
+        "table mixed column payload lengths");
+
+    // OBJECT column via dedicated write API
+    final List<IMeasurementSchema> objectSchemas =
+        Arrays.asList(new MeasurementSchema("obj", TSDataType.OBJECT, TSEncoding.PLAIN));
+    final Tablet objectTablet = new Tablet("root.sg.d1", objectSchemas, 5);
+    for (int i = 0; i < 5; i++) {
+      objectTablet.addTimestamp(i, i);
+      objectTablet.addValue(i, 0, i % 2 == 0, i * 10L, new byte[] {(byte) i, (byte) (i + 1)});
+    }
+    assertSerializedSizeMatches(objectTablet, "tree OBJECT column");
+    final Tablet deserializedObject = Tablet.deserialize(objectTablet.serialize());
+    assertEquals(objectTablet, deserializedObject);
+    for (int i = 0; i < 5; i++) {
+      assertEquals(objectTablet.getValue(i, 0), deserializedObject.getValue(i, 0));
+    }
+
+    final Map<String, String> propsWithNonAscii = new HashMap<>();
+    propsWithNonAscii.put("编码", "字典");
+    final Tablet nonAsciiTreeTablet =
+        new Tablet(
+            "root.测试.设备1",
+            Arrays.asList(
+                new MeasurementSchema(
+                    "温度",
+                    TSDataType.TEXT,
+                    TSEncoding.PLAIN,
+                    CompressionType.UNCOMPRESSED,
+                    propsWithNonAscii)),
+            3);
+    for (int i = 0; i < 3; i++) {
+      nonAsciiTreeTablet.addTimestamp(i, i);
+      nonAsciiTreeTablet.addValue("温度", i, "值" + i);
+    }
+    assertSerializedSizeMatches(nonAsciiTreeTablet, "tree non-ASCII names and schema props");
+
+    final Tablet nonAsciiTableTablet =
+        createAndFillTableTablet(
+            "表一",
+            Arrays.asList("标签", "数值"),
+            Arrays.asList(TSDataType.STRING, TSDataType.DOUBLE),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD),
+            3,
+            0,
+            false,
+            true);
+    assertSerializedSizeMatches(nonAsciiTableTablet, "table non-ASCII names");
+  }
+
+  private static List<ColumnCategory> buildTableColumnCategories(int columnCount) {
+    final List<ColumnCategory> categories = new ArrayList<>(columnCount);
+    categories.add(ColumnCategory.TAG);
+    for (int i = 1; i < columnCount; i++) {
+      categories.add(ColumnCategory.FIELD);
+    }
+    return categories;
+  }
+
+  private static List<String> buildColumnNames(List<TSDataType> dataTypes) {
+    final List<String> names = new ArrayList<>(dataTypes.size());
+    for (int i = 0; i < dataTypes.size(); i++) {
+      if (i == 0 && dataTypes.size() > 1) {
+        names.add("tag");
+      } else {
+        names.add("m_" + dataTypes.get(i).name() + "_" + i);
+      }
+    }
+    return names;
+  }
+
+  private static List<String> columnNamesForType(TSDataType type) {
+    return Arrays.asList("m_" + type.name() + "_0");
+  }
+
+  private Tablet createAndFillTreeTablet(
+      String deviceId,
+      List<String> columnNames,
+      List<TSDataType> dataTypes,
+      int rowCount,
+      int valueOffset,
+      boolean withNulls,
+      boolean variableBinaryLength)
+      throws IOException {
+    validateTabletSchema(columnNames, dataTypes, null);
+    final List<IMeasurementSchema> schemas = new ArrayList<>(dataTypes.size());
+    for (int i = 0; i < dataTypes.size(); i++) {
+      schemas.add(new MeasurementSchema(columnNames.get(i), dataTypes.get(i), TSEncoding.PLAIN));
+    }
+    final Tablet tablet = new Tablet(deviceId, schemas, Math.max(1024, rowCount + 1));
+    fillTabletRows(tablet, rowCount, valueOffset, withNulls, variableBinaryLength);
+    return tablet;
+  }
+
+  private Tablet createAndFillTableTablet(
+      String tableName,
+      List<String> columnNames,
+      List<TSDataType> dataTypes,
+      List<ColumnCategory> columnCategories,
+      int rowCount,
+      int valueOffset,
+      boolean withNulls,
+      boolean variableBinaryLength)
+      throws IOException {
+    validateTabletSchema(columnNames, dataTypes, columnCategories);
+    final Tablet tablet =
+        new Tablet(
+            tableName, columnNames, dataTypes, columnCategories, Math.max(1024, rowCount + 1));
+    fillTabletRows(tablet, rowCount, valueOffset, withNulls, variableBinaryLength);
+    return tablet;
+  }
+
+  private static void validateTabletSchema(
+      List<String> columnNames, List<TSDataType> dataTypes, List<ColumnCategory> columnCategories) {
+    if (columnNames.size() != dataTypes.size()) {
+      throw new IllegalArgumentException(
+          "columnNames size "
+              + columnNames.size()
+              + " must match dataTypes size "
+              + dataTypes.size());
+    }
+    if (columnCategories != null && columnCategories.size() != dataTypes.size()) {
+      throw new IllegalArgumentException(
+          "columnCategories size "
+              + columnCategories.size()
+              + " must match dataTypes size "
+              + dataTypes.size());
+    }
+  }
+
+  private void fillTabletRows(
+      Tablet tablet,
+      int rowCount,
+      int valueOffset,
+      boolean withNulls,
+      boolean variableBinaryLength) {
+    if (rowCount > 0) {
+      fillTabletForSerializedSizeTest(
+          tablet, valueOffset, rowCount, withNulls, variableBinaryLength);
+    }
+  }
+
+  private void fillTabletForSerializedSizeTest(
+      Tablet tablet,
+      int valueOffset,
+      int rowCount,
+      boolean withNulls,
+      boolean variableBinaryLength) {
+    for (int row = 0; row < rowCount; row++) {
+      tablet.addTimestamp(row, valueOffset + row);
+      for (int col = 0; col < tablet.getSchemas().size(); col++) {
+        final TSDataType type = tablet.getSchemas().get(col).getType();
+        if (isNullCell(withNulls, row, col)) {
+          tablet.addValue(tablet.getSchemas().get(col).getMeasurementName(), row, null);
+        } else if (type == TSDataType.OBJECT) {
+          tablet.addValue(
+              row,
+              col,
+              (row + col) % 2 == 0,
+              valueOffset + row * 1000L + col,
+              payloadBytes(binaryPayloadLength(variableBinaryLength, row, col)));
+        } else {
+          tablet.addValue(
+              tablet.getSchemas().get(col).getMeasurementName(),
+              row,
+              sampleValue(type, row, col, variableBinaryLength));
+        }
+      }
+    }
+  }
+
+  private static boolean isNullCell(boolean withNulls, int row, int col) {
+    return withNulls && (row + col) % 3 == 0;
+  }
+
+  private static int binaryPayloadLength(boolean variableBinaryLength, int row, int col) {
+    if (variableBinaryLength) {
+      return (col + 1) * 17 + row * 3 + 1;
+    }
+    return 8 + row % 11;
+  }
+
+  private Object sampleValue(TSDataType type, int row, int col, boolean variableBinaryLength) {
+    switch (type) {
+      case BOOLEAN:
+        return (row + col) % 2 == 0;
+      case INT32:
+        return row + col * 100;
+      case INT64:
+      case TIMESTAMP:
+        return (long) (valueOffset(row, col) * 1_000_000L);
+      case FLOAT:
+        return (row + col) * 1.5f;
+      case DOUBLE:
+        return (row + col) * 2.5;
+      case TEXT:
+      case STRING:
+        return stringOfLength(binaryPayloadLength(variableBinaryLength, row, col));
+      case BLOB:
+        return binaryOfLength(binaryPayloadLength(variableBinaryLength, row, col));
+      case DATE:
+        return LocalDate.of(2000 + (row % 20), (col % 12) + 1, (row % 28) + 1);
+      default:
+        throw new IllegalArgumentException("Unsupported type in test: " + type);
+    }
+  }
+
+  private static int valueOffset(int row, int col) {
+    return row + col + 1;
+  }
+
+  private static String stringOfLength(int length) {
+    final char[] chars = new char[length];
+    Arrays.fill(chars, 'x');
+    return new String(chars);
+  }
+
+  private static Binary binaryOfLength(int length) {
+    final byte[] bytes = new byte[length];
+    Arrays.fill(bytes, (byte) 'b');
+    return new Binary(bytes);
+  }
+
+  private static byte[] payloadBytes(int length) {
+    final byte[] bytes = new byte[length];
+    Arrays.fill(bytes, (byte) 'p');
+    return bytes;
+  }
+
+  private void assertSerializedSizeMatches(Tablet tablet, String scenario) throws IOException {
+    final int expectedSize = tablet.serializedSize();
+    final ByteBuffer buffer = tablet.serialize();
+    assertEquals(scenario + ": serialize() buffer size", expectedSize, buffer.remaining());
+    try (PublicBAOS baos = new PublicBAOS();
+        DataOutputStream outputStream = new DataOutputStream(baos)) {
+      tablet.serialize(outputStream);
+      assertEquals(scenario + ": serialize(stream) size", expectedSize, baos.size());
+    }
+    buffer.rewind();
+    assertEquals(scenario + ": deserialize roundtrip", tablet, Tablet.deserialize(buffer));
+  }
+
   @Test
   public void testAppendInconsistent() {
     Tablet t1 =
@@ -424,6 +820,9 @@ public class TabletTest {
           case STRING:
           case BLOB:
             t.addValue(i, j, String.valueOf(i + valueOffset));
+            break;
+          case OBJECT:
+            t.addValue(i, j, (i + valueOffset) % 2 == 0, i + valueOffset, new byte[] {(byte) i});
             break;
           case DATE:
             t.addValue(i, j, LocalDate.of(i + valueOffset, 1, 1));
@@ -654,6 +1053,16 @@ public class TabletTest {
             assertEquals(
                 new Binary(String.valueOf(i).getBytes(StandardCharsets.UTF_8)),
                 result.getValue(i, j));
+            break;
+          case OBJECT:
+            {
+              byte[] content = new byte[] {(byte) i};
+              byte[] expected = new byte[content.length + 9];
+              expected[0] = (byte) (i % 2);
+              System.arraycopy(BytesUtils.longToBytes(i), 0, expected, 1, 8);
+              System.arraycopy(content, 0, expected, 9, content.length);
+              assertEquals(new Binary(expected), result.getValue(i, j));
+            }
             break;
           case DATE:
             assertEquals(LocalDate.of(i, 1, 1), result.getValue(i, j));

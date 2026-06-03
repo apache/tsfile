@@ -18,6 +18,19 @@
     under the License.
 
 -->
+# Apache TsFile 2.3.1
+
+## New Features
+
+- Added scripts to convert CSV, Parquet and Arrow formats to TsFile.
+- Adapted TsFile for the MSVC compiler.
+
+## Bugs
+
+- Fixed the issue that the format conversion scripts did not support date and timestamp data types.
+- Fixed garbled characters when using Chinese table names in the conversion scripts.
+- Fixed the issue where TsFile displayed empty when converting with uppercase column names.
+
 # Apache TsFile 2.3.0
 
 ## New Features
@@ -187,7 +200,7 @@
 * Added accountable function to measurementSchema by @Caideyipi in #509
 * Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @JackieTien97 in #514
 * add switch to disable native lz4 (#480) by @jt2594838 in #515
-* Correct the memroy calculation of BinaryColumnBuilder by @JackieTien97 in #530
+* Correct the memory calculation of BinaryColumnBuilder by @JackieTien97 in #530
 * Fetch max tsblock line number each time from TSFileConfig by @JackieTien97 in #535
 * Support set default compression by data type & Bump org.apache.commons:commons-lang3 from 3.15.0 to 3.18.0 by @jt2594838 in #547
 * Avoid calculating shallow size of map by @shuwenwei in #566

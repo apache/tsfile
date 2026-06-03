@@ -22,6 +22,7 @@ import org.apache.tsfile.external.commons.collections4.OrderedMapIterator;
 import org.apache.tsfile.external.commons.collections4.ResettableIterator;
 import org.apache.tsfile.external.commons.collections4.iterators.EmptyOrderedIterator;
 import org.apache.tsfile.external.commons.collections4.iterators.EmptyOrderedMapIterator;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -171,7 +172,7 @@ public abstract class AbstractLinkedMap<K, V> extends AbstractHashedMap<K, V>
   @Override
   public K firstKey() {
     if (size == 0) {
-      throw new NoSuchElementException("Map is empty");
+      throw new NoSuchElementException(Messages.get("error.external.linked_map_empty"));
     }
     return header.after.getKey();
   }
@@ -184,7 +185,7 @@ public abstract class AbstractLinkedMap<K, V> extends AbstractHashedMap<K, V>
   @Override
   public K lastKey() {
     if (size == 0) {
-      throw new NoSuchElementException("Map is empty");
+      throw new NoSuchElementException(Messages.get("error.external.linked_map_empty"));
     }
     return header.before.getKey();
   }
@@ -228,10 +229,12 @@ public abstract class AbstractLinkedMap<K, V> extends AbstractHashedMap<K, V>
    */
   protected LinkEntry<K, V> getEntry(final int index) {
     if (index < 0) {
-      throw new IndexOutOfBoundsException("Index " + index + " is less than zero");
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.external.linked_map_index_negative", index));
     }
     if (index >= size) {
-      throw new IndexOutOfBoundsException("Index " + index + " is invalid for size " + size);
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.external.linked_map_index_invalid", index, size));
     }
     LinkEntry<K, V> entry;
     if (index < size / 2) {

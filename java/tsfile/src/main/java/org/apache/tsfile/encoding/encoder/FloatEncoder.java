@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -70,7 +71,7 @@ public class FloatEncoder extends Encoder {
         encoder = new LongRleEncoder();
       } else {
         throw new TsFileEncodingException(
-            String.format("data type %s is not supported by FloatEncoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else if (encodingType == TSEncoding.TS_2DIFF) {
       if (dataType == TSDataType.FLOAT) {
@@ -79,7 +80,7 @@ public class FloatEncoder extends Encoder {
         encoder = new DeltaBinaryEncoder.LongDeltaEncoder();
       } else {
         throw new TsFileEncodingException(
-            String.format("data type %s is not supported by FloatEncoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else if (encodingType == TSEncoding.RLBE) {
       if (dataType == TSDataType.FLOAT) {
@@ -88,11 +89,11 @@ public class FloatEncoder extends Encoder {
         encoder = new LongRLBE();
       } else {
         throw new TsFileEncodingException(
-            String.format("data type %s is not supported by FloatEncoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else {
       throw new TsFileEncodingException(
-          String.format("%s encoding is not supported by FloatEncoder", encodingType));
+          Messages.format("error.encoding.float_encoder_unsupported_encoding", encodingType));
     }
   }
 

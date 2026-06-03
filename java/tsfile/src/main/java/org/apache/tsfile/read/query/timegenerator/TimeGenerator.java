@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.query.timegenerator;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.ExpressionType;
 import org.apache.tsfile.read.expression.IBinaryExpression;
@@ -71,12 +72,10 @@ public abstract class TimeGenerator {
   /** ATTENTION: this method should only be used when there is no `OR` node */
   public Object[] getValues(Path path) throws IOException {
     if (hasOrNode) {
-      throw new IOException(
-          "getValues() method should not be invoked when there is OR operator in where clause");
+      throw new IOException(Messages.get("error.read.time_generator_or_get_values"));
     }
     if (leafValuesCache.get(path) == null) {
-      throw new IOException(
-          "getValues() method should not be invoked by non-existent path in where clause");
+      throw new IOException(Messages.get("error.read.time_generator_path_not_found_values"));
     }
     return leafValuesCache.remove(path).toArray();
   }
@@ -84,12 +83,10 @@ public abstract class TimeGenerator {
   /** ATTENTION: this method should only be used when there is no `OR` node */
   public Object getValue(Path path) throws IOException {
     if (hasOrNode) {
-      throw new IOException(
-          "getValue() method should not be invoked when there is OR operator in where clause");
+      throw new IOException(Messages.get("error.read.time_generator_or_get_value"));
     }
     if (leafValuesCache.get(path) == null) {
-      throw new IOException(
-          "getValue() method should not be invoked by non-existent path in where clause");
+      throw new IOException(Messages.get("error.read.time_generator_path_not_found_value"));
     }
     return leafValuesCache.get(path).remove(0);
   }
@@ -122,7 +119,8 @@ public abstract class TimeGenerator {
         return new AndNode(leftChild, rightChild, isAscending());
       }
       throw new UnSupportedDataTypeException(
-          "Unsupported ExpressionType when construct OperatorNode: " + expression.getType());
+          Messages.format(
+              "error.read.time_generator_unsupported_expression", expression.getType()));
     }
   }
 

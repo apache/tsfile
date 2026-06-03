@@ -1,0 +1,160 @@
+# This workflow builds and tests the C++ implementation of TsFile on Windows
+# using the MSVC toolchain (Visual Studio generator), as a complement to
+# unit-test-cpp.yml which builds the Windows target with MinGW.
+
+name: Unit-Test-Cpp-MSVC
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  # Enable manually starting builds.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  unit-test-msvc:
+    strategy:
+      fail-fast: false
+      # To exercise the VS 2017 compatibility this branch targets, the non-ASan
+      # jobs build with the v141 toolset (the VS 2017 compiler, cl.exe 19.16)
+      # via a VS 2022 generator. AddressSanitizer is not supported by v141, so
+      # the ASan jobs use the default v143 toolset (VS 2022), which fully
+      # supports /fsanitize=address.
+      matrix:
+        include:
+          - build_type: Release
+            enable_asan: NoAsan
+            toolset: v141
+          - build_type: Debug
+            enable_asan: NoAsan
+            toolset: v141
+          - build_type: Release
+            enable_asan: Asan
+            toolset: default
+          - build_type: Debug
+            enable_asan: Asan
+            toolset: default
+    # Pinned to windows-2022 deliberately: it ships Visual Studio 2022, which
+    # the "Visual Studio 17 2022" CMake generator requires. The windows-latest
+    # image has since moved to a newer Visual Studio that the bundled CMake
+    # (3.30.x) does not yet recognise as a generator. Bump this (and
+    # msvc.generator) together when migrating. The v141 (VS 2017) toolset is
+    # no longer bundled with the image and is installed by a step below.
+    runs-on: windows-2022
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: corretto
+          java-version: 17
+
+      # Setup caching of the artifacts in the .m2 directory, so they don't have
+      # to all be downloaded again for every build.
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-msvc-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # Put the MSVC toolchain (and, importantly, the AddressSanitizer runtime
+      # clang_rt.asan_dynamic-*.dll) on PATH so the test executable can run
+      # during ctest discovery and execution.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # The windows-2022 image no longer ships the v141 (VS 2017) toolset, so
+      # install it on demand for the v141 jobs. With the component present the
+      # VS 2022 generator can build with the VS 2017 compiler via
+      # -DCMAKE_GENERATOR_TOOLSET=v141.
+      - name: Install MSVC v141 (VS 2017) toolset
+        if: matrix.toolset == 'v141'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+          $installPath = & (Join-Path $installerDir "vswhere.exe") -latest -property installationPath
+          Write-Host "Visual Studio install path: $installPath"
+
+          # The v141 (VS 2017) toolset always installs as a 14.16.* directory.
+          function Test-V141Toolset {
+            [bool](Get-ChildItem -Path (Join-Path $installPath "VC\Tools\MSVC") `
+              -Directory -Filter "14.16.*" -ErrorAction SilentlyContinue)
+          }
+
+          if (Test-V141Toolset) {
+            Write-Host "v141 toolset already present."
+          } else {
+            # vs_installer.exe 'modify' accepts only a limited switch set;
+            # bootstrapper-only switches such as --wait / --nocache make it
+            # fail with exit code 87 (ERROR_INVALID_PARAMETER).
+            $argString = "modify --installPath `"$installPath`" " +
+              "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
+              "--quiet --norestart"
+            $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
+              -ArgumentList $argString -Wait -PassThru
+            Write-Host "vs_installer exit code: $($proc.ExitCode)"
+            # vs_installer may delegate to a background process; wait for it.
+            Get-Process -Name "vs_installer", "setup" -ErrorAction SilentlyContinue |
+              Wait-Process -Timeout 900 -ErrorAction SilentlyContinue
+            if (-not (Test-V141Toolset)) {
+              throw "v141 toolset not found after install (vs_installer exit code $($proc.ExitCode))"
+            }
+            Write-Host "v141 toolset installed."
+          }
+
+      # Run the maven build, selecting the MSVC toolchain via -Dcpp.toolchain=msvc.
+      # spotless (clang-format) is already covered by unit-test-cpp.yml, so it is
+      # skipped here to keep this workflow focused on the MSVC build.
+      #
+      # For the v141 jobs, -Dmsvc.toolset=v141 pins the VS 2017 compiler; the
+      # ASan jobs pass no toolset and so use the generator's default (v143).
+      - name: Build and test with Maven (MSVC)
+        shell: bash
+        run: |
+          if [ "${{ matrix.enable_asan }}" = "Asan" ]; then
+            ASAN_VALUE="ON"
+          else
+            ASAN_VALUE="OFF"
+          fi
+          if [ "${{ matrix.toolset }}" = "default" ]; then
+            TOOLSET_ARG=""
+          else
+            TOOLSET_ARG="-Dmsvc.toolset=${{ matrix.toolset }}"
+          fi
+          ./mvnw.cmd -P with-cpp \
+            -Dcpp.toolchain=msvc \
+            $TOOLSET_ARG \
+            -Denable.asan=$ASAN_VALUE \
+            -Dbuild.type=${{ matrix.build_type }} \
+            -Dspotless.skip=true \
+            clean verify

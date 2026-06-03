@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.IOException;
@@ -96,27 +97,32 @@ public class TimeStatistics extends Statistics<Long> {
 
   @Override
   public double getSumDoubleValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "double sum"));
+    throw new StatisticsClassException(
+        Messages.format("error.file.stats_unsupported", TIME, "double sum"));
   }
 
   @Override
   public long getSumLongValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "long sum"));
+    throw new StatisticsClassException(
+        Messages.format("error.file.stats_unsupported", TIME, "long sum"));
   }
 
   @Override
   void updateStats(long value) {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, UPDATE_STATS));
+    throw new StatisticsClassException(
+        Messages.format("error.file.stats_unsupported", TIME, UPDATE_STATS));
   }
 
   @Override
   void updateStats(long[] values, int batchSize) {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, UPDATE_STATS));
+    throw new StatisticsClassException(
+        Messages.format("error.file.stats_unsupported", TIME, UPDATE_STATS));
   }
 
   @Override
   public void updateStats(long minValue, long maxValue) {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, UPDATE_STATS));
+    throw new StatisticsClassException(
+        Messages.format("error.file.stats_unsupported", TIME, UPDATE_STATS));
   }
 
   @SuppressWarnings("rawtypes")

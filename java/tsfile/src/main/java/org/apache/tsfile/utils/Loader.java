@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -47,7 +49,7 @@ public class Loader {
   /** function for getting the class loader of the given object. */
   public static ClassLoader getClassLoaderOfObject(Object o) {
     if (o == null) {
-      throw new NullPointerException("Input object cannot be null");
+      throw new NullPointerException(Messages.get("error.utils.loader_null_input"));
     }
     return getClassLoaderOfClass(o.getClass());
   }

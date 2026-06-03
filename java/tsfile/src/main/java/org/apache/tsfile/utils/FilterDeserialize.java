@@ -14,6 +14,7 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
@@ -31,7 +32,9 @@ import java.nio.ByteBuffer;
 
 public class FilterDeserialize {
 
-  private static final String UNSUPPORTED_DATATYPE_MESSAGE = "Unsupported class serialize id:";
+  private static final String UNSUPPORTED_OPERATOR_KEY =
+      "error.utils.filter_unsupported_operator_type";
+  private static final String UNSUPPORTED_CLASS_ID_KEY = "error.utils.filter_unsupported_class_id";
 
   public static Filter deserializeValueFilter(OperatorType type, ByteBuffer buffer) {
     ClassSerializeId classSerializeId = ClassSerializeId.values()[ReadWriteIOUtils.readInt(buffer)];
@@ -69,7 +72,7 @@ public class FilterDeserialize {
       case VALUE_NOT_BETWEEN_AND:
         return FilterDeserialize.deserializeValueNotBetweenAndFilter(classSerializeId, buffer);
       default:
-        throw new UnsupportedOperationException("Unsupported operator type:" + type);
+        throw new UnsupportedOperationException(Messages.format(UNSUPPORTED_OPERATOR_KEY, type));
     }
   }
 
@@ -91,7 +94,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueEq(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -113,7 +117,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueNotEq(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -135,7 +140,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueGt(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -157,7 +163,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueGtEq(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -179,7 +186,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueLt(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -201,7 +209,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueLtEq(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -224,7 +233,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueIn(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -246,7 +256,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueNotIn(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -268,7 +279,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueBetweenAnd(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -290,7 +302,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueNotBetweenAnd(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -312,7 +325,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueRegexp(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -334,7 +348,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueNotRegexp(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -356,7 +371,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueLike(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 
@@ -378,7 +394,8 @@ public class FilterDeserialize {
       case STRING:
         return new StringFilterOperators.ValueNotLike(buffer);
       default:
-        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+        throw new UnsupportedOperationException(
+            Messages.format(UNSUPPORTED_CLASS_ID_KEY, classSerializeId));
     }
   }
 

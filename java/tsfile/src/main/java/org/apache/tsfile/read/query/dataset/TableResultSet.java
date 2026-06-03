@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.DateUtils;
@@ -139,7 +140,7 @@ public class TableResultSet extends AbstractResultSet {
     try {
       tsBlockReader.close();
     } catch (Exception e) {
-      LOG.error("Failed to close tsBlockReader");
+      LOG.error(Messages.get("log.read.table_result_set_close_error"));
     }
   }
 

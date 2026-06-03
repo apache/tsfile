@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 public class ColumnSchemaBuilder {
 
@@ -38,7 +39,8 @@ public class ColumnSchemaBuilder {
   @TsFileApi
   public ColumnSchemaBuilder name(String columnName) {
     if (columnName == null || columnName.isEmpty()) {
-      throw new IllegalArgumentException("Column name must be a non empty string");
+      throw new IllegalArgumentException(
+          Messages.get("error.file.column_schema_builder_name_empty"));
     }
     this.columnName = columnName;
     return this;
@@ -73,10 +75,12 @@ public class ColumnSchemaBuilder {
 
   private void validateParameters() {
     if (columnName == null) {
-      throw new IllegalStateException("Column name must be set before building");
+      throw new IllegalStateException(
+          Messages.get("error.file.column_schema_builder_name_not_set"));
     }
     if (columnDataType == null) {
-      throw new IllegalStateException("Column data type must be set before building");
+      throw new IllegalStateException(
+          Messages.get("error.file.column_schema_builder_type_not_set"));
     }
   }
 }

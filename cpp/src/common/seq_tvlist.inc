@@ -170,5 +170,5 @@ int32_t SeqTVList<Type>::binary_search_upper(int64_t time)
   return start;
 }
 
-} // namepsace storage
+} // namespace storage
 

@@ -18,10 +18,12 @@ under the License.
 ]]
 cmake_minimum_required(VERSION 3.10)
 project(examples)
-message("Running in exampes directory")
+message("Running in examples directory")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
+endif ()
 
 # TsFile include dir
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
@@ -44,6 +46,9 @@ if (DEFINED TSFILE_OPTIMIZATION_FLAGS AND NOT "${TSFILE_OPTIMIZATION_FLAGS}" STR
     message("examples using: TSFILE_OPTIMIZATION_FLAGS=${TSFILE_OPTIMIZATION_FLAGS}")
 else ()
     message("examples using: TSFILE_OPTIMIZATION_FLAGS=<inherit>")
+    if (NOT MSVC)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+    endif ()
 endif ()
 
 add_subdirectory(cpp_examples)

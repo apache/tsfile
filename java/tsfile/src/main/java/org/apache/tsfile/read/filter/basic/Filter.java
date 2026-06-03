@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.filter.basic;
 
 import org.apache.tsfile.file.metadata.IMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
@@ -298,7 +299,8 @@ public abstract class Filter {
       case EXTRACT_VALUE_LTEQ:
         return new ExtractValueFilterOperators.ExtractValueLtEq(buffer);
       default:
-        throw new UnsupportedOperationException("Unsupported operator type:" + type);
+        throw new UnsupportedOperationException(
+            Messages.format("error.read.filter_unsupported_operator", type));
     }
   }
 }

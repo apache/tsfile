@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.query.timegenerator.node;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.IOException;
 import java.util.function.BiPredicate;
 
@@ -96,7 +98,7 @@ public class AndNode implements Node {
       hasCachedTime = false;
       return cachedTime;
     }
-    throw new IOException("no more data");
+    throw new IOException(Messages.get("error.read.node_no_more_data"));
   }
 
   @Override

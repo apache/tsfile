@@ -27,6 +27,7 @@ import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.WriteUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
@@ -93,7 +94,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
       tableName = this.tableName;
     }
     if (tableName == null) {
-      throw new WriteProcessException("Table name is null");
+      throw new WriteProcessException(Messages.get("error.write.v4_table_name_null"));
     }
 
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);

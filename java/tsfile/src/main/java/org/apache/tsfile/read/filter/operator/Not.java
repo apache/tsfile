@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.filter.operator;
 
 import org.apache.tsfile.file.metadata.IMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.filter.basic.Filter;
@@ -148,23 +149,23 @@ public class Not extends Filter {
     // [not filter.canSkip(block)] is not equivalent to [notFilter.canSkip(block)]
     // e.g. block min = 5, max = 15, filter = [value > 10], notFilter = [value <= 10)]
     //  not filter.canSkip(block) = true (expected false), notFilter.canSkip(block) = false
-    throw new IllegalArgumentException(CONTAIN_NOT_ERR_MSG + this);
+    throw new IllegalArgumentException(Messages.format("error.read.filter_contains_not", this));
   }
 
   @Override
   public boolean allSatisfy(IMetadata metadata) {
     // same as canSkip
-    throw new IllegalArgumentException(CONTAIN_NOT_ERR_MSG + this);
+    throw new IllegalArgumentException(Messages.format("error.read.filter_contains_not", this));
   }
 
   @Override
   public boolean satisfyStartEndTime(long startTime, long endTime) {
-    throw new IllegalArgumentException(CONTAIN_NOT_ERR_MSG + this);
+    throw new IllegalArgumentException(Messages.format("error.read.filter_contains_not", this));
   }
 
   @Override
   public boolean containStartEndTime(long startTime, long endTime) {
-    throw new IllegalArgumentException(CONTAIN_NOT_ERR_MSG + this);
+    throw new IllegalArgumentException(Messages.format("error.read.filter_contains_not", this));
   }
 
   public Filter getFilter() {

@@ -20,6 +20,7 @@ import org.apache.tsfile.external.commons.io.build.AbstractOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractStreamBuilder;
 import org.apache.tsfile.external.commons.io.function.Uncheck;
 import org.apache.tsfile.external.commons.io.input.UnsynchronizedByteArrayInputStream;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -106,7 +107,8 @@ public final class UnsynchronizedByteArrayOutputStream extends AbstractByteArray
   @Deprecated
   public UnsynchronizedByteArrayOutputStream(final int size) {
     if (size < 0) {
-      throw new IllegalArgumentException("Negative initial size: " + size);
+      throw new IllegalArgumentException(
+          Messages.format("error.external.ubaos_negative_initial_size", size));
     }
     needNewBuffer(size);
   }
@@ -147,7 +149,8 @@ public final class UnsynchronizedByteArrayOutputStream extends AbstractByteArray
   @Override
   public void write(final byte[] b, final int off, final int len) {
     if (off < 0 || off > b.length || len < 0 || off + len > b.length || off + len < 0) {
-      throw new IndexOutOfBoundsException(String.format("offset=%,d, length=%,d", off, len));
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.external.ubaos_offset_length_out_of_bounds", off, len));
     }
     if (len == 0) {
       return;

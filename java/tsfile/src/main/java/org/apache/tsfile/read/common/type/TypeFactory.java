@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 public class TypeFactory {
 
@@ -53,7 +54,7 @@ public class TypeFactory {
         return ObjectType.getInstance();
       default:
         throw new UnsupportedOperationException(
-            String.format("Invalid TSDataType for TypeFactory: %s", tsDataType));
+            Messages.format("error.read.typefactory_invalid_tsdata_type", tsDataType));
     }
   }
 
@@ -83,7 +84,7 @@ public class TypeFactory {
         return StringType.getInstance();
       default:
         throw new UnsupportedOperationException(
-            String.format("Invalid TypeEnum for TypeFactory: %s", typeEnum));
+            Messages.format("error.read.typefactory_invalid_type_enum", typeEnum));
     }
   }
 }

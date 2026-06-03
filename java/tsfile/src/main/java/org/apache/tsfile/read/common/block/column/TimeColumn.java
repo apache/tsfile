@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
@@ -53,16 +54,16 @@ public class TimeColumn implements Column {
 
   TimeColumn(int arrayOffset, int positionCount, long[] values) {
     if (arrayOffset < 0) {
-      throw new IllegalArgumentException("arrayOffset is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
     this.arrayOffset = arrayOffset;
     if (positionCount < 0) {
-      throw new IllegalArgumentException("positionCount is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
     }
     this.positionCount = positionCount;
 
     if (values.length - arrayOffset < positionCount) {
-      throw new IllegalArgumentException("values length is less than positionCount");
+      throw new IllegalArgumentException(Messages.get("error.read.col_values_length_lt_position"));
     }
     this.values = values;
 
@@ -100,7 +101,8 @@ public class TimeColumn implements Column {
 
   @Override
   public boolean[] isNull() {
-    throw new UnsupportedOperationException("isNull is not supported for TimeColumn");
+    throw new UnsupportedOperationException(
+        Messages.get("error.read.time_column_isnull_unsupported"));
   }
 
   @Override
@@ -138,7 +140,7 @@ public class TimeColumn implements Column {
   @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
     return new TimeColumn(arrayOffset + fromIndex, positionCount - fromIndex, values);
   }
@@ -146,7 +148,7 @@ public class TimeColumn implements Column {
   @Override
   public Column subColumnCopy(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
 
     int from = arrayOffset + fromIndex;

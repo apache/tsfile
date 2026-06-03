@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.fileSystem.fileOutputFactory;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.writer.LocalTsFileOutput;
 import org.apache.tsfile.write.writer.TsFileOutput;
 
@@ -43,7 +44,7 @@ public class LocalFSOutputFactory implements FileOutputFactory {
       }
       return new LocalTsFileOutput(new FileOutputStream(file, append));
     } catch (IOException e) {
-      logger.error("Failed to get TsFile output of file: {}, ", filePath, e);
+      logger.error(Messages.get("log.fs.local_output_factory_get_error"), filePath, e);
       return null;
     }
   }
