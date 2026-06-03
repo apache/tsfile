@@ -1,18 +1,17 @@
 ---
 name: tsfile-cli
-description: Use when you need to inspect, preview, or export an Apache TsFile (.tsfile) from the command line — listing devices/tables, dumping schema, reading file/series metadata, counting rows, or sampling/previewing rows — via the project's read-only C++ `tsfile` CLI in cpp/tools.
+description: Use when you need to inspect, preview, export, OR import an Apache TsFile (.tsfile) from the command line — listing devices/tables, dumping schema, reading file/series metadata, counting rows, sampling/previewing rows, or writing CSV/TSV rows into a new .tsfile — via the project's C++ `tsfile-cli` in cpp/tools.
 ---
 
 # tsfile CLI
 
 ## Overview
 
-`tsfile` is a single, read-only, pipe-friendly C++ binary for inspecting a `.tsfile`
-without writing reader code — the TsFile analogue of `parquet-cli`/`pqrs`. Source:
-`cpp/tools/`. Data goes to **stdout**, diagnostics/errors to **stderr**, so it composes
-with `awk`, `jq`, `sort`, etc.
-
-It is **read-only**: there is no write/convert verb (see [Writing](#writing-a-tsfile)).
+`tsfile-cli` is a single, pipe-friendly C++ binary for inspecting **and** importing
+`.tsfile` data without writing reader/writer code — the TsFile analogue of
+`parquet-cli`/`pqrs`. Source: `cpp/tools/`. Read commands send data to **stdout** and
+diagnostics to **stderr** (so they compose with `awk`, `jq`, `sort`); the `write` command
+imports CSV/TSV into a new `.tsfile` (see **Writing** below).
 
 ## Locating / building the binary
 
@@ -95,9 +94,37 @@ $BIN cat -f csv data.tsfile 2>/dev/null | awk -F, 'NR>1{n++} END{print n}'
   and the `stats`/`count` rows may be fewer than the `schema` rows — not a discrepancy bug.
 - **Build needs `--disable-antlr4` on CMake ≥ 4** (see above).
 
-## Writing a TsFile
+## Writing (`write`): import CSV/TSV → tsfile
 
-The CLI does **not** write. Produce a `.tsfile` with the C++ SDK — see
-`cpp/examples/cpp_examples/demo_write.cpp` (`TsFileTableWriter` / `TsFileWriter` +
-`Tablet`), then inspect the result with this CLI. Java and Python writers exist under
-`java/` and `python/`.
+`tsfile-cli write` imports rows into a **new table-model** `.tsfile` (output is overwritten).
+The first input column is the timestamp (epoch ms); the rest are declared explicitly with
+`--columns` — **no type inference**.
+
+```
+tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
+                 [-f csv|tsv] [--no-header] [--header-match] [-v] [<input> | -]
+```
+
+| Option | Meaning |
+|---|---|
+| `--table <name>` | output table name (lower-cased) |
+| `--columns "id1:STRING:tag,s1:INT64:field"` | ordered data columns; category `tag\|field`; type ∈ BOOLEAN/INT32/INT64/FLOAT/DOUBLE/STRING/TEXT (case-insensitive) |
+| `-o, --output <path>` | output `.tsfile` (required, overwritten) |
+| `<input>` / `-` | input file, or `-`/omitted = **stdin** |
+| `-f csv\|tsv` | input delimiter (default csv; `json`/`table` rejected) |
+| `--no-header` / `--header-match` | input has no header / validate header names vs `--columns` |
+| `-v, --verbose` | print `wrote N rows to <out>` to stderr (else **silent on success**) |
+
+Empty cell = null. Exit codes: `1` usage (missing `--table`/`--columns`/`-o`, bad
+`--columns`, read-only flags), `2` input/output open fail, `3` bad row (field count / type
+/ header mismatch).
+
+```sh
+printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
+  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
+tsfile-cli count -f tsv out.tsfile          # -> t1.dev  s1  2
+```
+
+For **tree-model** writes, JSON input, or programmatic use, use the C++ SDK —
+`cpp/examples/cpp_examples/demo_write.cpp` (`TsFileTableWriter`/`TsFileWriter` + `Tablet`);
+Java/Python writers live under `java/`, `python/`.
