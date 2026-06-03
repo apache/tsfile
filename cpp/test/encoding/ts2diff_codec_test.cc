@@ -152,6 +152,21 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, TestFloatJavaDefaultHexCompatibility) {
     EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
 }
 
+TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleJavaDefaultHexCompatibility) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const double data[] = {3.123456768E20, std::nan("")};
+
+    for (double v : data) {
+        EXPECT_EQ(encoder_double_->encode(v, out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_double_->flush(out_stream), common::E_OK);
+
+    const std::string expected_hex =
+        "FE FF FF FF 07 02 00 03 02 00 00 00 01 00 00 00 00 3B C7 11 55 3D "
+        "D4 27 08 44 30 EE AA C2 2B D8 F8";
+    EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
+}
+
 TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleRoundTrip) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 800;
