@@ -117,6 +117,13 @@ TEST(ParseArgsTest, OutputFlagNeedsValue) {
     EXPECT_FALSE(p.error.empty());
 }
 
+TEST(ParseArgsTest, DashIsStdinPositional) {
+    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
+                                     "s1:INT64:field", "-o", "out.tsfile", "-"});
+    EXPECT_TRUE(p.error.empty());
+    EXPECT_EQ(p.file, "-");
+}
+
 TEST(ParseArgsTest, SeedFlagParsed) {
     auto p = tsfile_cli::parse_args(
         {"sample", "-m", "s1", "-n", "3", "--seed", "42", "data.tsfile"});

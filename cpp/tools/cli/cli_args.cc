@@ -185,7 +185,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             p.help = true;
         } else if (a == "--version") {
             p.version = true;
-        } else if (!a.empty() && a[0] == '-') {
+        } else if (a.size() > 1 && a[0] == '-') {
             p.error = "Unknown flag: " + a;
             return p;
         } else {
