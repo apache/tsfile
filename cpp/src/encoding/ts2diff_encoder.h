@@ -524,27 +524,27 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     if (overflow) {
         std::vector<uint8_t> underflow_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        std::vector<uint8_t> value_overflow_bitmap(
+        std::vector<uint8_t> overflow_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        bool has_value_overflow = false;
+        bool has_original_value_overflow = false;
         for (int i = 0; i < num_values; i++) {
             int8_t f = underflow_flags_[static_cast<size_t>(i)];
             if (f == 1) {
                 underflow_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             } else if (f == -1) {
-                has_value_overflow = true;
-                value_overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                has_original_value_overflow = true;
+                overflow_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t kJavaOverflowMagic =
+        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
             2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t kJavaValueOverflowMagic =
+        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
             2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_value_overflow ? kJavaValueOverflowMagic
-                                   : kJavaOverflowMagic,
+                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
+                                            : FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }
@@ -556,8 +556,8 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
             return ret;
         }
-        if (has_value_overflow && RET_FAIL(out_stream.write_buf(
-                                      value_overflow_bitmap.data(), bm_len))) {
+        if (has_original_value_overflow &&
+            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
             return ret;
         }
     }
@@ -603,27 +603,27 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     if (overflow) {
         std::vector<uint8_t> underflow_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        std::vector<uint8_t> value_overflow_bitmap(
+        std::vector<uint8_t> overflow_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        bool has_value_overflow = false;
+        bool has_original_value_overflow = false;
         for (int i = 0; i < num_values; i++) {
             int8_t f = underflow_flags_[static_cast<size_t>(i)];
             if (f == 1) {
                 underflow_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             } else if (f == -1) {
-                has_value_overflow = true;
-                value_overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                has_original_value_overflow = true;
+                overflow_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t kJavaOverflowMagic =
+        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
             2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t kJavaValueOverflowMagic =
+        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
             2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_value_overflow ? kJavaValueOverflowMagic
-                                   : kJavaOverflowMagic,
+                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
+                                            : FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }
@@ -635,8 +635,8 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
             return ret;
         }
-        if (has_value_overflow && RET_FAIL(out_stream.write_buf(
-                                      value_overflow_bitmap.data(), bm_len))) {
+        if (has_original_value_overflow &&
+            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
             return ret;
         }
     }

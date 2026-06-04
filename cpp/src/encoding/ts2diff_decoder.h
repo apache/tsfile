@@ -36,9 +36,9 @@ namespace storage {
 namespace ts2diff_java_detail {
 
 // Java float/double TS_2DIFF overflow page markers.
-constexpr uint32_t kJavaFloatTs2DiffOverflowMagic =
+constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
     2147483646u;  // Integer.MAX_VALUE - 1
-constexpr uint32_t kJavaFloatTs2DiffUnderflowMagic =
+constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
     2147483647u;  // Integer.MAX_VALUE
 
 inline bool bitmap_marked(const std::vector<uint8_t>& bm, int idx) {
@@ -74,21 +74,21 @@ inline bool looks_like_ts2diff_header(common::ByteStream& in) {
 
 inline int consume_float_double_ts2diff_prefix(
     common::ByteStream& in, bool& is_legacy_raw, int& max_point_number,
-    std::vector<uint8_t>& underflow_bm, std::vector<uint8_t>& value_overflow_bm,
+    std::vector<uint8_t>& underflow_bm, std::vector<uint8_t>& overflow_bm,
     int& segment_size) {
     int ret = common::E_OK;
     is_legacy_raw = false;
     max_point_number = 0;
     underflow_bm.clear();
-    value_overflow_bm.clear();
+    overflow_bm.clear();
     segment_size = 0;
     uint32_t mark = in.read_pos();
     uint32_t tag = 0;
     if (RET_FAIL(common::SerializationUtil::read_var_uint(tag, in))) {
         return ret;
     }
-    if (tag == kJavaFloatTs2DiffOverflowMagic ||
-        tag == kJavaFloatTs2DiffUnderflowMagic) {
+    if (tag == FLAG_ORIGINAL_VALUE_OVERFLOW ||
+        tag == FLAG_SCALED_VALUE_OVERFLOW) {
         uint32_t n = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(n, in))) {
             return ret;
@@ -102,9 +102,9 @@ inline int consume_float_double_ts2diff_prefix(
             read_len != static_cast<uint32_t>(bm_len)) {
             return ret;
         }
-        if (tag == kJavaFloatTs2DiffOverflowMagic) {
-            value_overflow_bm.resize(static_cast<size_t>(bm_len), 0);
-            if (RET_FAIL(in.read_buf(value_overflow_bm.data(),
+        if (tag == FLAG_ORIGINAL_VALUE_OVERFLOW) {
+            overflow_bm.resize(static_cast<size_t>(bm_len), 0);
+            if (RET_FAIL(in.read_buf(overflow_bm.data(),
                                      static_cast<uint32_t>(bm_len),
                                      read_len)) ||
                 read_len != static_cast<uint32_t>(bm_len)) {
@@ -295,7 +295,7 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
     int segment_pos_{0};
     int segment_size_{0};
     std::vector<uint8_t> underflow_bm_;
-    std::vector<uint8_t> value_overflow_bm_;
+    std::vector<uint8_t> overflow_bm_;
 };
 
 class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
@@ -319,7 +319,7 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
     int segment_pos_{0};
     int segment_size_{0};
     std::vector<uint8_t> underflow_bm_;
-    std::vector<uint8_t> value_overflow_bm_;
+    std::vector<uint8_t> overflow_bm_;
 };
 
 typedef TS2DIFFDecoder<int32_t> IntTS2DIFFDecoder;
@@ -421,7 +421,7 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
     if (current_index_ == 0) {
         if (RET_FAIL(ts2diff_java_detail::consume_float_double_ts2diff_prefix(
                 in, is_legacy_raw_, max_point_number_, underflow_bm_,
-                value_overflow_bm_, segment_size_))) {
+                overflow_bm_, segment_size_))) {
             return ret;
         }
         max_point_value_ =
@@ -435,8 +435,8 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
         return common::E_OK;
     }
     int32_t value_int = TS2DIFFDecoder<int32_t>::decode(in);
-    if (!value_overflow_bm_.empty() &&
-        ts2diff_java_detail::bitmap_marked(value_overflow_bm_, segment_pos_)) {
+    if (!overflow_bm_.empty() &&
+        ts2diff_java_detail::bitmap_marked(overflow_bm_, segment_pos_)) {
         ret_value = common::int_to_float(value_int);
     } else {
         bool use_scaled = true;
@@ -482,7 +482,7 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
     if (current_index_ == 0) {
         if (RET_FAIL(ts2diff_java_detail::consume_float_double_ts2diff_prefix(
                 in, is_legacy_raw_, max_point_number_, underflow_bm_,
-                value_overflow_bm_, segment_size_))) {
+                overflow_bm_, segment_size_))) {
             return ret;
         }
         max_point_value_ =
@@ -496,8 +496,8 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
         return common::E_OK;
     }
     int64_t value_long = TS2DIFFDecoder<int64_t>::decode(in);
-    if (!value_overflow_bm_.empty() &&
-        ts2diff_java_detail::bitmap_marked(value_overflow_bm_, segment_pos_)) {
+    if (!overflow_bm_.empty() &&
+        ts2diff_java_detail::bitmap_marked(overflow_bm_, segment_pos_)) {
         ret_value = common::long_to_double(value_long);
     } else {
         bool use_scaled = true;
