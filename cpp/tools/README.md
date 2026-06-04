@@ -28,23 +28,58 @@ importing Apache TsFile (`.tsfile`) files from the shell — the TsFile analogue
 imports CSV/TSV into a new `.tsfile`. It is built on the public `storage::TsFileReader`
 and `storage::TsFileTableWriter` APIs and does not modify the storage engine.
 
-## Building
+## Building from source
 
-The tool builds with the C++ module (CMake target `tsfile_cli`, output binary
-`tsfile-cli`):
+The CLI is part of the C++ module and is built by default (CMake option `BUILD_TOOLS=ON`).
+The CMake target is `tsfile_cli`; the produced executable is named `tsfile-cli`.
+
+**Prerequisites:** a C++11 compiler (GCC / Clang / MSVC) and CMake ≥ 3.11. The third-party
+dependencies (ANTLR4, Snappy, LZ4, LZOKAY, Zlib, GoogleTest) are bundled under
+`cpp/third_party/` and built automatically — no separate install step needed.
+
+Choose any one of the following.
+
+**1. Build script (recommended).** From `cpp/`:
 
 ```bash
-cd cpp && bash build.sh -t=Debug     # -> cpp/build/Debug/bin/tsfile-cli
-cd cpp && bash build.sh              # Release -> cpp/build/Release/bin/tsfile-cli
+bash build.sh -t=Debug      # -> cpp/build/Debug/bin/tsfile-cli
+bash build.sh               # Release (default) -> cpp/build/Release/bin/tsfile-cli
 ```
 
-If your CMake is 4.x and configuration fails on the bundled ANTLR4 runtime
-(`Policy CMP00xx may not be set to OLD behavior`), add `--disable-antlr4`; the reader and
-CLI do not use ANTLR4:
+**2. Maven (builds the whole C++ module).** From the repository root:
 
 ```bash
-cd cpp && bash build.sh -t=Debug --disable-antlr4
+./mvnw clean package -P with-cpp   # -> cpp/target/build/bin/tsfile-cli
 ```
+
+**3. Plain CMake.** From `cpp/`:
+
+```bash
+mkdir -p build/Debug && cd build/Debug
+cmake ../.. -DCMAKE_BUILD_TYPE=Debug
+make -j tsfile_cli                 # -> build/Debug/bin/tsfile-cli
+```
+
+> **CMake 4.x note.** The bundled ANTLR4 runtime sets old CMake policies that CMake 4
+> rejects (`Policy CMP00xx may not be set to OLD behavior`). The reader and CLI do not use
+> ANTLR4, so disable it — `--disable-antlr4` for the build script, or `-DENABLE_ANTLR4=OFF`
+> for plain CMake:
+>
+> ```bash
+> bash build.sh -t=Debug --disable-antlr4
+> ```
+
+Verify the binary:
+
+```bash
+./build/Debug/bin/tsfile-cli --version    # -> tsfile-cli (Apache TsFile C++) <version>
+./build/Debug/bin/tsfile-cli --help
+```
+
+The executable links the `tsfile` shared library built alongside it. To run it from
+anywhere, either run it in place by its full path, or use CMake's install step
+(`cmake --install .` / `make install`), which installs the binary to `<prefix>/bin` and
+`libtsfile` to `<prefix>/lib`.
 
 ## Usage
 
@@ -135,6 +170,32 @@ tsfile-cli count -f tsv out.tsfile          # -> t1.dev  s1  2
 
 For tree-model writes, JSON input, or programmatic use, use the C++ SDK directly — see
 `cpp/examples/cpp_examples/demo_write.cpp` (`TsFileTableWriter` / `TsFileWriter` + `Tablet`).
+
+## Using the skill with an AI assistant
+
+`cpp/tools/skills/tsfile-cli/SKILL.md` is a machine-readable reference that teaches AI
+coding assistants (e.g. Claude Code) how to drive `tsfile-cli` correctly. Such assistants
+auto-discover skills from a `.claude/skills/` directory at session start, so "installing"
+the skill just means placing it there — either project-level or user-level:
+
+```bash
+# project-level (this repository only)
+mkdir -p .claude/skills/tsfile-cli
+cp cpp/tools/skills/tsfile-cli/SKILL.md .claude/skills/tsfile-cli/SKILL.md
+
+# or user-level (available in all your projects)
+mkdir -p ~/.claude/skills/tsfile-cli
+cp cpp/tools/skills/tsfile-cli/SKILL.md ~/.claude/skills/tsfile-cli/SKILL.md
+```
+
+> The installed `SKILL.md` must begin with its YAML front-matter (`--- … ---`) for the
+> assistant to detect it. The in-repo copy carries an Apache license header comment above
+> the front-matter; if discovery fails, delete that leading `<!-- … -->` block from the
+> installed copy so `---` is the first line.
+
+Start a new assistant session afterward. The skill then activates automatically when you
+ask to inspect or import a `.tsfile`; you can also invoke it explicitly (e.g. "use the
+tsfile-cli skill").
 
 ## Source layout
 
