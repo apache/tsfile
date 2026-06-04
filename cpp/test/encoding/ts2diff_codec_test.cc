@@ -19,7 +19,13 @@
 #include <gtest/gtest.h>
 
 #include <bitset>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
 #include <random>
+#include <sstream>
+#include <vector>
 
 #include "encoding/ts2diff_decoder.h"
 #include "encoding/ts2diff_encoder.h"
@@ -58,6 +64,128 @@ class TS2DIFFCodecTest : public ::testing::Test {
     IntTS2DIFFDecoder* decoder_int_;
     LongTS2DIFFDecoder* decoder_long_;
 };
+
+class FloatDoubleTS2DIFFCodecTest : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        encoder_float_ = new FloatTS2DIFFEncoder();
+        decoder_float_ = new FloatTS2DIFFDecoder();
+        encoder_double_ = new DoubleTS2DIFFEncoder();
+        decoder_double_ = new DoubleTS2DIFFDecoder();
+    }
+
+    void TearDown() override {
+        if (encoder_float_ != nullptr) {
+            encoder_float_->destroy();
+            delete encoder_float_;
+            encoder_float_ = nullptr;
+        }
+        if (encoder_double_ != nullptr) {
+            encoder_double_->destroy();
+            delete encoder_double_;
+            encoder_double_ = nullptr;
+        }
+        delete decoder_float_;
+        decoder_float_ = nullptr;
+        delete decoder_double_;
+        decoder_double_ = nullptr;
+    }
+
+    FloatTS2DIFFEncoder* encoder_float_{nullptr};
+    DoubleTS2DIFFEncoder* encoder_double_{nullptr};
+    FloatTS2DIFFDecoder* decoder_float_{nullptr};
+    DoubleTS2DIFFDecoder* decoder_double_{nullptr};
+};
+
+static std::string byte_stream_to_hex(common::ByteStream& stream) {
+    uint32_t mark = stream.read_pos();
+    uint32_t size = stream.total_size();
+    std::vector<uint8_t> buf(size);
+    uint32_t read_len = 0;
+    EXPECT_EQ(stream.read_buf(buf.data(), size, read_len), common::E_OK);
+    EXPECT_EQ(read_len, size);
+    stream.set_read_pos(mark);
+
+    std::ostringstream oss;
+    for (uint32_t i = 0; i < size; i++) {
+        if (i > 0) {
+            oss << " ";
+        }
+        oss << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+            << static_cast<unsigned>(buf[i]);
+    }
+    return oss.str();
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, TestFloatRoundTrip) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 1000;
+    std::vector<float> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<float>(i) * 0.25f + 0.50f;
+    }
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_float_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_float_->flush(out_stream), common::E_OK);
+
+    float x = 0.f;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_float_->read_float(x, out_stream), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, TestFloatJavaDefaultHexCompatibility) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const float data[] = {3.123456768E20f, std::nanf("")};
+
+    for (float v : data) {
+        EXPECT_EQ(encoder_float_->encode(v, out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_float_->flush(out_stream), common::E_OK);
+
+    const std::string expected_hex =
+        "FE FF FF FF 07 02 00 03 02 00 00 00 01 00 00 00 00 1E 38 8A AA 61 87 "
+        "75 56";
+    EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleJavaDefaultHexCompatibility) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const double data[] = {3.123456768E20, std::nan("")};
+
+    for (double v : data) {
+        EXPECT_EQ(encoder_double_->encode(v, out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_double_->flush(out_stream), common::E_OK);
+
+    const std::string expected_hex =
+        "FE FF FF FF 07 02 00 03 02 00 00 00 01 00 00 00 00 3B C7 11 55 3D "
+        "D4 27 08 44 30 EE AA C2 2B D8 F8";
+    EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleRoundTrip) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 800;
+    std::vector<double> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<double>(i) * 0.25 + 0.5;
+    }
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_double_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_double_->flush(out_stream), common::E_OK);
+
+    double y = 0.;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_double_->read_double(y, out_stream), common::E_OK);
+        EXPECT_DOUBLE_EQ(y, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(out_stream));
+}
 
 TEST_F(TS2DIFFCodecTest, TestIntEncoding1) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
