@@ -41,19 +41,21 @@ void write_table_schema_rows(const ParsedArgs& args,
         if (!args.table.empty() && schema->get_table_name() != args.table) {
             continue;
         }
-        std::vector<std::string> names = schema->get_measurement_names();
-        std::vector<common::TSDataType> types = schema->get_data_types();
-        for (size_t i = 0; i < names.size(); ++i) {
-            if (!args.measurements.empty() &&
-                std::find(args.measurements.begin(), args.measurements.end(),
-                          names[i]) == args.measurements.end()) {
+        for (const auto& ms : schema->get_measurement_schemas()) {
+            if (!ms) {
                 continue;
             }
-            const common::TSDataType type =
-                i < types.size() ? types[i] : common::INVALID_DATATYPE;
-            w.write({schema->get_table_name(), names[i], tsdatatype_name(type),
-                     "", ""},
-                    {false, false, false, true, true});
+            const std::string& name = ms->measurement_name_;
+            if (!args.measurements.empty() &&
+                std::find(args.measurements.begin(), args.measurements.end(),
+                          name) == args.measurements.end()) {
+                continue;
+            }
+            w.write({schema->get_table_name(), name,
+                     tsdatatype_name(ms->data_type_),
+                     tsencoding_name(ms->encoding_),
+                     compression_name(ms->compression_type_)},
+                    {false, false, false, false, false});
         }
     }
 }

@@ -96,17 +96,18 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     }
 
     if (qret != 0 || rs == nullptr) {
-        err << "Error: query failed: " << query_error_text(qret) << "\n";
+        err << "Error: query failed: " << error_code_message(qret) << "\n";
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
         return kExitRuntime;
     }
 
-    int wret = write_result_set(rs, fmt, args.no_header, out, offset, limit);
+    int wret = emit_result_set(rs, fmt, args.no_header, out, offset, limit);
     reader.destroy_query_data_set(rs);
     if (wret != 0) {
-        err << "Error: failed to read rows: " << query_error_text(wret) << "\n";
+        err << "Error: failed to read rows: " << error_code_message(wret)
+            << "\n";
         return kExitRuntime;
     }
     return kExitOk;

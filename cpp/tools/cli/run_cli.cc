@@ -121,9 +121,61 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
         err << "Error: write input format must be csv or tsv\n";
         return false;
     }
+    if (p.no_header && p.header_match) {
+        err << "Error: --header-match cannot be combined with --no-header\n";
+        return false;
+    }
     if (!p.measurements.empty() || !p.device.empty() || p.has_start ||
         p.has_end || p.has_seed || p.limit != -1 || p.offset != 0) {
         err << "Error: read-only flags are not valid for write\n";
+        return false;
+    }
+    return true;
+}
+
+// Reject flags that have no effect for the given read command, instead of
+// silently ignoring them, so misuse is caught rather than producing surprising
+// output. Only called for non-write commands; write has its own validation.
+bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
+    const std::string& c = p.command;
+    const bool is_row = (c == "head" || c == "cat" || c == "sample");
+    const bool scoped = (c == "schema" || c == "stats" || c == "count" ||
+                         c == "head" || c == "cat" || c == "sample");
+
+    if (!p.output.empty()) {
+        err << "Error: -o/--output is only valid for write\n";
+        return false;
+    }
+    if (!p.columns.empty()) {
+        err << "Error: --columns is only valid for write\n";
+        return false;
+    }
+    if (p.header_match) {
+        err << "Error: --header-match is only valid for write\n";
+        return false;
+    }
+    if (p.verbose) {
+        err << "Error: -v/--verbose is only valid for write\n";
+        return false;
+    }
+    if (!is_row && p.limit != -1) {
+        err << "Error: -n/--limit is only valid for head/cat/sample\n";
+        return false;
+    }
+    if (!is_row && (p.has_start || p.has_end)) {
+        err << "Error: --start/--end are only valid for head/cat/sample\n";
+        return false;
+    }
+    if (!scoped && !p.device.empty()) {
+        err << "Error: -d/--device is not valid for " << c << "\n";
+        return false;
+    }
+    if (!scoped && !p.table.empty()) {
+        err << "Error: -t/--table is not valid for " << c << "\n";
+        return false;
+    }
+    if (!scoped && !p.measurements.empty()) {
+        err << "Error: -m/--measurements is not valid for " << c << "\n";
         return false;
     }
     return true;
@@ -174,6 +226,11 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         }
         storage::libtsfile_init();
         return cmd_write(p, out, err);
+    }
+
+    if (!validate_read_flag_applicability(p, err)) {
+        print_usage(err);
+        return kExitUsage;
     }
 
     storage::libtsfile_init();

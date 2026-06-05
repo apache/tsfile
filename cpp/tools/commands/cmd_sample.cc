@@ -93,7 +93,7 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
     }
 
     if (qret != 0 || rs == nullptr) {
-        err << "Error: query failed: " << query_error_text(qret) << "\n";
+        err << "Error: query failed: " << error_code_message(qret) << "\n";
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
@@ -104,10 +104,11 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
     const unsigned long long seed =
         args.has_seed ? static_cast<unsigned long long>(args.seed) : 0ULL;
     int wret =
-        write_result_set_sampled(rs, fmt, args.no_header, out, limit, seed);
+        emit_result_set_sampled(rs, fmt, args.no_header, out, limit, seed);
     reader.destroy_query_data_set(rs);
     if (wret != 0) {
-        err << "Error: failed to read rows: " << query_error_text(wret) << "\n";
+        err << "Error: failed to read rows: " << error_code_message(wret)
+            << "\n";
         return kExitRuntime;
     }
     return kExitOk;

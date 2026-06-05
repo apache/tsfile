@@ -131,6 +131,12 @@ bool parse_columns_spec(const std::string& spec, std::vector<ColumnDef>& out,
             error = "bad category '" + parts[2] + "' (want tag|field)";
             return false;
         }
+        for (const ColumnDef& prev : out) {
+            if (prev.name == def.name) {
+                error = "duplicate column name '" + def.name + "'";
+                return false;
+            }
+        }
         out.push_back(def);
     }
     return true;

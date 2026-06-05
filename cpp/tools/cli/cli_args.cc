@@ -79,6 +79,14 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
     if (p.command == "--help" || p.command == "-h") {
         p.help = true;
     }
+    // The subcommand must come first. A leading option means it was omitted;
+    // say so explicitly instead of failing later with a confusing message about
+    // the first real positional argument.
+    if (p.command.size() > 1 && p.command[0] == '-' && !p.version && !p.help) {
+        p.error = "the command must come before options (got option '" +
+                  p.command + "'); run with --help for usage";
+        return p;
+    }
 
     size_t i = 1;
     auto need_value = [&](const std::string& flag, std::string& dst) -> bool {

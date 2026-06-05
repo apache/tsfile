@@ -23,7 +23,54 @@
 #include <cstdio>
 #include <utility>
 
+#include "utils/errno_define.h"
+
 namespace tsfile_cli {
+
+const char* error_code_message(int code) {
+    switch (code) {
+        case common::E_OOM:
+            return "out of memory";
+        case common::E_NOT_EXIST:
+            return "not found";
+        case common::E_INVALID_ARG:
+            return "invalid argument";
+        case common::E_OUT_OF_RANGE:
+            return "value out of range";
+        case common::E_OUT_OF_ORDER:
+            return "data is out of order";
+        case common::E_FILE_OPEN_ERR:
+            return "cannot open file";
+        case common::E_FILE_WRITE_ERR:
+            return "file write error";
+        case common::E_FILE_READ_ERR:
+            return "file read error";
+        case common::E_TSFILE_CORRUPTED:
+            return "file is corrupted";
+        case common::E_INVALID_PATH:
+            return "invalid path";
+        case common::E_DEVICE_NOT_EXIST:
+            return "device does not exist";
+        case common::E_MEASUREMENT_NOT_EXIST:
+            return "measurement does not exist";
+        case common::E_TABLE_NOT_EXIST:
+            return "table does not exist";
+        case common::E_COLUMN_NOT_EXIST:
+            return "column does not exist";
+        case common::E_INVALID_QUERY:
+            return "invalid query";
+        case common::E_TYPE_NOT_SUPPORTED:
+            return "data type not supported";
+        case common::E_TYPE_NOT_MATCH:
+            return "data type mismatch";
+        case common::E_ENCODE_ERR:
+            return "failed to encode data";
+        case common::E_DECODE_ERR:
+            return "failed to decode data";
+        default:
+            return "internal error";
+    }
+}
 
 OutputFormat resolve_format(ParsedArgs::Format f, bool stdout_is_tty) {
     switch (f) {
@@ -196,7 +243,7 @@ RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
       types_(std::move(types)),
       no_header_(no_header) {}
 
-bool RowWriter::is_numeric(size_t col) const {
+bool RowWriter::emits_json_bare(size_t col) const {
     if (col >= types_.size()) {
         return false;
     }
@@ -248,7 +295,7 @@ void RowWriter::write(const std::vector<std::string>& cells,
             out_ << "\"" << json_escape(header_[i]) << "\":";
             if (i < is_null.size() && is_null[i]) {
                 out_ << "null";
-            } else if (is_numeric(i)) {
+            } else if (emits_json_bare(i)) {
                 out_ << (i < cells.size() ? cells[i] : "null");
             } else {
                 out_ << "\"" << json_escape(i < cells.size() ? cells[i] : "")

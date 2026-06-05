@@ -33,6 +33,10 @@ enum class OutputFormat { kCsv, kTsv, kJson, kTable };
 
 OutputFormat resolve_format(ParsedArgs::Format f, bool stdout_is_tty);
 
+// Translate a storage-engine error code (common::E_*) into a human-readable
+// phrase so CLI diagnostics carry meaning instead of a bare numeric code.
+const char* error_code_message(int code);
+
 const char* tsdatatype_name(common::TSDataType t);
 const char* tsencoding_name(common::TSEncoding e);
 const char* compression_name(common::CompressionType c);
@@ -52,7 +56,7 @@ class RowWriter {
 
    private:
     void ensure_header();
-    bool is_numeric(size_t col) const;
+    bool emits_json_bare(size_t col) const;
 
     std::ostream& out_;
     OutputFormat fmt_;

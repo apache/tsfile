@@ -22,10 +22,12 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cli/cli_args.h"
@@ -188,12 +190,26 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     std::vector<common::TSDataType> types;
     std::vector<common::ColumnCategory> cats;
     std::vector<common::ColumnSchema> col_schemas;
-    for (const ColumnDef& d : columns) {
+    std::vector<size_t> tag_idx;
+    for (size_t j = 0; j < columns.size(); ++j) {
+        const ColumnDef& d = columns[j];
         names.push_back(d.name);
         types.push_back(d.type);
         cats.push_back(d.category);
         col_schemas.push_back(common::ColumnSchema(
             d.name, d.type, common::UNCOMPRESSED, common::PLAIN, d.category));
+        if (d.category == common::ColumnCategory::TAG) {
+            tag_idx.push_back(j);
+        }
+    }
+
+    // Creating the output truncates it; refuse to clobber the input we are
+    // still reading from, which would otherwise silently destroy the source
+    // data.
+    if (!args.file.empty() && args.file != "-" && args.output == args.file) {
+        err << "Error: --output is the same as the input file: " << args.output
+            << "\n";
+        return kExitUsage;
     }
 
     storage::WriteFile file;
@@ -215,6 +231,11 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     long long total_rows = 0;
     std::vector<DataRow> batch;
     batch.reserve(kBatch);
+    // The table writer requires strictly increasing timestamps per device, and
+    // a device is identified by its tag-column values. Track the last timestamp
+    // seen for each device so out-of-order input is rejected with a clear,
+    // located message instead of an opaque write failure.
+    std::unordered_map<std::string, int64_t> last_ts_by_device;
 
     auto flush_batch = [&]() -> bool {
         if (batch.empty()) {
@@ -235,8 +256,10 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                 }
             }
         }
-        if (writer->write_table(tablet) != 0) {
-            err << "Error: write_table failed\n";
+        int wt = writer->write_table(tablet);
+        if (wt != 0) {
+            err << "Error: failed to write rows: " << error_code_message(wt)
+                << "\n";
             return false;
         }
         total_rows += static_cast<long long>(batch.size());
@@ -270,6 +293,23 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         r.line_no = line_no;
         r.timestamp = static_cast<int64_t>(ts);
         r.cells.assign(fields.begin() + 1, fields.end());
+
+        std::string device_key;
+        for (size_t k : tag_idx) {
+            device_key += r.cells[k];
+            device_key.push_back('\0');
+        }
+        auto seen = last_ts_by_device.find(device_key);
+        if (seen != last_ts_by_device.end() && r.timestamp <= seen->second) {
+            err << "Error: timestamps must be strictly increasing per device "
+                   "(line "
+                << line_no << ": " << r.timestamp << " <= previous "
+                << seen->second << ")\n";
+            rc = kExitRuntime;
+            break;
+        }
+        last_ts_by_device[device_key] = r.timestamp;
+
         batch.push_back(r);
         if (batch.size() >= kBatch && !flush_batch()) {
             rc = kExitRuntime;
@@ -282,9 +322,18 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     }
 
     if (rc == kExitOk) {
-        if (writer->flush() != 0 || writer->close() != 0) {
-            err << "Error: flush/close failed\n";
+        int fr = writer->flush();
+        if (fr != 0) {
+            err << "Error: failed to flush output: " << error_code_message(fr)
+                << "\n";
             rc = kExitRuntime;
+        } else {
+            int cr = writer->close();
+            if (cr != 0) {
+                err << "Error: failed to close output: "
+                    << error_code_message(cr) << "\n";
+                rc = kExitRuntime;
+            }
         }
     } else {
         writer->close();
@@ -292,7 +341,11 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     delete writer;
     delete schema;
 
-    if (rc == kExitOk && args.verbose) {
+    if (rc != kExitOk) {
+        // The import failed; do not leave a partial/corrupt .tsfile behind.
+        file.close();
+        std::remove(args.output.c_str());
+    } else if (args.verbose) {
         err << "wrote " << total_rows << " rows to " << args.output << "\n";
     }
     return rc;

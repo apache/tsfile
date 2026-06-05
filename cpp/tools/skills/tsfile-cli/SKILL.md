@@ -37,7 +37,7 @@ Single pipe-friendly C++ binary to inspect **and** import `.tsfile` (TsFile's an
 
 ## Read
 
-`tsfile-cli <cmd> [opts] <file.tsfile>` · `tsfile-cli --help | --version | help <cmd>`
+`tsfile-cli <cmd> [opts] <file.tsfile>` · `tsfile-cli --help | --version | help`
 
 | cmd | output | scans pages |
 |---|---|---|
@@ -82,11 +82,14 @@ TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT }
 input := file | '-' | omitted                          # '-' or omitted = stdin
 ```
 
-- `-o` required (overwritten); `-f` default csv (json/table → usage error).
+- `-o` required (overwritten, must differ from input); `-f` default csv (json/table → usage error).
 - header: first line skipped by default · `--no-header` if none · `--header-match` validates
-  header names vs `--columns`.
+  header names vs `--columns` (mutually exclusive with `--no-header`).
 - empty cell = null · `--table` is lower-cased · success **silent**, `-v` → `wrote N rows to <out>` on stderr.
-- exit: `1` usage (missing `--table`/`--columns`/`-o`, bad spec, read-only flag) · `2` IO open · `3` row (field-count / type / header mismatch).
+- **timestamps must be strictly increasing per device** (device = tag-column values); rows for
+  different tags may interleave/reuse timestamps. Out-of-order input → error with line number.
+- a failed import deletes its partial output (no half-written `.tsfile` left behind).
+- exit: `1` usage (missing `--table`/`--columns`/`-o`, bad spec, dup column, read-only flag) · `2` IO open · `3` row (field-count / type / overflow / timestamp-order / header mismatch).
 
 ```sh
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \

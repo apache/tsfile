@@ -85,7 +85,7 @@ anywhere, either run it in place by its full path, or use CMake's install step
 
 ```
 tsfile-cli <command> [options] <file.tsfile>
-tsfile-cli --help | --version | help <command>
+tsfile-cli --help | --version | help
 ```
 
 Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
@@ -137,6 +137,12 @@ $BIN sample -m temp -n 20 --seed 42 -f json data.tsfile | jq .
 `tsfile-cli write` imports CSV/TSV rows into a **new table-model** `.tsfile` (the output is
 overwritten). The first input column is the timestamp (epoch milliseconds); the remaining
 columns are declared explicitly with `--columns` — there is no type inference.
+
+Timestamps must be **strictly increasing per device**, where a device is identified by its
+`tag` column values (rows that share the same tags form one device's timeline). Rows for
+different tag combinations may freely interleave and reuse timestamps. Out-of-order input is
+rejected with the offending line number, and a failed import leaves no output file behind.
+`--output` must differ from the input file.
 
 ```
 tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
