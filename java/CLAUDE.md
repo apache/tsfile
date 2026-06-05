@@ -81,7 +81,7 @@ Code generation: FreeMarker templates in `tsfile/src/main/codegen/` generate typ
 
 ## Code Style
 
-- **Formatter**: Spotless with Google Java Format 1.28.0 (Spotless requires Java 17+ to run but the project targets Java 8 bytecode)
+- **Formatter**: Spotless with Google Java Format 1.28.0 (the project targets Java 17 bytecode)
 - **Checkstyle**: Google style variant in root `checkstyle.xml`, 100 char line limit
 - **Import order**: `org.apache.tsfile`, `javax`, `java`, static imports
 
