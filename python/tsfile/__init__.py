@@ -22,6 +22,7 @@ import sys
 
 _pkg_dir = os.path.dirname(os.path.abspath(__file__))
 
+
 def _preload_dll(path):
     if not os.path.isfile(path):
         return
