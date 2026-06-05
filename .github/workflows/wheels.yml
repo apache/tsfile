@@ -190,6 +190,11 @@ jobs:
             -Dspotless.check.skip=true -Dspotless.apply.skip=true
           test -d cpp/target/build/lib
           test -d cpp/target/build/include
+          # Bundle MinGW runtime DLLs built with libtsfile.dll so wheel jobs
+          # load matching libstdc++/libgcc instead of a different MSYS2 install.
+          for dll in libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll; do
+            cp "/mingw64/bin/$dll" cpp/target/build/lib/
+          done
 
       - name: Upload C++ build output
         uses: actions/upload-artifact@v7
@@ -229,7 +234,7 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: false
+          update: true
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-make
@@ -247,7 +252,7 @@ jobs:
           set -euxo pipefail
           export JAVA_HOME="$(cygpath "$JAVA_HOME")"
           export PYTHON_HOME="$(cygpath "$pythonLocation")"
-          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
+          export PATH="/mingw64/bin:$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
 
           # Build wheel via Maven (no clean — keep C++ artifacts from previous job)
           chmod +x mvnw || true

@@ -24,6 +24,16 @@ _pkg_dir = os.path.dirname(os.path.abspath(__file__))
 
 if sys.platform == "win32":
     os.add_dll_directory(_pkg_dir)
+    # Preload MinGW runtime DLLs before libtsfile.dll to avoid 0xc0000139 /
+    # WinError 127 when their versions must match the C++ build toolchain.
+    for _mingw_dll in (
+        "libwinpthread-1.dll",
+        "libgcc_s_seh-1.dll",
+        "libstdc++-6.dll",
+    ):
+        _mingw_path = os.path.join(_pkg_dir, _mingw_dll)
+        if os.path.isfile(_mingw_path):
+            ctypes.CDLL(_mingw_path)
     # Preload libtsfile.dll with absolute path to bypass DLL search issues.
     # This ensures it's already in memory when .pyd extensions reference it.
     _tsfile_dll = os.path.join(_pkg_dir, "libtsfile.dll")

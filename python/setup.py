@@ -86,7 +86,14 @@ elif sys.platform == "win32":
     # Copy MinGW runtime DLLs next to libtsfile.dll so Python can find them.
     # Python 3.8+ does not search PATH for DLLs; they must be in the same
     # directory as the .pyd extensions (registered via os.add_dll_directory).
+    # Prefer DLLs bundled with the C++ build output to avoid version mismatch
+    # when libtsfile.dll is produced on a different CI runner.
     for _mingw_dll in ("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll"):
+        _bundled = CPP_LIB / _mingw_dll
+        if _bundled.is_file():
+            shutil.copy2(_bundled, PKG / _mingw_dll)
+            print(f"setup.py: copied {_mingw_dll} from {_bundled}")
+            continue
         for _dir in os.environ.get("PATH", "").split(os.pathsep):
             _src = Path(_dir) / _mingw_dll
             if _src.is_file():
