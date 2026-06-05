@@ -29,6 +29,45 @@
 
 namespace tsfile_cli {
 
+const char* query_error_text(int code) {
+    switch (code) {
+        case common::E_OOM:
+            return "out of memory";
+        case common::E_NOT_EXIST:
+            return "not found";
+        case common::E_INVALID_ARG:
+            return "invalid argument";
+        case common::E_OUT_OF_RANGE:
+            return "value out of range";
+        case common::E_FILE_OPEN_ERR:
+            return "cannot open file";
+        case common::E_FILE_READ_ERR:
+            return "file read error";
+        case common::E_TSFILE_CORRUPTED:
+            return "file is corrupted";
+        case common::E_INVALID_PATH:
+            return "invalid path";
+        case common::E_DEVICE_NOT_EXIST:
+            return "device does not exist";
+        case common::E_MEASUREMENT_NOT_EXIST:
+            return "measurement does not exist";
+        case common::E_TABLE_NOT_EXIST:
+            return "table does not exist";
+        case common::E_COLUMN_NOT_EXIST:
+            return "column does not exist";
+        case common::E_INVALID_QUERY:
+            return "invalid query";
+        case common::E_TYPE_NOT_SUPPORTED:
+            return "data type not supported";
+        case common::E_TYPE_NOT_MATCH:
+            return "data type mismatch";
+        case common::E_DECODE_ERR:
+            return "failed to decode data";
+        default:
+            return "internal error";
+    }
+}
+
 std::string cell_to_string(storage::ResultSet* rs, uint32_t i,
                            common::TSDataType type) {
     std::ostringstream ss;

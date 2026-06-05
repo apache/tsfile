@@ -29,22 +29,20 @@ namespace tsfile_cli {
 int cmd_meta(const ParsedArgs& args, storage::TsFileReader& reader,
              OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
     RowWriter w(out, fmt,
-                {"file", "model", "version", "device_count", "table_count",
-                 "series_count", "start_time", "end_time", "bloom_filter",
-                 "file_size_bytes"},
-                {common::STRING, common::STRING, common::STRING, common::INT64,
-                 common::INT64, common::INT64, common::INT64, common::INT64,
-                 common::STRING, common::INT64},
+                {"file", "model", "device_count", "table_count",
+                 "series_count", "start_time", "end_time", "file_size_bytes"},
+                {common::STRING, common::STRING, common::INT64, common::INT64,
+                 common::INT64, common::INT64, common::INT64, common::INT64},
                 args.no_header);
 
     FileSummary s = collect_file_summary(args, reader);
-    w.write({s.file, s.model, "", std::to_string(s.device_count),
+    w.write({s.file, s.model, std::to_string(s.device_count),
              std::to_string(s.table_count), std::to_string(s.series_count),
              s.has_time_range ? std::to_string(s.start_time) : "",
-             s.has_time_range ? std::to_string(s.end_time) : "", "",
+             s.has_time_range ? std::to_string(s.end_time) : "",
              std::to_string(s.file_size_bytes)},
-            {false, false, true, false, false, false, !s.has_time_range,
-             !s.has_time_range, true, false});
+            {false, false, false, false, false, !s.has_time_range,
+             !s.has_time_range, false});
     w.finish();
     return kExitOk;
 }

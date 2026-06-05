@@ -93,7 +93,7 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
     }
 
     if (qret != 0 || rs == nullptr) {
-        err << "Error: query failed (code " << qret << ")\n";
+        err << "Error: query failed: " << query_error_text(qret) << "\n";
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
@@ -106,7 +106,11 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
     int wret =
         write_result_set_sampled(rs, fmt, args.no_header, out, limit, seed);
     reader.destroy_query_data_set(rs);
-    return wret == 0 ? kExitOk : kExitRuntime;
+    if (wret != 0) {
+        err << "Error: failed to read rows: " << query_error_text(wret) << "\n";
+        return kExitRuntime;
+    }
+    return kExitOk;
 }
 
 }  // namespace tsfile_cli

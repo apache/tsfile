@@ -51,7 +51,8 @@ void print_usage(std::ostream& os) {
           "  ls       list devices (tree) or tables (table)\n"
           "  schema   per-measurement data type/encoding/compression\n"
           "  meta     file metadata summary\n"
-          "  stats    per-series row count and time range\n"
+          "  stats    per-series count, time range, "
+          "min/max/first/last/sum\n"
           "  head     first N rows (use -n)\n"
           "  cat      all rows of a device/table\n"
           "  count    row count\n"
@@ -143,7 +144,7 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         return kExitUsage;
     }
     if (p.command == "help" || p.command == "--help" || p.command == "-h" ||
-        (p.help && p.file.empty())) {
+        p.help) {
         print_usage(out);
         return kExitOk;
     }

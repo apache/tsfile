@@ -20,6 +20,7 @@
 #include <fcntl.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -69,36 +70,56 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
             return true;
         }
         case common::INT32: {
-            long v = std::strtol(cell.c_str(), &e, 10);
+            errno = 0;
+            long long v = std::strtoll(cell.c_str(), &e, 10);
             if (e == nullptr || *e != '\0') {
                 error = "bad INT32 '" + cell + "'";
+                return false;
+            }
+            if (errno == ERANGE || v < INT32_MIN || v > INT32_MAX) {
+                error = "INT32 out of range '" + cell + "'";
                 return false;
             }
             tablet.add_value(row, def.name, static_cast<int32_t>(v));
             return true;
         }
         case common::INT64: {
+            errno = 0;
             long long v = std::strtoll(cell.c_str(), &e, 10);
             if (e == nullptr || *e != '\0') {
                 error = "bad INT64 '" + cell + "'";
+                return false;
+            }
+            if (errno == ERANGE) {
+                error = "INT64 out of range '" + cell + "'";
                 return false;
             }
             tablet.add_value(row, def.name, static_cast<int64_t>(v));
             return true;
         }
         case common::FLOAT: {
+            errno = 0;
             float v = std::strtof(cell.c_str(), &e);
             if (e == nullptr || *e != '\0') {
                 error = "bad FLOAT '" + cell + "'";
+                return false;
+            }
+            if (errno == ERANGE) {
+                error = "FLOAT out of range '" + cell + "'";
                 return false;
             }
             tablet.add_value(row, def.name, v);
             return true;
         }
         case common::DOUBLE: {
+            errno = 0;
             double v = std::strtod(cell.c_str(), &e);
             if (e == nullptr || *e != '\0') {
                 error = "bad DOUBLE '" + cell + "'";
+                return false;
+            }
+            if (errno == ERANGE) {
+                error = "DOUBLE out of range '" + cell + "'";
                 return false;
             }
             tablet.add_value(row, def.name, v);
@@ -163,33 +184,6 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         }
     }
 
-    std::vector<DataRow> rows;
-    while (std::getline(*in, line)) {
-        ++line_no;
-        strip_cr(line);
-        if (line.empty()) {
-            continue;
-        }
-        std::vector<std::string> fields = split_line(line, delim, csv_quotes);
-        if (fields.size() != columns.size() + 1) {
-            err << "Error: expected " << (columns.size() + 1) << " fields, got "
-                << fields.size() << " (line " << line_no << ")\n";
-            return kExitRuntime;
-        }
-        char* e = nullptr;
-        long long ts = std::strtoll(fields[0].c_str(), &e, 10);
-        if (e == nullptr || *e != '\0') {
-            err << "Error: bad timestamp '" << fields[0] << "' (line "
-                << line_no << ")\n";
-            return kExitRuntime;
-        }
-        DataRow r;
-        r.line_no = line_no;
-        r.timestamp = static_cast<int64_t>(ts);
-        r.cells.assign(fields.begin() + 1, fields.end());
-        rows.push_back(r);
-    }
-
     std::vector<std::string> names;
     std::vector<common::TSDataType> types;
     std::vector<common::ColumnCategory> cats;
@@ -214,31 +208,77 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     auto* schema = new storage::TableSchema(args.table, col_schemas);
     auto* writer = new storage::TsFileTableWriter(&file, schema);
 
-    int rc = kExitOk;
+    // Stream rows into fixed-size batches so memory stays bounded regardless of
+    // input size; a full file is never buffered in memory.
     const size_t kBatch = 1024;
-    for (size_t start = 0; start < rows.size() && rc == kExitOk;
-         start += kBatch) {
-        size_t end = std::min(start + kBatch, rows.size());
+    int rc = kExitOk;
+    long long total_rows = 0;
+    std::vector<DataRow> batch;
+    batch.reserve(kBatch);
+
+    auto flush_batch = [&]() -> bool {
+        if (batch.empty()) {
+            return true;
+        }
         storage::Tablet tablet(args.table, names, types, cats,
-                               static_cast<int>(end - start));
-        for (size_t i = start; i < end && rc == kExitOk; ++i) {
-            uint32_t r = static_cast<uint32_t>(i - start);
-            tablet.add_timestamp(r, rows[i].timestamp);
+                               static_cast<int>(batch.size()));
+        for (size_t i = 0; i < batch.size(); ++i) {
+            uint32_t r = static_cast<uint32_t>(i);
+            tablet.add_timestamp(r, batch[i].timestamp);
             for (size_t j = 0; j < columns.size(); ++j) {
-                std::string cerr;
-                if (!add_typed_value(tablet, r, columns[j], rows[i].cells[j],
-                                     cerr)) {
-                    err << "Error: " << cerr << " (line " << rows[i].line_no
-                        << ")\n";
-                    rc = kExitRuntime;
-                    break;
+                std::string cell_err;
+                if (!add_typed_value(tablet, r, columns[j], batch[i].cells[j],
+                                     cell_err)) {
+                    err << "Error: " << cell_err << " (line "
+                        << batch[i].line_no << ")\n";
+                    return false;
                 }
             }
         }
-        if (rc == kExitOk && writer->write_table(tablet) != 0) {
+        if (writer->write_table(tablet) != 0) {
             err << "Error: write_table failed\n";
-            rc = kExitRuntime;
+            return false;
         }
+        total_rows += static_cast<long long>(batch.size());
+        batch.clear();
+        return true;
+    };
+
+    while (std::getline(*in, line)) {
+        ++line_no;
+        strip_cr(line);
+        if (line.empty()) {
+            continue;
+        }
+        std::vector<std::string> fields = split_line(line, delim, csv_quotes);
+        if (fields.size() != columns.size() + 1) {
+            err << "Error: expected " << (columns.size() + 1) << " fields, got "
+                << fields.size() << " (line " << line_no << ")\n";
+            rc = kExitRuntime;
+            break;
+        }
+        char* e = nullptr;
+        errno = 0;
+        long long ts = std::strtoll(fields[0].c_str(), &e, 10);
+        if (e == nullptr || *e != '\0' || errno == ERANGE) {
+            err << "Error: bad timestamp '" << fields[0] << "' (line "
+                << line_no << ")\n";
+            rc = kExitRuntime;
+            break;
+        }
+        DataRow r;
+        r.line_no = line_no;
+        r.timestamp = static_cast<int64_t>(ts);
+        r.cells.assign(fields.begin() + 1, fields.end());
+        batch.push_back(r);
+        if (batch.size() >= kBatch && !flush_batch()) {
+            rc = kExitRuntime;
+            break;
+        }
+    }
+
+    if (rc == kExitOk && !flush_batch()) {
+        rc = kExitRuntime;
     }
 
     if (rc == kExitOk) {
@@ -253,7 +293,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     delete schema;
 
     if (rc == kExitOk && args.verbose) {
-        err << "wrote " << rows.size() << " rows to " << args.output << "\n";
+        err << "wrote " << total_rows << " rows to " << args.output << "\n";
     }
     return rc;
 }

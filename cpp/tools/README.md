@@ -97,7 +97,7 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 |---|---|
 | `ls` | List devices (tree model) or tables (table model), one name per line |
 | `schema` | Per-series `target, measurement, datatype, encoding, compression` |
-| `meta` | File summary: model, version, device/table/series counts, time range, file size |
+| `meta` | File summary: model, device/table/series counts, time range, file size |
 | `stats` | Per-series `count, start_time, end_time, min, max, first, last, sum` |
 | `count` | Per-series row counts plus a `total` row (from statistics, no page scan) |
 | `head` | First N rows (default 10; use `-n`) |

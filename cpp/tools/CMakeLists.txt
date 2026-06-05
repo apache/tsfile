@@ -17,8 +17,6 @@ specific language governing permissions and limitations
 under the License.
 ]]
 
-message("Running in tools directory")
-
 file(GLOB_RECURSE TSFILE_CLI_SRCS
         "cli/*.cc"
         "format/*.cc"

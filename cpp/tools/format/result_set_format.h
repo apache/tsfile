@@ -29,6 +29,10 @@
 
 namespace tsfile_cli {
 
+// Translate a storage-engine error code into a human-readable phrase so CLI
+// diagnostics carry meaning instead of a bare numeric code.
+const char* query_error_text(int code);
+
 std::string cell_to_string(storage::ResultSet* rs, uint32_t col_index,
                            common::TSDataType type);
 

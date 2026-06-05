@@ -64,10 +64,12 @@ if (${DOWNLOADED})
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
     # AppleClang searches /usr/local/include before CMake's generated -isystem
-    # paths. Force the vendored GTest headers ahead of any system installation.
+    # paths, so a system-installed GTest can shadow the vendored headers. Force
+    # the vendored include dirs ahead for GTest's own sources here; the same is
+    # done for the consuming TsFile_Test target below (where header resolution
+    # actually matters for the test code).
     foreach (GTEST_TARGET gtest gtest_main gmock gmock_main)
         if (TARGET ${GTEST_TARGET})
-            set_target_properties(${GTEST_TARGET} PROPERTIES SYSTEM OFF)
             target_include_directories(${GTEST_TARGET} BEFORE PRIVATE
                     ${googletest_SOURCE_DIR}/googletest/include
                     ${googletest_SOURCE_DIR}/googletest
@@ -83,6 +85,11 @@ if (${DOWNLOADED})
             endif ()
         endif ()
     endforeach ()
+    # Remember the vendored GTest header roots so they can be forced ahead of any
+    # system installation when compiling TsFile_Test itself.
+    set(VENDORED_GTEST_INCLUDE_DIRS
+            ${googletest_SOURCE_DIR}/googletest/include
+            ${googletest_SOURCE_DIR}/googlemock/include)
     set(TESTS_ENABLED ON PARENT_SCOPE)
 else ()
     message(WARNING "Failed to download googletest from all provided URLs, setting TESTS_ENABLED to OFF")
@@ -175,6 +182,12 @@ if (ENABLE_ANTLR4)
 endif()
 
 add_executable(TsFile_Test ${TEST_SRCS})
+# Force the vendored GTest headers ahead of any system installation so the test
+# code reliably compiles against the FetchContent-provided 1.12.1 headers.
+if (VENDORED_GTEST_INCLUDE_DIRS)
+    target_include_directories(TsFile_Test BEFORE PRIVATE
+            ${VENDORED_GTEST_INCLUDE_DIRS})
+endif ()
 if (BUILD_TOOLS)
     target_include_directories(TsFile_Test PRIVATE ${CMAKE_SOURCE_DIR}/tools)
 endif ()

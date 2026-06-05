@@ -43,7 +43,7 @@ Single pipe-friendly C++ binary to inspect **and** import `.tsfile` (TsFile's an
 |---|---|---|
 | `ls` | device (tree) / table (table) per line | no |
 | `schema` | `target,measurement,datatype,encoding,compression` | no |
-| `meta` | model, version, device/table/series counts, time range, bloom, size | no |
+| `meta` | model, device/table/series counts, time range, size | no |
 | `stats` | per-series `count,start,end,min,max,first,last,sum` | no |
 | `count` | per-series counts + `total` row | no |
 | `head` | first N rows (default 10, `-n`) | yes |

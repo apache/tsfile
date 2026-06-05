@@ -163,9 +163,8 @@ TEST(CliE2E, MetaReportsFileSummary) {
     int code = tsfile_cli::run_cli({"meta", "-f", "tsv", f.path}, out, err);
     EXPECT_EQ(code, 0);
     EXPECT_TRUE(err.str().empty());
-    EXPECT_NE(out.str().find("file\tmodel\tversion\tdevice_count\ttable_"
-                             "count\tseries_count\tstart_time\tend_time\tbloom_"
-                             "filter\tfile_size_bytes"),
+    EXPECT_NE(out.str().find("file\tmodel\tdevice_count\ttable_count\tseries_"
+                             "count\tstart_time\tend_time\tfile_size_bytes"),
               std::string::npos);
     EXPECT_NE(out.str().find("\ttable\t"), std::string::npos);
 }
