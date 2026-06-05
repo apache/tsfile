@@ -248,3 +248,312 @@ TEST(CliE2E, WriteMissingColumnsIsUsageError) {
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("--columns"), std::string::npos);
 }
+
+namespace {
+bool path_exists(const std::string& p) {
+    std::ifstream in(p.c_str());
+    return in.good();
+}
+}  // namespace
+
+TEST(CliE2E, WriteRejectsOutOfOrderTimestampsAndLeavesNoOutput) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_ooo", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n5,50\n1,10\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_ooo_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--columns",
+                                    "s1:INT64:field", "-o", out_path, csv},
+                                   out, err);
+    EXPECT_EQ(code, 3);
+    EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
+        << err.str();
+    EXPECT_NE(err.str().find("line 3"), std::string::npos) << err.str();
+    EXPECT_FALSE(path_exists(out_path)) << "failed import must leave no output";
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteAllowsSameTimestampAcrossDevices) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_md", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,id,s1\n1,A,10\n1,B,20\n2,A,30\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_md_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns", "id:STRING:tag,s1:INT64:field",
+         "-o", out_path, csv},
+        out, err);
+    EXPECT_EQ(code, 0) << err.str();
+
+    std::ostringstream cout_;
+    std::ostringstream cerr_;
+    tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_);
+    EXPECT_NE(cout_.str().find("total\t\t3"), std::string::npos) << cout_.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteRejectsOutputEqualsInput) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_alias", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,1\n";
+    }
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--columns",
+                                    "s1:INT64:field", "-o", csv, csv},
+                                   out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("same as the input"), std::string::npos)
+        << err.str();
+    // The input file must be untouched.
+    std::ifstream in(csv.c_str());
+    std::stringstream buf;
+    buf << in.rdbuf();
+    EXPECT_EQ(buf.str(), "time,s1\n0,1\n");
+
+    std::remove(csv.c_str());
+}
+
+TEST(CliE2E, WriteFailureOnBadValueLeavesNoOutput) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_badval", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,notanumber\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_badval_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--columns",
+                                    "s1:INT64:field", "-o", out_path, csv},
+                                   out, err);
+    EXPECT_EQ(code, 3);
+    EXPECT_FALSE(path_exists(out_path));
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteRejectsDuplicateColumnNames) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns", "s1:INT64:field,s1:INT64:field",
+         "-o", "x.tsfile", "-"},
+        out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("duplicate column"), std::string::npos)
+        << err.str();
+}
+
+TEST(CliE2E, WriteRejectsHeaderMatchWithNoHeader) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns", "s1:INT64:field", "-o",
+         "x.tsfile", "--no-header", "--header-match", "-"},
+        out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("--header-match"), std::string::npos) << err.str();
+}
+
+TEST(CliE2E, ReadRejectsWriteOnlyFlag) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"ls", "-o", "x.tsfile", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("only valid for write"), std::string::npos)
+        << err.str();
+}
+
+TEST(CliE2E, MetaRejectsDeviceScopeFlag) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"meta", "-d", "dev", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("not valid for meta"), std::string::npos)
+        << err.str();
+}
+
+TEST(CliE2E, SchemaTableShowsEncodingAndCompression) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"schema", "-f", "tsv", f.path}, out, err);
+    EXPECT_EQ(code, 0);
+    // Table-model schema must report real (non-empty) encoding and compression
+    // rather than blanks. The INT64 field encodes as TS_2DIFF; the compression
+    // is the engine default (build-dependent) but must not be empty.
+    EXPECT_NE(out.str().find("\ts1\tINT64\tTS_2DIFF\t"), std::string::npos)
+        << out.str();
+    EXPECT_EQ(out.str().find("\ts1\tINT64\tTS_2DIFF\t\n"), std::string::npos)
+        << out.str();
+}
+
+namespace {
+// Run a one-row `write` whose single value cell is `value`, declaring the
+// column as `type`. Returns the exit code; captures stderr into `err`.
+int write_one_value(const std::string& type, const std::string& value,
+                    std::string& err_out) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_ovf", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0," << value << "\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_ovf_out", ".tsfile");
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"write", "--table", "t", "--columns",
+                             "s1:" + type + ":field", "-o", out_path, csv},
+                            out, err);
+    err_out = err.str();
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+    return code;
+}
+}  // namespace
+
+TEST(CliE2E, WriteRejectsInt32Overflow) {
+    std::string err;
+    EXPECT_EQ(write_one_value("INT32", "3000000000", err), 3);
+    EXPECT_NE(err.find("INT32 out of range"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteAcceptsInt32Boundary) {
+    std::string err;
+    EXPECT_EQ(write_one_value("INT32", "2147483647", err), 0) << err;
+}
+
+TEST(CliE2E, WriteRejectsInt64Overflow) {
+    std::string err;
+    EXPECT_EQ(write_one_value("INT64", "99999999999999999999999999", err), 3);
+    EXPECT_NE(err.find("INT64 out of range"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteRejectsDoubleOverflow) {
+    std::string err;
+    EXPECT_EQ(write_one_value("DOUBLE", "1e400", err), 3);
+    EXPECT_NE(err.find("DOUBLE out of range"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteRejectsNonNumericInt64) {
+    std::string err;
+    EXPECT_EQ(write_one_value("INT64", "12abc", err), 3);
+    EXPECT_NE(err.find("bad INT64"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteRejectsOutOfOrderAcrossBatches) {
+    // More than one 1024-row batch of ascending rows, then a violating
+    // timestamp. The first batch is already flushed by the time the bad row is
+    // read, so this proves both that per-device tracking survives a batch flush
+    // and that the already-written output is removed on failure.
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_xbatch", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n";
+        for (int i = 1; i <= 1100; ++i) {
+            o << i << "," << i << "\n";
+        }
+        o << "500,999\n";  // <= the last timestamp for the tag-less device
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_xbatch_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--columns",
+                                    "s1:INT64:field", "-o", out_path, csv},
+                                   out, err);
+    EXPECT_EQ(code, 3);
+    EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
+        << err.str();
+    EXPECT_FALSE(path_exists(out_path));
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteStreamsLargeInputRoundTrips) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_large", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n";
+        for (int i = 1; i <= 3000; ++i) {
+            o << i << "," << (i * 2) << "\n";
+        }
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_large_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "big", "--columns",
+                                    "s1:INT64:field", "-o", out_path, csv},
+                                   out, err);
+    EXPECT_EQ(code, 0) << err.str();
+
+    std::ostringstream cout_;
+    std::ostringstream cerr_;
+    tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_);
+    EXPECT_NE(cout_.str().find("\ts1\t3000"), std::string::npos) << cout_.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, HelpWithPositionalFilePrintsUsage) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"cat", "--help", f.path}, out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_NE(out.str().find("Usage:"), std::string::npos) << out.str();
+}
+
+TEST(CliE2E, StatsRejectsRowOnlyFlag) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"stats", "--start", "1", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("only valid for head/cat/sample"),
+              std::string::npos)
+        << err.str();
+}
+
+TEST(CliE2E, LsRejectsMeasurementsFlag) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"ls", "-m", "s1", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("not valid for ls"), std::string::npos)
+        << err.str();
+}

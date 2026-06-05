@@ -25,10 +25,33 @@
 #include <vector>
 
 #include "common/db_common.h"
+#include "utils/errno_define.h"
 
 using tsfile_cli::OutputFormat;
 using tsfile_cli::ParsedArgs;
 using tsfile_cli::RowWriter;
+
+TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_TABLE_NOT_EXIST),
+                 "table does not exist");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_DEVICE_NOT_EXIST),
+                 "device does not exist");
+    EXPECT_STREQ(
+        tsfile_cli::error_code_message(common::E_MEASUREMENT_NOT_EXIST),
+        "measurement does not exist");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_TSFILE_CORRUPTED),
+                 "file is corrupted");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_OUT_OF_ORDER),
+                 "data is out of order");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_DECODE_ERR),
+                 "failed to decode data");
+}
+
+TEST(ErrorCodeMessageTest, UnknownCodeFallsBackToInternalError) {
+    EXPECT_STREQ(tsfile_cli::error_code_message(987654), "internal error");
+    // The phrase is always a non-empty, printable string (never a bare code).
+    EXPECT_GT(std::string(tsfile_cli::error_code_message(-1)).size(), 0u);
+}
 
 TEST(ResolveFormatTest, AutoUsesTableOnTtyTsvOtherwise) {
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kAuto, true),

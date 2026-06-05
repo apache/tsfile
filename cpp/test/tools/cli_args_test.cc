@@ -50,6 +50,17 @@ TEST(RunCliTest, UnknownCommandIsUsageError) {
     EXPECT_NE(err.str().find("Unknown command"), std::string::npos);
 }
 
+TEST(RunCliTest, LeadingOptionBeforeCommandIsClearError) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"-f", "json", "meta", "data.tsfile"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("command must come before options"),
+              std::string::npos)
+        << err.str();
+}
+
 TEST(ParseArgsTest, CommandAndFilePositional) {
     auto p = tsfile_cli::parse_args({"ls", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());

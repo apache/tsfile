@@ -51,6 +51,15 @@ TEST(InputFormatTest, ParseColumnsSpecErrors) {
     EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:bogus", cols, err));
     EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64", cols, err));
     EXPECT_FALSE(tsfile_cli::parse_columns_spec("", cols, err));
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec(":INT64:field", cols, err));
+}
+
+TEST(InputFormatTest, ParseColumnsSpecRejectsDuplicateNames) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:field,s1:INT32:field",
+                                                cols, err));
+    EXPECT_NE(err.find("duplicate column"), std::string::npos) << err;
 }
 
 TEST(InputFormatTest, SplitLineTsv) {
