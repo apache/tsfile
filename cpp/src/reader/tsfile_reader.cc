@@ -25,6 +25,71 @@
 using namespace common;
 using namespace storage;
 
+namespace {
+
+struct DeviceMetaEntry {
+    std::shared_ptr<IDeviceID> device_id;
+    int64_t start_offset;
+    int64_t end_offset;
+};
+
+int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
+                           std::shared_ptr<MetaIndexNode> index_node,
+                           ReadFile* read_file, PageArena& pa) {
+    int ret = E_OK;
+    if (index_node == nullptr) {
+        return ret;
+    }
+    if (index_node->node_type_ == LEAF_DEVICE) {
+        for (size_t i = 0; i < index_node->children_.size(); i++) {
+            DeviceMetaEntry entry;
+            entry.device_id = index_node->children_[i]->get_device_id();
+            entry.start_offset = index_node->children_[i]->get_offset();
+            entry.end_offset = (i + 1 < index_node->children_.size())
+                                   ? index_node->children_[i + 1]->get_offset()
+                                   : index_node->end_offset_;
+            entries.push_back(entry);
+        }
+    } else {
+        for (size_t idx = 0; idx < index_node->children_.size(); idx++) {
+            auto meta_index_entry = index_node->children_[idx];
+            int64_t start_offset = meta_index_entry->get_offset();
+            int64_t end_offset = index_node->end_offset_;
+            if (idx + 1 < index_node->children_.size()) {
+                end_offset = index_node->children_[idx + 1]->get_offset();
+            }
+            ASSERT(end_offset - start_offset > 0);
+            const int32_t read_size = (int32_t)(end_offset - start_offset);
+            int32_t ret_read_len = 0;
+            char* data_buf = (char*)pa.alloc(read_size);
+            void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+            if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+                return E_OOM;
+            }
+            auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+            auto top_node = std::shared_ptr<MetaIndexNode>(
+                top_node_ptr, [](MetaIndexNode* ptr) {
+                    if (ptr) {
+                        ptr->~MetaIndexNode();
+                    }
+                });
+            if (RET_FAIL(read_file->read(start_offset, data_buf, read_size,
+                                         ret_read_len))) {
+            } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
+                                                                  read_size))) {
+            } else {
+                ret = get_all_device_entries(entries, top_node, read_file, pa);
+            }
+            if (ret != E_OK) {
+                return ret;
+            }
+        }
+    }
+    return ret;
+}
+
+}  // namespace
+
 namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
@@ -367,8 +432,6 @@ int TsFileReader::get_timeseries_metadata_impl(
     std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
     int ret = E_OK;
     std::vector<ITimeseriesIndex*> timeseries_indexs;
-    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
-    // Pointers are owned by tsfile_reader_meta_pa_; shared_ptr must not delete
     auto noop_deleter = [](ITimeseriesIndex*) {};
     if (RET_FAIL(
             tsfile_executor_->get_tsfile_io_reader()
@@ -397,13 +460,36 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
 }
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
-    // Collect metadata for all devices present in the file
     DeviceTimeseriesMetadataMap result;
-    auto device_ids = get_all_device_ids();
-    for (const auto& device_id : device_ids) {
-        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
-            result.insert(std::make_pair(device_id, std::move(list)));
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return result;
+    }
+
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+    std::vector<DeviceMetaEntry> entries;
+    for (auto& table_entry : tsfile_meta->table_metadata_index_node_map_) {
+        if (get_all_device_entries(entries, table_entry.second, read_file_,
+                                   pa) != E_OK) {
+            return result;
+        }
+    }
+
+    auto noop_deleter = [](ITimeseriesIndex*) {};
+    for (auto& device_entry : entries) {
+        std::vector<ITimeseriesIndex*> raw_ts_indexes;
+        if (tsfile_executor_->get_tsfile_io_reader()
+                ->get_device_timeseries_meta_by_offset(
+                    device_entry.start_offset, device_entry.end_offset,
+                    raw_ts_indexes, tsfile_reader_meta_pa_) == E_OK) {
+            std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+            for (auto ts_idx : raw_ts_indexes) {
+                list.emplace_back(
+                    std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
+            }
+            result.insert(
+                std::make_pair(device_entry.device_id, std::move(list)));
         }
     }
     return result;

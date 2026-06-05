@@ -29,8 +29,8 @@ namespace tsfile_cli {
 int cmd_meta(const ParsedArgs& args, storage::TsFileReader& reader,
              OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
     RowWriter w(out, fmt,
-                {"file", "model", "device_count", "table_count",
-                 "series_count", "start_time", "end_time", "file_size_bytes"},
+                {"file", "model", "device_count", "table_count", "series_count",
+                 "start_time", "end_time", "file_size_bytes"},
                 {common::STRING, common::STRING, common::INT64, common::INT64,
                  common::INT64, common::INT64, common::INT64, common::INT64},
                 args.no_header);

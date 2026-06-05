@@ -886,3 +886,339 @@ TEST_F(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
 
     ASSERT_EQ(reader.close(), common::E_OK);
 }
+
+TEST_F(TsFileTableReaderTest, GetTimeseriesMetadataTableModel) {
+    std::vector<MeasurementSchema*> schemas;
+    std::vector<ColumnCategory> categories;
+    schemas.emplace_back(new MeasurementSchema("device", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("value", TSDataType::INT64,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::FIELD);
+    auto* table_schema = new TableSchema("meta_table", schemas, categories);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    int num_devices = 3;
+    int points = 10;
+    int total_rows = num_devices * points;
+    storage::Tablet tablet(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(),
+                           table_schema->get_data_types(),
+                           table_schema->get_column_categories(), total_rows);
+    for (int d = 0; d < num_devices; d++) {
+        std::string dev = "dev" + std::to_string(d);
+        for (int t = 0; t < points; t++) {
+            int row = d * points + t;
+            tablet.add_timestamp(row, static_cast<int64_t>(t));
+            tablet.add_value(row, "device", dev.c_str());
+            tablet.add_value(row, "value", static_cast<int64_t>(d * 100 + t));
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    auto meta_map = reader.get_timeseries_metadata();
+    ASSERT_EQ(meta_map.size(), static_cast<size_t>(num_devices));
+
+    for (auto& entry : meta_map) {
+        auto& ts_list = entry.second;
+        ASSERT_FALSE(ts_list.empty());
+        for (auto& ts_idx : ts_list) {
+            ASSERT_NE(ts_idx->get_statistic(), nullptr);
+            ASSERT_EQ(ts_idx->get_statistic()->count_, points);
+        }
+    }
+
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+}
+
+TEST_F(TsFileTableReaderTest, GetTimeseriesMetadataMultiTable) {
+    std::vector<MeasurementSchema*> schemas0;
+    std::vector<ColumnCategory> cats0;
+    schemas0.emplace_back(new MeasurementSchema("tag", TSDataType::STRING,
+                                                TSEncoding::PLAIN,
+                                                CompressionType::UNCOMPRESSED));
+    cats0.emplace_back(ColumnCategory::TAG);
+    schemas0.emplace_back(new MeasurementSchema("v0", TSDataType::INT64,
+                                                TSEncoding::PLAIN,
+                                                CompressionType::UNCOMPRESSED));
+    cats0.emplace_back(ColumnCategory::FIELD);
+    auto* schema0 = new TableSchema("table_a", schemas0, cats0);
+    auto writer = std::make_shared<TsFileTableWriter>(&write_file_, schema0);
+
+    storage::Tablet tablet0(
+        schema0->get_table_name(), schema0->get_measurement_names(),
+        schema0->get_data_types(), schema0->get_column_categories(), 10);
+    for (int d = 0; d < 2; d++) {
+        std::string dev = "a_dev" + std::to_string(d);
+        for (int t = 0; t < 5; t++) {
+            int row = d * 5 + t;
+            tablet0.add_timestamp(row, static_cast<int64_t>(t));
+            tablet0.add_value(row, "tag", dev.c_str());
+            tablet0.add_value(row, "v0", static_cast<int64_t>(t));
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet0), common::E_OK);
+
+    std::vector<MeasurementSchema*> schemas1;
+    std::vector<ColumnCategory> cats1;
+    schemas1.emplace_back(new MeasurementSchema("tag", TSDataType::STRING,
+                                                TSEncoding::PLAIN,
+                                                CompressionType::UNCOMPRESSED));
+    cats1.emplace_back(ColumnCategory::TAG);
+    schemas1.emplace_back(new MeasurementSchema("v1", TSDataType::INT64,
+                                                TSEncoding::PLAIN,
+                                                CompressionType::UNCOMPRESSED));
+    cats1.emplace_back(ColumnCategory::FIELD);
+    auto* schema1 = new TableSchema("table_b", schemas1, cats1);
+    auto schema1_ptr = std::shared_ptr<TableSchema>(schema1);
+    writer->register_table(schema1_ptr);
+
+    storage::Tablet tablet1(
+        schema1->get_table_name(), schema1->get_measurement_names(),
+        schema1->get_data_types(), schema1->get_column_categories(), 24);
+    for (int d = 0; d < 3; d++) {
+        std::string dev = "b_dev" + std::to_string(d);
+        for (int t = 0; t < 8; t++) {
+            int row = d * 8 + t;
+            tablet1.add_timestamp(row, static_cast<int64_t>(t));
+            tablet1.add_value(row, "tag", dev.c_str());
+            tablet1.add_value(row, "v1", static_cast<int64_t>(t));
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet1), common::E_OK);
+
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    auto meta_map = reader.get_timeseries_metadata();
+    ASSERT_EQ(meta_map.size(), 5u);
+
+    int table_a_count = 0;
+    int table_b_count = 0;
+    for (auto& entry : meta_map) {
+        auto table_name = entry.first->get_table_name();
+        if (table_name == "table_a") {
+            table_a_count++;
+            for (auto& ts : entry.second) {
+                ASSERT_EQ(ts->get_statistic()->count_, 5);
+            }
+        } else if (table_name == "table_b") {
+            table_b_count++;
+            for (auto& ts : entry.second) {
+                ASSERT_EQ(ts->get_statistic()->count_, 8);
+            }
+        }
+    }
+    ASSERT_EQ(table_a_count, 2);
+    ASSERT_EQ(table_b_count, 3);
+
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete schema0;
+}
+
+TEST_F(TsFileTableReaderTest, DirectLookupSingleTagColumn) {
+    std::vector<MeasurementSchema*> schemas;
+    std::vector<ColumnCategory> categories;
+    schemas.emplace_back(new MeasurementSchema("tag", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("val", TSDataType::INT64,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::FIELD);
+    auto* table_schema =
+        new TableSchema("single_tag_table", schemas, categories);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    int num_devices = 5;
+    int points = 10;
+    storage::Tablet tablet(
+        table_schema->get_table_name(), table_schema->get_measurement_names(),
+        table_schema->get_data_types(), table_schema->get_column_categories(),
+        num_devices * points);
+    for (int d = 0; d < num_devices; d++) {
+        std::string dev_name = "dev" + std::to_string(d);
+        for (int t = 0; t < points; t++) {
+            int row = d * points + t;
+            tablet.add_timestamp(row, static_cast<int64_t>(t));
+            tablet.add_value(row, "tag", dev_name.c_str());
+            tablet.add_value(row, "val", static_cast<int64_t>(d * 100 + t));
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    Filter* tag_filter = TagFilterBuilder(table_schema).eq("tag", "dev2");
+    std::vector<std::string> cols = {"tag", "val"};
+    int ret = reader.query("single_tag_table", cols, 0, 1000000, tmp_result_set,
+                           tag_filter);
+    ASSERT_EQ(ret, common::E_OK);
+    auto* table_result_set = (TableResultSet*)tmp_result_set;
+
+    bool has_next = false;
+    int64_t row_num = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_num % points);
+        auto* tag_val = table_result_set->get_value<common::String*>(2);
+        std::string expected_tag = "dev2";
+        ASSERT_EQ(std::string(tag_val->buf_, tag_val->len_), expected_tag);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(3),
+                  static_cast<int64_t>(200 + row_num));
+        row_num++;
+    }
+    ASSERT_EQ(row_num, points);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+    delete tag_filter;
+}
+
+TEST_F(TsFileTableReaderTest, DirectLookupNonExistDevice) {
+    std::vector<MeasurementSchema*> schemas;
+    std::vector<ColumnCategory> categories;
+    schemas.emplace_back(new MeasurementSchema("tag", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("val", TSDataType::INT64,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::FIELD);
+    auto* table_schema =
+        new TableSchema("single_tag_table", schemas, categories);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    storage::Tablet tablet(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(),
+                           table_schema->get_data_types(),
+                           table_schema->get_column_categories(), 5);
+    for (int t = 0; t < 5; t++) {
+        tablet.add_timestamp(t, static_cast<int64_t>(t));
+        tablet.add_value(t, "tag", "existing_dev");
+        tablet.add_value(t, "val", static_cast<int64_t>(t));
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    Filter* tag_filter = TagFilterBuilder(table_schema).eq("tag", "non_exist");
+    std::vector<std::string> cols = {"tag", "val"};
+    int ret = reader.query("single_tag_table", cols, 0, 1000000, tmp_result_set,
+                           tag_filter);
+    ASSERT_EQ(ret, common::E_OK);
+    auto* table_result_set = (TableResultSet*)tmp_result_set;
+
+    bool has_next = false;
+    int64_t row_num = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        row_num++;
+    }
+    ASSERT_EQ(row_num, 0);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+    delete tag_filter;
+}
+
+TEST_F(TsFileTableReaderTest, MultiTagColumnFilterOnSecondTag) {
+    std::vector<MeasurementSchema*> schemas;
+    std::vector<ColumnCategory> categories;
+    schemas.emplace_back(new MeasurementSchema("region", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("device", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("val", TSDataType::INT64,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::FIELD);
+    auto* table_schema =
+        new TableSchema("multi_tag_table", schemas, categories);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    struct DeviceData {
+        std::string region;
+        std::string device;
+        int start;
+        int count;
+    };
+    std::vector<DeviceData> devices = {
+        {"north", "dev_a", 0, 5},
+        {"north", "dev_b", 5, 5},
+        {"south", "dev_c", 10, 5},
+        {"east", "dev_d", 15, 5},
+    };
+
+    int total = 20;
+    storage::Tablet tablet(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(),
+                           table_schema->get_data_types(),
+                           table_schema->get_column_categories(), total);
+    int row = 0;
+    for (auto& d : devices) {
+        for (int t = 0; t < d.count; t++) {
+            tablet.add_timestamp(row, static_cast<int64_t>(d.start + t));
+            tablet.add_value(row, "region", d.region.c_str());
+            tablet.add_value(row, "device", d.device.c_str());
+            tablet.add_value(row, "val", static_cast<int64_t>(d.start + t));
+            row++;
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    Filter* tag_filter = TagFilterBuilder(table_schema).eq("device", "dev_c");
+    std::vector<std::string> cols = {"region", "device", "val"};
+    int ret = reader.query("multi_tag_table", cols, 0, 1000000, tmp_result_set,
+                           tag_filter);
+    ASSERT_EQ(ret, common::E_OK);
+    auto* table_result_set = (TableResultSet*)tmp_result_set;
+
+    bool has_next = false;
+    int64_t row_num = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        row_num++;
+    }
+    ASSERT_EQ(row_num, 5);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+    delete tag_filter;
+}

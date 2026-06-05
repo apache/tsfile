@@ -105,18 +105,37 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
-# MSVC provides sensible per-configuration optimization flags by default; the
-# GCC-style flags below would be rejected by cl.exe, so skip them on MSVC.
-if (NOT MSVC)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-        set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+# Keep optimization policy external by default (caller/toolchain/CMake defaults).
+set(TSFILE_OPTIMIZATION_FLAGS ""
+        CACHE STRING
+        "Optional extra optimization flags for tsfile-cpp (e.g. -O3). Empty means inherit caller defaults.")
+if (TSFILE_OPTIMIZATION_FLAGS)
+    # Apply after CMake defaults for each config so explicit optimization can
+    # override default -O flags in Release/RelWithDebInfo/Debug/MinSizeRel.
+    set(CMAKE_CXX_FLAGS_DEBUG
+            "${CMAKE_CXX_FLAGS_DEBUG} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_RELEASE
+            "${CMAKE_CXX_FLAGS_RELEASE} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO
+            "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_MINSIZEREL
+            "${CMAKE_CXX_FLAGS_MINSIZEREL} ${TSFILE_OPTIMIZATION_FLAGS}")
+    message("cmake using: TSFILE_OPTIMIZATION_FLAGS=${TSFILE_OPTIMIZATION_FLAGS}")
+else ()
+    message("cmake using: TSFILE_OPTIMIZATION_FLAGS=<inherit>")
+    # MSVC provides sensible per-configuration optimization flags by default; the
+    # GCC-style flags below would be rejected by cl.exe, so skip them on MSVC.
+    if (NOT MSVC)
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+            set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+        endif ()
     endif ()
 endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
@@ -244,7 +263,6 @@ else ()
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
 endif ()
 add_subdirectory(third_party)
-set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
 add_subdirectory(src)
 if (BUILD_TOOLS)

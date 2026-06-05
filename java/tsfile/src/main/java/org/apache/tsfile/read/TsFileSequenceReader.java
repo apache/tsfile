@@ -2426,11 +2426,15 @@ public class TsFileSequenceReader implements AutoCloseable {
                     Decoder.getDecoderByType(
                         chunkHeader.getEncodingType(), chunkHeader.getDataType());
                 ByteBuffer pageData = readPage(pageHeader, chunkHeader.getCompressionType());
+                TSEncoding configuredTimeEncoding =
+                    TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
+                boolean isTimeColumn =
+                    (chunkHeader.getChunkType() & TsFileConstant.TIME_COLUMN_MASK)
+                        == TsFileConstant.TIME_COLUMN_MASK;
+                TSEncoding selectedTimeEncoding =
+                    isTimeColumn ? chunkHeader.getEncodingType() : configuredTimeEncoding;
                 Decoder timeDecoder =
-                    Decoder.getDecoderByType(
-                        TSEncoding.valueOf(
-                            TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),
-                        TSDataType.INT64);
+                    Decoder.getDecoderByType(selectedTimeEncoding, TSDataType.INT64);
 
                 if ((chunkHeader.getChunkType() & TsFileConstant.TIME_COLUMN_MASK)
                     == TsFileConstant.TIME_COLUMN_MASK) { // Time Chunk with only one page

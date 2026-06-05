@@ -185,7 +185,7 @@ public class ReadWriteIOUtils {
       if (entry.getKey() == null) {
         buffer.putInt(-1);
       } else {
-        bytes = entry.getKey().getBytes();
+        bytes = entry.getKey().getBytes(TSFileConfig.STRING_CHARSET);
         buffer.putInt(bytes.length);
         buffer.put(bytes);
         length += bytes.length;
@@ -194,7 +194,7 @@ public class ReadWriteIOUtils {
       if (entry.getValue() == null) {
         buffer.putInt(-1);
       } else {
-        bytes = entry.getValue().getBytes();
+        bytes = entry.getValue().getBytes(TSFileConfig.STRING_CHARSET);
         buffer.putInt(bytes.length);
         buffer.put(bytes);
         length += bytes.length;
@@ -509,7 +509,7 @@ public class ReadWriteIOUtils {
     if (s == null) {
       return INT_LEN;
     }
-    return INT_LEN + s.getBytes().length;
+    return INT_LEN + s.getBytes(TSFileConfig.STRING_CHARSET).length;
   }
 
   /** read a byte var from inputStream. */
@@ -1202,7 +1202,7 @@ public class ReadWriteIOUtils {
         outputStream.write(NONE.ordinal());
       } else {
         outputStream.write(STRING.ordinal());
-        byte[] bytes = value.toString().getBytes();
+        byte[] bytes = value.toString().getBytes(TSFileConfig.STRING_CHARSET);
         outputStream.writeInt(bytes.length);
         outputStream.write(bytes);
       }
@@ -1238,7 +1238,7 @@ public class ReadWriteIOUtils {
       byteBuffer.putInt(NONE.ordinal());
     } else {
       byteBuffer.putInt(STRING.ordinal());
-      byte[] bytes = value.toString().getBytes();
+      byte[] bytes = value.toString().getBytes(TSFileConfig.STRING_CHARSET);
       byteBuffer.putInt(bytes.length);
       byteBuffer.put(bytes);
     }
@@ -1271,7 +1271,7 @@ public class ReadWriteIOUtils {
         length = buffer.getInt();
         bytes = new byte[length];
         buffer.get(bytes);
-        return new String(bytes);
+        return new String(bytes, TSFileConfig.STRING_CHARSET);
     }
   }
 
