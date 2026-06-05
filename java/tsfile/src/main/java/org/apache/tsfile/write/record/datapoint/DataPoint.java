@@ -21,6 +21,7 @@ package org.apache.tsfile.write.record.datapoint;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.StringContainer;
@@ -97,12 +98,12 @@ public abstract class DataPoint {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", dataType));
+              Messages.format("error.write.type_not_supported", dataType));
       }
     } catch (Exception e) {
       throw new UnSupportedDataTypeException(
-          String.format(
-              "Data type of %s is %s, but input value is %s", measurementId, dataType, value));
+          Messages.format(
+              "error.write.datapoint_type_value_mismatch", measurementId, dataType, value));
     }
 
     return dataPoint;
@@ -135,31 +136,38 @@ public abstract class DataPoint {
   }
 
   public void setInteger(int value) {
-    throw new UnsupportedOperationException("set Integer not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Integer"));
   }
 
   public void setLong(long value) {
-    throw new UnsupportedOperationException("set Long not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Long"));
   }
 
   public void setBoolean(boolean value) {
-    throw new UnsupportedOperationException("set Boolean not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Boolean"));
   }
 
   public void setFloat(float value) {
-    throw new UnsupportedOperationException("set Float not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Float"));
   }
 
   public void setDouble(double value) {
-    throw new UnsupportedOperationException("set Double not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Double"));
   }
 
   public void setString(Binary value) {
-    throw new UnsupportedOperationException("set String not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "String"));
   }
 
   public void setDate(LocalDate value) {
-    throw new UnsupportedOperationException("set Date not support in DataPoint");
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.datapoint_set_not_supported", "Date"));
   }
 
   public IMeasurementSchema getMeasurementSchema() {

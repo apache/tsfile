@@ -33,6 +33,7 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "utils/util_define.h"  // mode_t and other platform-compat shims
 
 namespace storage {
 class WriteFile;

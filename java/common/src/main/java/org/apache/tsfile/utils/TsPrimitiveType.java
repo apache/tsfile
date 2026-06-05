@@ -19,6 +19,7 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.Serializable;
@@ -55,7 +56,8 @@ public abstract class TsPrimitiveType implements Serializable {
       case VECTOR:
         return new TsPrimitiveType.TsVector();
       default:
-        throw new UnSupportedDataTypeException("Unsupported data type:" + dataType);
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.common.unsupported_data_type", dataType));
     }
   }
 
@@ -88,64 +90,79 @@ public abstract class TsPrimitiveType implements Serializable {
       case VECTOR:
         return new TsPrimitiveType.TsVector((TsPrimitiveType[]) v);
       default:
-        throw new UnSupportedDataTypeException("Unsupported data type:" + dataType);
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.common.unsupported_data_type", dataType));
     }
   }
 
   public boolean getBoolean() {
-    throw new UnsupportedOperationException("getBoolean() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getBoolean()"));
   }
 
   public int getInt() {
-    throw new UnsupportedOperationException("getInt() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getInt()"));
   }
 
   public long getLong() {
-    throw new UnsupportedOperationException("getLong() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getLong()"));
   }
 
   public float getFloat() {
-    throw new UnsupportedOperationException("getFloat() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getFloat()"));
   }
 
   public double getDouble() {
-    throw new UnsupportedOperationException("getDouble() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getDouble()"));
   }
 
   public Binary getBinary() {
-    throw new UnsupportedOperationException("getBinary() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getBinary()"));
   }
 
   public TsPrimitiveType[] getVector() {
-    throw new UnsupportedOperationException("getVector() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "getVector()"));
   }
 
   public void setBoolean(boolean val) {
-    throw new UnsupportedOperationException("setBoolean() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setBoolean()"));
   }
 
   public void setInt(int val) {
-    throw new UnsupportedOperationException("setInt() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setInt()"));
   }
 
   public void setLong(long val) {
-    throw new UnsupportedOperationException("setLong() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setLong()"));
   }
 
   public void setFloat(float val) {
-    throw new UnsupportedOperationException("setFloat() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setFloat()"));
   }
 
   public void setDouble(double val) {
-    throw new UnsupportedOperationException("setDouble() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setDouble()"));
   }
 
   public void setBinary(Binary val) {
-    throw new UnsupportedOperationException("setBinary() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setBinary()"));
   }
 
   public void setVector(TsPrimitiveType[] val) {
-    throw new UnsupportedOperationException("setVector() is not supported for current sub-class");
+    throw new UnsupportedOperationException(
+        Messages.format("error.common.subclass_op_not_supported", "setVector()"));
   }
 
   public abstract void setObject(Object val);
@@ -212,7 +229,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setBoolean((Boolean) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsBoolean can only be set Boolean value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsBoolean", "Boolean"));
     }
 
     @Override
@@ -315,7 +333,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setInt((Integer) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsInt can only be set Integer value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsInt", "Integer"));
     }
 
     @Override
@@ -397,7 +416,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setLong((Long) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsLong can only be set Long value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsLong", "Long"));
     }
 
     @Override
@@ -479,7 +499,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setFloat((Float) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsFloat can only be set float value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsFloat", "float"));
     }
 
     @Override
@@ -556,7 +577,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setDouble((Double) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsDouble can only be set Double value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsDouble", "Double"));
     }
 
     @Override
@@ -628,7 +650,8 @@ public abstract class TsPrimitiveType implements Serializable {
         setBinary((Binary) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsBinary can only be set Binary value");
+      throw new UnSupportedDataTypeException(
+          Messages.format("error.common.tsprimitive_wrong_value_type", "TsBinary", "Binary"));
     }
 
     @Override
@@ -700,7 +723,9 @@ public abstract class TsPrimitiveType implements Serializable {
         setVector((TsPrimitiveType[]) val);
         return;
       }
-      throw new UnSupportedDataTypeException("TsVector can only be set TsPrimitiveType[] value");
+      throw new UnSupportedDataTypeException(
+          Messages.format(
+              "error.common.tsprimitive_wrong_value_type", "TsVector", "TsPrimitiveType[]"));
     }
 
     @Override

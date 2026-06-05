@@ -26,6 +26,7 @@ import org.apache.tsfile.external.commons.io.build.AbstractOrigin.PathOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin.ReaderOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin.URIOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin.WriterOrigin;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.File;
 import java.io.InputStream;
@@ -168,7 +169,7 @@ public abstract class AbstractOriginSupplier<T, B extends AbstractOriginSupplier
    */
   protected AbstractOrigin<?, ?> checkOrigin() {
     if (origin == null) {
-      throw new IllegalStateException("origin == null");
+      throw new IllegalStateException(Messages.get("error.external.origin_null"));
     }
     return origin;
   }

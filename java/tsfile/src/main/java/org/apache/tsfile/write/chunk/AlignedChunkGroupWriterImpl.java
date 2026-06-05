@@ -30,6 +30,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -196,7 +197,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", point.getType()));
+              Messages.format("error.write.type_not_supported", point.getType()));
       }
     }
     if (!emptyValueChunkWriters.isEmpty()) {
@@ -289,8 +290,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             break;
           default:
             throw new UnSupportedDataTypeException(
-                String.format(
-                    "Data type %s is not supported.",
+                Messages.format(
+                    "error.write.type_not_supported",
                     measurementSchemas.get(columnIndex).getType()));
         }
       }
@@ -312,7 +313,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public long flushToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
-    LOG.debug("start flush device id:{}", deviceId);
+    LOG.debug(Messages.get("log.write.flush_device"), deviceId);
     // make sure all the pages have been compressed into buffers, so that we can get correct
     // groupWriter.getCurrentChunkGroupSize().
     sealAllChunks();
@@ -383,7 +384,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", dataType));
+              Messages.format("error.write.type_not_supported", dataType));
       }
     }
   }
@@ -421,12 +422,12 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   protected void checkIsHistoryData(long time) throws WriteProcessException {
     if (isInitLastTime && time <= lastTime) {
       throw new WriteProcessException(
-          "Not allowed to write out-of-order data in timeseries "
-              + deviceId
-              + TsFileConstant.PATH_SEPARATOR
-              + ""
-              + ", time should later than "
-              + lastTime);
+          Messages.format(
+              "error.write.chunk_group_aligned_out_of_order",
+              deviceId,
+              TsFileConstant.PATH_SEPARATOR,
+              "",
+              lastTime));
     }
   }
 

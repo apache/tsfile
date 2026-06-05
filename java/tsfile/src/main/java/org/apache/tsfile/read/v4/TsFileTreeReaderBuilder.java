@@ -21,6 +21,7 @@ package org.apache.tsfile.read.v4;
 
 import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,7 +46,7 @@ public class TsFileTreeReaderBuilder {
   @TreeModel
   public ITsFileTreeReader build() throws IOException {
     if (this.file == null) {
-      throw new IllegalStateException("file must be set before build()");
+      throw new IllegalStateException(Messages.get("error.read.tree_reader_file_required"));
     }
     return new TsFileTreeReader(this.file);
   }

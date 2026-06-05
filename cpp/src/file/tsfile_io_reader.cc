@@ -155,6 +155,70 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     return ret;
 }
 
+int TsFileIOReader::get_device_timeseries_meta_by_offset(
+    int64_t start_offset, int64_t end_offset,
+    std::vector<ITimeseriesIndex*>& timeseries_indexs, PageArena& pa) {
+    int ret = E_OK;
+    load_tsfile_meta_if_necessary();
+
+    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
+        meta_index_entry_list;
+    bool is_aligned = false;
+    TimeseriesIndex* time_timeseries_index = nullptr;
+
+    ASSERT(start_offset < end_offset);
+    const int32_t read_size = end_offset - start_offset;
+    int32_t ret_read_len = 0;
+    char* data_buf = (char*)pa.alloc(read_size);
+    void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+        return E_OOM;
+    }
+    auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+    auto top_node = std::shared_ptr<MetaIndexNode>(top_node_ptr,
+                                                   MetaIndexNode::self_deleter);
+    if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
+                                  ret_read_len))) {
+        return ret;
+    }
+    if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+        return ret;
+    }
+
+    is_aligned = is_aligned_device(top_node);
+    if (is_aligned) {
+        if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index,
+                                              pa))) {
+            return ret;
+        }
+    }
+
+    get_all_leaf(top_node, meta_index_entry_list);
+
+    if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
+                                              timeseries_indexs))) {
+        return ret;
+    }
+
+    if (is_aligned && time_timeseries_index != nullptr) {
+        for (size_t i = 0; i < timeseries_indexs.size(); i++) {
+            void* buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
+            if (IS_NULL(buf)) {
+                return E_OOM;
+            }
+            auto* aligned_ts_idx = new (buf) AlignedTimeseriesIndex;
+            aligned_ts_idx->time_ts_idx_ = time_timeseries_index;
+            aligned_ts_idx->value_ts_idx_ =
+                dynamic_cast<TimeseriesIndex*>(timeseries_indexs[i]);
+            if (aligned_ts_idx->value_ts_idx_ == nullptr) {
+                return E_TYPE_NOT_MATCH;
+            }
+            timeseries_indexs[i] = aligned_ts_idx;
+        }
+    }
+    return ret;
+}
+
 bool TsFileIOReader::filter_stasify(ITimeseriesIndex* ts_index,
                                     Filter* time_filter) {
     ASSERT(ts_index->get_statistic() != nullptr);

@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -93,7 +94,7 @@ public class LongStatistics extends Statistics<Long> {
   @Override
   public long getSumLongValue() {
     throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.INT64, "long sum"));
+        Messages.format("error.file.stats_unsupported", TSDataType.INT64, "long sum"));
   }
 
   @Override

@@ -51,5 +51,23 @@
             <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/csv2tsfile.bat</source>
             <destName>tools/csv2tsfile.bat</destName>
         </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/parquet2tsfile.sh</source>
+            <destName>tools/parquet2tsfile.sh</destName>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/parquet2tsfile.bat</source>
+            <destName>tools/parquet2tsfile.bat</destName>
+        </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/arrow2tsfile.sh</source>
+            <destName>tools/arrow2tsfile.sh</destName>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/arrow2tsfile.bat</source>
+            <destName>tools/arrow2tsfile.bat</destName>
+        </file>
     </files>
 </assembly>

@@ -24,6 +24,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -64,13 +65,12 @@ public class LazyLoadPageData {
           decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
-          "Uncompress error! uncompress size: "
-              + pageHeader.getUncompressedSize()
-              + "compressed size: "
-              + pageHeader.getCompressedSize()
-              + "page header: "
-              + pageHeader
-              + e.getMessage());
+          Messages.format(
+              "error.read.uncompress_error_with_header",
+              pageHeader.getUncompressedSize(),
+              pageHeader.getCompressedSize(),
+              pageHeader,
+              e.getMessage()));
     }
     return ByteBuffer.wrap(uncompressedPageData);
   }

@@ -20,6 +20,7 @@ import org.apache.tsfile.external.commons.io.Charsets;
 import org.apache.tsfile.external.commons.io.IOUtils;
 import org.apache.tsfile.external.commons.io.build.AbstractStreamBuilder;
 import org.apache.tsfile.external.commons.io.charset.CharsetDecoders;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -206,16 +207,14 @@ public class WriterOutputStream extends OutputStream {
         charsetDecoder2.decode(bb2, cb2, i == len - 1);
       } catch (final IllegalArgumentException e) {
         throw new UnsupportedOperationException(
-            "UTF-16 requested when running on an IBM JDK with broken UTF-16 support. "
-                + "Please find a JDK that supports UTF-16 if you intend to use UF-16 with WriterOutputStream");
+            Messages.get("error.external.writer_output_stream_utf16_ibm"));
       }
       bb2.compact();
     }
     cb2.rewind();
     if (!TEST_STRING_2.equals(cb2.toString())) {
       throw new UnsupportedOperationException(
-          "UTF-16 requested when running on an IBM JDK with broken UTF-16 support. "
-              + "Please find a JDK that supports UTF-16 if you intend to use UF-16 with WriterOutputStream");
+          Messages.get("error.external.writer_output_stream_utf16_ibm"));
     }
   }
 
@@ -426,7 +425,7 @@ public class WriterOutputStream extends OutputStream {
       } else {
         // The decoder is configured to replace malformed input and unmappable characters,
         // so we should not get here.
-        throw new IOException("Unexpected coder result");
+        throw new IOException(Messages.get("error.external.writer_output_stream_unexpected_coder"));
       }
     }
     // Discard the bytes that have been read

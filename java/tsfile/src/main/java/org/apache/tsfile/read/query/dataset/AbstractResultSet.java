@@ -22,6 +22,7 @@ package org.apache.tsfile.read.query.dataset;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.RowRecord;
 
@@ -149,7 +150,7 @@ public abstract class AbstractResultSet implements ResultSet {
     Integer columnIndex = columnNameToColumnIndexMap.get(columnName);
     if (columnIndex == null) {
       throw new IllegalArgumentException(
-          "Can't find columnName " + columnName + " from result set");
+          Messages.format("error.read.result_set_column_not_found", columnName));
     }
     return isNull(columnIndex);
   }
@@ -162,14 +163,16 @@ public abstract class AbstractResultSet implements ResultSet {
   protected Field getNonNullField(int columnIndex) {
     Field field = getField(columnIndex);
     if (field == null) {
-      throw new NullFieldException("Field in columnIndex " + columnIndex + " is null");
+      throw new NullFieldException(
+          Messages.format("error.read.result_set_null_field", columnIndex));
     }
     return field;
   }
 
   protected Field getField(int columnIndex) {
     if (columnIndex > this.columnNameToColumnIndexMap.size() || columnIndex <= 0) {
-      throw new IndexOutOfBoundsException("column index " + columnIndex + " out of bound");
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.read.result_set_index_out_of_bound", columnIndex));
     }
     Field field;
     if (columnIndex == 1) {

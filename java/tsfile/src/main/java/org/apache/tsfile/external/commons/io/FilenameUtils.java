@@ -17,6 +17,8 @@
 
 package org.apache.tsfile.external.commons.io;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.File;
 
 public class FilenameUtils {
@@ -113,8 +115,7 @@ public class FilenameUtils {
    */
   private static String requireNonNullChars(final String path) {
     if (path.indexOf(0) >= 0) {
-      throw new IllegalArgumentException(
-          "Null character present in file/path name. There are no known legitimate use cases for such data, but several injection attacks may use it");
+      throw new IllegalArgumentException(Messages.get("error.external.filename_null_char"));
     }
     return path;
   }
@@ -213,7 +214,8 @@ public class FilenameUtils {
       // Special handling for NTFS ADS: Don't accept colon in the fileName.
       final int offset = fileName.indexOf(':', getAdsCriticalOffset(fileName));
       if (offset != -1) {
-        throw new IllegalArgumentException("NTFS ADS separator (':') in file name is forbidden.");
+        throw new IllegalArgumentException(
+            Messages.get("error.external.filename_ntfs_ads_forbidden"));
       }
     }
     final int extensionPos = fileName.lastIndexOf(EXTENSION_SEPARATOR);

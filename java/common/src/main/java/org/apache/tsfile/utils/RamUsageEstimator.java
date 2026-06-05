@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -565,7 +567,7 @@ public final class RamUsageEstimator {
    */
   public static long shallowSizeOfInstance(Class<?> clazz) {
     if (clazz.isArray())
-      throw new IllegalArgumentException("This method does not work with array classes.");
+      throw new IllegalArgumentException(Messages.get("error.common.no_array_classes"));
     if (clazz.isPrimitive()) return primitiveSizes.get(clazz);
 
     long size = NUM_BYTES_OBJECT_HEADER;

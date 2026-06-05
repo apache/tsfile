@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.expression.IExpression;
 import org.apache.tsfile.read.expression.impl.BinaryExpression;
 import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
@@ -56,7 +57,7 @@ public class TimeRange implements Comparable<TimeRange> {
   @Override
   public int compareTo(TimeRange r) {
     if (r == null) {
-      throw new NullPointerException("The input cannot be null!");
+      throw new NullPointerException(Messages.get("error.read.timerange_null_input"));
     }
     if (this.min > r.min) {
       return 1;
@@ -75,14 +76,14 @@ public class TimeRange implements Comparable<TimeRange> {
 
   public void setMin(long min) {
     if (min < 0 || min > this.max) {
-      throw new IllegalArgumentException("Invalid input!");
+      throw new IllegalArgumentException(Messages.get("error.read.timerange_invalid_input"));
     }
     this.min = min;
   }
 
   public void setMax(long max) {
     if (max < 0 || max < this.min) {
-      throw new IllegalArgumentException("Invalid input!");
+      throw new IllegalArgumentException(Messages.get("error.read.timerange_invalid_input"));
     }
     this.max = max;
   }
@@ -128,7 +129,8 @@ public class TimeRange implements Comparable<TimeRange> {
    */
   public void set(long min, long max) {
     if (min > max) {
-      throw new IllegalArgumentException("min:" + min + " should not be larger than max: " + max);
+      throw new IllegalArgumentException(
+          Messages.format("error.read.timerange_min_gt_max", min, max));
     }
     this.min = min;
     this.max = max;

@@ -28,6 +28,7 @@ import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -293,7 +294,7 @@ public class ChunkWriterImpl implements IChunkWriter {
    */
   private void checkPageSizeAndMayOpenANewPage() {
     if (pageWriter.getPointNumber() == maxNumberOfPointsInPage) {
-      logger.debug("current line count reaches the upper bound, write page {}", measurementSchema);
+      logger.debug(Messages.get("log.write.chunk_writer_write_page"), measurementSchema);
       writePageToPageBuffer();
     } else if (pageWriter.getPointNumber()
         >= valueCountInOnePageForNextCheck) { // need to check memory size
@@ -302,7 +303,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
         // we will write the current page
         logger.debug(
-            "enough size, write page {}, pageSizeThreshold:{}, currentPateSize:{}, valueCountInOnePage:{}",
+            Messages.get("log.write.page_enough_size"),
             measurementSchema.getMeasurementName(),
             pageSizeThreshold,
             currentPageSize,
@@ -338,7 +339,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       numOfPages++;
       this.statistics.mergeStatistics(pageWriter.getStatistics());
     } catch (IOException e) {
-      logger.error("meet error in pageWriter.writePageHeaderAndDataIntoBuff,ignore this page:", e);
+      logger.error(Messages.get("log.write.chunk_writer_page_error"), e);
     } finally {
       // clear start time stamp for next initializing
       pageWriter.reset(measurementSchema);
@@ -433,8 +434,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       throws PageException {
     // write the page header to pageBuffer
     try {
-      logger.debug(
-          "start to flush a page header into buffer, buffer position {} ", pageBuffer.size());
+      logger.debug(Messages.get("log.write.page_header_flush_start"), pageBuffer.size());
       // serialize pageHeader  see writePageToPageBuffer method
       if (numOfPages == 0) { // record the firstPageStatistics
         this.firstPageStatistics = header.getStatistics();
@@ -458,7 +458,7 @@ public class ChunkWriterImpl implements IChunkWriter {
         header.getStatistics().serialize(pageBuffer);
       }
       logger.debug(
-          "finish to flush a page header {} of {} into buffer, buffer position {} ",
+          Messages.get("log.write.page_header_flush_done"),
           header,
           measurementSchema.getMeasurementName(),
           pageBuffer.size());
@@ -466,7 +466,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       statistics.mergeStatistics(header.getStatistics());
 
     } catch (IOException e) {
-      throw new PageException("IO Exception in writeDataPageHeader,ignore this page", e);
+      throw new PageException(Messages.get("error.write.page_write_header_io_exception"), e);
     }
     numOfPages++;
     // write page content to temp PBAOS
@@ -515,11 +515,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     int dataSize = (int) (writer.getPos() - dataOffset);
     if (dataSize != pageBuffer.size()) {
       throw new IOException(
-          "Bytes written is inconsistent with the size of data: "
-              + dataSize
-              + " !="
-              + " "
-              + pageBuffer.size());
+          Messages.format("error.write.chunk_bytes_inconsistent", dataSize, pageBuffer.size()));
     }
 
     writer.endCurrentChunk();

@@ -149,7 +149,7 @@ then
   cd build/minsizerel
 else
   echo ""
-  echo "unknow build type: ${build_type}, valid build types(case intensive): Debug, Release, RelWithDebInfo, MinSizeRel"
+  echo "unknown build type: ${build_type}, valid build types(case insensitive): Debug, Release, RelWithDebInfo, MinSizeRel"
   echo ""
   exit 1
 fi

@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.compress.CompressionTypeNotSupportedException;
 import org.apache.tsfile.exception.compress.GZIPCompressOverflowException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.i18n.Messages;
 
 import com.github.luben.zstd.Zstd;
 import net.jpountz.lz4.LZ4Factory;
@@ -60,7 +61,8 @@ public interface ICompressor extends Serializable {
    */
   static ICompressor getCompressor(CompressionType name) {
     if (name == null) {
-      throw new CompressionTypeNotSupportedException("NULL");
+      throw new CompressionTypeNotSupportedException(
+          Messages.get("error.compress.type_not_supported_null"));
     }
     switch (name) {
       case UNCOMPRESSED:
@@ -76,7 +78,8 @@ public interface ICompressor extends Serializable {
       case LZMA2:
         return new LZMA2Compressor();
       default:
-        throw new CompressionTypeNotSupportedException(name.toString());
+        throw new CompressionTypeNotSupportedException(
+            Messages.format("error.compress.type_not_supported", name));
     }
   }
 
@@ -128,17 +131,17 @@ public interface ICompressor extends Serializable {
 
     @Override
     public byte[] compress(byte[] data, int offset, int length) throws IOException {
-      throw new IOException("No Compressor does not support compression function");
+      throw new IOException(Messages.get("error.compress.no_compressor_not_supported"));
     }
 
     @Override
     public int compress(byte[] data, int offset, int length, byte[] compressed) throws IOException {
-      throw new IOException("No Compressor does not support compression function");
+      throw new IOException(Messages.get("error.compress.no_compressor_not_supported"));
     }
 
     @Override
     public int compress(ByteBuffer data, ByteBuffer compressed) throws IOException {
-      throw new IOException("No Compressor does not support compression function");
+      throw new IOException(Messages.get("error.compress.no_compressor_not_supported"));
     }
 
     @Override

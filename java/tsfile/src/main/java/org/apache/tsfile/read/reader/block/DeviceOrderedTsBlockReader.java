@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.reader.block;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
@@ -70,7 +71,7 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
             new SingleDeviceTsBlockReader(
                 nextTask, metadataQuerier, chunkLoader, blockSize, timeFilter, measurementFilter);
       } catch (IOException e) {
-        LOGGER.error("Failed to construct reader for {}", nextTask, e);
+        LOGGER.error(Messages.get("log.read.block_reader_construct_error"), nextTask, e);
       }
       if (currentReader != null && currentReader.hasNext()) {
         return true;

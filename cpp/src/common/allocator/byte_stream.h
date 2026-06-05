@@ -55,21 +55,21 @@ class OptionalAtomic {
         }
     }
 
-    FORCE_INLINE T atomic_faa(const T increament) {
+    FORCE_INLINE T atomic_faa(const T increment) {
         if (UNLIKELY(enable_atomic_)) {
-            return ATOMIC_FAA(&val_, increament);
+            return ATOMIC_FAA(&val_, increment);
         } else {
             T old_val = val_;
-            val_ = val_ + increament;
+            val_ = val_ + increment;
             return old_val;
         }
     }
 
-    FORCE_INLINE T atomic_aaf(const T increament) {
+    FORCE_INLINE T atomic_aaf(const T increment) {
         if (UNLIKELY(enable_atomic_)) {
-            return ATOMIC_AAF(&val_, increament);
+            return ATOMIC_AAF(&val_, increment);
         } else {
-            val_ = val_ + increament;
+            val_ = val_ + increment;
             return val_;
         }
     }
@@ -347,6 +347,21 @@ class ByteStream {
 
     FORCE_INLINE uint32_t total_size() const { return total_size_.load(); }
     FORCE_INLINE uint32_t read_pos() const { return read_pos_; };
+    /**
+     * Seek the read cursor to an absolute offset. Re-anchors read_page_ for
+     * multi-page streams.
+     */
+    void set_read_pos(uint32_t pos) {
+        ASSERT(pos <= total_size());
+        read_pos_ = pos;
+        Page* p = head_.load();
+        uint32_t skipped = 0;
+        while (p != nullptr && skipped + page_size_ <= pos) {
+            skipped += page_size_;
+            p = p->next_.load();
+        }
+        read_page_ = p;
+    }
     FORCE_INLINE void wrapped_buf_advance_read_pos(uint32_t size) {
         if (size + read_pos_ > total_size_.load()) {
             read_pos_ = total_size_.load();
@@ -378,7 +393,7 @@ class ByteStream {
 
     // reader @want_len bytes to @buf, @read_len indicates real len we reader.
     // if ByteStream do not have so many bytes, it will return E_PARTIAL_READ if
-    // no other error occure.
+    // no other error occur.
     int read_buf(uint8_t* buf, const uint32_t want_len, uint32_t& read_len) {
         int ret = common::E_OK;
         bool partial_read = (read_pos_ + want_len > total_size_.load());
@@ -540,7 +555,7 @@ class ByteStream {
                 return b;
             }
             if (UNLIKELY(cur_ == nullptr)) {
-                // this consumer did not initialiazed.
+                // this consumer did not initialized.
                 cur_ = host_.head_.load();
                 read_offset_within_cur_page_ = 0;
             }
@@ -717,7 +732,7 @@ FORCE_INLINE int copy_bs_to_buf(ByteStream& bs, char* src_buf,
 
 FORCE_INLINE uint32_t get_var_uint_size(
     uint32_t
-        ui32)  // return: the length of usigned number after varint encoding.
+        ui32)  // return: the length of unsigned number after varint encoding.
 {
     uint32_t bytes = 0;
     while ((ui32 & 0xFFFFFF80) != 0) {

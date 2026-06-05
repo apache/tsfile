@@ -20,6 +20,7 @@ package org.apache.tsfile.external.commons.io.build;
 import org.apache.tsfile.external.commons.io.IOUtils;
 import org.apache.tsfile.external.commons.io.input.ReaderInputStream;
 import org.apache.tsfile.external.commons.io.output.WriterOutputStream;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -400,9 +401,11 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
    */
   public File getFile() {
     throw new UnsupportedOperationException(
-        String.format(
-            "%s#getFile() for %s origin %s",
-            getClass().getSimpleName(), origin.getClass().getSimpleName(), origin));
+        Messages.format(
+            "error.external.abstract_origin_get_file",
+            getClass().getSimpleName(),
+            origin.getClass().getSimpleName(),
+            origin));
   }
 
   /**
@@ -437,9 +440,11 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
    */
   public Path getPath() {
     throw new UnsupportedOperationException(
-        String.format(
-            "%s#getPath() for %s origin %s",
-            getClass().getSimpleName(), origin.getClass().getSimpleName(), origin));
+        Messages.format(
+            "error.external.abstract_origin_get_path",
+            getClass().getSimpleName(),
+            origin.getClass().getSimpleName(),
+            origin));
   }
 
   /**

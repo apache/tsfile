@@ -59,7 +59,7 @@ enum AllocModID {
     __MAX_MOD_ID = 127,
 };
 
-extern const char* g_mod_names[__LAST_MOD_ID];
+extern TSFILE_API const char* g_mod_names[__LAST_MOD_ID];
 
 /* very basic alloc/free interface in C style */
 void* mem_alloc(uint32_t size, AllocModID mid);
@@ -120,7 +120,7 @@ class BaseAllocator {
     void free(void* ptr) { mem_free(ptr); }
 };
 
-extern BaseAllocator g_base_allocator;
+extern TSFILE_API BaseAllocator g_base_allocator;
 
 }  // end namespace common
 

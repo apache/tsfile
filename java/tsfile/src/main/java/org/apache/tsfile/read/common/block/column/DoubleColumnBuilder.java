@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -104,7 +105,7 @@ public class DoubleColumnBuilder implements ColumnBuilder {
       writeDouble((Double) value);
       return this;
     }
-    throw new UnSupportedDataTypeException("DoubleColumn only support Double data type");
+    throw new UnSupportedDataTypeException(Messages.get("error.read.col_builder_double_type"));
   }
 
   @Override

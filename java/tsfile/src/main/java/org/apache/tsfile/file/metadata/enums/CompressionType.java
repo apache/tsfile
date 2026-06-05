@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.file.metadata.enums;
 
+import org.apache.tsfile.i18n.Messages;
+
 public enum CompressionType {
   /** Do not comprocess. */
   UNCOMPRESSED("", (byte) 0),
@@ -69,7 +71,8 @@ public enum CompressionType {
       case 9:
         return CompressionType.LZMA2;
       default:
-        throw new IllegalArgumentException("Invalid input: " + compressor);
+        throw new IllegalArgumentException(
+            Messages.format("error.common.invalid_input", compressor));
     }
   }
 

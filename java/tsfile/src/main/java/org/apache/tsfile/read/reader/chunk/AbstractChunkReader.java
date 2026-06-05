@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.IChunkReader;
@@ -35,10 +36,15 @@ import java.util.function.LongConsumer;
 
 public abstract class AbstractChunkReader implements IChunkReader {
 
-  protected final Decoder defaultTimeDecoder =
-      Decoder.getDecoderByType(
-          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),
-          TSDataType.INT64);
+  protected Decoder getTimeDecoder(TSEncoding actualTimeEncoding) {
+    return Decoder.getDecoderByType(actualTimeEncoding, TSDataType.INT64);
+  }
+
+  /** Time encoding for value chunks is from TSFile config, not value chunk header. */
+  protected Decoder getConfiguredTimeDecoder() {
+    return getTimeDecoder(
+        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()));
+  }
 
   protected final long readStopTime;
 
@@ -70,7 +76,7 @@ public abstract class AbstractChunkReader implements IChunkReader {
   @Override
   public BatchData nextPageData() throws IOException {
     if (pageReaderList.isEmpty()) {
-      throw new IOException("No more page");
+      throw new IOException(Messages.get("error.read.no_more_page"));
     }
     return pageReaderList.remove(0).getAllSatisfiedPageData();
   }

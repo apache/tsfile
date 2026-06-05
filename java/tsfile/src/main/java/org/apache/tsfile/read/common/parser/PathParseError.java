@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.common.parser;
 
+import org.apache.tsfile.i18n.Messages;
+
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.RecognitionException;
@@ -58,6 +60,7 @@ public class PathParseError extends BaseErrorListener {
         }
       }
     }
-    throw new ParseCancellationException("line " + line + ":" + charPositionInLine + " " + msg);
+    throw new ParseCancellationException(
+        Messages.format("error.read.path_parse_error", line, charPositionInLine, msg));
   }
 }

@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 
 import java.io.ByteArrayOutputStream;
@@ -92,7 +93,7 @@ public class TsBlockSerde {
   public ByteBuffer serialize(TsBlock tsBlock) throws IOException {
     if (tsBlock.getSizeInBytes() > Integer.MAX_VALUE) {
       throw new IllegalStateException(
-          "TsBlock should not be that large: " + tsBlock.getSizeInBytes());
+          Messages.format("error.read.tsblock_too_large", tsBlock.getSizeInBytes()));
     }
     ByteArrayOutputStream byteArrayOutputStream =
         new ByteArrayOutputStream((int) tsBlock.getSizeInBytes());

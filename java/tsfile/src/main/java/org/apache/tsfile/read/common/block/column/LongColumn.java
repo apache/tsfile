@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -60,21 +61,21 @@ public class LongColumn implements Column {
 
   LongColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, long[] values) {
     if (arrayOffset < 0) {
-      throw new IllegalArgumentException("arrayOffset is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
     this.arrayOffset = arrayOffset;
     if (positionCount < 0) {
-      throw new IllegalArgumentException("positionCount is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
     }
     this.positionCount = positionCount;
 
     if (values.length - arrayOffset < positionCount) {
-      throw new IllegalArgumentException("values length is less than positionCount");
+      throw new IllegalArgumentException(Messages.get("error.read.col_values_length_lt_position"));
     }
     this.values = values;
 
     if (valueIsNull != null && valueIsNull.length - arrayOffset < positionCount) {
-      throw new IllegalArgumentException("isNull length is less than positionCount");
+      throw new IllegalArgumentException(Messages.get("error.read.col_isnull_length_lt_position"));
     }
     this.valueIsNull = valueIsNull;
 
@@ -197,7 +198,7 @@ public class LongColumn implements Column {
   @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
     return new LongColumn(arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values);
   }
@@ -205,7 +206,7 @@ public class LongColumn implements Column {
   @Override
   public Column subColumnCopy(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
 
     int from = arrayOffset + fromIndex;

@@ -36,9 +36,9 @@ The source code can be found in the `./src` directory. C/C++ examples are locate
 
 ## How to make contributions
 
-We use `clang-format` to ensure that our C++ code adheres to a consistent set of rules defined in `./clang-format`. This is similar to the Google style.
+We use `clang-format` to ensure that our C++ code adheres to a consistent set of rules defined in `.clang-format`. This is similar to the Google style.
 
-`mvn spotless` uses `clang-format v17.0.6` for C++ code formatting. Please make sure the `clang-format` in your `PATH` matches this version before submitting code.
+`mvn spotless:apply` uses `clang-format v17.0.6` for C++ code formatting. Please make sure the `clang-format` in your `PATH` matches this version before submitting code.
 
 How to install `clang-format v17.0.6`:
 
@@ -70,8 +70,17 @@ mvn spotless:apply -P with-cpp
 If you need to skip code formatting temporarily, you can add `-Dspotless.skip=true`, for example:
 
 ```bash
-mvn package -P with-cpp clean verify -Dspotless.skip=true
+mvn clean verify -P with-cpp -Dspotless.skip=true
 ```
+
+### Platform Support
+
+TsFile C++ now supports:
+- **Linux**: GCC/Clang
+- **macOS**: Clang
+- **Windows**: MSVC 2017+ and MinGW
+
+All code must compile without errors on all supported platforms before submission.
 
 We welcome any bug reports. You can open an issue with a title starting with [CPP] to describe the bug, like: https://github.com/apache/tsfile/issues/94
 
@@ -79,21 +88,53 @@ We welcome any bug reports. You can open an issue with a title starting with [CP
 
 ### Requirements
 
+TsFile C++ supports three toolchains:
+
+**Linux (GCC/Clang):**
 ```bash
 sudo apt-get update
 sudo apt-get install -y cmake make g++ clang-format libuuid-dev
 ```
 
-To build tsfile, you can run: `bash build.sh`. If you have Maven tools, you can run: `mvn package -P with-cpp clean verify`. Then, you can find the shared object at `./build`.
+**Windows (MSVC):**
+- Visual Studio 2017 or later
+- CMake 3.11+
 
-Before you submit your code to GitHub, please ensure that the `mvn` compilation is correct.
-
+**Windows (MinGW):**
 If you compile using MinGW on windows and encounter an error, you can try replacing MinGW with the following version that we have tried without problems:
-
 * GCC 14.2.0 (with **POSIX** threads) + LLVM/Clang/LLD/LLDB 18.1.8 + MinGW-w64 12.0.0 UCRT - release 1
 * GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (UCRT) - release 5
 * GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (MSVCRT) - release 5
 * GCC 11.2.0 + MinGW-w64 10.0.0 (MSVCRT) - release 1
+
+### Build Instructions
+
+To build tsfile, use Maven which automatically detects and uses the appropriate toolchain:
+
+```bash
+mvn clean verify -P with-cpp
+```
+
+**Toolchain Selection:**
+
+Maven will automatically select the compiler based on your platform:
+- **Linux**: GCC/Clang
+- **macOS**: Clang  
+- **Windows**: MinGW (default) or MSVC
+
+To explicitly specify a toolchain on Windows:
+
+```bash
+# Use MinGW (default on Windows)
+mvn clean verify -P with-cpp -Dcpp.toolchain=mingw
+
+# Use MSVC
+mvn clean verify -P with-cpp -Dcpp.toolchain=msvc
+```
+
+Then you can find the shared library at `./cpp/target/build/lib`.
+
+Before you submit your code to GitHub, please ensure that the compilation is correct.
 
 ### configure the cross-compilation toolchain
 
@@ -139,4 +180,4 @@ By default, parallel write is enabled when the machine has more than one CPU cor
 
 ## Use TsFile
 
-You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples`on how to use a C-style API to read and write data in a C environment. You can run `bash build.sh` under `./examples` to generate an executable output under `./examples/build`.
+You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples` on how to use a C-style API to read and write data in a C environment. The examples will be built automatically when you run the main build command.

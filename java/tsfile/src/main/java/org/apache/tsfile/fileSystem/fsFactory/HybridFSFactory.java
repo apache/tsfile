@@ -20,6 +20,7 @@ package org.apache.tsfile.fileSystem.fsFactory;
 
 import org.apache.tsfile.fileSystem.FSPath;
 import org.apache.tsfile.fileSystem.FSType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.FSUtils;
 
 import org.slf4j.Logger;
@@ -120,7 +121,7 @@ public class HybridFSFactory implements FSFactory {
       getFSFactory(destType).moveFile(srcFile, destFile);
     } else {
       throw new IOException(
-          String.format("Doesn't support move file from %s to %s.", srcType, destType));
+          Messages.format("error.fs.hybrid_factory_move_unsupported", srcType, destType));
     }
   }
 
@@ -135,7 +136,7 @@ public class HybridFSFactory implements FSFactory {
       getFSFactory(FSType.HDFS).copyFile(srcFile, destFile);
     } else {
       throw new IOException(
-          String.format("Doesn't support move file from %s to %s.", srcType, destType));
+          Messages.format("error.fs.hybrid_factory_copy_unsupported", srcType, destType));
     }
   }
 

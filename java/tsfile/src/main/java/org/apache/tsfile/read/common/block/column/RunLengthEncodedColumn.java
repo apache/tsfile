@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -45,9 +46,7 @@ public class RunLengthEncodedColumn implements Column {
     requireNonNull(value, "value is null");
     if (value.getPositionCount() != 1) {
       throw new IllegalArgumentException(
-          String.format(
-              "Expected value to contain a single position but has %s positions",
-              value.getPositionCount()));
+          Messages.format("error.read.rle_col_expected_single", value.getPositionCount()));
     }
 
     if (value instanceof RunLengthEncodedColumn) {
@@ -57,7 +56,7 @@ public class RunLengthEncodedColumn implements Column {
     }
 
     if (positionCount < 0) {
-      throw new IllegalArgumentException("positionCount is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
     }
 
     this.positionCount = positionCount;
@@ -214,7 +213,7 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
     return new RunLengthEncodedColumn(value, positionCount - fromIndex);
   }
@@ -222,7 +221,7 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public Column subColumnCopy(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
     Column valueCopy = value.subColumnCopy(0);
     return new RunLengthEncodedColumn(valueCopy, positionCount - fromIndex);
@@ -266,7 +265,8 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public void setNull(int start, int end) {
     throw new UnsupportedOperationException(
-        String.format(
-            "set null of %s is not supported !", RunLengthEncodedColumn.class.getSimpleName()));
+        Messages.format(
+            "error.read.rle_col_set_null_unsupported",
+            RunLengthEncodedColumn.class.getSimpleName()));
   }
 }

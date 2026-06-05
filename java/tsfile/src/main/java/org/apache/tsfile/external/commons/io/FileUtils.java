@@ -22,6 +22,7 @@ import org.apache.tsfile.external.commons.io.filefilter.IOFileFilter;
 import org.apache.tsfile.external.commons.io.filefilter.SuffixFileFilter;
 import org.apache.tsfile.external.commons.io.function.IOConsumer;
 import org.apache.tsfile.external.commons.io.function.Uncheck;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -77,9 +78,10 @@ public class FileUtils {
     if (!directory.isDirectory()) {
       if (directory.exists()) {
         throw new IllegalArgumentException(
-            "Parameter '" + name + "' is not a directory: '" + directory + "'");
+            Messages.format("error.external.file_not_a_directory", name, directory));
       }
-      throw new FileNotFoundException("Directory '" + directory + "' does not exist.");
+      throw new FileNotFoundException(
+          Messages.format("error.external.file_directory_not_exist", directory));
     }
   }
 
@@ -90,7 +92,7 @@ public class FileUtils {
         fileFilter == null ? directory.listFiles() : directory.listFiles(fileFilter);
     if (files == null) {
       // null if the directory does not denote a directory, or if an I/O error occurs.
-      throw new IOException("Unknown I/O error listing contents of directory: " + directory);
+      throw new IOException(Messages.format("error.external.file_list_io_error", directory));
     }
     return files;
   }
@@ -140,12 +142,12 @@ public class FileUtils {
               PathUtils.EMPTY_LINK_OPTION_ARRAY,
               StandardDeleteOption.OVERRIDE_READ_ONLY);
     } catch (final IOException ex) {
-      throw new IOException("Cannot delete file: " + file, ex);
+      throw new IOException(Messages.format("error.external.file_cannot_delete", file), ex);
     }
     if (deleteCounters.getFileCounter().get() < 1
         && deleteCounters.getDirectoryCounter().get() < 1) {
       // didn't find a file to delete.
-      throw new FileNotFoundException("File does not exist: " + file);
+      throw new FileNotFoundException(Messages.format("error.external.file_not_exist", file));
     }
   }
 
@@ -165,7 +167,7 @@ public class FileUtils {
       if (!srcFile.delete()) {
         deleteQuietly(destFile);
         throw new IOException(
-            "Failed to delete original file '" + srcFile + "' after copy to '" + destFile + "'");
+            Messages.format("error.external.file_move_delete_original", srcFile, destFile));
       }
     }
   }
@@ -175,10 +177,12 @@ public class FileUtils {
     Objects.requireNonNull(file, name);
     if (!file.isFile()) {
       if (file.exists()) {
-        throw new IllegalArgumentException("Parameter '" + name + "' is not a file: " + file);
+        throw new IllegalArgumentException(
+            Messages.format("error.external.file_param_not_a_file", name, file));
       }
       if (!Files.isSymbolicLink(file.toPath())) {
-        throw new FileNotFoundException("Source '" + file + "' does not exist");
+        throw new FileNotFoundException(
+            Messages.format("error.external.file_source_not_exist", file));
       }
     }
   }
@@ -195,7 +199,8 @@ public class FileUtils {
   private static File requireFile(final File file, final String name) {
     Objects.requireNonNull(file, name);
     if (!file.isFile()) {
-      throw new IllegalArgumentException("Parameter '" + name + "' is not a file: " + file);
+      throw new IllegalArgumentException(
+          Messages.format("error.external.file_param_not_a_file", name, file));
     }
     return file;
   }
@@ -203,7 +208,7 @@ public class FileUtils {
   private static void requireAbsent(final File file, final String name) throws FileExistsException {
     if (file.exists()) {
       throw new FileExistsException(
-          String.format("File element in parameter '%s' already exists: '%s'", name, file));
+          Messages.format("error.external.file_already_exists", name, file));
     }
   }
 
@@ -236,7 +241,7 @@ public class FileUtils {
 
     // On Windows, the last modified time is copied by default.
     if (preserveFileDate && !Files.isSymbolicLink(srcPath) && !setTimes(srcFile, destFile)) {
-      throw new IOException("Cannot set the file time.");
+      throw new IOException(Messages.get("error.external.file_cannot_set_time"));
     }
   }
 
@@ -245,9 +250,8 @@ public class FileUtils {
     final String canonicalPath = file1.getCanonicalPath();
     if (canonicalPath.equals(file2.getCanonicalPath())) {
       throw new IllegalArgumentException(
-          String.format(
-              "File canonical paths are equal: '%s' (file1='%s', file2='%s')",
-              canonicalPath, file1, file2));
+          Messages.format(
+              "error.external.file_canonical_paths_equal", canonicalPath, file1, file2));
     }
   }
 
@@ -257,7 +261,8 @@ public class FileUtils {
 
   private static File mkdirs(final File directory) throws IOException {
     if (directory != null && !directory.mkdirs() && !directory.isDirectory()) {
-      throw new IOException("Cannot create directory '" + directory + "'.");
+      throw new IOException(
+          Messages.format("error.external.file_cannot_create_directory", directory));
     }
     return directory;
   }
@@ -460,7 +465,8 @@ public class FileUtils {
     Objects.requireNonNull(source, "source");
     Objects.requireNonNull(destination, "destination");
     if (!source.exists()) {
-      throw new FileNotFoundException("Source '" + source + "' does not exist");
+      throw new FileNotFoundException(
+          Messages.format("error.external.file_source_not_exist", source));
     }
   }
 
@@ -480,11 +486,7 @@ public class FileUtils {
     Objects.requireNonNull(file, fileParamName);
     if (!file.exists()) {
       throw new FileNotFoundException(
-          "File system element for parameter '"
-              + fileParamName
-              + "' does not exist: '"
-              + file
-              + "'");
+          Messages.format("error.external.file_element_not_exist", fileParamName, file));
     }
     return file;
   }
@@ -504,7 +506,7 @@ public class FileUtils {
     Objects.requireNonNull(directory, name);
     if (!directory.isDirectory()) {
       throw new IllegalArgumentException(
-          "Parameter '" + name + "' is not a directory: '" + directory + "'");
+          Messages.format("error.external.file_not_a_directory", name, directory));
     }
     return directory;
   }
@@ -602,13 +604,13 @@ public class FileUtils {
     if (!srcDir.renameTo(destDir)) {
       if (destDir.getCanonicalPath().startsWith(srcDir.getCanonicalPath() + File.separator)) {
         throw new IOException(
-            "Cannot move directory: " + srcDir + " to a subdirectory of itself: " + destDir);
+            Messages.format("error.external.file_move_to_subdirectory", srcDir, destDir));
       }
       copyDirectory(srcDir, destDir);
       deleteDirectory(srcDir);
       if (srcDir.exists()) {
         throw new IOException(
-            "Failed to delete original directory '" + srcDir + "' after copy to '" + destDir + "'");
+            Messages.format("error.external.file_move_delete_directory", srcDir, destDir));
       }
     }
   }
@@ -869,7 +871,7 @@ public class FileUtils {
     Objects.requireNonNull(file, "file");
     if (!file.canWrite()) {
       throw new IllegalArgumentException(
-          "File parameter '" + name + " is not writable: '" + file + "'");
+          Messages.format("error.external.file_not_writable", name, file));
     }
   }
 

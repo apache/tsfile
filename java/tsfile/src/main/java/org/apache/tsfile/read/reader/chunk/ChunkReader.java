@@ -27,6 +27,7 @@ import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
@@ -153,7 +154,7 @@ public class ChunkReader extends AbstractChunkReader {
                 chunkDataBuffer.array(), currentPagePosition, unCompressor, encryptParam),
             chunkHeader.getDataType(),
             chunkHeader.calculateDecoderForNonTimeChunk(),
-            defaultTimeDecoder,
+            getConfiguredTimeDecoder(),
             queryFilter);
     reader.setDeleteIntervalList(deleteIntervalList);
     return reader;
@@ -170,10 +171,10 @@ public class ChunkReader extends AbstractChunkReader {
     // doesn't have a complete page body
     if (compressedPageBodyLength > chunkBuffer.remaining()) {
       throw new IOException(
-          "do not has a complete page body. Expected:"
-              + compressedPageBodyLength
-              + ". Actual:"
-              + chunkBuffer.remaining());
+          Messages.format(
+              "error.read.chunk_incomplete_page_body",
+              compressedPageBodyLength,
+              chunkBuffer.remaining()));
     }
     chunkBuffer.get(compressedPageBody);
     return ByteBuffer.wrap(compressedPageBody);
@@ -193,13 +194,12 @@ public class ChunkReader extends AbstractChunkReader {
           0);
     } catch (Exception e) {
       throw new IOException(
-          "Uncompress error! uncompress size: "
-              + pageHeader.getUncompressedSize()
-              + "compressed size: "
-              + pageHeader.getCompressedSize()
-              + "page header: "
-              + pageHeader
-              + e.getMessage(),
+          Messages.format(
+              "error.read.uncompress_error_with_header",
+              pageHeader.getUncompressedSize(),
+              pageHeader.getCompressedSize(),
+              pageHeader,
+              e.getMessage()),
           e);
     }
     compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
@@ -224,13 +224,12 @@ public class ChunkReader extends AbstractChunkReader {
           decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
-          "Uncompress error! uncompress size: "
-              + pageHeader.getUncompressedSize()
-              + "compressed size: "
-              + pageHeader.getCompressedSize()
-              + "page header: "
-              + pageHeader
-              + e.getMessage(),
+          Messages.format(
+              "error.read.uncompress_error_with_header",
+              pageHeader.getUncompressedSize(),
+              pageHeader.getCompressedSize(),
+              pageHeader,
+              e.getMessage()),
           e);
     }
     compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);

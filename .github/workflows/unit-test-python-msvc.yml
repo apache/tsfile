@@ -1,0 +1,144 @@
+# This workflow builds and tests the Python implementation of TsFile on
+# Windows using the MSVC toolchain, as a complement to unit-test-python.yml
+# which builds the Windows target with MinGW.
+#
+# The C++ shared library (libtsfile) is built with the v141 toolset (the
+# Visual Studio 2017 compiler) to match the VS 2017 support this branch
+# targets. The Cython extension links to it through the plain C wrapper ABI,
+# so it builds cleanly with whichever MSVC toolset setuptools selects.
+
+name: Unit-Test-Py-MSVC
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+      - 'java/**'
+  # Enable manually starting builds.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  unit-test-py-msvc:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.14"]
+    # Pinned to windows-2022 deliberately: it ships Visual Studio 2022, which
+    # the "Visual Studio 17 2022" CMake generator requires. The v141 (VS 2017)
+    # toolset is installed by a step below. See unit-test-cpp-msvc.yml for the
+    # full rationale.
+    runs-on: windows-2022
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: corretto
+          java-version: 17
+
+      # Setup caching of the artifacts in the .m2 directory, so they don't have
+      # to all be downloaded again for every build.
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-msvc-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # Make the MSVC toolchain available so setup.py can compile the Cython
+      # extension with cl.exe.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # The windows-2022 image no longer ships the v141 (VS 2017) toolset that
+      # this build pins via -Dmsvc.toolset=v141, so install the component on
+      # demand. With it present the VS 2022 generator can build libtsfile with
+      # the VS 2017 compiler.
+      - name: Install MSVC v141 (VS 2017) toolset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+          $installPath = & (Join-Path $installerDir "vswhere.exe") -latest -property installationPath
+          Write-Host "Visual Studio install path: $installPath"
+
+          # The v141 (VS 2017) toolset always installs as a 14.16.* directory.
+          function Test-V141Toolset {
+            [bool](Get-ChildItem -Path (Join-Path $installPath "VC\Tools\MSVC") `
+              -Directory -Filter "14.16.*" -ErrorAction SilentlyContinue)
+          }
+
+          if (Test-V141Toolset) {
+            Write-Host "v141 toolset already present."
+          } else {
+            # vs_installer.exe 'modify' accepts only a limited switch set;
+            # bootstrapper-only switches such as --wait / --nocache make it
+            # fail with exit code 87 (ERROR_INVALID_PARAMETER).
+            $argString = "modify --installPath `"$installPath`" " +
+              "--add Microsoft.VisualStudio.Component.VC.v141.x86.x64 " +
+              "--quiet --norestart"
+            $proc = Start-Process -FilePath (Join-Path $installerDir "vs_installer.exe") `
+              -ArgumentList $argString -Wait -PassThru
+            Write-Host "vs_installer exit code: $($proc.ExitCode)"
+            # vs_installer may delegate to a background process; wait for it.
+            Get-Process -Name "vs_installer", "setup" -ErrorAction SilentlyContinue |
+              Wait-Process -Timeout 900 -ErrorAction SilentlyContinue
+            if (-not (Test-V141Toolset)) {
+              throw "v141 toolset not found after install (vs_installer exit code $($proc.ExitCode))"
+            }
+            Write-Host "v141 toolset installed."
+          }
+
+      # Build C++ (MSVC, v141 toolset) and the Python extension, then run the
+      # Python test-suite. -P with-python builds the cpp module first.
+      # spotless (black/clang-format) is already covered by the non-MSVC
+      # workflows, so it is skipped here to keep this workflow focused.
+      - name: Build and test with Maven (MSVC)
+        shell: bash
+        run: |
+          ./mvnw.cmd -P with-python \
+            -Dcpp.toolchain=msvc \
+            -Dmsvc.toolset=v141 \
+            -Denable.asan=OFF \
+            -Dbuild.type=Release \
+            -Dspotless.skip=true \
+            clean verify
+
+      - name: Upload whl Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-msvc-${{ runner.os }}-py${{ matrix.python-version }}-whl
+          path: python/dist/tsfile-*.whl
+          retention-days: 1

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.query.timegenerator.node;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.reader.IBatchReader;
 
@@ -68,7 +69,7 @@ public class LeafNode implements Node {
       cacheData.next();
       return cachedTime;
     }
-    throw new IOException("no more data");
+    throw new IOException(Messages.get("error.read.node_no_more_data"));
   }
 
   /**

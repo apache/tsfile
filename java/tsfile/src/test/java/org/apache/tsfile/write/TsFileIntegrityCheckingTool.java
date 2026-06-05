@@ -93,10 +93,14 @@ public class TsFileIntegrityCheckingTool {
               // empty value chunk
               break;
             }
-            Decoder defaultTimeDecoder =
-                Decoder.getDecoderByType(
-                    TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),
-                    TSDataType.INT64);
+            TSEncoding configuredTimeEncoding =
+                TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
+            boolean isTimeColumn =
+                (header.getChunkType() & (byte) TsFileConstant.TIME_COLUMN_MASK)
+                    == (byte) TsFileConstant.TIME_COLUMN_MASK;
+            TSEncoding selectedTimeEncoding =
+                isTimeColumn ? header.getEncodingType() : configuredTimeEncoding;
+            Decoder timeDecoder = Decoder.getDecoderByType(selectedTimeEncoding, TSDataType.INT64);
             Decoder valueDecoder =
                 Decoder.getDecoderByType(header.getEncodingType(), header.getDataType());
             int dataSize = header.getDataSize();
@@ -114,7 +118,7 @@ public class TsFileIntegrityCheckingTool {
               if ((header.getChunkType() & (byte) TsFileConstant.TIME_COLUMN_MASK)
                   == (byte) TsFileConstant.TIME_COLUMN_MASK) { // Time Chunk
                 TimePageReader timePageReader =
-                    new TimePageReader(pageHeader, pageData, defaultTimeDecoder);
+                    new TimePageReader(pageHeader, pageData, timeDecoder);
                 timeBatch.add(timePageReader.getNextTimeBatch());
               } else if ((header.getChunkType() & (byte) TsFileConstant.VALUE_COLUMN_MASK)
                   == (byte) TsFileConstant.VALUE_COLUMN_MASK) { // Value Chunk
@@ -124,8 +128,7 @@ public class TsFileIntegrityCheckingTool {
                     valuePageReader.nextValueBatch(timeBatch.get(pageIndex));
               } else { // NonAligned Chunk
                 PageReader pageReader =
-                    new PageReader(
-                        pageData, header.getDataType(), valueDecoder, defaultTimeDecoder);
+                    new PageReader(pageData, header.getDataType(), valueDecoder, timeDecoder);
                 BatchData batchData = pageReader.getAllSatisfiedPageData();
               }
               pageIndex++;

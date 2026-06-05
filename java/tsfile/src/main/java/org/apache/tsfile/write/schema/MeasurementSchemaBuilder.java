@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -58,10 +59,10 @@ public class MeasurementSchemaBuilder {
    */
   public MeasurementSchemaBuilder(String measurementName, TSDataType dataType) {
     if (measurementName == null || measurementName.trim().isEmpty()) {
-      throw new IllegalArgumentException("Measurement name cannot be null or empty");
+      throw new IllegalArgumentException(Messages.get("error.write.schema_builder_null_name"));
     }
     if (dataType == null) {
-      throw new IllegalArgumentException("Data type cannot be null");
+      throw new IllegalArgumentException(Messages.get("error.write.schema_builder_null_type"));
     }
 
     this.measurementName = measurementName;
@@ -103,7 +104,7 @@ public class MeasurementSchemaBuilder {
    */
   public MeasurementSchemaBuilder withProperty(String key, String value) {
     if (key == null || value == null) {
-      throw new IllegalArgumentException("Property key and value cannot be null");
+      throw new IllegalArgumentException(Messages.get("error.write.schema_builder_null_property"));
     }
     if (this.props == null) {
       this.props = new HashMap<>();

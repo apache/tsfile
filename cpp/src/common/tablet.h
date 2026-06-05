@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "common/config/config.h"
@@ -229,6 +230,52 @@ class Tablet {
     }
 
     ~Tablet() { destroy(); }
+
+    // Tablet owns raw heap buffers (timestamps_, value_matrix_, bitmaps_) that
+    // destroy() frees. The implicitly generated copy operations would shallow-
+    // copy those pointers, causing double-free / use-after-free, so copying is
+    // disabled. Move transfers ownership and leaves the source empty (its
+    // pointers nulled) so the moved-from object destructs harmlessly.
+    Tablet(const Tablet&) = delete;
+    Tablet& operator=(const Tablet&) = delete;
+
+    Tablet(Tablet&& other) noexcept
+        : err_code_(other.err_code_),
+          max_row_num_(other.max_row_num_),
+          cur_row_size_(other.cur_row_size_),
+          insert_target_name_(std::move(other.insert_target_name_)),
+          schema_vec_(std::move(other.schema_vec_)),
+          schema_map_(std::move(other.schema_map_)),
+          timestamps_(other.timestamps_),
+          value_matrix_(other.value_matrix_),
+          bitmaps_(other.bitmaps_),
+          column_categories_(std::move(other.column_categories_)),
+          id_column_indexes_(std::move(other.id_column_indexes_)) {
+        other.timestamps_ = nullptr;
+        other.value_matrix_ = nullptr;
+        other.bitmaps_ = nullptr;
+    }
+
+    Tablet& operator=(Tablet&& other) noexcept {
+        if (this != &other) {
+            destroy();
+            err_code_ = other.err_code_;
+            max_row_num_ = other.max_row_num_;
+            cur_row_size_ = other.cur_row_size_;
+            insert_target_name_ = std::move(other.insert_target_name_);
+            schema_vec_ = std::move(other.schema_vec_);
+            schema_map_ = std::move(other.schema_map_);
+            timestamps_ = other.timestamps_;
+            value_matrix_ = other.value_matrix_;
+            bitmaps_ = other.bitmaps_;
+            column_categories_ = std::move(other.column_categories_);
+            id_column_indexes_ = std::move(other.id_column_indexes_);
+            other.timestamps_ = nullptr;
+            other.value_matrix_ = nullptr;
+            other.bitmaps_ = nullptr;
+        }
+        return *this;
+    }
 
     const std::string& get_table_name() const { return insert_target_name_; }
     void set_table_name(const std::string& table_name) {

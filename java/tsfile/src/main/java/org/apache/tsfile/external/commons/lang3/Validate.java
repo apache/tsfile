@@ -19,16 +19,17 @@
 
 package org.apache.tsfile.external.commons.lang3;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.Objects;
 import java.util.function.Supplier;
 
 public class Validate {
-  private static final String DEFAULT_IS_TRUE_EX_MESSAGE = "The validated expression is false";
   private static final String DEFAULT_IS_NULL_EX_MESSAGE = "The validated object is null";
 
   public static void isTrue(final boolean expression) {
     if (!expression) {
-      throw new IllegalArgumentException(DEFAULT_IS_TRUE_EX_MESSAGE);
+      throw new IllegalArgumentException(Messages.get("error.external.validate_expression_false"));
     }
   }
 

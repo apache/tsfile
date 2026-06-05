@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BytesUtils;
 
 import org.slf4j.Logger;
@@ -103,7 +104,7 @@ public abstract class RegularDataEncoder extends Encoder {
     try {
       flushBlockBuffer(out);
     } catch (IOException e) {
-      LOGGER.error("flush data to stream failed!", e);
+      LOGGER.error(Messages.get("log.encoding.flush_data_failed"), e);
     }
   }
 

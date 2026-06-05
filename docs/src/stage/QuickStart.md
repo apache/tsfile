@@ -446,7 +446,7 @@ The ReadOnlyTsFile class has two `query` method to perform a query.
 
         > **What is Partial Query ?**
         >
-        > In some distributed file systems(e.g. HDFS), a file is split into severval parts which are called "Blocks" and stored in different nodes. Executing a query paralleled in each nodes involved makes better efficiency. Thus Partial Query is needed. Paritial Query only selects the results stored in the part split by ```QueryConstant.PARTITION_START_OFFSET``` and ```QueryConstant.PARTITION_END_OFFSET``` for a TsFile.
+        > In some distributed file systems(e.g. HDFS), a file is split into several parts which are called "Blocks" and stored in different nodes. Executing a query paralleled in each nodes involved makes better efficiency. Thus Partial Query is needed. Partial Query only selects the results stored in the part split by ```QueryConstant.PARTITION_START_OFFSET``` and ```QueryConstant.PARTITION_END_OFFSET``` for a TsFile.
 
 * QueryDataset Interface
 

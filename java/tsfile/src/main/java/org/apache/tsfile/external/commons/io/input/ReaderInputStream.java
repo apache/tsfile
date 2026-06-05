@@ -21,6 +21,7 @@ import org.apache.tsfile.external.commons.io.IOUtils;
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractStreamBuilder;
 import org.apache.tsfile.external.commons.io.charset.CharsetEncoders;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -149,9 +150,11 @@ public class ReaderInputStream extends InputStream {
     final float minRequired = minBufferSize(charsetEncoder);
     if (bufferSize < minRequired) {
       throw new IllegalArgumentException(
-          String.format(
-              "Buffer size %,d must be at least %s for a CharsetEncoder %s.",
-              bufferSize, minRequired, charsetEncoder.charset().displayName()));
+          Messages.format(
+              "error.external.reader_input_stream_buffer_too_small",
+              bufferSize,
+              minRequired,
+              charsetEncoder.charset().displayName()));
     }
     return bufferSize;
   }
@@ -403,7 +406,8 @@ public class ReaderInputStream extends InputStream {
     Objects.requireNonNull(array, "array");
     if (len < 0 || off < 0 || off + len > array.length) {
       throw new IndexOutOfBoundsException(
-          "Array size=" + array.length + ", offset=" + off + ", length=" + len);
+          Messages.format(
+              "error.external.reader_input_stream_index_out_of_bounds", array.length, off, len));
     }
     int read = 0;
     if (len == 0) {

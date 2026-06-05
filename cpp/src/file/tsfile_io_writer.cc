@@ -799,7 +799,7 @@ int TsFileIOWriter::generate_root(
                 if (RET_FAIL(to->push_back(cur_index_node))) {
                 }
 #if DEBUG_SE
-                std::cout << "genereate root 2, "
+                std::cout << "generate root 2, "
                              "alloc_and_init_meta_index_node. cur_index_node="
                           << *cur_index_node << std::endl;
 #endif

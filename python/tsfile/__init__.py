@@ -32,8 +32,11 @@ def _preload_dll(path):
 
 
 if sys.platform == "win32":
-    os.add_dll_directory(_pkg_dir)
-    # Preload MinGW runtime DLLs used by the Python extensions. libtsfile.dll is
+    # Keep the handle alive for the lifetime of this module. CPython's reference
+    # counting frees the object immediately if not stored, which calls
+    # RemoveDllDirectory and undoes the registration before any .pyd is loaded.
+    _dll_dir = os.add_dll_directory(_pkg_dir)
+    # Preload MinGW runtime DLLs used by Python extensions. libtsfile.dll is
     # statically linked against libstdc++/libgcc and only needs libwinpthread.
     for _mingw_dll in (
         "libwinpthread-1.dll",
@@ -41,7 +44,19 @@ if sys.platform == "win32":
         "libstdc++-6.dll",
     ):
         _preload_dll(os.path.join(_pkg_dir, _mingw_dll))
-    _preload_dll(os.path.join(_pkg_dir, "libtsfile.dll"))
+    # Preload the tsfile DLL so Windows finds it when loading Cython extensions.
+    # MSVC builds produce "tsfile.dll"; MinGW builds produce "libtsfile.dll".
+    _tsfile_cdll = None
+    for _dll_name in ("tsfile.dll", "libtsfile.dll"):
+        _tsfile_dll = os.path.join(_pkg_dir, _dll_name)
+        if os.path.isfile(_tsfile_dll):
+            _tsfile_cdll = ctypes.CDLL(_tsfile_dll)
+            break
+    else:
+        raise FileNotFoundError(
+            f"tsfile DLL (tsfile.dll or libtsfile.dll) not found in {_pkg_dir}. "
+            "Re-build the C++ module and reinstall the Python package."
+        )
 elif sys.platform == "darwin":
     _tsfile_dylib = os.path.join(_pkg_dir, "libtsfile.dylib")
     if os.path.isfile(_tsfile_dylib):

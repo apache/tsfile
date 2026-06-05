@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -261,7 +263,8 @@ public class StringContainer {
     int realIndex = index >= 0 ? index : count + index;
     if (realIndex < 0 || realIndex >= count) {
       throw new IndexOutOfBoundsException(
-          String.format("Index: %d, Real Index: %d, Size: %d", index, realIndex, count));
+          Messages.format(
+              "error.utils.string_container_index_out_of_bounds", index, realIndex, count));
     }
     if (realIndex < reverseList.size()) {
       return reverseList.get(reverseList.size() - 1 - realIndex);
@@ -286,12 +289,16 @@ public class StringContainer {
     int realEndIndex = end >= 0 ? end : count + end;
     if (realStartIndex < 0 || realStartIndex >= count) {
       throw new IndexOutOfBoundsException(
-          String.format(
-              "start Index: %d, Real start Index: %d, Size: %d", start, realStartIndex, count));
+          Messages.format(
+              "error.utils.string_container_start_index_out_of_bounds",
+              start,
+              realStartIndex,
+              count));
     }
     if (realEndIndex < 0 || realEndIndex >= count) {
       throw new IndexOutOfBoundsException(
-          String.format("end Index: %d, Real end Index: %d, Size: %d", end, realEndIndex, count));
+          Messages.format(
+              "error.utils.string_container_end_index_out_of_bounds", end, realEndIndex, count));
     }
     StringContainer ret = new StringContainer(joinSeparator);
     if (realStartIndex < reverseList.size()) {

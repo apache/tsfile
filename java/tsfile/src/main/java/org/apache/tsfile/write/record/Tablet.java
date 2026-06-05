@@ -27,6 +27,7 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
@@ -66,7 +67,6 @@ import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
 public class Tablet implements Accountable {
   private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
-  private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
   private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
@@ -318,9 +318,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Binary or String for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Binary or String",
+                    dataType,
+                    value.getClass().getName()));
           }
           final Binary[] sensor = (Binary[]) values[indexOfSchema];
           if (value instanceof Binary) {
@@ -337,9 +339,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Float)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Float for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Float",
+                    dataType,
+                    value.getClass().getName()));
           }
           final float[] sensor = (float[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
@@ -349,9 +353,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Integer)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Integer for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Integer",
+                    dataType,
+                    value.getClass().getName()));
           }
           final int[] sensor = (int[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
@@ -361,9 +367,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof LocalDate)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type LocalDate for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "LocalDate",
+                    dataType,
+                    value.getClass().getName()));
           }
           final LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
@@ -374,9 +382,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Long)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Long for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Long",
+                    dataType,
+                    value.getClass().getName()));
           }
           final long[] sensor = (long[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
@@ -386,9 +396,11 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Double)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Double for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Double",
+                    dataType,
+                    value.getClass().getName()));
           }
           final double[] sensor = (double[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
@@ -398,16 +410,19 @@ public class Tablet implements Accountable {
         {
           if (value != null && !(value instanceof Boolean)) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Expected value of type Boolean for data type %s, but got %s",
-                    dataType, value.getClass().getName()));
+                Messages.format(
+                    "error.write.tablet_expected_type",
+                    "Boolean",
+                    dataType,
+                    value.getClass().getName()));
           }
           final boolean[] sensor = (boolean[]) values[indexOfSchema];
           sensor[rowIndex] = value != null && (boolean) value;
           break;
         }
       default:
-        throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", dataType));
     }
   }
 
@@ -421,7 +436,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, int val) {
     if (!(values[columnIndex] instanceof int[]) && !(values[columnIndex] instanceof long[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not INT32 or INT64");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "INT32 or INT64"));
     }
     if (values[columnIndex] instanceof int[]) {
       final int[] sensor = (int[]) values[columnIndex];
@@ -444,7 +459,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, long val) {
     if (!(values[columnIndex] instanceof long[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not INT64/TIMESTAMP");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "INT64/TIMESTAMP"));
     }
     final long[] sensor = (long[]) values[columnIndex];
     sensor[rowIndex] = val;
@@ -461,7 +476,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, float val) {
     if (!(values[columnIndex] instanceof float[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not FLOAT");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "FLOAT"));
     }
     final float[] sensor = (float[]) values[columnIndex];
     sensor[rowIndex] = val;
@@ -478,7 +493,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, double val) {
     if (!(values[columnIndex] instanceof double[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not DOUBLE");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "DOUBLE"));
     }
     final double[] sensor = (double[]) values[columnIndex];
     sensor[rowIndex] = val;
@@ -495,7 +510,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, boolean val) {
     if (!(values[columnIndex] instanceof boolean[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not BOOLEAN");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "BOOLEAN"));
     }
     final boolean[] sensor = (boolean[]) values[columnIndex];
     sensor[rowIndex] = val;
@@ -513,7 +528,7 @@ public class Tablet implements Accountable {
     if (!(values[columnIndex] instanceof Binary[])
         || !schemas.get(columnIndex).getType().isTextStringOrBlob()) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "TEXT/STRING/BLOB"));
     }
     if (val == null) {
       return;
@@ -554,7 +569,7 @@ public class Tablet implements Accountable {
     if (!(values[columnIndex] instanceof Binary[])
         || schemas.get(columnIndex).getType() != TSDataType.OBJECT) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not OBJECT");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "OBJECT"));
     }
     if (objectPath == null) {
       return;
@@ -569,7 +584,7 @@ public class Tablet implements Accountable {
     if (!(values[columnIndex] instanceof Binary[])
         || !schemas.get(columnIndex).getType().isTextStringOrBlob()) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "TEXT/STRING/BLOB"));
     }
     if (val == null) {
       return;
@@ -589,7 +604,7 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, int columnIndex, LocalDate val) {
     if (!(values[columnIndex] instanceof LocalDate[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not DATE");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "DATE"));
     }
     if (val == null) {
       return;
@@ -603,7 +618,7 @@ public class Tablet implements Accountable {
     if (!(values[columnIndex] instanceof Binary[])
         || schemas.get(columnIndex).getType() != TSDataType.OBJECT) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not OBJECT");
+          Messages.format("error.write.tablet_col_wrong_type", columnIndex, "OBJECT"));
     }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     byte[] val = new byte[content.length + 9];
@@ -616,11 +631,12 @@ public class Tablet implements Accountable {
 
   private int getColumnIndexByMeasurement(String measurement) {
     if (measurement == null) {
-      throw new IllegalArgumentException("measurement should be non null value");
+      throw new IllegalArgumentException(Messages.get("error.write.tablet_null_measurement"));
     }
     Integer columnIndex = measurementIndex.get(measurement);
     if (columnIndex == null) {
-      throw new IllegalArgumentException("No measurement for " + measurement);
+      throw new IllegalArgumentException(
+          Messages.format("error.write.tablet_no_measurement", measurement));
     }
     return columnIndex;
   }
@@ -724,18 +740,32 @@ public class Tablet implements Accountable {
         valueColumn = new LocalDate[capacity];
         break;
       default:
-        throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", dataType));
     }
     return valueColumn;
   }
 
   /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
-    try (PublicBAOS byteArrayOutputStream = new PublicBAOS();
+    final int serializedSize = serializedSize();
+    try (PublicBAOS byteArrayOutputStream = new PublicBAOS(serializedSize);
         DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream)) {
       serialize(outputStream);
       return ByteBuffer.wrap(byteArrayOutputStream.getBuf(), 0, byteArrayOutputStream.size());
     }
+  }
+
+  /** Return the exact serialized byte size of this tablet. */
+  public int serializedSize() {
+    int size = 0;
+    size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(insertTargetName));
+    size = Math.addExact(size, Integer.BYTES);
+    size = Math.addExact(size, serializedSizeOfMeasurementSchemas());
+    size = Math.addExact(size, serializedSizeOfTimes());
+    size = Math.addExact(size, serializedSizeOfBitMaps());
+    size = Math.addExact(size, serializedSizeOfValues());
+    return size;
   }
 
   public void serialize(DataOutputStream stream) throws IOException {
@@ -745,6 +775,104 @@ public class Tablet implements Accountable {
     writeTimes(stream);
     writeBitMaps(stream);
     writeValues(stream);
+  }
+
+  private int serializedSizeOfMeasurementSchemas() {
+    int size = Byte.BYTES;
+    if (schemas != null) {
+      size = Math.addExact(size, Integer.BYTES);
+      for (int i = 0; i < schemas.size(); i++) {
+        size = Math.addExact(size, Byte.BYTES);
+        final IMeasurementSchema schema = schemas.get(i);
+        if (schema != null) {
+          size = Math.addExact(size, schema.serializedSize());
+          size = Math.addExact(size, Byte.BYTES);
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfTimes() {
+    int size = Byte.BYTES;
+    if (timestamps != null) {
+      size = Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBitMaps() {
+    int size = Byte.BYTES;
+    if (bitMaps != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        if (bitMaps[i] == null || bitMaps[i].isAllUnmarked(rowSize)) {
+          size = Math.addExact(size, Byte.BYTES);
+        } else {
+          size = Math.addExact(size, Byte.BYTES);
+          size = Math.addExact(size, Integer.BYTES);
+          size = Math.addExact(size, Integer.BYTES);
+          size = Math.addExact(size, BitMap.getSizeOfBytes(rowSize));
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfValues() {
+    int size = Byte.BYTES;
+    if (values != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        size = Math.addExact(size, serializedSizeOfColumn(schemas.get(i).getType(), values[i]));
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfColumn(final TSDataType dataType, final Object column) {
+    int size = Byte.BYTES;
+    if (column == null) {
+      return size;
+    }
+    switch (dataType) {
+      case INT32:
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
+      case DATE:
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
+      case INT64:
+      case TIMESTAMP:
+        return Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
+      case FLOAT:
+        return Math.addExact(size, Math.multiplyExact(Float.BYTES, rowSize));
+      case DOUBLE:
+        return Math.addExact(size, Math.multiplyExact(Double.BYTES, rowSize));
+      case BOOLEAN:
+        return Math.addExact(size, rowSize);
+      case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
+        return Math.addExact(size, serializedSizeOfBinaryValues((Binary[]) column));
+      default:
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", dataType));
+    }
+  }
+
+  private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
+    int size = 0;
+    for (int j = 0; j < rowSize; j++) {
+      size = Math.addExact(size, Byte.BYTES);
+      if (binaryValues[j] != null) {
+        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[j]));
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBinaryValues(final Binary[] binaryValues) {
+    return serializedSizeOfBinaryValues(binaryValues, rowSize);
   }
 
   /** Serialize {@link MeasurementSchema}s */
@@ -865,7 +993,7 @@ public class Tablet implements Accountable {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", dataType));
+              Messages.format("error.write.type_not_supported", dataType));
       }
     }
   }
@@ -1015,8 +1143,7 @@ public class Tablet implements Accountable {
             break;
           default:
             throw new UnSupportedDataTypeException(
-                String.format(
-                    "data type %s is not supported when convert data at client", types[i]));
+                Messages.format("error.write.tablet_client_type_not_supported", types[i]));
         }
       }
     }
@@ -1173,7 +1300,7 @@ public class Tablet implements Accountable {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              String.format("Data type %s is not supported.", schemas.get(i).getType()));
+              Messages.format("error.write.type_not_supported", schemas.get(i).getType()));
       }
     }
 
@@ -1271,7 +1398,8 @@ public class Tablet implements Accountable {
       case DATE:
         return ((LocalDate[]) values[j])[i];
       default:
-        throw new IllegalArgumentException("Unsupported type: " + schemas.get(j).getType());
+        throw new IllegalArgumentException(
+            Messages.format("error.write.tablet_unsupported_type", schemas.get(j).getType()));
     }
   }
 

@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.bitpacking.LongPacker;
 import org.apache.tsfile.encoding.fire.LongFire;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.IOException;
@@ -116,7 +117,8 @@ public class DoubleSprintzDecoder extends SprintzDecoder {
         firePred.train(convertBuffer[i - 1], convertBuffer[i], err);
       }
     } else {
-      throw new UnsupportedOperationException("Sprintz predictive method {} is not supported.");
+      throw new UnsupportedOperationException(
+          Messages.get("error.encoding.sprintz_unsupported_predict_method"));
     }
   }
 
@@ -126,7 +128,7 @@ public class DoubleSprintzDecoder extends SprintzDecoder {
       try {
         decodeBlock(buffer);
       } catch (IOException e) {
-        logger.error("Error occured when readInt with Sprintz Decoder.", e);
+        logger.error(Messages.get("log.encoding.sprintz_decoder_read_error"), e);
       }
     }
     currentValue = currentBuffer[currentCount++];

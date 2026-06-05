@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -46,7 +47,7 @@ public class RunLengthColumnEncoder implements ColumnEncoder {
   public void writeColumn(DataOutputStream output, Column column) throws IOException {
     Column innerColumn = ((RunLengthEncodedColumn) column).getValue();
     if (innerColumn instanceof RunLengthEncodedColumn) {
-      throw new IOException("Unable to encode a nested RLE column.");
+      throw new IOException(Messages.get("error.read.rle_encoder_nested"));
     }
 
     innerColumn.getEncoding().serializeTo(output);

@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
@@ -59,7 +60,7 @@ public class DoublePrecisionDecoderV1 extends GorillaDecoderV1 {
         getNextValue(buffer);
         return tmp;
       } catch (IOException e) {
-        logger.error("DoublePrecisionDecoderV1 cannot read first double number", e);
+        logger.error(Messages.get("log.encoding.double_precision_v1_first_double_error"), e);
       }
     } else {
       try {
@@ -67,7 +68,7 @@ public class DoublePrecisionDecoderV1 extends GorillaDecoderV1 {
         getNextValue(buffer);
         return tmp;
       } catch (IOException e) {
-        logger.error("DoublePrecisionDecoderV1 cannot read following double number", e);
+        logger.error(Messages.get("log.encoding.double_precision_v1_following_double_error"), e);
       }
     }
     return Double.NaN;

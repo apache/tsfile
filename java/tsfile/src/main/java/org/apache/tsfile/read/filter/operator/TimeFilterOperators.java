@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.filter.operator;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
@@ -513,7 +514,7 @@ public final class TimeFilterOperators {
     public void serialize(DataOutputStream outputStream) throws IOException {
       super.serialize(outputStream);
       if (candidates == null) {
-        throw new IllegalArgumentException("set must not be null!");
+        throw new IllegalArgumentException(Messages.get("error.read.filter_timein_set_null"));
       }
       ReadWriteIOUtils.writeLongSet(candidates, outputStream);
     }

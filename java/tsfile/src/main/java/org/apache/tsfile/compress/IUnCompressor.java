@@ -21,6 +21,7 @@ package org.apache.tsfile.compress;
 
 import org.apache.tsfile.exception.compress.CompressionTypeNotSupportedException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.i18n.Messages;
 
 import com.github.luben.zstd.Zstd;
 import net.jpountz.lz4.LZ4SafeDecompressor;
@@ -42,7 +43,8 @@ public interface IUnCompressor {
    */
   static IUnCompressor getUnCompressor(CompressionType name) {
     if (name == null) {
-      throw new CompressionTypeNotSupportedException("NULL");
+      throw new CompressionTypeNotSupportedException(
+          Messages.get("error.compress.type_not_supported_null"));
     }
     switch (name) {
       case UNCOMPRESSED:
@@ -58,7 +60,8 @@ public interface IUnCompressor {
       case LZMA2:
         return new LZMA2UnCompressor();
       default:
-        throw new CompressionTypeNotSupportedException(name.toString());
+        throw new CompressionTypeNotSupportedException(
+            Messages.format("error.compress.type_not_supported", name));
     }
   }
 
@@ -127,7 +130,7 @@ public interface IUnCompressor {
 
     @Override
     public int uncompress(ByteBuffer compressed, ByteBuffer uncompressed) throws IOException {
-      throw new IOException("NoUnCompressor does not support this method.");
+      throw new IOException(Messages.get("error.compress.no_uncompressor_not_supported"));
     }
 
     @Override
@@ -159,8 +162,7 @@ public interface IUnCompressor {
       try {
         return Snappy.uncompress(bytes);
       } catch (IOException e) {
-        logger.error(
-            "tsfile-compression SnappyUnCompressor: errors occurs when uncompress input byte", e);
+        logger.error(Messages.get("log.compress.snappy_uncompress_error"), e);
       }
       return new byte[0];
     }
@@ -180,8 +182,7 @@ public interface IUnCompressor {
       try {
         return Snappy.uncompress(compressed, uncompressed);
       } catch (IOException e) {
-        logger.error(
-            "tsfile-compression SnappyUnCompressor: errors occurs when uncompress input byte", e);
+        logger.error(Messages.get("log.compress.snappy_uncompress_error"), e);
       }
       return 0;
     }
@@ -195,8 +196,6 @@ public interface IUnCompressor {
   class LZ4UnCompressor implements IUnCompressor {
 
     private static final Logger logger = LoggerFactory.getLogger(LZ4UnCompressor.class);
-    private static final String UNCOMPRESS_INPUT_ERROR =
-        "tsfile-compression LZ4UnCompressor: errors occurs when uncompress input byte";
 
     private static final int MAX_COMPRESS_RATIO = 255;
     private static final LZ4SafeDecompressor decompressor =
@@ -206,12 +205,14 @@ public interface IUnCompressor {
 
     @Override
     public int getUncompressedLength(byte[] array, int offset, int length) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     @Override
     public int getUncompressedLength(ByteBuffer buffer) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     /**
@@ -228,7 +229,7 @@ public interface IUnCompressor {
       try {
         return decompressor.decompress(bytes, MAX_COMPRESS_RATIO * bytes.length);
       } catch (RuntimeException e) {
-        logger.error(UNCOMPRESS_INPUT_ERROR, e);
+        logger.error(Messages.get("log.compress.lz4_uncompress_error"), e);
         throw new IOException(e);
       }
     }
@@ -239,7 +240,7 @@ public interface IUnCompressor {
       try {
         return decompressor.decompress(byteArray, offset, length, output, outOffset);
       } catch (RuntimeException e) {
-        logger.error(UNCOMPRESS_INPUT_ERROR, e);
+        logger.error(Messages.get("log.compress.lz4_uncompress_error"), e);
         throw new IOException(e);
       }
     }
@@ -254,7 +255,7 @@ public interface IUnCompressor {
         decompressor.decompress(compressed, uncompressed);
         return compressed.limit();
       } catch (RuntimeException e) {
-        logger.error(UNCOMPRESS_INPUT_ERROR, e);
+        logger.error(Messages.get("log.compress.lz4_uncompress_error"), e);
         throw new IOException(e);
       }
     }
@@ -269,12 +270,14 @@ public interface IUnCompressor {
 
     @Override
     public int getUncompressedLength(byte[] array, int offset, int length) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     @Override
     public int getUncompressedLength(ByteBuffer buffer) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     @Override
@@ -358,12 +361,14 @@ public interface IUnCompressor {
 
     @Override
     public int getUncompressedLength(byte[] array, int offset, int length) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     @Override
     public int getUncompressedLength(ByteBuffer buffer) {
-      throw new UnsupportedOperationException("unsupported get uncompress length");
+      throw new UnsupportedOperationException(
+          Messages.get("error.compress.get_uncompress_length_unsupported"));
     }
 
     @Override

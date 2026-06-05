@@ -23,6 +23,7 @@ import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Pair;
@@ -62,7 +63,7 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
     try {
       loadResults();
     } catch (IOException e) {
-      LOGGER.error("Failed to load device meta data", e);
+      LOGGER.error(Messages.get("log.read.device_meta_iterator_error"), e);
       return false;
     }
 
@@ -120,7 +121,8 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
           loadInternalNode(currentNode);
           break;
         default:
-          throw new IOException("A non-device node detected: " + currentNode);
+          throw new IOException(
+              Messages.format("error.read.non_device_node_detected", currentNode));
       }
     }
   }

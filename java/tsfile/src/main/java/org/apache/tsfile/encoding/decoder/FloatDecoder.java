@@ -23,6 +23,7 @@ import org.apache.tsfile.encoding.encoder.FloatEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -57,39 +58,39 @@ public class FloatDecoder extends Decoder {
     if (encodingType == TSEncoding.RLE) {
       if (dataType == TSDataType.FLOAT) {
         decoder = new IntRleDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using int-rle and float");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_int_rle"));
       } else if (dataType == TSDataType.DOUBLE) {
         decoder = new LongRleDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using long-rle and double");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_long_rle"));
       } else {
         throw new TsFileDecodingException(
-            String.format("data type %s is not supported by FloatDecoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else if (encodingType == TSEncoding.TS_2DIFF) {
       if (dataType == TSDataType.FLOAT) {
         decoder = new DeltaBinaryDecoder.IntDeltaDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using int-delta and float");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_int_delta"));
       } else if (dataType == TSDataType.DOUBLE) {
         decoder = new DeltaBinaryDecoder.LongDeltaDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using long-delta and double");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_long_delta"));
       } else {
         throw new TsFileDecodingException(
-            String.format("data type %s is not supported by FloatDecoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else if (encodingType == TSEncoding.RLBE) {
       if (dataType == TSDataType.FLOAT) {
         decoder = new IntRLBEDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using int-rlbe and float");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_int_rlbe"));
       } else if (dataType == TSDataType.DOUBLE) {
         decoder = new LongRLBEDecoder();
-        logger.debug("tsfile-encoding FloatDecoder: init decoder using long-rlbe and double");
+        logger.debug(Messages.get("log.encoding.float_decoder_init_long_rlbe"));
       } else {
         throw new TsFileDecodingException(
-            String.format("data type %s is not supported by FloatDecoder", dataType));
+            Messages.format("error.encoding.float_encoder_unsupported_type", dataType));
       }
     } else {
       throw new TsFileDecodingException(
-          String.format("%s encoding is not supported by FloatDecoder", encodingType));
+          Messages.format("error.encoding.float_decoder_unsupported_encoding", encodingType));
     }
     isMaxPointNumberRead = false;
   }
@@ -167,27 +168,32 @@ public class FloatDecoder extends Decoder {
 
   @Override
   public Binary readBinary(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBinary is not supported by FloatDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.float_decoder_method_not_supported", "readBinary"));
   }
 
   @Override
   public boolean readBoolean(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBoolean is not supported by FloatDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.float_decoder_method_not_supported", "readBoolean"));
   }
 
   @Override
   public short readShort(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readShort is not supported by FloatDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.float_decoder_method_not_supported", "readShort"));
   }
 
   @Override
   public int readInt(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readInt is not supported by FloatDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.float_decoder_method_not_supported", "readInt"));
   }
 
   @Override
   public long readLong(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readLong is not supported by FloatDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.float_decoder_method_not_supported", "readLong"));
   }
 
   @Override
