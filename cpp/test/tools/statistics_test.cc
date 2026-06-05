@@ -17,13 +17,13 @@
  * under the License.
  */
 
-#include "commands/stat_table.h"
+#include "commands/statistics.h"
 
 #include <gtest/gtest.h>
 
 #include "common/statistic.h"
 
-TEST(StatTableTest, Int64StatisticCellsContainValueSummaries) {
+TEST(StatisticsTest, Int64StatisticCellsContainValueSummaries) {
     storage::Int64Statistic st;
     st.update(1, static_cast<int64_t>(10));
     st.update(3, static_cast<int64_t>(30));
@@ -37,7 +37,7 @@ TEST(StatTableTest, Int64StatisticCellsContainValueSummaries) {
               std::vector<bool>({false, false, false, false, false}));
 }
 
-TEST(StatTableTest, BooleanStatisticLeavesMinMaxNull) {
+TEST(StatisticsTest, BooleanStatisticLeavesMinMaxNull) {
     storage::BooleanStatistic st;
     st.update(1, true);
     st.update(2, false);

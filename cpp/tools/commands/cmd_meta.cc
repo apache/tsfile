@@ -21,7 +21,7 @@
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
-#include "commands/stat_table.h"
+#include "commands/statistics.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {

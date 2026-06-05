@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "commands/stat_table.h"
+#include "commands/statistics.h"
 
 #include <algorithm>
 #include <fstream>

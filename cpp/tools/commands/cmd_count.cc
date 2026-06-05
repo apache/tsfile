@@ -22,7 +22,7 @@
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
-#include "commands/stat_table.h"
+#include "commands/statistics.h"
 
 namespace tsfile_cli {
 

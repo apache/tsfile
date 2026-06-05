@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef TSFILE_CLI_STAT_TABLE_H
-#define TSFILE_CLI_STAT_TABLE_H
+#ifndef TSFILE_CLI_STATISTICS_H
+#define TSFILE_CLI_STATISTICS_H
 
 #include <string>
 #include <vector>
@@ -66,4 +66,4 @@ FileSummary collect_file_summary(const ParsedArgs& args,
 
 }  // namespace tsfile_cli
 
-#endif  // TSFILE_CLI_STAT_TABLE_H
+#endif  // TSFILE_CLI_STATISTICS_H
