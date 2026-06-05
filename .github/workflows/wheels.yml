@@ -6,6 +6,47 @@ on:
       - "rc/**"
   workflow_dispatch:
 
+x-cibw-linux-shared: &cibw-linux-shared
+  CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs_linux }}
+  CIBW_SKIP: "pp* *-musllinux*"
+  MACOSX_DEPLOYMENT_TARGET: "12.0"
+  CIBW_BEFORE_ALL_LINUX: |
+    set -euxo pipefail
+    if command -v yum >/dev/null 2>&1; then
+      yum install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
+    elif command -v dnf >/dev/null 2>&1; then
+      dnf install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
+    else
+      echo "No supported package manager found (expected yum or dnf)." ; exit 1
+    fi
+    if (command -v dnf >/dev/null 2>&1 && dnf install -y java-17-openjdk-devel) \
+       || (command -v yum >/dev/null 2>&1 && yum install -y java-17-openjdk-devel); then
+      export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+    else
+      ARCH="$(uname -m)"
+      mkdir -p /opt/java
+      if [ "$ARCH" = "x86_64" ]; then
+        JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz"
+      else
+        # aarch64
+        JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-aarch64_bin.tar.gz"
+      fi
+      curl -L -o /tmp/jdk17.tar.gz "$JDK_URL"
+      tar -xzf /tmp/jdk17.tar.gz -C /opt/java
+      export JAVA_HOME=$(echo /opt/java/jdk-17.0.12*)
+    fi
+    export PATH="$JAVA_HOME/bin:$PATH"
+    java -version
+
+    chmod +x mvnw || true
+    ./mvnw -Pwith-cpp clean package \
+      -DskipTests -Dbuild.test=OFF \
+      -Dspotless.check.skip=true -Dspotless.apply.skip=true
+    test -d cpp/target/build/lib && test -d cpp/target/build/include
+  CIBW_TEST_COMMAND: >
+    python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok:')"
+  CIBW_BUILD_VERBOSITY: "1"
+
 jobs:
   build:
     name: Build wheels on ${{ matrix.name }}
@@ -100,97 +141,21 @@ jobs:
           otool -l cpp/target/build/lib/libtsfile*.dylib | grep -A2 LC_VERSION_MIN_MACOSX || true
             
       - name: Build wheels via cibuildwheel (Linux cp39-cp313)
-        if: matrix.platform != 'macos'
-        env: 
-          CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs_linux }}
-#          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_archs_windows }}
-
+        if: matrix.platform == 'linux'
+        env:
+          <<: *cibw-linux-shared
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
-          CIBW_SKIP: "pp* *-musllinux*"
-
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
           CIBW_MANYLINUX_AARCH64_IMAGE: "manylinux2014"
-
-          MACOSX_DEPLOYMENT_TARGET: "12.0"
-
-          CIBW_BEFORE_ALL_LINUX: |
-            set -euxo pipefail
-            if command -v yum >/dev/null 2>&1; then
-              yum install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
-            else
-              echo "Not a yum-based image?" ; exit 1
-            fi
-            ARCH="$(uname -m)"
-            mkdir -p /opt/java
-            if [ "$ARCH" = "x86_64" ]; then
-              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz"
-            else
-              # aarch64
-              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-aarch64_bin.tar.gz"
-            fi
-            curl -L -o /tmp/jdk17.tar.gz "$JDK_URL"
-            tar -xzf /tmp/jdk17.tar.gz -C /opt/java
-            export JAVA_HOME=$(echo /opt/java/jdk-17.0.12*)
-            export PATH="$JAVA_HOME/bin:$PATH"
-            java -version
-
-            chmod +x mvnw || true
-            ./mvnw -Pwith-cpp clean package \
-              -DskipTests -Dbuild.test=OFF \
-              -Dspotless.check.skip=true -Dspotless.apply.skip=true
-            test -d cpp/target/build/lib && test -d cpp/target/build/include
-                
-          CIBW_TEST_COMMAND: >
-            python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok:')"
-          CIBW_BUILD_VERBOSITY: "1"
         run: cibuildwheel --output-dir wheelhouse python
 
       - name: Build wheels via cibuildwheel (Linux cp314)
-        if: matrix.platform != 'macos'
+        if: matrix.platform == 'linux'
         env:
-          CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs_linux }}
-#          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_archs_windows }}
-
+          <<: *cibw-linux-shared
           CIBW_BUILD: "cp314-*"
-          CIBW_SKIP: "pp* *-musllinux*"
-
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
           CIBW_MANYLINUX_AARCH64_IMAGE: "manylinux_2_28"
-
-          MACOSX_DEPLOYMENT_TARGET: "12.0"
-
-          CIBW_BEFORE_ALL_LINUX: |
-            set -euxo pipefail
-            if command -v yum >/dev/null 2>&1; then
-              yum install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
-            elif command -v dnf >/dev/null 2>&1; then
-              dnf install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
-            else
-              echo "No supported package manager found (expected yum or dnf)." ; exit 1
-            fi
-            ARCH="$(uname -m)"
-            mkdir -p /opt/java
-            if [ "$ARCH" = "x86_64" ]; then
-              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz"
-            else
-              # aarch64
-              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-aarch64_bin.tar.gz"
-            fi
-            curl -L -o /tmp/jdk17.tar.gz "$JDK_URL"
-            tar -xzf /tmp/jdk17.tar.gz -C /opt/java
-            export JAVA_HOME=$(echo /opt/java/jdk-17.0.12*)
-            export PATH="$JAVA_HOME/bin:$PATH"
-            java -version
-
-            chmod +x mvnw || true
-            ./mvnw -Pwith-cpp clean package \
-              -DskipTests -Dbuild.test=OFF \
-              -Dspotless.check.skip=true -Dspotless.apply.skip=true
-            test -d cpp/target/build/lib && test -d cpp/target/build/include
-
-          CIBW_TEST_COMMAND: >
-            python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok:')"
-          CIBW_BUILD_VERBOSITY: "1"
         run: cibuildwheel --output-dir wheelhouse python
       
       - name: Build wheels via cibuildwheel (macOS)
