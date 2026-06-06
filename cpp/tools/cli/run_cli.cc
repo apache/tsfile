@@ -139,8 +139,8 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
 bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
     const std::string& c = p.command;
     const bool is_row = (c == "head" || c == "cat" || c == "sample");
-    const bool scoped = (c == "schema" || c == "stats" || c == "count" ||
-                         c == "head" || c == "cat" || c == "sample");
+    const bool scoped =
+        is_row || c == "schema" || c == "stats" || c == "count";
 
     if (!p.output.empty()) {
         err << "Error: -o/--output is only valid for write\n";
