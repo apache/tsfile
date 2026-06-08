@@ -149,7 +149,7 @@ Read TsFile Example
 
 To build TsFile with Java, you need to have:
 
-1. Java >= 1.8 (1.8, 11 to 17 are verified. Please make sure the environment path has been set accordingly).
+1. Java >= 17. Please make sure the environment path has been set accordingly.
 2. Maven >= 3.6.3 (If you want to compile TsFile from source code).
 
 

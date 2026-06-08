@@ -29,7 +29,7 @@
 
 To build the Java version of TsFile Tools, you must have the following dependencies installed:
 
-1. Java >= 1.8 (1.8, 11 to 17 are verified. Make sure the environment variable is set).
+1. Java >= 17. Make sure the environment variable is set.
 2. Maven >= 3.6 (if you are compiling TsFile from source).
 
 ### Build with Maven

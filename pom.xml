@@ -32,8 +32,9 @@
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <argLine />
         <spotless.skip>false</spotless.skip>
         <cmake.version>3.30.2-b1</cmake.version>
@@ -194,7 +195,7 @@
                 <plugin>
                     <groupId>org.antlr</groupId>
                     <artifactId>antlr4-maven-plugin</artifactId>
-                    <version>4.9.3</version>
+                    <version>4.13.2</version>
                 </plugin>
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
@@ -229,7 +230,7 @@
             </plugin>
             <!--
                 Strange things usually happen if you run with a too low Java version.
-                This plugin not only checks the minimum java version of 1.8, but also
+                This plugin not only checks the minimum java version of 17, but also
                 checks all dependencies (and transitive dependencies) for reported CVEs.
             -->
             <plugin>
@@ -289,16 +290,16 @@
                             <fail>true</fail>
                         </configuration>
                     </execution>
-                    <!-- Ensure dependencies are compatible with Java 8 -->
+                    <!-- Ensure dependencies are compatible with Java 17 -->
                     <execution>
-                        <id>enforce-java8-compatability</id>
+                        <id>enforce-java17-compatibility</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
                         <configuration>
                             <rules>
                                 <enforceBytecodeVersion>
-                                    <maxJdkVersion>1.8</maxJdkVersion>
+                                    <maxJdkVersion>17</maxJdkVersion>
                                 </enforceBytecodeVersion>
                             </rules>
                         </configuration>
@@ -315,7 +316,7 @@
                             <fail>true</fail>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>1.8.0</version>
+                                    <version>[17,)</version>
                                 </requireJavaVersion>
                                 <banVulnerable implementation="org.sonatype.ossindex.maven.enforcer.BanVulnerableDependencies">
                                     <excludeCoordinates>
@@ -616,15 +617,13 @@
             </modules>
         </profile>
         <profile>
-            <id>.java-9-and-above</id>
+            <id>.java-17-and-above</id>
             <activation>
-                <jdk>[9,)</jdk>
+                <jdk>[17,)</jdk>
             </activation>
             <properties>
-                <!-- TODO: This seems to break the build on everything above Java 8 -->
-                <maven.compiler.release>8</maven.compiler.release>
                 <!--
-                    Add argLine for Java 9 and above, due to
+                    Add argLine for Java 17 and above, due to
                     [JEP 260: Encapsulate Most Internal APIs],
                     [JEP 396: Strongly Encapsulate JDK Internals by Default],
                     [JEP 403: Strongly Encapsulate JDK Internals]
@@ -642,19 +641,6 @@
                         --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
                         --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
                       ]]></argLine>
-            </properties>
-        </profile>
-        <!-- Current version of spotless cannot support JDK17 below -->
-        <profile>
-            <id>.java-17-below</id>
-            <activation>
-                <jdk>(,17)</jdk>
-            </activation>
-            <properties>
-                <!-- This was the last version to support Java 8, Just for run -->
-                <spotless.version>2.27.1</spotless.version>
-                <!-- To avoid format conflicts -->
-                <spotless.skip>true</spotless.skip>
             </properties>
         </profile>
         <!-- Profile for linux x86_64 (mainly Intel Processors) (Self-Enabling) -->
