@@ -35,6 +35,7 @@
 #include "cli/cli_args.h"
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
+#include "common/datatype/date_converter.h"
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/write_file.h"
@@ -52,6 +53,8 @@ struct DataRow {
 
 // Parse a calendar date in strict YYYY-MM-DD form into a std::tm (year offset
 // from 1900, month 0-based) the way storage::Tablet expects for DATE columns.
+// Validates that it is a real date (DateConverter rejects e.g. 2024-13-40),
+// since the writer silently drops an invalid std::tm rather than erroring.
 bool parse_date_cell(const std::string& cell, std::tm& out) {
     int y = 0;
     int m = 0;
@@ -64,7 +67,8 @@ bool parse_date_cell(const std::string& cell, std::tm& out) {
     out.tm_year = y - 1900;
     out.tm_mon = m - 1;
     out.tm_mday = d;
-    return true;
+    int32_t date_int = 0;
+    return common::DateConverter::date_to_int(out, date_int) == common::E_OK;
 }
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,

@@ -724,3 +724,187 @@ TEST(CliE2E, WriteHeaderMatchReportsMismatchPosition) {
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
 }
+
+// Every column carries a distinct, type-specific value, so the JSON output pins
+// each column name to exactly one value. This is what guards the by-index
+// add_value mapping in cmd_write: if any two columns were written to the wrong
+// slot, a key/value pair below would mismatch.
+TEST(CliE2E, WriteMapsEachColumnToItsOwnValue) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_colmap", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,a_bool,b_int,c_long,d_float,e_double,f_str,g_ts,h_date\n"
+             "10,true,42,9000000000,1.5,3.25,hello,1700000000000,2024-06-15\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_colmap_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "--columns",
+         "a_bool:BOOLEAN:field,b_int:INT32:field,c_long:INT64:field,"
+         "d_float:FLOAT:field,e_double:DOUBLE:field,f_str:STRING:field,"
+         "g_ts:TIMESTAMP:field,h_date:DATE:field",
+         "-o", out_path, csv},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "json", out_path}, rout, rerr),
+              0)
+        << rerr.str();
+    const std::string& j = rout.str();
+    EXPECT_NE(j.find("\"a_bool\":true"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"b_int\":42"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"c_long\":9000000000"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"d_float\":1.5"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"e_double\":3.25"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"f_str\":\"hello\""), std::string::npos) << j;
+    EXPECT_NE(j.find("\"g_ts\":1700000000000"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"h_date\":\"2024-06-15\""), std::string::npos) << j;
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+// A multi-type import spanning several batches must keep every value in its own
+// column after each flush. Tags vary so timestamps may repeat across devices.
+TEST(CliE2E, WriteMultiTypeAcrossBatchesRoundTrips) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_mtb", ".csv");
+    const int kRows = 2500;  // > 2 batches of 1024
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,id,n,note\n";
+        for (int i = 0; i < kRows; ++i) {
+            o << i << ",dev," << (i * 3) << ",row" << i << "\n";
+        }
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_mtb_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns",
+         "id:STRING:tag,n:INT64:field,note:TEXT:field", "-o", out_path, csv},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream cout_;
+    std::ostringstream cerr_;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_), 0);
+    EXPECT_NE(cout_.str().find("\tn\t2500"), std::string::npos) << cout_.str();
+
+    // Spot-check a row from the last batch keeps n and note paired correctly.
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "--start", "2400", "--end", "2400",
+                                   "-f", "json", out_path},
+                                  rout, rerr),
+              0)
+        << rerr.str();
+    EXPECT_NE(rout.str().find("\"n\":7200"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("\"note\":\"row2400\""), std::string::npos)
+        << rout.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+// A quoted STRING field containing the delimiter and escaped quotes must
+// survive import and re-export unchanged (RFC 4180 round-trip through the
+// writer).
+TEST(CliE2E, WriteRoundTripsQuotedSpecialChars) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_special", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        // note = a,b "q" c  (comma + embedded quotes)
+        o << "time,id,note\n0,dev,\"a,b \"\"q\"\" c\"\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_special_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns",
+         "id:STRING:tag,note:STRING:field", "-o", out_path, csv},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    // JSON escapes the embedded quotes; the comma is preserved verbatim.
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "json", out_path}, rout, rerr),
+              0)
+        << rerr.str();
+    EXPECT_NE(rout.str().find("\"note\":\"a,b \\\"q\\\" c\""),
+              std::string::npos)
+        << rout.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteRejectsTimestampOverflow) {
+    std::string err;
+    EXPECT_EQ(write_one_value("TIMESTAMP", "99999999999999999999999999", err),
+              3);
+    EXPECT_NE(err.find("TIMESTAMP out of range"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteRejectsNonNumericTimestampColumn) {
+    std::string err;
+    EXPECT_EQ(write_one_value("TIMESTAMP", "not-a-number", err), 3);
+    EXPECT_NE(err.find("bad TIMESTAMP"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteRejectsImpossibleDate) {
+    // Syntactically YYYY-MM-DD but not a real calendar date.
+    std::string err;
+    EXPECT_EQ(write_one_value("DATE", "2024-13-40", err), 3);
+    EXPECT_NE(err.find("bad DATE"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteAcceptsDateBoundary) {
+    std::string err;
+    EXPECT_EQ(write_one_value("DATE", "2024-02-29", err), 0)
+        << err;  // leap day
+}
+
+// An empty cell writes a null, which JSON renders as null (not the type's
+// zero).
+TEST(CliE2E, WriteEmptyCellBecomesNull) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_null", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,id,n\n0,dev,\n";  // n is empty -> null
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_null_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns", "id:STRING:tag,n:INT64:field",
+         "-o", out_path, csv},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "json", out_path}, rout, rerr),
+              0)
+        << rerr.str();
+    EXPECT_NE(rout.str().find("\"n\":null"), std::string::npos) << rout.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
