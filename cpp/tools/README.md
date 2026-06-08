@@ -149,9 +149,11 @@ tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
                  [-f csv|tsv] [--no-header] [--header-match] [-v] [<input> | -]
 ```
 
-`--columns` is a comma-separated list of `name:TYPE:category`, where `category` is `tag` or
-`field` and `TYPE` (case-insensitive) is one of `BOOLEAN, INT32, INT64, FLOAT, DOUBLE,
-STRING, TEXT` — for example `--columns "id1:STRING:tag,s1:INT64:field"`.
+`--columns` is a comma-separated list of `name:TYPE:category`, where `category` (case-insensitive)
+is `tag` or `field` and `TYPE` (case-insensitive) is one of `BOOLEAN, INT32, INT64, FLOAT, DOUBLE,
+STRING, TEXT, TIMESTAMP, DATE, BLOB` — for example `--columns "id1:STRING:tag,s1:INT64:field"`.
+`DATE` cells are written as `YYYY-MM-DD`; `TIMESTAMP` cells as epoch milliseconds. Each column is
+stored with the engine's default encoding and compression for its type.
 
 | Option | Meaning |
 |---|---|

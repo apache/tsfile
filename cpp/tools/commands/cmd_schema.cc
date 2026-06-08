@@ -85,6 +85,9 @@ int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
             continue;
         }
 
+        // The timeseries metadata (kv.second) carries the data type but not the
+        // encoding/compression, so fetch the measurement schema separately to
+        // fill those two columns, keyed by measurement name.
         std::map<std::string, std::pair<std::string, std::string>> enc_comp;
         if (kv.first) {
             std::vector<storage::MeasurementSchema> ms;

@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -47,6 +48,23 @@ struct DataRow {
     int64_t timestamp;
     std::vector<std::string> cells;
 };
+
+// Parse a calendar date in strict YYYY-MM-DD form into a std::tm (year offset
+// from 1900, month 0-based) the way storage::Tablet expects for DATE columns.
+bool parse_date_cell(const std::string& cell, std::tm& out) {
+    int y = 0;
+    int m = 0;
+    int d = 0;
+    char extra = 0;
+    if (std::sscanf(cell.c_str(), "%4d-%2d-%2d%c", &y, &m, &d, &extra) != 3) {
+        return false;
+    }
+    out = std::tm();
+    out.tm_year = y - 1900;
+    out.tm_mon = m - 1;
+    out.tm_mday = d;
+    return true;
+}
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                      const ColumnDef& def, const std::string& cell,
@@ -93,6 +111,29 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
             tablet.add_value(row, def.name, static_cast<int64_t>(v));
             return true;
         }
+        case common::TIMESTAMP: {
+            errno = 0;
+            long long v = std::strtoll(cell.c_str(), &e, 10);
+            if (e == nullptr || *e != '\0') {
+                error = "bad TIMESTAMP '" + cell + "'";
+                return false;
+            }
+            if (errno == ERANGE) {
+                error = "TIMESTAMP out of range '" + cell + "'";
+                return false;
+            }
+            tablet.add_value(row, def.name, static_cast<int64_t>(v));
+            return true;
+        }
+        case common::DATE: {
+            std::tm d;
+            if (!parse_date_cell(cell, d)) {
+                error = "bad DATE '" + cell + "' (want YYYY-MM-DD)";
+                return false;
+            }
+            tablet.add_value(row, def.name, d);
+            return true;
+        }
         case common::FLOAT: {
             errno = 0;
             float v = std::strtof(cell.c_str(), &e);
@@ -122,7 +163,8 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
             return true;
         }
         case common::STRING:
-        case common::TEXT: {
+        case common::TEXT:
+        case common::BLOB: {
             tablet.add_value(row, def.name, cell);
             return true;
         }
@@ -157,6 +199,21 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     const char delim = (args.format == ParsedArgs::Format::kTsv) ? '\t' : ',';
     const bool csv_quotes = (delim == ',');
 
+    if (args.verbose) {
+        // Echo the resolved write configuration so the user can self-check the
+        // parsed flags before any rows are imported.
+        err << "write: table=" << args.table << " output=" << args.output
+            << " input=" << (args.file.empty() ? "-" : args.file)
+            << " format=" << (delim == '\t' ? "tsv" : "csv")
+            << " header=" << (args.no_header ? "none" : "yes")
+            << (args.header_match ? " (match)" : "") << "\n";
+        for (const ColumnDef& d : columns) {
+            err << "  column " << d.name << ":" << tsdatatype_name(d.type) << ":"
+                << (d.category == common::ColumnCategory::TAG ? "tag" : "field")
+                << "\n";
+        }
+    }
+
     std::string line;
     long long line_no = 0;
     long long record_lines = 0;
@@ -166,15 +223,20 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
             if (args.header_match) {
                 std::vector<std::string> h =
                     split_line(line, delim, csv_quotes);
-                bool ok = (h.size() == columns.size() + 1);
-                for (size_t i = 0; ok && i < columns.size(); ++i) {
-                    if (h[i + 1] != columns[i].name) {
-                        ok = false;
-                    }
-                }
-                if (!ok) {
-                    err << "Error: header does not match --columns (line 1)\n";
+                const size_t expected = columns.size() + 1;
+                if (h.size() != expected) {
+                    err << "Error: header has " << h.size()
+                        << " columns, expected " << expected
+                        << " (time + --columns) (line 1)\n";
                     return kExitRuntime;
+                }
+                for (size_t i = 0; i < columns.size(); ++i) {
+                    if (h[i + 1] != columns[i].name) {
+                        err << "Error: header column " << (i + 2) << " is '"
+                            << h[i + 1] << "', expected '" << columns[i].name
+                            << "' (line 1)\n";
+                        return kExitRuntime;
+                    }
                 }
             }
         }
@@ -191,7 +253,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         types.push_back(d.type);
         cats.push_back(d.category);
         col_schemas.push_back(common::ColumnSchema(
-            d.name, d.type, common::UNCOMPRESSED, common::PLAIN, d.category));
+            d.name, d.type, common::get_default_compressor(),
+            common::get_value_encoder(d.type), d.category));
         if (d.category == common::ColumnCategory::TAG) {
             tag_idx.push_back(j);
         }
@@ -221,7 +284,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     // Stream rows into fixed-size batches so memory stays bounded regardless of
     // input size; a full file is never buffered in memory.
     const size_t kBatch = 1024;
-    int rc = kExitOk;
+    int result_code = kExitOk;
     long long total_rows = 0;
     std::vector<DataRow> batch;
     batch.reserve(kBatch);
@@ -253,7 +316,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         int wt = writer->write_table(tablet);
         if (wt != 0) {
             err << "Error: failed to write rows: " << error_code_message(wt)
-                << "\n";
+                << " (code " << wt << ")\n";
             return false;
         }
         total_rows += static_cast<long long>(batch.size());
@@ -270,7 +333,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (fields.size() != columns.size() + 1) {
             err << "Error: expected " << (columns.size() + 1) << " fields, got "
                 << fields.size() << " (line " << line_no << ")\n";
-            rc = kExitRuntime;
+            result_code = kExitRuntime;
             break;
         }
         char* e = nullptr;
@@ -279,7 +342,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (e == nullptr || *e != '\0' || errno == ERANGE) {
             err << "Error: bad timestamp '" << fields[0] << "' (line "
                 << line_no << ")\n";
-            rc = kExitRuntime;
+            result_code = kExitRuntime;
             break;
         }
         DataRow r;
@@ -298,34 +361,34 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                    "(line "
                 << line_no << ": " << r.timestamp << " <= previous "
                 << seen->second << ")\n";
-            rc = kExitRuntime;
+            result_code = kExitRuntime;
             break;
         }
         last_ts_by_device[device_key] = r.timestamp;
 
         batch.push_back(r);
         if (batch.size() >= kBatch && !flush_batch()) {
-            rc = kExitRuntime;
+            result_code = kExitRuntime;
             break;
         }
     }
 
-    if (rc == kExitOk && !flush_batch()) {
-        rc = kExitRuntime;
+    if (result_code == kExitOk && !flush_batch()) {
+        result_code = kExitRuntime;
     }
 
-    if (rc == kExitOk) {
+    if (result_code == kExitOk) {
         int fr = writer->flush();
         if (fr != 0) {
             err << "Error: failed to flush output: " << error_code_message(fr)
-                << "\n";
-            rc = kExitRuntime;
+                << " (code " << fr << ")\n";
+            result_code = kExitRuntime;
         } else {
             int cr = writer->close();
             if (cr != 0) {
                 err << "Error: failed to close output: "
-                    << error_code_message(cr) << "\n";
-                rc = kExitRuntime;
+                    << error_code_message(cr) << " (code " << cr << ")\n";
+                result_code = kExitRuntime;
             }
         }
     } else {
@@ -334,14 +397,14 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     delete writer;
     delete schema;
 
-    if (rc != kExitOk) {
+    if (result_code != kExitOk) {
         // The import failed; do not leave a partial/corrupt .tsfile behind.
         file.close();
         std::remove(args.output.c_str());
     } else if (args.verbose) {
         err << "wrote " << total_rows << " rows to " << args.output << "\n";
     }
-    return rc;
+    return result_code;
 }
 
 }  // namespace tsfile_cli

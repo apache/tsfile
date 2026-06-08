@@ -22,6 +22,8 @@
 #include <cctype>
 #include <istream>
 
+#include "common/csv_utils.h"
+
 namespace tsfile_cli {
 
 namespace {
@@ -63,35 +65,18 @@ bool read_record(std::istream& in, bool csv_quotes, std::string& record,
 }
 
 bool parse_datatype_name(const std::string& s, common::TSDataType& out) {
-    std::string u;
-    u.reserve(s.size());
-    for (char c : s) {
-        u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    }
-    if (u == "BOOLEAN") {
-        out = common::BOOLEAN;
-    } else if (u == "INT32") {
-        out = common::INT32;
-    } else if (u == "INT64") {
-        out = common::INT64;
-    } else if (u == "FLOAT") {
-        out = common::FLOAT;
-    } else if (u == "DOUBLE") {
-        out = common::DOUBLE;
-    } else if (u == "STRING") {
-        out = common::STRING;
-    } else if (u == "TEXT") {
-        out = common::TEXT;
-    } else {
-        return false;
-    }
-    return true;
+    return common::parse_data_type_name(s, out);
 }
 
 bool parse_category(const std::string& s, common::ColumnCategory& out) {
-    if (s == "tag") {
+    std::string l;
+    l.reserve(s.size());
+    for (char c : s) {
+        l += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (l == "tag") {
         out = common::ColumnCategory::TAG;
-    } else if (s == "field") {
+    } else if (l == "field") {
         out = common::ColumnCategory::FIELD;
     } else {
         return false;
@@ -101,45 +86,7 @@ bool parse_category(const std::string& s, common::ColumnCategory& out) {
 
 std::vector<std::string> split_line(const std::string& line, char delim,
                                     bool csv_quotes) {
-    std::vector<std::string> out;
-    std::string field;
-    if (!csv_quotes) {
-        for (char c : line) {
-            if (c == delim) {
-                out.push_back(field);
-                field.clear();
-            } else {
-                field += c;
-            }
-        }
-        out.push_back(field);
-        return out;
-    }
-    bool in_quotes = false;
-    for (size_t i = 0; i < line.size(); ++i) {
-        char c = line[i];
-        if (in_quotes) {
-            if (c == '"') {
-                if (i + 1 < line.size() && line[i + 1] == '"') {
-                    field += '"';
-                    ++i;
-                } else {
-                    in_quotes = false;
-                }
-            } else {
-                field += c;
-            }
-        } else if (c == '"') {
-            in_quotes = true;
-        } else if (c == delim) {
-            out.push_back(field);
-            field.clear();
-        } else {
-            field += c;
-        }
-    }
-    out.push_back(field);
-    return out;
+    return common::split_csv_line(line, delim, csv_quotes);
 }
 
 bool parse_columns_spec(const std::string& spec, std::vector<ColumnDef>& out,

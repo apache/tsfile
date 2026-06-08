@@ -25,6 +25,7 @@
 #include <limits>
 #include <random>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include "utils/errno_define.h"
@@ -160,12 +161,12 @@ int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
     while ((code = rs->next(has_next)) == common::E_OK && has_next) {
         BufferedRow row = read_current_row(rs, types);
         if (static_cast<long long>(reservoir.size()) < limit) {
-            reservoir.push_back(row);
+            reservoir.push_back(std::move(row));
         } else {
             std::uniform_int_distribution<long long> dist(0, seen);
             long long idx = dist(rng);
             if (idx < limit) {
-                reservoir[static_cast<size_t>(idx)] = row;
+                reservoir[static_cast<size_t>(idx)] = std::move(row);
             }
         }
         ++seen;

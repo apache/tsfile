@@ -46,6 +46,29 @@ TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveType) {
     EXPECT_EQ(cols[0].type, common::INT64);
 }
 
+TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveCategory) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec("id1:STRING:TAG,s1:INT64:Field",
+                                               cols, err))
+        << err;
+    ASSERT_EQ(cols.size(), 2u);
+    EXPECT_EQ(cols[0].category, common::ColumnCategory::TAG);
+    EXPECT_EQ(cols[1].category, common::ColumnCategory::FIELD);
+}
+
+TEST(InputFormatTest, ParseColumnsSpecExtendedTypes) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec(
+        "ts:TIMESTAMP:field,d:DATE:field,b:BLOB:field", cols, err))
+        << err;
+    ASSERT_EQ(cols.size(), 3u);
+    EXPECT_EQ(cols[0].type, common::TIMESTAMP);
+    EXPECT_EQ(cols[1].type, common::DATE);
+    EXPECT_EQ(cols[2].type, common::BLOB);
+}
+
 TEST(InputFormatTest, ParseColumnsSpecErrors) {
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;

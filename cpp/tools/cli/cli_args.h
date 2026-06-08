@@ -29,29 +29,30 @@ namespace tsfile_cli {
 struct ParsedArgs {
     enum class Format { kAuto, kCsv, kTsv, kJson, kTable };
 
-    std::string command;
-    std::string file;
-    std::string device;
-    std::string table;
-    std::vector<std::string> measurements;
-    long long limit = -1;
-    long long offset = 0;
-    long long start = LLONG_MIN;
-    long long end = LLONG_MAX;
-    bool has_start = false;
-    bool has_end = false;
-    long long seed = 0;
-    bool has_seed = false;
-    Format format = Format::kAuto;
-    bool no_header = false;
-    std::string model;
-    std::string output;
-    std::string columns;
-    bool verbose = false;
-    bool header_match = false;
-    bool help = false;
-    bool version = false;
-    std::string error;
+    std::string command;  // subcommand, e.g. "ls"/"write" (args[0])
+    std::string file;     // positional <file.tsfile>; for write, the CSV/TSV
+                          // input ("" or "-" means read stdin)
+    std::string device;   // -d/--device filter (tree model)
+    std::string table;    // -t/--table filter (table model); write target table
+    std::vector<std::string> measurements;  // -m/--measurements projection
+    long long limit = -1;          // -n/--limit; -1 means unlimited
+    long long offset = 0;          // --offset; rows to skip before emitting
+    long long start = LLONG_MIN;   // --start; inclusive lower time bound
+    long long end = LLONG_MAX;     // --end; inclusive upper time bound
+    bool has_start = false;        // whether --start was supplied
+    bool has_end = false;          // whether --end was supplied
+    long long seed = 0;            // --seed for the reservoir sampler
+    bool has_seed = false;         // whether --seed was supplied
+    Format format = Format::kAuto;  // -f/--format; kAuto resolves by TTY
+    bool no_header = false;        // --no-header; suppress header row
+    std::string model;             // --model tree|table override ("" = auto)
+    std::string output;            // -o/--output; write destination .tsfile
+    std::string columns;           // --columns spec for write (name:TYPE:cat,..)
+    bool verbose = false;          // -v/--verbose; write progress to stderr
+    bool header_match = false;     // --header-match; validate write header row
+    bool help = false;             // -h/--help requested
+    bool version = false;          // --version requested
+    std::string error;             // non-empty if parsing failed (the message)
 };
 
 ParsedArgs parse_args(const std::vector<std::string>& args);

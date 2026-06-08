@@ -478,6 +478,9 @@ template int Tablet::add_value(uint32_t row_index,
                                const std::string& measurement_name, double val);
 template int Tablet::add_value(uint32_t row_index,
                                const std::string& measurement_name, String val);
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string& measurement_name,
+                               std::tm val);
 
 void Tablet::set_column_categories(
     const std::vector<ColumnCategory>& column_categories) {

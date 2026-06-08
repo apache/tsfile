@@ -52,6 +52,8 @@ Single pipe-friendly C++ binary to inspect **and** import `.tsfile` (TsFile's an
 
 Prefer no-scan verbs (`ls/schema/meta/stats/count`) — cheap and never hit the page-decode caveat.
 
+Table model + row verbs (`head/cat/sample/count`): without `-t`, only the **first** table is queried. Pass `-t <table>` to target a specific one.
+
 ```
 opts: -f csv|tsv|json|table  (default TTY→table, pipe→tsv)
       -d <device> | -t <table>   (mutually exclusive)
@@ -77,15 +79,15 @@ Imports rows into a **new table-model** file (overwritten). Input col 0 = timest
 
 ```
 spec  := col (',' col)*
-col   := name ':' TYPE ':' ('tag' | 'field')          # TYPE case-insensitive
-TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT }
+col   := name ':' TYPE ':' ('tag' | 'field')          # TYPE + category case-insensitive
+TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE, BLOB }
 input := file | '-' | omitted                          # '-' or omitted = stdin
 ```
 
 - `-o` required (overwritten, must differ from input); `-f` default csv (json/table → usage error).
 - header: first line skipped by default · `--no-header` if none · `--header-match` validates
   header names vs `--columns` (mutually exclusive with `--no-header`).
-- empty cell = null · `--table` is lower-cased · success **silent**, `-v` → `wrote N rows to <out>` on stderr.
+- empty cell = null · `--table` is lower-cased · `DATE` cells are `YYYY-MM-DD`, `TIMESTAMP` epoch ms · each column stored with the engine default encoding/compression for its type · success **silent**, `-v` → echoes the resolved config + `wrote N rows to <out>` on stderr.
 - **timestamps must be strictly increasing per device** (device = tag-column values); rows for
   different tags may interleave/reuse timestamps. Out-of-order input → error with line number.
 - a failed import deletes its partial output (no half-written `.tsfile` left behind).

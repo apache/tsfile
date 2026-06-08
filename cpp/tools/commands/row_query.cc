@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
@@ -30,6 +31,57 @@
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
+
+std::vector<std::string> collect_tree_query_paths(
+    const ParsedArgs& args, storage::TsFileReader& reader) {
+    std::vector<std::string> paths;
+    const bool has_projection = !args.measurements.empty();
+    auto include_measurement = [&](const std::string& m) {
+        return !has_projection ||
+               std::find(args.measurements.begin(), args.measurements.end(),
+                         m) != args.measurements.end();
+    };
+
+    if (!args.device.empty()) {
+        // A single device was requested: resolve just its series.
+        std::vector<std::string> ms = args.measurements;
+        if (ms.empty()) {
+            auto did =
+                std::make_shared<storage::StringArrayDeviceID>(args.device);
+            std::vector<storage::MeasurementSchema> sch;
+            if (reader.get_timeseries_schema(did, sch) == 0) {
+                for (auto& m : sch) {
+                    ms.push_back(m.measurement_name_);
+                }
+            }
+        }
+        for (const std::string& m : ms) {
+            paths.push_back(args.device + "." + m);
+        }
+        return paths;
+    }
+
+    // No device filter: collect every device/series from a single whole-file
+    // metadata call instead of querying each device one by one.
+    storage::DeviceTimeseriesMetadataMap meta =
+        reader.get_timeseries_metadata();
+    for (auto& kv : meta) {
+        if (!kv.first) {
+            continue;
+        }
+        const std::string dev = kv.first->get_device_name();
+        for (auto& ts : kv.second) {
+            if (!ts) {
+                continue;
+            }
+            const std::string m = ts->get_measurement_name().to_std_string();
+            if (include_measurement(m)) {
+                paths.push_back(dev + "." + m);
+            }
+        }
+    }
+    return paths;
+}
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
@@ -61,33 +113,7 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
         }
         qret = reader.query(table_name, cols, start, end, rs);
     } else {
-        std::vector<std::string> devices;
-        if (!args.device.empty()) {
-            devices.push_back(args.device);
-        } else {
-            for (auto& d : reader.get_all_device_ids()) {
-                if (d) {
-                    devices.push_back(d->get_device_name());
-                }
-            }
-        }
-
-        std::vector<std::string> paths;
-        for (const std::string& dev : devices) {
-            std::vector<std::string> ms = args.measurements;
-            if (ms.empty()) {
-                auto did = std::make_shared<storage::StringArrayDeviceID>(dev);
-                std::vector<storage::MeasurementSchema> sch;
-                if (reader.get_timeseries_schema(did, sch) == 0) {
-                    for (auto& m : sch) {
-                        ms.push_back(m.measurement_name_);
-                    }
-                }
-            }
-            for (const std::string& m : ms) {
-                paths.push_back(dev + "." + m);
-            }
-        }
+        std::vector<std::string> paths = collect_tree_query_paths(args, reader);
         if (paths.empty()) {
             err << "Error: no time series found\n";
             return kExitRuntime;

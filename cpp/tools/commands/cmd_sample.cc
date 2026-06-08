@@ -18,13 +18,11 @@
  */
 
 #include <limits>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
-#include "common/device_id.h"
 #include "common/schema.h"
 #include "format/result_set_format.h"
 #include "reader/tsfile_reader.h"
@@ -59,32 +57,7 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
         }
         qret = reader.query(table_name, cols, start, end, rs);
     } else {
-        std::vector<std::string> devices;
-        if (!args.device.empty()) {
-            devices.push_back(args.device);
-        } else {
-            for (auto& d : reader.get_all_device_ids()) {
-                if (d) {
-                    devices.push_back(d->get_device_name());
-                }
-            }
-        }
-        std::vector<std::string> paths;
-        for (const std::string& dev : devices) {
-            std::vector<std::string> ms = args.measurements;
-            if (ms.empty()) {
-                auto did = std::make_shared<storage::StringArrayDeviceID>(dev);
-                std::vector<storage::MeasurementSchema> sch;
-                if (reader.get_timeseries_schema(did, sch) == 0) {
-                    for (auto& m : sch) {
-                        ms.push_back(m.measurement_name_);
-                    }
-                }
-            }
-            for (const std::string& m : ms) {
-                paths.push_back(dev + "." + m);
-            }
-        }
+        std::vector<std::string> paths = collect_tree_query_paths(args, reader);
         if (paths.empty()) {
             err << "Error: no time series found\n";
             return kExitRuntime;

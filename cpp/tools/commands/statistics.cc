@@ -32,7 +32,7 @@ namespace tsfile_cli {
 namespace {
 
 template <typename T>
-std::string value_to_string(T value) {
+std::string value_to_string(const T& value) {
     std::ostringstream ss;
     ss << value;
     return ss.str();
@@ -189,6 +189,9 @@ FileSummary collect_file_summary(const ParsedArgs& args,
         static_cast<long long>(reader.get_all_table_schemas().size());
     s.file_size_bytes = file_size(args.file);
 
+    // The file summary (series_count + overall time range) describes the whole
+    // file, so clear any -d/-t/-m filters from the args copy before collecting
+    // per-series stats; otherwise meta would only count the filtered subset.
     ParsedArgs all = args;
     all.device.clear();
     all.table.clear();

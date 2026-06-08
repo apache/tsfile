@@ -629,3 +629,98 @@ TEST(CliE2E, LsRejectsMeasurementsFlag) {
     EXPECT_NE(err.str().find("not valid for ls"), std::string::npos)
         << err.str();
 }
+
+TEST(CliE2E, WriteRoundTripsTimestampDateBlob) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_tdb", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,id1,ts1,d1,b1\n"
+             "0,dev,1700000000000,2024-01-15,hello\n"
+             "1,dev,1700000000001,2024-12-31,world\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_tdb_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "--columns",
+         "id1:STRING:tag,ts1:TIMESTAMP:field,d1:DATE:field,b1:BLOB:field", "-o",
+         out_path, csv},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "tsv", out_path}, rout, rerr),
+              0)
+        << rerr.str();
+    // TIMESTAMP prints as raw epoch ms, DATE as YYYY-MM-DD, BLOB as its bytes.
+    EXPECT_NE(rout.str().find("1700000000000"), std::string::npos)
+        << rout.str();
+    EXPECT_NE(rout.str().find("2024-01-15"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("2024-12-31"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("hello"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("world"), std::string::npos) << rout.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteRejectsBadDate) {
+    std::string err;
+    EXPECT_EQ(write_one_value("DATE", "not-a-date", err), 3);
+    EXPECT_NE(err.find("bad DATE"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteVerboseEchoesConfig) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_vb", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,1\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_vb_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"write", "--table", "vt", "--columns",
+                             "s1:INT64:field", "-v", "-o", out_path, csv},
+                            out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_NE(err.str().find("table=vt"), std::string::npos) << err.str();
+    EXPECT_NE(err.str().find("column s1:INT64:field"), std::string::npos)
+        << err.str();
+    EXPECT_NE(err.str().find("wrote 1 rows"), std::string::npos) << err.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteHeaderMatchReportsMismatchPosition) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_hm", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,wrong\n0,1\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_hm_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--columns", "s1:INT64:field",
+         "--header-match", "-o", out_path, csv},
+        out, err);
+    EXPECT_EQ(code, 3);
+    EXPECT_NE(err.str().find("header column 2 is 'wrong'"), std::string::npos)
+        << err.str();
+    EXPECT_NE(err.str().find("expected 's1'"), std::string::npos) << err.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}

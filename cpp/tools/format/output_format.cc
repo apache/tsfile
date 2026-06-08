@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <utility>
 
+#include "common/csv_utils.h"
 #include "utils/errno_define.h"
 
 namespace tsfile_cli {
@@ -179,20 +180,7 @@ const char* compression_name(common::CompressionType c) {
 }
 
 std::string csv_escape(const std::string& field) {
-    bool needs_quote = field.find_first_of(",\"\n\r") != std::string::npos;
-    if (!needs_quote) {
-        return field;
-    }
-    std::string out = "\"";
-    for (char c : field) {
-        if (c == '"') {
-            out += "\"\"";
-        } else {
-            out += c;
-        }
-    }
-    out += "\"";
-    return out;
+    return common::csv_escape(field, ',');
 }
 
 std::string json_escape(const std::string& s) {

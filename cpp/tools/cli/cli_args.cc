@@ -191,8 +191,10 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             p.no_header = true;
         } else if (a == "-h" || a == "--help") {
             p.help = true;
+            return p;  // help wins; stop parsing the rest
         } else if (a == "--version") {
             p.version = true;
+            return p;  // version wins; stop parsing the rest
         } else if (a.size() > 1 && a[0] == '-') {
             p.error = "Unknown flag: " + a;
             return p;

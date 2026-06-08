@@ -21,6 +21,8 @@
 #define TSFILE_CLI_COMMANDS_H
 
 #include <ostream>
+#include <string>
+#include <vector>
 
 #include "cli/cli_args.h"
 #include "format/output_format.h"
@@ -32,6 +34,14 @@ class TsFileReader;
 namespace tsfile_cli {
 
 bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader);
+
+// Build the list of "device.measurement" paths to query for the tree model.
+// When args.device is set only that device is resolved (one targeted metadata
+// lookup); otherwise every device/series is collected from a single whole-file
+// get_timeseries_metadata() call rather than a per-device schema loop. Honors
+// args.measurements as a projection filter.
+std::vector<std::string> collect_tree_query_paths(
+    const ParsedArgs& args, storage::TsFileReader& reader);
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
