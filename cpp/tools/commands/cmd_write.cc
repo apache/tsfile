@@ -48,12 +48,6 @@ struct DataRow {
     std::vector<std::string> cells;
 };
 
-void strip_cr(std::string& s) {
-    if (!s.empty() && s.back() == '\r') {
-        s.pop_back();
-    }
-}
-
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                      const ColumnDef& def, const std::string& cell,
                      std::string& error) {
@@ -165,10 +159,10 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
 
     std::string line;
     long long line_no = 0;
+    long long record_lines = 0;
     if (!args.no_header) {
-        if (std::getline(*in, line)) {
-            ++line_no;
-            strip_cr(line);
+        if (read_record(*in, csv_quotes, line, record_lines)) {
+            line_no += record_lines;
             if (args.header_match) {
                 std::vector<std::string> h =
                     split_line(line, delim, csv_quotes);
@@ -267,9 +261,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         return true;
     };
 
-    while (std::getline(*in, line)) {
-        ++line_no;
-        strip_cr(line);
+    while (read_record(*in, csv_quotes, line, record_lines)) {
+        line_no += record_lines;
         if (line.empty()) {
             continue;
         }

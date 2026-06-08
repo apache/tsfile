@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include <sstream>
+
 #include "common/db_common.h"
 #include "utils/db_utils.h"
 
@@ -91,4 +93,61 @@ TEST(InputFormatTest, ParseBoolCell) {
     EXPECT_TRUE(tsfile_cli::parse_bool_cell("0", b));
     EXPECT_FALSE(b);
     EXPECT_FALSE(tsfile_cli::parse_bool_cell("maybe", b));
+}
+
+TEST(InputFormatTest, ReadRecordSingleLinePlain) {
+    std::istringstream in("a,b,c\nd,e,f\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "a,b,c");
+    EXPECT_EQ(n, 1);
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "d,e,f");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
+}
+
+TEST(InputFormatTest, ReadRecordJoinsQuotedNewline) {
+    std::istringstream in("1,\"line one\nline two\",x\n2,plain,y\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"line one\nline two\",x");
+    EXPECT_EQ(n, 2);  // two physical lines made one record
+    // The embedded newline survives field splitting inside the quotes.
+    std::vector<std::string> f = tsfile_cli::split_line(rec, ',', true);
+    ASSERT_EQ(f.size(), 3u);
+    EXPECT_EQ(f[1], "line one\nline two");
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "2,plain,y");
+    EXPECT_EQ(n, 1);
+}
+
+TEST(InputFormatTest, ReadRecordStripsCarriageReturn) {
+    std::istringstream in("a,b\r\nc,d\r\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "a,b");
+}
+
+TEST(InputFormatTest, ReadRecordTsvIgnoresQuotes) {
+    // With csv_quotes false a quote is just data; no line joining happens.
+    std::istringstream in("1\t\"open\n2\tclosed\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, false, rec, n));
+    EXPECT_EQ(rec, "1\t\"open");
+    EXPECT_EQ(n, 1);
+}
+
+TEST(InputFormatTest, ReadRecordUnterminatedQuoteAtEof) {
+    std::istringstream in("1,\"never closed\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"never closed");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
 }

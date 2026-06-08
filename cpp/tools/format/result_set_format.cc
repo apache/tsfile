@@ -21,6 +21,8 @@
 
 #include <cstdio>
 #include <ctime>
+#include <iomanip>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <vector>
@@ -43,10 +45,12 @@ std::string cell_to_string(storage::ResultSet* rs, uint32_t i,
             ss << rs->get_value<int64_t>(i);
             return ss.str();
         case common::FLOAT:
-            ss << rs->get_value<float>(i);
+            ss << std::setprecision(std::numeric_limits<float>::max_digits10)
+               << rs->get_value<float>(i);
             return ss.str();
         case common::DOUBLE:
-            ss << rs->get_value<double>(i);
+            ss << std::setprecision(std::numeric_limits<double>::max_digits10)
+               << rs->get_value<double>(i);
             return ss.str();
         case common::DATE: {
             std::tm d = rs->get_value<std::tm>(i);

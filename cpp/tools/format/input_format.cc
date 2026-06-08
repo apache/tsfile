@@ -20,8 +20,47 @@
 #include "format/input_format.h"
 
 #include <cctype>
+#include <istream>
 
 namespace tsfile_cli {
+
+namespace {
+
+void strip_cr(std::string& s) {
+    if (!s.empty() && s.back() == '\r') {
+        s.pop_back();
+    }
+}
+
+}  // namespace
+
+bool read_record(std::istream& in, bool csv_quotes, std::string& record,
+                 long long& lines_consumed) {
+    record.clear();
+    lines_consumed = 0;
+    std::string physical;
+    bool open_quote = false;
+    while (std::getline(in, physical)) {
+        strip_cr(physical);
+        ++lines_consumed;
+        if (!record.empty()) {
+            record.push_back('\n');  // restore the newline inside the field
+        }
+        record += physical;
+        if (csv_quotes) {
+            for (char c : physical) {
+                if (c == '"') {
+                    open_quote = !open_quote;
+                }
+            }
+            if (open_quote) {
+                continue;  // quote still open: the field spans the next line
+            }
+        }
+        return true;
+    }
+    return lines_consumed > 0;  // trailing record with an unterminated quote
+}
 
 bool parse_datatype_name(const std::string& s, common::TSDataType& out) {
     std::string u;

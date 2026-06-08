@@ -240,6 +240,78 @@ TEST(CliE2E, WriteThenReadRoundTrip) {
     std::remove(out_path.c_str());
 }
 
+TEST(CliE2E, WriteThenReadFloatDoubleRoundTripLossless) {
+    std::string csv_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_fp_in", ".csv");
+    {
+        std::ofstream o(csv_path.c_str());
+        o << "time,id1,f1,d1\n0,dev,0.1,0.1\n1,dev,3.4028235,"
+             "3.141592653589793\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_fp_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc =
+        tsfile_cli::run_cli({"write", "--table", "t1", "--columns",
+                             "id1:STRING:tag,f1:FLOAT:field,d1:DOUBLE:field",
+                             "-o", out_path, csv_path},
+                            wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    int rc = tsfile_cli::run_cli({"cat", "-f", "json", out_path}, rout, rerr);
+    ASSERT_EQ(rc, 0) << rerr.str();
+    // Default ostream precision (6 sig digits) would print 0.1 / 3.40282 and
+    // lose bits; max_digits10 keeps every digit needed to round-trip.
+    EXPECT_NE(rout.str().find("0.100000001"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("3.40282345"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("3.1415926535897931"), std::string::npos)
+        << rout.str();
+
+    std::remove(csv_path.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, WriteImportsQuotedFieldWithEmbeddedNewline) {
+    std::string csv_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_nl_in", ".csv");
+    {
+        std::ofstream o(csv_path.c_str());
+        // The note field on the first row spans two physical lines inside
+        // quotes; it must import as a single row, not be split into two.
+        o << "time,id1,note\n0,dev,\"line one\nline two\"\n1,dev,plain\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_nl_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "--columns",
+         "id1:STRING:tag,note:TEXT:field", "-o", out_path, csv_path},
+        wout, werr);
+    ASSERT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream cout_;
+    std::ostringstream cerr_;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"count", "-f", "tsv", out_path}, cout_, cerr_), 0);
+    EXPECT_NE(cout_.str().find("\tnote\t2"), std::string::npos) << cout_.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "json", out_path}, rout, rerr),
+              0);
+    EXPECT_NE(rout.str().find("line one\\nline two"), std::string::npos)
+        << rout.str();
+
+    std::remove(csv_path.c_str());
+    std::remove(out_path.c_str());
+}
+
 TEST(CliE2E, WriteMissingColumnsIsUsageError) {
     std::ostringstream out;
     std::ostringstream err;

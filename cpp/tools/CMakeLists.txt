@@ -23,9 +23,12 @@ file(GLOB_RECURSE TSFILE_CLI_SRCS
         "commands/*.cc")
 
 add_library(tsfile_cli_obj OBJECT ${TSFILE_CLI_SRCS})
+# Tool-own headers (cli/, commands/, format/) resolve from this directory;
+# library headers come from the staged include tree like the rest of the build.
 target_include_directories(tsfile_cli_obj PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/src)
+        ${LIBRARY_INCLUDE_DIR}
+        ${THIRD_PARTY_INCLUDE})
 
 if (ENABLE_ANTLR4)
     target_include_directories(tsfile_cli_obj PUBLIC
