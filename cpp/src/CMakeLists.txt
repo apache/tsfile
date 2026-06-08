@@ -160,6 +160,17 @@ endif()
 
 add_dependencies(tsfile utils_obj encoding_obj)
 
+# Static-link MinGW runtime on Windows so libtsfile.dll does not depend on
+# libstdc++/libgcc DLL versions that may differ across CI runners.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_link_options(tsfile PRIVATE
+        -static-libgcc
+        -static-libstdc++
+        -Wl,--whole-archive
+        -lwinpthread
+        -Wl,--no-whole-archive)
+endif()
+
 set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
 set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})

@@ -95,13 +95,13 @@ typedef int mode_t;
 #endif
 
 /* ======== inline ======== */
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MINGW32__)
 #define FORCE_INLINE inline __attribute__((always_inline))
 #elif defined(_MSC_VER)
 #define FORCE_INLINE __forceinline
 #else
 #define FORCE_INLINE inline
-#endif  // __GNUC__
+#endif
 
 #ifdef BUILD_FOR_SMALL_BINARY
 #define INLINE FORCE_INLINE

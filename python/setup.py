@@ -148,9 +148,8 @@ elif sys.platform == "win32":
     )
 
     if win_toolchain == "mingw":
-        # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
-        # Python 3.8+ does not search PATH for DLLs; they must sit in the
-        # same directory as the .pyd extensions (os.add_dll_directory).
+        # libtsfile.dll is statically linked against libstdc++/libgcc; copy the
+        # MinGW runtime used to build the Python extensions from PATH.
         for _mingw_dll in (
             "libstdc++-6.dll",
             "libgcc_s_seh-1.dll",
