@@ -235,6 +235,9 @@ bool RowWriter::emits_json_bare(size_t col) const {
     if (col >= types_.size()) {
         return false;
     }
+    // These types serialize to a bare (unquoted) JSON token: numbers as numeric
+    // literals, BOOLEAN as the literal true/false, TIMESTAMP as a number.
+    // Everything else (strings, blobs, dates) is quoted.
     switch (types_[col]) {
         case common::BOOLEAN:
         case common::INT32:
