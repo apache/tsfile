@@ -101,11 +101,11 @@ bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
         return false;
     }
     if (!p.device.empty() && !p.table.empty()) {
-        err << "Error: --device and --table cannot be used together\n";
+        err << "Error: -d/--device and -t/--table cannot be used together\n";
         return false;
     }
     if (p.limit < -1) {
-        err << "Error: --limit must be >= -1\n";
+        err << "Error: -n/--limit must be >= -1\n";
         return false;
     }
     if (p.offset < 0) {
@@ -121,7 +121,7 @@ bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
 
 bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
     if (p.table.empty()) {
-        err << "Error: write requires --table\n";
+        err << "Error: write requires -t/--table\n";
         return false;
     }
     if (p.columns.empty()) {

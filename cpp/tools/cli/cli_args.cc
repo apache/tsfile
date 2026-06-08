@@ -128,7 +128,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 return p;
             }
             if (!parse_ll(val, p.limit)) {
-                p.error = "Invalid --limit: " + val;
+                p.error = "Invalid -n/--limit: " + val;
                 return p;
             }
         } else if (a == "--offset") {
