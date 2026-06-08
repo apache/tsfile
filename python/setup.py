@@ -151,7 +151,11 @@ elif sys.platform == "win32":
         # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
         # Python 3.8+ does not search PATH for DLLs; they must sit in the
         # same directory as the .pyd extensions (os.add_dll_directory).
-        _mingw_search_dirs = []
+        # Prefer runtime DLLs captured from the same MSYS2 environment that
+        # built libtsfile.dll.  Mixing MinGW runtime DLLs from a different
+        # install can load successfully but fail later with WinError 127 when
+        # libtsfile.dll imports a newer runtime symbol.
+        _mingw_search_dirs = [CPP_LIB]
         for _dir in os.environ.get("PATH", "").split(os.pathsep):
             if _dir:
                 _mingw_search_dirs.append(Path(_dir))

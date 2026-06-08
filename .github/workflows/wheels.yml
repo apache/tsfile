@@ -206,6 +206,9 @@ jobs:
             -Dspotless.check.skip=true -Dspotless.apply.skip=true
           test -d cpp/target/build/lib
           test -d cpp/target/build/include
+          cp /mingw64/bin/libstdc++-6.dll cpp/target/build/lib/
+          cp /mingw64/bin/libgcc_s_seh-1.dll cpp/target/build/lib/
+          cp /mingw64/bin/libwinpthread-1.dll cpp/target/build/lib/
 
       - name: Upload C++ build output
         uses: actions/upload-artifact@v7
@@ -265,6 +268,9 @@ jobs:
           ls -laR cpp/target/build/include/
           test -f cpp/target/build/lib/libtsfile.dll
           test -f cpp/target/build/lib/libtsfile.dll.a
+          test -f cpp/target/build/lib/libstdc++-6.dll
+          test -f cpp/target/build/lib/libgcc_s_seh-1.dll
+          test -f cpp/target/build/lib/libwinpthread-1.dll
 
       - name: Build wheel
         shell: msys2 {0}
@@ -300,4 +306,3 @@ jobs:
         with:
           name: tsfile-wheels-windows-py${{ matrix.python-version }}
           path: python/dist/*.whl
-
