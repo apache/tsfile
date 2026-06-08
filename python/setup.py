@@ -30,7 +30,7 @@ from setuptools.command.build_ext import build_ext
 ROOT = Path(__file__).parent.resolve()
 PKG = ROOT / "tsfile"
 
-version = "2.2.1.dev"
+version = "2.3.1"
 
 
 def _find_cpp_build():
@@ -214,8 +214,11 @@ elif sys.platform == "darwin":
     extra_compile_args += ["-O3", "-std=c++11", "-fvisibility=hidden", "-fPIC"]
     extra_link_args += ["-Wl,-rpath,@loader_path", "-stdlib=libc++"]
 elif sys.platform == "win32":
-    libraries = ["tsfile"]
     if win_toolchain == "mingw":
+        # Resolve EH/runtime symbols from MinGW runtimes before libtsfile.dll.a.
+        # Otherwise _Unwind_Resume is recorded against libtsfile.dll and loading
+        # the .pyd fails with WinError 127 on Windows.
+        libraries = ["gcc_s", "stdc++", "tsfile"]
         extra_compile_args += [
             "-O2",
             "-std=c++11",
@@ -225,6 +228,7 @@ elif sys.platform == "win32":
             "-D_WIN64",
         ]
     else:  # msvc
+        libraries = ["tsfile"]
         # cl.exe rejects the GCC-style flags above. Mirror the options the
         # C++ module itself is built with (see cpp/CMakeLists.txt). C++17 is
         # required because Cython 3 emits inline variables (error C7525); the

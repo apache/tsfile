@@ -281,7 +281,7 @@ jobs:
           case "${{ matrix.python-version }}" in
             3.9) BLACK_VER_PROP="-Dblack.version=25.11.0" ;;
           esac
-          ../mvnw package -DskipTests \
+          ../mvnw package -DskipTests -Dmaven.test.skip=true \
             -Dspotless.check.skip=true -Dspotless.apply.skip=true \
             ${BLACK_VER_PROP}
           ls -la dist/
