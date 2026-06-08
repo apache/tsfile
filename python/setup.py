@@ -151,19 +151,36 @@ elif sys.platform == "win32":
         # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
         # Python 3.8+ does not search PATH for DLLs; they must sit in the
         # same directory as the .pyd extensions (os.add_dll_directory).
+        _mingw_search_dirs = []
+        for _dir in os.environ.get("PATH", "").split(os.pathsep):
+            if _dir:
+                _mingw_search_dirs.append(Path(_dir))
+        _msys_prefix = os.environ.get("MSYSTEM_PREFIX")
+        if _msys_prefix:
+            _mingw_search_dirs.append(Path(_msys_prefix) / "bin")
+        for _extra in (
+            Path("C:/msys64/mingw64/bin"),
+            Path("C:/ProgramData/mingw64/mingw64/bin"),
+        ):
+            if _extra.is_dir():
+                _mingw_search_dirs.append(_extra)
+
         for _mingw_dll in (
             "libstdc++-6.dll",
             "libgcc_s_seh-1.dll",
             "libwinpthread-1.dll",
         ):
-            for _dir in os.environ.get("PATH", "").split(os.pathsep):
-                _src = Path(_dir) / _mingw_dll
+            for _dir in _mingw_search_dirs:
+                _src = _dir / _mingw_dll
                 if _src.is_file():
                     shutil.copy2(_src, PKG / _mingw_dll)
                     print(f"setup.py: copied {_mingw_dll} from {_src}")
                     break
             else:
-                print(f"setup.py: WARNING - {_mingw_dll} not found on PATH")
+                raise FileNotFoundError(
+                    f"setup.py: MinGW runtime DLL {_mingw_dll} not found; "
+                    "ensure mingw-w64-x86_64-gcc is on PATH or MSYSTEM_PREFIX is set"
+                )
 else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 

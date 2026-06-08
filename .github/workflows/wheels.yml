@@ -257,13 +257,22 @@ jobs:
           name: tsfile-cpp-windows
           path: cpp/target/build/
 
+      - name: Verify C++ artifacts exist
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          ls -laR cpp/target/build/lib/
+          ls -laR cpp/target/build/include/
+          test -f cpp/target/build/lib/libtsfile.dll
+          test -f cpp/target/build/lib/libtsfile.dll.a
+
       - name: Build wheel
         shell: msys2 {0}
         run: |
           set -euxo pipefail
           export JAVA_HOME="$(cygpath "$JAVA_HOME")"
           export PYTHON_HOME="$(cygpath "$pythonLocation")"
-          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
+          export PATH="/mingw64/bin:$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
 
           # Build wheel via Maven (no clean — keep C++ artifacts from previous job)
           chmod +x mvnw || true
@@ -278,8 +287,11 @@ jobs:
           ls -la dist/
 
       - name: Verify wheel
-        shell: bash
+        shell: msys2 {0}
         run: |
+          set -euxo pipefail
+          export PYTHON_HOME="$(cygpath "$pythonLocation")"
+          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$PATH"
           python -m pip install python/dist/*.whl
           python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok')"
 
