@@ -29,6 +29,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "cli/cli_args.h"
@@ -67,8 +68,8 @@ bool parse_date_cell(const std::string& cell, std::tm& out) {
 }
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
-                     const ColumnDef& def, const std::string& cell,
-                     std::string& error) {
+                     uint32_t schema_index, const ColumnDef& def,
+                     const std::string& cell, std::string& error) {
     if (cell.empty()) {
         return true;  // null
     }
@@ -80,7 +81,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "bad BOOLEAN '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, v);
+            tablet.add_value(row, schema_index, v);
             return true;
         }
         case common::INT32: {
@@ -94,7 +95,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "INT32 out of range '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, static_cast<int32_t>(v));
+            tablet.add_value(row, schema_index, static_cast<int32_t>(v));
             return true;
         }
         case common::INT64: {
@@ -108,7 +109,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "INT64 out of range '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, static_cast<int64_t>(v));
+            tablet.add_value(row, schema_index, static_cast<int64_t>(v));
             return true;
         }
         case common::TIMESTAMP: {
@@ -122,7 +123,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "TIMESTAMP out of range '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, static_cast<int64_t>(v));
+            tablet.add_value(row, schema_index, static_cast<int64_t>(v));
             return true;
         }
         case common::DATE: {
@@ -131,7 +132,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "bad DATE '" + cell + "' (want YYYY-MM-DD)";
                 return false;
             }
-            tablet.add_value(row, def.name, d);
+            tablet.add_value(row, schema_index, d);
             return true;
         }
         case common::FLOAT: {
@@ -145,7 +146,7 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "FLOAT out of range '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, v);
+            tablet.add_value(row, schema_index, v);
             return true;
         }
         case common::DOUBLE: {
@@ -159,13 +160,15 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "DOUBLE out of range '" + cell + "'";
                 return false;
             }
-            tablet.add_value(row, def.name, v);
+            tablet.add_value(row, schema_index, v);
             return true;
         }
         case common::STRING:
         case common::TEXT:
         case common::BLOB: {
-            tablet.add_value(row, def.name, cell);
+            // Add by index using the c-string overload to avoid the per-cell
+            // name lowercasing + map lookup the by-name overload would do.
+            tablet.add_value(row, schema_index, cell.c_str());
             return true;
         }
         default:
@@ -305,8 +308,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
             tablet.add_timestamp(r, batch[i].timestamp);
             for (size_t j = 0; j < columns.size(); ++j) {
                 std::string cell_err;
-                if (!add_typed_value(tablet, r, columns[j], batch[i].cells[j],
-                                     cell_err)) {
+                if (!add_typed_value(tablet, r, static_cast<uint32_t>(j),
+                                     columns[j], batch[i].cells[j], cell_err)) {
                     err << "Error: " << cell_err << " (line "
                         << batch[i].line_no << ")\n";
                     return false;
@@ -366,7 +369,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         }
         last_ts_by_device[device_key] = r.timestamp;
 
-        batch.push_back(r);
+        batch.push_back(std::move(r));
         if (batch.size() >= kBatch && !flush_batch()) {
             result_code = kExitRuntime;
             break;
