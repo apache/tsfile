@@ -30,7 +30,7 @@ from setuptools.command.build_ext import build_ext
 ROOT = Path(__file__).parent.resolve()
 PKG = ROOT / "tsfile"
 
-version = "2.3.1"
+version = "2.3.2.dev"
 
 
 def _find_cpp_build():

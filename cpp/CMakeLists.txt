@@ -29,7 +29,7 @@ endif ()
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif ()
-set(TsFile_CPP_VERSION 2.3.1)
+set(TsFile_CPP_VERSION 2.3.2.dev)
 
 if (MSVC)
     # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
