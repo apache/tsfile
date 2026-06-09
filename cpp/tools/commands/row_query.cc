@@ -43,20 +43,18 @@ std::vector<std::string> collect_tree_query_paths(
     };
 
     if (!args.device.empty()) {
-        // A single device was requested: resolve just its series.
-        std::vector<std::string> ms = args.measurements;
-        if (ms.empty()) {
-            auto did =
-                std::make_shared<storage::StringArrayDeviceID>(args.device);
-            std::vector<storage::MeasurementSchema> sch;
-            if (reader.get_timeseries_schema(did, sch) == 0) {
-                for (auto& m : sch) {
-                    ms.push_back(m.measurement_name_);
+        // A single device was requested: resolve its series and keep only the
+        // ones matching the projection. Filtering against the device's real
+        // schema means a provided measurement that doesn't exist on the device
+        // is dropped rather than queried blindly (matching the no-device path).
+        auto did = std::make_shared<storage::StringArrayDeviceID>(args.device);
+        std::vector<storage::MeasurementSchema> sch;
+        if (reader.get_timeseries_schema(did, sch) == 0) {
+            for (auto& m : sch) {
+                if (include_measurement(m.measurement_name_)) {
+                    paths.push_back(args.device + "." + m.measurement_name_);
                 }
             }
-        }
-        for (const std::string& m : ms) {
-            paths.push_back(args.device + "." + m);
         }
         return paths;
     }
