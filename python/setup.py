@@ -30,7 +30,7 @@ from setuptools.command.build_ext import build_ext
 ROOT = Path(__file__).parent.resolve()
 PKG = ROOT / "tsfile"
 
-version = "2.2.1.dev"
+version = "2.3.1"
 
 
 def _find_cpp_build():
@@ -151,19 +151,40 @@ elif sys.platform == "win32":
         # Copy MinGW runtime DLLs next to tsfile.dll so Python can find them.
         # Python 3.8+ does not search PATH for DLLs; they must sit in the
         # same directory as the .pyd extensions (os.add_dll_directory).
+        # Prefer runtime DLLs captured from the same MSYS2 environment that
+        # built libtsfile.dll.  Mixing MinGW runtime DLLs from a different
+        # install can load successfully but fail later with WinError 127 when
+        # libtsfile.dll imports a newer runtime symbol.
+        _mingw_search_dirs = [CPP_LIB]
+        for _dir in os.environ.get("PATH", "").split(os.pathsep):
+            if _dir:
+                _mingw_search_dirs.append(Path(_dir))
+        _msys_prefix = os.environ.get("MSYSTEM_PREFIX")
+        if _msys_prefix:
+            _mingw_search_dirs.append(Path(_msys_prefix) / "bin")
+        for _extra in (
+            Path("C:/msys64/mingw64/bin"),
+            Path("C:/ProgramData/mingw64/mingw64/bin"),
+        ):
+            if _extra.is_dir():
+                _mingw_search_dirs.append(_extra)
+
         for _mingw_dll in (
             "libstdc++-6.dll",
             "libgcc_s_seh-1.dll",
             "libwinpthread-1.dll",
         ):
-            for _dir in os.environ.get("PATH", "").split(os.pathsep):
-                _src = Path(_dir) / _mingw_dll
+            for _dir in _mingw_search_dirs:
+                _src = _dir / _mingw_dll
                 if _src.is_file():
                     shutil.copy2(_src, PKG / _mingw_dll)
                     print(f"setup.py: copied {_mingw_dll} from {_src}")
                     break
             else:
-                print(f"setup.py: WARNING - {_mingw_dll} not found on PATH")
+                raise FileNotFoundError(
+                    f"setup.py: MinGW runtime DLL {_mingw_dll} not found; "
+                    "ensure mingw-w64-x86_64-gcc is on PATH or MSYSTEM_PREFIX is set"
+                )
 else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
@@ -197,8 +218,11 @@ elif sys.platform == "darwin":
     extra_compile_args += ["-O3", "-std=c++11", "-fvisibility=hidden", "-fPIC"]
     extra_link_args += ["-Wl,-rpath,@loader_path", "-stdlib=libc++"]
 elif sys.platform == "win32":
-    libraries = ["tsfile"]
     if win_toolchain == "mingw":
+        # Resolve EH/runtime symbols from MinGW runtimes before libtsfile.dll.a.
+        # Otherwise _Unwind_Resume is recorded against libtsfile.dll and loading
+        # the .pyd fails with WinError 127 on Windows.
+        libraries = ["gcc_s", "stdc++", "tsfile"]
         extra_compile_args += [
             "-O2",
             "-std=c++11",
@@ -208,6 +232,7 @@ elif sys.platform == "win32":
             "-D_WIN64",
         ]
     else:  # msvc
+        libraries = ["tsfile"]
         # cl.exe rejects the GCC-style flags above. Mirror the options the
         # C++ module itself is built with (see cpp/CMakeLists.txt). C++17 is
         # required because Cython 3 emits inline variables (error C7525); the

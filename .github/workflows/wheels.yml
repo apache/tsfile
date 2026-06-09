@@ -206,6 +206,9 @@ jobs:
             -Dspotless.check.skip=true -Dspotless.apply.skip=true
           test -d cpp/target/build/lib
           test -d cpp/target/build/include
+          cp /mingw64/bin/libstdc++-6.dll cpp/target/build/lib/
+          cp /mingw64/bin/libgcc_s_seh-1.dll cpp/target/build/lib/
+          cp /mingw64/bin/libwinpthread-1.dll cpp/target/build/lib/
 
       - name: Upload C++ build output
         uses: actions/upload-artifact@v7
@@ -257,13 +260,25 @@ jobs:
           name: tsfile-cpp-windows
           path: cpp/target/build/
 
+      - name: Verify C++ artifacts exist
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          ls -laR cpp/target/build/lib/
+          ls -laR cpp/target/build/include/
+          test -f cpp/target/build/lib/libtsfile.dll
+          test -f cpp/target/build/lib/libtsfile.dll.a
+          test -f cpp/target/build/lib/libstdc++-6.dll
+          test -f cpp/target/build/lib/libgcc_s_seh-1.dll
+          test -f cpp/target/build/lib/libwinpthread-1.dll
+
       - name: Build wheel
         shell: msys2 {0}
         run: |
           set -euxo pipefail
           export JAVA_HOME="$(cygpath "$JAVA_HOME")"
           export PYTHON_HOME="$(cygpath "$pythonLocation")"
-          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
+          export PATH="/mingw64/bin:$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
 
           # Build wheel via Maven (no clean — keep C++ artifacts from previous job)
           chmod +x mvnw || true
@@ -272,14 +287,17 @@ jobs:
           case "${{ matrix.python-version }}" in
             3.9) BLACK_VER_PROP="-Dblack.version=25.11.0" ;;
           esac
-          ../mvnw package -DskipTests \
+          ../mvnw package -DskipTests -Dmaven.test.skip=true \
             -Dspotless.check.skip=true -Dspotless.apply.skip=true \
             ${BLACK_VER_PROP}
           ls -la dist/
 
       - name: Verify wheel
-        shell: bash
+        shell: msys2 {0}
         run: |
+          set -euxo pipefail
+          export PYTHON_HOME="$(cygpath "$pythonLocation")"
+          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$PATH"
           python -m pip install python/dist/*.whl
           python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok')"
 
@@ -288,4 +306,3 @@ jobs:
         with:
           name: tsfile-wheels-windows-py${{ matrix.python-version }}
           path: python/dist/*.whl
-

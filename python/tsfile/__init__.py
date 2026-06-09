@@ -22,15 +22,32 @@ import sys
 
 _pkg_dir = os.path.dirname(os.path.abspath(__file__))
 
+
+def _preload_dll(path):
+    if not os.path.isfile(path):
+        return
+    try:
+        ctypes.CDLL(path)
+    except OSError:
+        pass
+
+
 if sys.platform == "win32":
     # Keep the handle alive for the lifetime of this module. CPython's reference
     # counting frees the object immediately if not stored, which calls
     # RemoveDllDirectory and undoes the registration before any .pyd is loaded.
     _dll_dir = os.add_dll_directory(_pkg_dir)
-    # Preload the tsfile DLL so Windows finds it by base-name when loading the
-    # Cython extensions. Store the handle to prevent the DLL from being
-    # unloaded prematurely.
+    # Preload MinGW runtime DLLs before libtsfile.dll. Python 3.8+ does not
+    # search PATH for DLL dependencies; they must live next to the extensions.
+    for _mingw_dll in (
+        "libwinpthread-1.dll",
+        "libgcc_s_seh-1.dll",
+        "libstdc++-6.dll",
+    ):
+        _preload_dll(os.path.join(_pkg_dir, _mingw_dll))
+    # Preload the tsfile DLL so Windows finds it when loading Cython extensions.
     # MSVC builds produce "tsfile.dll"; MinGW builds produce "libtsfile.dll".
+    _tsfile_cdll = None
     for _dll_name in ("tsfile.dll", "libtsfile.dll"):
         _tsfile_dll = os.path.join(_pkg_dir, _dll_name)
         if os.path.isfile(_tsfile_dll):
