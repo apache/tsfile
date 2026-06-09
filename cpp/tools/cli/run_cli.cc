@@ -88,7 +88,7 @@ bool is_known_command(const std::string& c) {
     static const std::set<std::string> kCmds = {"ls",    "schema", "meta",
                                                 "stats", "head",   "cat",
                                                 "count", "sample", "write"};
-    return kCmds.count(c) != 0;
+    return kCmds.find(c) != kCmds.end();
 }
 
 bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
