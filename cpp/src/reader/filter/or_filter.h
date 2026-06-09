@@ -30,7 +30,7 @@ class OrFilter : public BinaryFilter {
     OrFilter(Filter* left, Filter* right) : BinaryFilter(left, right) {}
     ~OrFilter() {}
 
-    FORCE_INLINE bool satisfy(Statistic* statistic) {
+    bool satisfy(Statistic* statistic) {
         return left_->satisfy(statistic) || right_->satisfy(statistic);
     }
 

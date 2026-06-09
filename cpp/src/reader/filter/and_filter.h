@@ -30,7 +30,7 @@ class AndFilter : public BinaryFilter {
     ~AndFilter() {}
     AndFilter(Filter* left, Filter* right) : BinaryFilter(left, right) {}
 
-    FORCE_INLINE bool satisfy(Statistic* statistic) {
+    bool satisfy(Statistic* statistic) {
         return left_->satisfy(statistic) && right_->satisfy(statistic);
     }
 
