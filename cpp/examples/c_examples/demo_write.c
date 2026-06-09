@@ -24,6 +24,15 @@
 
 #include "c_examples.h"
 
+static char* duplicate_string(const char* src) {
+    size_t len = strlen(src) + 1;
+    char* dst = (char*)malloc(len);
+    if (dst != NULL) {
+        memcpy(dst, src, len);
+    }
+    return dst;
+}
+
 // This example shows you how to write tsfile.
 ERRNO write_tsfile() {
     ERRNO code = 0;
@@ -39,20 +48,20 @@ ERRNO write_tsfile() {
 
     // Create table schema to describe a table in a tsfile.
     TableSchema table_schema;
-    table_schema.table_name = strdup(table_name);
+    table_schema.table_name = duplicate_string(table_name);
     table_schema.column_num = 3;
     table_schema.column_schemas =
         (ColumnSchema*)malloc(sizeof(ColumnSchema) * 3);
     table_schema.column_schemas[0] =
-        (ColumnSchema){.column_name = strdup("id1"),
+        (ColumnSchema){.column_name = duplicate_string("id1"),
                        .data_type = TS_DATATYPE_STRING,
                        .column_category = TAG};
     table_schema.column_schemas[1] =
-        (ColumnSchema){.column_name = strdup("id2"),
+        (ColumnSchema){.column_name = duplicate_string("id2"),
                        .data_type = TS_DATATYPE_STRING,
                        .column_category = TAG};
     table_schema.column_schemas[2] =
-        (ColumnSchema){.column_name = strdup("s1"),
+        (ColumnSchema){.column_name = duplicate_string("s1"),
                        .data_type = TS_DATATYPE_INT32,
                        .column_category = FIELD};
 
