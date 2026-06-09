@@ -38,14 +38,12 @@ class OrFilter : public BinaryFilter {
         return left_->satisfy(time, value) || right_->satisfy(time, value);
     }
 
-    bool satisfy_start_end_time(int64_t start_time,
-                                int64_t end_time) {
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time) {
         return left_->satisfy_start_end_time(start_time, end_time) ||
                right_->satisfy_start_end_time(start_time, end_time);
     }
 
-    bool contain_start_end_time(int64_t start_time,
-                                int64_t end_time) {
+    bool contain_start_end_time(int64_t start_time, int64_t end_time) {
         return left_->contain_start_end_time(start_time, end_time) ||
                right_->contain_start_end_time(start_time, end_time);
     }
