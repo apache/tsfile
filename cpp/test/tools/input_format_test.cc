@@ -1,0 +1,176 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * License); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#include "format/input_format.h"
+
+#include <gtest/gtest.h>
+
+#include <sstream>
+
+#include "common/db_common.h"
+#include "utils/db_utils.h"
+
+TEST(InputFormatTest, ParseColumnsSpecValid) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec("id1:STRING:tag,s1:INT64:field",
+                                               cols, err));
+    ASSERT_EQ(cols.size(), 2u);
+    EXPECT_EQ(cols[0].name, "id1");
+    EXPECT_EQ(cols[0].type, common::STRING);
+    EXPECT_EQ(cols[0].category, common::ColumnCategory::TAG);
+    EXPECT_EQ(cols[1].type, common::INT64);
+    EXPECT_EQ(cols[1].category, common::ColumnCategory::FIELD);
+}
+
+TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveType) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec("s1:int64:field", cols, err));
+    EXPECT_EQ(cols[0].type, common::INT64);
+}
+
+TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveCategory) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec("id1:STRING:TAG,s1:INT64:Field",
+                                               cols, err))
+        << err;
+    ASSERT_EQ(cols.size(), 2u);
+    EXPECT_EQ(cols[0].category, common::ColumnCategory::TAG);
+    EXPECT_EQ(cols[1].category, common::ColumnCategory::FIELD);
+}
+
+TEST(InputFormatTest, ParseColumnsSpecExtendedTypes) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_TRUE(tsfile_cli::parse_columns_spec(
+        "ts:TIMESTAMP:field,d:DATE:field,b:BLOB:field", cols, err))
+        << err;
+    ASSERT_EQ(cols.size(), 3u);
+    EXPECT_EQ(cols[0].type, common::TIMESTAMP);
+    EXPECT_EQ(cols[1].type, common::DATE);
+    EXPECT_EQ(cols[2].type, common::BLOB);
+}
+
+TEST(InputFormatTest, ParseColumnsSpecErrors) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:NOPE:field", cols, err));
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:bogus", cols, err));
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64", cols, err));
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("", cols, err));
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec(":INT64:field", cols, err));
+}
+
+TEST(InputFormatTest, ParseColumnsSpecRejectsDuplicateNames) {
+    std::vector<tsfile_cli::ColumnDef> cols;
+    std::string err;
+    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:field,s1:INT32:field",
+                                                cols, err));
+    EXPECT_NE(err.find("duplicate column"), std::string::npos) << err;
+}
+
+TEST(InputFormatTest, SplitLineTsv) {
+    std::vector<std::string> f =
+        tsfile_cli::split_line("0\t10\t20", '\t', false);
+    ASSERT_EQ(f.size(), 3u);
+    EXPECT_EQ(f[0], "0");
+    EXPECT_EQ(f[2], "20");
+}
+
+TEST(InputFormatTest, SplitLineCsvQuotes) {
+    std::vector<std::string> f =
+        tsfile_cli::split_line("1,\"a,b\",\"she \"\"hi\"\"\"", ',', true);
+    ASSERT_EQ(f.size(), 3u);
+    EXPECT_EQ(f[1], "a,b");
+    EXPECT_EQ(f[2], "she \"hi\"");
+}
+
+TEST(InputFormatTest, SplitLineEmptyFields) {
+    std::vector<std::string> f = tsfile_cli::split_line("0,,5", ',', true);
+    ASSERT_EQ(f.size(), 3u);
+    EXPECT_EQ(f[1], "");
+}
+
+TEST(InputFormatTest, ParseBoolCell) {
+    bool b = false;
+    EXPECT_TRUE(tsfile_cli::parse_bool_cell("true", b));
+    EXPECT_TRUE(b);
+    EXPECT_TRUE(tsfile_cli::parse_bool_cell("0", b));
+    EXPECT_FALSE(b);
+    EXPECT_FALSE(tsfile_cli::parse_bool_cell("maybe", b));
+}
+
+TEST(InputFormatTest, ReadRecordSingleLinePlain) {
+    std::istringstream in("a,b,c\nd,e,f\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "a,b,c");
+    EXPECT_EQ(n, 1);
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "d,e,f");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
+}
+
+TEST(InputFormatTest, ReadRecordJoinsQuotedNewline) {
+    std::istringstream in("1,\"line one\nline two\",x\n2,plain,y\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"line one\nline two\",x");
+    EXPECT_EQ(n, 2);  // two physical lines made one record
+    // The embedded newline survives field splitting inside the quotes.
+    std::vector<std::string> f = tsfile_cli::split_line(rec, ',', true);
+    ASSERT_EQ(f.size(), 3u);
+    EXPECT_EQ(f[1], "line one\nline two");
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "2,plain,y");
+    EXPECT_EQ(n, 1);
+}
+
+TEST(InputFormatTest, ReadRecordStripsCarriageReturn) {
+    std::istringstream in("a,b\r\nc,d\r\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "a,b");
+}
+
+TEST(InputFormatTest, ReadRecordTsvIgnoresQuotes) {
+    // With csv_quotes false a quote is just data; no line joining happens.
+    std::istringstream in("1\t\"open\n2\tclosed\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, false, rec, n));
+    EXPECT_EQ(rec, "1\t\"open");
+    EXPECT_EQ(n, 1);
+}
+
+TEST(InputFormatTest, ReadRecordUnterminatedQuoteAtEof) {
+    std::istringstream in("1,\"never closed\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"never closed");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
+}

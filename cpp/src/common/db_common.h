@@ -20,8 +20,10 @@
 #ifndef COMMON_DB_COMMON_H
 #define COMMON_DB_COMMON_H
 
+#include <cctype>
 #include <functional>
 #include <iostream>
+#include <string>
 #include <type_traits>
 #include <unordered_set>
 
@@ -113,6 +115,42 @@ namespace common {
 FORCE_INLINE const char* get_data_type_name(TSDataType type) {
     ASSERT(type >= BOOLEAN && type <= STRING);
     return s_data_type_names[type];
+}
+
+// Parse a case-insensitive type name (e.g. "int32", "TIMESTAMP") into its
+// TSDataType. Covers every named scalar type, not just the subset in
+// s_data_type_names, so callers such as the CLI importer can accept the full
+// set. Returns false for unrecognized names.
+FORCE_INLINE bool parse_data_type_name(const std::string& s, TSDataType& out) {
+    std::string u;
+    u.reserve(s.size());
+    for (char c : s) {
+        u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    if (u == "BOOLEAN") {
+        out = BOOLEAN;
+    } else if (u == "INT32") {
+        out = INT32;
+    } else if (u == "INT64") {
+        out = INT64;
+    } else if (u == "FLOAT") {
+        out = FLOAT;
+    } else if (u == "DOUBLE") {
+        out = DOUBLE;
+    } else if (u == "TEXT") {
+        out = TEXT;
+    } else if (u == "STRING") {
+        out = STRING;
+    } else if (u == "TIMESTAMP") {
+        out = TIMESTAMP;
+    } else if (u == "DATE") {
+        out = DATE;
+    } else if (u == "BLOB") {
+        out = BLOB;
+    } else {
+        return false;
+    }
+    return true;
 }
 
 FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {

@@ -110,6 +110,33 @@ if (${DOWNLOADED})
     endif ()
     add_subdirectory("${GTEST_SRC_ROOT}" "${CMAKE_BINARY_DIR}/googletest-build"
             EXCLUDE_FROM_ALL)
+    # AppleClang searches /usr/local/include before CMake's generated -isystem
+    # paths, so a system-installed GTest can shadow the vendored headers. Force
+    # the vendored include dirs ahead for GTest's own sources here; the same is
+    # done for the consuming TsFile_Test target below (where header resolution
+    # actually matters for the test code).
+    foreach (GTEST_TARGET gtest gtest_main gmock gmock_main)
+        if (TARGET ${GTEST_TARGET})
+            target_include_directories(${GTEST_TARGET} BEFORE PRIVATE
+                    ${GTEST_SRC_ROOT}/googletest/include
+                    ${GTEST_SRC_ROOT}/googletest
+                    ${GTEST_SRC_ROOT}/googlemock/include
+                    ${GTEST_SRC_ROOT}/googlemock)
+            if (APPLE AND NOT MSVC)
+                target_compile_options(${GTEST_TARGET} BEFORE PRIVATE
+                        -iquote${GTEST_SRC_ROOT}/googletest/include
+                        -iquote${GTEST_SRC_ROOT}/googletest
+                        -I${GTEST_SRC_ROOT}/googletest/include
+                        -I${GTEST_SRC_ROOT}/googletest
+                        -std=c++14)
+            endif ()
+        endif ()
+    endforeach ()
+    # Remember the vendored GTest header roots so they can be forced ahead of any
+    # system installation when compiling TsFile_Test itself.
+    set(VENDORED_GTEST_INCLUDE_DIRS
+            ${GTEST_SRC_ROOT}/googletest/include
+            ${GTEST_SRC_ROOT}/googlemock/include)
     set(TESTS_ENABLED ON PARENT_SCOPE)
 else ()
     message(WARNING "Failed to download googletest from all provided URLs, setting TESTS_ENABLED to OFF")
@@ -186,6 +213,11 @@ if (ENABLE_ZLIB)
     list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
 endif()
 
+if (BUILD_TOOLS)
+    file(GLOB_RECURSE TOOLS_TEST_SRCS "tools/*_test.cc")
+    list(APPEND TEST_SRCS ${TOOLS_TEST_SRCS})
+endif ()
+
 if (${COV_ENABLED})
     message("Enable code cov...")
     add_compile_options(-fprofile-arcs -ftest-coverage)
@@ -197,12 +229,27 @@ if (ENABLE_ANTLR4)
 endif()
 
 add_executable(TsFile_Test ${TEST_SRCS})
+# Force the vendored GTest headers ahead of any system installation so the test
+# code reliably compiles against the vendored 1.12.1 headers.
+if (VENDORED_GTEST_INCLUDE_DIRS)
+    target_include_directories(TsFile_Test BEFORE PRIVATE
+            ${VENDORED_GTEST_INCLUDE_DIRS})
+endif ()
+if (BUILD_TOOLS)
+    target_include_directories(TsFile_Test PRIVATE ${CMAKE_SOURCE_DIR}/tools)
+endif ()
+if (APPLE AND NOT MSVC)
+    target_compile_options(TsFile_Test PRIVATE -std=c++14)
+endif ()
 target_link_libraries(
         TsFile_Test
         GTest::gtest_main
         GTest::gmock
         tsfile
 )
+if (BUILD_TOOLS)
+    target_link_libraries(TsFile_Test tsfile_cli_obj)
+endif ()
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
 
