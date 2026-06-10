@@ -134,12 +134,47 @@ TEST(CliE2E, CatReturnsAllRows) {
     EXPECT_NE(out.str().find("time\ts1\n"), std::string::npos);
 }
 
+TEST(CliE2E, CatPushesDownOffsetAndLimit) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--offset", "2", "-n", "2", "-f", "tsv", f.path},
+        out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
+}
+
+TEST(CliE2E, HeadPushesDownOffsetAndLimit) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"head", "-m", "s1", "--offset", "1", "-n", "3", "-f", "tsv",
+         f.path},
+        out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_EQ(out.str(), "time\ts1\n1\t10\n2\t20\n3\t30\n");
+}
+
 TEST(CliE2E, CatWithTimeRange) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
         {"cat", "-m", "s1", "--start", "2", "--end", "3", "-f", "tsv", f.path},
+        out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
+}
+
+TEST(CliE2E, CatAppliesOffsetAfterTimeRange) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--start", "1", "--end", "4", "--offset", "1",
+         "-n", "2", "-f", "tsv", f.path},
         out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
