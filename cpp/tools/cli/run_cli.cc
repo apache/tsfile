@@ -70,6 +70,10 @@ void print_usage(std::ostream& os) {
           "      --start <ms>         inclusive lower time bound\n"
           "      --end <ms>           inclusive upper time bound\n"
           "      --seed N             RNG seed for sample\n"
+          "      --tag-filter C OP V   table TAG predicate; OP is "
+          "eq|neq|lt|lteq|gt|gteq|regexp|not-regexp\n"
+          "      --tag-between C L U   table TAG predicate: L <= C <= U\n"
+          "      --tag-not-between C L U  table TAG predicate outside [L,U]\n"
           "      --no-header          omit the header row\n"
           "      --model tree|table   force the data model (else auto)\n"
           "  -h, --help               print this help\n"
@@ -141,6 +145,10 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
         err << "Error: --header-match cannot be combined with --no-header\n";
         return false;
     }
+    if (p.has_tag_filter) {
+        err << "Error: tag filter flags are not valid for write\n";
+        return false;
+    }
     if (!p.measurements.empty() || !p.device.empty() || p.has_start ||
         p.has_end || p.has_seed || p.limit != -1 || p.offset != 0) {
         err << "Error: read-only flags are not valid for write\n";
@@ -180,6 +188,18 @@ bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
     }
     if (!is_row && (p.has_start || p.has_end)) {
         err << "Error: --start/--end are only valid for head/cat/sample\n";
+        return false;
+    }
+    if (p.has_tag_filter && !is_row) {
+        err << "Error: tag filter flags are only valid for head/cat/sample\n";
+        return false;
+    }
+    if (p.has_tag_filter && p.model == "tree") {
+        err << "Error: tag filter flags are only valid for table model\n";
+        return false;
+    }
+    if (p.has_tag_filter && !p.device.empty()) {
+        err << "Error: tag filter flags cannot be combined with -d/--device\n";
         return false;
     }
     if (!scoped && !p.device.empty()) {

@@ -58,8 +58,10 @@ Table model + row verbs (`head/cat/sample/count`): without `-t`, only the **firs
 opts: -f csv|tsv|json|table  (default TTY→table, pipe→tsv)
       -d <device> | -t <table>   (mutually exclusive)
       -m a,b,c (projection) · -n N · --offset N · --start <ms> · --end <ms> (inclusive)
+      --tag-filter C OP V · --tag-between C L U · --tag-not-between C L U (table TAG predicates)
       --seed N · --no-header · --model tree|table (else auto)
 applies: -m → schema/head/cat/sample · -d/-t → row cmds/schema/stats/count · --offset ∉ sample
+         tag filters → head/cat/sample table model; OP=eq|neq|lt|lteq|gt|gteq|regexp|not-regexp
 json=NDJSON (num/bool bare, else quoted, null→null) · csv=RFC4180 · ts=raw epoch ms
 exit: 0 ok · 1 usage · 2 file open/corrupt · 3 query/runtime
 ```
@@ -67,6 +69,7 @@ exit: 0 ok · 1 usage · 2 file open/corrupt · 3 query/runtime
 ```sh
 B=cpp/build/Debug/bin/tsfile-cli
 $B meta data.tsfile; $B count -t table1 -f tsv data.tsfile
+$B cat -t table1 --tag-filter device eq dev_1 -m temp -f tsv data.tsfile
 $B cat -m temp --start 1700000000000 -f csv data.tsfile 2>/dev/null | head
 ```
 

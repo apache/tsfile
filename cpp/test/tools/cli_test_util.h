@@ -99,6 +99,51 @@ inline std::string write_table_fixture() {
     return out_path;
 }
 
+inline std::string write_tag_filter_fixture() {
+    storage::libtsfile_init();
+    std::string out_path =
+        unique_temp_path("tsfile_cli_tag_filter_fixture", ".tsfile");
+    std::string table_name = "t1";
+
+    storage::WriteFile file;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    file.create(out_path, flags, 0666);
+
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::INT64, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+        });
+
+    auto* writer = new storage::TsFileTableWriter(&file, schema);
+    storage::Tablet tablet(table_name, {"id1", "s1"},
+                           {common::STRING, common::INT64},
+                           {common::ColumnCategory::TAG,
+                            common::ColumnCategory::FIELD},
+                           10);
+
+    const char* tags[] = {"dev_a", "dev_b", "dev_b", "dev_c"};
+    for (int row = 0; row < 4; ++row) {
+        tablet.add_timestamp(row, static_cast<int64_t>(row));
+        tablet.add_value(row, "id1", tags[row]);
+        tablet.add_value(row, "s1", static_cast<int64_t>((row + 1) * 10));
+    }
+
+    writer->write_table(tablet);
+    writer->flush();
+    writer->close();
+
+    delete writer;
+    delete schema;
+    return out_path;
+}
+
 }  // namespace tsfile_cli_test
 
 #endif  // TSFILE_CLI_TEST_UTIL_H

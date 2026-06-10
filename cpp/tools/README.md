@@ -119,6 +119,7 @@ Shared options:
 | `-n, --limit N` / `--offset N` | Max rows / rows to skip (`head`, `cat`; `--offset` not valid for `sample`) |
 | `--start <ms>` / `--end <ms>` | Inclusive epoch-millisecond time range (`head`, `cat`, `sample`) |
 | `--seed N` | Reproducible sampling seed (`sample` only) |
+| `--tag-filter C OP V` / `--tag-between C L U` / `--tag-not-between C L U` | Table TAG predicate for `head`, `cat`, `sample`; `OP` is `eq`, `neq`, `lt`, `lteq`, `gt`, `gteq`, `regexp`, or `not-regexp` |
 | `--no-header` | Omit the header row |
 | `--model tree\|table` | Force the model (otherwise auto-detected) |
 
@@ -130,6 +131,7 @@ BIN=cpp/build/Debug/bin/tsfile-cli
 $BIN ls -f tsv data.tsfile                          # list tables / devices
 $BIN meta data.tsfile                               # quick file overview
 $BIN count -t table1 -f tsv data.tsfile             # row counts, no page scan
+$BIN cat -t table1 --tag-filter device eq dev_1 -m temp -f tsv data.tsfile
 $BIN cat -m temp,humidity --start 1700000000000 -f csv data.tsfile | head
 $BIN sample -m temp -n 20 --seed 42 -f json data.tsfile | jq .
 ```

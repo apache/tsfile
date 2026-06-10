@@ -29,6 +29,7 @@
 #include "common/device_id.h"
 #include "common/schema.h"
 #include "format/result_set_format.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
@@ -45,6 +46,70 @@ int to_reader_row_bound(long long value) {
 }
 
 }  // namespace
+
+std::unique_ptr<storage::Filter> build_table_tag_filter(
+    const ParsedArgs& args, storage::TsFileReader& reader,
+    const std::string& table_name, std::ostream& err) {
+    if (!args.has_tag_filter) {
+        return std::unique_ptr<storage::Filter>();
+    }
+    auto schema = reader.get_table_schema(table_name);
+    if (!schema) {
+        err << "Error: no schema found for table " << table_name << "\n";
+        return std::unique_ptr<storage::Filter>();
+    }
+
+    storage::TagFilterBuilder builder(schema.get());
+    storage::Filter* filter = nullptr;
+    switch (args.tag_filter_op) {
+        case ParsedArgs::TagFilterOp::kEq:
+            filter = builder.eq(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kNeq:
+            filter = builder.neq(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kLt:
+            filter = builder.lt(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kLteq:
+            filter =
+                builder.lteq(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kGt:
+            filter = builder.gt(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kGteq:
+            filter =
+                builder.gteq(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kRegexp:
+            filter =
+                builder.reg_exp(args.tag_filter_column, args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kNotRegexp:
+            filter = builder.not_reg_exp(args.tag_filter_column,
+                                         args.tag_filter_value);
+            break;
+        case ParsedArgs::TagFilterOp::kBetween:
+            filter = builder.between_and(args.tag_filter_column,
+                                         args.tag_filter_value,
+                                         args.tag_filter_value2);
+            break;
+        case ParsedArgs::TagFilterOp::kNotBetween:
+            filter = builder.not_between_and(args.tag_filter_column,
+                                             args.tag_filter_value,
+                                             args.tag_filter_value2);
+            break;
+        case ParsedArgs::TagFilterOp::kNone:
+            break;
+    }
+    if (filter == nullptr) {
+        err << "Error: invalid tag filter column '" << args.tag_filter_column
+            << "' for table " << table_name << "\n";
+        return std::unique_ptr<storage::Filter>();
+    }
+    return std::unique_ptr<storage::Filter>(filter);
+}
 
 std::vector<std::string> collect_tree_query_paths(
     const ParsedArgs& args, storage::TsFileReader& reader) {
@@ -106,6 +171,7 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     storage::ResultSet* rs = nullptr;
     int qret = 0;
     const bool push_down = can_push_down_row_window(args, offset, limit);
+    std::unique_ptr<storage::Filter> tag_filter;
 
     if (is_table_model(args, reader)) {
         std::string table_name = args.table;
@@ -124,14 +190,24 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                 cols = ts->get_measurement_names();
             }
         }
+        tag_filter = build_table_tag_filter(args, reader, table_name, err);
+        if (args.has_tag_filter && tag_filter == nullptr) {
+            return kExitUsage;
+        }
         if (push_down) {
             qret = reader.queryByRow(table_name, cols,
                                      to_reader_row_bound(offset),
-                                     to_reader_row_bound(limit), rs);
+                                     to_reader_row_bound(limit), rs,
+                                     tag_filter.get());
         } else {
-            qret = reader.query(table_name, cols, start, end, rs);
+            qret = reader.query(table_name, cols, start, end, rs,
+                                tag_filter.get());
         }
     } else {
+        if (args.has_tag_filter) {
+            err << "Error: tag filter flags are only valid for table model\n";
+            return kExitUsage;
+        }
         std::vector<std::string> paths = collect_tree_query_paths(args, reader);
         if (paths.empty()) {
             err << "Error: no time series found\n";

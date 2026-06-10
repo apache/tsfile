@@ -34,6 +34,11 @@ struct Fixture {
     ~Fixture() { std::remove(path.c_str()); }
 };
 
+struct TagFilterFixture {
+    std::string path = tsfile_cli_test::write_tag_filter_fixture();
+    ~TagFilterFixture() { std::remove(path.c_str()); }
+};
+
 size_t count_lines(const std::string& s) {
     size_t n = 0;
     for (char c : s) {
@@ -178,6 +183,55 @@ TEST(CliE2E, CatAppliesOffsetAfterTimeRange) {
         out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
+}
+
+TEST(CliE2E, CatFiltersRowsByTagEq) {
+    TagFilterFixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--tag-filter", "id1", "eq", "dev_b", "-f",
+         "tsv", f.path},
+        out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n");
+}
+
+TEST(CliE2E, HeadFiltersRowsByTagBetween) {
+    TagFilterFixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"head", "-m", "s1", "--tag-between", "id1", "dev_b", "dev_c", "-n",
+         "10", "-f", "tsv", f.path},
+        out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n3\t40\n");
+}
+
+TEST(CliE2E, SampleFiltersRowsByTagEq) {
+    TagFilterFixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"sample", "-m", "s1", "--tag-filter", "id1", "eq", "dev_b", "-n",
+         "10", "--seed", "1", "-f", "tsv", f.path},
+        out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n");
+}
+
+TEST(CliE2E, TagFilterRejectsFieldColumn) {
+    TagFilterFixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"cat", "-m", "s1", "--tag-filter", "s1", "eq", "20", "-f", "tsv",
+         f.path},
+        out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("invalid tag filter column"), std::string::npos)
+        << err.str();
 }
 
 TEST(CliE2E, CatJsonIsNdjson) {
