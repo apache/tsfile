@@ -181,6 +181,39 @@ TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
     EXPECT_NE(out.str().find("total\t\t"), std::string::npos);
 }
 
+TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
+    Fixture f;
+
+    std::ostringstream schema_out;
+    std::ostringstream schema_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"schema", "-t", "TABLE1", "-f", "tsv",
+                                   f.path},
+                                  schema_out, schema_err),
+              0);
+    EXPECT_NE(schema_out.str().find("table1\ts1\tINT64"), std::string::npos)
+        << schema_out.str();
+
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"count", "-t", "TABLE1", "-f", "tsv",
+                                   f.path},
+                                  count_out, count_err),
+              0);
+    EXPECT_NE(count_out.str().find("table1.id1_field_1.id2_field_2\ts1\t5"),
+              std::string::npos)
+        << count_out.str();
+
+    std::ostringstream stats_out;
+    std::ostringstream stats_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"stats", "-t", "TABLE1", "-f", "tsv",
+                                   f.path},
+                                  stats_out, stats_err),
+              0);
+    EXPECT_NE(stats_out.str().find("table1.id1_field_1.id2_field_2\ts1\t5"),
+              std::string::npos)
+        << stats_out.str();
+}
+
 TEST(CliE2E, SampleIsReproducibleWithSeed) {
     Fixture f;
     std::ostringstream out1;

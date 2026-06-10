@@ -27,6 +27,7 @@
 #include "commands/commands.h"
 #include "common/statistic.h"
 #include "reader/tsfile_reader.h"
+#include "utils/storage_utils.h"
 
 namespace tsfile_cli {
 namespace {
@@ -138,6 +139,7 @@ StatisticCells statistic_value_cells(storage::Statistic* st) {
 std::vector<SeriesStatRow> collect_series_stats(const ParsedArgs& args,
                                                 storage::TsFileReader& reader) {
     std::vector<SeriesStatRow> rows;
+    const std::string table_filter = storage::to_lower(args.table);
     storage::DeviceTimeseriesMetadataMap meta =
         reader.get_timeseries_metadata();
     for (auto& kv : meta) {
@@ -145,8 +147,8 @@ std::vector<SeriesStatRow> collect_series_stats(const ParsedArgs& args,
         if (!args.device.empty() && target != args.device) {
             continue;
         }
-        if (!args.table.empty() && kv.first &&
-            kv.first->get_table_name() != args.table) {
+        if (!table_filter.empty() && kv.first &&
+            kv.first->get_table_name() != table_filter) {
             continue;
         }
         for (auto& ts : kv.second) {
