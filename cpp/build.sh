@@ -21,6 +21,7 @@
 build_type=Release
 build_test=0
 build_bench=0
+do_install=0
 use_cpp11=1
 enable_cov=0
 debug_se=0
@@ -39,10 +40,37 @@ get_key_value() {
     echo "${1#*=}"
 }
 
+usage()
+{
+  cat <<EOF
+Usage: bash build.sh [install] [options]
+
+Commands:
+  install                Run make install after a successful build.
+
+Options:
+  -t=<type>, -t <type>   Build type: Debug, Release, RelWithDebInfo, MinSizeRel.
+  -a=<ON|OFF>            Enable or disable AddressSanitizer.
+  -c=<ON|OFF>            Enable or disable code coverage.
+  --enable-antlr4=<ON|OFF>
+  --disable-antlr4
+  --enable-snappy=<ON|OFF>
+  --disable-snappy
+  --enable-lz4=<ON|OFF>
+  --disable-lz4
+  --enable-lzokay=<ON|OFF>
+  --disable-lzokay
+  --enable-zlib=<ON|OFF>
+  --disable-zlib
+  -h, --help             Show this help message.
+EOF
+}
+
 function print_config()
 {
   echo "build_type=$build_type"
   echo "build_test=$build_test"
+  echo "do_install=$do_install"
   echo "use_cpp11=$use_cpp11"
   echo "enable_cov=$enable_cov"
   echo "enable_asan=$enable_asan"
@@ -68,6 +96,8 @@ parse_options()
       do_clean=1;;
     run_cov)
       run_cov_only=1;;
+    install | --install)
+      do_install=1;;
     -t=*)
       build_type=$(get_key_value "$1");;
     -t)
@@ -103,18 +133,19 @@ parse_options()
       enable_lzokay=OFF;;
     --disable-zlib)
       enable_zlib=OFF;;
-    #-h | --help)
-    #  usage
-    #  exit 0;;
-    #*)
-    #  echo "Unknown option '$1'"
-    #  exit 1;;
+    -h | --help)
+      usage
+      exit 0;;
+    *)
+      echo "Unknown option '$1'"
+      usage
+      exit 1;;
     esac
     shift
   done
 }
 
-parse_options $*
+parse_options "$@"
 print_config
 
 if [[ ${run_cov_only} -eq 1 ]]
@@ -171,4 +202,9 @@ cmake ../../                           \
   -DENABLE_ZLIB=$enable_zlib
 
 VERBOSE=1 make
-VERBOSE=1 make install
+if [ ${do_install} -eq 1 ]
+then
+  VERBOSE=1 make install
+else
+  echo "Skip install. Pass 'install' to run 'make install'."
+fi

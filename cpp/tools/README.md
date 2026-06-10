@@ -44,6 +44,7 @@ Choose any one of the following.
 ```bash
 bash build.sh -t=Debug      # -> cpp/build/Debug/bin/tsfile-cli
 bash build.sh               # Release (default) -> cpp/build/Release/bin/tsfile-cli
+bash build.sh install       # Release build, then run make install
 ```
 
 **2. Maven (builds the whole C++ module).** From the repository root:
@@ -77,9 +78,10 @@ Verify the binary:
 ```
 
 The executable links the `tsfile` shared library built alongside it. To run it from
-anywhere, either run it in place by its full path, or use CMake's install step
-(`cmake --install .` / `make install`), which installs the binary to `<prefix>/bin` and
-`libtsfile` to `<prefix>/lib`.
+anywhere, either run it in place by its full path, or explicitly install it with
+`bash build.sh install`, `cmake --install .`, or `make install`. The install step places
+the binary under `<prefix>/bin` and `libtsfile` under `<prefix>/lib`. The build script
+does not install by default.
 
 ## Usage
 
