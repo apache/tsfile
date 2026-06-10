@@ -93,8 +93,8 @@ TEST(ParseArgsTest, LimitOffsetAndTimeRange) {
 }
 
 TEST(ParseArgsTest, TagFilterParsed) {
-    auto p = tsfile_cli::parse_args({"cat", "--tag-filter", "id1", "eq",
-                                     "dev_a", "data.tsfile"});
+    auto p = tsfile_cli::parse_args(
+        {"cat", "--tag-filter", "id1", "eq", "dev_a", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_TRUE(p.has_tag_filter);
     EXPECT_EQ(p.tag_filter_op, tsfile_cli::ParsedArgs::TagFilterOp::kEq);
@@ -103,8 +103,8 @@ TEST(ParseArgsTest, TagFilterParsed) {
 }
 
 TEST(ParseArgsTest, TagBetweenParsed) {
-    auto p = tsfile_cli::parse_args({"cat", "--tag-between", "id1", "dev_a",
-                                     "dev_c", "data.tsfile"});
+    auto p = tsfile_cli::parse_args(
+        {"cat", "--tag-between", "id1", "dev_a", "dev_c", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_TRUE(p.has_tag_filter);
     EXPECT_EQ(p.tag_filter_op, tsfile_cli::ParsedArgs::TagFilterOp::kBetween);
@@ -115,8 +115,8 @@ TEST(ParseArgsTest, TagBetweenParsed) {
 
 TEST(ParseArgsTest, DuplicateTagFilterIsError) {
     auto p = tsfile_cli::parse_args({"cat", "--tag-filter", "id1", "eq",
-                                     "dev_a", "--tag-between", "id1", "a",
-                                     "z", "data.tsfile"});
+                                     "dev_a", "--tag-between", "id1", "a", "z",
+                                     "data.tsfile"});
     EXPECT_FALSE(p.error.empty());
 }
 

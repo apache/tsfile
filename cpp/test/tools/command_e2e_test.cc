@@ -155,8 +155,7 @@ TEST(CliE2E, HeadPushesDownOffsetAndLimit) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
-        {"head", "-m", "s1", "--offset", "1", "-n", "3", "-f", "tsv",
-         f.path},
+        {"head", "-m", "s1", "--offset", "1", "-n", "3", "-f", "tsv", f.path},
         out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "time\ts1\n1\t10\n2\t20\n3\t30\n");
@@ -177,10 +176,10 @@ TEST(CliE2E, CatAppliesOffsetAfterTimeRange) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"cat", "-m", "s1", "--start", "1", "--end", "4", "--offset", "1",
-         "-n", "2", "-f", "tsv", f.path},
-        out, err);
+    int code =
+        tsfile_cli::run_cli({"cat", "-m", "s1", "--start", "1", "--end", "4",
+                             "--offset", "1", "-n", "2", "-f", "tsv", f.path},
+                            out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "time\ts1\n2\t20\n3\t30\n");
 }
@@ -189,10 +188,9 @@ TEST(CliE2E, CatFiltersRowsByTagEq) {
     TagFilterFixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"cat", "-m", "s1", "--tag-filter", "id1", "eq", "dev_b", "-f",
-         "tsv", f.path},
-        out, err);
+    int code = tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                    "eq", "dev_b", "-f", "tsv", f.path},
+                                   out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n");
 }
@@ -201,10 +199,10 @@ TEST(CliE2E, HeadFiltersRowsByTagBetween) {
     TagFilterFixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"head", "-m", "s1", "--tag-between", "id1", "dev_b", "dev_c", "-n",
-         "10", "-f", "tsv", f.path},
-        out, err);
+    int code =
+        tsfile_cli::run_cli({"head", "-m", "s1", "--tag-between", "id1",
+                             "dev_b", "dev_c", "-n", "10", "-f", "tsv", f.path},
+                            out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n3\t40\n");
 }
@@ -214,8 +212,8 @@ TEST(CliE2E, SampleFiltersRowsByTagEq) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
-        {"sample", "-m", "s1", "--tag-filter", "id1", "eq", "dev_b", "-n",
-         "10", "--seed", "1", "-f", "tsv", f.path},
+        {"sample", "-m", "s1", "--tag-filter", "id1", "eq", "dev_b", "-n", "10",
+         "--seed", "1", "-f", "tsv", f.path},
         out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_EQ(out.str(), "time\ts1\n1\t20\n2\t30\n");
@@ -225,10 +223,9 @@ TEST(CliE2E, TagFilterRejectsFieldColumn) {
     TagFilterFixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"cat", "-m", "s1", "--tag-filter", "s1", "eq", "20", "-f", "tsv",
-         f.path},
-        out, err);
+    int code = tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "s1",
+                                    "eq", "20", "-f", "tsv", f.path},
+                                   out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("invalid tag filter column"), std::string::npos)
         << err.str();
@@ -275,29 +272,29 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
 
     std::ostringstream schema_out;
     std::ostringstream schema_err;
-    EXPECT_EQ(tsfile_cli::run_cli({"schema", "-t", "TABLE1", "-f", "tsv",
-                                   f.path},
-                                  schema_out, schema_err),
-              0);
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"schema", "-t", "TABLE1", "-f", "tsv", f.path},
+                            schema_out, schema_err),
+        0);
     EXPECT_NE(schema_out.str().find("table1\ts1\tINT64"), std::string::npos)
         << schema_out.str();
 
     std::ostringstream count_out;
     std::ostringstream count_err;
-    EXPECT_EQ(tsfile_cli::run_cli({"count", "-t", "TABLE1", "-f", "tsv",
-                                   f.path},
-                                  count_out, count_err),
-              0);
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"count", "-t", "TABLE1", "-f", "tsv", f.path},
+                            count_out, count_err),
+        0);
     EXPECT_NE(count_out.str().find("table1.id1_field_1.id2_field_2\ts1\t5"),
               std::string::npos)
         << count_out.str();
 
     std::ostringstream stats_out;
     std::ostringstream stats_err;
-    EXPECT_EQ(tsfile_cli::run_cli({"stats", "-t", "TABLE1", "-f", "tsv",
-                                   f.path},
-                                  stats_out, stats_err),
-              0);
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"stats", "-t", "TABLE1", "-f", "tsv", f.path},
+                            stats_out, stats_err),
+        0);
     EXPECT_NE(stats_out.str().find("table1.id1_field_1.id2_field_2\ts1\t5"),
               std::string::npos)
         << stats_out.str();

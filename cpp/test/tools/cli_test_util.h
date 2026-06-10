@@ -122,11 +122,9 @@ inline std::string write_tag_filter_fixture() {
         });
 
     auto* writer = new storage::TsFileTableWriter(&file, schema);
-    storage::Tablet tablet(table_name, {"id1", "s1"},
-                           {common::STRING, common::INT64},
-                           {common::ColumnCategory::TAG,
-                            common::ColumnCategory::FIELD},
-                           10);
+    storage::Tablet tablet(
+        table_name, {"id1", "s1"}, {common::STRING, common::INT64},
+        {common::ColumnCategory::TAG, common::ColumnCategory::FIELD}, 10);
 
     const char* tags[] = {"dev_a", "dev_b", "dev_b", "dev_c"};
     for (int row = 0; row < 4; ++row) {
