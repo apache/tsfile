@@ -26,9 +26,15 @@ add_library(tsfile_cli_obj OBJECT ${TSFILE_CLI_SRCS})
 # Tool-own headers (cli/, commands/, format/) resolve from this directory;
 # library headers come from the staged include tree like the rest of the build.
 target_include_directories(tsfile_cli_obj PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/tools
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE})
+
+# Library headers are compiled from the staged include tree
+# (LIBRARY_INCLUDE_DIR), which is populated by the copy_* targets that
+# tsfile depends on transitively. Without this edge a clean parallel build
+# can compile these sources before the headers exist.
+add_dependencies(tsfile_cli_obj tsfile)
 
 if (ENABLE_ANTLR4)
     target_include_directories(tsfile_cli_obj PUBLIC
@@ -39,7 +45,7 @@ target_compile_definitions(tsfile_cli_obj PRIVATE
         TSFILE_CLI_VERSION="${TsFile_CPP_VERSION}")
 
 add_executable(tsfile_cli tools_main.cc $<TARGET_OBJECTS:tsfile_cli_obj>)
-target_include_directories(tsfile_cli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tsfile_cli PRIVATE ${CMAKE_SOURCE_DIR}/tools)
 target_link_libraries(tsfile_cli tsfile)
 set_target_properties(tsfile_cli PROPERTIES
         OUTPUT_NAME tsfile-cli

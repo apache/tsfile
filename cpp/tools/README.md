@@ -103,7 +103,7 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 | `stats` | Per-series `count, start_time, end_time, min, max, first, last, sum` |
 | `count` | Per-series row counts plus a `total` row (from statistics, no page scan) |
 | `head` | First N rows (default 10; use `-n`) |
-| `cat` | All matching rows, streamed |
+| `cat` | All matching rows, streamed (`table` format buffers to align columns) |
 | `sample` | Reproducible reservoir sample (default 10; `-n`, `--seed`) |
 
 The metadata commands (`ls` / `schema` / `meta` / `stats` / `count`) answer most questions
@@ -115,7 +115,7 @@ Shared options:
 |---|---|
 | `-f, --format csv\|tsv\|json\|table` | Output format; defaults to `table` on a TTY, `tsv` when piped |
 | `-d, --device <id>` / `-t, --table <name>` | Scope to one device / table (mutually exclusive) |
-| `-m, --measurements a,b,c` | Column projection (`schema`, `head`, `cat`, `sample`) |
+| `-m, --measurements a,b,c` | Column projection (`schema`, `stats`, `count`, `head`, `cat`, `sample`) |
 | `-n, --limit N` / `--offset N` | Max rows / rows to skip (`head`, `cat`; `--offset` not valid for `sample`) |
 | `--start <ms>` / `--end <ms>` | Inclusive epoch-millisecond time range (`head`, `cat`, `sample`) |
 | `--seed N` | Reproducible sampling seed (`sample` only) |
@@ -124,7 +124,9 @@ Shared options:
 | `--model tree\|table` | Force the model (otherwise auto-detected) |
 
 `json` output is NDJSON (one object per line; numbers/booleans bare, other values quoted,
-nulls as `null`). CSV output follows RFC 4180. Timestamps are raw epoch milliseconds.
+nulls as `null`; non-finite floats — NaN/Inf — become `null`). CSV output follows RFC 4180.
+Timestamps are raw epoch milliseconds. The `table` format buffers all rows in memory to
+align columns, so prefer `csv`/`tsv`/`json` when dumping large files.
 
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli

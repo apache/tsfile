@@ -47,12 +47,12 @@ Single pipe-friendly C++ binary to inspect **and** import `.tsfile` (TsFile's an
 | `stats` | per-series `count,start,end,min,max,first,last,sum` | no |
 | `count` | per-series counts + `total` row | no |
 | `head` | first N rows (default 10, `-n`) | yes |
-| `cat` | all matching rows (streamed) | yes |
+| `cat` | all matching rows (streamed; `table` format buffers) | yes |
 | `sample` | reservoir sample (default 10, `-n` + `--seed`) | yes |
 
 Prefer no-scan verbs (`ls/schema/meta/stats/count`) — cheap and never hit the page-decode caveat.
 
-Table model + row verbs (`head/cat/sample/count`): without `-t`, only the **first** table is queried. Pass `-t <table>` to target a specific one.
+Table model + row verbs (`head/cat/sample`): without `-t`, only the **first** table is queried. Pass `-t <table>` to target a specific one (`count` covers all tables).
 
 ```
 opts: -f csv|tsv|json|table  (default TTY→table, pipe→tsv)
@@ -60,9 +60,10 @@ opts: -f csv|tsv|json|table  (default TTY→table, pipe→tsv)
       -m a,b,c (projection) · -n N · --offset N · --start <ms> · --end <ms> (inclusive)
       --tag-filter C OP V · --tag-between C L U · --tag-not-between C L U (table TAG predicates)
       --seed N · --no-header · --model tree|table (else auto)
-applies: -m → schema/head/cat/sample · -d/-t → row cmds/schema/stats/count · --offset ∉ sample
+applies: -m → schema/stats/count/head/cat/sample · -d/-t → row cmds/schema/stats/count
+         (-d needs tree model, -t needs table model in head/cat/sample/schema) · --offset ∉ sample
          tag filters → head/cat/sample table model; OP=eq|neq|lt|lteq|gt|gteq|regexp|not-regexp
-json=NDJSON (num/bool bare, else quoted, null→null) · csv=RFC4180 · ts=raw epoch ms
+json=NDJSON (num/bool bare, else quoted, null→null, NaN/Inf→null) · csv=RFC4180 · ts=raw epoch ms
 exit: 0 ok · 1 usage · 2 file open/corrupt · 3 query/runtime
 ```
 
