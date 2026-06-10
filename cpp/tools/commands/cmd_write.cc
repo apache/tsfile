@@ -281,8 +281,10 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
-    if (file.create(args.output, flags, 0666) != 0) {
-        err << "Error: cannot create output: " << args.output << "\n";
+    int cret = file.create(args.output, flags, 0666);
+    if (cret != 0) {
+        err << "Error: cannot create output " << args.output << ": "
+            << error_code_message(cret) << " (code " << cret << ")\n";
         return kExitFile;
     }
     auto* schema = new storage::TableSchema(args.table, col_schemas);

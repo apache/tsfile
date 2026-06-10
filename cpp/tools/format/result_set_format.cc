@@ -19,6 +19,7 @@
 
 #include "format/result_set_format.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
 #include <iomanip>
@@ -153,7 +154,10 @@ int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
     }
 
     std::vector<BufferedRow> reservoir;
-    reservoir.reserve(static_cast<size_t>(limit));
+    // Cap the pre-allocation: limit is user input and a huge -n would make
+    // reserve() throw std::length_error before any row is read. The vector
+    // still grows up to `limit` as rows actually arrive.
+    reservoir.reserve(static_cast<size_t>(std::min<long long>(limit, 4096)));
     std::mt19937_64 rng(seed);
     bool has_next = false;
     int code = common::E_OK;

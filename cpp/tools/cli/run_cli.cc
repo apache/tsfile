@@ -141,9 +141,34 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
         err << "Error: --header-match cannot be combined with --no-header\n";
         return false;
     }
-    if (!p.measurements.empty() || !p.device.empty() || p.has_start ||
-        p.has_end || p.has_seed || p.limit != -1 || p.offset != 0) {
-        err << "Error: read-only flags are not valid for write\n";
+    // Name the offending flag so the user does not have to guess which of
+    // the read-only options triggered the rejection.
+    if (!p.measurements.empty()) {
+        err << "Error: -m/--measurements is not valid for write\n";
+        return false;
+    }
+    if (!p.device.empty()) {
+        err << "Error: -d/--device is not valid for write\n";
+        return false;
+    }
+    if (p.has_start || p.has_end) {
+        err << "Error: --start/--end are not valid for write\n";
+        return false;
+    }
+    if (p.has_seed) {
+        err << "Error: --seed is not valid for write\n";
+        return false;
+    }
+    if (p.limit != -1) {
+        err << "Error: -n/--limit is not valid for write\n";
+        return false;
+    }
+    if (p.offset != 0) {
+        err << "Error: --offset is not valid for write\n";
+        return false;
+    }
+    if (!p.model.empty()) {
+        err << "Error: --model is not valid for write\n";
         return false;
     }
     return true;
@@ -176,6 +201,10 @@ bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
     }
     if (!is_row && p.limit != -1) {
         err << "Error: -n/--limit is only valid for head/cat/sample\n";
+        return false;
+    }
+    if (!is_row && p.offset != 0) {
+        err << "Error: --offset is only valid for head/cat\n";
         return false;
     }
     if (!is_row && (p.has_start || p.has_end)) {
@@ -253,8 +282,28 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     storage::TsFileReader reader;
     int open_ret = reader.open(p.file);
     if (open_ret != 0) {
-        err << "Error: cannot open or corrupted file: " << p.file << "\n";
+        err << "Error: cannot open " << p.file << ": "
+            << error_code_message(open_ret) << " (code " << open_ret << ")\n";
         return kExitFile;
+    }
+
+    // head/cat/sample/schema dispatch on the data model and would silently
+    // ignore the scope flag of the other model; reject that instead.
+    if (p.command == "head" || p.command == "cat" || p.command == "sample" ||
+        p.command == "schema") {
+        const bool table_model = is_table_model(p, reader);
+        if (table_model && !p.device.empty()) {
+            err << "Error: -d/--device does not apply to the table model; "
+                   "use -t/--table (or force --model tree)\n";
+            reader.close();
+            return kExitUsage;
+        }
+        if (!table_model && !p.table.empty()) {
+            err << "Error: -t/--table does not apply to the tree model; "
+                   "use -d/--device (or force --model table)\n";
+            reader.close();
+            return kExitUsage;
+        }
     }
 
     bool stdout_tty = TSFILE_ISATTY(TSFILE_FILENO(stdout)) != 0;

@@ -19,6 +19,7 @@
 
 #include "cli/cli_args.h"
 
+#include <cerrno>
 #include <cstdlib>
 #include <sstream>
 
@@ -42,8 +43,9 @@ bool parse_ll(const std::string& s, long long& out) {
         return false;
     }
     char* endp = nullptr;
+    errno = 0;
     long long v = std::strtoll(s.c_str(), &endp, 10);
-    if (endp == nullptr || *endp != '\0') {
+    if (endp == nullptr || *endp != '\0' || errno == ERANGE) {
         return false;
     }
     out = v;

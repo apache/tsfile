@@ -222,6 +222,19 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
+namespace {
+
+// FLOAT/DOUBLE cells render non-finite values as nan/inf tokens, which have
+// no JSON representation; finite numbers never contain these letters.
+bool json_nonfinite(common::TSDataType t, const std::string& cell) {
+    if (t != common::FLOAT && t != common::DOUBLE) {
+        return false;
+    }
+    return cell.find_first_of("nNiI") != std::string::npos;
+}
+
+}  // namespace
+
 RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
                      std::vector<std::string> header,
                      std::vector<common::TSDataType> types, bool no_header)
@@ -287,7 +300,11 @@ void RowWriter::write(const std::vector<std::string>& cells,
             if (i < is_null.size() && is_null[i]) {
                 out_ << "null";
             } else if (emits_json_bare(i)) {
-                out_ << (i < cells.size() ? cells[i] : "null");
+                if (i >= cells.size() || json_nonfinite(types_[i], cells[i])) {
+                    out_ << "null";  // NaN/Inf: match JSON serializer practice
+                } else {
+                    out_ << cells[i];
+                }
             } else {
                 out_ << "\"" << json_escape(i < cells.size() ? cells[i] : "")
                      << "\"";
