@@ -30,6 +30,12 @@ target_include_directories(tsfile_cli_obj PUBLIC
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE})
 
+# Library headers are compiled from the staged include tree
+# (LIBRARY_INCLUDE_DIR), which is populated by the copy_* targets that
+# tsfile depends on transitively. Without this edge a clean parallel build
+# can compile these sources before the headers exist.
+add_dependencies(tsfile_cli_obj tsfile)
+
 if (ENABLE_ANTLR4)
     target_include_directories(tsfile_cli_obj PUBLIC
             ${PROJECT_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)

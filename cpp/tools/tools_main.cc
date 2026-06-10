@@ -17,13 +17,21 @@
  * under the License.
  */
 
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "cli/exit_codes.h"
 #include "cli/run_cli.h"
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    return tsfile_cli::run_cli(args, std::cout, std::cerr);
+    try {
+        return tsfile_cli::run_cli(args, std::cout, std::cerr);
+    } catch (const std::exception& e) {
+        // Last-resort net (e.g. std::bad_alloc): report instead of aborting.
+        std::cerr << "Error: " << e.what() << "\n";
+        return tsfile_cli::kExitRuntime;
+    }
 }
