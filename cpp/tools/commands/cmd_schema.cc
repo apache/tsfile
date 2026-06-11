@@ -34,13 +34,14 @@ namespace {
 
 void write_table_schema_rows(const ParsedArgs& args,
                              storage::TsFileReader& reader, RowWriter& w) {
-    const std::string table_filter = storage::to_lower(args.table);
+    const std::string target_table_name = storage::to_lower(args.table);
     auto schemas = reader.get_all_table_schemas();
     for (auto& schema : schemas) {
         if (!schema) {
             continue;
         }
-        if (!table_filter.empty() && schema->get_table_name() != table_filter) {
+        if (!target_table_name.empty() &&
+            schema->get_table_name() != target_table_name) {
             continue;
         }
         for (const auto& ms : schema->get_measurement_schemas()) {

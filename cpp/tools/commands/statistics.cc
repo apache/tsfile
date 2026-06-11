@@ -139,7 +139,7 @@ StatisticCells statistic_value_cells(storage::Statistic* st) {
 std::vector<SeriesStatRow> collect_series_stats(const ParsedArgs& args,
                                                 storage::TsFileReader& reader) {
     std::vector<SeriesStatRow> rows;
-    const std::string table_filter = storage::to_lower(args.table);
+    const std::string target_table_name = storage::to_lower(args.table);
     storage::DeviceTimeseriesMetadataMap meta =
         reader.get_timeseries_metadata();
     for (auto& kv : meta) {
@@ -147,8 +147,8 @@ std::vector<SeriesStatRow> collect_series_stats(const ParsedArgs& args,
         if (!args.device.empty() && target != args.device) {
             continue;
         }
-        if (!table_filter.empty() && kv.first &&
-            kv.first->get_table_name() != table_filter) {
+        if (!target_table_name.empty() && kv.first &&
+            kv.first->get_table_name() != target_table_name) {
             continue;
         }
         for (auto& ts : kv.second) {
