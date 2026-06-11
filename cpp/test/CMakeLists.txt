@@ -150,6 +150,7 @@ set(LIB_TSFILE_SDK_DIR ${PROJECT_BINARY_DIR}/lib)
 message("LIB_TSFILE_SDK_DIR: ${LIB_TSFILE_SDK_DIR}")
 
 include_directories(
+        ${CMAKE_CURRENT_SOURCE_DIR}/reader
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE}
 )

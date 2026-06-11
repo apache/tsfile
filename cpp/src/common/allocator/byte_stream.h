@@ -543,6 +543,10 @@ class ByteStream {
 
         Consumer(const ByteStream& bs) : host_(bs) {
             ASSERT(bs.head_.enable_atomic());
+            reset();
+        }
+
+        void reset() {
             cur_ = nullptr;
             read_offset_within_cur_page_ = 0;
             total_end_offset_ = 0;

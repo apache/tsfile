@@ -262,24 +262,51 @@ TEST_F(TsFileWriterTest, RegisterTimeSeries) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
-TEST_F(TsFileWriterTest, WriteMultipleRecords) {
+TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
-    common::TSDataType data_type = common::TSDataType::INT32;
-    common::TSEncoding encoding = common::TSEncoding::PLAIN;
-    common::CompressionType compression_type =
-        common::CompressionType::UNCOMPRESSED;
     tsfile_writer_->register_timeseries(
-        device_path, storage::MeasurementSchema(measurement_name, data_type,
-                                                encoding, compression_type));
+        device_path,
+        storage::MeasurementSchema(measurement_name, common::TSDataType::INT64,
+                                   common::TSEncoding::PLAIN,
+                                   common::CompressionType::UNCOMPRESSED));
 
-    for (int i = 0; i < 50000; ++i) {
-        TsRecord record(1622505600000 + i * 1000, device_path);
-        record.add_point(measurement_name, (int32_t)i);
+    const int64_t start_time = 1622505600000LL;
+    const int row_count = 200000;
+    for (int i = 0; i < row_count; ++i) {
+        TsRecord record(start_time + i * 1000, device_path);
+        record.add_point(measurement_name, static_cast<int64_t>(i));
         ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
-        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        if ((i + 1) % 10000 == 0) {
+            ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        }
     }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<std::string> select_list = {"device1.temperature"};
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(select_list, start_time,
+                           start_time + (row_count - 1) * 1000 + 1, tmp_qds),
+              E_OK);
+    auto* qds = static_cast<QDSWithoutTimeGenerator*>(tmp_qds);
+
+    int64_t read_rows = 0;
+    bool has_next = false;
+    while (true) {
+        ASSERT_EQ(qds->next(has_next), E_OK);
+        if (!has_next) {
+            break;
+        }
+        ASSERT_EQ(qds->get_value<int64_t>(1), start_time + read_rows * 1000);
+        ASSERT_EQ(qds->get_value<int64_t>(2), read_rows);
+        ++read_rows;
+    }
+    ASSERT_EQ(read_rows, row_count);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
 }
 
 #if defined(ENABLE_ZLIB) && defined(ENABLE_SNAPPY) && defined(ENABLE_LZ4) && \

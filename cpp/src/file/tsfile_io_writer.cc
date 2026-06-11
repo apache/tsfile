@@ -891,7 +891,11 @@ int TsFileIOWriter::flush_stream_to_file() {
         }
     }
 
-    write_stream_.purge_prev_pages();
+    if (IS_SUCC(ret)) {
+        file_base_offset_ = file_->get_position();
+        write_stream_.reset();
+        write_stream_consumer_.reset();
+    }
 
     return ret;
 }
