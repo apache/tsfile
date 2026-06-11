@@ -225,6 +225,12 @@ SketchLayout::SketchLayout()
     pa_.init(4096, common::MOD_TSFILE_READER);
 }
 
+SketchLayout::~SketchLayout() {
+    node_by_offset_.clear();
+    metadata_nodes_.clear();
+    footer_.roots.clear();
+}
+
 int SketchLayout::load_file(const std::string& path) {
     path_ = path;
     int ret = file_.open(path_);

@@ -144,6 +144,7 @@ struct FooterSketch {
 class SketchLayout {
    public:
     SketchLayout();
+    ~SketchLayout();
 
     int load_file(const std::string& path);
     int collect_metadata_layout();
