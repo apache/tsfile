@@ -24,6 +24,7 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.TimeRange;
@@ -42,6 +43,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 public class TsFileDeviceIteratorTest {
   private static final String FILE_PATH =
@@ -99,6 +101,37 @@ public class TsFileDeviceIteratorTest {
         previous = next.getLeft();
       }
       Assert.assertEquals(20000, deviceFromIterator);
+    }
+  }
+
+  @Test
+  public void testReadTimeseriesMetadataWithDeviceMetadataIndexNodeOffset() throws IOException {
+    try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
+      registerTableSchema(writer, "table1");
+      generateDevice(writer, "table1", 10);
+      writer.endFile();
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+      TsFileDeviceIterator deviceIterator =
+          reader.getTableDevicesIteratorWithIsAligned("table1", null);
+      Assert.assertTrue(deviceIterator.hasNext());
+      Pair<IDeviceID, Boolean> currentDevice = deviceIterator.next();
+      long[] deviceMetadataIndexNodeOffset = deviceIterator.getCurrentDeviceMeasurementNodeOffset();
+
+      TimeseriesMetadata metadataWithoutOffset =
+          reader.readTimeseriesMetadata(currentDevice.getLeft(), "s1", false);
+      TimeseriesMetadata metadataWithOffset =
+          reader.readTimeseriesMetadata(
+              currentDevice.getLeft(),
+              Optional.of(deviceMetadataIndexNodeOffset),
+              "s1",
+              false,
+              null);
+
+      Assert.assertEquals("s1", metadataWithoutOffset.getMeasurementId());
+      Assert.assertEquals(
+          metadataWithoutOffset.getMeasurementId(), metadataWithOffset.getMeasurementId());
     }
   }
 
