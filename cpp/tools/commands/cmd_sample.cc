@@ -18,6 +18,7 @@
  */
 
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@
 #include "commands/commands.h"
 #include "common/schema.h"
 #include "format/result_set_format.h"
+#include "reader/filter/filter.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
@@ -37,6 +39,7 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
                                      : std::numeric_limits<int64_t>::max();
     storage::ResultSet* rs = nullptr;
     int qret = 0;
+    std::unique_ptr<storage::Filter> tag_filter;
 
     if (is_table_model(args, reader)) {
         std::string table_name = args.table;
@@ -55,8 +58,16 @@ int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
                 cols = ts->get_measurement_names();
             }
         }
-        qret = reader.query(table_name, cols, start, end, rs);
+        tag_filter = build_table_tag_filter(args, reader, table_name, err);
+        if (args.has_tag_filter && tag_filter == nullptr) {
+            return kExitUsage;
+        }
+        qret = reader.query(table_name, cols, start, end, rs, tag_filter.get());
     } else {
+        if (args.has_tag_filter) {
+            err << "Error: tag filter flags are only valid for table model\n";
+            return kExitUsage;
+        }
         std::vector<std::string> paths = collect_tree_query_paths(args, reader);
         if (paths.empty()) {
             err << "Error: no time series found\n";

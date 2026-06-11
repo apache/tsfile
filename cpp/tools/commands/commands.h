@@ -20,6 +20,7 @@
 #ifndef TSFILE_CLI_COMMANDS_H
 #define TSFILE_CLI_COMMANDS_H
 
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "format/output_format.h"
 
 namespace storage {
+class Filter;
 class TsFileReader;
 }  // namespace storage
 
@@ -42,6 +44,10 @@ bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader);
 // args.measurements as a projection filter.
 std::vector<std::string> collect_tree_query_paths(
     const ParsedArgs& args, storage::TsFileReader& reader);
+
+std::unique_ptr<storage::Filter> build_table_tag_filter(
+    const ParsedArgs& args, storage::TsFileReader& reader,
+    const std::string& table_name, std::ostream& err);
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,

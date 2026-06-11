@@ -99,6 +99,12 @@ sudo apt-get install -y cmake make g++ clang-format libuuid-dev
 bash build.sh
 ```
 
+`build.sh` 默认只编译，不执行安装。如果需要安装到 CMake 的安装前缀目录，显式传入 `install` 参数：
+
+```bash
+bash build.sh install
+```
+
 如果你安装了 Maven 工具，也可以运行：
 
 ```bash

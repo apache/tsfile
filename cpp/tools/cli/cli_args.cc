@@ -67,6 +67,29 @@ bool parse_format(const std::string& s, ParsedArgs::Format& out) {
     return true;
 }
 
+bool parse_tag_filter_op(const std::string& s, ParsedArgs::TagFilterOp& out) {
+    if (s == "eq" || s == "=" || s == "==") {
+        out = ParsedArgs::TagFilterOp::kEq;
+    } else if (s == "neq" || s == "ne" || s == "!=") {
+        out = ParsedArgs::TagFilterOp::kNeq;
+    } else if (s == "lt" || s == "<") {
+        out = ParsedArgs::TagFilterOp::kLt;
+    } else if (s == "lteq" || s == "lte" || s == "le" || s == "<=") {
+        out = ParsedArgs::TagFilterOp::kLteq;
+    } else if (s == "gt" || s == ">") {
+        out = ParsedArgs::TagFilterOp::kGt;
+    } else if (s == "gteq" || s == "gte" || s == "ge" || s == ">=") {
+        out = ParsedArgs::TagFilterOp::kGteq;
+    } else if (s == "regexp" || s == "regex" || s == "=~") {
+        out = ParsedArgs::TagFilterOp::kRegexp;
+    } else if (s == "not-regexp" || s == "not-regex" || s == "!~") {
+        out = ParsedArgs::TagFilterOp::kNotRegexp;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 ParsedArgs parse_args(const std::vector<std::string>& args) {
@@ -97,6 +120,17 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             return false;
         }
         dst = args[++i];
+        return true;
+    };
+    auto need_tag_filter_slot = [&](const std::string& flag) -> bool {
+        if (p.has_tag_filter) {
+            p.error = "Only one tag filter predicate is supported";
+            return false;
+        }
+        if (i + 3 >= args.size()) {
+            p.error = "Missing value for " + flag;
+            return false;
+        }
         return true;
     };
 
@@ -180,6 +214,30 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             p.verbose = true;
         } else if (a == "--header-match") {
             p.header_match = true;
+        } else if (a == "--tag-filter") {
+            if (!need_tag_filter_slot(a)) {
+                return p;
+            }
+            p.has_tag_filter = true;
+            p.tag_filter_column = args[++i];
+            std::string op = args[++i];
+            if (!parse_tag_filter_op(op, p.tag_filter_op)) {
+                p.error = "Invalid --tag-filter operator: " + op +
+                          " (use eq|neq|lt|lteq|gt|gteq|regexp|not-regexp)";
+                return p;
+            }
+            p.tag_filter_value = args[++i];
+        } else if (a == "--tag-between" || a == "--tag-not-between") {
+            if (!need_tag_filter_slot(a)) {
+                return p;
+            }
+            p.has_tag_filter = true;
+            p.tag_filter_op = (a == "--tag-between")
+                                  ? ParsedArgs::TagFilterOp::kBetween
+                                  : ParsedArgs::TagFilterOp::kNotBetween;
+            p.tag_filter_column = args[++i];
+            p.tag_filter_value = args[++i];
+            p.tag_filter_value2 = args[++i];
         } else if (a == "--model") {
             if (!need_value(a, val)) {
                 return p;

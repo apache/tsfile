@@ -27,18 +27,21 @@
 #include "commands/commands.h"
 #include "common/schema.h"
 #include "reader/tsfile_reader.h"
+#include "utils/storage_utils.h"
 
 namespace tsfile_cli {
 namespace {
 
 void write_table_schema_rows(const ParsedArgs& args,
                              storage::TsFileReader& reader, RowWriter& w) {
+    const std::string target_table_name = storage::to_lower(args.table);
     auto schemas = reader.get_all_table_schemas();
     for (auto& schema : schemas) {
         if (!schema) {
             continue;
         }
-        if (!args.table.empty() && schema->get_table_name() != args.table) {
+        if (!target_table_name.empty() &&
+            schema->get_table_name() != target_table_name) {
             continue;
         }
         for (const auto& ms : schema->get_measurement_schemas()) {

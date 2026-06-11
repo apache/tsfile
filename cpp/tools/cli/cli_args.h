@@ -28,6 +28,19 @@ namespace tsfile_cli {
 
 struct ParsedArgs {
     enum class Format { kAuto, kCsv, kTsv, kJson, kTable };
+    enum class TagFilterOp {
+        kNone,
+        kEq,
+        kNeq,
+        kLt,
+        kLteq,
+        kGt,
+        kGteq,
+        kRegexp,
+        kNotRegexp,
+        kBetween,
+        kNotBetween,
+    };
 
     std::string command;  // subcommand, e.g. "ls"/"write" (args[0])
     std::string file;     // positional <file.tsfile>; for write, the CSV/TSV
@@ -50,6 +63,11 @@ struct ParsedArgs {
     std::string columns;           // --columns spec for write (name:TYPE:cat,..)
     bool verbose = false;          // -v/--verbose; write progress to stderr
     bool header_match = false;     // --header-match; validate write header row
+    bool has_tag_filter = false;   // --tag-filter/--tag-between was supplied
+    TagFilterOp tag_filter_op = TagFilterOp::kNone;
+    std::string tag_filter_column;  // TAG column name for table row queries
+    std::string tag_filter_value;   // comparison value or BETWEEN lower bound
+    std::string tag_filter_value2;  // BETWEEN upper bound
     bool help = false;             // -h/--help requested
     bool version = false;          // --version requested
     std::string error;             // non-empty if parsing failed (the message)
