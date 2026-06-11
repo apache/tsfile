@@ -70,6 +70,7 @@ int cmd_cat(const ParsedArgs& args, storage::TsFileReader& reader,
 int cmd_sample(const ParsedArgs& args, storage::TsFileReader& reader,
                OutputFormat fmt, std::ostream& out, std::ostream& err);
 int cmd_write(const ParsedArgs& args, std::ostream& out, std::ostream& err);
+int cmd_sketch(const ParsedArgs& args, std::ostream& out, std::ostream& err);
 
 }  // namespace tsfile_cli
 

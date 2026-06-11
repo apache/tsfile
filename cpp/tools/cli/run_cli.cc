@@ -57,6 +57,7 @@ void print_usage(std::ostream& os) {
           "  cat      all rows of a device/table\n"
           "  count    number of rows (per series, plus a total)\n"
           "  sample   deterministic sample rows (use -n and --seed)\n"
+          "  sketch   human-readable file layout/self-check view\n"
           "  write    import CSV/TSV rows into a new table tsfile "
           "(--table, --columns, -o)\n"
           "Options:\n"
@@ -89,9 +90,9 @@ void print_usage(std::ostream& os) {
 }
 
 bool is_known_command(const std::string& c) {
-    static const std::set<std::string> kCmds = {"ls",    "schema", "meta",
-                                                "stats", "head",   "cat",
-                                                "count", "sample", "write"};
+    static const std::set<std::string> kCmds = {
+        "ls",  "schema", "meta",   "stats", "head",
+        "cat", "count",  "sample", "write", "sketch"};
     return kCmds.find(c) != kCmds.end();
 }
 
@@ -188,8 +189,34 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
 bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
     const std::string& c = p.command;
     const bool is_row = (c == "head" || c == "cat" || c == "sample");
-    const bool scoped =
-        is_row || c == "schema" || c == "stats" || c == "count";
+    const bool scoped = is_row || c == "schema" || c == "stats" || c == "count";
+
+    if (c == "sketch") {
+        if (p.format != ParsedArgs::Format::kAuto) {
+            err << "Error: -f/--format is not valid for sketch\n";
+            return false;
+        }
+        if (!p.device.empty()) {
+            err << "Error: -d/--device is not valid for sketch\n";
+            return false;
+        }
+        if (!p.table.empty()) {
+            err << "Error: -t/--table is not valid for sketch\n";
+            return false;
+        }
+        if (!p.measurements.empty()) {
+            err << "Error: -m/--measurements is not valid for sketch\n";
+            return false;
+        }
+        if (p.no_header) {
+            err << "Error: --no-header is not valid for sketch\n";
+            return false;
+        }
+        if (!p.model.empty()) {
+            err << "Error: --model is not valid for sketch\n";
+            return false;
+        }
+    }
 
     if (!p.output.empty()) {
         err << "Error: -o/--output is only valid for write\n";
@@ -299,6 +326,10 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     }
 
     storage::libtsfile_init();
+    if (p.command == "sketch") {
+        return cmd_sketch(p, out, err);
+    }
+
     storage::TsFileReader reader;
     int open_ret = reader.open(p.file);
     if (open_ret != 0) {

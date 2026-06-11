@@ -255,6 +255,41 @@ TEST(CliE2E, MetaReportsFileSummary) {
     EXPECT_NE(out.str().find("\ttable\t"), std::string::npos);
 }
 
+TEST(CliE2E, SketchPrintsHumanReadableLayout) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"sketch", f.path}, out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("TsFile Sketch"), std::string::npos);
+    EXPECT_NE(out.str().find("POSITION|\tCONTENT"), std::string::npos);
+    EXPECT_NE(out.str().find("[magic head] TsFile"), std::string::npos);
+    EXPECT_NE(out.str().find("[ChunkGroup]"), std::string::npos);
+    EXPECT_NE(out.str().find("[Chunk Header]"), std::string::npos);
+    EXPECT_NE(out.str().find("[Page Header]"), std::string::npos);
+    EXPECT_NE(out.str().find("[TimeseriesMetadata]"), std::string::npos);
+    EXPECT_NE(out.str().find("[ChunkMetadata]"), std::string::npos);
+    EXPECT_NE(out.str().find("[TsFileMetadata]"), std::string::npos);
+    EXPECT_NE(out.str().find("[Bloom Filter Size]"), std::string::npos);
+    EXPECT_NE(out.str().find("[Bloom Filter]"), std::string::npos);
+    EXPECT_NE(out.str().find("END of TsFile"), std::string::npos);
+    EXPECT_EQ(out.str().find("[TsFileProperties]"), std::string::npos);
+    EXPECT_NE(out.str().find("IndexOfTimerseriesIndex Tree"),
+              std::string::npos);
+}
+
+TEST(CliE2E, SketchRejectsFormatFlag) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"sketch", "-f", "json", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("-f/--format is not valid for sketch"),
+              std::string::npos)
+        << err.str();
+}
+
 TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
     Fixture f;
     std::ostringstream out;
