@@ -68,6 +68,8 @@ import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
+import org.apache.tsfile.read.query.DeviceMetadataIndexEntriesQueryResult;
+import org.apache.tsfile.read.query.DeviceMetadataIndexNodeOffsetsQueryContext;
 import org.apache.tsfile.read.reader.TsFileInput;
 import org.apache.tsfile.read.reader.page.PageReader;
 import org.apache.tsfile.read.reader.page.TimePageReader;
@@ -721,6 +723,123 @@ public class TsFileSequenceReader implements AutoCloseable {
     return deviceMetadata;
   }
 
+  /**
+   * Find the offset of MetadataIndexNode corresponding to every device to avoid repeated reading of
+   * internal MetadataIndexNode
+   *
+   * @param table table name. ("" or null) for cases with different tables
+   * @param sortedDevices devices should be sorted
+   * @param ioSizeRecorder can be null
+   * @return Each element of the outer array corresponds to the device at this index. The inner
+   *     array size is 2, the first element is the start offset, and the second is the end offset
+   * @throws IOException io error
+   */
+  public DeviceMetadataIndexEntriesQueryResult getDeviceMetadataIndexNodeOffsets(
+      String table, List<IDeviceID> sortedDevices, LongConsumer ioSizeRecorder) throws IOException {
+    DeviceMetadataIndexNodeOffsetsQueryContext context =
+        new DeviceMetadataIndexNodeOffsetsQueryContext(sortedDevices.size(), getAllMetadataSize());
+    if (sortedDevices.isEmpty()) {
+      return context.compact();
+    }
+    readFileMetadata();
+    // for many table
+    if (table == null || table.isEmpty()) {
+      int tableStartIndex = 0;
+      String previousTable = null;
+      for (int i = 0; i < sortedDevices.size(); i++) {
+        String currentTable = sortedDevices.get(i).getTableName();
+        if (i == 0) {
+          previousTable = currentTable;
+          continue;
+        }
+        if (!previousTable.equals(currentTable)) {
+          getDeviceMetadataIndexNodeOffsets(
+              context, sortedDevices, tableStartIndex, i, previousTable, ioSizeRecorder);
+          tableStartIndex = i;
+          previousTable = currentTable;
+        }
+      }
+      // for last table
+      getDeviceMetadataIndexNodeOffsets(
+          context,
+          sortedDevices,
+          tableStartIndex,
+          sortedDevices.size(),
+          previousTable,
+          ioSizeRecorder);
+    } else {
+      getDeviceMetadataIndexNodeOffsets(
+          context, sortedDevices, 0, sortedDevices.size(), table, ioSizeRecorder);
+    }
+    return context.compact();
+  }
+
+  private void getDeviceMetadataIndexNodeOffsets(
+      DeviceMetadataIndexNodeOffsetsQueryContext context,
+      List<IDeviceID> devices,
+      int deviceStartIdx,
+      int deviceEndIdx,
+      String table,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
+    if (tableMetadataIndexNode == null) {
+      return;
+    }
+    getDeviceMetadataIndexNodeOffsets(
+        context, devices, deviceStartIdx, deviceEndIdx, tableMetadataIndexNode, ioSizeRecorder);
+  }
+
+  private void getDeviceMetadataIndexNodeOffsets(
+      DeviceMetadataIndexNodeOffsetsQueryContext context,
+      List<IDeviceID> devices,
+      int deviceStartIdx,
+      int deviceEndIdx,
+      MetadataIndexNode startNode,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    MetadataIndexNodeType metadataIndexNodeType = startNode.getNodeType();
+    boolean exactSearch = metadataIndexNodeType == MetadataIndexNodeType.LEAF_DEVICE;
+    List<Pair<IMetadataIndexEntry, Long>> entries =
+        startNode.getChildIndexEntries(devices.subList(deviceStartIdx, deviceEndIdx), exactSearch);
+    Iterator<Pair<IMetadataIndexEntry, Long>> metadataIndexEntriesIterator = entries.iterator();
+    int startIdxOfChild = deviceStartIdx;
+    Pair<IMetadataIndexEntry, Long> previousPair = null;
+    for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
+      Pair<IMetadataIndexEntry, Long> pair = metadataIndexEntriesIterator.next();
+      if (exactSearch) {
+        if (pair != null) {
+          context.addDeviceMetadataIndexNodeOffset(i, pair.getLeft().getOffset(), pair.getRight());
+        }
+        continue;
+      }
+      if (previousPair == null) {
+        previousPair = pair;
+        continue;
+      }
+      if (previousPair == pair) {
+        continue;
+      }
+      IMetadataIndexEntry entry = previousPair.getLeft();
+      ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight(), ioSizeRecorder);
+      MetadataIndexNode lastNode =
+          MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
+      getDeviceMetadataIndexNodeOffsets(
+          context, devices, startIdxOfChild, i, lastNode, ioSizeRecorder);
+      previousPair = pair;
+      startIdxOfChild = i;
+    }
+    if (exactSearch || previousPair == null) {
+      return;
+    }
+    // for last entry
+    IMetadataIndexEntry entry = previousPair.getLeft();
+    ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight(), ioSizeRecorder);
+    MetadataIndexNode lastNode = MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
+    getDeviceMetadataIndexNodeOffsets(
+        context, devices, startIdxOfChild, deviceEndIdx, lastNode, ioSizeRecorder);
+  }
+
   public TimeseriesMetadata readTimeseriesMetadata(
       IDeviceID device, String measurement, boolean ignoreNotExists) throws IOException {
     return readTimeseriesMetadata(device, measurement, ignoreNotExists, null);
@@ -732,11 +851,31 @@ public class TsFileSequenceReader implements AutoCloseable {
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeConsumer)
       throws IOException {
+    return readTimeseriesMetadata(device, null, measurement, ignoreNotExistDevice, ioSizeConsumer);
+  }
+
+  public TimeseriesMetadata readTimeseriesMetadata(
+      IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
+      String measurement,
+      boolean ignoreNotExistDevice,
+      LongConsumer ioSizeConsumer)
+      throws IOException {
     readFileMetadata(ioSizeConsumer);
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
-    Pair<IMetadataIndexEntry, Long> metadataIndexPair =
-        getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, true, ioSizeConsumer);
+    Pair<IMetadataIndexEntry, Long> metadataIndexPair;
+    if (deviceMetadataIndexNodeOffset == null) {
+      metadataIndexPair =
+          getMetadataAndEndOffsetOfDeviceNode(
+              deviceMetadataIndexNode, device, true, ioSizeConsumer);
+    } else {
+      metadataIndexPair =
+          new Pair<>(
+              new DeviceMetadataIndexEntry(device, deviceMetadataIndexNodeOffset[0]),
+              deviceMetadataIndexNodeOffset[1]);
+    }
+
     if (metadataIndexPair == null) {
       if (ignoreNotExistDevice) {
         return null;
@@ -867,13 +1006,15 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public List<TimeseriesMetadata> readTimeseriesMetadata(
       IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
       String measurement,
       Set<String> allSensors,
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeRecorder)
       throws IOException {
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =
-        getLeafMetadataIndexPair(device, measurement, ioSizeRecorder);
+        getLeafMetadataIndexPair(
+            device, deviceMetadataIndexNodeOffset, measurement, ioSizeRecorder);
     if (metadataIndexPair == null) {
       if (ignoreNotExistDevice) {
         return Collections.emptyList();
@@ -927,17 +1068,28 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   /* Get leaf MetadataIndexPair which contains path */
   private Pair<IMetadataIndexEntry, Long> getLeafMetadataIndexPair(
-      IDeviceID device, String measurement, LongConsumer ioSizeRecorder) throws IOException {
+      IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
+      String measurement,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
     readFileMetadata(ioSizeRecorder);
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
-    Pair<IMetadataIndexEntry, Long> metadataIndexPair =
-        getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, true, ioSizeRecorder);
-    if (metadataIndexPair == null) {
-      return null;
+    Pair<IMetadataIndexEntry, Long> metadataIndexPair = null;
+    ByteBuffer buffer;
+    if (deviceMetadataIndexNodeOffset == null) {
+      metadataIndexPair =
+          getMetadataAndEndOffsetOfDeviceNode(
+              deviceMetadataIndexNode, device, true, ioSizeRecorder);
+      if (metadataIndexPair == null) {
+        return null;
+      }
+      buffer =
+          readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right, ioSizeRecorder);
+    } else {
+      buffer = readData(deviceMetadataIndexNodeOffset[0], deviceMetadataIndexNodeOffset[1]);
     }
-    ByteBuffer buffer =
-        readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right, ioSizeRecorder);
     MetadataIndexNode metadataIndexNode = deviceMetadataIndexNode;
     if (!metadataIndexNode.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
       try {
