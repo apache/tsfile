@@ -244,9 +244,6 @@ endif()
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
-# TsFile code will be stored here.
-set(PROJECT_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
-
 # All include files will be installed here.
 # Use global var so that tests may also use this
 set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include CACHE STRING "TsFile includes")
