@@ -319,15 +319,15 @@ public class MeasurementSchema
   @Override
   public int serializedSize() {
     int byteLen = 0;
-    byteLen += ReadWriteIOUtils.sizeToWrite(measurementName);
-    byteLen += 3 * Byte.BYTES;
+    byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(measurementName));
+    byteLen = Math.addExact(byteLen, 3 * Byte.BYTES);
     if (props == null) {
-      byteLen += Integer.BYTES;
+      byteLen = Math.addExact(byteLen, Integer.BYTES);
     } else {
-      byteLen += Integer.BYTES;
+      byteLen = Math.addExact(byteLen, Integer.BYTES);
       for (Map.Entry<String, String> entry : props.entrySet()) {
-        byteLen += ReadWriteIOUtils.sizeToWrite(entry.getKey());
-        byteLen += ReadWriteIOUtils.sizeToWrite(entry.getValue());
+        byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(entry.getKey()));
+        byteLen = Math.addExact(byteLen, ReadWriteIOUtils.sizeToWrite(entry.getValue()));
       }
     }
 

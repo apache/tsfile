@@ -22,6 +22,10 @@
 
 #include <sys/types.h>
 
+#include <cmath>
+#include <limits>
+#include <vector>
+
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
@@ -271,28 +275,106 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
 
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
    public:
+    FloatTS2DIFFEncoder() : max_point_number_(2), max_point_value_(100.0) {}
     int do_encode(float value, common::ByteStream& out_stream) {
-        int32_t value_int = common::float_to_int(value);
+        int32_t value_int = convert_float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
     }
+    int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
     int encode(int32_t value, common::ByteStream& out_stream);
     int encode(int64_t value, common::ByteStream& out_stream);
     int encode(float value, common::ByteStream& out_stream);
     int encode(double value, common::ByteStream& out_stream);
+
+   private:
+    int32_t convert_float_to_int(float value) {
+        const double scaled = static_cast<double>(value) * max_point_value_;
+        if (scaled > static_cast<double>(std::numeric_limits<int32_t>::max()) ||
+            scaled < static_cast<double>(std::numeric_limits<int32_t>::min())) {
+            if (std::isnan(value) ||
+                value >
+                    static_cast<float>(std::numeric_limits<int32_t>::max()) ||
+                value <
+                    static_cast<float>(std::numeric_limits<int32_t>::min())) {
+                underflow_flags_.push_back(-1);
+                return common::float_to_int(value);
+            }
+            underflow_flags_.push_back(0);
+            return static_cast<int32_t>(std::lround(value));
+        }
+        if (std::isnan(value)) {
+            underflow_flags_.push_back(-1);
+            return common::float_to_int(value);
+        }
+        underflow_flags_.push_back(1);
+        return static_cast<int32_t>(std::lround(scaled));
+    }
+    bool has_overflow() const {
+        for (int8_t f : underflow_flags_) {
+            if (f != 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+   private:
+    int max_point_number_;
+    double max_point_value_;
+    std::vector<int8_t> underflow_flags_;
 };
 
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
    public:
+    DoubleTS2DIFFEncoder() : max_point_number_(2), max_point_value_(100.0) {}
     int do_encode(double value, common::ByteStream& out_stream) {
-        int64_t value_long = common::double_to_long(value);
+        int64_t value_long = convert_double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
     }
+    int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
     int encode(int32_t value, common::ByteStream& out_stream);
     int encode(int64_t value, common::ByteStream& out_stream);
     int encode(float value, common::ByteStream& out_stream);
     int encode(double value, common::ByteStream& out_stream);
+
+   private:
+    int64_t convert_double_to_long(double value) {
+        const double scaled = value * max_point_value_;
+        if (scaled > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+            scaled < static_cast<double>(std::numeric_limits<int64_t>::min())) {
+            if (std::isnan(value) ||
+                value >
+                    static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+                value <
+                    static_cast<double>(std::numeric_limits<int64_t>::min())) {
+                underflow_flags_.push_back(-1);
+                return common::double_to_long(value);
+            }
+            underflow_flags_.push_back(0);
+            return static_cast<int64_t>(std::llround(value));
+        }
+        if (std::isnan(value)) {
+            underflow_flags_.push_back(-1);
+            return common::double_to_long(value);
+        }
+        underflow_flags_.push_back(1);
+        return static_cast<int64_t>(std::llround(scaled));
+    }
+    bool has_overflow() const {
+        for (int8_t f : underflow_flags_) {
+            if (f != 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+   private:
+    int max_point_number_;
+    double max_point_value_;
+    std::vector<int8_t> underflow_flags_;
 };
 
 typedef TS2DIFFEncoder<int32_t> IntTS2DIFFEncoder;
@@ -400,6 +482,169 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::encode(float value,
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
                                               common::ByteStream& out) {
     return do_encode(value, out);
+}
+
+// Keep float/double TS_2DIFF page layout compatible with Java.
+FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    if (write_index_ == -1) {
+        return common::E_OK;
+    }
+    const int num_values = write_index_ + 1;
+    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(max_point_number_), inner))) {
+        return ret;
+    }
+    SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(write_index_), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(bit_width), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(delta_arr_min_), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(first_value_), inner))) {
+        return ret;
+    }
+    for (int i = 0; i < write_index_; i++) {
+        write_bits(delta_arr_[i], bit_width, inner);
+    }
+    flush_remaining(inner);
+    reset();
+
+    const bool overflow = has_overflow();
+    if (overflow) {
+        std::vector<uint8_t> underflow_bitmap(
+            static_cast<size_t>(num_values / 8 + 1), 0);
+        std::vector<uint8_t> overflow_bitmap(
+            static_cast<size_t>(num_values / 8 + 1), 0);
+        bool has_original_value_overflow = false;
+        for (int i = 0; i < num_values; i++) {
+            int8_t f = underflow_flags_[static_cast<size_t>(i)];
+            if (f == 1) {
+                underflow_bitmap[static_cast<size_t>(i / 8)] |=
+                    static_cast<uint8_t>(1u << (i % 8));
+            } else if (f == -1) {
+                has_original_value_overflow = true;
+                overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                    static_cast<uint8_t>(1u << (i % 8));
+            }
+        }
+        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
+            2147483647u;  // Integer.MAX_VALUE
+        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
+            2147483646u;  // Integer.MAX_VALUE - 1
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
+                                            : FLAG_SCALED_VALUE_OVERFLOW,
+                out_stream))) {
+            return ret;
+        }
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                static_cast<uint32_t>(num_values), out_stream))) {
+            return ret;
+        }
+        const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
+        if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
+            return ret;
+        }
+        if (has_original_value_overflow &&
+            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
+            return ret;
+        }
+    }
+    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+        return ret;
+    }
+    underflow_flags_.clear();
+    return ret;
+}
+
+FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    if (write_index_ == -1) {
+        return common::E_OK;
+    }
+    const int num_values = write_index_ + 1;
+    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(max_point_number_), inner))) {
+        return ret;
+    }
+    SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
+    if (RET_FAIL(common::SerializationUtil::write_i32(write_index_, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i32(bit_width, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i64(delta_arr_min_, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i64(first_value_, inner))) {
+        return ret;
+    }
+    for (int i = 0; i < write_index_; i++) {
+        write_bits(delta_arr_[i], bit_width, inner);
+    }
+    flush_remaining(inner);
+    reset();
+
+    const bool overflow = has_overflow();
+    if (overflow) {
+        std::vector<uint8_t> underflow_bitmap(
+            static_cast<size_t>(num_values / 8 + 1), 0);
+        std::vector<uint8_t> overflow_bitmap(
+            static_cast<size_t>(num_values / 8 + 1), 0);
+        bool has_original_value_overflow = false;
+        for (int i = 0; i < num_values; i++) {
+            int8_t f = underflow_flags_[static_cast<size_t>(i)];
+            if (f == 1) {
+                underflow_bitmap[static_cast<size_t>(i / 8)] |=
+                    static_cast<uint8_t>(1u << (i % 8));
+            } else if (f == -1) {
+                has_original_value_overflow = true;
+                overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                    static_cast<uint8_t>(1u << (i % 8));
+            }
+        }
+        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
+            2147483647u;  // Integer.MAX_VALUE
+        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
+            2147483646u;  // Integer.MAX_VALUE - 1
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
+                                            : FLAG_SCALED_VALUE_OVERFLOW,
+                out_stream))) {
+            return ret;
+        }
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                static_cast<uint32_t>(num_values), out_stream))) {
+            return ret;
+        }
+        const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
+        if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
+            return ret;
+        }
+        if (has_original_value_overflow &&
+            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
+            return ret;
+        }
+    }
+    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+        return ret;
+    }
+    underflow_flags_.clear();
+    return ret;
 }
 
 }  // end namespace storage

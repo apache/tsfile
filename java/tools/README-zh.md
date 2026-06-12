@@ -29,7 +29,7 @@
 
 构建 Java 版的 TsFile Tools，必须要安装以下依赖:
 
-1. Java >= 1.8 (1.8, 11 到 17 都经过验证. 请确保设置了环境变量).
+1. Java >= 17. 请确保设置了环境变量.
 2. Maven >= 3.6 (如果要从源代码编译TsFile).
 
 
@@ -228,5 +228,4 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
 - 单批次：`{源文件名}.tsfile`
 - 多批次：`{源文件名}_1.tsfile`、`{源文件名}_2.tsfile`、...
 - 表名与输出文件名相互独立——表名来自 schema 或 `--table_name`，文件名来自源文件。
-
 

@@ -29,7 +29,7 @@ endif ()
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif ()
-set(TsFile_CPP_VERSION 2.2.1.dev)
+set(TsFile_CPP_VERSION 2.3.2.dev)
 
 if (MSVC)
     # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
@@ -105,18 +105,37 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
-# MSVC provides sensible per-configuration optimization flags by default; the
-# GCC-style flags below would be rejected by cl.exe, so skip them on MSVC.
-if (NOT MSVC)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-        set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+# Keep optimization policy external by default (caller/toolchain/CMake defaults).
+set(TSFILE_OPTIMIZATION_FLAGS ""
+        CACHE STRING
+        "Optional extra optimization flags for tsfile-cpp (e.g. -O3). Empty means inherit caller defaults.")
+if (TSFILE_OPTIMIZATION_FLAGS)
+    # Apply after CMake defaults for each config so explicit optimization can
+    # override default -O flags in Release/RelWithDebInfo/Debug/MinSizeRel.
+    set(CMAKE_CXX_FLAGS_DEBUG
+            "${CMAKE_CXX_FLAGS_DEBUG} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_RELEASE
+            "${CMAKE_CXX_FLAGS_RELEASE} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO
+            "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS_MINSIZEREL
+            "${CMAKE_CXX_FLAGS_MINSIZEREL} ${TSFILE_OPTIMIZATION_FLAGS}")
+    message("cmake using: TSFILE_OPTIMIZATION_FLAGS=${TSFILE_OPTIMIZATION_FLAGS}")
+else ()
+    message("cmake using: TSFILE_OPTIMIZATION_FLAGS=<inherit>")
+    # MSVC provides sensible per-configuration optimization flags by default; the
+    # GCC-style flags below would be rejected by cl.exe, so skip them on MSVC.
+    if (NOT MSVC)
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+            set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+        endif ()
     endif ()
 endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
@@ -170,6 +189,9 @@ endif ()
 
 option(BUILD_TEST "Build tests" ON)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
+
+option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
+message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
@@ -241,9 +263,11 @@ else ()
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
 endif ()
 add_subdirectory(third_party)
-set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
 add_subdirectory(src)
+if (BUILD_TOOLS)
+    add_subdirectory(tools)
+endif ()
 if (BUILD_TEST)
     add_subdirectory(test)
     if (TESTS_ENABLED)
@@ -254,4 +278,3 @@ else()
 endif ()
 
 add_subdirectory(examples)
-

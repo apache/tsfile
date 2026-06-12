@@ -21,6 +21,8 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+
+#include <iostream>
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>
@@ -49,10 +51,8 @@ int ReadFile::open(const std::string& file_path) {
     file_path_ = file_path;
     fd_ = ::open(file_path_.c_str(), O_RDONLY);
     if (fd_ < 0) {
-        std::cout << "open file " << file_path << "  error :" << fd_
-                  << std::endl;
-        std::cout << "open error" << errno << "  " << strerror(errno)
-                  << std::endl;
+        std::cerr << "open file " << file_path << " error: " << strerror(errno)
+                  << " (errno " << errno << ")" << std::endl;
         return E_FILE_OPEN_ERR;
     }
 

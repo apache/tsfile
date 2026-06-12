@@ -250,7 +250,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
     return constructPageReader(
         timePageHeader,
         timePageData,
-        defaultTimeDecoder,
+        getTimeDecoder(timeChunkHeader.getEncodingType()),
         valuePageHeaderList,
         lazyLoadPageDataArray,
         valueDataTypeList,

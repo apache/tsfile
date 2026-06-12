@@ -21,6 +21,8 @@
 #define READER_DEVICE_META_ITERATOR_H
 
 #include <queue>
+#include <string>
+#include <vector>
 
 #include "file/tsfile_io_reader.h"
 #include "reader/expression.h"
@@ -34,15 +36,19 @@ class DeviceMetaIterator {
                                 const Filter* id_filter)
         : io_reader_(io_reader),
           id_filter_(id_filter),
-          should_split_device_name(false) {
+          should_split_device_name(false),
+          direct_lookup_done_(false) {
         meta_index_nodes_.push(meat_index_node);
         pa_.init(512, common::MOD_DEVICE_META_ITER);
+        try_setup_direct_lookup(meat_index_node);
     }
 
     DeviceMetaIterator(TsFileIOReader* io_reader,
                        const std::vector<MetaIndexNode*>& meta_index_node_list,
                        const Filter* id_filter)
-        : io_reader_(io_reader), id_filter_(id_filter) {
+        : io_reader_(io_reader),
+          id_filter_(id_filter),
+          direct_lookup_done_(false) {
         for (auto meta_index_node : meta_index_node_list) {
             meta_index_nodes_.push(meta_index_node);
         }
@@ -62,6 +68,10 @@ class DeviceMetaIterator {
     int load_results();
     int load_leaf_device(MetaIndexNode* meta_index_node);
     int load_internal_node(MetaIndexNode* meta_index_node);
+
+    void try_setup_direct_lookup(MetaIndexNode* root_node);
+    int load_results_direct();
+
     TsFileIOReader* io_reader_;
     std::queue<MetaIndexNode*> meta_index_nodes_;
     std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>>
@@ -69,6 +79,10 @@ class DeviceMetaIterator {
     const Filter* id_filter_;
     common::PageArena pa_;
     bool should_split_device_name;
+
+    bool direct_lookup_done_;
+    std::shared_ptr<IDeviceID> direct_device_id_;
+    MetaIndexNode* direct_root_node_ = nullptr;
 };
 
 }  // end namespace storage

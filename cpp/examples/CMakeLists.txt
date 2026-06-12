@@ -22,6 +22,7 @@ message("Running in examples directory")
 
 if (NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 endif ()
 
 # TsFile include dir
@@ -39,8 +40,15 @@ include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/ru
 set(BUILD_TYPE "Release")
 include_directories(${SDK_INCLUDE_DIR})
 
-if (NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+if (DEFINED TSFILE_OPTIMIZATION_FLAGS AND NOT "${TSFILE_OPTIMIZATION_FLAGS}" STREQUAL "")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TSFILE_OPTIMIZATION_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TSFILE_OPTIMIZATION_FLAGS}")
+    message("examples using: TSFILE_OPTIMIZATION_FLAGS=${TSFILE_OPTIMIZATION_FLAGS}")
+else ()
+    message("examples using: TSFILE_OPTIMIZATION_FLAGS=<inherit>")
+    if (NOT MSVC)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+    endif ()
 endif ()
 
 add_subdirectory(cpp_examples)

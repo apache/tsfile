@@ -30,22 +30,20 @@ class AndFilter : public BinaryFilter {
     ~AndFilter() {}
     AndFilter(Filter* left, Filter* right) : BinaryFilter(left, right) {}
 
-    FORCE_INLINE bool satisfy(Statistic* statistic) {
+    bool satisfy(Statistic* statistic) {
         return left_->satisfy(statistic) && right_->satisfy(statistic);
     }
 
-    FORCE_INLINE bool satisfy(int64_t time, int64_t value) {
+    bool satisfy(int64_t time, int64_t value) {
         return left_->satisfy(time, value) && right_->satisfy(time, value);
     }
 
-    FORCE_INLINE bool satisfy_start_end_time(int64_t start_time,
-                                             int64_t end_time) {
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time) {
         return left_->satisfy_start_end_time(start_time, end_time) &&
                right_->satisfy_start_end_time(start_time, end_time);
     }
 
-    FORCE_INLINE bool contain_start_end_time(int64_t start_time,
-                                             int64_t end_time) {
+    bool contain_start_end_time(int64_t start_time, int64_t end_time) {
         return left_->contain_start_end_time(start_time, end_time) &&
                right_->contain_start_end_time(start_time, end_time);
     }

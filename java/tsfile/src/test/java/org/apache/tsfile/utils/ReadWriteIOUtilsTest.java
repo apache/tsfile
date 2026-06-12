@@ -184,6 +184,13 @@ public class ReadWriteIOUtilsTest {
     Assert.assertNotNull(result);
     Assert.assertEquals(map, result);
 
+    ByteBuffer buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
+    ReadWriteIOUtils.write(map, buffer);
+    buffer.flip();
+    result = ReadWriteIOUtils.readMap(buffer);
+    Assert.assertNotNull(result);
+    Assert.assertEquals(map, result);
+
     // 7. null
     map = null;
     byteArrayOutputStream = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);

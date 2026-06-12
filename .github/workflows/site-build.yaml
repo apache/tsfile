@@ -3,14 +3,10 @@ name: Site Build
 on:
   push:
     branches:
-      - develop
-    paths:
-      - 'docs/**'
+      - 'docs/dev'
   pull_request:
     branches:
-      - develop
-    paths:
-      - 'docs/**'
+      - 'docs/dev'
   # allow manually run the action:
   workflow_dispatch:
 
@@ -24,67 +20,63 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v4
         with:
-          package_json_file: 'docs/package.json'
+          package_json_file: 'package.json'
           run_install: true
           version: 8
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: docs/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
 
       - name: Install deps
         run: |-
-          cd docs 
           pnpm install --frozen-lockfile
 
       - name: Test build Docs
         env:
           NODE_OPTIONS: --max_old_space_size=8192
         run: |-
-          cd docs
           pnpm run docs:build
           > src/.vuepress/dist/.nojekyll
 
   deploy:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'develop' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'docs') || github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v4
         with:
-          package_json_file: 'docs/package.json'
+          package_json_file: 'package.json'
           run_install: true
           version: 8
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: docs/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install deps
         run: |-
-          cd docs 
           pnpm install --frozen-lockfile
 
       - name: Build Docs
         env:
           NODE_OPTIONS: --max_old_space_size=8192
         run: |-
-          cd docs
           pnpm run docs:build
           > src/.vuepress/dist/.nojekyll
 
@@ -92,7 +84,6 @@ jobs:
         env:
           TSFILE_WEBSITE_BUILD: ${{ secrets.TSFILE_WEBSITE_BUILD }}
         run: |
-          cd docs
           git config --global url."https://asf-ci-deploy:$TSFILE_WEBSITE_BUILD@github.com/apache/".insteadOf "https://github.com/apache/"
           git config --global user.name github-actions
           git config --global user.email 41898282+github-actions[bot]@users.noreply.github.com

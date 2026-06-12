@@ -748,11 +748,24 @@ public class Tablet implements Accountable {
 
   /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
-    try (PublicBAOS byteArrayOutputStream = new PublicBAOS();
+    final int serializedSize = serializedSize();
+    try (PublicBAOS byteArrayOutputStream = new PublicBAOS(serializedSize);
         DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream)) {
       serialize(outputStream);
       return ByteBuffer.wrap(byteArrayOutputStream.getBuf(), 0, byteArrayOutputStream.size());
     }
+  }
+
+  /** Return the exact serialized byte size of this tablet. */
+  public int serializedSize() {
+    int size = 0;
+    size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(insertTargetName));
+    size = Math.addExact(size, Integer.BYTES);
+    size = Math.addExact(size, serializedSizeOfMeasurementSchemas());
+    size = Math.addExact(size, serializedSizeOfTimes());
+    size = Math.addExact(size, serializedSizeOfBitMaps());
+    size = Math.addExact(size, serializedSizeOfValues());
+    return size;
   }
 
   public void serialize(DataOutputStream stream) throws IOException {
@@ -762,6 +775,104 @@ public class Tablet implements Accountable {
     writeTimes(stream);
     writeBitMaps(stream);
     writeValues(stream);
+  }
+
+  private int serializedSizeOfMeasurementSchemas() {
+    int size = Byte.BYTES;
+    if (schemas != null) {
+      size = Math.addExact(size, Integer.BYTES);
+      for (int i = 0; i < schemas.size(); i++) {
+        size = Math.addExact(size, Byte.BYTES);
+        final IMeasurementSchema schema = schemas.get(i);
+        if (schema != null) {
+          size = Math.addExact(size, schema.serializedSize());
+          size = Math.addExact(size, Byte.BYTES);
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfTimes() {
+    int size = Byte.BYTES;
+    if (timestamps != null) {
+      size = Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBitMaps() {
+    int size = Byte.BYTES;
+    if (bitMaps != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        if (bitMaps[i] == null || bitMaps[i].isAllUnmarked(rowSize)) {
+          size = Math.addExact(size, Byte.BYTES);
+        } else {
+          size = Math.addExact(size, Byte.BYTES);
+          size = Math.addExact(size, Integer.BYTES);
+          size = Math.addExact(size, Integer.BYTES);
+          size = Math.addExact(size, BitMap.getSizeOfBytes(rowSize));
+        }
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfValues() {
+    int size = Byte.BYTES;
+    if (values != null) {
+      final int columnCount = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < columnCount; i++) {
+        size = Math.addExact(size, serializedSizeOfColumn(schemas.get(i).getType(), values[i]));
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfColumn(final TSDataType dataType, final Object column) {
+    int size = Byte.BYTES;
+    if (column == null) {
+      return size;
+    }
+    switch (dataType) {
+      case INT32:
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
+      case DATE:
+        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
+      case INT64:
+      case TIMESTAMP:
+        return Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
+      case FLOAT:
+        return Math.addExact(size, Math.multiplyExact(Float.BYTES, rowSize));
+      case DOUBLE:
+        return Math.addExact(size, Math.multiplyExact(Double.BYTES, rowSize));
+      case BOOLEAN:
+        return Math.addExact(size, rowSize);
+      case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
+        return Math.addExact(size, serializedSizeOfBinaryValues((Binary[]) column));
+      default:
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", dataType));
+    }
+  }
+
+  private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
+    int size = 0;
+    for (int j = 0; j < rowSize; j++) {
+      size = Math.addExact(size, Byte.BYTES);
+      if (binaryValues[j] != null) {
+        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[j]));
+      }
+    }
+    return size;
+  }
+
+  private int serializedSizeOfBinaryValues(final Binary[] binaryValues) {
+    return serializedSizeOfBinaryValues(binaryValues, rowSize);
   }
 
   /** Serialize {@link MeasurementSchema}s */
