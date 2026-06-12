@@ -20,7 +20,12 @@
 #ifndef TEST_LARGE_FILE_TEST_COMMON_H
 #define TEST_LARGE_FILE_TEST_COMMON_H
 
+#ifdef _WIN32
 #include <sys/stat.h>
+#include <sys/types.h>
+#else
+#include <sys/stat.h>
+#endif
 
 #include <cstdint>
 #include <random>
@@ -37,11 +42,19 @@ constexpr uint32_t kTabletRows = 50000;
 constexpr int64_t kFlushRows = 1000000;
 
 inline int64_t GetFileSize(const std::string& path) {
+#ifdef _WIN32
+    struct __stat64 s;
+    if (_stat64(path.c_str(), &s) != 0) {
+        return -1;
+    }
+    return static_cast<int64_t>(s.st_size);
+#else
     struct stat s;
     if (stat(path.c_str(), &s) != 0) {
         return -1;
     }
     return static_cast<int64_t>(s.st_size);
+#endif
 }
 
 inline std::string RandomSuffix(int length = 10) {
