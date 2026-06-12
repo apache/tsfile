@@ -17,9 +17,7 @@
  * under the License.
  */
 
-#include <fcntl.h>
 #include <gtest/gtest.h>
-#include <unistd.h>
 
 #include <memory>
 #include <vector>
