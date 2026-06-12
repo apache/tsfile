@@ -16,9 +16,30 @@
 # under the License.
 #
 
+import os
+import random
+import string
 import sys
 from pathlib import Path
 
 _TESTS_DIR = Path(__file__).resolve().parent
 if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
+
+TARGET_FILE_SIZE = 4 * 1024 * 1024 * 1024
+MIN_ACCEPTABLE_FILE_SIZE = 3800 * 1024 * 1024
+START_TIME = 1622505600000
+TABLET_ROWS = 50000
+FLUSH_ROWS = 1_000_000
+
+
+def get_file_size(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return -1
+
+
+def random_suffix(length: int = 10) -> str:
+    chars = string.ascii_letters + string.digits
+    return "".join(random.choice(chars) for _ in range(length))

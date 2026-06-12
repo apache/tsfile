@@ -21,7 +21,7 @@ import os
 from tsfile import ColumnCategory, ColumnSchema, Tablet
 from tsfile import TableSchema, TSDataType, TsFileReader, TsFileTableWriter
 
-from large_file_test_common import (
+from conftest import (
     FLUSH_ROWS,
     MIN_ACCEPTABLE_FILE_SIZE,
     START_TIME,

@@ -21,7 +21,7 @@ import os
 from tsfile import Compressor, Tablet, TSEncoding, TSDataType, TimeseriesSchema
 from tsfile import TsFileReader, TsFileWriter
 
-from large_file_test_common import (
+from conftest import (
     FLUSH_ROWS,
     MIN_ACCEPTABLE_FILE_SIZE,
     START_TIME,
