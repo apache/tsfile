@@ -131,22 +131,12 @@ public class TabletBuilder {
       if (tag.hasDefault()) {
         tagDefaults.put(tag.getName().toLowerCase(), tag.getDefaultValue());
       }
-      schemas.add(
-          new MeasurementSchema(
-              tag.getName(),
-              TSDataType.STRING,
-              org.apache.tsfile.file.metadata.enums.TSEncoding.PLAIN,
-              org.apache.tsfile.file.metadata.enums.CompressionType.UNCOMPRESSED));
+      schemas.add(new MeasurementSchema(tag.getName(), TSDataType.STRING));
       categories.add(ColumnCategory.TAG);
     }
 
     for (ImportSchema.SourceColumn field : importSchema.fieldColumns()) {
-      schemas.add(
-          new MeasurementSchema(
-              field.getName(),
-              field.getDataType(),
-              org.apache.tsfile.file.metadata.enums.TSEncoding.PLAIN,
-              org.apache.tsfile.file.metadata.enums.CompressionType.UNCOMPRESSED));
+      schemas.add(new MeasurementSchema(field.getName(), field.getDataType()));
       categories.add(ColumnCategory.FIELD);
     }
 
