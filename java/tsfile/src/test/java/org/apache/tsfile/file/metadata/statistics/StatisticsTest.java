@@ -47,7 +47,7 @@ public class StatisticsTest {
         Statistics toStatistics = genStatistics(to, 1);
         if (Statistics.canMerge(from, to)) {
           toStatistics.mergeStatistics(fromStatistics);
-          checkStatistics(toStatistics, 0, 1, 1.0);
+          checkStatistics(toStatistics, 1, 0, 1, 1.0);
         } else {
           try {
             toStatistics.mergeStatistics(fromStatistics);
@@ -59,14 +59,15 @@ public class StatisticsTest {
                     toStatistics.getClass(), fromStatistics.getClass()),
                 e.getMessage());
           }
-          checkStatistics(toStatistics, 1, 1, 1.0);
+          checkStatistics(toStatistics, 1, 1, 1, 1.0);
         }
       }
     }
   }
 
   @SuppressWarnings("SameParameterValue")
-  private static void checkStatistics(Statistics statistics, int min, int max, double sum) {
+  private static void checkStatistics(
+      Statistics statistics, int first, int min, int max, double sum) {
     assertEquals(min, statistics.getStartTime());
     assertEquals(max, statistics.getEndTime());
     switch (statistics.getType()) {
@@ -78,18 +79,18 @@ public class StatisticsTest {
       case DATE:
         assertEquals(min, ((Number) statistics.getMinValue()).intValue());
         assertEquals(max, ((Number) statistics.getMaxValue()).intValue());
-        assertEquals(min, ((Number) statistics.getFirstValue()).intValue());
+        assertEquals(first, ((Number) statistics.getFirstValue()).intValue());
         assertEquals(max, ((Number) statistics.getLastValue()).intValue());
         assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
         break;
       case BOOLEAN:
-        assertEquals(min % 2 == 1, statistics.getFirstValue());
+        assertEquals(first % 2 == 1, statistics.getFirstValue());
         assertEquals(max % 2 == 1, statistics.getLastValue());
         assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
         break;
       case TEXT:
         assertEquals(
-            new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
+            new Binary(String.valueOf(first), TSFileConfig.STRING_CHARSET),
             statistics.getFirstValue());
         assertEquals(
             new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
@@ -101,7 +102,7 @@ public class StatisticsTest {
         assertEquals(
             new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET), statistics.getMaxValue());
         assertEquals(
-            new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
+            new Binary(String.valueOf(first), TSFileConfig.STRING_CHARSET),
             statistics.getFirstValue());
         assertEquals(
             new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),

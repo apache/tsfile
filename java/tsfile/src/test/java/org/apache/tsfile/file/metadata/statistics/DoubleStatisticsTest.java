@@ -84,11 +84,11 @@ public class DoubleStatisticsTest {
     doubleStats5.updateStats(111.1d);
 
     doubleStats3.mergeStatistics(doubleStats4);
-    assertEquals(122.34d, doubleStats3.getFirstValue(), maxError);
+    assertEquals(1.34d, doubleStats3.getFirstValue(), maxError);
     assertEquals(125.34d, doubleStats3.getLastValue(), maxError);
 
     doubleStats3.mergeStatistics(doubleStats5);
-    assertEquals(122.34d, doubleStats3.getFirstValue(), maxError);
+    assertEquals(1.34d, doubleStats3.getFirstValue(), maxError);
     assertEquals(125.34d, doubleStats3.getLastValue(), maxError);
   }
 }

@@ -171,33 +171,38 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       if (valueChunkWriter == null) {
         valueChunkWriter = tryToAddSeriesWriterInternal(point.getMeasurementSchema());
       }
-      switch (point.getType()) {
-        case BOOLEAN:
-          valueChunkWriter.write(time, (boolean) point.getValue(), isNull);
-          break;
-        case INT32:
-        case DATE:
-          valueChunkWriter.write(time, isNull ? 0 : (int) point.getValue(), isNull);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueChunkWriter.write(time, (long) point.getValue(), isNull);
-          break;
-        case FLOAT:
-          valueChunkWriter.write(time, (float) point.getValue(), isNull);
-          break;
-        case DOUBLE:
-          valueChunkWriter.write(time, (double) point.getValue(), isNull);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueChunkWriter.write(time, (Binary) point.getValue(), isNull);
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", point.getType()));
+      try {
+        switch (valueChunkWriter.getDataType()) {
+          case BOOLEAN:
+            valueChunkWriter.write(time, (boolean) point.getValue(), isNull);
+            break;
+          case INT32:
+          case DATE:
+            valueChunkWriter.write(time, isNull ? 0 : (int) point.getValue(), isNull);
+            break;
+          case INT64:
+          case TIMESTAMP:
+            valueChunkWriter.write(time, (long) point.getValue(), isNull);
+            break;
+          case FLOAT:
+            valueChunkWriter.write(time, (float) point.getValue(), isNull);
+            break;
+          case DOUBLE:
+            valueChunkWriter.write(time, (double) point.getValue(), isNull);
+            break;
+          case TEXT:
+          case BLOB:
+          case STRING:
+          case OBJECT:
+            valueChunkWriter.write(time, (Binary) point.getValue(), isNull);
+            break;
+          default:
+            throw new UnSupportedDataTypeException(
+                String.format("Data type %s is not supported.", point.getType()));
+        }
+      } catch (ClassCastException e) {
+        throw new UnSupportedDataTypeException(
+            Messages.format("error.write.type_not_supported", point.getType()));
       }
     }
     if (!emptyValueChunkWriters.isEmpty()) {

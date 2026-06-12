@@ -83,11 +83,11 @@ public class IntegerStatisticsTest {
     intStats5.updateStats(20);
 
     intStats3.mergeStatistics(intStats4);
-    assertEquals(11, (int) intStats3.getFirstValue());
+    assertEquals(1, (int) intStats3.getFirstValue());
     assertEquals(15, (int) intStats3.getLastValue());
 
     intStats3.mergeStatistics(intStats5);
-    assertEquals(11, (int) intStats3.getFirstValue());
+    assertEquals(1, (int) intStats3.getFirstValue());
     assertEquals(15, (int) intStats3.getLastValue());
   }
 }

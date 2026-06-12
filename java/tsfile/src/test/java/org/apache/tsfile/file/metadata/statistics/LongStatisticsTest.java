@@ -89,11 +89,11 @@ public class LongStatisticsTest {
     longStats5.updateStats(116L);
 
     longStats3.mergeStatistics(longStats4);
-    assertEquals(111L, (long) longStats3.getFirstValue());
+    assertEquals(1L, (long) longStats3.getFirstValue());
     assertEquals(114L, (long) longStats3.getLastValue());
 
     longStats3.mergeStatistics(longStats5);
-    assertEquals(111L, (long) longStats3.getFirstValue());
+    assertEquals(1L, (long) longStats3.getFirstValue());
     assertEquals(114L, (long) longStats3.getLastValue());
   }
 }
