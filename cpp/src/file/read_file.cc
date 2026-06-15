@@ -49,7 +49,11 @@ void ReadFile::close() {
 int ReadFile::open(const std::string& file_path) {
     int ret = E_OK;
     file_path_ = file_path;
-    fd_ = ::open(file_path_.c_str(), O_RDONLY);
+    int flags = O_RDONLY;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    fd_ = ::open(file_path_.c_str(), flags);
     if (fd_ < 0) {
         std::cerr << "open file " << file_path << " error: " << strerror(errno)
                   << " (errno " << errno << ")" << std::endl;
@@ -66,8 +70,13 @@ int ReadFile::open(const std::string& file_path) {
 }
 
 int ReadFile::get_file_size(int64_t& file_size) {
+#ifdef _WIN32
+    struct __stat64 s;
+    if (_fstat64(fd_, &s) < 0) {
+#else
     struct stat s;
     if (fstat(fd_, &s) < 0) {
+#endif
         LOGE("fstat error, file_path=" << file_path_.c_str() << "fd=" << fd_
                                        << "errno" << errno);
         return E_FILE_STAT_ERR;
@@ -114,8 +123,13 @@ int ReadFile::read(int64_t offset, char* buf, int32_t buf_size,
     int ret = E_OK;
     read_len = 0;
     while (read_len < buf_size) {
+#ifdef _WIN32
+        ssize_t pread_size = ::pread(fd_, buf + read_len, buf_size - read_len,
+                                     static_cast<uint64_t>(offset + read_len));
+#else
         ssize_t pread_size = ::pread(fd_, buf + read_len, buf_size - read_len,
                                      static_cast<off_t>(offset + read_len));
+#endif
         if (pread_size < 0) {
             ret = E_FILE_READ_ERR;
             ////log_err("tsfile reader error, file_path=%s, errno=%d",

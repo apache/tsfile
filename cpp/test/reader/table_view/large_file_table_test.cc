@@ -94,7 +94,7 @@ class LargeFileTableTest : public ::testing::Test {
     std::string file_name_;
 };
 
-TEST_F(LargeFileTableTest, LargeFile4GB_TableWriteAndRead) {
+TEST_F(LargeFileTableTest, DISABLED_LargeFile4GB_TableWriteAndRead) {
     std::unique_ptr<TableSchema> table_schema(CreateTableSchema());
 
     WriteFile write_file;

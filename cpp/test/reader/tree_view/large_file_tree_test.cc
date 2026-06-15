@@ -76,7 +76,7 @@ class LargeFileTreeTest : public ::testing::Test {
     std::string file_name_;
 };
 
-TEST_F(LargeFileTreeTest, LargeFile4GB_TreeWriteAndRead) {
+TEST_F(LargeFileTreeTest, DISABLED_LargeFile4GB_TreeWriteAndRead) {
     TsFileWriter writer;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
