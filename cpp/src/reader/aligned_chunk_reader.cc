@@ -319,7 +319,7 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
     char* file_data_buf = in_stream_.get_wrapped_buf();
-    int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
+    int64_t offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size < read_size ||

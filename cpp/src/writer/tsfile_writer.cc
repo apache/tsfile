@@ -44,7 +44,6 @@ bool g_s_is_inited = false;
 }
 
 int libtsfile_init() {
-    libtsfile::g_s_is_inited = false;
     if (libtsfile::g_s_is_inited) {
         return E_OK;
     }

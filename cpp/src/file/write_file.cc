@@ -131,7 +131,7 @@ int WriteFile::close() {
 int WriteFile::truncate(int64_t size) {
     ASSERT(fd_ > 0);
 #ifdef _WIN32
-    if (_chsize_s(fd_, static_cast<long>(size)) != 0) {
+    if (_chsize_s(fd_, size) != 0) {
         return E_FILE_WRITE_ERR;
     }
 #else

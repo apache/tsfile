@@ -56,14 +56,7 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
 extern "C" {
 #endif
 
-static bool is_init = false;
-
-void init_tsfile_config() {
-    if (!is_init) {
-        common::init_common();
-        is_init = true;
-    }
-}
+void init_tsfile_config() { storage::libtsfile_init(); }
 
 uint8_t get_global_time_encoding() {
     return common::get_global_time_encoding();
