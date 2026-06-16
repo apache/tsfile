@@ -102,7 +102,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
@@ -733,13 +732,12 @@ public class TsFileSequenceReader implements AutoCloseable {
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeConsumer)
       throws IOException {
-    return readTimeseriesMetadata(
-        device, Optional.empty(), measurement, ignoreNotExistDevice, ioSizeConsumer);
+    return readTimeseriesMetadata(device, null, measurement, ignoreNotExistDevice, ioSizeConsumer);
   }
 
   public TimeseriesMetadata readTimeseriesMetadata(
       IDeviceID device,
-      Optional<long[]> deviceMetadataIndexNodeOffset,
+      long[] deviceMetadataIndexNodeOffset,
       String measurement,
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeConsumer)
@@ -747,9 +745,10 @@ public class TsFileSequenceReader implements AutoCloseable {
     Pair<IMetadataIndexEntry, Long> metadataIndexPair;
     MetadataIndexNode metadataIndexNode;
     ByteBuffer buffer;
-    if (deviceMetadataIndexNodeOffset.isPresent()) {
-      long[] offsetArr = deviceMetadataIndexNodeOffset.get();
-      buffer = readData(offsetArr[0], offsetArr[1], ioSizeConsumer);
+    if (deviceMetadataIndexNodeOffset != null) {
+      buffer =
+          readData(
+              deviceMetadataIndexNodeOffset[0], deviceMetadataIndexNodeOffset[1], ioSizeConsumer);
       try {
         metadataIndexNode =
             deserializeConfig.measurementMetadataIndexNodeBufferDeserializer.deserialize(
@@ -907,12 +906,12 @@ public class TsFileSequenceReader implements AutoCloseable {
       LongConsumer ioSizeRecorder)
       throws IOException {
     return readTimeseriesMetadata(
-        device, Optional.empty(), measurement, allSensors, ignoreNotExistDevice, ioSizeRecorder);
+        device, null, measurement, allSensors, ignoreNotExistDevice, ioSizeRecorder);
   }
 
   public List<TimeseriesMetadata> readTimeseriesMetadata(
       IDeviceID device,
-      Optional<long[]> deviceMetadataIndexNodeOffset,
+      long[] deviceMetadataIndexNodeOffset,
       String measurement,
       Set<String> allSensors,
       boolean ignoreNotExistDevice,
@@ -975,16 +974,17 @@ public class TsFileSequenceReader implements AutoCloseable {
   /* Get leaf MetadataIndexPair which contains path */
   private Pair<IMetadataIndexEntry, Long> getLeafMetadataIndexPair(
       IDeviceID device,
-      Optional<long[]> deviceMetadataIndexNodeOffset,
+      long[] deviceMetadataIndexNodeOffset,
       String measurement,
       LongConsumer ioSizeRecorder)
       throws IOException {
     Pair<IMetadataIndexEntry, Long> metadataIndexPair;
     MetadataIndexNode metadataIndexNode;
     ByteBuffer buffer;
-    if (deviceMetadataIndexNodeOffset.isPresent()) {
-      long[] offsetArr = deviceMetadataIndexNodeOffset.get();
-      buffer = readData(offsetArr[0], offsetArr[1], ioSizeRecorder);
+    if (deviceMetadataIndexNodeOffset != null) {
+      buffer =
+          readData(
+              deviceMetadataIndexNodeOffset[0], deviceMetadataIndexNodeOffset[1], ioSizeRecorder);
       try {
         metadataIndexNode =
             deserializeConfig.measurementMetadataIndexNodeBufferDeserializer.deserialize(

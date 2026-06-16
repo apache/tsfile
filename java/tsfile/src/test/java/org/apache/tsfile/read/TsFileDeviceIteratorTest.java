@@ -43,7 +43,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 public class TsFileDeviceIteratorTest {
   private static final String FILE_PATH =
@@ -123,11 +122,7 @@ public class TsFileDeviceIteratorTest {
           reader.readTimeseriesMetadata(currentDevice.getLeft(), "s1", false);
       TimeseriesMetadata metadataWithOffset =
           reader.readTimeseriesMetadata(
-              currentDevice.getLeft(),
-              Optional.of(deviceMetadataIndexNodeOffset),
-              "s1",
-              false,
-              null);
+              currentDevice.getLeft(), deviceMetadataIndexNodeOffset, "s1", false, null);
 
       Assert.assertEquals("s1", metadataWithoutOffset.getMeasurementId());
       Assert.assertEquals(
