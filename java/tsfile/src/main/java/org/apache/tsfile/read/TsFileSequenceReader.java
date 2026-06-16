@@ -1694,7 +1694,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
   }
 
-  private synchronized void generateMetadataIndexUsingTsFileInput(
+  private void generateMetadataIndexUsingTsFileInput(
       IMetadataIndexEntry metadataIndex,
       long start,
       long end,
@@ -1714,7 +1714,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         needChunkMetadata);
   }
 
-  private void generateMetadataIndexUsingTsFileInput(
+  private synchronized void generateMetadataIndexUsingTsFileInput(
       IMetadataIndexEntry metadataIndex,
       long start,
       long end,
