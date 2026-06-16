@@ -32,6 +32,14 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.sources.And;
+import org.apache.spark.sql.sources.EqualTo;
+import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.GreaterThanOrEqual;
+import org.apache.spark.sql.sources.IsNotNull;
+import org.apache.spark.sql.sources.LessThan;
+import org.apache.spark.sql.sources.LessThanOrEqual;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -374,6 +382,82 @@ public class TsFileTableConnectorTest {
     assertFalse(new File(output, "_temporary").exists());
   }
 
+  @Test
+  public void pushesSupportedTimeRangeAndTagFilters() {
+    TsFileTableFilterTranslator translator =
+        new TsFileTableFilterTranslator(
+            weatherSchema(), readOptions("/tmp/weather.tsfile", "weather"));
+    Filter[] filters =
+        new Filter[] {
+          new And(
+              new And(new GreaterThanOrEqual("time", 10L), new LessThanOrEqual("time", 20L)),
+              new EqualTo("city", "beijing"))
+        };
+
+    Filter[] residuals = translator.pushFilters(filters);
+
+    assertEquals(0, residuals.length);
+    assertEquals(3, translator.pushedFilters().length);
+    assertEquals(10L, translator.startTime());
+    assertEquals(20L, translator.endTime());
+    assertEquals(Collections.singletonMap("city", "beijing"), translator.tagEqualities());
+  }
+
+  @Test
+  public void pushesTimeEqualityAndExclusiveBounds() {
+    TsFileTableFilterTranslator translator =
+        new TsFileTableFilterTranslator(
+            weatherSchema(), readOptions("/tmp/weather.tsfile", "weather"));
+
+    Filter[] residuals =
+        translator.pushFilters(
+            new Filter[] {
+              new EqualTo("time", 100L), new GreaterThan("time", 99L), new LessThan("time", 101L)
+            });
+
+    assertEquals(0, residuals.length);
+    assertEquals(3, translator.pushedFilters().length);
+    assertEquals(100L, translator.startTime());
+    assertEquals(100L, translator.endTime());
+  }
+
+  @Test
+  public void leavesUnsupportedFiltersAsResiduals() {
+    TsFileTableFilterTranslator translator =
+        new TsFileTableFilterTranslator(
+            weatherSchema(), readOptions("/tmp/weather.tsfile", "weather"));
+
+    Filter[] residuals =
+        translator.pushFilters(
+            new Filter[] {
+              new EqualTo("city", "beijing"), new EqualTo("temperature", 20), new IsNotNull("city")
+            });
+
+    assertEquals(2, residuals.length);
+    assertEquals(1, translator.pushedFilters().length);
+    assertEquals(Collections.singletonMap("city", "beijing"), translator.tagEqualities());
+  }
+
+  @Test
+  public void pushdownCanBeDisabled() {
+    Map<String, String> options = new HashMap<>();
+    options.put("path", "/tmp/weather.tsfile");
+    options.put("table", "weather");
+    options.put("pushdown", "false");
+    TsFileTableFilterTranslator translator =
+        new TsFileTableFilterTranslator(
+            weatherSchema(), TsFileTableOptions.forRead(new CaseInsensitiveStringMap(options)));
+    Filter[] filters = new Filter[] {new EqualTo("city", "beijing"), new EqualTo("time", 1L)};
+
+    Filter[] residuals = translator.pushFilters(filters);
+
+    assertEquals(2, residuals.length);
+    assertEquals(0, translator.pushedFilters().length);
+    assertEquals(Long.MIN_VALUE, translator.startTime());
+    assertEquals(Long.MAX_VALUE, translator.endTime());
+    assertTrue(translator.tagEqualities().isEmpty());
+  }
+
   private static TsFileTableOptions readOptions(String path, String table) {
     Map<String, String> options = new HashMap<>();
     options.put("path", path);
@@ -464,6 +548,17 @@ public class TsFileTableConnectorTest {
       categories.add(column.category);
     }
     return new TableSchema(tableName, measurementSchemas, categories);
+  }
+
+  private static TsFileTableSchema weatherSchema() {
+    return TsFileTableSchema.fromTableSchema(
+        tableSchema(
+            "weather",
+            new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+            new ColumnSpec("temperature", TSDataType.INT32, ColumnCategory.FIELD),
+            new ColumnSpec("humidity", TSDataType.INT64, ColumnCategory.FIELD)),
+        "time",
+        TsFileTableOptions.TimestampAs.LONG);
   }
 
   private static void assertFailsContaining(String expectedMessage, ThrowingRunnable runnable) {

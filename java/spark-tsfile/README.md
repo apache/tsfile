@@ -111,3 +111,29 @@ spark.sql(
 
 Table and column names are normalized to lower case to match TsFile table model
 metadata behavior.
+
+## Initial Scope
+
+This module is the initial Spark 3.x DataSource V2 connector for TsFile table
+model files. It intentionally keeps the first production surface narrow:
+
+- Batch read and batch write are supported; streaming read/write are not.
+- Only TsFile table model is supported. Tree model files are outside this
+  module's scope.
+- Input discovery supports a single `.tsfile`, a directory of `.tsfile` files,
+  and glob paths, but actual TsFile reading and writing is local-file only in
+  this initial version. Non-`file` Hadoop paths should be handled in a follow-up
+  change.
+- `mergeSchema=true` is rejected. All files selected for one read must contain
+  a compatible schema for the selected table.
+- Predicate pushdown is limited to `time =`, `time >`, `time >=`, `time <`,
+  `time <=`, AND-combined time ranges, and string equality on TAG columns.
+  Unsupported predicates are returned to Spark as residual filters.
+- Unsupported table categories and types fail fast: `ATTRIBUTE`, `TIME`,
+  `VECTOR`, `UNKNOWN`, and `OBJECT` are not part of the first connector scope.
+- TAG columns must be non-null strings. FIELD columns may be null and are
+  written/read as sparse TsFile values.
+
+Follow-up issues should track non-local filesystem support, schema merging, a
+broader predicate pushdown matrix, streaming semantics, and expanded type or
+category support.
