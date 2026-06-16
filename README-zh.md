@@ -127,3 +127,69 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 [C++](./cpp/README-zh.md)
 
 [Python](./python/README-zh.md)
+
+## 命令行工具（tsfile-cli）
+
+Apache TsFile 提供了命令行工具 `tsfile-cli`，这是一个单文件、对管道友好的工具，可直接在
+shell 中查看**并**导入 `.tsfile` 文件。读取类命令
+（`ls`、`meta`、`schema`、`stats`、`count`、`head`、`cat`、`sample`）将数据输出到 stdout、
+诊断信息输出到 stderr，因此可与 `awk`、`jq`、`sort` 等工具组合使用；`write` 命令则将 CSV/TSV
+导入为新的 `.tsfile`。支持的输出格式：`csv`、`tsv`、`json`（NDJSON）、`table`。
+
+### 命令
+
+| 命令 | 作用 |
+|---|---|
+| `ls`     | 列出文件中的表（表模型）或设备（树模型），每行一个名称 |
+| `meta`   | 文件概览：数据模型、表 / 设备 / 序列数量、时间范围、文件大小 |
+| `schema` | 每条序列的数据类型、编码、压缩方式 |
+| `stats`  | 每条序列的统计信息：行数、时间范围、最小 / 最大值、首 / 末值、求和 |
+| `count`  | 每条序列的行数及总计 —— 直接读取统计信息，不扫描数据页 |
+| `head`   | 输出前 N 行（默认 10，可用 `-n` 调整） |
+| `cat`    | 流式输出所有匹配的行 |
+| `sample` | 对行做可复现的蓄水池采样（`-n`、`--seed`） |
+| `write`  | 将 CSV/TSV 导入为新的表模型 `.tsfile` |
+
+其中元数据类命令（`ls`、`meta`、`schema`、`stats`、`count`）无需解码数据页即可回答大部分问题，
+而 `head`、`cat`、`sample` 则会读取真实的行数据。
+
+### 示例
+
+```bash
+tsfile-cli ls data.tsfile                          # 列出表 / 设备
+tsfile-cli meta data.tsfile                        # 文件概览（模型、数量、时间范围、大小）
+tsfile-cli head -n 20 data.tsfile                  # 前 20 行
+tsfile-cli cat -m temp,humidity -f csv data.tsfile # 以 CSV 流式输出指定列
+
+# 将 CSV/TSV 导入为新的表模型 .tsfile
+printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
+  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
+```
+
+### 构建
+
+> **平台支持。** 目前 `tsfile-cli` 仅支持在 **Linux 和 macOS** 上从源码编译。后续我们会单独
+> 发布该工具的预编译版本。
+
+`tsfile-cli` 随 C++ 模块一起构建，因此在仓库根目录用 Maven 编译 C++ 模块时，它会一并包含在产物中：
+
+```bash
+./mvnw clean package -P with-cpp
+```
+
+生成的可执行文件位于 `cpp/target/build/bin/tsfile-cli`，它所依赖的共享库 `libtsfile` 位于
+`cpp/target/build/lib/`（Linux 为 `libtsfile.so`，macOS 为 `libtsfile.dylib`）。`tsfile-cli`
+在运行时会加载 `libtsfile`，因此使用时需要让动态链接器能找到该库 —— 可以把它保留在
+`cpp/target/build/lib` 下并将该目录加入库搜索路径，或把 `libtsfile` 复制到可执行文件旁边（或系统库目录）：
+
+```bash
+# Linux
+export LD_LIBRARY_PATH=cpp/target/build/lib:$LD_LIBRARY_PATH
+# macOS
+export DYLD_LIBRARY_PATH=cpp/target/build/lib:$DYLD_LIBRARY_PATH
+
+cpp/target/build/bin/tsfile-cli --version
+cpp/target/build/bin/tsfile-cli --help
+```
+
+完整的命令与选项说明见 [`cpp/tools/README.md`](./cpp/tools/README.md)。
