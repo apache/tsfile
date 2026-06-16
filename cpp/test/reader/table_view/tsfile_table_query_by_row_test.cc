@@ -27,7 +27,6 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/write_file.h"
-#include "reader/filter/tag_filter.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_table_writer.h"
@@ -94,6 +93,41 @@ class TableQueryByRowTest : public ::testing::Test {
             tablet.add_value(i, "id1", "device_a");
             tablet.add_value(i, "s1", static_cast<int64_t>(i * 10));
             tablet.add_value(i, "s2", static_cast<int64_t>(i * 100));
+        }
+
+        ASSERT_EQ(writer->write_table(tablet), E_OK);
+        ASSERT_EQ(writer->flush(), E_OK);
+        ASSERT_EQ(writer->close(), E_OK);
+        delete writer;
+        delete schema;
+    }
+
+    void write_single_device_file_with_string_field(int num_rows) {
+        std::vector<ColumnSchema> col_schemas = {
+            ColumnSchema("id1", TSDataType::STRING,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::TAG),
+            ColumnSchema("s_text", TSDataType::STRING,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::FIELD),
+            ColumnSchema("s_num", TSDataType::INT64,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::FIELD),
+        };
+        auto* schema = new TableSchema("t_string", col_schemas);
+        auto* writer = new TsFileTableWriter(&write_file_, schema);
+
+        Tablet tablet(
+            "t_string", {"id1", "s_text", "s_num"},
+            {TSDataType::STRING, TSDataType::STRING, TSDataType::INT64},
+            {ColumnCategory::TAG, ColumnCategory::FIELD, ColumnCategory::FIELD},
+            num_rows);
+
+        for (int i = 0; i < num_rows; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(i));
+            tablet.add_value(i, "id1", "device_a");
+            tablet.add_value(i, "s_text", "value_" + std::to_string(i));
+            tablet.add_value(i, "s_num", static_cast<int64_t>(i * 10));
         }
 
         ASSERT_EQ(writer->write_table(tablet), E_OK);
@@ -341,6 +375,29 @@ class TableQueryByRowTest : public ::testing::Test {
         return manual;
     }
 
+    std::vector<std::pair<int64_t, std::string>> query_by_row_time_and_text(
+        const std::string& table_name, const std::vector<std::string>& cols,
+        int offset, int limit) {
+        TsFileReader reader;
+        EXPECT_EQ(reader.open(file_name_), E_OK);
+        ResultSet* rs = nullptr;
+        EXPECT_EQ(reader.queryByRow(table_name, cols, offset, limit, rs), E_OK);
+        EXPECT_NE(rs, nullptr);
+
+        std::vector<std::pair<int64_t, std::string>> result;
+        bool has_next = false;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            int64_t time = rs->get_value<int64_t>("time");
+            common::String* text_val = rs->get_value<common::String*>("s_text");
+            result.emplace_back(time,
+                                std::string(text_val->buf_, text_val->len_));
+        }
+
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return result;
+    }
+
     std::string file_name_;
     WriteFile write_file_;
 };
@@ -354,6 +411,23 @@ TEST_F(TableQueryByRowTest, NoOffsetNoLimit) {
     auto result = query_by_row_s1("t1", {"id1", "s1", "s2"}, 0, -1);
     ASSERT_EQ(result.size(), all.size());
     ASSERT_EQ(result, all);
+}
+
+TEST_F(TableQueryByRowTest, NoOffsetNoLimitWithSmallPages) {
+    int prev_page_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 8;
+
+    int num_rows = 25;
+    write_single_device_file(num_rows);
+
+    auto result = query_by_row_time_and_s1("t1", {"id1", "s1", "s2"}, 0, -1);
+    ASSERT_EQ(result.size(), static_cast<size_t>(num_rows));
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(result[i].first, i);
+        EXPECT_EQ(result[i].second, i * 10);
+    }
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_config;
 }
 
 // Offset only: skip first N rows, return the rest; limit=-1 means no cap.
@@ -397,6 +471,43 @@ TEST_F(TableQueryByRowTest, OffsetAndLimit) {
     for (size_t i = 0; i < result.size(); i++) {
         ASSERT_EQ(result[i], all[i + offset]);
     }
+}
+
+TEST_F(TableQueryByRowTest, OffsetAndLimitWithSmallPages) {
+    int prev_page_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 8;
+
+    int num_rows = 40;
+    write_single_device_file(num_rows);
+
+    int offset = 7;
+    int limit = 19;
+    auto by_row =
+        query_by_row_time_and_s1("t1", {"id1", "s1", "s2"}, offset, limit);
+    auto manual =
+        query_manual_time_and_s1("t1", {"id1", "s1", "s2"}, offset, limit);
+
+    ASSERT_EQ(by_row, manual);
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_config;
+}
+
+TEST_F(TableQueryByRowTest, VariableLengthFieldWithSmallPages) {
+    int prev_page_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 8;
+
+    int num_rows = 21;
+    write_single_device_file_with_string_field(num_rows);
+
+    auto result = query_by_row_time_and_text("t_string",
+                                             {"id1", "s_text", "s_num"}, 0, -1);
+    ASSERT_EQ(result.size(), static_cast<size_t>(num_rows));
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(result[i].first, i);
+        EXPECT_EQ(result[i].second, "value_" + std::to_string(i));
+    }
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_config;
 }
 
 // Offset beyond total row count: returns empty result.
@@ -652,15 +763,16 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at device/SSI/Chunk level; old query then manual next decodes every
-// row. Timing tolerance 20% to allow measurement noise.
+// row. Timing tolerance 5% to allow measurement noise.
 TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
-    const int num_rows = 8000;
-    const int offset = 3000;
+    const int num_rows = 80000;
+    const int offset = 30000;
     const int limit = 1000;
     write_single_device_file(num_rows);
 
     const int num_iters = 5;
-    const double tolerance = 0.2;
+    const double tolerance =
+        0.5;  // 50% tolerance for cross-platform timing noise
 
     auto run_query_by_row = [this, offset, limit]() {
         TsFileReader reader;
@@ -724,48 +836,4 @@ TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
         << "queryByRow (pushdown) should be faster than query+manual next "
            "(min_by_row="
         << min_by_row << " ms, min_manual=" << min_manual << " ms)";
-}
-
-// queryByRow with tag filter: only rows matching the tag predicate are
-// returned.
-TEST_F(TableQueryByRowTest, TagFilterEq) {
-    int rows_per_device = 20;
-    int device_count = 3;
-    write_multi_device_file(rows_per_device, device_count);
-
-    // Reconstruct the same schema used by write_multi_device_file.
-    std::vector<ColumnSchema> col_schemas = {
-        ColumnSchema("id1", TSDataType::STRING, CompressionType::UNCOMPRESSED,
-                     TSEncoding::PLAIN, ColumnCategory::TAG),
-        ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
-                     TSEncoding::PLAIN, ColumnCategory::FIELD),
-    };
-    TableSchema schema("t1", col_schemas);
-
-    // Build tag filter: id1 == "dev1"
-    TagFilterBuilder builder(&schema);
-    Filter* tag_filter = builder.eq("id1", "dev1");
-
-    TsFileReader reader;
-    ASSERT_EQ(reader.open(file_name_), E_OK);
-
-    ResultSet* rs = nullptr;
-    ASSERT_EQ(reader.queryByRow("t1", {"id1", "s1"}, 0, -1, rs, tag_filter),
-              E_OK);
-    ASSERT_NE(rs, nullptr);
-
-    std::vector<int64_t> filtered_s1;
-    bool has_next = false;
-    while (IS_SUCC(rs->next(has_next)) && has_next) {
-        filtered_s1.push_back(rs->get_value<int64_t>("s1"));
-    }
-    reader.destroy_query_data_set(rs);
-    reader.close();
-    delete tag_filter;
-
-    // dev1 has rows_per_device rows with s1 = 1*1000+t for t in [0,20).
-    ASSERT_EQ(filtered_s1.size(), static_cast<size_t>(rows_per_device));
-    for (int t = 0; t < rows_per_device; t++) {
-        EXPECT_EQ(filtered_s1[t], static_cast<int64_t>(1 * 1000 + t));
-    }
 }

@@ -169,7 +169,7 @@ if (ENABLE_LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13)
+    include_directories(${THIRD_PARTY_INCLUDE}/zlib-1.3.1)
 endif()
 
 if (ENABLE_ANTLR4)
@@ -186,6 +186,7 @@ file(GLOB_RECURSE TEST_SRCS
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
+        "compress/*_test.cc"
 )
 
 # Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.

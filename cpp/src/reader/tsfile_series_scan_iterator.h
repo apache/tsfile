@@ -50,6 +50,7 @@ class TsFileSeriesScanIterator {
           tsblock_(nullptr),
           time_filter_(nullptr),
           is_aligned_(false),
+          is_multi_value_(false),
           row_offset_(0),
           row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
@@ -93,11 +94,42 @@ class TsFileSeriesScanIterator {
                  int64_t min_time_hint = std::numeric_limits<int64_t>::min());
     void revert_tsblock();
 
+    // Multi-value: number of value columns in the TsBlock
+    uint32_t get_value_column_count() const {
+        if (is_multi_value_ && chunk_reader_) {
+            auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
+            return acr->get_value_column_count();
+        }
+        return 1;
+    }
+
+    bool is_multi_value() const { return is_multi_value_; }
+
     friend class TsFileIOReader;
 
    private:
     int init_chunk_reader();
+    int init_chunk_reader_multi();
     FORCE_INLINE bool has_next_chunk() const {
+        if (is_multi_value_) {
+            // Anchor on the time chunk list and require every value column
+            // to still have a chunk available.  Checking only value[0] used
+            // to read past end() for columns with fewer chunks (e.g. a
+            // column added after some chunk groups had already been
+            // flushed), which dereferenced freed memory and paired the
+            // wrong time/value chunks.
+            if (time_chunk_meta_cursor_ ==
+                itimeseries_index_->get_time_chunk_meta_list()->end()) {
+                return false;
+            }
+            for (uint32_t c = 0; c < value_chunk_meta_cursors_.size(); c++) {
+                if (value_chunk_meta_cursors_[c] ==
+                    itimeseries_index_->get_value_chunk_meta_list(c)->end()) {
+                    return false;
+                }
+            }
+            return true;
+        }
         if (is_aligned_) {
             return value_chunk_meta_cursor_ !=
                    itimeseries_index_->get_value_chunk_meta_list()->end();
@@ -107,7 +139,21 @@ class TsFileSeriesScanIterator {
         }
     }
     FORCE_INLINE void advance_to_next_chunk() {
-        if (is_aligned_) {
+        if (is_multi_value_) {
+            // Guard each cursor against advancing past end().  Same defense
+            // as has_next_chunk(): per-column chunk counts can diverge in
+            // files with schema evolution.
+            auto time_end =
+                itimeseries_index_->get_time_chunk_meta_list()->end();
+            if (time_chunk_meta_cursor_ != time_end) time_chunk_meta_cursor_++;
+            for (uint32_t c = 0; c < value_chunk_meta_cursors_.size(); c++) {
+                auto end =
+                    itimeseries_index_->get_value_chunk_meta_list(c)->end();
+                if (value_chunk_meta_cursors_[c] != end) {
+                    value_chunk_meta_cursors_[c]++;
+                }
+            }
+        } else if (is_aligned_) {
             time_chunk_meta_cursor_++;
             value_chunk_meta_cursor_++;
         } else {
@@ -119,15 +165,10 @@ class TsFileSeriesScanIterator {
     }
     bool should_skip_chunk_by_time(ChunkMeta* cm, int64_t min_time_hint);
     bool should_skip_chunk_by_offset(ChunkMeta* cm);
-    /**
-     * Aligned (VECTOR): whole-chunk skip by row count is only safe when the
-     * time ChunkMeta and value ChunkMeta agree on statistic count (>0). If
-     * either side lacks count or counts differ, skip is disabled for this
-     * chunk; pages are loaded and page/row-level offset handling applies.
-     */
     bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
                                              ChunkMeta* value_cm);
     common::TsBlock* alloc_tsblock();
+    common::TsBlock* alloc_tsblock_multi();
 
    private:
     ReadFile* read_file_;
@@ -140,12 +181,16 @@ class TsFileSeriesScanIterator {
     common::SimpleList<ChunkMeta*>::Iterator chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator time_chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator value_chunk_meta_cursor_;
+    // Multi-value: one cursor per value column
+    std::vector<common::SimpleList<ChunkMeta*>::Iterator>
+        value_chunk_meta_cursors_;
     IChunkReader* chunk_reader_;
 
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
     bool is_aligned_ = false;
+    bool is_multi_value_ = false;
     int row_offset_;
     int row_limit_;
 };

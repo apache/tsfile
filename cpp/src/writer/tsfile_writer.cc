@@ -25,8 +25,12 @@
 #include <unistd.h>
 #endif
 
+#include <chrono>
+#include <iomanip>
+
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#include "common/global.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
 #endif
@@ -56,23 +60,19 @@ int libtsfile_init() {
 }
 
 void libtsfile_destroy() {
-#ifdef ENABLE_THREADS
-    delete common::g_write_thread_pool_;
-    common::g_write_thread_pool_ = nullptr;
-#endif
     ModStat::get_instance().destroy();
+#ifdef ENABLE_THREADS
+    delete common::g_thread_pool_;
+    common::g_thread_pool_ = nullptr;
+#endif
     libtsfile::g_s_is_inited = false;
 }
 
-void set_page_max_point_count(uint32_t page_max_ponint_count) {
-    config_set_page_max_point_count(page_max_ponint_count);
+int set_page_max_point_count(uint32_t page_max_ponint_count) {
+    return config_set_page_max_point_count(page_max_ponint_count);
 }
-void set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
-    config_set_max_degree_of_index_node(max_degree_of_index_node);
-}
-
-void set_strict_page_size(bool strict_page_size) {
-    config_set_strict_page_size(strict_page_size);
+int set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
+    return config_set_max_degree_of_index_node(max_degree_of_index_node);
 }
 
 TsFileWriter::TsFileWriter()
@@ -84,8 +84,7 @@ TsFileWriter::TsFileWriter()
       record_count_for_next_mem_check_(
           g_config_value_.record_count_for_next_mem_check_),
       write_file_created_(false),
-      io_writer_owned_(true),
-      enforce_recovered_last_time_order_(false) {}
+      io_writer_owned_(true) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
@@ -131,7 +130,19 @@ int TsFileWriter::init(WriteFile* write_file) {
     write_file_ = write_file;
     write_file_created_ = false;
     io_writer_owned_ = true;
+    // Re-arm per-lifecycle state when the writer is reused after a
+    // destroy().  enforce_recovered_last_time_order_ may have been set
+    // true by a previous recovery init; without resetting it we'd refuse
+    // valid writes whose timestamps don't satisfy a long-stale anchor.
+    // unrecoverable_ from a previous partial-write failure would otherwise
+    // make every operation on the new file fail immediately.
+    // start_file_done_ is true after the previous lifecycle's first flush,
+    // so without resetting it flush() would skip the magic/version write on
+    // the new file and produce headerless output.
     enforce_recovered_last_time_order_ = false;
+    unrecoverable_ = false;
+    start_file_done_ = false;
+    record_count_since_last_flush_ = 0;
     io_writer_ = new TsFileIOWriter();
     io_writer_->init(write_file_);
     return E_OK;
@@ -151,6 +162,10 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     write_file_ = rw->get_write_file();
     write_file_created_ = false;
     io_writer_owned_ = false;
+    // Clear any unrecoverable_ latched from a previous lifecycle so the
+    // re-init isn't immediately poisoned.
+    unrecoverable_ = false;
+    // Reject new writes whose timestamps fall back into the recovered range.
     enforce_recovered_last_time_order_ = true;
     io_writer_ = rw;
 
@@ -188,6 +203,8 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
             if (cm == nullptr) {
                 continue;
             }
+            // Track the highest end_time across recovered chunks so that
+            // appending writes can refuse out-of-order timestamps.
             if (cm->statistic_ != nullptr && cm->statistic_->count_ > 0) {
                 group->last_time_ =
                     std::max(group->last_time_, cm->statistic_->end_time_);
@@ -682,6 +699,10 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
     return mem_total_size;
 }
 
+int64_t TsFileWriter::calculate_meta_mem_size() const {
+    return io_writer_->get_meta_size();
+}
+
 /**
  * check occupied memory size, if it exceeds the chunkGroupSize threshold, flush
  * them to given OutputStream.
@@ -689,7 +710,15 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
 int TsFileWriter::check_memory_size_and_may_flush_chunks() {
     int ret = E_OK;
     if (record_count_since_last_flush_ >= record_count_for_next_mem_check_) {
-        int64_t mem_size = calculate_mem_size_for_all_group();
+        // chunk-writer memory drops to ~0 after flush, but chunk metadata
+        // (ChunkMeta / ChunkGroupMeta / per-statistic PageArenas) keeps
+        // accumulating until end_file().  Wide-schema or many-flush
+        // workloads can pile up tens of MB of metadata that the old
+        // threshold check ignored entirely — flush would never fire even
+        // though total writer memory was well past chunk_group_size_threshold_.
+        int64_t chunk_size = calculate_mem_size_for_all_group();
+        int64_t meta_size = calculate_meta_mem_size();
+        int64_t mem_size = chunk_size + meta_size;
         record_count_for_next_mem_check_ =
             record_count_since_last_flush_ *
             common::g_config_value_.chunk_group_size_threshold_ / mem_size;
@@ -701,16 +730,17 @@ int TsFileWriter::check_memory_size_and_may_flush_chunks() {
 }
 
 int TsFileWriter::write_record(const TsRecord& record) {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
-    auto schema_it = schemas_.find(device_id);
-    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
-        return E_DEVICE_NOT_EXIST;
-    }
-    MeasurementSchemaGroup* device_schema = schema_it->second;
-    if (enforce_recovered_last_time_order_ &&
-        record.timestamp_ <= device_schema->last_time_) {
-        return E_OUT_OF_ORDER;
+    // After recovery, refuse writes whose timestamp would land at or before
+    // any already-flushed chunk's end_time for this device.
+    if (enforce_recovered_last_time_order_) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
+            record.timestamp_ <= schema_it->second->last_time_) {
+            return E_OUT_OF_ORDER;
+        }
     }
     // std::vector<ChunkWriter*> chunk_writers;
     SimpleVector<ChunkWriter*> chunk_writers;
@@ -732,24 +762,28 @@ int TsFileWriter::write_record(const TsRecord& record) {
                     record.points_[c]);
     }
 
-    device_schema->last_time_ =
-        std::max(device_schema->last_time_, record.timestamp_);
+    if (enforce_recovered_last_time_order_) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr) {
+            schema_it->second->last_time_ =
+                std::max(schema_it->second->last_time_, record.timestamp_);
+        }
+    }
     record_count_since_last_flush_++;
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
 
 int TsFileWriter::write_record_aligned(const TsRecord& record) {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
-    auto schema_it = schemas_.find(device_id);
-    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
-        return E_DEVICE_NOT_EXIST;
-    }
-    MeasurementSchemaGroup* device_schema = schema_it->second;
-    if (enforce_recovered_last_time_order_ &&
-        record.timestamp_ <= device_schema->last_time_) {
-        return E_OUT_OF_ORDER;
+    if (enforce_recovered_last_time_order_) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
+            record.timestamp_ <= schema_it->second->last_time_) {
+            return E_OUT_OF_ORDER;
+        }
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     SimpleVector<common::TSDataType> data_types;
@@ -763,6 +797,8 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
     if (value_chunk_writers.size() != record.points_.size()) {
         return E_INVALID_ARG;
     }
+    // Snapshot page counters before the write so we can detect any column
+    // that crossed a page boundary and seal the rest in lockstep.
     int32_t time_pages_before = time_chunk_writer->num_of_pages();
     std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
@@ -771,22 +807,40 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
             value_pages_before[c] = value_chunk_writer->num_of_pages();
         }
     }
-    time_chunk_writer->write(record.timestamp_);
+    // Time first: a rejected timestamp (E_OUT_OF_ORDER, OOM, etc.) must
+    // not silently advance the value writers — that would leave the time
+    // chunk one row behind every value chunk for the rest of the file.
+    if (RET_FAIL(time_chunk_writer->write(record.timestamp_))) {
+        return ret;
+    }
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
         ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
-        write_point_aligned(value_chunk_writer, record.timestamp_,
-                            data_types[c], record.points_[c]);
+        if (RET_FAIL(write_point_aligned(value_chunk_writer, record.timestamp_,
+                                         data_types[c], record.points_[c]))) {
+            // Time wrote the row but at least one value column failed
+            // mid-record; the per-column row counts no longer agree.
+            // Mark the writer unrecoverable so flush/close refuses to
+            // seal a misaligned chunk group.
+            unrecoverable_ = true;
+            return ret;
+        }
     }
     if (RET_FAIL(maybe_seal_aligned_pages_together(
             time_chunk_writer, value_chunk_writers, time_pages_before,
             value_pages_before))) {
+        unrecoverable_ = true;
         return ret;
     }
-    device_schema->last_time_ =
-        std::max(device_schema->last_time_, record.timestamp_);
+    if (enforce_recovered_last_time_order_) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr) {
+            schema_it->second->last_time_ =
+                std::max(schema_it->second->last_time_, record.timestamp_);
+        }
+    }
     return ret;
 }
 
@@ -815,39 +869,10 @@ int TsFileWriter::write_point(ChunkWriter* chunk_writer, int64_t timestamp,
     }
 }
 
-int TsFileWriter::write_point_aligned(ValueChunkWriter* value_chunk_writer,
-                                      int64_t timestamp,
-                                      common::TSDataType data_type,
-                                      const DataPoint& point) {
-    bool isnull = point.isnull;
-    switch (data_type) {
-        case common::BOOLEAN:
-            return value_chunk_writer->write(timestamp, point.u_.bool_val_,
-                                             isnull);
-        case common::INT32:
-        case common::DATE:
-            return value_chunk_writer->write(timestamp, point.u_.i32_val_,
-                                             isnull);
-        case common::TIMESTAMP:
-        case common::INT64:
-            return value_chunk_writer->write(timestamp, point.u_.i64_val_,
-                                             isnull);
-        case common::FLOAT:
-            return value_chunk_writer->write(timestamp, point.u_.float_val_,
-                                             isnull);
-        case common::DOUBLE:
-            return value_chunk_writer->write(timestamp, point.u_.double_val_,
-                                             isnull);
-        case common::BLOB:
-        case common::TEXT:
-        case common::STRING:
-            return value_chunk_writer->write(timestamp, point.text_val_,
-                                             isnull);
-        default:
-            return E_INVALID_DATA_POINT;
-    }
-}
-
+// After writing one record / batch to the time chunk and every value chunk,
+// keep their page boundaries aligned: if any of them autosealed a page on
+// memory pressure, seal the rest of the open pages too so an aligned reader
+// can still pair position N across time + every value column.
 int TsFileWriter::maybe_seal_aligned_pages_together(
     TimeChunkWriter* time_chunk_writer,
     common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
@@ -883,19 +908,52 @@ int TsFileWriter::maybe_seal_aligned_pages_together(
     return ret;
 }
 
+int TsFileWriter::write_point_aligned(ValueChunkWriter* value_chunk_writer,
+                                      int64_t timestamp,
+                                      common::TSDataType data_type,
+                                      const DataPoint& point) {
+    bool isnull = point.isnull;
+    switch (data_type) {
+        case common::BOOLEAN:
+            return value_chunk_writer->write(timestamp, point.u_.bool_val_,
+                                             isnull);
+        case common::INT32:
+        case common::DATE:
+            return value_chunk_writer->write(timestamp, point.u_.i32_val_,
+                                             isnull);
+        case common::TIMESTAMP:
+        case common::INT64:
+            return value_chunk_writer->write(timestamp, point.u_.i64_val_,
+                                             isnull);
+        case common::FLOAT:
+            return value_chunk_writer->write(timestamp, point.u_.float_val_,
+                                             isnull);
+        case common::DOUBLE:
+            return value_chunk_writer->write(timestamp, point.u_.double_val_,
+                                             isnull);
+        case common::BLOB:
+        case common::TEXT:
+        case common::STRING:
+            return value_chunk_writer->write(timestamp, point.text_val_,
+                                             isnull);
+        default:
+            return E_INVALID_DATA_POINT;
+    }
+}
+
 int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id =
         std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
-    auto schema_it = schemas_.find(device_id);
-    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
-        return E_DEVICE_NOT_EXIST;
-    }
-    MeasurementSchemaGroup* device_schema = schema_it->second;
     const uint32_t total_rows = tablet.get_cur_row_size();
     if (enforce_recovered_last_time_order_ && total_rows > 0 &&
-        tablet.timestamps_[0] <= device_schema->last_time_) {
-        return E_OUT_OF_ORDER;
+        tablet.timestamps_ != nullptr) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
+            tablet.timestamps_[0] <= schema_it->second->last_time_) {
+            return E_OUT_OF_ORDER;
+        }
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     TimeChunkWriter* time_chunk_writer = nullptr;
@@ -906,247 +964,109 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
                                          data_types))) {
         return ret;
     }
-    const bool strict_page_size = common::g_config_value_.strict_page_size_;
-
-    // Decide whether we have string/blob/text columns.
-    bool has_varlen_column = false;
-    for (uint32_t i = 0; i < data_types.size(); i++) {
-        if (data_types[i] == common::STRING || data_types[i] == common::TEXT ||
-            data_types[i] == common::BLOB) {
-            has_varlen_column = true;
-            break;
+    ASSERT(data_types.size() == tablet.get_column_count());
+    for (uint32_t c = 0; c < data_types.size(); c++) {
+        if (data_types[c] == common::NULL_TYPE) {
+            continue;
+        }
+        if (data_types[c] != tablet.schema_vec_->at(c).data_type_) {
+            return E_TYPE_NOT_MATCH;
         }
     }
-
-    // Keep writers' seal-check behavior consistent across calls.
-    time_chunk_writer->set_enable_page_seal_if_full(strict_page_size);
+    // Snapshot page counters before the batch so we can detect any column
+    // that crossed a page boundary mid-tablet and seal the rest in lockstep.
+    int32_t time_pages_before = time_chunk_writer->num_of_pages();
+    std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        if (!IS_NULL(value_chunk_writers[c])) {
-            value_chunk_writers[c]->set_enable_page_seal_if_full(
-                strict_page_size);
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+        if (!IS_NULL(value_chunk_writer)) {
+            value_pages_before[c] = value_chunk_writer->num_of_pages();
         }
     }
-
-    if (strict_page_size) {
-        // Strict mode: keep the original row-based insertion to ensure aligned
-        // pages seal together when either side becomes full.
-        for (uint32_t row = 0; row < total_rows; row++) {
-            int32_t time_pages_before = time_chunk_writer->num_of_pages();
-            std::vector<int32_t> value_pages_before(value_chunk_writers.size(),
-                                                    0);
-            for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-                if (!IS_NULL(value_chunk_writer)) {
-                    value_pages_before[c] = value_chunk_writer->num_of_pages();
-                }
-            }
-
-            if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[row]))) {
-                return ret;
-            }
-            ASSERT(value_chunk_writers.size() == tablet.get_column_count());
-            for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-                if (IS_NULL(value_chunk_writer)) {
-                    continue;
-                }
-                if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c,
-                                                row, row + 1))) {
-                    return ret;
-                }
-            }
-            if (RET_FAIL(maybe_seal_aligned_pages_together(
-                    time_chunk_writer, value_chunk_writers, time_pages_before,
-                    value_pages_before))) {
-                return ret;
+    // Suppress memory-driven page sealing on every column for the duration of
+    // the batch. The count-driven seals inside write_batch still fire at the
+    // same `page_writer_max_point_num_` boundary on every writer (time +
+    // values), which keeps aligned page boundaries in lock-step. Re-enable
+    // both before returning so subsequent record-by-record writes restore the
+    // normal memory-pressure behavior, and let the final
+    // maybe_seal_aligned_pages_together pick up any count-driven divergence
+    // (e.g. when a sealed value column ended a page that the time column did
+    // not).
+    time_chunk_writer->set_enable_page_seal_if_full(false);
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+        if (!IS_NULL(value_chunk_writer)) {
+            value_chunk_writer->set_enable_page_seal_if_full(false);
+        }
+    }
+    auto restore_seal = [&]() {
+        time_chunk_writer->set_enable_page_seal_if_full(true);
+        for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+            if (!IS_NULL(value_chunk_writers[k])) {
+                value_chunk_writers[k]->set_enable_page_seal_if_full(true);
             }
         }
-        if (total_rows > 0) {
-            device_schema->last_time_ = std::max(
-                device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
-        }
+    };
+    // Any failure (out-of-order timestamps, OOM, etc.) must abort before we
+    // write a single value column — otherwise the time chunk would record
+    // fewer rows than each value chunk and the chunk-group would deserialize
+    // as misaligned data.
+    if (RET_FAIL(time_write_column_batch(time_chunk_writer, tablet, 0,
+                                         total_rows))) {
+        restore_seal();
         return ret;
     }
-
-    // Non-strict mode: switch to column-based insertion.
-    if (!has_varlen_column) {
-        // Optimization: when there is no string/blob/text column, we only need
-        // to split by point-number so that each split will trigger a page
-        // seal (and avoid the per-row page-size check).
-        const uint32_t points_per_page =
-            common::g_config_value_.page_writer_max_point_num_;
-
-        // Disable auto page sealing. We will seal pages at split boundaries.
-        time_chunk_writer->set_enable_page_seal_if_full(false);
-        for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-            if (!IS_NULL(value_chunk_writers[c])) {
-                value_chunk_writers[c]->set_enable_page_seal_if_full(false);
-            }
-        }
-
-        // Determine how many points we need to fill the current unsealed time
-        // page (it may already contain data from previous tablets).
-        uint32_t time_cur_points = time_chunk_writer->get_point_numer();
-        if (time_cur_points >= points_per_page &&
-            time_chunk_writer->has_current_page_data()) {
-            // Close the already-full page together with all aligned value
-            // pages.
-            if (RET_FAIL(time_chunk_writer->seal_current_page())) {
-                return ret;
-            }
-            for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-                if (!IS_NULL(value_chunk_writer) &&
-                    value_chunk_writer->has_current_page_data()) {
-                    if (RET_FAIL(value_chunk_writer->seal_current_page())) {
-                        return ret;
-                    }
-                }
-            }
-            time_cur_points = 0;
-        }
-        const uint32_t first_seg_len =
-            (time_cur_points > 0 && time_cur_points < points_per_page)
-                ? (points_per_page - time_cur_points)
-                : points_per_page;
-
-        // 1) Write time in segments and seal all full segments (except the
-        // last remaining segment).
-        uint32_t seg_start = 0;
-        uint32_t seg_len = first_seg_len;
-        while (seg_start < total_rows) {
-            const uint32_t seg_end = std::min(seg_start + seg_len, total_rows);
-            if (RET_FAIL(time_write_column(time_chunk_writer, tablet, seg_start,
-                                           seg_end))) {
-                return ret;
-            }
-            seg_start = seg_end;
-            if (seg_start < total_rows) {
-                if (RET_FAIL(time_chunk_writer->seal_current_page())) {
-                    return ret;
-                }
-            }
-            seg_len = points_per_page;
-        }
-
-        // 2) Write each value column in the same segments.
-        ASSERT(value_chunk_writers.size() == tablet.get_column_count());
-        for (uint32_t col = 0; col < value_chunk_writers.size(); col++) {
-            ValueChunkWriter* value_chunk_writer = value_chunk_writers[col];
-            if (IS_NULL(value_chunk_writer)) {
-                continue;
-            }
-
-            seg_start = 0;
-            seg_len = first_seg_len;
-            while (seg_start < total_rows) {
-                const uint32_t seg_end =
-                    std::min(seg_start + seg_len, total_rows);
-                if (RET_FAIL(value_write_column(value_chunk_writer, tablet, col,
-                                                seg_start, seg_end))) {
-                    return ret;
-                }
-                seg_start = seg_end;
-                if (seg_start < total_rows) {
-                    if (value_chunk_writer->has_current_page_data() &&
-                        RET_FAIL(value_chunk_writer->seal_current_page())) {
-                        return ret;
-                    }
-                }
-                seg_len = points_per_page;
-            }
-        }
-        if (total_rows > 0) {
-            device_schema->last_time_ = std::max(
-                device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
-        }
-        return ret;
-    }
-
-    // General non-strict (may have varlen STRING/TEXT/BLOB columns):
-    // time auto-seals to provide aligned page boundaries; value writers
-    // skip auto page sealing and are sealed manually at time boundaries.
-    // Attention: since value-side auto-seal is disabled, if a varlen value
-    // page hits the memory threshold earlier, it may not seal immediately
-    // and instead will be sealed later at the recorded time-page boundaries
-    // (this may sacrifice the strict page size limit for performance).
-    time_chunk_writer->set_enable_page_seal_if_full(true);
-    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        if (!IS_NULL(value_chunk_writers[c])) {
-            value_chunk_writers[c]->set_enable_page_seal_if_full(false);
-        }
-    }
-
-    std::vector<uint32_t> time_page_row_ends;
-    const uint32_t page_max_points = std::max<uint32_t>(
-        1, common::g_config_value_.page_writer_max_point_num_);
-    time_page_row_ends.reserve(total_rows / page_max_points + 1);
-
-    // Write time and record where a time page is sealed.
-    for (uint32_t row = 0; row < total_rows; row++) {
-        const int32_t pages_before = time_chunk_writer->num_of_pages();
-        if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[row]))) {
-            return ret;
-        }
-        const int32_t pages_after = time_chunk_writer->num_of_pages();
-        if (pages_after > pages_before) {
-            const uint32_t boundary_end = row + 1;
-            if (time_page_row_ends.empty() ||
-                time_page_row_ends.back() != boundary_end) {
-                time_page_row_ends.push_back(boundary_end);
-            }
-        }
-    }
-
-    // Write values column-by-column and seal at recorded boundaries.
     ASSERT(value_chunk_writers.size() == tablet.get_column_count());
-    for (uint32_t col = 0; col < value_chunk_writers.size(); col++) {
-        ValueChunkWriter* value_chunk_writer = value_chunk_writers[col];
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
-        uint32_t seg_start = 0;
-        for (uint32_t boundary_end : time_page_row_ends) {
-            if (boundary_end <= seg_start) {
-                continue;
-            }
-            if (RET_FAIL(value_write_column(value_chunk_writer, tablet, col,
-                                            seg_start, boundary_end))) {
-                return ret;
-            }
-            if (value_chunk_writer->has_current_page_data() &&
-                RET_FAIL(value_chunk_writer->seal_current_page())) {
-                return ret;
-            }
-            seg_start = boundary_end;
-        }
-        if (seg_start < total_rows) {
-            if (RET_FAIL(value_write_column(value_chunk_writer, tablet, col,
-                                            seg_start, total_rows))) {
-                return ret;
-            }
+        if (RET_FAIL(value_write_column_batch(value_chunk_writer, tablet, c, 0,
+                                              total_rows))) {
+            restore_seal();
+            // Time chunk has the full row count but at least one value
+            // column stopped early.  Mark the writer unrecoverable so no
+            // later flush/close seals the divergent state.
+            unrecoverable_ = true;
+            return ret;
         }
     }
-    if (total_rows > 0) {
-        device_schema->last_time_ = std::max(
-            device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
+    restore_seal();
+    if (RET_FAIL(maybe_seal_aligned_pages_together(
+            time_chunk_writer, value_chunk_writers, time_pages_before,
+            value_pages_before))) {
+        unrecoverable_ = true;
+        return ret;
+    }
+    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
+        tablet.timestamps_ != nullptr) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr) {
+            schema_it->second->last_time_ =
+                std::max(schema_it->second->last_time_,
+                         tablet.timestamps_[total_rows - 1]);
+        }
     }
     return ret;
 }
 
 int TsFileWriter::write_tablet(const Tablet& tablet) {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id =
         std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
-    auto schema_it = schemas_.find(device_id);
-    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
-        return E_DEVICE_NOT_EXIST;
-    }
-    MeasurementSchemaGroup* device_schema = schema_it->second;
+    // Use the actual filled row count — max_row_num_ is the buffer capacity
+    // and would let uninitialized timestamps/values past the live range leak
+    // into the chunk.
     const uint32_t total_rows = tablet.get_cur_row_size();
     if (enforce_recovered_last_time_order_ && total_rows > 0 &&
-        tablet.timestamps_[0] <= device_schema->last_time_) {
-        return E_OUT_OF_ORDER;
+        tablet.timestamps_ != nullptr) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
+            tablet.timestamps_[0] <= schema_it->second->last_time_) {
+            return E_OUT_OF_ORDER;
+        }
     }
     SimpleVector<ChunkWriter*> chunk_writers;
     SimpleVector<common::TSDataType> data_types;
@@ -1155,22 +1075,44 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
                                  data_types))) {
         return ret;
     }
+    ASSERT(data_types.size() == tablet.get_column_count());
+    for (uint32_t c = 0; c < data_types.size(); c++) {
+        if (data_types[c] == common::NULL_TYPE) {
+            continue;
+        }
+        if (data_types[c] != tablet.schema_vec_->at(c).data_type_) {
+            return E_TYPE_NOT_MATCH;
+        }
+    }
     ASSERT(chunk_writers.size() == tablet.get_column_count());
+    uint32_t columns_written = 0;
     for (uint32_t c = 0; c < chunk_writers.size(); c++) {
         ChunkWriter* chunk_writer = chunk_writers[c];
         if (IS_NULL(chunk_writer)) {
             continue;
         }
-        if (RET_FAIL(write_column(chunk_writer, tablet, c))) {
+        if (RET_FAIL(
+                write_column_batch(chunk_writer, tablet, c, 0, total_rows))) {
+            // Earlier columns already advanced their chunk writers; this
+            // column failed mid-write, so per-column row counts diverge.
+            // Mark unrecoverable so flush/close refuse to seal the
+            // misaligned tree chunk group.
+            if (columns_written > 0) unrecoverable_ = true;
             return ret;
         }
+        columns_written++;
     }
 
-    if (total_rows > 0) {
-        device_schema->last_time_ = std::max(
-            device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
+    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
+        tablet.timestamps_ != nullptr) {
+        auto schema_it = schemas_.find(device_id);
+        if (schema_it != schemas_.end() && schema_it->second != nullptr) {
+            schema_it->second->last_time_ =
+                std::max(schema_it->second->last_time_,
+                         tablet.timestamps_[total_rows - 1]);
+        }
     }
-    record_count_since_last_flush_ += tablet.max_row_num_;
+    record_count_since_last_flush_ += total_rows;
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
@@ -1201,6 +1143,7 @@ int TsFileWriter::write_tree(const TsRecord& record) {
 }
 
 int TsFileWriter::write_table(Tablet& tablet) {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     if (io_writer_->get_schema()->table_schema_map_.find(
             tablet.insert_target_name_) ==
@@ -1213,175 +1156,332 @@ int TsFileWriter::write_table(Tablet& tablet) {
     }
 
     auto device_id_end_index_pairs = split_tablet_by_device(tablet);
-    int start_idx = 0;
-    for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
-        auto device_id = device_id_end_index_pair.first;
-        int end_idx = device_id_end_index_pair.second;
-        if (end_idx == 0) continue;
 
-        SimpleVector<ValueChunkWriter*> value_chunk_writers;
-        TimeChunkWriter* time_chunk_writer = nullptr;
-        if (RET_FAIL(do_check_schema_table(device_id, tablet, time_chunk_writer,
-                                           value_chunk_writers))) {
-            return ret;
-        }
-        auto schema_it = schemas_.find(device_id);
-        MeasurementSchemaGroup* device_schema =
-            (schema_it == schemas_.end()) ? nullptr : schema_it->second;
+    if (table_aligned_) {
+        struct ValueTask {
+            ValueChunkWriter* vcw;
+            uint32_t col_idx;
+        };
+        struct SegmentRange {
+            uint32_t si;
+            uint32_t ei;
+        };
+        struct DeviceWriteCtx {
+            TimeChunkWriter* tcw;
+            std::vector<ValueTask> value_tasks;
+            std::vector<SegmentRange> segments;
+            uint32_t initial_page_points;
+        };
 
-        std::vector<uint32_t> field_columns;
-        field_columns.reserve(tablet.get_column_count());
-        for (uint32_t col = 0; col < tablet.get_column_count(); ++col) {
-            if (tablet.column_categories_[col] ==
-                common::ColumnCategory::FIELD) {
-                field_columns.push_back(col);
+        const uint32_t page_max_points =
+            std::max<uint32_t>(1, g_config_value_.page_writer_max_point_num_);
+
+        std::vector<DeviceWriteCtx> device_ctxs;
+        std::map<std::shared_ptr<IDeviceID>, size_t, IDeviceIDComparator>
+            device_ctx_index;
+        int start_idx = 0;
+        for (auto& pair : device_id_end_index_pairs) {
+            auto device_id = pair.first;
+            int end_idx = pair.second;
+            if (end_idx == 0) continue;
+
+            const uint32_t si = static_cast<uint32_t>(start_idx);
+            const uint32_t ei = static_cast<uint32_t>(end_idx);
+            // Recovery: refuse any segment whose first timestamp would land
+            // at or before a flushed chunk's end_time for this device. This
+            // mirrors the per-record / per-tablet check on the tree path.
+            if (enforce_recovered_last_time_order_ && tablet.timestamps_ &&
+                ei > si) {
+                auto schema_it = schemas_.find(device_id);
+                if (schema_it != schemas_.end() &&
+                    schema_it->second != nullptr &&
+                    tablet.timestamps_[si] <= schema_it->second->last_time_) {
+                    return E_OUT_OF_ORDER;
+                }
             }
-        }
-        ASSERT(field_columns.size() == value_chunk_writers.size());
-
-        // Precompute page boundaries from point counts — no serial write
-        // needed.  The first segment may be shorter if the time page already
-        // holds data from a previous write_table call.
-        const uint32_t page_max_points = std::max<uint32_t>(
-            1, common::g_config_value_.page_writer_max_point_num_);
-        const uint32_t si = static_cast<uint32_t>(start_idx);
-        const uint32_t ei = static_cast<uint32_t>(end_idx);
-        if (enforce_recovered_last_time_order_ && device_schema != nullptr &&
-            si < ei && tablet.timestamps_[si] <= device_schema->last_time_) {
-            return E_OUT_OF_ORDER;
-        }
-
-        // If the current unsealed page is already at or past capacity (from
-        // a previous write_table call), seal it before starting new segments.
-        uint32_t time_cur_points = time_chunk_writer->get_point_numer();
-        if (time_cur_points >= page_max_points) {
-            if (time_chunk_writer->has_current_page_data()) {
-                if (RET_FAIL(time_chunk_writer->seal_current_page())) {
+            auto idx_it = device_ctx_index.find(device_id);
+            if (idx_it == device_ctx_index.end()) {
+                SimpleVector<ValueChunkWriter*> value_chunk_writers;
+                TimeChunkWriter* time_chunk_writer = nullptr;
+                if (RET_FAIL(do_check_schema_table(device_id, tablet,
+                                                   time_chunk_writer,
+                                                   value_chunk_writers))) {
                     return ret;
                 }
-            }
-            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                if (!IS_NULL(value_chunk_writers[k]) &&
-                    value_chunk_writers[k]->has_current_page_data()) {
-                    if (RET_FAIL(value_chunk_writers[k]->seal_current_page())) {
-                        return ret;
+
+                uint32_t time_cur_points = time_chunk_writer->get_point_numer();
+                if (time_cur_points >= page_max_points) {
+                    // Seal the time page first, then every value page in
+                    // lockstep.  Any failure leaves columns at different
+                    // page boundaries and the chunk group can no longer be
+                    // sealed coherently — mark the writer unrecoverable.
+                    if (time_chunk_writer->has_current_page_data()) {
+                        if (RET_FAIL(time_chunk_writer->seal_current_page())) {
+                            unrecoverable_ = true;
+                            return ret;
+                        }
+                    }
+                    for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                        if (!IS_NULL(value_chunk_writers[k]) &&
+                            value_chunk_writers[k]->has_current_page_data()) {
+                            if (RET_FAIL(value_chunk_writers[k]
+                                             ->seal_current_page())) {
+                                unrecoverable_ = true;
+                                return ret;
+                            }
+                        }
+                    }
+                    time_cur_points = 0;
+                }
+
+                DeviceWriteCtx ctx;
+                ctx.tcw = time_chunk_writer;
+                ctx.initial_page_points = time_cur_points;
+                uint32_t field_col_count = 0;
+                for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
+                    if (tablet.column_categories_[i] ==
+                        common::ColumnCategory::FIELD) {
+                        ValueChunkWriter* vcw =
+                            value_chunk_writers[field_col_count];
+                        if (!IS_NULL(vcw)) {
+                            ctx.value_tasks.push_back({vcw, i});
+                        }
+                        field_col_count++;
                     }
                 }
+                device_ctxs.push_back(std::move(ctx));
+                idx_it = device_ctx_index
+                             .insert(std::make_pair(device_id,
+                                                    device_ctxs.size() - 1))
+                             .first;
             }
-            time_cur_points = 0;
-        }
-        const uint32_t first_seg_cap =
-            (time_cur_points > 0 && time_cur_points < page_max_points)
-                ? (page_max_points - time_cur_points)
-                : page_max_points;
 
-        std::vector<uint32_t> page_boundaries;  // row indices where a page
-                                                // should seal
-        {
-            uint32_t pos = si;
-            uint32_t seg_cap = first_seg_cap;
-            while (pos < ei) {
-                uint32_t seg_end = std::min(pos + seg_cap, ei);
-                if (seg_end < ei) {
-                    page_boundaries.push_back(seg_end);
-                }
-                pos = seg_end;
-                seg_cap = page_max_points;
-            }
+            device_ctxs[idx_it->second].segments.push_back({si, ei});
+            start_idx = end_idx;
         }
 
-        // We control page sealing explicitly at precomputed boundaries, so
-        // auto-seal must be disabled during segmented writes — otherwise a
-        // segment of exactly page_max_points would trigger auto-seal AND
-        // our explicit seal, double-sealing (sealing an empty page → crash).
-        // Note: with auto-seal off, the memory-based threshold
-        // (page_writer_max_memory_bytes_) is not enforced within a segment.
-        // For varlen columns (STRING/TEXT/BLOB), individual pages may exceed
-        // the memory limit.  Each segment is still bounded by
-        // page_max_points rows, keeping pages within a reasonable size.
-        auto write_time_in_segments = [this, &tablet, &page_boundaries, si,
-                                       ei](TimeChunkWriter* tcw) -> int {
+        auto write_time_segments =
+            [this, &tablet, page_max_points](
+                TimeChunkWriter* tcw, const std::vector<SegmentRange>& segments,
+                uint32_t initial_page_points) -> int {
             int r = E_OK;
             tcw->set_enable_page_seal_if_full(false);
-            uint32_t seg_start = si;
-            for (uint32_t boundary : page_boundaries) {
-                if ((r = time_write_column(tcw, tablet, seg_start, boundary)) !=
-                    E_OK)
-                    return r;
-                if ((r = tcw->seal_current_page()) != E_OK) return r;
-                seg_start = boundary;
-            }
-            if (seg_start < ei) {
-                r = time_write_column(tcw, tablet, seg_start, ei);
+            uint32_t page_remaining =
+                (initial_page_points > 0 &&
+                 initial_page_points < page_max_points)
+                    ? (page_max_points - initial_page_points)
+                    : page_max_points;
+            for (const auto& segment : segments) {
+                uint32_t seg_pos = segment.si;
+                while (seg_pos < segment.ei) {
+                    uint32_t batch =
+                        std::min(page_remaining, segment.ei - seg_pos);
+                    if ((r = time_write_column_batch(
+                             tcw, tablet, seg_pos, seg_pos + batch)) != E_OK) {
+                        tcw->set_enable_page_seal_if_full(true);
+                        return r;
+                    }
+                    seg_pos += batch;
+                    page_remaining -= batch;
+                    if (page_remaining == 0) {
+                        if ((r = tcw->seal_current_page()) != E_OK) {
+                            tcw->set_enable_page_seal_if_full(true);
+                            return r;
+                        }
+                        page_remaining = page_max_points;
+                    }
+                }
             }
             tcw->set_enable_page_seal_if_full(true);
             return r;
         };
 
-        auto write_value_in_segments = [this, &tablet, &page_boundaries, si,
-                                        ei](ValueChunkWriter* vcw,
-                                            uint32_t col_idx) -> int {
+        auto write_value_segments =
+            [this, &tablet, page_max_points](
+                ValueChunkWriter* vcw, uint32_t col_idx,
+                const std::vector<SegmentRange>& segments,
+                uint32_t initial_page_points) -> int {
             int r = E_OK;
             vcw->set_enable_page_seal_if_full(false);
-            uint32_t seg_start = si;
-            for (uint32_t boundary : page_boundaries) {
-                if ((r = value_write_column(vcw, tablet, col_idx, seg_start,
-                                            boundary)) != E_OK)
-                    return r;
-                if (vcw->has_current_page_data() &&
-                    (r = vcw->seal_current_page()) != E_OK)
-                    return r;
-                seg_start = boundary;
-            }
-            if (seg_start < ei) {
-                r = value_write_column(vcw, tablet, col_idx, seg_start, ei);
+            uint32_t page_remaining =
+                (initial_page_points > 0 &&
+                 initial_page_points < page_max_points)
+                    ? (page_max_points - initial_page_points)
+                    : page_max_points;
+            for (const auto& segment : segments) {
+                uint32_t seg_pos = segment.si;
+                while (seg_pos < segment.ei) {
+                    uint32_t batch =
+                        std::min(page_remaining, segment.ei - seg_pos);
+                    if ((r = value_write_column_batch(
+                             vcw, tablet, col_idx, seg_pos, seg_pos + batch)) !=
+                        E_OK) {
+                        vcw->set_enable_page_seal_if_full(true);
+                        return r;
+                    }
+                    seg_pos += batch;
+                    page_remaining -= batch;
+                    if (page_remaining == 0) {
+                        if (vcw->has_current_page_data() &&
+                            (r = vcw->seal_current_page()) != E_OK) {
+                            vcw->set_enable_page_seal_if_full(true);
+                            return r;
+                        }
+                        page_remaining = page_max_points;
+                    }
+                }
             }
             vcw->set_enable_page_seal_if_full(true);
             return r;
         };
 
-        // All columns (time + values) write the same row segments and seal
-        // at the same boundaries — fully parallel.
 #ifdef ENABLE_THREADS
-        if (g_config_value_.parallel_write_enabled_) {
+        if (g_config_value_.parallel_write_enabled_ &&
+            common::g_thread_pool_ != nullptr) {
             std::vector<std::future<int>> futures;
-            futures.push_back(g_write_thread_pool_->submit(
-                [&write_time_in_segments, time_chunk_writer]() {
-                    return write_time_in_segments(time_chunk_writer);
-                }));
-            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                ValueChunkWriter* vcw = value_chunk_writers[k];
-                if (IS_NULL(vcw)) continue;
-                uint32_t col_idx = field_columns[k];
-                futures.push_back(g_write_thread_pool_->submit(
-                    [&write_value_in_segments, vcw, col_idx]() {
-                        return write_value_in_segments(vcw, col_idx);
+            for (auto& ctx : device_ctxs) {
+                futures.push_back(common::g_thread_pool_->submit(
+                    [&write_time_segments, &ctx]() {
+                        return write_time_segments(ctx.tcw, ctx.segments,
+                                                   ctx.initial_page_points);
                     }));
+                for (auto& vt : ctx.value_tasks) {
+                    futures.push_back(common::g_thread_pool_->submit(
+                        [&write_value_segments, &vt, &ctx]() {
+                            return write_value_segments(
+                                vt.vcw, vt.col_idx, ctx.segments,
+                                ctx.initial_page_points);
+                        }));
+                }
             }
             for (auto& f : futures) {
                 int r = f.get();
                 if (r != E_OK && ret == E_OK) ret = r;
             }
-            if (ret != E_OK) return ret;
+            if (ret != E_OK) {
+                // One task aborted mid-batch while others may have written
+                // all of their rows; the per-column row counts no longer
+                // line up.  Mark the writer unrecoverable so flush/close
+                // can't seal a corrupt aligned chunk group.
+                unrecoverable_ = true;
+                return ret;
+            }
         } else
 #endif
         {
-            if (RET_FAIL(write_time_in_segments(time_chunk_writer))) {
-                return ret;
-            }
-            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                ValueChunkWriter* vcw = value_chunk_writers[k];
-                if (IS_NULL(vcw)) continue;
-                if (RET_FAIL(write_value_in_segments(vcw, field_columns[k]))) {
+            for (auto& ctx : device_ctxs) {
+                if (RET_FAIL(write_time_segments(ctx.tcw, ctx.segments,
+                                                 ctx.initial_page_points))) {
+                    // Time wrote partial rows before failing; value columns
+                    // still hold the prior count.  Same column-alignment
+                    // hazard as the parallel path.
+                    unrecoverable_ = true;
                     return ret;
+                }
+                for (auto& vt : ctx.value_tasks) {
+                    if (RET_FAIL(write_value_segments(
+                            vt.vcw, vt.col_idx, ctx.segments,
+                            ctx.initial_page_points))) {
+                        unrecoverable_ = true;
+                        return ret;
+                    }
                 }
             }
         }
-        if (device_schema != nullptr && si < ei) {
-            device_schema->last_time_ =
-                std::max(device_schema->last_time_, tablet.timestamps_[ei - 1]);
+    } else {
+        int start_idx = 0;
+        for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
+            auto device_id = device_id_end_index_pair.first;
+            int end_idx = device_id_end_index_pair.second;
+            if (end_idx == 0) continue;
+
+            const uint32_t si = static_cast<uint32_t>(start_idx);
+            if (enforce_recovered_last_time_order_ && tablet.timestamps_ &&
+                end_idx > start_idx) {
+                auto schema_it = schemas_.find(device_id);
+                if (schema_it != schemas_.end() &&
+                    schema_it->second != nullptr &&
+                    tablet.timestamps_[si] <= schema_it->second->last_time_) {
+                    return E_OUT_OF_ORDER;
+                }
+            }
+            MeasurementNamesFromTablet mnames_getter(tablet);
+            SimpleVector<ChunkWriter*> chunk_writers;
+            SimpleVector<common::TSDataType> data_types;
+            if (RET_FAIL(do_check_schema(device_id, mnames_getter,
+                                         chunk_writers, data_types))) {
+                return ret;
+            }
+            ASSERT(chunk_writers.size() == tablet.get_column_count());
+
+#ifdef ENABLE_THREADS
+            if (chunk_writers.size() >= 2 &&
+                g_config_value_.parallel_write_enabled_ &&
+                common::g_thread_pool_ != nullptr) {
+                const uint32_t si = start_idx;
+                const uint32_t ei = device_id_end_index_pair.second;
+                std::vector<std::future<int>> futures;
+                for (uint32_t c = 0; c < chunk_writers.size(); c++) {
+                    ChunkWriter* cw = chunk_writers[c];
+                    if (IS_NULL(cw)) continue;
+                    futures.push_back(common::g_thread_pool_->submit(
+                        [this, cw, &tablet, c, si, ei]() {
+                            return write_column_batch(cw, tablet, c, si, ei);
+                        }));
+                }
+                for (auto& f : futures) {
+                    int r = f.get();
+                    if (r != E_OK && ret == E_OK) ret = r;
+                }
+                if (ret != E_OK) {
+                    // One column aborted partway while sibling columns
+                    // may have written all of their rows.  The per-column
+                    // chunk writers now disagree on row count, so subsequent
+                    // flush/close would seal a corrupt non-aligned chunk
+                    // group.  Same hazard as the aligned parallel path —
+                    // mark the writer unrecoverable so future ops refuse.
+                    unrecoverable_ = true;
+                    return ret;
+                }
+            } else
+#endif
+            {
+                for (uint32_t c = 0; c < chunk_writers.size(); c++) {
+                    ChunkWriter* chunk_writer = chunk_writers[c];
+                    if (IS_NULL(chunk_writer)) continue;
+                    if (RET_FAIL(write_column_batch(
+                            chunk_writer, tablet, c, start_idx,
+                            device_id_end_index_pair.second))) {
+                        // Sequential path: earlier columns already wrote
+                        // their batch, this column failed → divergent row
+                        // counts.  Same unrecoverable contract.
+                        if (c > 0) unrecoverable_ = true;
+                        return ret;
+                    }
+                }
+            }
+            start_idx = device_id_end_index_pair.second;
         }
-        start_idx = end_idx;
+    }
+    // After all device segments wrote successfully, advance recovery's
+    // per-device last_time_ floor to the highest timestamp this tablet
+    // contributed for each device.
+    if (enforce_recovered_last_time_order_ && tablet.timestamps_) {
+        int update_start = 0;
+        for (auto& pair : device_id_end_index_pairs) {
+            int end_idx = pair.second;
+            if (end_idx == 0) continue;
+            if (end_idx > update_start) {
+                auto schema_it = schemas_.find(pair.first);
+                if (schema_it != schemas_.end() &&
+                    schema_it->second != nullptr) {
+                    schema_it->second->last_time_ =
+                        std::max(schema_it->second->last_time_,
+                                 tablet.timestamps_[end_idx - 1]);
+                }
+            }
+            update_start = end_idx;
+        }
     }
     record_count_since_last_flush_ += tablet.cur_row_size_;
     // Reset string column buffers so the tablet can be reused for the next
@@ -1395,14 +1495,13 @@ std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
 TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
 
-    if (tablet.id_column_indexes_.empty()) {
+    if (tablet.id_column_indexes_.empty() || tablet.single_device_) {
+        // No tag columns or caller guarantees single device — skip boundary
+        // detection entirely.
         auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
         result.emplace_back(std::move(sentinel), 0);
-        std::vector<std::string*> id_array;
-        id_array.push_back(new std::string(tablet.insert_target_name_));
-        auto res = std::make_shared<StringArrayDeviceID>(id_array);
-        delete id_array[0];
-        result.emplace_back(std::move(res), tablet.get_cur_row_size());
+        std::shared_ptr<IDeviceID> dev_id(tablet.get_device_id(0));
+        result.emplace_back(std::move(dev_id), tablet.get_cur_row_size());
         return result;
     }
 
@@ -1428,41 +1527,49 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
 int TsFileWriter::write_column(ChunkWriter* chunk_writer, const Tablet& tablet,
                                int col_idx, uint32_t start_idx,
                                uint32_t end_idx) {
-    int ret = E_OK;
-
     common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
     int64_t* timestamps = tablet.timestamps_;
     Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
     BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
     end_idx = std::min(end_idx, tablet.max_row_num_);
 
-    if (data_type == common::BOOLEAN) {
-        ret = write_typed_column(chunk_writer, timestamps, col_values.bool_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::INT32) {
-        ret =
-            write_typed_column(chunk_writer, timestamps, col_values.int32_data,
-                               col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::INT64) {
-        ret =
-            write_typed_column(chunk_writer, timestamps, col_values.int64_data,
-                               col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::FLOAT) {
-        ret =
-            write_typed_column(chunk_writer, timestamps, col_values.float_data,
-                               col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::DOUBLE) {
-        ret =
-            write_typed_column(chunk_writer, timestamps, col_values.double_data,
-                               col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::STRING) {
-        ret =
-            write_typed_column(chunk_writer, timestamps, col_values.string_col,
-                               col_notnull_bitmap, start_idx, end_idx);
-    } else {
-        ASSERT(false);
+    // Cover every storage type (DATE->int32, TIMESTAMP->int64, TEXT/BLOB->
+    // string).  This is the null fallback for the non-aligned batch path, so a
+    // column of any type that contains a null lands here; the old if/else only
+    // handled 6 types and ASSERT(false)'d (silently no-op in NDEBUG) on
+    // DATE/TIMESTAMP/TEXT/BLOB, dropping those rows.
+    switch (data_type) {
+        case common::BOOLEAN:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.bool_data, col_notnull_bitmap,
+                                      start_idx, end_idx);
+        case common::INT32:
+        case common::DATE:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.int32_data, col_notnull_bitmap,
+                                      start_idx, end_idx);
+        case common::INT64:
+        case common::TIMESTAMP:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.int64_data, col_notnull_bitmap,
+                                      start_idx, end_idx);
+        case common::FLOAT:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.float_data, col_notnull_bitmap,
+                                      start_idx, end_idx);
+        case common::DOUBLE:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.double_data,
+                                      col_notnull_bitmap, start_idx, end_idx);
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB:
+            return write_typed_column(chunk_writer, timestamps,
+                                      col_values.string_col, col_notnull_bitmap,
+                                      start_idx, end_idx);
+        default:
+            return E_NOT_SUPPORT;
     }
-    return ret;
 }
 
 int TsFileWriter::time_write_column(TimeChunkWriter* time_chunk_writer,
@@ -1481,122 +1588,23 @@ int TsFileWriter::time_write_column(TimeChunkWriter* time_chunk_writer,
     return ret;
 }
 
-int TsFileWriter::value_write_column(ValueChunkWriter* value_chunk_writer,
-                                     const Tablet& tablet, int col_idx,
+// Non-aligned numeric column: a null row contributes no point, so null rows
+// are skipped.  Covers bool/int32/int64/float/double; instantiated only from
+// write_column in this translation unit.
+template <typename T>
+int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
+                                     int64_t* timestamps, T* col_values,
+                                     BitMap& col_notnull_bitmap,
                                      uint32_t start_idx, uint32_t end_idx) {
     int ret = E_OK;
-
-    TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
-    int64_t* timestamps = tablet.timestamps_;
-    Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
-    BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
-    switch (data_type) {
-        case common::BOOLEAN:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (bool*)col_values.bool_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
-            break;
-        case common::DATE:
-        case common::INT32:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (int32_t*)col_values.int32_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
-            break;
-        case common::TIMESTAMP:
-        case common::INT64:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (int64_t*)col_values.int64_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
-            break;
-        case common::FLOAT:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (float*)col_values.float_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
-            break;
-        case common::DOUBLE:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (double*)col_values.double_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
-            break;
-        case common::STRING:
-        case common::TEXT:
-        case common::BLOB:
-            ret = write_typed_column(value_chunk_writer, timestamps,
-                                     col_values.string_col, col_notnull_bitmap,
-                                     start_idx, end_idx);
-            break;
-        default:
-            ret = E_NOT_SUPPORT;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        if (LIKELY(!col_notnull_bitmap.test(r))) {
+            if (RET_FAIL(chunk_writer->write(timestamps[r], col_values[r]))) {
+                return ret;
+            }
+        }
     }
     return ret;
-}
-
-#define DO_WRITE_TYPED_COLUMN()                                               \
-    do {                                                                      \
-        int ret = E_OK;                                                       \
-        for (uint32_t r = start_idx; r < end_idx; r++) {                      \
-            if (LIKELY(!col_notnull_bitmap.test(r))) {                        \
-                if (RET_FAIL(                                                 \
-                        chunk_writer->write(timestamps[r], col_values[r]))) { \
-                    return ret;                                               \
-                }                                                             \
-            }                                                                 \
-        }                                                                     \
-        return ret;                                                           \
-    } while (false)
-
-#define DO_VALUE_WRITE_TYPED_COLUMN()                            \
-    do {                                                         \
-        int ret = E_OK;                                          \
-        for (uint32_t r = start_idx; r < end_idx; r++) {         \
-            if (LIKELY(col_notnull_bitmap.test(r))) {            \
-                if (RET_FAIL(value_chunk_writer->write(          \
-                        timestamps[r], col_values[r], true))) {  \
-                    return ret;                                  \
-                }                                                \
-            } else {                                             \
-                if (RET_FAIL(value_chunk_writer->write(          \
-                        timestamps[r], col_values[r], false))) { \
-                    return ret;                                  \
-                }                                                \
-            }                                                    \
-        }                                                        \
-        return ret;                                              \
-    } while (false)
-
-int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
-                                     int64_t* timestamps, bool* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
-                                     int64_t* timestamps, int32_t* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
-                                     int64_t* timestamps, int64_t* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
-                                     int64_t* timestamps, float* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
-                                     int64_t* timestamps, double* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
 }
 
 int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
@@ -1609,8 +1617,7 @@ int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
         if (LIKELY(!col_notnull_bitmap.test(r))) {
             common::String val(
                 string_col->buffer + string_col->offsets[r],
-                static_cast<uint32_t>(string_col->offsets[r + 1] -
-                                      string_col->offsets[r]));
+                string_col->offsets[r + 1] - string_col->offsets[r]);
             if (RET_FAIL(chunk_writer->write(timestamps[r], val))) {
                 return ret;
             }
@@ -1619,67 +1626,161 @@ int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
     return ret;
 }
 
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps, bool* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
+int TsFileWriter::time_write_column_batch(TimeChunkWriter* time_chunk_writer,
+                                          const Tablet& tablet,
+                                          uint32_t start_idx,
+                                          uint32_t end_idx) {
+    int64_t* timestamps = tablet.timestamps_;
+    int ret = E_OK;
+    if (IS_NULL(time_chunk_writer) || IS_NULL(timestamps)) {
+        return E_INVALID_ARG;
+    }
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+    return time_chunk_writer->write_batch(timestamps + start_idx, count);
 }
 
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps, int32_t* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps, int64_t* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps, float* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps, double* col_values,
-                                     BitMap& col_notnull_bitmap,
-                                     uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
-}
-
-int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
-                                     int64_t* timestamps,
-                                     Tablet::StringColumn* string_col,
-                                     common::BitMap& col_notnull_bitmap,
+int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
+                                     const Tablet& tablet, int col_idx,
                                      uint32_t start_idx, uint32_t end_idx) {
     int ret = E_OK;
-    for (uint32_t r = start_idx; r < end_idx; r++) {
-        common::String val(string_col->buffer + string_col->offsets[r],
-                           static_cast<uint32_t>(string_col->offsets[r + 1] -
-                                                 string_col->offsets[r]));
-        if (LIKELY(col_notnull_bitmap.test(r))) {
-            if (RET_FAIL(value_chunk_writer->write(timestamps[r], val, true))) {
-                return ret;
-            }
-        } else {
-            if (RET_FAIL(
-                    value_chunk_writer->write(timestamps[r], val, false))) {
-                return ret;
+    common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
+    int64_t* timestamps = tablet.timestamps_;
+    Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
+    BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+
+    bool has_null = false;
+    if (col_notnull_bitmap.may_have_set_bits()) {
+        for (uint32_t r = start_idx; r < end_idx; r++) {
+            if (col_notnull_bitmap.test(r)) {
+                has_null = true;
+                break;
             }
         }
+    }
+
+    if (!has_null) {
+        switch (data_type) {
+            case common::BOOLEAN:
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.bool_data + start_idx,
+                    count);
+                break;
+            case common::INT32:
+            case common::DATE:
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.int32_data + start_idx,
+                    count);
+                break;
+            case common::INT64:
+            case common::TIMESTAMP:
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.int64_data + start_idx,
+                    count);
+                break;
+            case common::FLOAT:
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.float_data + start_idx,
+                    count);
+                break;
+            case common::DOUBLE:
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.double_data + start_idx,
+                    count);
+                break;
+            case common::STRING:
+            case common::TEXT:
+            case common::BLOB: {
+                auto* sc = col_values.string_col;
+                // sc->offsets is int32_t* (Arrow Utf8/Binary spec);
+                // write_string_batch still takes const uint32_t* through the
+                // page/encoder stack.  Offsets are non-negative by
+                // construction so the bit pattern is identical — cast at the
+                // boundary until the downstream chain is converted in a
+                // follow-up.
+                ret = chunk_writer->write_string_batch(
+                    timestamps + start_idx, sc->buffer,
+                    reinterpret_cast<const uint32_t*>(sc->offsets), start_idx,
+                    count);
+                break;
+            }
+            default:
+                ret = write_column(chunk_writer, tablet, col_idx, start_idx,
+                                   end_idx);
+                break;
+        }
+    } else {
+        ret = write_column(chunk_writer, tablet, col_idx, start_idx, end_idx);
+    }
+    return ret;
+}
+
+int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
+                                           const Tablet& tablet, int col_idx,
+                                           uint32_t start_idx,
+                                           uint32_t end_idx) {
+    int ret = E_OK;
+    common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
+    int64_t* timestamps = tablet.timestamps_;
+    Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
+    BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+
+    switch (data_type) {
+        case common::BOOLEAN:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.bool_data, col_notnull_bitmap, start_idx,
+                count);
+            break;
+        case common::DATE:
+        case common::INT32:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.int32_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::TIMESTAMP:
+        case common::INT64:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.int64_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::FLOAT:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.float_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::DOUBLE:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.double_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB: {
+            auto* sc = col_values.string_col;
+            // See above: sc->offsets is int32_t*, downstream still uint32_t*.
+            ret = value_chunk_writer->write_string_batch(
+                timestamps, sc->buffer,
+                reinterpret_cast<const uint32_t*>(sc->offsets),
+                col_notnull_bitmap, start_idx, count);
+            break;
+        }
+        default:
+            ret = E_NOT_SUPPORT;
+            break;
     }
     return ret;
 }
 
 // TODO make sure ret is meaningful to SDK user
 int TsFileWriter::flush() {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     if (!start_file_done_) {
         if (RET_FAIL(io_writer_->start_file())) {
@@ -1690,9 +1791,10 @@ int TsFileWriter::flush() {
 
     /* since @schemas_ used std::map which is rbtree underlying,
              so map itself is ordered by device name. */
+
     DeviceSchemasMapIter device_iter;
     for (device_iter = schemas_.begin(); device_iter != schemas_.end();
-         device_iter++) {  // cppcheck-suppress postfixOperator
+         device_iter++) {
         if (check_chunk_group_empty(device_iter->second,
                                     device_iter->second->is_aligned_)) {
             continue;
@@ -1706,6 +1808,7 @@ int TsFileWriter::flush() {
         } else if (RET_FAIL(io_writer_->end_flush_chunk_group(is_aligned))) {
         }
     }
+
     record_count_since_last_flush_ = 0;
     return ret;
 }
@@ -1751,6 +1854,56 @@ bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup* chunk_group,
         writer->reset();                                                       \
     }
 
+// Write already-encoded chunk data to stream (no compression — done earlier).
+#define FLUSH_CHUNK_ENCODED(writer, io_writer, name, data_type, encoding,     \
+                            compression, num_pages)                           \
+    if (RET_FAIL(io_writer->start_flush_chunk(writer->get_chunk_data(), name, \
+                                              data_type, encoding,            \
+                                              compression, num_pages))) {     \
+    } else if (RET_FAIL(io_writer->flush_chunk(writer->get_chunk_data()))) {  \
+    } else if (RET_FAIL(io_writer->end_flush_chunk(                           \
+                   writer->get_chunk_statistic()))) {                         \
+    } else {                                                                  \
+        writer->reset();                                                      \
+    }
+
+int TsFileWriter::flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
+                                            bool is_aligned) {
+    int ret = E_OK;
+    MeasurementSchemaMap& map = chunk_group->measurement_schema_map_;
+
+    if (chunk_group->is_aligned_) {
+        TimeChunkWriter*& time_chunk_writer = chunk_group->time_chunk_writer_;
+        ChunkHeader chunk_header = time_chunk_writer->get_chunk_header();
+        FLUSH_CHUNK_ENCODED(
+            time_chunk_writer, io_writer_, chunk_header.measurement_name_,
+            chunk_header.data_type_, chunk_header.encoding_type_,
+            chunk_header.compression_type_, time_chunk_writer->num_of_pages())
+    }
+
+    for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
+         ms_iter++) {
+        MeasurementSchema* m_schema = ms_iter->second;
+        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr) {
+            ChunkWriter*& chunk_writer = m_schema->chunk_writer_;
+            FLUSH_CHUNK_ENCODED(
+                chunk_writer, io_writer_, m_schema->measurement_name_,
+                m_schema->data_type_, m_schema->encoding_,
+                m_schema->compression_type_, chunk_writer->num_of_pages())
+        } else if (m_schema->value_chunk_writer_ != nullptr &&
+                   m_schema->value_chunk_writer_->hasData()) {
+            ValueChunkWriter*& value_chunk_writer =
+                m_schema->value_chunk_writer_;
+            FLUSH_CHUNK_ENCODED(
+                value_chunk_writer, io_writer_, m_schema->measurement_name_,
+                m_schema->data_type_, m_schema->encoding_,
+                m_schema->compression_type_, value_chunk_writer->num_of_pages())
+        }
+    }
+
+    return ret;
+}
+
 int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
                                     bool is_aligned) {
     int ret = E_OK;
@@ -1774,7 +1927,8 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
                         m_schema->data_type_, m_schema->encoding_,
                         m_schema->compression_type_,
                         chunk_writer->num_of_pages())
-        } else if (m_schema->value_chunk_writer_ != nullptr) {
+        } else if (m_schema->value_chunk_writer_ != nullptr &&
+                   m_schema->value_chunk_writer_->hasData()) {
             ValueChunkWriter*& value_chunk_writer =
                 m_schema->value_chunk_writer_;
             FLUSH_CHUNK(value_chunk_writer, io_writer_,
@@ -1787,6 +1941,9 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
     return ret;
 }
 
-int TsFileWriter::close() { return io_writer_->end_file(); }
+int TsFileWriter::close() {
+    if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
+    return io_writer_->end_file();
+}
 
 }  // end namespace storage

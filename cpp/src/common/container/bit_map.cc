@@ -31,14 +31,15 @@ BitMap::~BitMap() {
     }
 }
 
-int BitMap::init(uint32_t item_size, bool init_as_zero) {
+int BitMap::init(uint32_t item_size, bool init_as_zero, AllocModID mod_id) {
     uint32_t size = (item_size + 7) / 8;
-    bitmap_ = static_cast<char*>(mem_alloc(size, MOD_TSBLOCK));
+    bitmap_ = static_cast<char*>(mem_alloc(size, mod_id));
     // need set to 0, otherwise there will be wrong data
     const char initial_char = init_as_zero ? 0x00 : 0xFF;
     memset(bitmap_, initial_char, size);
     size_ = size;
     init_as_zero_ = init_as_zero;
+    has_set_bits_ = !init_as_zero;
     return common::E_OK;
 }
 

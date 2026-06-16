@@ -40,6 +40,7 @@ class CReleaseTest : public testing::Test {};
 
 TEST_F(CReleaseTest, TestCreateFile) {
     ERRNO error_no = RET_OK;
+    remove("create_file1.tsfile");
     // Create File and Get RET_OK
     WriteFile file = write_file_new("create_file1.tsfile", &error_no);
     ASSERT_EQ(RET_OK, error_no);
@@ -50,7 +51,8 @@ TEST_F(CReleaseTest, TestCreateFile) {
     ASSERT_EQ(RET_ALREADY_EXIST, error_no);
     ASSERT_EQ(nullptr, file);
 
-    // Folder
+    // Folder: rejected either as an open error (POSIX) or as already-existing
+    // (Windows / filesystems where the directory already exists).
     file = write_file_new("test/", &error_no);
     ASSERT_TRUE(error_no == RET_FILRET_OPEN_ERR ||
                 error_no == RET_ALREADY_EXIST);
@@ -112,6 +114,17 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     free_write_file(&file);
     remove("test_empty_writer.tsfile");
 
+    // Normal schema with memory threshold
+    file = write_file_new("test_memory_threshold_writer.tsfile", &error_code);
+    ASSERT_EQ(RET_OK, error_code);
+    writer = tsfile_writer_new_with_memory_threshold(file, &table_schema, 100,
+                                                     &error_code);
+    ASSERT_NE(nullptr, writer);
+    ASSERT_EQ(RET_OK, error_code);
+    ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
+    free_write_file(&file);
+    remove("test_memory_threshold_writer.tsfile");
+
     free_table_schema(table_schema);
     free_table_schema(test_schema);
 }
@@ -142,6 +155,10 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     TsFileWriter writer =
         tsfile_writer_new(file, &abnormal_schema, &error_code);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
+    writer = tsfile_writer_new_with_memory_threshold(file, &abnormal_schema,
+                                                     100, &error_code);
+    ASSERT_EQ(nullptr, writer);
+    ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
     free(abnormal_schema.column_schemas[2].column_name);
 
     abnormal_schema.column_schemas[2] =
@@ -149,6 +166,10 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
 
     // datatype conflict
     writer = tsfile_writer_new(file, &abnormal_schema, &error_code);
+    ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
+    writer = tsfile_writer_new_with_memory_threshold(file, &abnormal_schema,
+                                                     100, &error_code);
+    ASSERT_EQ(nullptr, writer);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
 
     free(abnormal_schema.column_schemas[1].column_name);

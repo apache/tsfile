@@ -144,6 +144,9 @@ int TimeChunkWriter::seal_cur_page(bool end_chunk) {
 void TimeChunkWriter::save_first_page_data(TimePageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
+    // See ValueChunkWriter::save_first_page_data: avoid double-free on the
+    // shallow-copied buffer pointers.
+    first_page_writer.release_cur_page_data();
 }
 
 int TimeChunkWriter::write_first_page_data(ByteStream& pages_data,
@@ -173,9 +176,6 @@ int TimeChunkWriter::end_encode_chunk() {
             chunk_header_.data_size_ = chunk_data_.total_size();
             chunk_header_.num_of_pages_ = num_of_pages_;
         }
-    } else if (num_of_pages_ > 0) {
-        chunk_header_.data_size_ = chunk_data_.total_size();
-        chunk_header_.num_of_pages_ = num_of_pages_;
     }
 #if DEBUG_SE
     std::cout << "end_encode_time_chunk: num_of_pages_=" << num_of_pages_

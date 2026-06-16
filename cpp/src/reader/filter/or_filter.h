@@ -19,6 +19,8 @@
 #ifndef READER_FILTER_OPERATOR_OR_FILTER_H
 #define READER_FILTER_OPERATOR_OR_FILTER_H
 
+#include <memory>
+
 #include "binary_filter.h"
 // #include "storage/storage_utils.h"
 
@@ -46,6 +48,27 @@ class OrFilter : public BinaryFilter {
     bool contain_start_end_time(int64_t start_time, int64_t end_time) {
         return left_->contain_start_end_time(start_time, end_time) ||
                right_->contain_start_end_time(start_time, end_time);
+    }
+
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask) {
+        // Inline buffer covers the common per-page BATCH=129 callers; only
+        // out-of-spec larger counts fall back to a heap allocation.
+        constexpr int kInlineCap = 256;
+        bool inline_buf[kInlineCap];
+        std::unique_ptr<bool[]> heap_buf;
+        bool* mask_right = inline_buf;
+        if (count > kInlineCap) {
+            heap_buf.reset(new bool[count]);
+            mask_right = heap_buf.get();
+        }
+        left_->satisfy_batch_time(times, count, mask);
+        right_->satisfy_batch_time(times, count, mask_right);
+        int pass = 0;
+        for (int i = 0; i < count; ++i) {
+            mask[i] = mask[i] || mask_right[i];
+            if (mask[i]) ++pass;
+        }
+        return pass;
     }
 
     std::vector<TimeRange*>* get_time_ranges() {

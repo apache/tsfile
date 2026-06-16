@@ -42,8 +42,7 @@ class TimeChunkWriter {
           first_page_data_(),
           first_page_statistic_(nullptr),
           chunk_header_(),
-          num_of_pages_(0),
-          enable_page_seal_if_full_(true) {}
+          num_of_pages_(0) {}
     ~TimeChunkWriter() { destroy(); }
     int init(const common::ColumnSchema& col_schema);
     int init(const std::string& measurement_name, common::TSEncoding encoding,
@@ -58,9 +57,35 @@ class TimeChunkWriter {
         if (RET_FAIL(time_page_writer_.write(timestamp))) {
             return ret;
         }
-        if (UNLIKELY(!enable_page_seal_if_full_)) {
+        if (RET_FAIL(seal_cur_page_if_full())) {
             return ret;
-        } else {
+        }
+        return ret;
+    }
+
+    int write_batch(const int64_t* timestamps, uint32_t count) {
+        int ret = common::E_OK;
+        uint32_t offset = 0;
+        const uint32_t page_cap =
+            common::g_config_value_.page_writer_max_point_num_;
+        while (offset < count) {
+            uint32_t cur_points = time_page_writer_.get_point_numer();
+            // Seal whenever cur_points is at or past the cap; the counter is
+            // size_ (rows including the just-written batch) and may exceed
+            // page_cap, so a plain subtraction would underflow uint32_t.
+            if (cur_points >= page_cap) {
+                if (RET_FAIL(seal_cur_page(false))) {
+                    return ret;
+                }
+                cur_points = 0;
+            }
+            uint32_t page_remaining = page_cap - cur_points;
+            uint32_t batch_size = std::min(count - offset, page_remaining);
+            if (RET_FAIL(time_page_writer_.write_batch(timestamps + offset,
+                                                       batch_size))) {
+                return ret;
+            }
+            offset += batch_size;
             if (RET_FAIL(seal_cur_page_if_full())) {
                 return ret;
             }
@@ -73,29 +98,25 @@ class TimeChunkWriter {
     Statistic* get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
+    int64_t estimate_max_series_mem_size();
+
+    bool hasData();
+
     // Current (unsealed) page point count.
     FORCE_INLINE uint32_t get_point_numer() const {
         return time_page_writer_.get_point_numer();
     }
-
-    int64_t estimate_max_series_mem_size();
-
-    bool hasData();
 
     /** True if the current (unsealed) page has at least one point. */
     bool has_current_page_data() const {
         return time_page_writer_.get_point_numer() > 0;
     }
 
-    /**
-     * Force seal the current page (for aligned model: when any aligned page
-     * seals due to memory/point threshold, all pages must seal together).
-     * @return E_OK on success.
-     */
+    /** Force seal the current page. */
     int seal_current_page() { return seal_cur_page(false); }
 
-    // For aligned writer: allow disabling the automatic page-size/point-number
-    // check so the caller can seal pages at chosen boundaries.
+    // Allow disabling the automatic page-size/point-number check so the
+    // caller can seal pages at chosen boundaries.
     FORCE_INLINE void set_enable_page_seal_if_full(bool enable) {
         enable_page_seal_if_full_ = enable;
     }
@@ -109,6 +130,9 @@ class TimeChunkWriter {
                 common::g_config_value_.page_writer_max_memory_bytes_);
     }
     FORCE_INLINE int seal_cur_page_if_full() {
+        if (UNLIKELY(!enable_page_seal_if_full_)) {
+            return common::E_OK;
+        }
         if (UNLIKELY(is_cur_page_full())) {
             return seal_cur_page(false);
         }
@@ -138,8 +162,7 @@ class TimeChunkWriter {
 
     ChunkHeader chunk_header_;
     int32_t num_of_pages_;
-    // If false, write() won't auto-seal when the current page becomes full.
-    bool enable_page_seal_if_full_;
+    bool enable_page_seal_if_full_ = true;
 };
 
 }  // end namespace storage

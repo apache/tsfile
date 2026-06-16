@@ -143,7 +143,6 @@ class TsFileReader {
      * @param offset         Number of leading rows to skip (>= 0).
      * @param limit          Maximum rows to return. < 0 means unlimited.
      * @param[out] result_set  The result set containing query results.
-     * @param tag_filter     Optional tag filter for filtering by tag columns.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int queryByRow(const std::string& table_name,
@@ -243,8 +242,10 @@ class TsFileReader {
     storage::ReadFile* read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
-    int table_query_executor_batch_size_;
+    int table_query_executor_batch_size_ = -1;
     common::PageArena tsfile_reader_meta_pa_;
+    // Test-only hook for the unbounded-arena-growth regression check.
+    friend class TsFileReaderMetaArenaTest;
 };
 
 }  // namespace storage

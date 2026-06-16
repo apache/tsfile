@@ -509,3 +509,48 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
     }
     reader.close();
 }
+
+// Regression: query_table_on_tree with an inverted time range (start > end) on
+// a non-aligned tree device must yield zero rows, not E_NOT_SUPPORT.  The chunk
+// time span straddles both bounds and single-chunk timeseries carry no
+// per-chunk statistic, so the device-level early-skip does NOT short-circuit;
+// the empty value-column result previously fell through to the time-only
+// fallback -> alloc_multi_ssi() (aligned-only) -> E_NOT_SUPPORT.
+TEST_F(TsFileTreeReaderTest, QueryTableOnTreeInvertedTimeRange) {
+    std::string device_id = "root.Device1";
+    std::vector<std::string> measurement_ids = {"m1", "m2", "m3"};
+    {
+        TsFileTreeWriter writer(&write_file_);
+        for (auto const& m : measurement_ids) {
+            auto* schema = new storage::MeasurementSchema(m, TSDataType::INT32);
+            ASSERT_EQ(E_OK, writer.register_timeseries(device_id, schema));
+            delete schema;
+        }
+        for (int i = 0; i < 100; i++) {
+            TsRecord record(device_id, static_cast<int64_t>(i - 50));
+            for (auto const& m : measurement_ids) {
+                record.add_point(m, static_cast<int32_t>(i));
+            }
+            ASSERT_EQ(E_OK, writer.write(record));
+        }
+        writer.flush();
+        writer.close();
+    }
+
+    TsFileReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+    ResultSet* result = nullptr;
+    int ret = reader.query_table_on_tree(measurement_ids, 10, -10, result);
+    ASSERT_EQ(E_OK, ret);
+    auto* trs = (storage::TableResultSet*)result;
+    bool has_next = false;
+    int row_cnt = 0;
+    int next_ret = E_OK;
+    while (IS_SUCC(next_ret = trs->next(has_next)) && has_next) {
+        row_cnt++;
+    }
+    EXPECT_EQ(E_OK, next_ret);
+    EXPECT_EQ(0, row_cnt);
+    reader.destroy_query_data_set(result);
+    reader.close();
+}

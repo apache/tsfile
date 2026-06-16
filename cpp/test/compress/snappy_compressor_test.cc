@@ -126,4 +126,40 @@ TEST_F(SnappyTest, TestBytes2) {
     compressor.after_compress(compressed_buf);
     compressor.after_uncompress(decompressed_buf);
 }
+
+TEST_F(SnappyTest, AfterUncompressFreesParamNotMember) {
+    storage::SnappyCompressor compressor;
+    std::string input_a(1024, 'A');
+    std::string input_b(2048, 'B');
+    char* compressed_a = nullptr;
+    char* compressed_b = nullptr;
+    uint32_t compressed_a_len = 0;
+    uint32_t compressed_b_len = 0;
+
+    ASSERT_EQ(compressor.compress(&input_a[0], input_a.size(), compressed_a,
+                                  compressed_a_len),
+              common::E_OK);
+    ASSERT_EQ(compressor.compress(&input_b[0], input_b.size(), compressed_b,
+                                  compressed_b_len),
+              common::E_OK);
+
+    char* uncompressed_a = nullptr;
+    char* uncompressed_b = nullptr;
+    uint32_t uncompressed_a_len = 0;
+    uint32_t uncompressed_b_len = 0;
+    ASSERT_EQ(compressor.uncompress(compressed_a, compressed_a_len,
+                                    uncompressed_a, uncompressed_a_len),
+              common::E_OK);
+    ASSERT_EQ(compressor.uncompress(compressed_b, compressed_b_len,
+                                    uncompressed_b, uncompressed_b_len),
+              common::E_OK);
+
+    compressor.after_uncompress(uncompressed_a);
+    EXPECT_EQ(uncompressed_b_len, input_b.size());
+    EXPECT_EQ(memcmp(uncompressed_b, input_b.data(), uncompressed_b_len), 0);
+
+    compressor.after_uncompress(uncompressed_b);
+    compressor.after_compress(compressed_a);
+    compressor.after_compress(compressed_b);
+}
 }  // namespace

@@ -995,3 +995,69 @@ TEST_F(RestorableTsFileIOWriterTest,
         ASSERT_EQ(table_writer2.close(), E_OK);
     }
 }
+
+// Regression: recovery of an aligned single-page value chunk must consult the
+// page's not-null bitmap to bind each decoded value to its real timestamp.
+// The bug paired non-null values densely with times[0..N-1], so a column whose
+// only non-null entry sat at the tail surfaced start_time/end_time equal to
+// the head of the time chunk, which then leaked through chunk-level time
+// filters.
+TEST_F(RestorableTsFileIOWriterTest, RecoveryAlignedSparseStatRespectsBitmap) {
+    const int64_t kBase = 100;
+    const int kRowCount = 10;
+    const int kNonNullRow = 7;
+    const std::string table_name = "sparse_aligned_t";
+    std::vector<MeasurementSchema*> ms_vec;
+    ms_vec.push_back(new MeasurementSchema("device", STRING));
+    ms_vec.push_back(new MeasurementSchema("s1", INT64));
+    std::vector<ColumnCategory> cats = {ColumnCategory::TAG,
+                                        ColumnCategory::FIELD};
+    TableSchema table_schema(table_name, ms_vec, cats);
+    {
+        WriteFile wf;
+        ASSERT_EQ(wf.create(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+        TsFileTableWriter tw(&wf, &table_schema);
+        Tablet tablet(table_schema.get_measurement_names(),
+                      table_schema.get_data_types(), kRowCount);
+        tablet.set_table_name(table_name);
+        for (int i = 0; i < kRowCount; i++) {
+            tablet.add_timestamp(i, kBase + i);
+            tablet.add_value(i, "device", "d0");
+            // Only row kNonNullRow gets a value; the rest stay null.
+            if (i == kNonNullRow) {
+                tablet.add_value(i, "s1", static_cast<int64_t>(999));
+            }
+        }
+        ASSERT_EQ(tw.write_table(tablet), E_OK);
+        ASSERT_EQ(tw.flush(), E_OK);
+        ASSERT_EQ(tw.close(), E_OK);
+        wf.close();
+    }
+
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+
+    const std::vector<ChunkGroupMeta*>& cgms =
+        rw.get_recovered_chunk_group_metas();
+    ASSERT_FALSE(cgms.empty());
+
+    bool found_value_chunk = false;
+    for (ChunkGroupMeta* cgm : cgms) {
+        if (cgm == nullptr) continue;
+        for (auto it = cgm->chunk_meta_list_.begin();
+             it != cgm->chunk_meta_list_.end(); it++) {
+            ChunkMeta* cm = it.get();
+            if (cm == nullptr) continue;
+            if (cm->measurement_name_.to_std_string() != "s1") continue;
+            ASSERT_NE(cm->statistic_, nullptr);
+            // Exactly one non-null row at timestamp kBase + kNonNullRow.
+            EXPECT_EQ(cm->statistic_->count_, 1);
+            EXPECT_EQ(cm->statistic_->start_time_, kBase + kNonNullRow);
+            EXPECT_EQ(cm->statistic_->end_time_, kBase + kNonNullRow);
+            found_value_chunk = true;
+        }
+    }
+    EXPECT_TRUE(found_value_chunk);
+}

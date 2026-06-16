@@ -94,8 +94,7 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr),
-      table_query_executor_batch_size_(0) {
+      table_query_executor_(nullptr) {
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 }
 
@@ -109,25 +108,6 @@ int TsFileReader::open(const std::string& file_path) {
         std::cout << "filed to open file " << ret << std::endl;
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
         std::cout << "filed to init " << ret << std::endl;
-    }
-    return ret;
-}
-
-int TsFileReader::close() {
-    int ret = E_OK;
-    if (tsfile_executor_ != nullptr) {
-        delete tsfile_executor_;
-        tsfile_executor_ = nullptr;
-    }
-    if (table_query_executor_ != nullptr) {
-        delete table_query_executor_;
-        table_query_executor_ = nullptr;
-    }
-    table_query_executor_batch_size_ = 0;
-    if (read_file_ != nullptr) {
-        read_file_->close();
-        delete read_file_;
-        read_file_ = nullptr;
     }
     return ret;
 }
@@ -146,6 +126,24 @@ int TsFileReader::ensure_table_query_executor(int batch_size) {
     table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
     table_query_executor_batch_size_ = batch_size;
     return E_OK;
+}
+
+int TsFileReader::close() {
+    int ret = E_OK;
+    if (tsfile_executor_ != nullptr) {
+        delete tsfile_executor_;
+        tsfile_executor_ = nullptr;
+    }
+    if (table_query_executor_ != nullptr) {
+        delete table_query_executor_;
+        table_query_executor_ = nullptr;
+    }
+    if (read_file_ != nullptr) {
+        read_file_->close();
+        delete read_file_;
+        read_file_ = nullptr;
+    }
+    return ret;
 }
 
 int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
@@ -411,16 +409,21 @@ int TsFileReader::get_timeseries_schema(
                          device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
-            auto* aligned_timeseries_index =
-                dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
-            auto data_type =
-                aligned_timeseries_index != nullptr &&
-                        aligned_timeseries_index->value_ts_idx_ != nullptr
-                    ? aligned_timeseries_index->value_ts_idx_->get_data_type()
-                    : timeseries_index->get_data_type();
+            // AlignedTimeseriesIndex::get_data_type() returns the time
+            // column type (VECTOR) so the aligned/non-aligned dispatch in
+            // SSI can keep using the existing accessor.  For schema
+            // exposure we need the actual value column type — without this
+            // unwrap, INT32/FLOAT/... would all surface as VECTOR.
+            common::TSDataType dt = timeseries_index->get_data_type();
+            if (dt == common::VECTOR) {
+                auto* aligned =
+                    dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
+                if (aligned != nullptr && aligned->value_ts_idx_ != nullptr) {
+                    dt = aligned->value_ts_idx_->get_data_type();
+                }
+            }
             MeasurementSchema ms(
-                timeseries_index->get_measurement_name().to_std_string(),
-                data_type);
+                timeseries_index->get_measurement_name().to_std_string(), dt);
             result.push_back(ms);
         }
     }
@@ -448,6 +451,15 @@ int TsFileReader::get_timeseries_metadata_impl(
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    // Reset the shared meta arena up front: every call writes fresh
+    // timeseries-index metadata into it via _impl(), and the previous
+    // implementation only ever appended.  A long-lived reader that repeats
+    // this query would grow tsfile_reader_meta_pa_ without bound (each call
+    // duplicates the per-device payload).  Callers that need to retain prior
+    // results past this call must copy them out before invoking again — the
+    // shared_ptrs handed back use a noop deleter pointing into this arena.
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
     DeviceTimeseriesMetadataMap result;
     for (const auto& device_id : device_ids) {
         std::vector<std::shared_ptr<ITimeseriesIndex>> list;
@@ -465,6 +477,10 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     if (tsfile_meta == nullptr) {
         return result;
     }
+
+    // Same arena-reset rationale as the device_ids overload above.
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 
     PageArena pa;
     pa.init(512, MOD_TSFILE_READER);

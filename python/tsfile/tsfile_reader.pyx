@@ -199,7 +199,9 @@ cdef class ResultSetPy:
         if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
         elif data_type == TSDataTypePy.DATE:
-            return parse_int_to_date(tsfile_result_set_get_value_by_index_int64_t(self.result, index))
+            # DATE is physically stored as int32 (yyyymmdd), so read it through
+            # the int32 accessor that matches the underlying storage width.
+            return parse_int_to_date(tsfile_result_set_get_value_by_index_int32_t(self.result, index))
         elif data_type == TSDataTypePy.INT64 or data_type == TSDataTypePy.TIMESTAMP:
             return tsfile_result_set_get_value_by_index_int64_t(self.result, index)
         elif data_type == TSDataTypePy.FLOAT:

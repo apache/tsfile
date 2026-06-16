@@ -68,7 +68,12 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
         if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_DEVICE_NOT_EXIST ||
-            ret == E_NOT_EXIST) {
+            ret == E_NOT_EXIST || ret == E_NO_MORE_DATA) {
+            // Java-aligned: silently skip paths whose device or measurement
+            // doesn't exist in this file. The bloom-filter optimization in
+            // alloc_ssi reports a missing series as E_NO_MORE_DATA, so treat
+            // that the same as the not-found codes.
+            ret = E_OK;
             continue;
         }
         if (ret != E_OK) {

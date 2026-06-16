@@ -422,13 +422,355 @@ int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream& time_in,
                 row_appender.backoff_add_row();
                 continue;
             } else {
-                /*std::cout << "decoder: time=" << time << ", value=" << value
-                 * << std::endl;*/
                 row_appender.append(0, (char*)&time, sizeof(time));
                 row_appender.append(1, (char*)&value, sizeof(value));
             }
         }
     } while (false);
+    return ret;
+}
+
+int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
+                                     RowAppender& row_appender,
+                                     Filter* filter) {
+    int ret = E_OK;
+    const int BATCH = 129;
+    int64_t times[BATCH];
+    int32_t values[BATCH];
+
+    while (time_decoder_->has_remaining(time_in)) {
+        // Cap each pass to what the appender can still hold; the old
+        // "remaining < BATCH → OVERFLOW" check made progress impossible on
+        // TsBlocks with capacity below BATCH.
+        int eff_batch =
+            std::min(BATCH, static_cast<int>(row_appender.remaining()));
+        if (eff_batch <= 0) {
+            ret = E_OVERFLOW;
+            break;
+        }
+
+        // Block-level time filter check
+        bool block_all_pass = false;
+        if (filter != nullptr) {
+            int64_t block_min, block_max;
+            int block_count;
+            if (time_decoder_->peek_next_block_range_int64(
+                    time_in, block_min, block_max, block_count)) {
+                if (!filter->satisfy_start_end_time(block_min, block_max)) {
+                    int skipped = 0;
+                    time_decoder_->skip_peeked_block_int64(time_in, skipped);
+                    value_decoder_->skip_int32(block_count, skipped, value_in);
+                    continue;
+                }
+                if (filter->contain_start_end_time(block_min, block_max)) {
+                    block_all_pass = true;
+                }
+            }
+        }
+
+        int time_count = 0;
+        int value_count = 0;
+
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
+                                                     time_count, time_in))) {
+            break;
+        }
+        if (time_count == 0) break;
+
+        bool time_mask[BATCH];
+        int pass_count = time_count;
+        if (filter != nullptr && !block_all_pass) {
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
+        }
+
+        if (pass_count == 0) {
+            int skipped = 0;
+            value_decoder_->skip_int32(time_count, skipped, value_in);
+            continue;
+        }
+
+        if (RET_FAIL(value_decoder_->read_batch_int32(values, time_count,
+                                                      value_count, value_in))) {
+            break;
+        }
+        // Time and value chunks are written in lock-step; any discrepancy
+        // means the file is truncated or corrupted.  Reading uninitialised
+        // values[i] would silently surface garbage as decoded rows.
+        if (value_count != time_count) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
+
+        for (int i = 0; i < time_count; ++i) {
+            if (filter != nullptr && !block_all_pass && !time_mask[i]) {
+                continue;
+            }
+            if (filter != nullptr && !block_all_pass &&
+                !filter->satisfy(times[i], (int64_t)values[i])) {
+                continue;
+            }
+            if (UNLIKELY(!row_appender.add_row())) {
+                ret = E_OVERFLOW;
+                break;
+            }
+            row_appender.append(0, (char*)&times[i], sizeof(int64_t));
+            row_appender.append(1, (char*)&values[i], sizeof(int32_t));
+        }
+        if (ret != E_OK) break;
+    }
+    return ret;
+}
+
+int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
+                                     RowAppender& row_appender,
+                                     Filter* filter) {
+    int ret = E_OK;
+    const int BATCH = 129;
+    int64_t times[BATCH];
+    int64_t values[BATCH];
+
+    while (time_decoder_->has_remaining(time_in)) {
+        int eff_batch =
+            std::min(BATCH, static_cast<int>(row_appender.remaining()));
+        if (eff_batch <= 0) {
+            ret = E_OVERFLOW;
+            break;
+        }
+
+        // Block-level time filter check
+        bool block_all_pass = false;
+        if (filter != nullptr) {
+            int64_t block_min, block_max;
+            int block_count;
+            if (time_decoder_->peek_next_block_range_int64(
+                    time_in, block_min, block_max, block_count)) {
+                if (!filter->satisfy_start_end_time(block_min, block_max)) {
+                    int skipped = 0;
+                    time_decoder_->skip_peeked_block_int64(time_in, skipped);
+                    value_decoder_->skip_int64(block_count, skipped, value_in);
+                    continue;
+                }
+                if (filter->contain_start_end_time(block_min, block_max)) {
+                    block_all_pass = true;
+                }
+            }
+        }
+
+        int time_count = 0;
+        int value_count = 0;
+
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
+                                                     time_count, time_in))) {
+            break;
+        }
+        if (time_count == 0) break;
+
+        bool time_mask[BATCH];
+        int pass_count = time_count;
+        if (filter != nullptr && !block_all_pass) {
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
+        }
+
+        if (pass_count == 0) {
+            int skipped = 0;
+            value_decoder_->skip_int64(time_count, skipped, value_in);
+            continue;
+        }
+
+        if (RET_FAIL(value_decoder_->read_batch_int64(values, time_count,
+                                                      value_count, value_in))) {
+            break;
+        }
+        if (value_count != time_count) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
+
+        for (int i = 0; i < time_count; ++i) {
+            if (filter != nullptr && !block_all_pass && !time_mask[i]) {
+                continue;
+            }
+            if (filter != nullptr && !block_all_pass &&
+                !filter->satisfy(times[i], values[i])) {
+                continue;
+            }
+            if (UNLIKELY(!row_appender.add_row())) {
+                ret = E_OVERFLOW;
+                break;
+            }
+            row_appender.append(0, (char*)&times[i], sizeof(int64_t));
+            row_appender.append(1, (char*)&values[i], sizeof(int64_t));
+        }
+        if (ret != E_OK) break;
+    }
+    return ret;
+}
+
+int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
+                                       ByteStream& value_in,
+                                       RowAppender& row_appender,
+                                       Filter* filter) {
+    int ret = E_OK;
+    const int BATCH = 129;
+    int64_t times[BATCH];
+    float values[BATCH];
+
+    while (time_decoder_->has_remaining(time_in)) {
+        int eff_batch =
+            std::min(BATCH, static_cast<int>(row_appender.remaining()));
+        if (eff_batch <= 0) {
+            ret = E_OVERFLOW;
+            break;
+        }
+
+        // Block-level time filter check
+        bool block_all_pass = false;
+        if (filter != nullptr) {
+            int64_t block_min, block_max;
+            int block_count;
+            if (time_decoder_->peek_next_block_range_int64(
+                    time_in, block_min, block_max, block_count)) {
+                if (!filter->satisfy_start_end_time(block_min, block_max)) {
+                    int skipped = 0;
+                    time_decoder_->skip_peeked_block_int64(time_in, skipped);
+                    value_decoder_->skip_float(block_count, skipped, value_in);
+                    continue;
+                }
+                if (filter->contain_start_end_time(block_min, block_max)) {
+                    block_all_pass = true;
+                }
+            }
+        }
+
+        int time_count = 0;
+        int value_count = 0;
+
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
+                                                     time_count, time_in))) {
+            break;
+        }
+        if (time_count == 0) break;
+
+        bool time_mask[BATCH];
+        int pass_count = time_count;
+        if (filter != nullptr && !block_all_pass) {
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
+        }
+
+        if (pass_count == 0) {
+            int skipped = 0;
+            value_decoder_->skip_float(time_count, skipped, value_in);
+            continue;
+        }
+
+        if (RET_FAIL(value_decoder_->read_batch_float(values, time_count,
+                                                      value_count, value_in))) {
+            break;
+        }
+        if (value_count != time_count) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
+
+        for (int i = 0; i < time_count; ++i) {
+            if (filter != nullptr && !block_all_pass && !time_mask[i]) {
+                continue;
+            }
+            if (UNLIKELY(!row_appender.add_row())) {
+                ret = E_OVERFLOW;
+                break;
+            }
+            row_appender.append(0, (char*)&times[i], sizeof(int64_t));
+            row_appender.append(1, (char*)&values[i], sizeof(float));
+        }
+        if (ret != E_OK) break;
+    }
+    return ret;
+}
+
+int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
+                                        ByteStream& value_in,
+                                        RowAppender& row_appender,
+                                        Filter* filter) {
+    int ret = E_OK;
+    const int BATCH = 129;
+    int64_t times[BATCH];
+    double values[BATCH];
+
+    while (time_decoder_->has_remaining(time_in)) {
+        int eff_batch =
+            std::min(BATCH, static_cast<int>(row_appender.remaining()));
+        if (eff_batch <= 0) {
+            ret = E_OVERFLOW;
+            break;
+        }
+
+        // Block-level time filter check
+        bool block_all_pass = false;
+        if (filter != nullptr) {
+            int64_t block_min, block_max;
+            int block_count;
+            if (time_decoder_->peek_next_block_range_int64(
+                    time_in, block_min, block_max, block_count)) {
+                if (!filter->satisfy_start_end_time(block_min, block_max)) {
+                    int skipped = 0;
+                    time_decoder_->skip_peeked_block_int64(time_in, skipped);
+                    value_decoder_->skip_double(block_count, skipped, value_in);
+                    continue;
+                }
+                if (filter->contain_start_end_time(block_min, block_max)) {
+                    block_all_pass = true;
+                }
+            }
+        }
+
+        int time_count = 0;
+        int value_count = 0;
+
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
+                                                     time_count, time_in))) {
+            break;
+        }
+        if (time_count == 0) break;
+
+        bool time_mask[BATCH];
+        int pass_count = time_count;
+        if (filter != nullptr && !block_all_pass) {
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
+        }
+
+        if (pass_count == 0) {
+            int skipped = 0;
+            value_decoder_->skip_double(time_count, skipped, value_in);
+            continue;
+        }
+
+        if (RET_FAIL(value_decoder_->read_batch_double(
+                values, time_count, value_count, value_in))) {
+            break;
+        }
+        if (value_count != time_count) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
+
+        for (int i = 0; i < time_count; ++i) {
+            if (filter != nullptr && !block_all_pass && !time_mask[i]) {
+                continue;
+            }
+            if (UNLIKELY(!row_appender.add_row())) {
+                ret = E_OVERFLOW;
+                break;
+            }
+            row_appender.append(0, (char*)&times[i], sizeof(int64_t));
+            row_appender.append(1, (char*)&values[i], sizeof(double));
+        }
+        if (ret != E_OK) break;
+    }
     return ret;
 }
 
@@ -472,23 +814,21 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream& time_in,
             break;
         case common::DATE:
         case common::INT32:
-            // DECODE_TYPED_TV_INTO_TSBLOCK(int32_t, int32, time_in_, value_in_,
-            // row_appender);
-            ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_,
-                                                   row_appender, filter);
+            ret =
+                i32_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case TIMESTAMP:
         case common::INT64:
-            DECODE_TYPED_TV_INTO_TSBLOCK(int64_t, int64, time_in_, value_in_,
-                                         row_appender);
+            ret =
+                i64_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case common::FLOAT:
-            DECODE_TYPED_TV_INTO_TSBLOCK(float, float, time_in_, value_in_,
-                                         row_appender);
+            ret = float_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                        filter);
             break;
         case common::DOUBLE:
-            DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
-                                         row_appender);
+            ret = double_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                         filter);
             break;
         case common::TEXT:
         case common::BLOB:

@@ -27,7 +27,6 @@
 #include <mutex>
 #include <queue>
 #include <thread>
-#include <type_traits>
 #include <vector>
 
 namespace common {
@@ -38,11 +37,26 @@ namespace common {
 // (column-parallel decoding).
 class ThreadPool {
    public:
-    explicit ThreadPool(size_t num_threads) : stop_(false), active_(0) {
-        for (size_t i = 0; i < num_threads; i++) {
-            workers_.emplace_back([this] { worker_loop(); });
+    explicit ThreadPool(size_t num_threads)
+        // A zero-thread pool would silently accept submit() but wait_all()
+        // would block forever because active_ never reaches 0.  init_common()
+        // already clamps the configured size to >= 1 before building the
+        // global pool; this normalization is a defensive backstop so any
+        // direct ThreadPool(0) still makes progress.
+        : num_threads_(num_threads == 0 ? 1 : num_threads),
+          stop_(false),
+          active_(0) {
+        for (size_t i = 0; i < num_threads_; i++) {
+            workers_.emplace_back([this, i] { worker_loop(i); });
         }
     }
+
+    // Returns this worker's index in [0, num_threads).  Returns SIZE_MAX when
+    // called from a non-pool thread.  Used by callers that want per-worker
+    // state (e.g., per-worker decoders/compressors).
+    static size_t current_worker_id() { return tl_worker_id_(); }
+
+    size_t num_threads() const { return num_threads_; }
 
     ~ThreadPool() {
         {
@@ -88,7 +102,8 @@ class ThreadPool {
     }
 
    private:
-    void worker_loop() {
+    void worker_loop(size_t id) {
+        tl_worker_id_() = id;
         while (true) {
             std::function<void()> task;
             {
@@ -98,7 +113,23 @@ class ThreadPool {
                 task = std::move(tasks_.front());
                 tasks_.pop();
             }
-            task();
+            // Without the try/catch, a task that throws would:
+            //   (1) skip the active_-- below → wait_all() blocks forever
+            //       because active_ never drops to zero, and
+            //   (2) propagate the exception out of the std::thread function
+            //       → std::terminate() takes down the whole process.
+            // Swallowing the exception is unfortunate but it matches the
+            // contract of the public submit(std::function<void()>) overload
+            // which has no way to surface the failure back to the caller.
+            // submit<F>() callers receive their error via the std::future
+            // wrapper installed by std::packaged_task — that path never
+            // reaches here, so this catch only fires for fire-and-forget
+            // tasks where the alternative is termination.
+            try {
+                task();
+            } catch (...) {
+                // Intentionally suppressed; see comment above.
+            }
             {
                 std::lock_guard<std::mutex> lk(mu_);
                 active_--;
@@ -107,6 +138,14 @@ class ThreadPool {
         }
     }
 
+    // Wrapped in a function so static-initialization order is well-defined
+    // (function-local static is zero-initialized to a sentinel).
+    static size_t& tl_worker_id_() {
+        static thread_local size_t id = static_cast<size_t>(-1);
+        return id;
+    }
+
+    size_t num_threads_;
     std::vector<std::thread> workers_;
     std::queue<std::function<void()>> tasks_;
     std::mutex mu_;

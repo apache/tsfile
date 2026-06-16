@@ -16,7 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#include <fcntl.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -25,12 +24,10 @@
 #include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
-#include "common/tablet.h"
 #include "file/write_file.h"
 #include "reader/tsfile_reader.h"
 #include "reader/tsfile_tree_reader.h"
 #include "writer/tsfile_tree_writer.h"
-#include "writer/tsfile_writer.h"
 
 using namespace storage;
 using namespace common;
@@ -209,6 +206,90 @@ class TreeQueryByRowTest : public ::testing::Test {
     std::string file_name_;
     WriteFile write_file_;
 };
+
+// Regression: aligned value chunks store statistic_->count_ as the
+// non-null row count, not the total row count.  Whole-chunk offset skip
+// used to apply value_cm's count, so a sparse aligned chunk with 100 rows
+// and 10 non-nulls would jump over all 100 rows on offset=10 — leaving
+// the next chunks completely unread.  The fix only takes the whole-chunk
+// shortcut when time and value statistics agree on the row count, falling
+// through to per-row offset handling otherwise.
+TEST_F(TreeQueryByRowTest, SparseAlignedChunkOffsetCrossesChunks) {
+    using namespace storage;
+    libtsfile_destroy();
+    libtsfile_init();
+    remove(file_name_.c_str());
+
+    // Tighten per-chunk capacity so two write_tablet_aligned calls produce
+    // two distinct aligned chunks (rather than being merged into one).
+    uint32_t prev_chunk_thresh = g_config_value_.chunk_group_size_threshold_;
+    g_config_value_.chunk_group_size_threshold_ = 64;
+    int64_t prev_record_check =
+        g_config_value_.record_count_for_next_mem_check_;
+    g_config_value_.record_count_for_next_mem_check_ = 1;
+
+    {
+        TsFileWriter writer;
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        ASSERT_EQ(writer.open(file_name_, flags, 0666), E_OK);
+        const std::string device = "sparse_dev";
+        std::vector<MeasurementSchema*> reg;
+        reg.push_back(new MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED));
+        writer.register_aligned_timeseries(device, reg);
+
+        // First aligned chunk: 20 timestamps but only every 4th row has a
+        // non-null value column (5 non-nulls).  Flush.
+        for (int i = 0; i < 20; i++) {
+            TsRecord r(static_cast<int64_t>(i), device);
+            DataPoint p("v0");
+            if (i % 4 == 0) p.set_i64(static_cast<int64_t>(i));
+            r.points_.push_back(p);
+            ASSERT_EQ(writer.write_record_aligned(r), E_OK);
+        }
+        ASSERT_EQ(writer.flush(), E_OK);
+
+        // Second aligned chunk: 20 more timestamps, every value non-null
+        // (all 20 non-nulls).
+        for (int i = 20; i < 40; i++) {
+            TsRecord r(static_cast<int64_t>(i), device);
+            DataPoint p("v0");
+            p.set_i64(static_cast<int64_t>(i));
+            r.points_.push_back(p);
+            ASSERT_EQ(writer.write_record_aligned(r), E_OK);
+        }
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+    g_config_value_.chunk_group_size_threshold_ = prev_chunk_thresh;
+    g_config_value_.record_count_for_next_mem_check_ = prev_record_check;
+
+    // Query with offset=10 — enough to fully cover the first chunk's 5
+    // non-null statistic-reported rows, but NOT enough to cover the
+    // chunk's 20 actual rows.  Under the bug the entire first chunk was
+    // skipped, and offset_=10-5=5 would land 5 rows into the second
+    // chunk, returning rows 25..39 (15 rows).  With the fix the first
+    // chunk is decoded, 10 rows are eaten, leaving rows 10..39 (30 rows).
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<std::string> devices = {"sparse_dev"};
+    std::vector<std::string> measurements = {"v0"};
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.queryByRow(devices, measurements, 10, -1, result), E_OK);
+    ASSERT_NE(result, nullptr);
+
+    auto timestamps = collect_timestamps(result);
+    EXPECT_EQ(timestamps.size(), static_cast<size_t>(30));
+    if (timestamps.size() == 30) {
+        for (size_t i = 0; i < timestamps.size(); i++) {
+            EXPECT_EQ(timestamps[i], static_cast<int64_t>(i + 10));
+        }
+    }
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
 
 // Basic test: queryByRow returns correct total count with no offset/limit.
 TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
@@ -1310,7 +1391,8 @@ TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk_WithOffset) {
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at Chunk/Page level; old query then manual next decodes every row.
-// Timing tolerance 20% to allow measurement noise.
+// Use the same 50% tolerance as the table-view sibling test for cross-platform
+// timing noise; the test is DISABLED_ and intended for manual runs.
 TEST_F(TreeQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
@@ -1320,7 +1402,8 @@ TEST_F(TreeQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
     write_test_file(devices, measurements, num_rows);
 
     const int num_iters = 5;
-    const double tolerance = 0.2;
+    const double tolerance =
+        0.5;  // 50% tolerance for cross-platform timing noise
 
     auto run_query_by_row = [this, &devices, &measurements, offset, limit]() {
         TsFileTreeReader reader;

@@ -314,6 +314,11 @@ class ITimeseriesIndex {
     virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const {
         return nullptr;
     }
+    virtual uint32_t get_value_column_count() const { return 1; }
+    virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const {
+        return col_index == 0 ? get_value_chunk_meta_list() : nullptr;
+    }
 
     virtual common::String get_measurement_name() const {
         return common::String();
@@ -457,7 +462,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
                 (timeseries_meta_type_ & 0x3F);  // TODO
             chunk_meta_list_ =
                 new (chunk_meta_list_buf) common::SimpleList<ChunkMeta*>(pa);
-            uint32_t start_pos = in.read_pos();
+            uint64_t start_pos = in.read_pos();
             while (IS_SUCC(ret) &&
                    in.read_pos() < start_pos + chunk_meta_list_data_size_) {
                 void* cm_buf = pa->alloc(sizeof(ChunkMeta));
@@ -589,11 +594,17 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
     virtual common::String get_measurement_name() const {
         return value_ts_idx_->get_measurement_name();
     }
+    // Return the VALUE column's data type — that's what consumers like
+    // TsFileReader::get_timeseries_schema and metadata APIs expect for an
+    // aligned measurement.  Returning time_ts_idx_->get_data_type() would
+    // surface the time chunk's on-wire VECTOR marker (or INT64 depending
+    // on how the marker is interpreted) for every aligned timeseries,
+    // breaking schema introspection.
     virtual common::TSDataType get_data_type() const {
         return value_ts_idx_ == nullptr ? common::INVALID_DATATYPE
                                         : value_ts_idx_->get_data_type();
     }
-    virtual bool is_aligned() const { return true; }
+    bool is_aligned() const override { return true; }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
@@ -606,6 +617,52 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return os;
     }
 #endif
+};
+
+class MultiAlignedTimeseriesIndex : public ITimeseriesIndex {
+   public:
+    TimeseriesIndex* time_ts_idx_ = nullptr;
+    std::vector<TimeseriesIndex*> value_ts_idxs_;
+
+    MultiAlignedTimeseriesIndex() {}
+    ~MultiAlignedTimeseriesIndex() {}
+
+    common::SimpleList<ChunkMeta*>* get_time_chunk_meta_list() const override {
+        return time_ts_idx_ ? time_ts_idx_->get_chunk_meta_list() : nullptr;
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const override {
+        return value_ts_idxs_.empty()
+                   ? nullptr
+                   : value_ts_idxs_[0]->get_chunk_meta_list();
+    }
+    uint32_t get_value_column_count() const override {
+        return value_ts_idxs_.size();
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const override {
+        return col_index < value_ts_idxs_.size()
+                   ? value_ts_idxs_[col_index]->get_chunk_meta_list()
+                   : nullptr;
+    }
+    common::String get_measurement_name() const override {
+        return value_ts_idxs_.empty()
+                   ? common::String()
+                   : value_ts_idxs_[0]->get_measurement_name();
+    }
+    // Same fix as AlignedTimeseriesIndex: report the first value column's
+    // type rather than the time chunk's VECTOR marker.  Consumers walking
+    // a multi-aligned device for schema info expect the measurement type.
+    common::TSDataType get_data_type() const override {
+        return value_ts_idxs_.empty() || value_ts_idxs_[0] == nullptr
+                   ? common::INVALID_DATATYPE
+                   : value_ts_idxs_[0]->get_data_type();
+    }
+    bool is_aligned() const override { return true; }
+    Statistic* get_statistic() const override { return nullptr; }
+
+    const std::vector<TimeseriesIndex*>& get_value_indices() const {
+        return value_ts_idxs_;
+    }
 };
 
 class TSMIterator {
@@ -629,7 +686,6 @@ class TSMIterator {
     common::SimpleList<ChunkMeta*>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
-    // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
              std::map<common::String, std::vector<ChunkMeta*>>,
              IDeviceIDComparator>

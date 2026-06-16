@@ -126,6 +126,11 @@ void PageWriter::reset() {
     }
     time_out_stream_.reset();
     value_out_stream_.reset();
+    // Without this, a page that was poisoned by a mid-batch encode failure
+    // would stay refused forever even after ChunkWriter calls reset() to
+    // start a fresh page — `partial_failure_` would still be true and
+    // write_to_chunk() would return E_DATA_INCONSISTENCY indefinitely.
+    partial_failure_ = false;
 }
 
 void PageWriter::destroy() {
@@ -156,6 +161,14 @@ int PageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
               << pages_data.total_size() << " of chunk_data." << std::endl;
 #endif
     int ret = E_OK;
+    // Refuse to seal a page whose time and value streams diverged because of
+    // a mid-batch encode failure (see PageWriter::write_batch).  The higher
+    // layer (TsFileWriter::unrecoverable_) is the authoritative place to
+    // surface this to the caller; this guard prevents a misaligned page from
+    // ever entering the chunk stream.
+    if (UNLIKELY(partial_failure_)) {
+        return common::E_DATA_INCONSISTENCY;
+    }
     if (RET_FAIL(prepare_end_page())) {
         return ret;
     }
