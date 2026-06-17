@@ -51,13 +51,24 @@ class TsFileIOReader {
         device_node_cache_pa_.init(512, common::MOD_TSFILE_READER);
     }
 
-    // reset() frees a ReadFile created by init(const std::string&) and tears
-    // down the metadata arenas.  Without an explicit destructor the class
-    // relied on every owner calling reset() by hand, which leaks the ReadFile
-    // whenever a TsFileIOReader value goes out of scope directly (e.g. a stack
-    // instance in a test).  reset() is idempotent and skips a borrowed
-    // ReadFile (read_file_created_ == false), so this is safe in all cases.
-    ~TsFileIOReader() { reset(); }
+    // Free only the ReadFile we own (created by init(const std::string&)).
+    // Without an explicit destructor that raw pointer leaks whenever a
+    // TsFileIOReader value goes out of scope without an explicit reset() (e.g.
+    // a stack instance in a test).  We deliberately do NOT call reset() here:
+    // reset() also runs tsfile_meta_page_arena_.destroy(), which would free the
+    // arena that tsfile_meta_ lives in *before* the implicit ~TsFileMeta member
+    // destructor runs, leaving its arena-allocated MetaIndexNode / shared_ptr
+    // graph dangling (use-after-free / crash).  The arenas and TsFileMeta clean
+    // themselves up correctly via member destruction order (tsfile_meta_ is
+    // destroyed before its backing arena).  An owner that already called
+    // reset() leaves read_file_ == nullptr, so this never double-frees.
+    ~TsFileIOReader() {
+        if (read_file_created_ && read_file_ != nullptr) {
+            read_file_->destroy();
+            delete read_file_;
+            read_file_ = nullptr;
+        }
+    }
 
     int init(const std::string& file_path);
 
