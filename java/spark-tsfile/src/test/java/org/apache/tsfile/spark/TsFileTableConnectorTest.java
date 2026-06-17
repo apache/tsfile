@@ -185,6 +185,20 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void directoryInferenceFailsWhenLaterFileHasMultipleTables() throws Exception {
+    File directory = temporaryFolder.newFolder("multi-table-later-file");
+    writeWeatherFile(new File(directory, "part-a.tsfile"), "weather", 0);
+    try (TsFileWriter writer = new TsFileWriter(new File(directory, "part-b.tsfile"))) {
+      writeWeatherTable(writer, "weather", 10);
+      writeWeatherTable(writer, "traffic", 20);
+    }
+
+    assertFailsContaining(
+        "multiple tables",
+        () -> spark.read().format("tsfile").load(directory.getAbsolutePath()).count());
+  }
+
+  @Test
   public void lowerCaseDuplicateColumnsFail() {
     StructType schema =
         new StructType()

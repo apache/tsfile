@@ -50,15 +50,18 @@ public final class TsFileTableSchemaInferer {
     }
 
     String selectedTable = options.table();
+    boolean inferTable = selectedTable == null;
     TableSchema selectedSchema = null;
     for (String file : files) {
       Map<String, TableSchema> schemaMap = readTableSchemas(file);
-      if (selectedTable == null) {
+      if (inferTable) {
         if (schemaMap.size() != 1) {
           throw new TsFileSparkException(
               "Path contains a TsFile with multiple tables; specify option \"table\": " + file);
         }
-        selectedTable = schemaMap.keySet().iterator().next();
+        if (selectedTable == null) {
+          selectedTable = schemaMap.keySet().iterator().next();
+        }
       }
       TableSchema current = schemaMap.get(selectedTable);
       if (current == null) {
