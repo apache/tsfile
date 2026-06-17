@@ -51,6 +51,14 @@ class TsFileIOReader {
         device_node_cache_pa_.init(512, common::MOD_TSFILE_READER);
     }
 
+    // reset() frees a ReadFile created by init(const std::string&) and tears
+    // down the metadata arenas.  Without an explicit destructor the class
+    // relied on every owner calling reset() by hand, which leaks the ReadFile
+    // whenever a TsFileIOReader value goes out of scope directly (e.g. a stack
+    // instance in a test).  reset() is idempotent and skips a borrowed
+    // ReadFile (read_file_created_ == false), so this is safe in all cases.
+    ~TsFileIOReader() { reset(); }
+
     int init(const std::string& file_path);
 
     int init(ReadFile* read_file);

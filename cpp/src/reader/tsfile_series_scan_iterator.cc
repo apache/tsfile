@@ -31,6 +31,18 @@ using namespace common;
 namespace storage {
 
 void TsFileSeriesScanIterator::destroy() {
+    // MultiAlignedTimeseriesIndex is placement-new'd inside
+    // timeseries_index_pa_ (see TsFileIOReader::alloc_multi_ssi).  The arena's
+    // destroy() frees raw memory without running destructors, so its
+    // value_ts_idxs_ std::vector backing buffer would leak.  Release it
+    // explicitly before tearing down the arena.  dynamic_cast is null-safe and
+    // returns nullptr for the single-value / non-aligned index types, which own
+    // no separate heap storage.
+    if (auto* multi =
+            dynamic_cast<MultiAlignedTimeseriesIndex*>(itimeseries_index_)) {
+        std::vector<TimeseriesIndex*>().swap(multi->value_ts_idxs_);
+    }
+    itimeseries_index_ = nullptr;
     timeseries_index_pa_.destroy();
     if (chunk_reader_ != nullptr) {
         // destroy() already runs manual destructors on internal members

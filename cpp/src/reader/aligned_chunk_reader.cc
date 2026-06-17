@@ -199,9 +199,15 @@ void AlignedChunkReader::destroy() {
         col->cur_page_header.reset();
         delete col;
     }
-    value_columns_.clear();
+    // This reader is placement-new'd and torn down via destroy() + mem_free
+    // without ever running ~AlignedChunkReader (see
+    // TsFileSeriesScanIterator::destroy), so .clear() would leave these
+    // vectors' backing buffers allocated and unreachable.  swap with an empty
+    // vector to actually release the storage, matching the chunk_pages_ /
+    // page_all_times_ handling above.
+    std::vector<ValueColumnState*>().swap(value_columns_);
     release_current_page_state();
-    per_page_times_.clear();
+    std::vector<std::vector<int64_t>>().swap(per_page_times_);
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned
     for (auto* d : time_decoder_pool_) {
@@ -210,14 +216,14 @@ void AlignedChunkReader::destroy() {
             DecoderFactory::free(d);
         }
     }
-    time_decoder_pool_.clear();
+    std::vector<Decoder*>().swap(time_decoder_pool_);
     for (auto* c : time_compressor_pool_) {
         if (c != nullptr) {
             c->~Compressor();
             CompressorFactory::free(c);
         }
     }
-    time_compressor_pool_.clear();
+    std::vector<Compressor*>().swap(time_compressor_pool_);
 #endif
 }
 
