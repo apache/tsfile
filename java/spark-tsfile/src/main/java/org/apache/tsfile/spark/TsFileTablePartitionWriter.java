@@ -76,7 +76,7 @@ public class TsFileTablePartitionWriter implements DataWriter<InternalRow> {
     Path outputPath = context.outputPath();
     Path tempDir = outputPath.resolve("_temporary").resolve(queryId);
     Files.createDirectories(tempDir);
-    String fileName = String.format("part-%05d-%020d.tsfile", partitionId, taskId);
+    String fileName = String.format("part-%s-%05d-%020d.tsfile", queryId, partitionId, taskId);
     tempFile = tempDir.resolve(fileName);
     finalFile = outputPath.resolve(fileName);
     writer = new TsFileWriter(tempFile.toFile());

@@ -26,9 +26,13 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class TsFileTableBatchWrite implements BatchWrite {
 
@@ -55,23 +59,18 @@ public class TsFileTableBatchWrite implements BatchWrite {
         deleteVisibleOutput(outputPath);
       }
       Files.createDirectories(outputPath);
-      for (WriterCommitMessage message : messages) {
-        if (!(message instanceof TsFileTableWriterCommitMessage)) {
-          continue;
-        }
-        TsFileTableWriterCommitMessage tsfileMessage = (TsFileTableWriterCommitMessage) message;
-        if (tsfileMessage.tempFile() == null) {
-          continue;
-        }
-        Files.move(
-            Path.of(tsfileMessage.tempFile()),
-            Path.of(tsfileMessage.finalFile()),
-            StandardCopyOption.REPLACE_EXISTING,
-            StandardCopyOption.ATOMIC_MOVE);
-      }
+      List<TsFileTableWriterCommitMessage> tsfileMessages = validMessages(messages);
+      validateFinalFilesDoNotExist(tsfileMessages);
+      validateNoDuplicateFinalFiles(tsfileMessages);
       Path temporaryPath = outputPath.resolve("_temporary");
-      deleteRecursively(temporaryPath.resolve(TsFileTableDataWriterFactory.safeId(queryId)));
+      Path queryTemporaryPath = temporaryPath.resolve(TsFileTableDataWriterFactory.safeId(queryId));
+      for (TsFileTableWriterCommitMessage tsfileMessage : tsfileMessages) {
+        Files.move(Path.of(tsfileMessage.tempFile()), Path.of(tsfileMessage.finalFile()));
+      }
+      deleteRecursively(queryTemporaryPath);
       deleteIfEmpty(temporaryPath);
+    } catch (FileAlreadyExistsException e) {
+      throw new TsFileSparkException("TsFile output file already exists during append: " + e, e);
     } catch (IOException e) {
       throw new TsFileSparkException("Failed to commit TsFile Spark write", e);
     }
@@ -84,7 +83,6 @@ public class TsFileTableBatchWrite implements BatchWrite {
         if (message instanceof TsFileTableWriterCommitMessage) {
           TsFileTableWriterCommitMessage tsfileMessage = (TsFileTableWriterCommitMessage) message;
           deleteIfPresent(tsfileMessage.tempFile());
-          deleteIfPresent(tsfileMessage.finalFile());
         }
       }
     }
@@ -106,6 +104,45 @@ public class TsFileTableBatchWrite implements BatchWrite {
         if (!"_temporary".equals(child.getFileName().toString())) {
           deleteRecursively(child);
         }
+      }
+    }
+  }
+
+  private static List<TsFileTableWriterCommitMessage> validMessages(
+      WriterCommitMessage[] messages) {
+    List<TsFileTableWriterCommitMessage> tsfileMessages = new ArrayList<>();
+    if (messages == null) {
+      return tsfileMessages;
+    }
+    for (WriterCommitMessage message : messages) {
+      if (!(message instanceof TsFileTableWriterCommitMessage)) {
+        continue;
+      }
+      TsFileTableWriterCommitMessage tsfileMessage = (TsFileTableWriterCommitMessage) message;
+      if (tsfileMessage.tempFile() != null) {
+        tsfileMessages.add(tsfileMessage);
+      }
+    }
+    return tsfileMessages;
+  }
+
+  private static void validateFinalFilesDoNotExist(List<TsFileTableWriterCommitMessage> messages)
+      throws IOException {
+    for (TsFileTableWriterCommitMessage message : messages) {
+      Path finalFile = Path.of(message.finalFile());
+      if (Files.exists(finalFile)) {
+        throw new FileAlreadyExistsException(finalFile.toString());
+      }
+    }
+  }
+
+  private static void validateNoDuplicateFinalFiles(List<TsFileTableWriterCommitMessage> messages)
+      throws IOException {
+    Set<Path> finalFiles = new HashSet<>();
+    for (TsFileTableWriterCommitMessage message : messages) {
+      Path finalFile = Path.of(message.finalFile());
+      if (!finalFiles.add(finalFile)) {
+        throw new FileAlreadyExistsException(finalFile.toString());
       }
     }
   }

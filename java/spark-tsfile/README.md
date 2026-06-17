@@ -126,6 +126,8 @@ model files. It intentionally keeps the first production surface narrow:
   change.
 - `mergeSchema=true` is rejected. All files selected for one read must contain
   a compatible schema for the selected table.
+- User-provided read schemas are validated against TsFile table metadata and
+  may be used as read projections. They cannot change the stored column types.
 - Predicate pushdown is limited to `time =`, `time >`, `time >=`, `time <`,
   `time <=`, AND-combined time ranges, and string equality on TAG columns.
   Unsupported predicates are returned to Spark as residual filters.

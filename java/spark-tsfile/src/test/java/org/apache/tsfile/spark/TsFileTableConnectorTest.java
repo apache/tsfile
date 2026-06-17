@@ -51,6 +51,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -308,9 +311,14 @@ public class TsFileTableConnectorTest {
             .orderBy("time")
             .collectAsList();
 
+    assertEquals(3, projected.size());
     assertEquals(2, projected.get(0).size());
     assertEquals(0L, projected.get(0).getLong(0));
     assertEquals("beijing", projected.get(0).getString(1));
+    assertEquals(1L, projected.get(1).getLong(0));
+    assertEquals("shanghai", projected.get(1).getString(1));
+    assertEquals(2L, projected.get(2).getLong(0));
+    assertEquals("beijing", projected.get(2).getString(1));
 
     TsFileTableSchema tableSchema =
         TsFileTableSchemaInferer.infer(readOptions(file.getAbsolutePath(), "weather"))
@@ -358,6 +366,29 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void sqlTemporaryViewReadsTsFile() throws Exception {
+    File file = temporaryFolder.newFile("sql-view.tsfile");
+    writeWeatherFile(file, "weather", 0);
+
+    spark.sql(
+        "CREATE OR REPLACE TEMPORARY VIEW weather_sql USING tsfile OPTIONS (path '"
+            + file.getAbsolutePath().replace("'", "\\'")
+            + "', table 'weather')");
+
+    List<Row> rows =
+        spark
+            .sql(
+                "SELECT time, city, temperature FROM weather_sql "
+                    + "WHERE city = 'beijing' ORDER BY time")
+            .collectAsList();
+
+    assertEquals(2, rows.size());
+    assertEquals(0L, rows.get(0).getLong(0));
+    assertEquals("beijing", rows.get(0).getString(1));
+    assertEquals(22, rows.get(1).getInt(2));
+  }
+
+  @Test
   public void writesOneTsFilePerNonEmptySparkPartition() throws Exception {
     File output = temporaryFolder.newFolder("partitioned");
     Dataset<Row> rows =
@@ -380,6 +411,140 @@ public class TsFileTableConnectorTest {
     assertNotNull(tsFiles);
     assertEquals(2, tsFiles.length);
     assertFalse(new File(output, "_temporary").exists());
+  }
+
+  @Test
+  public void appendTwiceCreatesDistinctTsFiles() throws Exception {
+    File output = temporaryFolder.newFolder("append-twice");
+    Dataset<Row> rows =
+        spark
+            .range(0, 4, 1, 2)
+            .selectExpr(
+                "id as time",
+                "concat('city', cast(id % 2 as string)) as city",
+                "cast(id as int) as temperature",
+                "cast(id as bigint) as humidity");
+
+    rows.write()
+        .format("tsfile")
+        .option("table", "weather")
+        .option("tagColumns", "city")
+        .mode(SaveMode.Append)
+        .save(output.getAbsolutePath());
+    File[] firstWriteFiles = output.listFiles((dir, name) -> name.endsWith(".tsfile"));
+    assertNotNull(firstWriteFiles);
+    assertEquals(2, firstWriteFiles.length);
+
+    rows.write()
+        .format("tsfile")
+        .option("table", "weather")
+        .option("tagColumns", "city")
+        .mode(SaveMode.Append)
+        .save(output.getAbsolutePath());
+
+    File[] secondWriteFiles = output.listFiles((dir, name) -> name.endsWith(".tsfile"));
+    assertNotNull(secondWriteFiles);
+    assertEquals(4, secondWriteFiles.length);
+    assertEquals(
+        8,
+        spark
+            .read()
+            .format("tsfile")
+            .option("table", "weather")
+            .load(output.getAbsolutePath())
+            .count());
+  }
+
+  @Test
+  public void commitDoesNotOverwriteExistingOutputFile() throws Exception {
+    File output = temporaryFolder.newFolder("commit-collision");
+    Path outputPath = output.toPath();
+    Path tempFile =
+        outputPath.resolve("_temporary").resolve("query").resolve("part-query-0.tsfile");
+    Path finalFile = outputPath.resolve("part-query-0.tsfile");
+    Files.createDirectories(tempFile.getParent());
+    Files.write(tempFile, "new".getBytes(StandardCharsets.UTF_8));
+    Files.write(finalFile, "old".getBytes(StandardCharsets.UTF_8));
+    TsFileTableBatchWrite batchWrite =
+        new TsFileTableBatchWrite(
+            TsFileTableWriteContext.build(
+                writeOptions(output.getAbsolutePath(), "city"), sampleSchema()),
+            false,
+            "query");
+
+    assertFailsContaining(
+        "already exists",
+        () ->
+            batchWrite.commit(
+                new TsFileTableWriterCommitMessage[] {
+                  new TsFileTableWriterCommitMessage(tempFile.toString(), finalFile.toString())
+                }));
+
+    assertEquals("old", Files.readString(finalFile, StandardCharsets.UTF_8));
+    assertEquals("new", Files.readString(tempFile, StandardCharsets.UTF_8));
+  }
+
+  @Test
+  public void abortDoesNotDeleteExistingOutputFile() throws Exception {
+    File output = temporaryFolder.newFolder("abort-collision");
+    Path outputPath = output.toPath();
+    Path tempFile =
+        outputPath.resolve("_temporary").resolve("query").resolve("part-query-0.tsfile");
+    Path finalFile = outputPath.resolve("part-query-0.tsfile");
+    Files.createDirectories(tempFile.getParent());
+    Files.write(tempFile, "new".getBytes(StandardCharsets.UTF_8));
+    Files.write(finalFile, "old".getBytes(StandardCharsets.UTF_8));
+    TsFileTableBatchWrite batchWrite =
+        new TsFileTableBatchWrite(
+            TsFileTableWriteContext.build(
+                writeOptions(output.getAbsolutePath(), "city"), sampleSchema()),
+            false,
+            "query");
+
+    batchWrite.abort(
+        new TsFileTableWriterCommitMessage[] {
+          new TsFileTableWriterCommitMessage(tempFile.toString(), finalFile.toString())
+        });
+
+    assertFalse(Files.exists(tempFile));
+    assertTrue(Files.exists(finalFile));
+    assertEquals("old", Files.readString(finalFile, StandardCharsets.UTF_8));
+  }
+
+  @Test
+  public void externalReadSchemaIsValidatedAndUsed() throws Exception {
+    assertTrue(new TsFileTableProvider().supportsExternalMetadata());
+    File file = temporaryFolder.newFile("external-schema.tsfile");
+    writeWeatherFile(file, "weather", 0);
+    StructType projectionSchema =
+        new StructType()
+            .add("time", DataTypes.LongType, false)
+            .add("city", DataTypes.StringType, false);
+
+    Dataset<Row> projected =
+        spark
+            .read()
+            .format("tsfile")
+            .schema(projectionSchema)
+            .option("table", "weather")
+            .load(file.getAbsolutePath());
+    assertEquals(Arrays.asList("time", "city"), Arrays.asList(projected.schema().fieldNames()));
+    assertEquals(3, projected.count());
+
+    StructType incompatibleSchema =
+        new StructType()
+            .add("time", DataTypes.LongType, false)
+            .add("temperature", DataTypes.DoubleType, true);
+    assertFailsContaining(
+        "External Spark schema column temperature has type DoubleType",
+        () ->
+            spark
+                .read()
+                .format("tsfile")
+                .schema(incompatibleSchema)
+                .option("table", "weather")
+                .load(file.getAbsolutePath())
+                .count());
   }
 
   @Test

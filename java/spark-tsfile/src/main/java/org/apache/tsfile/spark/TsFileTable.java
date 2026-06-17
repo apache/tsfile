@@ -72,7 +72,7 @@ public class TsFileTable implements SupportsRead, SupportsWrite {
 
   @Override
   public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-    return new TsFileTableScanBuilder(TsFileTableOptions.forRead(options));
+    return new TsFileTableScanBuilder(TsFileTableOptions.forRead(options), schema);
   }
 
   @Override

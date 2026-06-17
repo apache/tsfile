@@ -24,7 +24,11 @@ import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.read.SupportsPushDownFilters;
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
 import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class TsFileTableScanBuilder
     implements ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns {
@@ -35,10 +39,56 @@ public class TsFileTableScanBuilder
   private StructType readSchema;
 
   public TsFileTableScanBuilder(TsFileTableOptions options) {
+    this(options, null);
+  }
+
+  public TsFileTableScanBuilder(TsFileTableOptions options, StructType externalSchema) {
     this.options = options;
     this.inferenceResult = TsFileTableSchemaInferer.infer(options);
+    validateExternalSchema(externalSchema, inferenceResult.tableSchema());
     this.filterTranslator = new TsFileTableFilterTranslator(inferenceResult.tableSchema(), options);
-    this.readSchema = inferenceResult.tableSchema().sparkSchema();
+    this.readSchema =
+        externalSchema == null ? inferenceResult.tableSchema().sparkSchema() : externalSchema;
+  }
+
+  private static void validateExternalSchema(
+      StructType externalSchema, TsFileTableSchema tableSchema) {
+    if (externalSchema == null) {
+      return;
+    }
+    Set<String> normalizedNames = new HashSet<>();
+    for (StructField field : externalSchema.fields()) {
+      String normalizedName = TsFileTableOptions.normalizeName(field.name());
+      if (!normalizedNames.add(normalizedName)) {
+        throw new TsFileSparkException(
+            "Duplicate external Spark schema column after lower-case normalization: "
+                + field.name());
+      }
+      StructField expectedField = findExpectedField(tableSchema.sparkSchema(), normalizedName);
+      if (expectedField == null) {
+        throw new TsFileSparkException(
+            "External Spark schema column does not exist in TsFile table metadata: "
+                + field.name());
+      }
+      if (!field.dataType().sameType(expectedField.dataType())) {
+        throw new TsFileSparkException(
+            "External Spark schema column "
+                + field.name()
+                + " has type "
+                + field.dataType()
+                + ", but TsFile table metadata has type "
+                + expectedField.dataType());
+      }
+    }
+  }
+
+  private static StructField findExpectedField(StructType expectedSchema, String normalizedName) {
+    for (StructField field : expectedSchema.fields()) {
+      if (normalizedName.equals(TsFileTableOptions.normalizeName(field.name()))) {
+        return field;
+      }
+    }
+    return null;
   }
 
   @Override
