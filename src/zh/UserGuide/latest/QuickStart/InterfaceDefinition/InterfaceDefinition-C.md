@@ -32,12 +32,44 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
-    TS_DATATYPE_STRING = 11
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
+    TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_INVALID = 255
 } TSDataType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+// 值编码
+typedef enum {
+    TS_ENCODING_PLAIN = 0,
+    TS_ENCODING_DICTIONARY = 1,
+    TS_ENCODING_RLE = 2,
+    TS_ENCODING_TS_2DIFF = 4,
+    TS_ENCODING_GORILLA = 8,
+    TS_ENCODING_ZIGZAG = 9,
+    TS_ENCODING_SPRINTZ = 12,
+    TS_ENCODING_INVALID = 255
+} TSEncoding;
+
+// 压缩类型，默认值为 LZ4。
+typedef enum {
+    TS_COMPRESSION_UNCOMPRESSED = 0,
+    TS_COMPRESSION_SNAPPY = 1,
+    TS_COMPRESSION_GZIP = 2,
+    TS_COMPRESSION_LZO = 3,
+    TS_COMPRESSION_LZ4 = 7,
+    TS_COMPRESSION_INVALID = 255
+} CompressionType;
+
+typedef enum column_category {
+    TAG = 0,
+    FIELD = 1,
+    ATTRIBUTE = 2,
+    TIME = 3
+} ColumnCategory;
 
 // ColumnSchema：表示单个列的模式，包括列名、数据类型和分类。
+// 列的编码/压缩遵循全局默认值（见下文“配置”）。
 typedef struct column_schema {
     char* column_name;
     TSDataType data_type;
@@ -58,6 +90,8 @@ typedef struct result_set_meta_data {
     int column_num;
 } ResultSetMetaData;
 ```
+
+> `ColumnSchema` 不携带编码/压缩——它们遵循全局默认值（见[配置](#配置编码与压缩)）。
 
 ## 写入接口
 
@@ -250,6 +284,38 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
 
 
 
+## 配置（编码与压缩）
+
+列按其数据类型的 **全局默认** 编码与压缩存储（`ColumnSchema` 不携带编解码设置）。
+请在创建写入器 *之前* 用下列函数修改这些默认值。
+
+每个 setter 成功返回 `RET_OK`（0），遇到不支持的数据类型/编码或压缩组合返回 `RET_NOT_SUPPORT`（40）。
+
+```C
+/* 按数据类型的默认值编码，以及默认压缩。 */
+int     set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+int     set_global_compression(uint8_t compression);
+uint8_t get_datatype_encoding(uint8_t data_type);
+uint8_t get_global_compression();
+
+/* 时间列（时间数据类型固定为 INT64）。 */
+int     set_global_time_encoding(uint8_t encoding);
+int     set_global_time_compression(uint8_t compression);
+uint8_t get_global_time_encoding();
+uint8_t get_global_time_compression();
+```
+
+允许的取值：编码方面，`BOOLEAN` 仅 `PLAIN`；`INT32`/`INT64`/`DATE` 为
+`PLAIN`/`TS_2DIFF`/`GORILLA`/`ZIGZAG`/`RLE`/`SPRINTZ`；`FLOAT`/`DOUBLE` 为
+`PLAIN`/`TS_2DIFF`/`GORILLA`/`SPRINTZ`；`STRING`/`TEXT` 为 `PLAIN`/`DICTIONARY`。
+压缩可取 `UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`。
+
+```C
+// 例如：所有列均以 LZ4 压缩写入
+ERRNO code = set_global_compression(TS_COMPRESSION_LZ4);
+if (code != RET_OK) { /* 处理不支持的取值 */ }
+```
+
 ## 读取接口
 
 ###  TsFile Reader 创建/关闭
@@ -277,9 +343,10 @@ ERRNO tsfile_reader_close(TsFileReader reader);
 
 
 
-###  查询表 / 获取下一行 / 按行查询
+###  查询表 / 获取下一行
 
 ```C
+
 /**
  * @brief 在指定时间范围内，从指定表和列中查询数据。
  *
@@ -312,45 +379,129 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
  * @param result_set [输入] 有效的 ResultSet 句柄指针。
  */
 void free_tsfile_result_set(ResultSet* result_set);
+```
+
+
+
+### 按标签过滤
+
+**标签列（TAG）** 构成设备的唯一标识（联合主键）——正是它们的取值在一个表内
+区分不同的设备。*标签过滤器* 把查询限定到标签取值满足条件的设备，从而只读取你关心的设备数据。
+用 reader 构造一个过滤器，传给下文的表查询函数，用完再用 `tsfile_tag_filter_free()` 释放。
+
+```C
+// 标签过滤器的不透明句柄，用下面的函数构造。
+typedef void* TagFilterHandle;
+
+// 单列标签谓词的比较运算符。
+typedef enum {
+    TAG_FILTER_EQ = 0,          // 列 == 值
+    TAG_FILTER_NEQ = 1,         // 列 != 值
+    TAG_FILTER_LT = 2,          // 列 <  值
+    TAG_FILTER_LTEQ = 3,        // 列 <= 值
+    TAG_FILTER_GT = 4,          // 列 >  值
+    TAG_FILTER_GTEQ = 5,        // 列 >= 值
+    TAG_FILTER_REGEXP = 6,      // 列匹配正则 值
+    TAG_FILTER_NOT_REGEXP = 7,  // 列不匹配正则 值
+} TagFilterOp;
 
 /**
- * @brief 按行查询时间序列数据（树模型），支持偏移量与行数限制
+ * @brief 创建单列标签谓词：`<column_name> <op> <value>`。
  *
- * @param reader [in] 有效的 TsFileReader 句柄，通过 tsfile_reader_new() 获取
- * @param device_ids [in] 设备 ID 数组
- * @param device_ids_len [in] 设备 ID 的数量
- * @param measurement_names [in] 测量项（传感器）名称数组
- * @param measurement_names_len [in] 测量项名称的数量
- * @param offset [in] 需要跳过的起始行数（必须 >= 0）
- * @param limit [in] 最多返回的行数，< 0 表示不限制
- * @param err_code [out] 错误码，成功返回 E_OK(0)
- * @return 成功返回结果集 ResultSet 句柄，失败返回 NULL
+ * @param reader      [输入] 有效的 TsFileReader 句柄。
+ * @param table_name  [输入] 其 schema 定义了这些标签列的表名。
+ * @param column_name [输入] 要过滤的标签列名。
+ * @param value       [输入] 比较值（标签列为 STRING 类型）。
+ * @param op          [输入] 比较运算符（TagFilterOp）。
+ * @param err_code    [输出] 成功返回 RET_OK(0)，否则返回 errno_define_c.h 中的错误码。
+ * @return 成功返回 TagFilterHandle，失败返回 NULL。
  */
-ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
-                                          char** device_ids, int device_ids_len,
-                                          char** measurement_names,
-                                          int measurement_names_len, int offset,
-                                          int limit, ERRNO* err_code);
+TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value, TagFilterOp op,
+                                         ERRNO* err_code);
 
 /**
- * @brief 按行查询表模型数据，支持偏移量与行数限制下推
+ * @brief 创建范围谓词：lower <= 列 <= upper（is_not 为 true 表示 NOT BETWEEN）。
+ */
+TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* lower, const char* upper,
+                                          bool is_not, ERRNO* err_code);
+
+// 组合谓词。AND/OR/NOT 会接管其子节点的所有权，只需释放根节点。
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left, TagFilterHandle right);
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left, TagFilterHandle right);
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+
+// 释放标签过滤器及其全部子节点。
+void tsfile_tag_filter_free(TagFilterHandle filter);
+```
+
+### 带标签过滤、分页与分批的表查询
+
+下列查询函数接受一个可选的 `tag_filter`（传 `NULL` 表示不过滤）和 `batch_size`
+（`<= 0` 逐行返回；`> 0` 按该大小返回数据块）。
+
+```C
+/**
+ * @brief 按行查询表，支持偏移量/行数限制下推与可选的标签过滤。
  *
- * @param reader [in] 有效的 TsFileReader 句柄，通过 tsfile_reader_new() 获取
- * @param table_name [in] 目标表名
- * @param column_names [in] 要查询的列名数组
- * @param column_names_len [in] 要查询的列数量
- * @param offset [in] 需要跳过的起始行数（必须 >= 0）
- * @param limit [in] 最多返回的行数，< 0 表示不限制
- * @param err_code [out] 错误码，成功返回 E_OK(0)
- * @return 成功返回结果集 ResultSet 句柄，失败返回 NULL
+ * @param reader           [输入] 有效的 TsFileReader 句柄。
+ * @param table_name       [输入] 目标表名。
+ * @param column_names     [输入] 要查询的列名数组。
+ * @param column_names_len [输入] 要查询的列数量。
+ * @param offset           [输入] 需要跳过的起始行数（>= 0）。
+ * @param limit            [输入] 最多返回行数；< 0 表示不限制。
+ * @param tag_filter       [输入] 标签谓词，NULL 表示不过滤。
+ * @param batch_size       [输入] <= 0 逐行；> 0 数据块大小。
+ * @param err_code         [输出] 成功返回 RET_OK(0)，否则返回错误码。
+ * @return 成功返回 ResultSet 句柄，失败返回 NULL。用 free_tsfile_result_set() 释放。
  */
 ResultSet tsfile_reader_query_table_by_row(
     TsFileReader reader, const char* table_name, char** column_names,
     int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
     int batch_size, ERRNO* err_code);
+
+/**
+ * @brief 在时间范围内查询表，支持可选的标签过滤与分批。
+ *
+ * @param batch_size <= 0 逐行返回；> 0 返回该大小的 TsBlock。
+ */
+ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
+                                   char** columns, uint32_t column_num,
+                                   Timestamp start_time, Timestamp end_time,
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code);
+
+/**
+ * @brief 带标签过滤的表查询（时间范围 + 标签谓词）。
+ *
+ * @param batch_size <= 0 逐行返回；> 0 返回该大小的 TsBlock。
+ */
+ResultSet tsfile_query_table_with_tag_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
 ```
 
+示例——只读取 `region` 标签等于 `shanghai` 的设备的 `temperature`：
 
+```C
+ERRNO ec = RET_OK;
+TagFilterHandle f = tsfile_tag_filter_create(
+    reader, "weather", "region", "shanghai", TAG_FILTER_EQ, &ec);
+
+char* cols[] = {"temperature"};
+ResultSet rs = tsfile_reader_query_table_by_row(
+    reader, "weather", cols, 1, /*offset*/ 0, /*limit*/ -1, f, /*batch*/ 0, &ec);
+
+// ... 用 tsfile_result_set_next() 遍历 rs，然后释放：
+free_tsfile_result_set(&rs);
+tsfile_tag_filter_free(f);
+```
 
 ### 从结果集中获取数据
 

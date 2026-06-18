@@ -60,6 +60,20 @@ export const enSidebar = {
         { text: 'InterfaceDefinition-Python', link: 'InterfaceDefinition-Python' },
       ],
     },
+    {
+      text: 'TsFileDataFrame',
+      collapsible: true,
+      link: 'DataFrame/TsFileDataFrame',
+    },
+    {
+      text: 'Tools',
+      collapsible: true,
+      prefix: 'Tools/',
+      children: [
+        { text: 'tsfile-cli', link: 'Tsfile-CLI' },
+        { text: 'tsfile-viewer', link: 'Tsfile-Viewer' },
+      ],
+    },
     /* {
       text: 'Ecosystem Integration',
       collapsible: true,

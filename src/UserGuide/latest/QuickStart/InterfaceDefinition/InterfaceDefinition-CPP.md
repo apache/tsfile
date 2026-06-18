@@ -20,6 +20,67 @@
 -->
 # Interface Definitions - C++
 
+## Data Types, Encoding and Compression
+
+These enumerations are shared by the read and write interfaces. The numeric
+codes are also the values stored on disk.
+
+```cpp
+// Supported measurement/column data types.
+enum TSDataType : uint8_t {
+    BOOLEAN = 0,
+    INT32 = 1,
+    INT64 = 2,
+    FLOAT = 3,
+    DOUBLE = 4,
+    TEXT = 5,
+    TIMESTAMP = 8,
+    DATE = 9,
+    BLOB = 10,
+    STRING = 11,
+};
+
+// Value encoding. See the table below for which encodings apply to which types.
+enum TSEncoding : uint8_t {
+    PLAIN = 0,
+    DICTIONARY = 1,
+    RLE = 2,
+    TS_2DIFF = 4,
+    GORILLA = 8,
+    ZIGZAG = 9,
+    SPRINTZ = 12,
+};
+
+// Compression type. SNAPPY/GZIP/LZO/LZ4 depend on build options; LZ4 is the default.
+enum CompressionType : uint8_t {
+    UNCOMPRESSED = 0,
+    SNAPPY = 1,
+    GZIP = 2,
+    LZO = 3,
+    LZ4 = 7,
+};
+
+// Column role within a table schema.
+enum class ColumnCategory { TAG = 0, FIELD = 1, ATTRIBUTE = 2, TIME = 3 };
+```
+
+Encodings applicable to each data type:
+
+| Encoding | Applicable types |
+|---|---|
+| `PLAIN` | all types |
+| `DICTIONARY` | `TEXT`, `STRING` |
+| `RLE` | `INT32`, `INT64`, `TIMESTAMP`, `DATE` |
+| `TS_2DIFF` | `INT32`, `INT64`, `TIMESTAMP`, `DATE`, `FLOAT`, `DOUBLE` |
+| `GORILLA` | `INT32`, `INT64`, `TIMESTAMP`, `DATE`, `FLOAT`, `DOUBLE` |
+| `ZIGZAG` | `INT32`, `INT64` |
+| `SPRINTZ` | `INT32`, `INT64`, `FLOAT`, `DOUBLE` |
+
+Default value encoding per type: `BOOLEAN → PLAIN`, `INT32 / INT64 → TS_2DIFF`,
+`FLOAT / DOUBLE → GORILLA`, `TEXT / STRING / BLOB → PLAIN`. The default
+compression is `LZ4`. See [Configuring encoding and compression](#configuring-encoding-and-compression)
+for how to override these.
+
 ## Write Interface
 
 ### TsFileTableWriter
@@ -27,92 +88,53 @@
 Used to write data to tsfile
 
 ```cpp
-namespace storage {
-class RestorableTsFileIOWriter;
-
 /**
- * @brief Supports writing structured table data to TsFile according to the specified table schema
+ * @brief Facilitates writing structured table data into a TsFile with a specified schema.
  *
- * The TsFileTableWriter class is used to write structured data (especially suitable for time-series data)
- * to TsFile optimized for efficient storage and querying.
- * Users can define the structure of the table to be written, add data rows according to the structure,
- * and serialize the data into TsFile.
- * Meanwhile, this class provides the ability to limit memory usage during the writing process.
+ * The TsFileTableWriter class is designed to write structured data, particularly suitable for time-series data,
+ * into a file optimized for efficient storage and retrieval (referred to as TsFile here). It allows users to define
+ * the schema of the tables they want to write, add rows of data according to that schema, and serialize this data
+ * into a TsFile. Additionally, it provides options to limit memory usage during the writing process.
  */
 class TsFileTableWriter {
    public:
     /**
-     * TsFileTableWriter is used to write table data to the target file according to the specified table schema,
-     * and can optionally limit the memory usage.
+     * TsFileTableWriter is used to write table data into a target file with the given schema,
+     * optionally limiting the memory usage.
      *
-     * @param writer_file Target file for writing table data, cannot be a null pointer
-     * @param table_schema Used to construct the table structure and define the schema of the table to be written
-     * @param memory_threshold Optional parameter. When the written data volume exceeds this threshold,
-     *                         data will be automatically flushed to disk. The default value is 128MB
+     * @param writer_file Target file where the table data will be written. Must not be null.
+     * @param table_schema Used to construct table structures. Defines the schema of the table
+     *                     being written.
+     * @param memory_threshold Optional parameter. When the size of written
+     * data exceeds this value, the data will be automatically flushed to the
+     * disk. Default value is 128MB.
      */
-    template <typename T>
-    explicit TsFileTableWriter(storage::WriteFile* writer_file, T* table_schema,
-                               uint64_t memory_threshold = 128 * 1024 * 1024) {
-        static_assert(!std::is_same<T, std::nullptr_t>::value,
-                      "table_schema cannot be nullptr");
-        tsfile_writer_ = std::make_shared<TsFileWriter>();
-        tsfile_writer_->init(writer_file);
-        tsfile_writer_->set_generate_table_schema(false);
-
-        // Perform a deep copy. The source TableSchema object may be allocated on the stack/heap
-        auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
-        error_number = tsfile_writer_->register_table(table_schema_ptr);
-        exclusive_table_name_ = table_schema->get_table_name();
-        common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
-    }
-
+    TsFileTableWriter(WriteFile* writer_file,
+                      TableSchema* table_schema,
+                      uint64_t memory_threshold = 128 * 1024 * 1024);
+    ~TsFileTableWriter();
     /**
-     * Constructs TsFileTableWriter from a restorable TsFileIOWriter,
-     * supporting appending table data after failure recovery.
-     * The schema is read from the recovered file without additional TableSchema input.
+     * Writes the given tablet data into the target file according to the schema.
      *
-     * @param restorable_writer Recovered I/O writer; cannot be a null pointer,
-     *                          and must be opened in truncate mode to ensure can_write() returns true
-     * @param memory_threshold Optional memory threshold for cached data
+     * @param tablet The tablet containing the data to be written. Must not be null.
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    explicit TsFileTableWriter(
-        storage::RestorableTsFileIOWriter* restorable_writer,
-        uint64_t memory_threshold = 128 * 1024 * 1024);
-
+    int write_table(const Tablet& tablet);
     /**
-     * Registers a table schema with the writer
+     * Flushes any buffered data to the underlying storage medium, ensuring all data is written out.
+     * This method ensures that all pending writes are persisted.
      *
-     * @param table_schema The table schema to be registered, cannot be a null pointer
-     * @return Returns 0 on success, non-zero error code on failure
-     */
-    int register_table(const std::shared_ptr<TableSchema>& table_schema);
-
-    /**
-     * Writes the specified Tablet data to the target file according to the table schema
-     *
-     * @param tablet Tablet containing the data to be written, cannot be a null pointer
-     * @return Returns 0 on success, non-zero error code on failure
-     */
-    int write_table(Tablet& tablet) const;
-
-    /**
-     * Flushes all cached data to the underlying storage medium to ensure all data is persisted.
-     * This method guarantees that all pending data is written to disk.
-     *
-     * @return Returns 0 on success, non-zero error code on failure
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int flush();
-
     /**
-     * Closes the writer and releases all resources it occupies.
-     * No subsequent operations should be performed on the current instance after calling this method.
+     * Closes the writer and releases any resources held by it.
+     * After calling this method, no further operations should be performed on this instance.
      *
-     * @return Returns 0 on success, non-zero error code on failure
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
 };
-
-}  // namespace storage
 ```
 
 ### TableSchema
@@ -150,43 +172,40 @@ class TableSchema {
 struct ColumnSchema {
     std::string column_name_;
     common::TSDataType data_type_;
+    common::CompressionType compression_;
+    common::TSEncoding encoding_;
     ColumnCategory column_category_;
 
     /**
-     * @brief Constructs a ColumnSchema object with the given parameters.
+     * @brief Constructs a ColumnSchema with explicit compression and encoding.
      *
      * @param column_name The name of the column. Must be a non-empty string.
-     *                    This name is used to identify the column within the table.
-     * @param data_type The data type of the measurement, such as INT32, DOUBLE, TEXT, etc.
-     *                  This determines how the data will be stored and interpreted.
-     * @param column_category The category of the column indicating its role or type
-     *                        within the schema, e.g., FIELD, TAG.
-     *                        Defaults to ColumnCategory::FIELD if not specified.
-     * @note It is the responsibility of the caller to ensure that `column_name` is not empty.
+     * @param data_type The data type of the column (INT32, DOUBLE, TEXT, ...).
+     * @param compression The compression applied to the column's chunks.
+     * @param encoding The encoding applied to the column's values.
+     * @param column_category The role of the column (FIELD, TAG, ...). Defaults to FIELD.
      */
     ColumnSchema(std::string column_name, common::TSDataType data_type,
-                 ColumnCategory column_category = ColumnCategory::FIELD) : column_name_(std::move(column_name)),
-                                                                           data_type_(data_type),
-                                                                           column_category_(column_category) {
-    }
-};
+                 common::CompressionType compression, common::TSEncoding encoding,
+                 ColumnCategory column_category = ColumnCategory::FIELD);
 
-/**
- * @brief Represents the data type of a measurement.
- *
- * This enumeration defines the supported data types for measurements in the system.
- */
-enum TSDataType : uint8_t {
-    BOOLEAN = 0,
-    INT32 = 1,
-    INT64 = 2,
-    FLOAT = 3,
-    DOUBLE = 4,
-    TEXT = 5,
-    STRING = 11
+    /**
+     * @brief Constructs a ColumnSchema using the engine's default encoding and
+     * compression for the given data type.
+     *
+     * @param column_name The name of the column. Must be a non-empty string.
+     * @param data_type The data type of the column.
+     * @param column_category The role of the column. Defaults to FIELD.
+     */
+    ColumnSchema(std::string column_name, common::TSDataType data_type,
+                 ColumnCategory column_category = ColumnCategory::FIELD);
 };
-
 ```
+
+> `TAG` columns are the device identifier (joint primary key); their data type is
+> always `STRING`. `FIELD` columns hold the measured values. The encoding and
+> compression you set on a `ColumnSchema` apply to that column when written; the
+> two-argument constructor falls back to the per-type defaults.
 
 ### Tablet
 
@@ -253,159 +272,117 @@ public:
 };
 ```
 
-### RestorableTsFileIOWriter
-> V2.3.1
+### Configuring encoding and compression
+
+Encoding and compression are chosen **per data type**: each type has a default
+(see the table above). You can change those defaults, or pass an explicit
+encoding/compression on a schema.
+
+**1. On a schema.** Pass an explicit encoding and compression when you build a
+`ColumnSchema`:
 
 ```cpp
-namespace storage {
-/**
- * RestorableTsFileIOWriter is used to open a TsFile and perform optional recovery operations on it.
- * Inherits from TsFileIOWriter and supports continuous writing after file recovery.
- *
- * (1) If the TsFile was closed normally: has_crashed()=false, can_write()=false
- *
- * (2) If the TsFile is incomplete / the program crashed: has_crashed()=true,
- * can_write()=true. The writer will truncate the corrupted data and allow further writing.
- *
- * Implemented based on standard C++11, uses RAII and smart pointers to avoid memory leaks.
- */
-class RestorableTsFileIOWriter : public TsFileIOWriter {
-   public:
-    RestorableTsFileIOWriter();
-
-    /**
-     * Opens a TsFile for recovery / appending data.
-     * Uses O_RDWR|O_CREAT mode without O_TRUNC, so the original file content is preserved.
-     *
-     * @param file_path Path of the TsFile
-     * @param truncate_corrupted If true, truncate the corrupted data;
-     *        If false, do not truncate (the incomplete file remains unchanged)
-     * @return E_OK on success, error code on failure
-     */
-    int open(const std::string& file_path, bool truncate_corrupted = true);
-
-    /**
-     * Closes the file
-     */
-    void close();
-};
-
-}  // namespace storage
+// Store column "temperature" as TS_2DIFF + LZ4.
+common::ColumnSchema col("temperature", common::INT64,
+                         common::LZ4, common::TS_2DIFF,
+                         common::ColumnCategory::FIELD);
 ```
 
+**2. Per-type defaults.** Change the defaults *before* creating a writer; they then
+apply to any column whose schema does not specify its own encoding/compression.
+These helpers live in `common`/`storage` and validate their arguments (returning
+`E_NOT_SUPPORT` for an unsupported combination):
 
+```cpp
+// Default value encoding per data type and default compression.
+int  common::set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+int  common::set_global_compression(uint8_t compression);
+uint8_t common::get_datatype_encoding(uint8_t data_type);
+uint8_t common::get_global_compression();
+
+// Time-column encoding/compression (the data type is fixed to INT64).
+int  common::set_global_time_encoding(uint8_t encoding);
+int  common::set_global_time_compression(uint8_t compression);
+```
 
 ## Read Interface 
 ### Tsfile Reader
-use to execute query in tsfile and return value by ResultSet.
 ```cpp
-namespace storage {
 /**
- * @brief TsFileReader provides the ability to query all files with the .tsfile suffix
+ * @brief TsfileReader provides the ability to query all files with the suffix
+ * .tsfile
  *
- * TsFileReader is designed specifically for querying .tsfile files, supporting both tree-model queries and table-model queries.
- * It also supports querying metadata such as table schemas (TableSchema) and time-series schemas (TimeseriesSchema).
+ * TsfileReader is designed to query .tsfile files. It accepts table-model
+ * queries and supports querying metadata such as TableSchema.
  */
 class TsFileReader {
    public:
     TsFileReader();
+    ~TsFileReader();
     /**
-     * @brief Opens a TsFile
+     * @brief open the tsfile
      *
-     * @param file_path Path of the TsFile to be opened
-     * @return 0 on success, non-zero error code on failure
+     * @param file_path the path of the tsfile which will be opened
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    int open(const std::string& file_path);
+    int open(const std::string &file_path);
     /**
-     * @brief Closes the TsFile. This method should be called after queries are completed.
+     * @brief close the tsfile, this method should be called after the
+     * query is finished
      *
-     * @return 0 on success, non-zero error code on failure
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
     /**
-     * @brief Queries the TsFile using a query expression. Users can construct custom query expressions for execution.
+     * @brief query the tsfile by the query expression,Users can construct
+     * their own query expressions to query tsfile
      *
-     * @param [in] qe Query expression
-     * @param [out] ret_qds Result set
-     * @return 0 on success, non-zero error code on failure
+     * @param [in] qe the query expression
+     * @param [out] ret_qds the result set
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    int query(storage::QueryExpression* qe, ResultSet*& ret_qds);
+    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
-     * @brief Queries the TsFile by path list, start time, and end time.
-     * This method is used for tree-model queries on TsFile.
+     * @brief query the tsfile by the table name, columns names, start time
+     * and end time.
      *
-     * @param [in] path_list Path list
-     * @param [in] start_time Start timestamp
-     * @param [in] end_time End timestamp
-     * @param [out] result_set Result set
-     * @return 0 on success, non-zero error code on failure
+     * @param [in] table_name the table name
+     * @param [in] columns_names the columns names
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
      */
-    int query(std::vector<std::string>& path_list, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set);
+    int query(const std::string &table_name,
+              const std::vector<std::string> &columns_names, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set);
+
     /**
-     * @brief Queries the TsFile by table name, column names, start time, and end time.
-     * This method is used for table-model queries on TsFile.
+     * @brief query the tsfile by the table name, columns names, start time
+     * and end time, tag filter.
      *
-     * @param [in] table_name Table name
-     * @param [in] columns_names List of column names
-     * @param [in] start_time Start timestamp
-     * @param [in] end_time End timestamp
-     * @param [out] result_set Result set
-     * @param [in] batch_size ≤ 0 for row-by-row mode;
-     *             > 0 to return TsBlock chunks of the specified size
-     * @return 0 on success, non-zero error code on failure
+     * @param [in] table_name the table name
+     * @param [in] columns_names the columns names
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [in] tag_filter the tag filter
+     * @param [out] result_set the result set
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, int batch_size = -1);
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
 
     /**
-     * @brief Queries the TsFile by table name, column names, start time, end time, and tag filter conditions.
-     * This method is used for table-model queries on TsFile.
+     * @brief query a table by row, with offset/limit pushdown and an optional
+     * tag filter.
      *
-     * @param [in] table_name Table name
-     * @param [in] columns_names List of column names
-     * @param [in] start_time Start timestamp
-     * @param [in] end_time End timestamp
-     * @param [in] tag_filter Tag filter condition
-     * @param [out] result_set Result set
-     * @param [in] batch_size Batch reading size
-     * @return 0 on success, non-zero error code on failure
-     */
-    int query(const std::string& table_name,
-              const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
-              int batch_size = 0);
-
-    /**
-     * @brief Queries tree-model time-series data by row with offset and row limit.
-     *
-     * @param path_list  Full paths to query (device.measurement)
-     * @param offset     Number of starting rows to skip (>= 0)
-     * @param limit      Maximum number of rows to return; no limit if < 0
-     * @param[out] result_set  Result set to store query results
-     * @return 0 on success, non-zero error code on failure
-     */
-    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
-                   ResultSet*& result_set);
-
-    /**
-     * @brief Queries table-model data by row with pushed-down offset and row limit.
-     *
-     * For dense devices (all columns have the same row count),
-     * offset/limit are pushed down to the data block/page level via SSI,
-     * skipping entire blocks/pages without decoding.
-     * For sparse devices, offset/limit take effect during row merging.
-     * Entire devices can be skipped directly if their total rows fall within the offset range.
-     *
-     * @param table_name     Table name to query
-     * @param column_names   Column names to query
-     * @param offset         Number of starting rows to skip (>= 0)
-     * @param limit          Maximum number of rows to return; no limit if < 0
-     * @param[out] result_set  Result set to store query results
-     * @param tag_filter     Optional tag filter condition for filtering data by tag columns
-     * @param batch_size     Batch reading size
-     * @return 0 on success, non-zero error code on failure
+     * @param [in] table_name the table name
+     * @param [in] column_names the column names
+     * @param [in] offset leading rows to skip (>= 0)
+     * @param [in] limit max rows to return; < 0 means unlimited
+     * @param [out] result_set the result set
+     * @param [in] tag_filter optional tag filter built with TagFilterBuilder, or nullptr
+     * @param [in] batch_size <= 0 returns rows one by one; > 0 returns blocks of that size
+     * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int queryByRow(const std::string& table_name,
                    const std::vector<std::string>& column_names, int offset,
@@ -413,115 +390,37 @@ class TsFileReader {
                    Filter* tag_filter = nullptr, int batch_size = 0);
 
     /**
-     * @brief Performs a table query on the tree model.
+     * @brief destroy the result set, this method should be called after the
+     * query is finished and result_set
      *
-     * @param measurement_names List of measurement names
-     * @param start_time Start timestamp
-     * @param end_time End timestamp
-     * @param result_set Result set
-     * @return 0 on success, non-zero error code on failure
+     * @param qds the result set
      */
-    int query_table_on_tree(const std::vector<std::string>& measurement_names,
-                            int64_t start_time, int64_t end_time,
-                            ResultSet*& result_set);
+    void destroy_query_data_set(ResultSet *qds);
     /**
-     * @brief Destroys the result set. This method should be called after the query is completed and the result set is no longer used.
+     * @brief get the table schema by the table name
      *
-     * @param qds Result set object
-     */
-    void destroy_query_data_set(ResultSet* qds);
-    /**
-     * @brief Reads time-series data by device ID and measurement names.
-     *
-     * @param device_id Device ID
-     * @param measurement_name List of measurement names
-     * @return Result set object
-     */
-    ResultSet* read_timeseries(
-        const std::shared_ptr<IDeviceID>& device_id,
-        const std::vector<std::string>& measurement_name);
-    /**
-     * @brief Gets all devices in the TsFile for a specified table.
-     *
-     * @param table_name Table name
-     * @return List of device IDs
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
-        std::string table_name);
-
-    /**
-     * @brief Gets all device IDs in the TsFile.
-     *
-     * @return List of device IDs
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
-
-    /**
-     * @brief Gets all device IDs in the file (functionally identical to get_all_device_ids).
-     *
-     * @return List of devices
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
-
-    /**
-     * @brief Gets time-series schemas by device ID and measurement names.
-     *
-     * @param [in] device_id Device ID
-     * @param [out] result List of measurement schemas
-     * @return 0 on success, non-zero error code on failure
-     */
-    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
-                              std::vector<MeasurementSchema>& result);
-
-    /**
-     * @brief Gets time-series metadata for specified devices.
-     *
-     * Only devices existing in the file are included in the result.
-     * Returns an empty map if the device ID list is empty.
-     *
-     * @param device_ids List of devices to query
-     * @return Mapping: Device ID -> List of time-series metadata (existing entries only)
-     */
-    DeviceTimeseriesMetadataMap get_timeseries_metadata(
-        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
-
-    /**
-     * @brief Gets time-series metadata for all devices in the file.
-     *
-     * @return Mapping: Device ID -> List of time-series metadata
-     */
-    DeviceTimeseriesMetadataMap get_timeseries_metadata();
-
-    /**
-     * @brief Gets the table schema by table name.
-     *
-     * @param table_name Table name
-     * @return Shared pointer to the table schema
+     * @param table_name the table name
+     * @return std::shared_ptr<TableSchema> the table schema
      */
     std::shared_ptr<TableSchema> get_table_schema(
-        const std::string& table_name);
+        const std::string &table_name);
     /**
-     * @brief Gets all table schemas in the TsFile.
+     * @brief get all table schemas in the tsfile
      *
-     * @return List of table schemas
+     * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
 ```
 ### ResultSet
-A collection of query.Support iterator to get data, and directly through the column name or index to get specific data.
 ```cpp
 /**
  * @brief ResultSet is the query result of the TsfileReader. It provides access
  * to the results.
  *
  * ResultSet is a virtual class. Convert it to the corresponding implementation
- * class when used
- * @note When using the tree model and the filter is a global time filter,
- * it should be cast as QDSWithoutTimeGenerator.
- * @note When using the tree model and the filter is not a global time filter,
- * it should be QDSWithTimeGenerator.
- * @note If the query uses the table model, the cast should be TableResultSet
+ * class when used.
+ * @note The concrete type is TableResultSet.
  */
 class ResultSet {
    public:
@@ -557,6 +456,7 @@ class ResultSet {
      */
     template <typename T>
     T get_value(const std::string& column_name);
+    /**
      * @brief Get the value of the column by column index
      *
      * @param column_index the index of the column starting from 1
@@ -586,7 +486,6 @@ class ResultSet {
 };
 ```
 ### ResultMeta
-user can obtain the metadata from ResultSetMetadata, including all columnnames and data types. When a user uses a table model, the first columndefaults to the time column.
 ```cpp
 /**
  * @brief metadata of result set

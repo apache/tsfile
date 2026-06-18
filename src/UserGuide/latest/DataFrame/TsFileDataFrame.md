@@ -1,0 +1,287 @@
+<!--
+
+    Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+-->
+# TsFileDataFrame
+
+`TsFileDataFrame` lets you read the time series inside one or more TsFiles the
+same way you would work with a pandas DataFrame — without having to care about
+the underlying file format or data-loading details. It is part of the Python
+package (`pip install tsfile`).
+
+## Quick start
+
+```python
+from tsfile import TsFileDataFrame
+
+df = TsFileDataFrame("table_data/")           # load every .tsfile under the directory
+print(df)                                     # browse all series (metadata only)
+
+ts = df["weather.Beijing.humidity"]           # pick one series (lazy handle)
+window = ts[20:100]                           # slice by row index -> np.ndarray
+
+data = df.loc[start:end, [                     # align multiple series on timestamps
+    "weather.Beijing.temperature",
+    "weather.Beijing.humidity",
+]]
+data.values                                   # -> np.ndarray, shape = (N, 2)
+```
+
+## Core types
+
+`TsFileDataFrame` is built around three types:
+
+- **`TsFileDataFrame`** — the entry point. It loads one or more TsFiles and
+  exposes a unified view. Construction only scans metadata; **no values are read**.
+- **`Timeseries`** — a lazy handle to a single series, obtained from `df[...]`.
+  It carries the series' metadata but reads nothing until you index it by row.
+- **`AlignedTimeseries`** — the result of aligning several series on a common
+  time axis, obtained from `df.loc[...]`. It reads the requested range of the
+  requested series into memory at once.
+
+### TsFileDataFrame
+
+In the table below, `df` is a `TsFileDataFrame` instance, created with
+`df = TsFileDataFrame(paths)`.
+
+| Example | Operation | Returns |
+|---|---|---|
+| `TsFileDataFrame(paths)` | Load a file / list of files / directory | `TsFileDataFrame` |
+| `len(df)` | Number of time series | `int` |
+| `df.list_timeseries("weather")` | Series names, optionally filtered by prefix | `List[str]` |
+| `df["weather.Beijing.humidity"]`, `df[0]`, `df[-1]` | One series | `Timeseries` |
+| `df["city"]` | A metadata column (a tag / `field` / `start_time` / `end_time` / `count`) | `pandas.Series` |
+| `df[0:3]`, `df[[0, 2, 5]]` | A subset view | `TsFileDataFrame` |
+| `df[df["city"] == "Beijing"]` | Filter by a metadata column | `TsFileDataFrame` |
+| `df.loc[start:end, series_list]` | Timestamp-aligned query | `AlignedTimeseries` |
+| `df.show(max_rows=20)` / `print(df)` | Formatted metadata table | — |
+| `df.close()` | Release file handles | — |
+
+### Timeseries
+
+In the table below, `ts` is a `Timeseries`, obtained from `ts = df[...]`.
+
+| Example | Operation | Returns |
+|---|---|---|
+| `ts.name` | Series name | `str` |
+| `len(ts)` | Number of points | `int` |
+| `ts.stats` | Series statistics | `dict` (`start_time`, `end_time`, `count`) |
+| `ts[20]` | Single value | `float` (or `None` if null) |
+| `ts[20:100]` | Row-range slice | `np.ndarray` |
+| `ts.timestamps` | Timestamp array | `np.ndarray` |
+
+### AlignedTimeseries
+
+In the table below, `data` is an `AlignedTimeseries`, obtained from
+`data = df.loc[...]`.
+
+| Example | Operation | Returns |
+|---|---|---|
+| `data.timestamps` | Timestamp array | `np.ndarray` |
+| `data.values` | Value matrix | `np.ndarray`, shape `(N, M)` |
+| `data.series_names` | Series names | `List[str]` |
+| `data.shape` | Shape `(N, M)` — N timestamps, M series | `tuple` |
+| `len(data)` | Number of rows | `int` |
+| `data[0]`, `data[0:10]`, `data[0, 1]` | Row / element indexing | `np.ndarray` / scalar |
+| `data.show(50)` / `print(data)` | Formatted output (auto-truncated) | — |
+
+## Series names
+
+A series is uniquely identified by its **series name**, a string formed by
+joining the **table name**, the **tag-column values**, and the **field name**
+with `.`, in that order:
+
+```text
+{table_name}.{tag_value_1}.{tag_value_2}...{field_name}
+```
+
+`list_timeseries()` returns series names; name-based indexing (`df[...]`) and
+series selection in `df.loc[...]` both take a series name.
+
+Examples:
+
+- `weather.Beijing.humidity` — table `weather`, tag `Beijing`, field `humidity`
+- `sensor.s1.pressure` — table `sensor`, tag `s1`, field `pressure`
+
+> A series name can be obtained from `list_timeseries()` and need not be
+> constructed by hand; a series may also be selected by integer index (`df[0]`)
+> or metadata filter (`df[df["city"] == "Beijing"]`).
+
+## Loading
+
+A path may be a single file, a list of files, or a directory:
+
+```python
+from tsfile import TsFileDataFrame
+
+df = TsFileDataFrame(["data/weather.tsfile", "data/sensor.tsfile"])
+df = TsFileDataFrame("data/")     # recursively find every .tsfile under the directory
+print(df)
+```
+
+Construction only scans metadata; actual values are not read. When several files
+are loaded, metadata is scanned in parallel.
+
+If several files contain the **same series** (e.g. daily shards of
+`weather.Beijing.humidity`), they are merged into one continuous series. For
+duplicate timestamps only the first is kept — this is not an expected situation,
+so deduplicate during preprocessing to avoid metadata distortion.
+
+### Displaying a DataFrame
+
+`print(df)` (and `df.show(max_rows=...)`) prints series metadata, head/tail
+truncated when large. The header is:
+
+```text
+index │ table │ <tag1> │ <tag2> │ ... │ field │ start_time │ end_time │ count
+```
+
+For devices with different numbers of tags the tag values are left-aligned and
+shorter ones are padded with `None` at the end.
+
+```text
+TsFileDataFrame(table model, 972 time series, 5 files)
+     table  ps_id                    sn  frac                 field           start_time             end_time  count
+  0    pvf     10  30100194A00234H00572     1                   pac  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
+  1    pvf     10  30100194A00234H00572     1    tenmeterswindspeed  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
+...
+```
+
+### Closing
+
+A `with` block closes file handles automatically; you can also close manually:
+
+```python
+with TsFileDataFrame("data/") as df:
+    ...                       # handles released on exit
+
+tsdf = TsFileDataFrame("data/")
+tsdf.close()                  # or close it yourself
+```
+
+## Browsing series
+
+`list_timeseries(path_prefix="")` lists the series names in the loaded files,
+optionally filtered by a prefix. Calling it with no argument returns all series.
+
+```python
+>>> df.list_timeseries("weather")
+['weather.Beijing.humidity', 'weather.Beijing.temperature',
+ 'weather.Shanghai.humidity', 'weather.Shanghai.temperature']
+>>> df.list_timeseries("weather.Beijing")
+['weather.Beijing.humidity', 'weather.Beijing.temperature']
+```
+
+To inspect metadata such as start/end time and count, print the DataFrame (or a
+subset of it) — see [Displaying a DataFrame](#displaying-a-dataframe).
+
+## Selecting series
+
+`df[...]` returns a lazy `Timeseries` handle (no data read) or a subset view:
+
+```python
+ts = df["weather.Beijing.humidity"]   # by name
+ts = df[0]                            # by index (negative indices allowed)
+
+sub_df = df[0:3]                      # slice           -> TsFileDataFrame (view)
+sub_df = df[[0, 2, 5]]                # integer list    -> TsFileDataFrame (view)
+sub_df = df[df["city"] == "Beijing"]  # metadata filter -> TsFileDataFrame (view)
+```
+
+```text
+>>> df["weather.Beijing.humidity"]
+Timeseries('weather.Beijing.humidity', count=2880, start=2026-01-27 00:00:00, end=2026-02-05 23:55:00)
+```
+
+Series metadata is served from cache (no I/O):
+
+```python
+>>> ts = df["weather.Beijing.humidity"]
+>>> ts.name
+'weather.Beijing.humidity'
+>>> len(ts)
+2880
+>>> ts.stats
+{'start_time': 1769443200000, 'end_time': 1770306900000, 'count': 2880}
+```
+
+## Reading data
+
+Indexing a `Timeseries` by row triggers the actual file read:
+
+```python
+val = ts[20]            # -> float
+window = ts[20:100]     # -> np.ndarray, shape = (80,)
+last_ten = ts[-10:]     # -> np.ndarray
+sampled = ts[::2]       # -> np.ndarray (strided sampling)
+ts.timestamps[20:100]   # -> the timestamps for those rows, np.ndarray
+```
+
+```text
+>>> ts[20]
+46.1
+>>> ts[20:100]
+array([46.1 , 41.72, 52.94, ..., 76.3 , 84.35])
+>>> ts.timestamps[20:100]
+array([1769449200000, 1769449500000, ..., 1769472900000])
+```
+
+## Timestamp-aligned queries
+
+When you need several series strictly aligned on one time axis, use `.loc`:
+
+```python
+data = df.loc[start_time:end_time, [
+    "weather.Beijing.humidity",
+    "weather.Beijing.temperature",
+    "sensor.s1.pressure",
+]]
+```
+
+The returned `AlignedTimeseries` aligns all series to the **union** of their
+timestamps and fills missing positions with `NaN`:
+
+```python
+data.timestamps    # np.ndarray, millisecond timestamps
+data.values        # np.ndarray, shape = (N, 3)
+data.series_names  # ["weather.Beijing.humidity", ...]
+data.shape         # (N, 3)
+data[0:10]         # first 10 rows, np.ndarray shape = (10, 3)
+data.show(50)      # show up to 50 rows
+```
+
+Series may be given by name or by index, mixed freely:
+
+```python
+df.loc[start_time:end_time, [0, 1, 4]]
+df.loc[start_time:end_time, [0, "weather.Beijing.temperature", 4]]
+```
+
+```text
+>>> df.loc[1769616000000:1769702100000,
+...        ['weather.Beijing.temperature', 'weather.Beijing.humidity', 'sensor.s2.pressure']]
+AlignedTimeseries(288 rows, 3 series)
+          timestamp  weather.Beijing.temperature  weather.Beijing.humidity  sensor.s2.pressure
+2026-01-29 00:00:00                        29.12                     92.87                 NaN
+2026-01-29 00:05:00                         1.55                     87.34                 NaN
+...
+```
+
+The pretty-printed view shows only value columns; to read the aligned timestamp
+column use `df.loc[...].timestamps`.
