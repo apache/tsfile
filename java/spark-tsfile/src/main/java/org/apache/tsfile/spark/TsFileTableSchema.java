@@ -22,6 +22,7 @@ package org.apache.tsfile.spark;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -65,7 +66,7 @@ public class TsFileTableSchema implements Serializable {
       ColumnInfo previous = map.put(column.name(), column);
       if (previous != null) {
         throw new TsFileSparkException(
-            "Duplicate TsFile table column after lower-case normalization: " + column.name());
+            Messages.format("error.spark.duplicate_tsfile_column", column.name()));
       }
     }
     return Collections.unmodifiableMap(map);
@@ -87,7 +88,7 @@ public class TsFileTableSchema implements Serializable {
     for (ColumnInfo column : columns) {
       if (!normalizedSparkNames.add(column.name())) {
         throw new TsFileSparkException(
-            "Duplicate Spark schema column after lower-case normalization: " + column.name());
+            Messages.format("error.spark.duplicate_spark_schema_column", column.name()));
       }
       fields.add(
           DataTypes.createStructField(
@@ -120,18 +121,15 @@ public class TsFileTableSchema implements Serializable {
     if (category == ColumnCategory.TAG) {
       if (type != TSDataType.STRING) {
         throw new TsFileSparkException(
-            "TAG column "
-                + tableName
-                + "."
-                + columnName
-                + " must be TSDataType.STRING, but was "
-                + type);
+            Messages.format(
+                "error.spark.tag_column_must_string_tsfile", tableName, columnName, type));
       }
       return;
     }
     if (category != ColumnCategory.FIELD) {
       throw new TsFileSparkException(
-          "Column category " + category + " is not supported for " + tableName + "." + columnName);
+          Messages.format(
+              "error.spark.unsupported_column_category", category, tableName, columnName));
     }
     TsFileTableTypeConverter.toSparkType(type, TsFileTableOptions.TimestampAs.LONG);
   }
@@ -180,7 +178,7 @@ public class TsFileTableSchema implements Serializable {
     for (String name : normalizedNames) {
       ColumnInfo column = column(name);
       if (column == null) {
-        throw new TsFileSparkException("Unknown TsFile table column: " + name);
+        throw new TsFileSparkException(Messages.format("error.spark.unknown_tsfile_column", name));
       }
       names.add(column.name());
     }

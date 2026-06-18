@@ -23,6 +23,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.TagFilterBuilder;
 import org.apache.tsfile.read.query.dataset.ResultSet;
@@ -92,7 +93,7 @@ public class TsFileTablePartitionReader implements PartitionReader<InternalRow> 
               context.endTime(),
               tagFilter());
     } catch (NoMeasurementException | NoTableException | ReadProcessException e) {
-      throw new IOException("Failed to query TsFile table data from " + file, e);
+      throw new IOException(Messages.format("error.spark.query_table_failed", file), e);
     }
   }
 
@@ -171,7 +172,8 @@ public class TsFileTablePartitionReader implements PartitionReader<InternalRow> 
       case UNKNOWN:
       case OBJECT:
       default:
-        throw new TsFileSparkException("Unsupported TsFile data type: " + type);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unsupported_tsfile_type", type));
     }
   }
 

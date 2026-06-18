@@ -22,6 +22,7 @@ package org.apache.tsfile.spark;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.spark.sql.types.BinaryType;
 import org.apache.spark.sql.types.BooleanType;
@@ -71,7 +72,8 @@ public final class TsFileTableTypeConverter {
       case UNKNOWN:
       case OBJECT:
       default:
-        throw new TsFileSparkException("Unsupported TsFile data type for Spark connector: " + type);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unsupported_tsfile_type_connector", type));
     }
   }
 
@@ -104,7 +106,8 @@ public final class TsFileTableTypeConverter {
     if (sparkType instanceof BinaryType) {
       return TSDataType.BLOB;
     }
-    throw new TsFileSparkException("Unsupported Spark SQL type for TsFile FIELD: " + sparkType);
+    throw new TsFileSparkException(
+        Messages.format("error.spark.unsupported_spark_field_type", sparkType));
   }
 
   public static long timestampMicrosToRaw(
@@ -117,7 +120,8 @@ public final class TsFileTableTypeConverter {
       case NS:
         return Math.multiplyExact(micros, 1_000L);
       default:
-        throw new TsFileSparkException("Unsupported timestamp precision: " + precision);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unsupported_timestamp_precision", precision));
     }
   }
 
@@ -131,7 +135,8 @@ public final class TsFileTableTypeConverter {
       case NS:
         return Math.floorDiv(raw, 1_000L);
       default:
-        throw new TsFileSparkException("Unsupported timestamp precision: " + precision);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unsupported_timestamp_precision", precision));
     }
   }
 
@@ -151,9 +156,15 @@ public final class TsFileTableTypeConverter {
     if (encoding == null) {
       return null;
     }
-    TSEncoding parsed = TSEncoding.valueOf(encoding.toUpperCase(Locale.ROOT));
+    TSEncoding parsed;
+    try {
+      parsed = TSEncoding.valueOf(encoding.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw new TsFileSparkException(Messages.format("error.spark.encoding_invalid", encoding), e);
+    }
     if (!TSEncoding.isSupported(type, parsed)) {
-      throw new TsFileSparkException("Encoding " + parsed + " is not supported for type " + type);
+      throw new TsFileSparkException(
+          Messages.format("error.spark.encoding_not_supported", parsed, type));
     }
     return parsed;
   }
@@ -162,6 +173,11 @@ public final class TsFileTableTypeConverter {
     if (compression == null) {
       return null;
     }
-    return CompressionType.valueOf(compression.toUpperCase(Locale.ROOT));
+    try {
+      return CompressionType.valueOf(compression.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw new TsFileSparkException(
+          Messages.format("error.spark.compression_invalid", compression), e);
+    }
   }
 }

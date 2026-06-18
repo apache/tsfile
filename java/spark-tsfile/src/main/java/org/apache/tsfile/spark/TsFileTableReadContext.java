@@ -20,6 +20,7 @@
 package org.apache.tsfile.spark;
 
 import org.apache.tsfile.enums.ColumnCategory;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -75,7 +76,8 @@ public class TsFileTableReadContext implements Serializable {
       }
       TsFileTableSchema.ColumnInfo column = tableSchema.column(normalizedName);
       if (column == null) {
-        throw new TsFileSparkException("Unknown projected TsFile table column: " + field.name());
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unknown_projected_column", field.name()));
       }
       queryColumns.add(column.name());
       hasFieldColumn = hasFieldColumn || column.category() == ColumnCategory.FIELD;
@@ -85,7 +87,7 @@ public class TsFileTableReadContext implements Serializable {
       TsFileTableSchema.ColumnInfo hidden = tableSchema.firstFieldColumn();
       if (hidden == null) {
         throw new TsFileSparkException(
-            "Time/TAG-only projection requires at least one FIELD column in the TsFile table");
+            Messages.get("error.spark.time_tag_projection_requires_field"));
       }
       hiddenFieldColumn = hidden.name();
       queryColumns.add(hidden.name());

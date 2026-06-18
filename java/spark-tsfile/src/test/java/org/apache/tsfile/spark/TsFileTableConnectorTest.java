@@ -70,6 +70,10 @@ import static org.junit.Assert.fail;
 
 public class TsFileTableConnectorTest {
 
+  static {
+    System.setProperty("tsfile.locale", "en");
+  }
+
   private static SparkSession spark;
 
   @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();

@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.spark;
 
+import org.apache.tsfile.i18n.Messages;
+
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.read.SupportsPushDownFilters;
@@ -61,23 +63,20 @@ public class TsFileTableScanBuilder
       String normalizedName = TsFileTableOptions.normalizeName(field.name());
       if (!normalizedNames.add(normalizedName)) {
         throw new TsFileSparkException(
-            "Duplicate external Spark schema column after lower-case normalization: "
-                + field.name());
+            Messages.format("error.spark.duplicate_external_schema_column", field.name()));
       }
       StructField expectedField = findExpectedField(tableSchema.sparkSchema(), normalizedName);
       if (expectedField == null) {
         throw new TsFileSparkException(
-            "External Spark schema column does not exist in TsFile table metadata: "
-                + field.name());
+            Messages.format("error.spark.external_schema_column_missing", field.name()));
       }
       if (!field.dataType().sameType(expectedField.dataType())) {
         throw new TsFileSparkException(
-            "External Spark schema column "
-                + field.name()
-                + " has type "
-                + field.dataType()
-                + ", but TsFile table metadata has type "
-                + expectedField.dataType());
+            Messages.format(
+                "error.spark.external_schema_type_mismatch",
+                field.name(),
+                field.dataType(),
+                expectedField.dataType()));
       }
     }
   }

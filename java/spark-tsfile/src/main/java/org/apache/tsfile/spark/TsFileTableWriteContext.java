@@ -24,6 +24,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -73,21 +74,22 @@ public class TsFileTableWriteContext implements Serializable {
     String normalizedTime = TsFileTableOptions.normalizeName(options.timeColumn());
     Integer timeColumnIndex = indexByName.get(normalizedTime);
     if (timeColumnIndex == null) {
-      throw new TsFileSparkException("Time column does not exist: " + options.timeColumn());
+      throw new TsFileSparkException(
+          Messages.format("error.spark.time_column_missing", options.timeColumn()));
     }
     DataType timeColumnType = schema.fields()[timeColumnIndex].dataType();
     if (!timeColumnType.sameType(DataTypes.LongType)
         && !timeColumnType.sameType(DataTypes.TimestampType)) {
-      throw new TsFileSparkException("Time column must be LongType or TimestampType");
+      throw new TsFileSparkException(Messages.get("error.spark.time_column_type_invalid"));
     }
 
     List<String> normalizedTags = normalizeColumns(options.tagColumns());
     Set<String> tagSet = new LinkedHashSet<>(normalizedTags);
     if (tagSet.size() != normalizedTags.size()) {
-      throw new TsFileSparkException("Duplicate tagColumns after lower-case normalization");
+      throw new TsFileSparkException(Messages.get("error.spark.duplicate_tag_columns"));
     }
     if (tagSet.contains(normalizedTime)) {
-      throw new TsFileSparkException("timeColumn must not be listed in tagColumns");
+      throw new TsFileSparkException(Messages.get("error.spark.time_column_in_tag_columns"));
     }
 
     List<String> normalizedFields =
@@ -96,37 +98,37 @@ public class TsFileTableWriteContext implements Serializable {
             : normalizeColumns(options.fieldColumns());
     Set<String> fieldSet = new LinkedHashSet<>(normalizedFields);
     if (fieldSet.size() != normalizedFields.size()) {
-      throw new TsFileSparkException("Duplicate fieldColumns after lower-case normalization");
+      throw new TsFileSparkException(Messages.get("error.spark.duplicate_field_columns"));
     }
     if (fieldSet.contains(normalizedTime)) {
-      throw new TsFileSparkException("timeColumn must not be listed in fieldColumns");
+      throw new TsFileSparkException(Messages.get("error.spark.time_column_in_field_columns"));
     }
     for (String tag : tagSet) {
       if (fieldSet.contains(tag)) {
-        throw new TsFileSparkException("Column cannot be both TAG and FIELD: " + tag);
+        throw new TsFileSparkException(Messages.format("error.spark.column_both_tag_field", tag));
       }
     }
     if (fieldSet.isEmpty()) {
-      throw new TsFileSparkException(
-          "At least one FIELD column is required for TsFile table writes");
+      throw new TsFileSparkException(Messages.get("error.spark.field_required_write"));
     }
 
     List<WriteColumn> columns = new ArrayList<>();
     for (String tag : normalizedTags) {
       Integer index = indexByName.get(tag);
       if (index == null) {
-        throw new TsFileSparkException("TAG column does not exist: " + tag);
+        throw new TsFileSparkException(Messages.format("error.spark.tag_column_missing", tag));
       }
       DataType type = schema.fields()[index].dataType();
       if (!type.sameType(DataTypes.StringType)) {
-        throw new TsFileSparkException("TAG column must be StringType: " + tag);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.tag_column_must_string_spark", tag));
       }
       columns.add(new WriteColumn(tag, index, type, TSDataType.STRING, ColumnCategory.TAG));
     }
     for (String field : normalizedFields) {
       Integer index = indexByName.get(field);
       if (index == null) {
-        throw new TsFileSparkException("FIELD column does not exist: " + field);
+        throw new TsFileSparkException(Messages.format("error.spark.field_column_missing", field));
       }
       DataType sparkType = schema.fields()[index].dataType();
       TSDataType tsType =
@@ -151,7 +153,7 @@ public class TsFileTableWriteContext implements Serializable {
       Integer previous = indexByName.put(normalized, i);
       if (previous != null) {
         throw new TsFileSparkException(
-            "Duplicate DataFrame column after lower-case normalization: " + normalized);
+            Messages.format("error.spark.duplicate_dataframe_column", normalized));
       }
     }
     return indexByName;
@@ -221,7 +223,7 @@ public class TsFileTableWriteContext implements Serializable {
     } catch (IllegalArgumentException e) {
       return Paths.get(value).toAbsolutePath().toString();
     }
-    throw new TsFileSparkException("Only local output paths are supported: " + value);
+    throw new TsFileSparkException(Messages.format("error.spark.local_output_paths_only", value));
   }
 
   public TsFileTableOptions options() {

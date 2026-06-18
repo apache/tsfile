@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.spark;
 
+import org.apache.tsfile.i18n.Messages;
+
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.io.Serializable;
@@ -109,7 +111,7 @@ public class TsFileTableOptions implements Serializable {
         timestampPrecision(option(options, "timestampPrecision", "ms"));
     boolean mergeSchema = options.getBoolean("mergeSchema", false);
     if (mergeSchema) {
-      throw new TsFileSparkException("mergeSchema=true is not supported in this initial connector");
+      throw new TsFileSparkException(Messages.get("error.spark.merge_schema_unsupported"));
     }
     return new TsFileTableOptions(
         options.asCaseSensitiveMap(),
@@ -134,15 +136,15 @@ public class TsFileTableOptions implements Serializable {
     String path = path(options);
     String table = blankToNull(options.get("table"));
     if (table == null) {
-      throw new TsFileSparkException("Writing TsFile table model requires option \"table\"");
+      throw new TsFileSparkException(Messages.get("error.spark.write_table_required"));
     }
     List<String> tagColumns = parseColumns(options.get("tagColumns"));
     if (tagColumns.isEmpty()) {
-      throw new TsFileSparkException("Writing TsFile table model requires option \"tagColumns\"");
+      throw new TsFileSparkException(Messages.get("error.spark.write_tag_columns_required"));
     }
     String nullTagPolicy = option(options, "nullTagPolicy", "error").toLowerCase(Locale.ROOT);
     if (!"error".equals(nullTagPolicy)) {
-      throw new TsFileSparkException("Only nullTagPolicy=error is supported");
+      throw new TsFileSparkException(Messages.get("error.spark.null_tag_policy_unsupported"));
     }
     return new TsFileTableOptions(
         options.asCaseSensitiveMap(),
@@ -165,7 +167,7 @@ public class TsFileTableOptions implements Serializable {
     for (String key : options.keySet()) {
       String normalized = key.toLowerCase(Locale.ROOT);
       if (!KNOWN_OPTIONS.contains(normalized)) {
-        throw new TsFileSparkException("Unsupported TsFile connector option: " + key);
+        throw new TsFileSparkException(Messages.format("error.spark.unsupported_option", key));
       }
     }
   }
@@ -173,19 +175,17 @@ public class TsFileTableOptions implements Serializable {
   private static void validateModel(CaseInsensitiveStringMap options) {
     String model = option(options, "model", "table").toLowerCase(Locale.ROOT);
     if (!"table".equals(model)) {
-      throw new TsFileSparkException(
-          "Only TsFile table model is supported, but option \"model\" was " + model);
+      throw new TsFileSparkException(Messages.format("error.spark.model_unsupported", model));
     }
   }
 
   private static String path(CaseInsensitiveStringMap options) {
     if (blankToNull(options.get("paths")) != null) {
-      throw new TsFileSparkException(
-          "Multiple Spark load paths are not supported yet; pass a directory or glob path instead");
+      throw new TsFileSparkException(Messages.get("error.spark.multiple_load_paths_unsupported"));
     }
     String path = blankToNull(options.get("path"));
     if (path == null) {
-      throw new TsFileSparkException("TsFile connector requires a path");
+      throw new TsFileSparkException(Messages.get("error.spark.path_required"));
     }
     return path;
   }
@@ -200,7 +200,8 @@ public class TsFileTableOptions implements Serializable {
       CaseInsensitiveStringMap options, String optionName, int defaultValue) {
     int value = options.getInt(optionName, defaultValue);
     if (value <= 0) {
-      throw new TsFileSparkException(optionName + " must be positive");
+      throw new TsFileSparkException(
+          Messages.format("error.spark.positive_option_required", optionName));
     }
     return value;
   }
@@ -212,7 +213,7 @@ public class TsFileTableOptions implements Serializable {
       case "timestamp":
         return TimestampAs.TIMESTAMP;
       default:
-        throw new TsFileSparkException("timestampAs must be either long or timestamp");
+        throw new TsFileSparkException(Messages.get("error.spark.timestamp_as_invalid"));
     }
   }
 
@@ -225,7 +226,7 @@ public class TsFileTableOptions implements Serializable {
       case "ns":
         return TimestampPrecision.NS;
       default:
-        throw new TsFileSparkException("timestampPrecision must be one of ms, us, or ns");
+        throw new TsFileSparkException(Messages.get("error.spark.timestamp_precision_invalid"));
     }
   }
 
@@ -239,7 +240,7 @@ public class TsFileTableOptions implements Serializable {
             .filter(column -> !column.isEmpty())
             .collect(Collectors.toCollection(ArrayList::new));
     if (columns.isEmpty()) {
-      throw new TsFileSparkException("Column list option must not be empty");
+      throw new TsFileSparkException(Messages.get("error.spark.column_list_empty"));
     }
     return Collections.unmodifiableList(columns);
   }

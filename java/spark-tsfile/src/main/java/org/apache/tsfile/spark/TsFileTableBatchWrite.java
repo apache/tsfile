@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.spark;
 
+import org.apache.tsfile.i18n.Messages;
+
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.DataWriterFactory;
 import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
@@ -70,9 +72,9 @@ public class TsFileTableBatchWrite implements BatchWrite {
       deleteRecursively(queryTemporaryPath);
       deleteIfEmpty(temporaryPath);
     } catch (FileAlreadyExistsException e) {
-      throw new TsFileSparkException("TsFile output file already exists during append: " + e, e);
+      throw new TsFileSparkException(Messages.format("error.spark.output_exists_append", e), e);
     } catch (IOException e) {
-      throw new TsFileSparkException("Failed to commit TsFile Spark write", e);
+      throw new TsFileSparkException(Messages.get("error.spark.commit_failed"), e);
     }
   }
 
@@ -163,7 +165,7 @@ public class TsFileTableBatchWrite implements BatchWrite {
       }
     } catch (IOException e) {
       throw new TsFileSparkException(
-          "Failed to delete empty path during TsFile write cleanup: " + path, e);
+          Messages.format("error.spark.delete_empty_cleanup_failed", path), e);
     }
   }
 
@@ -181,8 +183,7 @@ public class TsFileTableBatchWrite implements BatchWrite {
       }
       Files.deleteIfExists(path);
     } catch (IOException e) {
-      throw new TsFileSparkException(
-          "Failed to delete path during TsFile write cleanup: " + path, e);
+      throw new TsFileSparkException(Messages.format("error.spark.delete_cleanup_failed", path), e);
     }
   }
 }

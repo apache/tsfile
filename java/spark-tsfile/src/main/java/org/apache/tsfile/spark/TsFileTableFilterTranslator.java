@@ -20,6 +20,7 @@
 package org.apache.tsfile.spark;
 
 import org.apache.tsfile.enums.ColumnCategory;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.spark.sql.sources.And;
 import org.apache.spark.sql.sources.EqualTo;
@@ -149,7 +150,8 @@ public class TsFileTableFilterTranslator {
               Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
       return TsFileTableTypeConverter.timestampMicrosToRaw(micros, options.timestampPrecision());
     }
-    throw new TsFileSparkException("Unsupported time filter literal: " + value);
+    throw new TsFileSparkException(
+        Messages.format("error.spark.unsupported_time_filter_literal", value));
   }
 
   private long addOne(long value) {

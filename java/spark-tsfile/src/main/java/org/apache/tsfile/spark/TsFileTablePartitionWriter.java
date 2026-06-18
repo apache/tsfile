@@ -22,6 +22,7 @@ package org.apache.tsfile.spark;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
@@ -92,7 +93,7 @@ public class TsFileTablePartitionWriter implements DataWriter<InternalRow> {
 
   private long readTime(InternalRow record) {
     if (record.isNullAt(context.timeColumnIndex())) {
-      throw new TsFileSparkException("timeColumn must not be null");
+      throw new TsFileSparkException(Messages.get("error.spark.time_column_not_null"));
     }
     if (context.timeColumnType().sameType(DataTypes.TimestampType)) {
       return TsFileTableTypeConverter.timestampMicrosToRaw(
@@ -104,7 +105,8 @@ public class TsFileTablePartitionWriter implements DataWriter<InternalRow> {
   private void addColumnValue(
       InternalRow record, int rowIndex, TsFileTableWriteContext.WriteColumn column) {
     if (column.category() == ColumnCategory.TAG && record.isNullAt(column.inputIndex())) {
-      throw new TsFileSparkException("TAG column must not be null: " + column.name());
+      throw new TsFileSparkException(
+          Messages.format("error.spark.tag_column_not_null", column.name()));
     }
     Object value = record.isNullAt(column.inputIndex()) ? null : readValue(record, column);
     tablet.addValue(column.name(), rowIndex, value);
@@ -139,7 +141,8 @@ public class TsFileTablePartitionWriter implements DataWriter<InternalRow> {
       case UNKNOWN:
       case OBJECT:
       default:
-        throw new TsFileSparkException("Unsupported TsFile data type for write: " + type);
+        throw new TsFileSparkException(
+            Messages.format("error.spark.unsupported_tsfile_type_write", type));
     }
   }
 
@@ -151,7 +154,7 @@ public class TsFileTablePartitionWriter implements DataWriter<InternalRow> {
       writer.writeTable(tablet);
       tablet.reset();
     } catch (WriteProcessException e) {
-      throw new IOException("Failed to write TsFile tablet", e);
+      throw new IOException(Messages.get("error.spark.write_tablet_failed"), e);
     }
   }
 

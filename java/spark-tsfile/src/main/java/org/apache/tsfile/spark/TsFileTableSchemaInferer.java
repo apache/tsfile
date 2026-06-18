@@ -21,6 +21,7 @@ package org.apache.tsfile.spark;
 
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 
@@ -46,7 +47,8 @@ public final class TsFileTableSchemaInferer {
   public static InferenceResult infer(TsFileTableOptions options) {
     List<String> files = discoverTsFiles(options.path());
     if (files.isEmpty()) {
-      throw new TsFileSparkException("No .tsfile files found at path: " + options.path());
+      throw new TsFileSparkException(
+          Messages.format("error.spark.no_tsfile_files", options.path()));
     }
 
     String selectedTable = options.table();
@@ -57,7 +59,7 @@ public final class TsFileTableSchemaInferer {
       if (inferTable) {
         if (schemaMap.size() != 1) {
           throw new TsFileSparkException(
-              "Path contains a TsFile with multiple tables; specify option \"table\": " + file);
+              Messages.format("error.spark.multiple_tables_requires_table", file));
         }
         if (selectedTable == null) {
           selectedTable = schemaMap.keySet().iterator().next();
@@ -66,7 +68,7 @@ public final class TsFileTableSchemaInferer {
       TableSchema current = schemaMap.get(selectedTable);
       if (current == null) {
         throw new TsFileSparkException(
-            "TsFile " + file + " does not contain table " + selectedTable);
+            Messages.format("error.spark.table_not_found_in_file", file, selectedTable));
       }
       if (selectedSchema == null) {
         selectedSchema = current;
@@ -85,7 +87,8 @@ public final class TsFileTableSchemaInferer {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(file)) {
       return reader.getTableSchemaMap();
     } catch (IOException e) {
-      throw new TsFileSparkException("Failed to read TsFile table metadata from " + file, e);
+      throw new TsFileSparkException(
+          Messages.format("error.spark.read_table_metadata_failed", file), e);
     }
   }
 
@@ -93,16 +96,15 @@ public final class TsFileTableSchemaInferer {
       TableSchema expected, TableSchema actual, String actualFile) {
     if (!expected.getTableName().equals(actual.getTableName())) {
       throw new TsFileSparkException(
-          "Incompatible TsFile table name in "
-              + actualFile
-              + ": expected "
-              + expected.getTableName()
-              + ", found "
-              + actual.getTableName());
+          Messages.format(
+              "error.spark.incompatible_table_name",
+              actualFile,
+              expected.getTableName(),
+              actual.getTableName()));
     }
     if (expected.getColumnSchemas().size() != actual.getColumnSchemas().size()) {
       throw new TsFileSparkException(
-          "Incompatible TsFile table schema column count in " + actualFile);
+          Messages.format("error.spark.incompatible_column_count", actualFile));
     }
     for (int i = 0; i < expected.getColumnSchemas().size(); i++) {
       IMeasurementSchema expectedColumn = expected.getColumnSchemas().get(i);
@@ -113,22 +115,16 @@ public final class TsFileTableSchemaInferer {
           || expectedColumn.getType() != actualColumn.getType()
           || expectedCategory != actualCategory) {
         throw new TsFileSparkException(
-            "Incompatible TsFile table schema in "
-                + actualFile
-                + " at column "
-                + i
-                + ": expected "
-                + expectedColumn.getMeasurementName()
-                + " "
-                + expectedColumn.getType()
-                + " "
-                + expectedCategory
-                + ", found "
-                + actualColumn.getMeasurementName()
-                + " "
-                + actualColumn.getType()
-                + " "
-                + actualCategory);
+            Messages.format(
+                "error.spark.incompatible_table_schema_column",
+                actualFile,
+                i,
+                expectedColumn.getMeasurementName(),
+                expectedColumn.getType(),
+                expectedCategory,
+                actualColumn.getMeasurementName(),
+                actualColumn.getType(),
+                actualCategory));
       }
     }
   }
@@ -147,7 +143,7 @@ public final class TsFileTableSchemaInferer {
       } else if (fs.exists(path)) {
         statuses.add(fs.getFileStatus(path));
       } else {
-        throw new TsFileSparkException("TsFile path does not exist: " + inputPath);
+        throw new TsFileSparkException(Messages.format("error.spark.path_not_exist", inputPath));
       }
       List<String> files = new ArrayList<>();
       for (FileStatus status : statuses) {
@@ -155,7 +151,8 @@ public final class TsFileTableSchemaInferer {
       }
       return files.stream().distinct().sorted().collect(Collectors.toList());
     } catch (IOException e) {
-      throw new TsFileSparkException("Failed to discover TsFile path: " + inputPath, e);
+      throw new TsFileSparkException(
+          Messages.format("error.spark.discover_path_failed", inputPath), e);
     }
   }
 
@@ -176,7 +173,8 @@ public final class TsFileTableSchemaInferer {
       }
     } else if (status.isFile()) {
       if (!status.getPath().getName().endsWith(".tsfile")) {
-        throw new TsFileSparkException("Input file is not a .tsfile: " + status.getPath());
+        throw new TsFileSparkException(
+            Messages.format("error.spark.input_not_tsfile", status.getPath()));
       }
       files.add(toLocalFile(status.getPath()));
     }
@@ -200,8 +198,7 @@ public final class TsFileTableSchemaInferer {
     if ("file".equalsIgnoreCase(scheme)) {
       return Paths.get(uri).toString();
     }
-    throw new TsFileSparkException(
-        "Only local file paths are supported by the initial TsFile Spark connector: " + path);
+    throw new TsFileSparkException(Messages.format("error.spark.local_paths_only", path));
   }
 
   public static class InferenceResult {
