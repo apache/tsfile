@@ -25,17 +25,15 @@ import org.apache.spark.sql.connector.write.Write;
 public class TsFileTableWrite implements Write {
 
   private final TsFileTableWriteContext context;
-  private final boolean truncate;
   private final String queryId;
 
-  public TsFileTableWrite(TsFileTableWriteContext context, boolean truncate, String queryId) {
+  public TsFileTableWrite(TsFileTableWriteContext context, String queryId) {
     this.context = context;
-    this.truncate = truncate;
     this.queryId = queryId;
   }
 
   @Override
   public BatchWrite toBatch() {
-    return new TsFileTableBatchWrite(context, truncate, queryId);
+    return new TsFileTableBatchWrite(context, queryId);
   }
 }

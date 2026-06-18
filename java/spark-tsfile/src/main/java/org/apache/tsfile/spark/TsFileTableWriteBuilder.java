@@ -20,14 +20,12 @@
 package org.apache.tsfile.spark;
 
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
-import org.apache.spark.sql.connector.write.SupportsTruncate;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 
-public class TsFileTableWriteBuilder implements WriteBuilder, SupportsTruncate {
+public class TsFileTableWriteBuilder implements WriteBuilder {
 
   private final LogicalWriteInfo info;
-  private boolean truncate;
 
   public TsFileTableWriteBuilder(LogicalWriteInfo info) {
     this.info = info;
@@ -37,12 +35,6 @@ public class TsFileTableWriteBuilder implements WriteBuilder, SupportsTruncate {
   public Write build() {
     TsFileTableOptions options = TsFileTableOptions.forWrite(info.options());
     TsFileTableWriteContext context = TsFileTableWriteContext.build(options, info.schema());
-    return new TsFileTableWrite(context, truncate, info.queryId());
-  }
-
-  @Override
-  public WriteBuilder truncate() {
-    this.truncate = true;
-    return this;
+    return new TsFileTableWrite(context, info.queryId());
   }
 }

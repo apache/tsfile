@@ -108,6 +108,7 @@ spark.sql(
 | `compression` | default TsFile setting | Compression codec for written FIELD columns. |
 | `encoding` | default TsFile setting | Encoding for written FIELD columns. |
 | `nullTagPolicy` | `error` | Only `error` is supported. |
+| `maxRowsPerTablet` | `1024` | Maximum rows buffered in each TsFile `Tablet` before flushing. |
 
 Table and column names are normalized to lower case to match TsFile table model
 metadata behavior.
@@ -118,6 +119,8 @@ This module is the initial Spark 3.x DataSource V2 connector for TsFile table
 model files. It intentionally keeps the first production surface narrow:
 
 - Batch read and batch write are supported; streaming read/write are not.
+- Writes are append-only and create new `part-*.tsfile` files. Overwrite and
+  truncate semantics are not supported in this initial connector.
 - Only TsFile table model is supported. Tree model files are outside this
   module's scope.
 - Input discovery supports a single `.tsfile`, a directory of `.tsfile` files,

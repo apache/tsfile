@@ -41,7 +41,6 @@ public class TsFileTable implements SupportsRead, SupportsWrite {
     Set<TableCapability> capabilities = new HashSet<>();
     capabilities.add(TableCapability.BATCH_READ);
     capabilities.add(TableCapability.BATCH_WRITE);
-    capabilities.add(TableCapability.TRUNCATE);
     capabilities.add(TableCapability.ACCEPT_ANY_SCHEMA);
     CAPABILITIES = Collections.unmodifiableSet(capabilities);
   }

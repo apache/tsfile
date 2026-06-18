@@ -165,6 +165,30 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void missingTagColumnsOnWriteFails() {
+    Dataset<Row> rows = spark.createDataFrame(sampleRows(), sampleSchema());
+    assertFailsContaining(
+        "requires option \"tagColumns\"",
+        () ->
+            rows.write()
+                .format("tsfile")
+                .option("table", "weather")
+                .mode(SaveMode.Append)
+                .save(temporaryFolder.newFolder("missing-tags").getAbsolutePath()));
+  }
+
+  @Test
+  public void invalidTimestampPrecisionFails() {
+    Map<String, String> options = new HashMap<>();
+    options.put("path", "/tmp/weather.tsfile");
+    options.put("timestampPrecision", "seconds");
+
+    assertFailsContaining(
+        "timestampPrecision must be one of ms, us, or ns",
+        () -> TsFileTableOptions.forRead(new CaseInsensitiveStringMap(options)));
+  }
+
+  @Test
   public void singleTableFileCanInferTable() throws Exception {
     File file = temporaryFolder.newFile("single.tsfile");
     writeWeatherFile(file, "Weather", 0);
@@ -188,6 +212,28 @@ public class TsFileTableConnectorTest {
     assertFailsContaining(
         "multiple tables",
         () -> spark.read().format("tsfile").load(file.getAbsolutePath()).count());
+  }
+
+  @Test
+  public void specifiedTableReadsMultiTableFile() throws Exception {
+    File file = temporaryFolder.newFile("specified-table.tsfile");
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      writeWeatherTable(writer, "weather", 0);
+      writeWeatherTable(writer, "traffic", 10);
+    }
+
+    List<Row> rows =
+        spark
+            .read()
+            .format("tsfile")
+            .option("table", "traffic")
+            .load(file.getAbsolutePath())
+            .orderBy("time")
+            .collectAsList();
+
+    assertEquals(3, rows.size());
+    assertEquals(10L, rows.get(0).getLong(rows.get(0).fieldIndex("time")));
+    assertEquals(12L, rows.get(2).getLong(rows.get(2).fieldIndex("time")));
   }
 
   @Test
@@ -507,6 +553,33 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void overwriteModeIsNotSupported() throws Exception {
+    File output = temporaryFolder.newFolder("overwrite-unsupported");
+    Dataset<Row> rows = spark.createDataFrame(sampleRows(), sampleSchema());
+
+    rows.write()
+        .format("tsfile")
+        .option("table", "weather")
+        .option("tagColumns", "city")
+        .mode(SaveMode.Append)
+        .save(output.getAbsolutePath());
+
+    assertFailsContaining(
+        "does not support",
+        () ->
+            rows.write()
+                .format("tsfile")
+                .option("table", "weather")
+                .option("tagColumns", "city")
+                .mode(SaveMode.Overwrite)
+                .save(output.getAbsolutePath()));
+
+    File[] tsFiles = output.listFiles((dir, name) -> name.endsWith(".tsfile"));
+    assertNotNull(tsFiles);
+    assertEquals(2, tsFiles.length);
+  }
+
+  @Test
   public void commitDoesNotOverwriteExistingOutputFile() throws Exception {
     File output = temporaryFolder.newFolder("commit-collision");
     Path outputPath = output.toPath();
@@ -520,7 +593,6 @@ public class TsFileTableConnectorTest {
         new TsFileTableBatchWrite(
             TsFileTableWriteContext.build(
                 writeOptions(output.getAbsolutePath(), "city"), sampleSchema()),
-            false,
             "query");
 
     assertFailsContaining(
@@ -549,7 +621,6 @@ public class TsFileTableConnectorTest {
         new TsFileTableBatchWrite(
             TsFileTableWriteContext.build(
                 writeOptions(output.getAbsolutePath(), "city"), sampleSchema()),
-            false,
             "query");
 
     batchWrite.abort(

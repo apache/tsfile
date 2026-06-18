@@ -39,12 +39,10 @@ import java.util.Set;
 public class TsFileTableBatchWrite implements BatchWrite {
 
   private final TsFileTableWriteContext context;
-  private final boolean truncate;
   private final String queryId;
 
-  public TsFileTableBatchWrite(TsFileTableWriteContext context, boolean truncate, String queryId) {
+  public TsFileTableBatchWrite(TsFileTableWriteContext context, String queryId) {
     this.context = context;
-    this.truncate = truncate;
     this.queryId = queryId;
   }
 
@@ -57,9 +55,6 @@ public class TsFileTableBatchWrite implements BatchWrite {
   public void commit(WriterCommitMessage[] messages) {
     try {
       Path outputPath = context.outputPath();
-      if (truncate) {
-        deleteVisibleOutput(outputPath);
-      }
       Files.createDirectories(outputPath);
       List<TsFileTableWriterCommitMessage> tsfileMessages = validMessages(messages);
       validateFinalFilesDoNotExist(tsfileMessages);
@@ -91,23 +86,6 @@ public class TsFileTableBatchWrite implements BatchWrite {
     Path temporaryPath = context.outputPath().resolve("_temporary");
     deleteRecursively(temporaryPath.resolve(TsFileTableDataWriterFactory.safeId(queryId)));
     deleteIfEmpty(temporaryPath);
-  }
-
-  private void deleteVisibleOutput(Path outputPath) throws IOException {
-    if (!Files.exists(outputPath)) {
-      return;
-    }
-    if (!Files.isDirectory(outputPath)) {
-      Files.delete(outputPath);
-      return;
-    }
-    try (DirectoryStream<Path> stream = Files.newDirectoryStream(outputPath)) {
-      for (Path child : stream) {
-        if (!"_temporary".equals(child.getFileName().toString())) {
-          deleteRecursively(child);
-        }
-      }
-    }
   }
 
   private static List<TsFileTableWriterCommitMessage> validMessages(
