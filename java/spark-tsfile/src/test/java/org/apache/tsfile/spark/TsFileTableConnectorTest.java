@@ -311,6 +311,31 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void unsupportedTimeCategoryAndObjectTypeFail() {
+    TableSchema timeCategorySchema =
+        tableSchema(
+            "weather",
+            new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+            new ColumnSpec("event_time", TSDataType.TIMESTAMP, ColumnCategory.TIME));
+    assertFailsContaining(
+        "Column category TIME is not supported",
+        () ->
+            TsFileTableSchema.fromTableSchema(
+                timeCategorySchema, "time", TsFileTableOptions.TimestampAs.LONG));
+
+    TableSchema objectTypeSchema =
+        tableSchema(
+            "weather",
+            new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+            new ColumnSpec("payload", TSDataType.OBJECT, ColumnCategory.FIELD));
+    assertFailsContaining(
+        "Unsupported TsFile data type for Spark connector: OBJECT",
+        () ->
+            TsFileTableSchema.fromTableSchema(
+                objectTypeSchema, "time", TsFileTableOptions.TimestampAs.LONG));
+  }
+
+  @Test
   public void readsSingleFileAndSparseFieldNulls() throws Exception {
     File file = temporaryFolder.newFile("sparse.tsfile");
     writeWeatherFile(file, "weather", 0);
@@ -341,6 +366,25 @@ public class TsFileTableConnectorTest {
 
     assertEquals(6, df.count());
     assertEquals(1, df.where("time = 100").count());
+  }
+
+  @Test
+  public void readsGlobPath() throws Exception {
+    File directory = temporaryFolder.newFolder("glob-read");
+    writeWeatherFile(new File(directory, "part-a.tsfile"), "weather", 0);
+    writeWeatherFile(new File(directory, "part-b.tsfile"), "weather", 100);
+    writeWeatherFile(new File(directory, "other.tsfile"), "weather", 1000);
+
+    Dataset<Row> df =
+        spark
+            .read()
+            .format("tsfile")
+            .option("table", "weather")
+            .load(new File(directory, "part-*.tsfile").getAbsolutePath());
+
+    assertEquals(6, df.count());
+    assertEquals(1, df.where("time = 100").count());
+    assertEquals(0, df.where("time = 1000").count());
   }
 
   @Test
@@ -421,6 +465,38 @@ public class TsFileTableConnectorTest {
 
     assertFailsContaining(
         "FIELD column temperature has type DOUBLE but expected INT32",
+        () ->
+            spark
+                .read()
+                .format("tsfile")
+                .option("table", "weather")
+                .option("mergeSchema", "true")
+                .load(directory.getAbsolutePath())
+                .count());
+  }
+
+  @Test
+  public void mergeSchemaRejectsTagMismatch() throws Exception {
+    File directory = temporaryFolder.newFolder("merge-schema-tag-mismatch");
+    try (TsFileWriter writer = new TsFileWriter(new File(directory, "part-a.tsfile"))) {
+      writeTable(
+          writer,
+          "weather",
+          new Object[][] {{0L, "beijing", 20}},
+          new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+          new ColumnSpec("temperature", TSDataType.INT32, ColumnCategory.FIELD));
+    }
+    try (TsFileWriter writer = new TsFileWriter(new File(directory, "part-b.tsfile"))) {
+      writeTable(
+          writer,
+          "weather",
+          new Object[][] {{1L, "station-a", 21}},
+          new ColumnSpec("station", TSDataType.STRING, ColumnCategory.TAG),
+          new ColumnSpec("temperature", TSDataType.INT32, ColumnCategory.FIELD));
+    }
+
+    assertFailsContaining(
+        "TAG column",
         () ->
             spark
                 .read()
