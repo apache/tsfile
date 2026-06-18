@@ -54,6 +54,8 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -357,6 +359,37 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void timestampMsPushdownKeepsFractionalBoundaryRows() throws Exception {
+    File file = temporaryFolder.newFile("timestamp-ms.tsfile");
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      writeTable(
+          writer,
+          "weather",
+          new Object[][] {
+            {9L, "beijing", 19},
+            {10L, "beijing", 20},
+            {11L, "beijing", 21}
+          },
+          new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+          new ColumnSpec("temperature", TSDataType.INT32, ColumnCategory.FIELD));
+    }
+
+    Dataset<Row> df =
+        spark
+            .read()
+            .format("tsfile")
+            .option("table", "weather")
+            .option("timestampAs", "timestamp")
+            .option("timestampPrecision", "ms")
+            .load(file.getAbsolutePath());
+
+    assertEquals(2, df.where("time < timestamp '1970-01-01 00:00:00.0105'").count());
+    assertEquals(1, df.where("time >= timestamp '1970-01-01 00:00:00.0105'").count());
+    assertEquals(0, df.where("time = timestamp '1970-01-01 00:00:00.0105'").count());
+    assertEquals(1, df.where("time = timestamp '1970-01-01 00:00:00.010'").count());
+  }
+
+  @Test
   public void roundTripWriteAndRead() throws Exception {
     File output = temporaryFolder.newFolder("round-trip");
     Dataset<Row> rows = spark.createDataFrame(sampleRows(), sampleSchema());
@@ -605,6 +638,29 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void pushesTimestampMsFiltersWithPrecisionAwareBounds() {
+    TsFileTableOptions options = readTimestampOptions("/tmp/weather.tsfile", "weather", "ms");
+
+    assertPushedTimeRange(
+        new LessThan("time", timestampMicros(10_500L)), options, Long.MIN_VALUE, 10L);
+    assertPushedTimeRange(
+        new GreaterThanOrEqual("time", timestampMicros(10_500L)), options, 11L, Long.MAX_VALUE);
+    assertPushedTimeRange(new EqualTo("time", timestampMicros(10_000L)), options, 10L, 10L);
+    assertPushedTimeRange(new EqualTo("time", timestampMicros(10_500L)), options, 1L, 0L);
+  }
+
+  @Test
+  public void pushesTimestampNsFiltersWithMicrosRanges() {
+    TsFileTableOptions options = readTimestampOptions("/tmp/weather.tsfile", "weather", "ns");
+
+    assertPushedTimeRange(new EqualTo("time", timestampMicros(10L)), options, 10_000L, 10_999L);
+    assertPushedTimeRange(
+        new GreaterThan("time", timestampMicros(10L)), options, 11_000L, Long.MAX_VALUE);
+    assertPushedTimeRange(
+        new LessThanOrEqual("time", timestampMicros(10L)), options, Long.MIN_VALUE, 10_999L);
+  }
+
+  @Test
   public void leavesUnsupportedFiltersAsResiduals() {
     TsFileTableFilterTranslator translator =
         new TsFileTableFilterTranslator(
@@ -646,6 +702,35 @@ public class TsFileTableConnectorTest {
     options.put("path", path);
     options.put("table", table);
     return TsFileTableOptions.forRead(new CaseInsensitiveStringMap(options));
+  }
+
+  private static TsFileTableOptions readTimestampOptions(
+      String path, String table, String timestampPrecision) {
+    Map<String, String> options = new HashMap<>();
+    options.put("path", path);
+    options.put("table", table);
+    options.put("timestampAs", "timestamp");
+    options.put("timestampPrecision", timestampPrecision);
+    return TsFileTableOptions.forRead(new CaseInsensitiveStringMap(options));
+  }
+
+  private static Timestamp timestampMicros(long micros) {
+    long seconds = Math.floorDiv(micros, 1_000_000L);
+    long microsOfSecond = Math.floorMod(micros, 1_000_000L);
+    return Timestamp.from(Instant.ofEpochSecond(seconds, microsOfSecond * 1_000L));
+  }
+
+  private static void assertPushedTimeRange(
+      Filter filter, TsFileTableOptions options, long startTime, long endTime) {
+    TsFileTableFilterTranslator translator =
+        new TsFileTableFilterTranslator(weatherSchema(), options);
+
+    Filter[] residuals = translator.pushFilters(new Filter[] {filter});
+
+    assertEquals(0, residuals.length);
+    assertEquals(1, translator.pushedFilters().length);
+    assertEquals(startTime, translator.startTime());
+    assertEquals(endTime, translator.endTime());
   }
 
   private static TsFileTableOptions writeOptions(String path, String tagColumns) {
