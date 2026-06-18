@@ -28,6 +28,7 @@ import org.apache.spark.sql.types.StructType;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ public class TsFileTableReadContext implements Serializable {
   private final TsFileTableOptions options;
   private final List<String> files;
   private final TsFileTableSchema tableSchema;
+  private final Map<String, TsFileTableSchema> schemasByFile;
   private final StructType readSchema;
   private final List<String> queryColumns;
   private final String hiddenFieldColumn;
@@ -48,6 +50,7 @@ public class TsFileTableReadContext implements Serializable {
       TsFileTableOptions options,
       List<String> files,
       TsFileTableSchema tableSchema,
+      Map<String, TsFileTableSchema> schemasByFile,
       StructType readSchema,
       long startTime,
       long endTime,
@@ -55,6 +58,7 @@ public class TsFileTableReadContext implements Serializable {
     this.options = options;
     this.files = Collections.unmodifiableList(new ArrayList<>(files));
     this.tableSchema = tableSchema;
+    this.schemasByFile = Collections.unmodifiableMap(new HashMap<>(schemasByFile));
     this.readSchema = readSchema;
     QueryColumns selected = selectQueryColumns(readSchema, tableSchema, options.timeColumn());
     this.queryColumns = selected.queryColumns;
@@ -62,6 +66,34 @@ public class TsFileTableReadContext implements Serializable {
     this.startTime = startTime;
     this.endTime = endTime;
     this.tagEqualities = tagEqualities;
+  }
+
+  public TsFileTableReadContext(
+      TsFileTableOptions options,
+      List<String> files,
+      TsFileTableSchema tableSchema,
+      StructType readSchema,
+      long startTime,
+      long endTime,
+      Map<String, String> tagEqualities) {
+    this(
+        options,
+        files,
+        tableSchema,
+        schemaByFile(files, tableSchema),
+        readSchema,
+        startTime,
+        endTime,
+        tagEqualities);
+  }
+
+  private static Map<String, TsFileTableSchema> schemaByFile(
+      List<String> files, TsFileTableSchema tableSchema) {
+    Map<String, TsFileTableSchema> schemas = new HashMap<>();
+    for (String file : files) {
+      schemas.put(file, tableSchema);
+    }
+    return schemas;
   }
 
   private static QueryColumns selectQueryColumns(
@@ -113,6 +145,34 @@ public class TsFileTableReadContext implements Serializable {
 
   public List<String> queryColumns() {
     return queryColumns;
+  }
+
+  public List<String> queryColumns(String file) {
+    TsFileTableSchema fileSchema = schemasByFile.get(file);
+    if (fileSchema == null) {
+      fileSchema = tableSchema;
+    }
+    List<String> fileQueryColumns = new ArrayList<>();
+    boolean hasFieldColumn = false;
+    for (String columnName : queryColumns) {
+      TsFileTableSchema.ColumnInfo fileColumn = fileSchema.column(columnName);
+      if (fileColumn == null) {
+        continue;
+      }
+      fileQueryColumns.add(fileColumn.name());
+      hasFieldColumn = hasFieldColumn || fileColumn.category() == ColumnCategory.FIELD;
+    }
+    if (!hasFieldColumn) {
+      TsFileTableSchema.ColumnInfo hidden = fileSchema.firstFieldColumn();
+      if (hidden == null) {
+        throw new TsFileSparkException(
+            Messages.get("error.spark.time_tag_projection_requires_field"));
+      }
+      if (!fileQueryColumns.contains(hidden.name())) {
+        fileQueryColumns.add(hidden.name());
+      }
+    }
+    return Collections.unmodifiableList(fileQueryColumns);
   }
 
   public String hiddenFieldColumn() {

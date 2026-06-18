@@ -110,9 +110,6 @@ public class TsFileTableOptions implements Serializable {
     TimestampPrecision timestampPrecision =
         timestampPrecision(option(options, "timestampPrecision", "ms"));
     boolean mergeSchema = options.getBoolean("mergeSchema", false);
-    if (mergeSchema) {
-      throw new TsFileSparkException(Messages.get("error.spark.merge_schema_unsupported"));
-    }
     return new TsFileTableOptions(
         options.asCaseSensitiveMap(),
         path,
@@ -165,11 +162,14 @@ public class TsFileTableOptions implements Serializable {
 
   private static void validateKnownOptions(CaseInsensitiveStringMap options) {
     for (String key : options.keySet()) {
-      String normalized = key.toLowerCase(Locale.ROOT);
-      if (!KNOWN_OPTIONS.contains(normalized)) {
+      if (!isKnownOption(key)) {
         throw new TsFileSparkException(Messages.format("error.spark.unsupported_option", key));
       }
     }
+  }
+
+  public static boolean isKnownOption(String key) {
+    return KNOWN_OPTIONS.contains(key.toLowerCase(Locale.ROOT));
   }
 
   private static void validateModel(CaseInsensitiveStringMap options) {

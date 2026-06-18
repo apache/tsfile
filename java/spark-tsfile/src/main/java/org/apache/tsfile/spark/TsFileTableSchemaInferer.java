@@ -23,7 +23,6 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -36,6 +35,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -53,7 +53,8 @@ public final class TsFileTableSchemaInferer {
 
     String selectedTable = options.table();
     boolean inferTable = selectedTable == null;
-    TableSchema selectedSchema = null;
+    TsFileTableSchema selectedSchema = null;
+    Map<String, TsFileTableSchema> schemasByFile = new LinkedHashMap<>();
     for (String file : files) {
       Map<String, TableSchema> schemaMap = readTableSchemas(file);
       if (inferTable) {
@@ -70,17 +71,20 @@ public final class TsFileTableSchemaInferer {
         throw new TsFileSparkException(
             Messages.format("error.spark.table_not_found_in_file", file, selectedTable));
       }
+      TsFileTableSchema currentSchema =
+          TsFileTableSchema.fromTableSchema(current, options.timeColumn(), options.timestampAs());
+      schemasByFile.put(file, currentSchema);
       if (selectedSchema == null) {
-        selectedSchema = current;
+        selectedSchema = currentSchema;
+      } else if (options.mergeSchema()) {
+        selectedSchema =
+            mergeCompatible(selectedSchema, currentSchema, file, options.timestampAs());
       } else {
-        validateCompatible(selectedSchema, current, file);
+        validateCompatible(selectedSchema, currentSchema, file);
       }
     }
 
-    return new InferenceResult(
-        files,
-        TsFileTableSchema.fromTableSchema(
-            selectedSchema, options.timeColumn(), options.timestampAs()));
+    return new InferenceResult(files, schemasByFile, selectedSchema);
   }
 
   private static Map<String, TableSchema> readTableSchemas(String file) {
@@ -93,38 +97,115 @@ public final class TsFileTableSchemaInferer {
   }
 
   private static void validateCompatible(
-      TableSchema expected, TableSchema actual, String actualFile) {
-    if (!expected.getTableName().equals(actual.getTableName())) {
+      TsFileTableSchema expected, TsFileTableSchema actual, String actualFile) {
+    if (!expected.tableName().equals(actual.tableName())) {
       throw new TsFileSparkException(
           Messages.format(
               "error.spark.incompatible_table_name",
               actualFile,
-              expected.getTableName(),
-              actual.getTableName()));
+              expected.tableName(),
+              actual.tableName()));
     }
-    if (expected.getColumnSchemas().size() != actual.getColumnSchemas().size()) {
+    if (expected.columns().size() != actual.columns().size()) {
       throw new TsFileSparkException(
           Messages.format("error.spark.incompatible_column_count", actualFile));
     }
-    for (int i = 0; i < expected.getColumnSchemas().size(); i++) {
-      IMeasurementSchema expectedColumn = expected.getColumnSchemas().get(i);
-      IMeasurementSchema actualColumn = actual.getColumnSchemas().get(i);
-      ColumnCategory expectedCategory = expected.getColumnTypes().get(i);
-      ColumnCategory actualCategory = actual.getColumnTypes().get(i);
-      if (!expectedColumn.getMeasurementName().equals(actualColumn.getMeasurementName())
-          || expectedColumn.getType() != actualColumn.getType()
-          || expectedCategory != actualCategory) {
+    for (int i = 0; i < expected.columns().size(); i++) {
+      TsFileTableSchema.ColumnInfo expectedColumn = expected.columns().get(i);
+      TsFileTableSchema.ColumnInfo actualColumn = actual.columns().get(i);
+      if (!expectedColumn.name().equals(actualColumn.name())
+          || expectedColumn.type() != actualColumn.type()
+          || expectedColumn.category() != actualColumn.category()) {
         throw new TsFileSparkException(
             Messages.format(
                 "error.spark.incompatible_table_schema_column",
                 actualFile,
                 i,
-                expectedColumn.getMeasurementName(),
-                expectedColumn.getType(),
-                expectedCategory,
-                actualColumn.getMeasurementName(),
-                actualColumn.getType(),
-                actualCategory));
+                expectedColumn.name(),
+                expectedColumn.type(),
+                expectedColumn.category(),
+                actualColumn.name(),
+                actualColumn.type(),
+                actualColumn.category()));
+      }
+    }
+  }
+
+  private static TsFileTableSchema mergeCompatible(
+      TsFileTableSchema expected,
+      TsFileTableSchema actual,
+      String actualFile,
+      TsFileTableOptions.TimestampAs timestampAs) {
+    if (!expected.tableName().equals(actual.tableName())) {
+      throw new TsFileSparkException(
+          Messages.format(
+              "error.spark.incompatible_table_name",
+              actualFile,
+              expected.tableName(),
+              actual.tableName()));
+    }
+    List<TsFileTableSchema.ColumnInfo> expectedTags = columns(expected, ColumnCategory.TAG);
+    List<TsFileTableSchema.ColumnInfo> actualTags = columns(actual, ColumnCategory.TAG);
+    if (expectedTags.size() != actualTags.size()) {
+      throw new TsFileSparkException(
+          Messages.format("error.spark.incompatible_tag_column_count", actualFile));
+    }
+    for (int i = 0; i < expectedTags.size(); i++) {
+      TsFileTableSchema.ColumnInfo expectedTag = expectedTags.get(i);
+      TsFileTableSchema.ColumnInfo actualTag = actualTags.get(i);
+      if (!expectedTag.name().equals(actualTag.name()) || expectedTag.type() != actualTag.type()) {
+        throw new TsFileSparkException(
+            Messages.format(
+                "error.spark.incompatible_tag_column",
+                actualFile,
+                i,
+                expectedTag.name(),
+                expectedTag.type(),
+                actualTag.name(),
+                actualTag.type()));
+      }
+    }
+
+    Map<String, TsFileTableSchema.ColumnInfo> fields = new LinkedHashMap<>();
+    addFields(fields, expected, actualFile);
+    addFields(fields, actual, actualFile);
+
+    List<TsFileTableSchema.ColumnInfo> mergedColumns = new ArrayList<>(expectedTags);
+    mergedColumns.addAll(fields.values());
+    return new TsFileTableSchema(
+        expected.tableName(), expected.timeColumn(), mergedColumns, timestampAs);
+  }
+
+  private static List<TsFileTableSchema.ColumnInfo> columns(
+      TsFileTableSchema schema, ColumnCategory category) {
+    List<TsFileTableSchema.ColumnInfo> columns = new ArrayList<>();
+    for (TsFileTableSchema.ColumnInfo column : schema.columns()) {
+      if (column.category() == category) {
+        columns.add(column);
+      }
+    }
+    return columns;
+  }
+
+  private static void addFields(
+      Map<String, TsFileTableSchema.ColumnInfo> fields,
+      TsFileTableSchema schema,
+      String actualFile) {
+    for (TsFileTableSchema.ColumnInfo column : schema.columns()) {
+      if (column.category() != ColumnCategory.FIELD) {
+        continue;
+      }
+      TsFileTableSchema.ColumnInfo existing = fields.get(column.name());
+      if (existing == null) {
+        fields.put(column.name(), column);
+      } else if (existing.type() != column.type()) {
+        throw new TsFileSparkException(
+            Messages.format(
+                "error.spark.incompatible_field_column_type",
+                actualFile,
+                column.name(),
+                existing.type(),
+                column.type()));
       }
     }
   }
@@ -203,10 +284,15 @@ public final class TsFileTableSchemaInferer {
 
   public static class InferenceResult {
     private final List<String> files;
+    private final Map<String, TsFileTableSchema> schemasByFile;
     private final TsFileTableSchema tableSchema;
 
-    public InferenceResult(List<String> files, TsFileTableSchema tableSchema) {
+    public InferenceResult(
+        List<String> files,
+        Map<String, TsFileTableSchema> schemasByFile,
+        TsFileTableSchema tableSchema) {
       this.files = Collections.unmodifiableList(new ArrayList<>(files));
+      this.schemasByFile = Collections.unmodifiableMap(new LinkedHashMap<>(schemasByFile));
       this.tableSchema = tableSchema;
     }
 
@@ -216,6 +302,10 @@ public final class TsFileTableSchemaInferer {
 
     public TsFileTableSchema tableSchema() {
       return tableSchema;
+    }
+
+    public Map<String, TsFileTableSchema> schemasByFile() {
+      return schemasByFile;
     }
   }
 }

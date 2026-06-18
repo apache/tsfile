@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -50,7 +51,7 @@ public class TsFileTable implements SupportsRead, SupportsWrite {
 
   public TsFileTable(StructType schema, Map<String, String> properties) {
     this.schema = schema;
-    this.properties = properties;
+    this.properties = Collections.unmodifiableMap(new HashMap<>(properties));
   }
 
   @Override
@@ -65,17 +66,28 @@ public class TsFileTable implements SupportsRead, SupportsWrite {
   }
 
   @Override
+  public Map<String, String> properties() {
+    return properties;
+  }
+
+  @Override
   public Set<TableCapability> capabilities() {
     return CAPABILITIES;
   }
 
   @Override
   public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-    return new TsFileTableScanBuilder(TsFileTableOptions.forRead(options), schema);
+    return new TsFileTableScanBuilder(TsFileTableOptions.forRead(mergedOptions(options)), schema);
   }
 
   @Override
   public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-    return new TsFileTableWriteBuilder(info);
+    return new TsFileTableWriteBuilder(info, properties);
+  }
+
+  private CaseInsensitiveStringMap mergedOptions(CaseInsensitiveStringMap options) {
+    Map<String, String> merged = new HashMap<>(properties);
+    merged.putAll(options.asCaseSensitiveMap());
+    return new CaseInsensitiveStringMap(merged);
   }
 }

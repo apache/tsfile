@@ -112,6 +112,7 @@ public class TsFileTableScanBuilder
             options,
             inferenceResult.files(),
             inferenceResult.tableSchema(),
+            inferenceResult.schemasByFile(),
             readSchema,
             filterTranslator.startTime(),
             filterTranslator.endTime(),

@@ -22,19 +22,36 @@ package org.apache.tsfile.spark;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TsFileTableWriteBuilder implements WriteBuilder {
 
   private final LogicalWriteInfo info;
+  private final Map<String, String> tableProperties;
 
   public TsFileTableWriteBuilder(LogicalWriteInfo info) {
+    this(info, Collections.emptyMap());
+  }
+
+  public TsFileTableWriteBuilder(LogicalWriteInfo info, Map<String, String> tableProperties) {
     this.info = info;
+    this.tableProperties = tableProperties;
   }
 
   @Override
   public Write build() {
-    TsFileTableOptions options = TsFileTableOptions.forWrite(info.options());
+    TsFileTableOptions options = TsFileTableOptions.forWrite(mergedOptions());
     TsFileTableWriteContext context = TsFileTableWriteContext.build(options, info.schema());
     return new TsFileTableWrite(context, info.queryId());
+  }
+
+  private CaseInsensitiveStringMap mergedOptions() {
+    Map<String, String> merged = new HashMap<>(tableProperties);
+    merged.putAll(info.options().asCaseSensitiveMap());
+    return new CaseInsensitiveStringMap(merged);
   }
 }

@@ -92,6 +92,31 @@ spark.sql(
   .show()
 ```
 
+## SQL CTAS Write
+
+SQL CTAS uses the connector's Spark DataSource V2 catalog, configured for the
+Spark session.
+
+```scala
+spark.conf.set(
+  "spark.sql.catalog.tsfile_catalog",
+  "org.apache.tsfile.spark.TsFileTableCatalog")
+
+spark.sql(
+  """
+    |CREATE TABLE tsfile_catalog.weather_copy
+    |USING tsfile
+    |TBLPROPERTIES (
+    |  'path' = '/data/tsfile/weather-copy',
+    |  'model' = 'table',
+    |  'table' = 'weather',
+    |  'tagColumns' = 'city'
+    |)
+    |AS SELECT time, city, temperature, humidity
+    |FROM source_weather
+    |""".stripMargin)
+```
+
 ## Options
 
 | Option | Default | Description |
@@ -103,7 +128,7 @@ spark.sql(
 | `fieldColumns` | inferred | Comma-separated FIELD columns for writes. |
 | `timestampAs` | `long` | Use `long` or `timestamp` for TsFile `TIMESTAMP` fields and the Spark time column. |
 | `timestampPrecision` | `ms` | Raw TsFile timestamp precision: `ms`, `us`, or `ns`. |
-| `mergeSchema` | `false` | `true` is rejected in the initial connector. |
+| `mergeSchema` | `false` | When `true`, multi-file reads union compatible FIELD columns. TAG columns must keep the same order and type. |
 | `pushdown` | `true` | Enables supported time and TAG equality predicate pushdown. |
 | `compression` | default TsFile setting | Compression codec for written FIELD columns. |
 | `encoding` | default TsFile setting | Encoding for written FIELD columns. |
@@ -127,8 +152,9 @@ model files. It intentionally keeps the first production surface narrow:
   and glob paths, but actual TsFile reading and writing is local-file only in
   this initial version. Non-`file` Hadoop paths should be handled in a follow-up
   change.
-- `mergeSchema=true` is rejected. All files selected for one read must contain
-  a compatible schema for the selected table.
+- `mergeSchema=true` supports FIELD column union for multi-file reads. TAG
+  columns must keep the same order and type, and same-name FIELD columns must
+  keep the same TsFile type.
 - User-provided read schemas are validated against TsFile table metadata and
   may be used as read projections. They cannot change the stored column types.
 - Predicate pushdown is limited to `time =`, `time >`, `time >=`, `time <`,
@@ -139,6 +165,5 @@ model files. It intentionally keeps the first production surface narrow:
 - TAG columns must be non-null strings. FIELD columns may be null and are
   written/read as sparse TsFile values.
 
-Follow-up issues should track non-local filesystem support, schema merging, a
-broader predicate pushdown matrix, streaming semantics, and expanded type or
-category support.
+Follow-up issues should track non-local filesystem support, a broader predicate
+pushdown matrix, streaming semantics, and expanded type or category support.

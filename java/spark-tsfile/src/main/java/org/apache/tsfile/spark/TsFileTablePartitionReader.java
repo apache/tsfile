@@ -79,7 +79,7 @@ public class TsFileTablePartitionReader implements PartitionReader<InternalRow> 
     if (context.isEmptyTimeRange()) {
       return;
     }
-    List<String> queryColumns = context.queryColumns();
+    List<String> queryColumns = context.queryColumns(file);
     for (int i = 0; i < queryColumns.size(); i++) {
       resultColumnIndex.put(queryColumns.get(i), i + 2);
     }
@@ -121,8 +121,9 @@ public class TsFileTablePartitionReader implements PartitionReader<InternalRow> 
         values[i] = convertTime(resultSet.getLong(1), fields[i].dataType());
       } else {
         TsFileTableSchema.ColumnInfo column = context.tableSchema().column(normalizedName);
+        Integer resultIndex = resultColumnIndex.get(normalizedName);
         values[i] =
-            convertColumn(column, resultColumnIndex.get(normalizedName), fields[i].dataType());
+            resultIndex == null ? null : convertColumn(column, resultIndex, fields[i].dataType());
       }
     }
     return new GenericInternalRow(values);

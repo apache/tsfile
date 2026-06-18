@@ -116,6 +116,7 @@ public class TsFileTableConnectorTest {
     readOptions.put("table", "Weather");
     readOptions.put("timestampAs", "timestamp");
     readOptions.put("timestampPrecision", "us");
+    readOptions.put("mergeSchema", "true");
 
     TsFileTableOptions parsedRead =
         TsFileTableOptions.forRead(new CaseInsensitiveStringMap(readOptions));
@@ -123,6 +124,7 @@ public class TsFileTableConnectorTest {
     assertEquals("weather", parsedRead.table());
     assertEquals(TsFileTableOptions.TimestampAs.TIMESTAMP, parsedRead.timestampAs());
     assertEquals(TsFileTableOptions.TimestampPrecision.US, parsedRead.timestampPrecision());
+    assertTrue(parsedRead.mergeSchema());
 
     Map<String, String> writeOptions = new HashMap<>();
     writeOptions.put("path", "/tmp/out");
@@ -363,6 +365,73 @@ public class TsFileTableConnectorTest {
   }
 
   @Test
+  public void mergeSchemaUnionsFieldColumns() throws Exception {
+    File directory = temporaryFolder.newFolder("merge-schema");
+    try (TsFileWriter writer = new TsFileWriter(new File(directory, "part-a.tsfile"))) {
+      writeTable(
+          writer,
+          "weather",
+          new Object[][] {
+            {0L, "beijing", 20},
+            {1L, "shanghai", 21}
+          },
+          new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+          new ColumnSpec("temperature", TSDataType.INT32, ColumnCategory.FIELD));
+    }
+    try (TsFileWriter writer = new TsFileWriter(new File(directory, "part-b.tsfile"))) {
+      writeTable(
+          writer,
+          "weather",
+          new Object[][] {
+            {10L, "beijing", 30L},
+            {11L, "shanghai", 31L}
+          },
+          new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+          new ColumnSpec("humidity", TSDataType.INT64, ColumnCategory.FIELD));
+    }
+
+    Dataset<Row> df =
+        spark
+            .read()
+            .format("tsfile")
+            .option("table", "weather")
+            .option("mergeSchema", "true")
+            .load(directory.getAbsolutePath());
+    List<Row> rows = df.orderBy("time").collectAsList();
+
+    assertEquals(
+        Arrays.asList("time", "city", "temperature", "humidity"),
+        Arrays.asList(df.schema().fieldNames()));
+    assertEquals(4, rows.size());
+    assertEquals(20, rows.get(0).getInt(rows.get(0).fieldIndex("temperature")));
+    assertTrue(rows.get(0).isNullAt(rows.get(0).fieldIndex("humidity")));
+    assertTrue(rows.get(2).isNullAt(rows.get(2).fieldIndex("temperature")));
+    assertEquals(30L, rows.get(2).getLong(rows.get(2).fieldIndex("humidity")));
+  }
+
+  @Test
+  public void mergeSchemaRejectsFieldTypeConflict() throws Exception {
+    File directory = temporaryFolder.newFolder("merge-schema-conflict");
+    writeWeatherFile(new File(directory, "part-a.tsfile"), "weather", 0);
+    writeTsFile(
+        new File(directory, "part-b.tsfile"),
+        "weather",
+        new ColumnSpec("city", TSDataType.STRING, ColumnCategory.TAG),
+        new ColumnSpec("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD));
+
+    assertFailsContaining(
+        "FIELD column temperature has type DOUBLE but expected INT32",
+        () ->
+            spark
+                .read()
+                .format("tsfile")
+                .option("table", "weather")
+                .option("mergeSchema", "true")
+                .load(directory.getAbsolutePath())
+                .count());
+  }
+
+  @Test
   public void supportsColumnPruningAndTimeTagOnlyProjection() throws Exception {
     File file = temporaryFolder.newFile("projection.tsfile");
     writeWeatherFile(file, "weather", 0);
@@ -483,6 +552,53 @@ public class TsFileTableConnectorTest {
     assertEquals(0L, rows.get(0).getLong(0));
     assertEquals("beijing", rows.get(0).getString(1));
     assertEquals(22, rows.get(1).getInt(2));
+  }
+
+  @Test
+  public void sqlCtasWritesTsFile() throws Exception {
+    File output = temporaryFolder.newFolder("sql-ctas");
+    Dataset<Row> rows = spark.createDataFrame(sampleRows(), sampleSchema());
+    String sourceView = "weather_ctas_source";
+    String catalog = "tsfile_ctas";
+    String ctasTable = "weather_ctas_" + System.nanoTime();
+    rows.createOrReplaceTempView(sourceView);
+    spark.conf().set("spark.sql.catalog." + catalog, TsFileTableCatalog.class.getName());
+
+    try {
+      spark.sql(
+          "CREATE TABLE "
+              + catalog
+              + "."
+              + ctasTable
+              + " USING tsfile TBLPROPERTIES ('path'='"
+              + escapeSql(output.getAbsolutePath())
+              + "', 'table'='weather', 'tagColumns'='city') AS SELECT * FROM "
+              + sourceView);
+
+      assertEquals(
+          3,
+          spark
+              .sql("SELECT count(*) FROM " + catalog + "." + ctasTable)
+              .collectAsList()
+              .get(0)
+              .getLong(0));
+
+      List<Row> readRows =
+          spark
+              .read()
+              .format("tsfile")
+              .option("table", "weather")
+              .load(output.getAbsolutePath())
+              .orderBy("time")
+              .collectAsList();
+
+      assertEquals(3, readRows.size());
+      assertEquals("beijing", readRows.get(0).getString(readRows.get(0).fieldIndex("city")));
+      assertEquals(20, readRows.get(0).getInt(readRows.get(0).fieldIndex("temperature")));
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS " + catalog + "." + ctasTable);
+      spark.catalog().dropTempView(sourceView);
+    }
   }
 
   @Test
@@ -789,6 +905,10 @@ public class TsFileTableConnectorTest {
     long seconds = Math.floorDiv(micros, 1_000_000L);
     long microsOfSecond = Math.floorMod(micros, 1_000_000L);
     return Timestamp.from(Instant.ofEpochSecond(seconds, microsOfSecond * 1_000L));
+  }
+
+  private static String escapeSql(String value) {
+    return value.replace("'", "\\'");
   }
 
   private static void assertPushedTimeRange(
