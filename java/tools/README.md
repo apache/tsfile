@@ -44,6 +44,44 @@ mvn clean package -P with-java -DskipTests
 mvn install -P with-java -DskipTests
 ```
 
+## Hybrid CSV Import
+
+Combine one main time-series CSV (with a real time column) and multiple supplement CSVs (same TAG/FIELD columns, **no** time column) into a **single** TsFile. Supplement rows receive synthetic timestamps `1, 2, …, N` per file; each file is isolated with a virtual TAG `batch_id` (one ChunkGroup per file per business TAG combination).
+
+Example config (`hybrid.conf`):
+
+```
+output_tsfile=combined.tsfile
+shared_schema=main.schema
+main_csv=timeseries.csv
+main_batch_id=main
+batch_id_tag=batch_id
+validate_uniform_tags=true
+supplement_sort_by_variance=true
+supplement_csv=experiment_1.csv
+supplement_batch_id=experiment_1
+supplement_csv=experiment_2.csv
+supplement_batch_id=experiment_2
+```
+
+Run:
+
+```sh
+java -jar tsfile-tools.jar --hybrid_config hybrid.conf
+```
+
+Supplement CSV headers must list all business TAG and FIELD columns from `shared_schema`, excluding the time column (e.g. `Region,DeviceId,Temperature,Pressure`).
+
+For each supplement CSV separately (`supplement_sort_by_variance=true` by default):
+
+1. Compute variance of each **FIELD** column **within that CSV only**.
+2. Order columns by variance descending (higher variance = higher sort priority).
+3. Sort rows in that CSV ascending (multi-key comparator).
+4. Write one ChunkGroup per CSV; timestamps are **consecutive** inside the group (`startId`, `startId+1`, …).
+5. The next supplement CSV continues ids from `maxId + 1` (file1: `1..n1`, file2: `n1+1..n1+n2`, …).
+
+Programmatic API: `HybridCsvTsFileAssembler.execute(HybridImportConfig)`.
+
 ## Schema Definition
 
 ### Parameters

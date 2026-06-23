@@ -58,11 +58,17 @@ public class TsFileTool {
 
   private static ImportSchema importSchema = null;
 
+  private static String hybridConfigPathStr = null;
+
   public static void main(String[] args) {
     if (System.getenv("TSFILE_HOME") != null) {
       System.setProperty("TSFILE_HOME", System.getenv("TSFILE_HOME"));
     }
     parseCommandLineParams(args);
+    if (hybridConfigPathStr != null && !hybridConfigPathStr.isEmpty()) {
+      runHybridImport(hybridConfigPathStr);
+      return;
+    }
     if (!validateParams()) {
       return;
     }
@@ -274,6 +280,7 @@ public class TsFileTool {
     separatorStr = null;
     formatStr = null;
     importSchema = null;
+    hybridConfigPathStr = null;
 
     Options options = new Options();
     options.addOption("s", "source", true, "Input directory or file");
@@ -291,6 +298,7 @@ public class TsFileTool {
         true,
         "Source format: csv / parquet / arrow (default: auto-detect by extension)");
     options.addOption("h", "help", false, "Show help");
+    options.addOption(null, "hybrid_config", true, "Hybrid import config file path");
 
     try {
       CommandLineParser parser = new DefaultParser();
@@ -335,11 +343,26 @@ public class TsFileTool {
       if (cmd.hasOption("format")) {
         formatStr = cmd.getOptionValue("format").toLowerCase();
       }
+      if (cmd.hasOption("hybrid_config")) {
+        hybridConfigPathStr = cmd.getOptionValue("hybrid_config");
+      }
       if (failedDirectoryStr == null || failedDirectoryStr.isEmpty()) {
         failedDirectoryStr = "failed";
       }
     } catch (ParseException e) {
       LOGGER.error(Messages.get("log.tools.tool_parse_cli_error"), e);
+    }
+  }
+
+  private static void runHybridImport(String configPath) {
+    try {
+      HybridImportConfig config = HybridImportConfigParser.parse(configPath);
+      HybridCsvTsFileAssembler.execute(config);
+      LOGGER.info(
+          Messages.format("log.tools.tool_execution_completed", config.getOutputTsfile()));
+    } catch (Exception e) {
+      LOGGER.error("Hybrid import failed for config: " + configPath, e);
+      System.exit(1);
     }
   }
 
