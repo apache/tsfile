@@ -218,7 +218,16 @@ set_tsfile_config({
 ```
 
 `set_tsfile_config` 会校验每个取值，且只更新你传入的键。编码/压缩取值为 `TSEncoding` / `Compressor`
-成员；类型与编码的适配限制同 C++ 接口。
+成员。各数据类型允许的编码，以及不修改时使用的默认值：
+
+| 数据类型 | 允许的编码 | 默认值 |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`、`INT64`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
+| `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
+
+压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。
 
 ## 读取接口
 

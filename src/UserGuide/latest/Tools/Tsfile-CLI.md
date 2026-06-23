@@ -23,8 +23,7 @@
 `tsfile-cli` is a single, pipe-friendly C++ command-line tool for inspecting
 **and** importing Apache TsFile (`.tsfile`) files from the shell. Read commands print data to **stdout** and
 diagnostics to **stderr**, so they compose with `awk`, `jq`, `sort`, and friends;
-the `write` command imports CSV/TSV into a new `.tsfile`. It is built on the
-public `TsFileReader` and `TsFileTableWriter` APIs.
+the `write` command imports CSV/TSV into a new `.tsfile`.
 
 ## Building from source
 
@@ -33,8 +32,6 @@ downloads a pinned CMake and compiles the whole C++ module (the `libtsfile`
 shared library + the `tsfile-cli` executable) for you.
 
 **Prerequisites:** a JDK (8+) to run Maven, and a C++11 compiler (GCC / Clang).
-The third-party C++ dependencies (Snappy, LZ4, LZOKAY, Zlib, …) are bundled under
-`cpp/third_party/` and built automatically.
 
 From the repository root:
 
@@ -48,6 +45,17 @@ This produces, under `cpp/target/build/`:
 |---|---|
 | CLI executable | `cpp/target/build/bin/tsfile-cli` |
 | Shared library | `cpp/target/build/lib/libtsfile.so` (Linux) — `libtsfile.dylib` on macOS |
+
+To build just the CLI without Maven (needs a C++11 compiler and CMake ≥ 3.11), run
+from `cpp/` instead:
+
+```bash
+mkdir -p build/Release && cd build/Release
+cmake ../.. -DCMAKE_BUILD_TYPE=Release
+make -j tsfile_cli      # -> cpp/build/Release/bin/tsfile-cli
+```
+
+`libtsfile` is built alongside under `cpp/build/Release/lib/`.
 
 `tsfile-cli` is dynamically linked against `libtsfile`. Run it **in place** by its
 full path and it finds the library automatically:
@@ -110,7 +118,7 @@ Shared options:
 | `--no-header` | Omit the header row |
 | `--model tree\|table` | Force the model (otherwise auto-detected) |
 
-`json` output is NDJSON (one object per line; numbers/booleans bare, other values
+`json` output is NDJSON (one JSON object per line, one row per object; numbers/booleans bare, other values
 quoted, nulls as `null`; non-finite floats — NaN/Inf — become `null`). CSV output
 follows RFC 4180. Timestamps are raw epoch milliseconds. The `table` format
 buffers all rows in memory to align columns, so prefer `csv`/`tsv`/`json` when

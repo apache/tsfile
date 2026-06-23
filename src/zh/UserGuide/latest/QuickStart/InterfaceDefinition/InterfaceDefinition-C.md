@@ -69,7 +69,7 @@ typedef enum column_category {
 } ColumnCategory;
 
 // ColumnSchema：表示单个列的模式，包括列名、数据类型和分类。
-// 列的编码/压缩遵循全局默认值（见下文“配置”）。
+// 写入时，列的编码/压缩遵循全局默认值（见下文“配置”）。
 typedef struct column_schema {
     char* column_name;
     TSDataType data_type;
@@ -91,7 +91,7 @@ typedef struct result_set_meta_data {
 } ResultSetMetaData;
 ```
 
-> `ColumnSchema` 不携带编码/压缩——它们遵循全局默认值（见[配置](#配置编码与压缩)）。
+> `ColumnSchema` 不携带编码/压缩：写入时列遵循全局默认值（见[配置](#配置编码与压缩)），读取时按文件中的实际配置解码。
 
 ## 写入接口
 
@@ -118,7 +118,7 @@ void free_write_file(WriteFile* write_file);
 
 ### 创建/关闭 TsFile Writer
 
-在创建 TsFile Writer 时，需要指定 WriteFile 和 TableSchema。你可以使用 tsfile_writer_new_with_memory_threshold 设置内存阈值。
+在创建 TsFile Writer 时，需要指定 WriteFile 和 TableSchema。写入的数据先在内存中缓冲，当缓冲大小超过 `memory_threshold`（字节）时自动刷盘。`tsfile_writer_new` 使用默认值（128 MB）；`tsfile_writer_new_with_memory_threshold` 可覆盖该值——调大则刷盘前缓冲更多（更占内存、chunk group 更大），调小则刷盘更频繁。
 
 ```C++
 /**
@@ -305,10 +305,16 @@ uint8_t get_global_time_encoding();
 uint8_t get_global_time_compression();
 ```
 
-允许的取值：编码方面，`BOOLEAN` 仅 `PLAIN`；`INT32`/`INT64`/`DATE` 为
-`PLAIN`/`TS_2DIFF`/`GORILLA`/`ZIGZAG`/`RLE`/`SPRINTZ`；`FLOAT`/`DOUBLE` 为
-`PLAIN`/`TS_2DIFF`/`GORILLA`/`SPRINTZ`；`STRING`/`TEXT` 为 `PLAIN`/`DICTIONARY`。
-压缩可取 `UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`。
+各数据类型允许的编码，以及不修改时使用的默认值：
+
+| 数据类型 | 允许的编码 | 默认值 |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`、`INT64`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
+| `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
+
+压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。
 
 ```C
 // 例如：所有列均以 LZ4 压缩写入

@@ -20,9 +20,9 @@
 -->
 # TsFileDataFrame
 
-`TsFileDataFrame` lets you read the time series inside one or more TsFiles the
+`TsFileDataFrame` lets you read the numeric measurements inside one or more TsFiles the
 same way you would work with a pandas DataFrame — without having to care about
-the underlying file format or data-loading details. It is part of the Python
+the underlying file format or data-loading details. It is part of the TsFile Python
 package (`pip install tsfile`).
 
 ## Quick start
@@ -40,7 +40,7 @@ data = df.loc[start:end, [                     # align multiple series on timest
     "weather.Beijing.temperature",
     "weather.Beijing.humidity",
 ]]
-data.values                                   # -> np.ndarray, shape = (N, 2)
+data.values                                   # -> np.ndarray, shape (N, 2): N timestamps × 2 series
 ```
 
 ## Core types
@@ -52,8 +52,9 @@ data.values                                   # -> np.ndarray, shape = (N, 2)
 - **`Timeseries`** — a lazy handle to a single series, obtained from `df[...]`.
   It carries the series' metadata but reads nothing until you index it by row.
 - **`AlignedTimeseries`** — the result of aligning several series on a common
-  time axis, obtained from `df.loc[...]`. It reads the requested range of the
-  requested series into memory at once.
+  time axis, obtained from `df.loc[...]`. It reads the requested range into
+  memory at once as a value matrix of shape **(N, M)** — **N** aligned
+  timestamps (rows) × **M** selected series (columns).
 
 ### TsFileDataFrame
 
@@ -67,10 +68,10 @@ In the table below, `df` is a `TsFileDataFrame` instance, created with
 | `df.list_timeseries("weather")` | Series names, optionally filtered by prefix | `List[str]` |
 | `df["weather.Beijing.humidity"]`, `df[0]`, `df[-1]` | One series | `Timeseries` |
 | `df["city"]` | A metadata column (a tag / `field` / `start_time` / `end_time` / `count`) | `pandas.Series` |
-| `df[0:3]`, `df[[0, 2, 5]]` | A subset view | `TsFileDataFrame` |
+| `df[0:3]`, `df[[0, 2, 5]]` | Subset view by integer position: a contiguous range (`0:3`), or the listed positions (`[0, 2, 5]`); positions are the printed `index` column | `TsFileDataFrame` |
 | `df[df["city"] == "Beijing"]` | Filter by a metadata column | `TsFileDataFrame` |
 | `df.loc[start:end, series_list]` | Timestamp-aligned query | `AlignedTimeseries` |
-| `df.show(max_rows=20)` / `print(df)` | Formatted metadata table | — |
+| `df.show(max_rows=20)` / `print(df)` | Print the metadata table | — |
 | `df.close()` | Release file handles | — |
 
 ### Timeseries
@@ -93,10 +94,10 @@ In the table below, `data` is an `AlignedTimeseries`, obtained from
 
 | Example | Operation | Returns |
 |---|---|---|
+| `data.shape` | Shape `(N, M)` — N timestamps, M series | `tuple` |
 | `data.timestamps` | Timestamp array | `np.ndarray` |
 | `data.values` | Value matrix | `np.ndarray`, shape `(N, M)` |
 | `data.series_names` | Series names | `List[str]` |
-| `data.shape` | Shape `(N, M)` — N timestamps, M series | `tuple` |
 | `len(data)` | Number of rows | `int` |
 | `data[0]`, `data[0:10]`, `data[0, 1]` | Row / element indexing | `np.ndarray` / scalar |
 | `data.show(50)` / `print(data)` | Formatted output (auto-truncated) | — |
@@ -119,13 +120,26 @@ Examples:
 - `weather.Beijing.humidity` — table `weather`, tag `Beijing`, field `humidity`
 - `sensor.s1.pressure` — table `sensor`, tag `s1`, field `pressure`
 
+**Dots inside a name.** Because `.` separates the parts, a `.` that belongs to a
+table, tag, or field name is escaped with a backslash. `list_timeseries()`
+returns the escaped form — e.g. a `weather` table with tag value `Bei.jing` and
+field `humidity` is rendered as `weather.Bei\.jing.humidity` (a literal `\`
+becomes `\\`). Selecting it needs the same escaped form: the unescaped
+`weather.Bei.jing.humidity` would be read as two tags `Bei` and `jing`. Reuse the
+string `list_timeseries()` returns, or type it as a raw string so Python keeps
+the backslash:
+
+```python
+df[r"weather.Bei\.jing.humidity"]     # selects the device whose tag is "Bei.jing"
+```
+
 > A series name can be obtained from `list_timeseries()` and need not be
 > constructed by hand; a series may also be selected by integer index (`df[0]`)
 > or metadata filter (`df[df["city"] == "Beijing"]`).
 
 ## Loading
 
-A path may be a single file, a list of files, or a directory:
+A path may be a single file, a directory, or a list mixing files and directories:
 
 ```python
 from tsfile import TsFileDataFrame
@@ -136,12 +150,19 @@ print(df)
 ```
 
 Construction only scans metadata; actual values are not read. When several files
-are loaded, metadata is scanned in parallel.
+are loaded, their metadata is scanned in parallel, using up to
+`min(number_of_files, CPU cores)` threads; a single file is scanned serially.
+
+Only numeric **field** columns hold readable data (`BOOLEAN`, `INT32`, `INT64`,
+`FLOAT`, `DOUBLE`, `TIMESTAMP`); non-numeric fields (`STRING`, `TEXT`, `BLOB`,
+`DATE`) are skipped during loading and never become series. **Tag** columns are
+unaffected — string tags are fully supported as device identifiers and metadata
+(series names, the `df["city"]` column, metadata filters).
 
 If several files contain the **same series** (e.g. daily shards of
-`weather.Beijing.humidity`), they are merged into one continuous series. For
-duplicate timestamps only the first is kept — this is not an expected situation,
-so deduplicate during preprocessing to avoid metadata distortion.
+`weather.Beijing.humidity`), they are merged into one continuous series. Their
+timestamps must not conflict across shards; a duplicate timestamp raises an error
+when the series is read. Deduplicate during preprocessing.
 
 ### Displaying a DataFrame
 
@@ -152,8 +173,9 @@ truncated when large. The header is:
 index │ table │ <tag1> │ <tag2> │ ... │ field │ start_time │ end_time │ count
 ```
 
-For devices with different numbers of tags the tag values are left-aligned and
-shorter ones are padded with `None` at the end.
+The tag columns shown are the union of every table's tag-column names (in
+first-seen order). Each row fills only the tag columns its own table defines;
+other tag columns are left blank, and a null tag value shows as `None`.
 
 ```text
 TsFileDataFrame(table model, 972 time series, 5 files)
@@ -161,18 +183,6 @@ TsFileDataFrame(table model, 972 time series, 5 files)
   0    pvf     10  30100194A00234H00572     1                   pac  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
   1    pvf     10  30100194A00234H00572     1    tenmeterswindspeed  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
 ...
-```
-
-### Closing
-
-A `with` block closes file handles automatically; you can also close manually:
-
-```python
-with TsFileDataFrame("data/") as df:
-    ...                       # handles released on exit
-
-tsdf = TsFileDataFrame("data/")
-tsdf.close()                  # or close it yourself
 ```
 
 ## Browsing series
@@ -285,3 +295,15 @@ AlignedTimeseries(288 rows, 3 series)
 
 The pretty-printed view shows only value columns; to read the aligned timestamp
 column use `df.loc[...].timestamps`.
+
+## Closing
+
+A `with` block closes file handles automatically; you can also close manually:
+
+```python
+with TsFileDataFrame("data/") as df:
+    ...                       # handles released on exit
+
+tsdf = TsFileDataFrame("data/")
+tsdf.close()                  # or close it yourself
+```

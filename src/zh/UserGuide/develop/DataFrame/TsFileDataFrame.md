@@ -20,8 +20,8 @@
 -->
 # TsFileDataFrame
 
-`TsFileDataFrame` 让你像操作 pandas DataFrame 一样读取一个或多个 TsFile 中的时序数据，
-无需关心底层文件格式与数据加载细节。它是 Python 包的一部分（`pip install tsfile`）。
+`TsFileDataFrame` 让你像操作 pandas DataFrame 一样读取一个或多个 TsFile 中的数值型测点数据，
+无需关心底层文件格式与数据加载细节。它是 TsFile Python 包的一部分（`pip install tsfile`）。
 
 ## 快速上手
 
@@ -38,7 +38,7 @@ data = df.loc[start:end, [                     # 按时间戳对齐多条序列
     "weather.Beijing.temperature",
     "weather.Beijing.humidity",
 ]]
-data.values                                   # -> np.ndarray, shape = (N, 2)
+data.values                                   # -> np.ndarray, shape (N, 2)：N 个时间戳 × 2 条序列
 ```
 
 ## 核心类型
@@ -50,7 +50,8 @@ data.values                                   # -> np.ndarray, shape = (N, 2)
 - **`Timeseries`**：单条序列的懒加载句柄，通过 `df[...]` 获得。它携带序列元信息，但在按行号索引前
   不读取任何数据。
 - **`AlignedTimeseries`**：多条序列在同一时间轴上的对齐结果，通过 `df.loc[...]` 获得，会一次性将
-  指定时间范围内的多条序列读入内存。
+  指定时间范围内的数据读入内存，构成一个形状为 **(N, M)** 的值矩阵——**N** 为对齐后的时间戳行数，
+  **M** 为选中的序列数。
 
 ### TsFileDataFrame
 
@@ -63,10 +64,10 @@ data.values                                   # -> np.ndarray, shape = (N, 2)
 | `df.list_timeseries("weather")` | 获取序列名，可按前缀筛选 | `List[str]` |
 | `df["weather.Beijing.humidity"]`、`df[0]`、`df[-1]` | 获取单条序列 | `Timeseries` |
 | `df["city"]` | 获取某元数据列（标签 / `field` / `start_time` / `end_time` / `count`） | `pandas.Series` |
-| `df[0:3]`、`df[[0, 2, 5]]` | 获取子集视图 | `TsFileDataFrame` |
+| `df[0:3]`、`df[[0, 2, 5]]` | 按整数位置取子集视图：连续区间（`0:3`）或所列位置（`[0, 2, 5]`）；位置即打印的 `index` 列 | `TsFileDataFrame` |
 | `df[df["city"] == "Beijing"]` | 按元数据列过滤 | `TsFileDataFrame` |
 | `df.loc[start:end, series_list]` | 按时间戳对齐查询 | `AlignedTimeseries` |
-| `df.show(max_rows=20)` / `print(df)` | 格式化元数据表格 | — |
+| `df.show(max_rows=20)` / `print(df)` | 打印元数据表格 | — |
 | `df.close()` | 释放文件句柄 | — |
 
 ### Timeseries
@@ -88,10 +89,10 @@ data.values                                   # -> np.ndarray, shape = (N, 2)
 
 | 示例 | 操作 | 返回类型 |
 |---|---|---|
+| `data.shape` | 形状 `(N, M)`——N 为时间戳数，M 为序列数 | `tuple` |
 | `data.timestamps` | 时间戳数组 | `np.ndarray` |
 | `data.values` | 值矩阵 | `np.ndarray`，shape `(N, M)` |
 | `data.series_names` | 序列名列表 | `List[str]` |
-| `data.shape` | 形状 `(N, M)`——N 为时间戳数，M 为序列数 | `tuple` |
 | `len(data)` | 行数 | `int` |
 | `data[0]`、`data[0:10]`、`data[0, 1]` | 行 / 元素索引 | `np.ndarray` / 标量 |
 | `data.show(50)` / `print(data)` | 格式化输出（自动截断） | — |
@@ -112,12 +113,18 @@ TsFileDataFrame 以**序列名**（一个字符串）作为序列的唯一标识
 - `weather.Beijing.humidity` — 表 `weather`，标签 `Beijing`，字段 `humidity`
 - `sensor.s1.pressure` — 表 `sensor`，标签 `s1`，字段 `pressure`
 
+**名称中含点号时。** 由于 `.` 用作分隔符，属于表名/标签/字段名本身的 `.` 会用反斜杠转义。`list_timeseries()` 返回的是转义后的形式——例如表 `weather`、标签值 `Bei.jing`、字段 `humidity`，渲染为 `weather.Bei\.jing.humidity`（字面 `\` 转义为 `\\`）。选取时也要用这种转义形式：若传未转义的 `weather.Bei.jing.humidity`，会被当成 `Bei`、`jing` 两个标签。直接复用 `list_timeseries()` 的返回值，或用 raw string 让 Python 保留反斜杠：
+
+```python
+df[r"weather.Bei\.jing.humidity"]     # 选中标签为 "Bei.jing" 的设备
+```
+
 > 序列名可由 `list_timeseries()` 获取，无需手工构造；亦可改用整数索引（`df[0]`）或元数据过滤
 > （`df[df["city"] == "Beijing"]`）选择序列。
 
 ## 加载
 
-路径可以是单个文件、文件列表或目录：
+路径可以是单个文件、目录，或由文件与目录混合组成的列表：
 
 ```python
 from tsfile import TsFileDataFrame
@@ -127,10 +134,12 @@ df = TsFileDataFrame("data/")     # 递归查找目录下所有 .tsfile
 print(df)
 ```
 
-初始化时只扫描元数据，不读取实际数值。加载多个文件时会并行扫描元数据。
+初始化时只扫描元数据，不读取实际数值。加载多个文件时，会并行扫描元数据，使用 `min(文件数, CPU 核数)` 个线程；单个文件则串行扫描。
+
+只有数值型 **field（字段）** 列承载可读数据（`BOOLEAN`、`INT32`、`INT64`、`FLOAT`、`DOUBLE`、`TIMESTAMP`）；非数值字段（`STRING`、`TEXT`、`BLOB`、`DATE`）在加载时被跳过，不会成为序列。**tag（标签）** 列不受此限——字符串标签作为设备标识与元数据（序列名、`df["city"]` 列、元数据过滤）是完全支持的。
 
 如果多个文件包含 **同名序列**（如按日分片的 `weather.Beijing.humidity`），会自动合并为一条连续序列。
-对于重复时间戳仅保留第一条——这并非预期情况，请在预处理阶段去重，以免造成元数据失真。
+各分片的时间戳不能冲突（不可重复），否则读取该序列时会报错。请在预处理阶段去重。
 
 ### DataFrame 的展示
 
@@ -140,7 +149,7 @@ print(df)
 index │ table │ <tag1> │ <tag2> │ ... │ field │ start_time │ end_time │ count
 ```
 
-对于标签数量不同的设备：标签值按左对齐，较短的在末尾补 `None`。
+表头的标签列是所有表 tag 列名的并集（按首次出现顺序排列）。每行只填本表拥有的 tag 列，其余留空；仅当标签值本身为空时才显示 `None`。
 
 ```text
 TsFileDataFrame(table model, 972 time series, 5 files)
@@ -148,18 +157,6 @@ TsFileDataFrame(table model, 972 time series, 5 files)
   0    pvf     10  30100194A00234H00572     1                   pac  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
   1    pvf     10  30100194A00234H00572     1    tenmeterswindspeed  2024-04-02 00:00:00  2024-10-28 23:45:00  20160
 ...
-```
-
-### 关闭
-
-`with` 语句会自动释放文件句柄，也可以手动关闭：
-
-```python
-with TsFileDataFrame("data/") as df:
-    ...                       # 退出后自动关闭
-
-tsdf = TsFileDataFrame("data/")
-tsdf.close()                  # 也可以自己关闭
 ```
 
 ## 浏览序列
@@ -268,3 +265,15 @@ AlignedTimeseries(288 rows, 3 series)
 ```
 
 该美化视图仅展示值列；如需读取对齐后的时间戳列，请使用 `df.loc[...].timestamps`。
+
+## 关闭
+
+`with` 语句会自动释放文件句柄，也可以手动关闭：
+
+```python
+with TsFileDataFrame("data/") as df:
+    ...                       # 退出后自动关闭
+
+tsdf = TsFileDataFrame("data/")
+tsdf.close()                  # 也可以自己关闭
+```

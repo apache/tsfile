@@ -23,15 +23,14 @@
 `tsfile-cli` 是一个单一、对管道友好的 C++ 命令行工具，用于在 shell 中检视 **并** 导入 Apache
 TsFile（`.tsfile`）文件。读取类命令将数据打印到
 **stdout**、诊断信息打印到 **stderr**，因此可与 `awk`、`jq`、`sort` 等组合使用；`write` 命令
-将 CSV/TSV 导入为新的 `.tsfile`。它构建于公开的 `TsFileReader` 与 `TsFileTableWriter` 接口之上。
+将 CSV/TSV 导入为新的 `.tsfile`。
 
 ## 从源码构建
 
 CLI 是 C++ 模块的一部分。用 Maven 包装器构建即可——它会下载固定版本的 CMake，为你编译整个
 C++ 模块（`libtsfile` 共享库 + `tsfile-cli` 可执行文件）。
 
-**前置条件**：用于运行 Maven 的 JDK（8+），以及 C++11 编译器（GCC / Clang）。第三方 C++ 依赖
-（Snappy、LZ4、LZOKAY、Zlib 等）已捆绑在 `cpp/third_party/` 下并自动构建。
+**前置条件**：用于运行 Maven 的 JDK（8+），以及 C++11 编译器（GCC / Clang）。
 
 在仓库根目录执行：
 
@@ -45,6 +44,16 @@ C++ 模块（`libtsfile` 共享库 + `tsfile-cli` 可执行文件）。
 |---|---|
 | CLI 可执行文件 | `cpp/target/build/bin/tsfile-cli` |
 | 共享库 | `cpp/target/build/lib/libtsfile.so`（Linux）——macOS 为 `libtsfile.dylib` |
+
+若只想用 CMake 构建 CLI 而不经过 Maven（需 C++11 编译器与 CMake ≥ 3.11），改在 `cpp/` 下执行：
+
+```bash
+mkdir -p build/Release && cd build/Release
+cmake ../.. -DCMAKE_BUILD_TYPE=Release
+make -j tsfile_cli      # -> cpp/build/Release/bin/tsfile-cli
+```
+
+`libtsfile` 会一并构建在 `cpp/build/Release/lib/` 下。
 
 `tsfile-cli` 动态链接 `libtsfile`。用完整路径 **就地** 运行即可自动找到该库：
 
@@ -102,7 +111,7 @@ tsfile-cli --help | --version | help
 | `--no-header` | 不输出表头行 |
 | `--model tree\|table` | 强制指定模型（否则自动检测） |
 
-`json` 输出为 NDJSON（每行一个对象；数字/布尔裸输出，其他值加引号，空值为 `null`；非有限浮点数
+`json` 输出为 NDJSON（每行一个 JSON 对象，对应一行数据；数字/布尔裸输出，其他值加引号，空值为 `null`；非有限浮点数
 ——NaN/Inf——变为 `null`）。CSV 输出遵循 RFC 4180。时间戳为原始毫秒时间戳。`table` 格式会在内存中
 缓冲所有行以对齐列，因此导出大文件时优先用 `csv`/`tsv`/`json`。
 

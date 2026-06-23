@@ -70,7 +70,7 @@ typedef enum column_category {
 
 // ColumnSchema: Represents the schema of a single column,
 // including its name, data type, and category.
-// Encoding/compression for columns follow the global defaults
+// On write, encoding/compression for columns follow the global defaults
 // (see "Configuration" below).
 typedef struct column_schema {
     char* column_name;
@@ -95,8 +95,9 @@ typedef struct result_set_meta_data {
 } ResultSetMetaData;
 ```
 
-> `ColumnSchema` does not carry encoding/compression — those follow the global
-> defaults (see [Configuration](#configuration-encoding--compression)).
+> `ColumnSchema` does not carry encoding/compression: on write, columns follow the
+> global defaults (see [Configuration](#configuration-encoding--compression)); on
+> read, each column is decoded with the file's actual settings.
 
 
 ## Write Interface
@@ -123,8 +124,12 @@ void free_write_file(WriteFile* write_file);
 
 ### TsFile Writer Create/Close
 
-When creating a TsFile Writer, you need to specify WriteFile and TableSchema. You can use the memory_threshold parameter in
-tsfile_writer_new_with_memory_threshold to set a memory threshold.
+When creating a TsFile Writer, you specify a `WriteFile` and a `TableSchema`. As
+you write, data is buffered in memory and automatically flushed to disk once the
+buffered size exceeds `memory_threshold` bytes. `tsfile_writer_new` uses the
+default (128 MB); `tsfile_writer_new_with_memory_threshold` lets you override it
+— a larger value buffers more before flushing (more memory, larger chunk groups),
+a smaller value flushes more often.
 
 ```C
 /**
@@ -319,11 +324,16 @@ uint8_t get_global_time_encoding();
 uint8_t get_global_time_compression();
 ```
 
-Allowed values: encoding accepts `PLAIN` for `BOOLEAN`; `PLAIN`/`TS_2DIFF`/
-`GORILLA`/`ZIGZAG`/`RLE`/`SPRINTZ` for `INT32`/`INT64`/`DATE`;
-`PLAIN`/`TS_2DIFF`/`GORILLA`/`SPRINTZ` for `FLOAT`/`DOUBLE`;
-`PLAIN`/`DICTIONARY` for `STRING`/`TEXT`. Compression accepts `UNCOMPRESSED`,
-`SNAPPY`, `GZIP`, `LZO`, or `LZ4`.
+Allowed encodings per data type, and the default used when you do not change it:
+
+| Data type | Allowed encodings | Default |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
+| `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
 
 ```C
 // e.g. write every column with LZ4 compression

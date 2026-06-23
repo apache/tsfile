@@ -225,8 +225,17 @@ set_tsfile_config({
 ```
 
 `set_tsfile_config` validates each value and only updates the keys you pass.
-Encoding/compression values are `TSEncoding` / `Compressor` members; the same
-type-vs-encoding restrictions as the C++ API apply.
+Encoding/compression values are `TSEncoding` / `Compressor` members. The allowed
+encodings per data type, and the default used when you do not change it:
+
+| Data type | Allowed encodings | Default |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
+| `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
 
 ## Read Interface
 

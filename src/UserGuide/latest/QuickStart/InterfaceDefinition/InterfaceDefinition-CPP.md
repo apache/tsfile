@@ -22,9 +22,6 @@
 
 ## Data Types, Encoding and Compression
 
-These enumerations are shared by the read and write interfaces. The numeric
-codes are also the values stored on disk.
-
 ```cpp
 // Supported measurement/column data types.
 enum TSDataType : uint8_t {

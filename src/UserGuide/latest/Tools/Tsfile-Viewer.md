@@ -91,3 +91,15 @@ java -jar backend/target/tsfile-viewer-*.jar
 ```
 
 Open the app at <http://localhost:8080/view/>.
+
+## Usage
+
+After opening the UI, a typical workflow is:
+
+1. **Select a file** — browse the server's whitelisted directories in the left-hand file tree and click a `.tsfile`, or drag/select a local file into the "Upload TsFile" card; recently opened files are listed under "Recent".
+2. **View metadata** — the metadata page shows the version, time range, and device/measurement counts. Use the view-mode toggle to switch between the Tree model (measurements, devices, chunks) and the Table model (a table's TAG/FIELD column definitions).
+3. **Preview data** — click "Data Preview" and use the filter panel to narrow by time range, devices, measurements, and value range, with pagination (page size / offset); data is shown as a paginated table.
+4. **Visualize** — plot the selected series as interactive ECharts charts with multi-series overlay, aggregation, and drill-down; large datasets are downsampled automatically.
+5. **Export** — export the filtered data as CSV / JSON, or export charts as PNG / SVG.
+
+For a full walkthrough, see the [user guide](https://github.com/apache/tsfile-viewer/blob/main/docs/USER_GUIDE.md) in the repository.
