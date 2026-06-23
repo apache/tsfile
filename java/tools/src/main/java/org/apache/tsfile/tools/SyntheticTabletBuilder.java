@@ -22,6 +22,7 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -83,7 +84,10 @@ public class SyntheticTabletBuilder {
     int rowCount = batch.getRowCount();
     if (timestamps.length != rowCount) {
       throw new IllegalArgumentException(
-          "timestamps length " + timestamps.length + " != row count " + rowCount);
+          Messages.format(
+              "error.tools.hybrid_timestamps_length_mismatch",
+              timestamps.length,
+              rowCount));
     }
     Tablet tablet =
         new Tablet(
@@ -136,13 +140,12 @@ public class SyntheticTabletBuilder {
     for (int i = 1; i < tablet.getRowSize(); i++) {
       if (!tablet.getDeviceID(i).equals(expected)) {
         throw new IllegalArgumentException(
-            "Supplement CSV must have a single business TAG combination per file when "
-                + "one_chunk_per_file is enabled. Rows 0 and "
-                + i
-                + " map to different devices: "
-                + expected
-                + " vs "
-                + tablet.getDeviceID(i));
+            Messages.format(
+                "error.tools.hybrid_uniform_tags_violation",
+                0,
+                i,
+                expected,
+                tablet.getDeviceID(i)));
       }
     }
   }

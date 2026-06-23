@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,7 +86,7 @@ public final class SupplementVarianceSorter {
       }
       if (batchIdx < 0) {
         throw new IllegalArgumentException(
-            "FIELD column '" + name + "' not found in supplement batch columns");
+            Messages.format("error.tools.hybrid_field_column_not_in_batch", name));
       }
       indices[f] = batchIdx;
     }
@@ -173,7 +174,7 @@ public final class SupplementVarianceSorter {
       List<ImportSchema.SourceColumn> fieldColumns,
       double[] variances,
       int[] priorityFieldOrder) {
-    StringBuilder sb = new StringBuilder("Supplement FIELD sort priority (variance desc): ");
+    StringBuilder sb = new StringBuilder();
     for (int i = 0; i < priorityFieldOrder.length; i++) {
       int fieldIdx = priorityFieldOrder[i];
       if (i > 0) {
@@ -184,7 +185,7 @@ public final class SupplementVarianceSorter {
           .append(variances[fieldIdx])
           .append(")");
     }
-    LOGGER.info(sb.toString());
+    LOGGER.info(Messages.get("log.tools.hybrid_variance_sort_priority"), sb.toString());
   }
 
   private static boolean isNumericType(TSDataType type) {

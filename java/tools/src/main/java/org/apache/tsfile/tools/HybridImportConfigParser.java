@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -74,19 +76,20 @@ public class HybridImportConfigParser {
         } else if (line.startsWith("supplement_batch_id=")) {
           if (pendingSupplementCsv == null) {
             throw new IllegalArgumentException(
-                "supplement_batch_id must follow supplement_csv in config file");
+                Messages.get("error.tools.hybrid_supplement_batch_id_order"));
           }
           config.addSupplement(pendingSupplementCsv, extractValue(line));
           pendingSupplementCsv = null;
         } else {
-          throw new IllegalArgumentException("Unknown config line: " + line);
+          throw new IllegalArgumentException(
+              Messages.format("error.tools.hybrid_unknown_config_line", line));
         }
       }
     }
 
     if (pendingSupplementCsv != null) {
       throw new IllegalArgumentException(
-          "supplement_csv without matching supplement_batch_id: " + pendingSupplementCsv);
+          Messages.format("error.tools.hybrid_supplement_csv_without_batch_id", pendingSupplementCsv));
     }
     validate(config);
     return config;
@@ -94,24 +97,27 @@ public class HybridImportConfigParser {
 
   private static void validate(HybridImportConfig config) {
     if (config.getOutputTsfile() == null || config.getOutputTsfile().isEmpty()) {
-      throw new IllegalArgumentException("output_tsfile is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.hybrid_output_tsfile_required"));
     }
     if (config.getSharedSchemaPath() == null || config.getSharedSchemaPath().isEmpty()) {
-      throw new IllegalArgumentException("shared_schema is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.hybrid_shared_schema_required"));
     }
     if (config.getMainCsvPath() == null || config.getMainCsvPath().isEmpty()) {
-      throw new IllegalArgumentException("main_csv is required");
+      throw new IllegalArgumentException(Messages.get("error.tools.hybrid_main_csv_required"));
     }
     if (!config.getMainCsvFile().exists()) {
-      throw new IllegalArgumentException("main_csv file not found: " + config.getMainCsvPath());
+      throw new IllegalArgumentException(
+          Messages.format("error.tools.hybrid_main_csv_not_found", config.getMainCsvPath()));
     }
     if (!new java.io.File(config.getSharedSchemaPath()).exists()) {
       throw new IllegalArgumentException(
-          "shared_schema file not found: " + config.getSharedSchemaPath());
+          Messages.format(
+              "error.tools.hybrid_shared_schema_not_found", config.getSharedSchemaPath()));
     }
     for (HybridImportConfig.SupplementEntry entry : config.getSupplements()) {
       if (!entry.getCsvFile().exists()) {
-        throw new IllegalArgumentException("supplement_csv file not found: " + entry.getCsvPath());
+        throw new IllegalArgumentException(
+            Messages.format("error.tools.hybrid_supplement_csv_not_found", entry.getCsvPath()));
       }
     }
   }
@@ -119,7 +125,8 @@ public class HybridImportConfigParser {
   private static String extractValue(String line) {
     int idx = line.indexOf('=');
     if (idx < 0 || idx == line.length() - 1) {
-      throw new IllegalArgumentException("Invalid config line: " + line);
+      throw new IllegalArgumentException(
+          Messages.format("error.tools.hybrid_invalid_config_line", line));
     }
     return line.substring(idx + 1).trim();
   }

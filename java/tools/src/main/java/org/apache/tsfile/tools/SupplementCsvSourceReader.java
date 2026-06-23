@@ -77,7 +77,7 @@ public class SupplementCsvSourceReader implements SourceReader {
   @Override
   public ImportSchema inferSchema() {
     throw new UnsupportedOperationException(
-        "inferSchema() is not supported for supplement CSV reader");
+        Messages.get("error.tools.hybrid_infer_schema_unsupported"));
   }
 
   @Override
@@ -99,7 +99,8 @@ public class SupplementCsvSourceReader implements SourceReader {
         headerConsumed = true;
       } else if (!headerConsumed) {
         throw new IllegalArgumentException(
-            "Supplement CSV requires has_header=true in schema: " + sourceFile.getAbsolutePath());
+            Messages.format(
+                "error.tools.hybrid_supplement_header_required", sourceFile.getAbsolutePath()));
       }
 
       List<Object[]> rows = new ArrayList<>();
@@ -163,7 +164,7 @@ public class SupplementCsvSourceReader implements SourceReader {
       }
       if (supplementIdx < 0) {
         throw new IllegalArgumentException(
-            "Unexpected column in supplement CSV header: " + name);
+            Messages.format("error.tools.hybrid_supplement_unexpected_column", name));
       }
       fileColumnToSupplementIndex[fileCol] = supplementIdx;
     }
@@ -176,7 +177,9 @@ public class SupplementCsvSourceReader implements SourceReader {
     for (int j = 0; j < supplementColumns.size(); j++) {
       if (!seen[j]) {
         throw new IllegalArgumentException(
-            "Missing column in supplement CSV header: " + supplementColumns.get(j).getName());
+            Messages.format(
+                "error.tools.hybrid_supplement_missing_column",
+                supplementColumns.get(j).getName()));
       }
     }
   }

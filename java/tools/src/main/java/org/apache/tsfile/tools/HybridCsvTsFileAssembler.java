@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
 
@@ -56,7 +57,8 @@ public class HybridCsvTsFileAssembler {
       output.getParentFile().mkdirs();
     }
     if (output.exists() && !output.delete()) {
-      LOGGER.warn("Could not delete existing output file: {}", output.getAbsolutePath());
+      LOGGER.warn(
+          Messages.get("log.tools.hybrid_delete_output_failed"), output.getAbsolutePath());
     }
 
     TsFileWriter writer = null;
@@ -84,7 +86,7 @@ public class HybridCsvTsFileAssembler {
       TabletBuilder mainBuilder,
       TsFileWriter writer)
       throws IOException, WriteProcessException {
-    LOGGER.info("Writing main CSV: {}", config.getMainCsvPath());
+    LOGGER.info(Messages.get("log.tools.hybrid_writing_main_csv"), config.getMainCsvPath());
     try (CsvSourceReader reader =
         new CsvSourceReader(
             config.getMainCsvFile(), mainSchema, config.getReadChunkSizeBytes())) {
@@ -108,7 +110,7 @@ public class HybridCsvTsFileAssembler {
           ImportSchemaUtils.withBatchIdTag(
               baseSchema, config.getBatchIdTag(), entry.getBatchId());
       LOGGER.info(
-          "Writing supplement CSV: {} (batch_id={}, starting id={})",
+          Messages.get("log.tools.hybrid_writing_supplement_csv"),
           entry.getCsvPath(),
           entry.getBatchId(),
           nextSupplementId);
@@ -138,7 +140,8 @@ public class HybridCsvTsFileAssembler {
   /** Builds {@code [startId, startId+1, …, startId+rowCount-1]}. */
   static long[] buildConsecutiveTimestamps(long startId, long rowCount) {
     if (rowCount > Integer.MAX_VALUE) {
-      throw new IllegalArgumentException("Too many rows in one supplement CSV: " + rowCount);
+      throw new IllegalArgumentException(
+          Messages.format("error.tools.hybrid_supplement_too_many_rows", rowCount));
     }
     int n = (int) rowCount;
     long[] timestamps = new long[n];

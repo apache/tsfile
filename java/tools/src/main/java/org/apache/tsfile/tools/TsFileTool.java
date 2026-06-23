@@ -361,7 +361,7 @@ public class TsFileTool {
       LOGGER.info(
           Messages.format("log.tools.tool_execution_completed", config.getOutputTsfile()));
     } catch (Exception e) {
-      LOGGER.error("Hybrid import failed for config: " + configPath, e);
+      LOGGER.error(Messages.format("log.tools.hybrid_import_failed", configPath), e);
       System.exit(1);
     }
   }
