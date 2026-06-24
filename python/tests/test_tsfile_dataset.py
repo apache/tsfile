@@ -290,6 +290,74 @@ def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_pa
         assert aligned.values[2, 1] == 30.0
 
 
+def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
+    path = tmp_path / "nullable_tags.tsfile"
+    schema = TableSchema(
+        "sensors",
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    # Non-trailing null: region IS NULL, device='alpha'.
+    null_region = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": [None, None, None],
+            "device": ["alpha", "alpha", "alpha"],
+            "temperature": [10.0, 11.0, 12.0],
+        }
+    )
+    # Trailing null: region='north', device IS NULL. Shares the region prefix
+    # with the fully specified device below to exercise device isolation.
+    null_device = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": ["north", "north", "north"],
+            "device": [None, None, None],
+            "temperature": [20.0, 21.0, 22.0],
+        }
+    )
+    full = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": ["north", "north", "north"],
+            "device": ["beta", "beta", "beta"],
+            "temperature": [30.0, 31.0, 32.0],
+        }
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(null_region)
+        writer.write_dataframe(null_device)
+        writer.write_dataframe(full)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        series = tsdf.list_timeseries()
+        # Null tags are dropped from the compressed logical path.
+        assert set(series) == {
+            "sensors.alpha.temperature",
+            "sensors.north.temperature",
+            "sensors.north.beta.temperature",
+        }
+
+        ordered = sorted(series)
+        aligned = tsdf.loc[:, ordered]
+        by_name = dict(zip(aligned.series_names, aligned.values.T))
+
+        # Non-trailing null device reads its own data (previously crashed / NaN).
+        np.testing.assert_array_equal(
+            by_name["sensors.alpha.temperature"], np.array([10.0, 11.0, 12.0])
+        )
+        # Trailing-null device must NOT merge with the fully specified north.beta.
+        np.testing.assert_array_equal(
+            by_name["sensors.north.temperature"], np.array([20.0, 21.0, 22.0])
+        )
+        np.testing.assert_array_equal(
+            by_name["sensors.north.beta.temperature"], np.array([30.0, 31.0, 32.0])
+        )
+
+
 def test_dataset_loc_supports_single_timestamp_and_mixed_series_specifiers(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
@@ -826,24 +894,60 @@ def test_reader_metadata_tag_values_trim_trailing_none():
     assert TsFileSeriesReader._metadata_tag_values(_Group(), 1) == ("device_a",)
 
 
-def test_exact_tag_filter_rejects_none_tag_values():
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        _build_exact_tag_filter({"device": None})
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        _build_exact_tag_filter({"city": "beijing", "device": None})
+def test_exact_tag_filter_uses_is_null_for_none_tag_values():
+    from tsfile.tag_filter import AndTagFilter, ComparisonTagFilter
+
+    only_null = _build_exact_tag_filter({"device": None})
+    assert isinstance(only_null, ComparisonTagFilter)
+    assert only_null.op == ComparisonTagFilter.IS_NULL
+    assert only_null.column_name == "device"
+
+    mixed = _build_exact_tag_filter({"city": "beijing", "device": None})
+    assert isinstance(mixed, AndTagFilter)
+    assert isinstance(mixed.left, ComparisonTagFilter)
+    assert mixed.left.op == ComparisonTagFilter.EQ
+    assert mixed.left.value == "beijing"
+    assert isinstance(mixed.right, ComparisonTagFilter)
+    assert mixed.right.op == ComparisonTagFilter.IS_NULL
+    assert mixed.right.column_name == "device"
 
 
-def test_reader_exact_match_with_none_tag_values_fails_fast():
+def _tag_filter_has_is_null(tag_filter) -> bool:
+    from tsfile.tag_filter import ComparisonTagFilter
+
+    if isinstance(tag_filter, ComparisonTagFilter):
+        return tag_filter.op == ComparisonTagFilter.IS_NULL
+    for attr in ("left", "right", "filter"):
+        child = getattr(tag_filter, attr, None)
+        if child is not None and _tag_filter_has_is_null(child):
+            return True
+    return False
+
+
+def test_reader_exact_match_with_none_tag_values_issues_is_null_query():
+    captured = {}
+
+    class _EmptyResultSet:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read_arrow_batch(self):
+            return None
+
+        def next(self):
+            return False
+
     class _FakeNativeReader:
         def query_table(self, *args, **kwargs):
-            raise AssertionError(
-                "query should not be issued when None-tag exact matching is unsupported"
-            )
+            captured["table"] = kwargs.get("tag_filter")
+            return _EmptyResultSet()
 
         def query_table_by_row(self, *args, **kwargs):
-            raise AssertionError(
-                "row query should not be issued when None-tag exact matching is unsupported"
-            )
+            captured["row"] = kwargs.get("tag_filter")
+            return _EmptyResultSet()
 
     reader = object.__new__(TsFileSeriesReader)
     reader._reader = _FakeNativeReader()
@@ -864,10 +968,13 @@ def test_reader_exact_match_with_none_tag_values_fails_fast():
         "timeline_max_time": 1,
     }
 
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        reader.read_series_by_ref(device_id, 0, 0, 1)
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        reader.read_series_by_row(device_id, 0, 0, 2)
+    # Both read paths now issue a native query that encodes the null tag as
+    # IS NULL instead of failing fast.
+    reader.read_series_by_ref(device_id, 0, 0, 1)
+    reader.read_series_by_row(device_id, 0, 0, 2)
+
+    assert _tag_filter_has_is_null(captured["table"])
+    assert _tag_filter_has_is_null(captured["row"])
 
 
 def test_dataframe_resolves_named_sparse_tag_series_path():

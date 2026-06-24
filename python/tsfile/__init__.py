@@ -81,6 +81,8 @@ from .tag_filter import (
     tag_gteq,
     tag_regexp,
     tag_not_regexp,
+    tag_is_null,
+    tag_is_not_null,
     tag_between,
     tag_not_between,
 )

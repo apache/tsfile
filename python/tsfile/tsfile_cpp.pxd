@@ -324,6 +324,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TAG_FILTER_GTEQ = 5,
         TAG_FILTER_REGEXP = 6,
         TAG_FILTER_NOT_REGEXP = 7,
+        TAG_FILTER_IS_NULL = 8,
+        TAG_FILTER_IS_NOT_NULL = 9,
 
     TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
                                              const char* table_name,

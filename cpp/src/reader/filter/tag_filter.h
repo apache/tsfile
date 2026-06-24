@@ -106,6 +106,21 @@ class TagNotRegExp : public TagFilter {
     bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
+// IS NULL: tag column has no value for this device. An absent trailing
+// segment (col_idx_ beyond the device's segment count) is also treated as null.
+class TagIsNull : public TagFilter {
+   public:
+    explicit TagIsNull(int col_idx);
+    bool satisfyRow(std::vector<std::string*> segments) const override;
+};
+
+// IS NOT NULL: tag column has a concrete value for this device.
+class TagIsNotNull : public TagFilter {
+   public:
+    explicit TagIsNotNull(int col_idx);
+    bool satisfyRow(std::vector<std::string*> segments) const override;
+};
+
 // Range query [value_, value2_]
 class TagBetween : public TagFilter {
    public:
@@ -171,6 +186,8 @@ class TagFilterBuilder {
     Filter* reg_exp(const std::string& columnName, const std::string& value);
     Filter* not_reg_exp(const std::string& columnName,
                         const std::string& value);
+    Filter* is_null(const std::string& columnName);
+    Filter* is_not_null(const std::string& columnName);
     Filter* between_and(const std::string& columnName, const std::string& lower,
                         const std::string& upper);
     Filter* not_between_and(const std::string& columnName,
