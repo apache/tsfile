@@ -53,8 +53,9 @@ data.values                                   # -> np.ndarray, shape (N, 2): N t
   It carries the series' metadata but reads nothing until you index it by row.
 - **`AlignedTimeseries`** — the result of aligning several series on a common
   time axis, obtained from `df.loc[...]`. It reads the requested range into
-  memory at once as a value matrix of shape **(N, M)** — **N** aligned
-  timestamps (rows) × **M** selected series (columns).
+  memory at once: the aligned timestamp array (`.timestamps`, length **N**) and a
+  value matrix (`.values`, shape **(N, M)**) — **N** timestamps (rows) × **M**
+  selected series (columns).
 
 ### TsFileDataFrame
 
@@ -293,8 +294,9 @@ AlignedTimeseries(288 rows, 3 series)
 ...
 ```
 
-The pretty-printed view shows only value columns; to read the aligned timestamp
-column use `df.loc[...].timestamps`.
+Printing the result shows the time column to the left of the values, but the
+`.values` matrix holds only the value columns — read the aligned timestamps from
+`df.loc[...].timestamps`.
 
 ## Closing
 
