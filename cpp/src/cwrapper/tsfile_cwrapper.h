@@ -875,6 +875,8 @@ typedef enum {
     TAG_FILTER_GTEQ = 5,
     TAG_FILTER_REGEXP = 6,
     TAG_FILTER_NOT_REGEXP = 7,
+    TAG_FILTER_IS_NULL = 8,
+    TAG_FILTER_IS_NOT_NULL = 9,
 } TagFilterOp;
 
 /**
@@ -884,7 +886,8 @@ typedef enum {
  * index).
  * @param table_name [in] Table name whose schema defines the TAG columns.
  * @param column_name [in] Name of the TAG column to filter on.
- * @param value [in] Comparison value (string).
+ * @param value [in] Comparison value (string). Ignored for
+ * TAG_FILTER_IS_NULL / TAG_FILTER_IS_NOT_NULL (may be NULL).
  * @param op [in] Comparison operator (TagFilterOp).
  * @param err_code [out] Error code. E_OK(0) on success.
  * @return TagFilterHandle on success; NULL on failure.

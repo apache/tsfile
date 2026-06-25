@@ -1118,8 +1118,13 @@ int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
     for (int i = 0; i < n; i++) {
         const std::string* ps =
             (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
-        const char* lit = (ps != nullptr) ? ps->c_str() : "null";
-        seg_arr[i] = strdup(lit);
+        // A null tag segment is exposed as a NULL pointer so callers can
+        // distinguish a missing/null tag from the literal string "null".
+        if (ps == nullptr) {
+            seg_arr[i] = nullptr;
+            continue;
+        }
+        seg_arr[i] = strdup(ps->c_str());
         if (seg_arr[i] == nullptr) {
             for (int j = 0; j < i; j++) {
                 free(seg_arr[j]);
@@ -1626,6 +1631,12 @@ TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
             break;
         case TAG_FILTER_NOT_REGEXP:
             filter = builder.not_reg_exp(column_name, value);
+            break;
+        case TAG_FILTER_IS_NULL:
+            filter = builder.is_null(column_name);
+            break;
+        case TAG_FILTER_IS_NOT_NULL:
+            filter = builder.is_not_null(column_name);
             break;
         default:
             *err_code = common::E_INVALID_ARG;

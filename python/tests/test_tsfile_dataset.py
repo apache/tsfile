@@ -28,7 +28,7 @@ from tsfile import (
     TableSchema,
     TsFileTableWriter,
 )
-from tsfile import AlignedTimeseries, Timeseries, TsFileDataFrame
+from tsfile import AlignedTimeseries, SeriesPath, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
 from tsfile.dataset.metadata import (
     MetadataCatalog,
@@ -288,6 +288,190 @@ def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_pa
         assert np.isnan(aligned.values[1, 1])
         assert aligned.values[2, 0] == 300.0
         assert aligned.values[2, 1] == 30.0
+
+
+def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
+    path = tmp_path / "nullable_tags.tsfile"
+    schema = TableSchema(
+        "sensors",
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    # Non-trailing null: region IS NULL, device='alpha'.
+    null_region = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": [None, None, None],
+            "device": ["alpha", "alpha", "alpha"],
+            "temperature": [10.0, 11.0, 12.0],
+        }
+    )
+    # Trailing null: region='north', device IS NULL. Shares the region prefix
+    # with the fully specified device below to exercise device isolation.
+    null_device = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": ["north", "north", "north"],
+            "device": [None, None, None],
+            "temperature": [20.0, 21.0, 22.0],
+        }
+    )
+    full = pd.DataFrame(
+        {
+            "time": [0, 1, 2],
+            "region": ["north", "north", "north"],
+            "device": ["beta", "beta", "beta"],
+            "temperature": [30.0, 31.0, 32.0],
+        }
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(null_region)
+        writer.write_dataframe(null_device)
+        writer.write_dataframe(full)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        series = tsdf.list_timeseries()
+        # Null tags keep their position via the \N marker; trailing nulls drop.
+        assert set(series) == {
+            "sensors.\\N.alpha.temperature",
+            "sensors.north.temperature",
+            "sensors.north.beta.temperature",
+        }
+        # list_timeseries returns SeriesPath objects carrying structured tags.
+        by_tags = {sp.tags: sp for sp in series}
+        assert (None, "alpha") in by_tags
+        assert ("north",) in by_tags
+        assert ("north", "beta") in by_tags
+
+        ordered = sorted(series)
+        aligned = tsdf.loc[:, ordered]
+        by_name = dict(zip(aligned.series_names, aligned.values.T))
+
+        # Non-trailing null device reads its own data (previously crashed / NaN).
+        np.testing.assert_array_equal(
+            by_name["sensors.\\N.alpha.temperature"], np.array([10.0, 11.0, 12.0])
+        )
+        # Trailing-null device must NOT merge with the fully specified north.beta.
+        np.testing.assert_array_equal(
+            by_name["sensors.north.temperature"], np.array([20.0, 21.0, 22.0])
+        )
+        np.testing.assert_array_equal(
+            by_name["sensors.north.beta.temperature"], np.array([30.0, 31.0, 32.0])
+        )
+
+
+def test_series_path_object_roundtrip_and_escaping():
+    from tsfile.dataset.metadata import split_logical_series_path
+
+    sp = SeriesPath("tbl", ("a.b", None, "x"), "f")
+    assert isinstance(sp, str)
+    assert sp.table == "tbl"
+    assert sp.tags == ("a.b", None, "x")
+    assert sp.field == "f"
+    # A dot in a value is escaped; a null tag uses the collision-proof \N marker.
+    assert str(sp) == "tbl.a\\.b.\\N.x.f"
+    # Splitting round-trips: the escaped dot stays in the value, \N decodes to None.
+    assert split_logical_series_path(str(sp)) == ["tbl", "a.b", None, "x", "f"]
+    # Trailing nulls are dropped (mirroring device-id normalization).
+    assert SeriesPath("tbl", ("a", None), "f").tags == ("a",)
+    assert str(SeriesPath("tbl", ("a", None), "f")) == "tbl.a.f"
+
+
+def test_series_path_construction_forms_are_equivalent():
+    explicit = SeriesPath("tbl", (None, "sensorA"), "temperature")
+    flat = SeriesPath(["tbl", None, "sensorA", "temperature"])  # [table, *tags, field]
+    from_string = SeriesPath("tbl.\\N.sensorA.temperature")
+
+    for sp in (explicit, flat, from_string):
+        assert sp == "tbl.\\N.sensorA.temperature"
+        assert sp.table == "tbl"
+        assert sp.tags == (None, "sensorA")
+        assert sp.field == "temperature"
+
+    # A no-tag table is just [table, field].
+    assert SeriesPath(["tbl", "f"]).tags == ()
+    with pytest.raises(ValueError):
+        SeriesPath(["tbl"])
+
+
+def test_split_logical_series_path_null_marker_only_whole_component():
+    from tsfile.dataset.metadata import split_logical_series_path
+
+    # \N is a null tag only as a complete component.
+    assert split_logical_series_path("a.\\N.b.f") == ["a", None, "b", "f"]
+    assert split_logical_series_path("a.\\N.\\N.f") == ["a", None, None, "f"]
+    # A real value "\N" (doubled backslash) stays a string, never null.
+    assert split_logical_series_path("a.\\\\N.b.f") == ["a", "\\N", "b", "f"]
+
+    # \N mixed with other characters is invalid input and fails fast, instead of
+    # being silently parsed as a null tag (which could resolve the wrong device).
+    for bad in (
+        "tbl.a\\N.b.f",  # characters before the marker
+        "tbl.\\Nfoo.x.f",  # characters after the marker
+        "a.\\N\\N.f",  # two markers in one component
+        "a.\\N\\.b.f",  # an escape after the marker
+    ):
+        with pytest.raises(ValueError, match="Invalid series path"):
+            split_logical_series_path(bad)
+
+
+def test_dataset_null_tag_positions_and_string_null_are_distinct(tmp_path):
+    path = tmp_path / "null_positions.tsfile"
+    schema = TableSchema(
+        "a",
+        [
+            ColumnSchema("t1", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("t2", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("t3", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("v", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    rows = {
+        (None, "b", "c"): 10.0,  # null at position 1
+        ("b", None, "c"): 20.0,  # null at position 2 (distinct from the above)
+        ("null", "b", "c"): 30.0,  # the literal string "null", not a real null
+    }
+    with TsFileTableWriter(str(path), schema) as writer:
+        for tags, base in rows.items():
+            writer.write_dataframe(
+                pd.DataFrame(
+                    {
+                        "time": [0, 1],
+                        "t1": [tags[0], tags[0]],
+                        "t2": [tags[1], tags[1]],
+                        "t3": [tags[2], tags[2]],
+                        "v": [base, base + 1],
+                    }
+                )
+            )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        series = tsdf.list_timeseries()
+        # Nothing collapses: three physically distinct devices stay distinct.
+        assert len(series) == 3
+        by_tags = {sp.tags: sp for sp in series}
+        assert (None, "b", "c") in by_tags  # null position 1
+        assert ("b", None, "c") in by_tags  # null position 2
+        assert ("null", "b", "c") in by_tags  # the string "null"
+
+        # Each device reads its own data via SeriesPath and via the \N string form.
+        for tags, base in rows.items():
+            sp = by_tags[tags]
+            np.testing.assert_array_equal(
+                tsdf.loc[:, sp].values.ravel(), np.array([base, base + 1])
+            )
+            np.testing.assert_array_equal(
+                tsdf.loc[:, str(sp)].values.ravel(), np.array([base, base + 1])
+            )
+
+        # A hand-built SeriesPath resolves to the same null-tag device.
+        hand = SeriesPath("a", (None, "b", "c"), "v")
+        np.testing.assert_array_equal(
+            tsdf.loc[:, hand].values.ravel(), np.array([10.0, 11.0])
+        )
 
 
 def test_dataset_loc_supports_single_timestamp_and_mixed_series_specifiers(tmp_path):
@@ -814,8 +998,43 @@ def test_series_path_resolution_uses_named_tags_for_sparse_non_prefix_values():
     }
 
     series_path = build_series_path(catalog, device_id, 0)
-    assert series_path == "weather.device_a.temperature"
+    # The leading null tag is preserved at its position via the \N marker.
+    assert series_path == "weather.\\N.device_a.temperature"
+    assert series_path.tags == (None, "device_a")
     assert resolve_series_path(catalog, series_path) == (table_id, device_id, 0)
+    # The plain string form (with \N) round-trips to the same device.
+    assert resolve_series_path(catalog, str(series_path)) == (table_id, device_id, 0)
+
+
+def test_resolve_series_path_rejects_wrong_tag_count():
+    catalog = MetadataCatalog()
+    table_id = catalog.add_table(
+        "weather",
+        ("city", "device"),
+        (TSDataType.STRING, TSDataType.STRING),
+        ("temperature",),
+    )
+    device_id = catalog.add_device(table_id, ("beijing", "d1"), 0, 1)
+    catalog.series_stats_by_ref[(device_id, 0)] = {
+        "length": 1,
+        "min_time": 0,
+        "max_time": 0,
+        "timeline_length": 1,
+        "timeline_min_time": 0,
+        "timeline_max_time": 0,
+    }
+
+    assert resolve_series_path(catalog, "weather.beijing.d1.temperature") == (
+        table_id,
+        device_id,
+        0,
+    )
+    # An extra tag must NOT be silently truncated into a match.
+    with pytest.raises(ValueError, match="Series not found"):
+        resolve_series_path(catalog, "weather.beijing.d1.extra.temperature")
+    # Too few tags has no matching device either.
+    with pytest.raises(ValueError, match="Series not found"):
+        resolve_series_path(catalog, "weather.beijing.temperature")
 
 
 def test_reader_metadata_tag_values_trim_trailing_none():
@@ -826,24 +1045,60 @@ def test_reader_metadata_tag_values_trim_trailing_none():
     assert TsFileSeriesReader._metadata_tag_values(_Group(), 1) == ("device_a",)
 
 
-def test_exact_tag_filter_rejects_none_tag_values():
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        _build_exact_tag_filter({"device": None})
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        _build_exact_tag_filter({"city": "beijing", "device": None})
+def test_exact_tag_filter_uses_is_null_for_none_tag_values():
+    from tsfile.tag_filter import AndTagFilter, ComparisonTagFilter
+
+    only_null = _build_exact_tag_filter({"device": None})
+    assert isinstance(only_null, ComparisonTagFilter)
+    assert only_null.op == ComparisonTagFilter.IS_NULL
+    assert only_null.column_name == "device"
+
+    mixed = _build_exact_tag_filter({"city": "beijing", "device": None})
+    assert isinstance(mixed, AndTagFilter)
+    assert isinstance(mixed.left, ComparisonTagFilter)
+    assert mixed.left.op == ComparisonTagFilter.EQ
+    assert mixed.left.value == "beijing"
+    assert isinstance(mixed.right, ComparisonTagFilter)
+    assert mixed.right.op == ComparisonTagFilter.IS_NULL
+    assert mixed.right.column_name == "device"
 
 
-def test_reader_exact_match_with_none_tag_values_fails_fast():
+def _tag_filter_has_is_null(tag_filter) -> bool:
+    from tsfile.tag_filter import ComparisonTagFilter
+
+    if isinstance(tag_filter, ComparisonTagFilter):
+        return tag_filter.op == ComparisonTagFilter.IS_NULL
+    for attr in ("left", "right", "filter"):
+        child = getattr(tag_filter, attr, None)
+        if child is not None and _tag_filter_has_is_null(child):
+            return True
+    return False
+
+
+def test_reader_exact_match_with_none_tag_values_issues_is_null_query():
+    captured = {}
+
+    class _EmptyResultSet:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read_arrow_batch(self):
+            return None
+
+        def next(self):
+            return False
+
     class _FakeNativeReader:
         def query_table(self, *args, **kwargs):
-            raise AssertionError(
-                "query should not be issued when None-tag exact matching is unsupported"
-            )
+            captured["table"] = kwargs.get("tag_filter")
+            return _EmptyResultSet()
 
         def query_table_by_row(self, *args, **kwargs):
-            raise AssertionError(
-                "row query should not be issued when None-tag exact matching is unsupported"
-            )
+            captured["row"] = kwargs.get("tag_filter")
+            return _EmptyResultSet()
 
     reader = object.__new__(TsFileSeriesReader)
     reader._reader = _FakeNativeReader()
@@ -864,10 +1119,13 @@ def test_reader_exact_match_with_none_tag_values_fails_fast():
         "timeline_max_time": 1,
     }
 
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        reader.read_series_by_ref(device_id, 0, 0, 1)
-    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
-        reader.read_series_by_row(device_id, 0, 0, 2)
+    # Both read paths now issue a native query that encodes the null tag as
+    # IS NULL instead of failing fast.
+    reader.read_series_by_ref(device_id, 0, 0, 1)
+    reader.read_series_by_row(device_id, 0, 0, 2)
+
+    assert _tag_filter_has_is_null(captured["table"])
+    assert _tag_filter_has_is_null(captured["row"])
 
 
 def test_dataframe_resolves_named_sparse_tag_series_path():
@@ -882,17 +1140,15 @@ def test_dataframe_resolves_named_sparse_tag_series_path():
     device_key = ("weather", (None, "device_a"))
     tsdf._index.device_order = [device_key]
     tsdf._index.device_index_by_key = {device_key: 0}
-    tsdf._index.tables_with_sparse_tag_values = {"weather"}
-    tsdf._index.sparse_device_indices_by_compressed_path = {
-        ("weather", ("device_a",)): [0]
-    }
     tsdf._index.device_refs = [[]]
     tsdf._index.series_refs_ordered = [(0, 0)]
     tsdf._index.series_ref_set = {(0, 0)}
     tsdf._index.series_ref_map = {(0, 0): []}
 
-    assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
-    assert tsdf._resolve_series_name("weather.device_a.temperature") == (0, 0)
+    assert tsdf.list_timeseries() == ["weather.\\N.device_a.temperature"]
+    # Resolvable by the \N string form and by the returned SeriesPath itself.
+    assert tsdf._resolve_series_name("weather.\\N.device_a.temperature") == (0, 0)
+    assert tsdf._resolve_series_name(tsdf.list_timeseries()[0]) == (0, 0)
 
 
 def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
@@ -912,17 +1168,17 @@ def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
         ("weather", (None, "device_a")): 0,
         ("weather", ("beijing", "device_b")): 1,
     }
-    tsdf._index.tables_with_sparse_tag_values = {"weather"}
-    tsdf._index.sparse_device_indices_by_compressed_path = {
-        ("weather", ("device_a",)): [0],
-        ("weather", ("beijing", "device_b")): [1],
-    }
     tsdf._index.device_refs = [[], []]
     tsdf._index.series_refs_ordered = [(0, 0), (1, 0)]
     tsdf._index.series_ref_set = {(0, 0), (1, 0)}
     tsdf._index.series_ref_map = {(0, 0): [], (1, 0): []}
 
-    assert tsdf.list_timeseries("weather.device_a") == ["weather.device_a.temperature"]
+    # Prefix matching is position-aware: "weather.\N" selects the null-city
+    # device, "weather.beijing" selects the fully specified one.
+    assert tsdf.list_timeseries("weather.\\N") == ["weather.\\N.device_a.temperature"]
+    assert tsdf.list_timeseries("weather.beijing") == [
+        "weather.beijing.device_b.temperature"
+    ]
 
 
 def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
@@ -943,7 +1199,7 @@ def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
         assert tsdf.list_timeseries("pvf") == []
 
 
-def test_series_path_resolution_reports_ambiguous_sparse_path():
+def test_series_path_resolution_distinguishes_null_position():
     catalog = MetadataCatalog()
     table_id = catalog.add_table(
         "weather",
@@ -951,8 +1207,8 @@ def test_series_path_resolution_reports_ambiguous_sparse_path():
         (TSDataType.STRING, TSDataType.STRING),
         ("temperature",),
     )
-    first_id = catalog.add_device(table_id, ("beijing", None), 0, 1)
-    second_id = catalog.add_device(table_id, (None, "beijing"), 0, 1)
+    first_id = catalog.add_device(table_id, ("beijing", None), 0, 1)  # device IS NULL
+    second_id = catalog.add_device(table_id, (None, "beijing"), 0, 1)  # city IS NULL
     for device_id in (first_id, second_id):
         catalog.series_stats_by_ref[(device_id, 0)] = {
             "length": 1,
@@ -963,10 +1219,17 @@ def test_series_path_resolution_reports_ambiguous_sparse_path():
             "timeline_max_time": 0,
         }
 
-    assert build_series_path(catalog, first_id, 0) == "weather.beijing.temperature"
-    assert build_series_path(catalog, second_id, 0) == "weather.beijing.temperature"
-    with pytest.raises(ValueError, match="Ambiguous series path"):
-        resolve_series_path(catalog, "weather.beijing.temperature")
+    # Null position is preserved, so these two devices get distinct paths
+    # (previously both compressed to "weather.beijing.temperature" -> ambiguous).
+    first_path = build_series_path(catalog, first_id, 0)
+    second_path = build_series_path(catalog, second_id, 0)
+    assert first_path == "weather.beijing.temperature"
+    assert second_path == "weather.\\N.beijing.temperature"
+    assert first_path != second_path
+
+    # Each resolves unambiguously back to its own device.
+    assert resolve_series_path(catalog, first_path) == (table_id, first_id, 0)
+    assert resolve_series_path(catalog, second_path) == (table_id, second_id, 0)
 
 
 def test_reader_show_progress_reports_start_immediately(tmp_path, capsys):

@@ -19,6 +19,7 @@
 """Dataset-style TsFile accessors."""
 
 from .dataframe import TsFileDataFrame
+from .metadata import SeriesPath
 from .timeseries import AlignedTimeseries, Timeseries
 
-__all__ = ["TsFileDataFrame", "Timeseries", "AlignedTimeseries"]
+__all__ = ["TsFileDataFrame", "Timeseries", "AlignedTimeseries", "SeriesPath"]

@@ -25,7 +25,7 @@ from typing import Dict, Iterator, List, Tuple
 import numpy as np
 
 from ..constants import ColumnCategory, TSDataType
-from ..tag_filter import tag_eq
+from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from .metadata import (
     MetadataCatalog,
@@ -48,21 +48,34 @@ def _to_python_scalar(value):
     return value.item() if hasattr(value, "item") else value
 
 
-def _ensure_supported_exact_tag_values(tag_values: Dict[str, object]) -> None:
-    if any(tag_value is None for tag_value in tag_values.values()):
-        raise NotImplementedError(
-            "Exact tag matching with None tag values is not supported yet. "
-            "Native tag filter support for IS NULL / IS NOT NULL is required."
-        )
-
-
 def _build_exact_tag_filter(tag_values: Dict[str, object]):
-    _ensure_supported_exact_tag_values(tag_values)
+    """Build a conjunctive filter that isolates exactly one device.
+
+    A ``None`` tag value matches the device's null/missing tag via IS NULL so
+    that devices sharing the same non-null tags (for example a trailing-null
+    device versus a fully specified one) are not conflated.
+    """
     tag_filter = None
     for tag_column, tag_value in tag_values.items():
-        expr = tag_eq(tag_column, str(tag_value))
+        if tag_value is None:
+            expr = tag_is_null(tag_column)
+        else:
+            expr = tag_eq(tag_column, str(tag_value))
         tag_filter = expr if tag_filter is None else tag_filter & expr
     return tag_filter
+
+
+def _device_exact_tag_values(table_entry, device_entry) -> Dict[str, object]:
+    """Map every declared tag column to this device's value (None when null/missing).
+
+    ``device_entry.tag_values`` drops trailing null tags, so columns beyond its
+    length are treated as null rather than omitted from the exact-match filter.
+    """
+    device_tag_values = device_entry.tag_values
+    return {
+        column: device_tag_values[idx] if idx < len(device_tag_values) else None
+        for idx, column in enumerate(table_entry.tag_columns)
+    }
 
 
 class TsFileSeriesReader:
@@ -362,7 +375,7 @@ class TsFileSeriesReader:
         table_entry, device_entry, field_name = self._resolve_series_ref(
             device_id, field_idx
         )
-        tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
+        tag_values = _device_exact_tag_values(table_entry, device_entry)
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
         # Some native row-query paths stop at an internal block boundary even
@@ -416,7 +429,7 @@ class TsFileSeriesReader:
             table_entry.table_name,
             requested_field_columns,
             table_entry.tag_columns,
-            dict(zip(table_entry.tag_columns, device_entry.tag_values)),
+            _device_exact_tag_values(table_entry, device_entry),
             start_time,
             end_time,
         )
