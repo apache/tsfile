@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# tsfile-viewer
+# TsFile-Viewer
 
 [Apache TsFile Viewer](https://github.com/apache/tsfile-viewer) 是一个基于 Web 的应用，
 用于在浏览器中浏览与分析 TsFile 数据。它由一个 Spring Boot 后端（通过 Apache TsFile 库读取

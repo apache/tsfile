@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# tsfile-viewer
+# TsFile-Viewer
 
 [Apache TsFile Viewer](https://github.com/apache/tsfile-viewer) is a web-based
 application for browsing and analyzing TsFile data in your browser. It pairs a

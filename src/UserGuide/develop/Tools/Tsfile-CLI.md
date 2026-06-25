@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# tsfile-cli
+# TsFile-CLI
 
 `tsfile-cli` is a single, pipe-friendly C++ command-line tool for inspecting
 **and** importing Apache TsFile (`.tsfile`) files from the shell. Read commands print data to **stdout** and

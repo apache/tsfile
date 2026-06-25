@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# tsfile-cli
+# TsFile-CLI
 
 `tsfile-cli` 是一个单一、对管道友好的 C++ 命令行工具，用于在 shell 中检视 **并** 导入 Apache
 TsFile（`.tsfile`）文件。读取类命令将数据打印到
