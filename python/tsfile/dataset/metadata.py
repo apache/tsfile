@@ -147,11 +147,36 @@ class SeriesPath(str):
 
     Trailing null tags are dropped (mirroring the device-id normalization), so
     ``tags`` keeps every interior null but not absent trailing ones.
+
+    Construct it from explicit parts or from a single flat component sequence
+    (the same shape :func:`split_logical_series_path` returns)::
+
+        SeriesPath("table", (None, "sensorA"), "temperature")
+        SeriesPath(["table", None, "sensorA", "temperature"])  # [table, *tags, field]
+        SeriesPath("table.\\N.sensorA.temperature")            # a path string
     """
 
     __slots__ = ("_table", "_tags", "_field")
 
-    def __new__(cls, table: str, tags: Iterable[Any], field: str) -> "SeriesPath":
+    def __new__(cls, *args: Any) -> "SeriesPath":
+        if len(args) == 3:
+            table, tags, field = args
+        elif len(args) == 1:
+            components = args[0]
+            # A bare string is a path; otherwise it is a [table, *tags, field]
+            # sequence (None entries are null tags).
+            if isinstance(components, str):
+                components = split_logical_series_path(components)
+            components = list(components)
+            if len(components) < 2:
+                raise ValueError(
+                    f"SeriesPath needs at least [table, field]; got {components!r}"
+                )
+            table, tags, field = components[0], components[1:-1], components[-1]
+        else:
+            raise TypeError(
+                "SeriesPath(table, tags, field) or " "SeriesPath([table, *tags, field])"
+            )
         normalized = _normalize_tag_values(tags)
         obj = str.__new__(cls, _join_series_path(table, normalized, field))
         obj._table = table
@@ -322,9 +347,21 @@ def resolve_series_path(
         raise ValueError(f"Series not found: {series_path}") from exc
 
     if coerce:
+        # Coerce each part by its column's type. Parts beyond the declared tag
+        # columns are kept as-is (rather than truncated) so an over-specified
+        # path fails the lookup instead of silently matching a shorter device.
+        tag_types = table_entry.tag_types
         tag_values = _normalize_tag_values(
-            None if raw_value is None else _coerce_path_component(raw_value, tag_type)
-            for raw_value, tag_type in zip(tag_parts, table_entry.tag_types)
+            (
+                None
+                if raw_value is None
+                else (
+                    _coerce_path_component(raw_value, tag_types[idx])
+                    if idx < len(tag_types)
+                    else raw_value
+                )
+            )
+            for idx, raw_value in enumerate(tag_parts)
         )
     else:
         tag_values = _normalize_tag_values(tag_parts)

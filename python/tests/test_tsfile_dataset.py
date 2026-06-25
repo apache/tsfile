@@ -380,6 +380,23 @@ def test_series_path_object_roundtrip_and_escaping():
     assert str(SeriesPath("tbl", ("a", None), "f")) == "tbl.a.f"
 
 
+def test_series_path_construction_forms_are_equivalent():
+    explicit = SeriesPath("tbl", (None, "sensorA"), "temperature")
+    flat = SeriesPath(["tbl", None, "sensorA", "temperature"])  # [table, *tags, field]
+    from_string = SeriesPath("tbl.\\N.sensorA.temperature")
+
+    for sp in (explicit, flat, from_string):
+        assert sp == "tbl.\\N.sensorA.temperature"
+        assert sp.table == "tbl"
+        assert sp.tags == (None, "sensorA")
+        assert sp.field == "temperature"
+
+    # A no-tag table is just [table, field].
+    assert SeriesPath(["tbl", "f"]).tags == ()
+    with pytest.raises(ValueError):
+        SeriesPath(["tbl"])
+
+
 def test_dataset_null_tag_positions_and_string_null_are_distinct(tmp_path):
     path = tmp_path / "null_positions.tsfile"
     schema = TableSchema(
@@ -966,6 +983,37 @@ def test_series_path_resolution_uses_named_tags_for_sparse_non_prefix_values():
     assert resolve_series_path(catalog, series_path) == (table_id, device_id, 0)
     # The plain string form (with \N) round-trips to the same device.
     assert resolve_series_path(catalog, str(series_path)) == (table_id, device_id, 0)
+
+
+def test_resolve_series_path_rejects_wrong_tag_count():
+    catalog = MetadataCatalog()
+    table_id = catalog.add_table(
+        "weather",
+        ("city", "device"),
+        (TSDataType.STRING, TSDataType.STRING),
+        ("temperature",),
+    )
+    device_id = catalog.add_device(table_id, ("beijing", "d1"), 0, 1)
+    catalog.series_stats_by_ref[(device_id, 0)] = {
+        "length": 1,
+        "min_time": 0,
+        "max_time": 0,
+        "timeline_length": 1,
+        "timeline_min_time": 0,
+        "timeline_max_time": 0,
+    }
+
+    assert resolve_series_path(catalog, "weather.beijing.d1.temperature") == (
+        table_id,
+        device_id,
+        0,
+    )
+    # An extra tag must NOT be silently truncated into a match.
+    with pytest.raises(ValueError, match="Series not found"):
+        resolve_series_path(catalog, "weather.beijing.d1.extra.temperature")
+    # Too few tags has no matching device either.
+    with pytest.raises(ValueError, match="Series not found"):
+        resolve_series_path(catalog, "weather.beijing.temperature")
 
 
 def test_reader_metadata_tag_values_trim_trailing_none():
