@@ -73,10 +73,6 @@ class MetadataCatalog:
     device_entries: List[DeviceEntry] = field(default_factory=list)
     table_id_by_name: Dict[str, int] = field(default_factory=dict)
     device_id_by_key: Dict[Tuple[int, tuple], int] = field(default_factory=dict)
-    tables_with_sparse_tag_values: set = field(default_factory=set)
-    sparse_device_ids_by_compressed_path: Dict[
-        Tuple[int, Tuple[str, ...]], List[int]
-    ] = field(default_factory=dict)
     series_stats_by_ref: Dict[Tuple[int, int], Dict[str, int]] = field(
         default_factory=dict
     )
@@ -122,15 +118,6 @@ class MetadataCatalog:
             )
         )
         self.device_id_by_key[key] = device_id
-        if _has_sparse_tag_holes(normalized_tag_values):
-            self.tables_with_sparse_tag_values.add(table_id)
-            compressed_key = (
-                table_id,
-                _compressed_tag_path_components(normalized_tag_values),
-            )
-            self.sparse_device_ids_by_compressed_path.setdefault(
-                compressed_key, []
-            ).append(device_id)
         return device_id
 
     @property
@@ -141,12 +128,74 @@ class MetadataCatalog:
         )
 
 
+# Path marker for a null tag value. A real tag value can never escape to this
+# sequence because escaping always doubles a backslash, so it unambiguously
+# distinguishes a null tag from the literal string "null".
+_NULL_TOKEN = _PATH_ESCAPE + "N"
+
+
+class SeriesPath(str):
+    """Logical identifier of one time series: table + ordered tag values + field.
+
+    ``SeriesPath`` subclasses ``str``; its string value is the escaped path form
+    (with ``\\N`` marking a null tag), so it can be used anywhere a path string
+    is accepted. It additionally exposes the structured ``table`` / ``tags`` /
+    ``field`` components, where a ``None`` entry in ``tags`` means the tag is
+    null -- unambiguously distinct from the literal string value ``"null"``.
+
+    Trailing null tags are dropped (mirroring the device-id normalization), so
+    ``tags`` keeps every interior null but not absent trailing ones.
+    """
+
+    __slots__ = ("_table", "_tags", "_field")
+
+    def __new__(cls, table: str, tags: Iterable[Any], field: str) -> "SeriesPath":
+        normalized = _normalize_tag_values(tags)
+        obj = str.__new__(cls, _join_series_path(table, normalized, field))
+        obj._table = table
+        obj._tags = normalized
+        obj._field = field
+        return obj
+
+    @property
+    def table(self) -> str:
+        return self._table
+
+    @property
+    def tags(self) -> Tuple[Any, ...]:
+        return self._tags
+
+    @property
+    def field(self) -> str:
+        return self._field
+
+
 def _escape_path_component(value: Any) -> str:
     return (
         str(value)
         .replace(_PATH_ESCAPE, _PATH_ESCAPE * 2)
         .replace(_PATH_SEPARATOR, _PATH_ESCAPE + _PATH_SEPARATOR)
     )
+
+
+def _render_path_component(value: Any) -> str:
+    """Render one tag component: ``None`` -> the null marker, else escaped value."""
+    return _NULL_TOKEN if value is None else _escape_path_component(value)
+
+
+def _unescape_path_component(raw: str) -> str:
+    out: List[str] = []
+    escaping = False
+    for char in raw:
+        if escaping:
+            out.append(char)
+            escaping = False
+            continue
+        if char == _PATH_ESCAPE:
+            escaping = True
+            continue
+        out.append(char)
+    return "".join(out)
 
 
 def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
@@ -156,17 +205,10 @@ def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
     return tuple(values)
 
 
-def _compressed_tag_path_components(tag_values: Iterable[Any]) -> Tuple[str, ...]:
-    return tuple(str(value) for value in tag_values if value is not None)
-
-
-def _has_sparse_tag_holes(tag_values: Iterable[Any]) -> bool:
-    return any(value is None for value in tag_values)
-
-
-def split_logical_series_path(series_path: str) -> List[str]:
-    parts = []
-    current = []
+def split_logical_series_path(series_path: str) -> List[Any]:
+    """Split a path into components; a ``\\N`` component decodes to ``None``."""
+    raw_parts: List[str] = []
+    current: List[str] = []
     escaping = False
 
     for char in series_path:
@@ -176,9 +218,10 @@ def split_logical_series_path(series_path: str) -> List[str]:
             continue
         if char == _PATH_ESCAPE:
             escaping = True
+            current.append(char)  # keep the escape char in the raw component
             continue
         if char == _PATH_SEPARATOR:
-            parts.append("".join(current))
+            raw_parts.append("".join(current))
             current = []
             continue
         current.append(char)
@@ -186,8 +229,20 @@ def split_logical_series_path(series_path: str) -> List[str]:
     if escaping:
         raise ValueError(f"Invalid series path: {series_path}")
 
-    parts.append("".join(current))
-    return parts
+    raw_parts.append("".join(current))
+    return [
+        None if raw == _NULL_TOKEN else _unescape_path_component(raw)
+        for raw in raw_parts
+    ]
+
+
+def _join_series_path(
+    table_name: str, tag_values: Iterable[Any], field_name: str
+) -> str:
+    parts = [_escape_path_component(table_name)]
+    parts.extend(_render_path_component(value) for value in tag_values)
+    parts.append(_escape_path_component(field_name))
+    return _PATH_SEPARATOR.join(parts)
 
 
 def build_logical_series_path(
@@ -195,13 +250,8 @@ def build_logical_series_path(
     tag_values: Iterable[Any],
     field_name: str,
     tag_columns: Iterable[str] = (),
-) -> str:
-    components = build_logical_series_components(
-        table_name, tag_values, field_name, tag_columns
-    )
-    return _PATH_SEPARATOR.join(
-        _escape_path_component(component) for component in components
-    )
+) -> SeriesPath:
+    return SeriesPath(table_name, tag_values, field_name)
 
 
 def build_logical_series_components(
@@ -209,9 +259,16 @@ def build_logical_series_components(
     tag_values: Iterable[Any],
     field_name: str,
     _tag_columns: Iterable[str] = (),
-) -> List[str]:
-    components = [table_name, *_compressed_tag_path_components(tag_values), field_name]
-    return [str(component) for component in components]
+) -> List[Any]:
+    """Position-preserving components for prefix matching; ``None`` marks a null tag."""
+    return [
+        str(table_name),
+        *(
+            None if value is None else str(value)
+            for value in _normalize_tag_values(tag_values)
+        ),
+        str(field_name),
+    ]
 
 
 def build_series_path(catalog: MetadataCatalog, device_id: int, field_idx: int) -> str:
@@ -242,60 +299,48 @@ def iter_series_paths(catalog: MetadataCatalog) -> Iterator[str]:
 
 
 def resolve_series_path(
-    catalog: MetadataCatalog, series_path: str
+    catalog: MetadataCatalog, series_path: Any
 ) -> Tuple[int, int, int]:
-    """Resolve an external path to ``(table_id, device_id, field_idx)``."""
-    parts = split_logical_series_path(series_path)
-    if len(parts) < 2:
-        raise ValueError(f"Invalid series path: {series_path}")
+    """Resolve a path (``str`` with ``\\N``, or ``SeriesPath``) to refs.
 
-    table_name = parts[0]
+    Returns ``(table_id, device_id, field_idx)``. Every device maps to a unique
+    position-preserving path, so resolution is a single direct lookup.
+    """
+    if isinstance(series_path, SeriesPath):
+        table_name, tag_parts, field_name = (
+            series_path.table,
+            list(series_path.tags),
+            series_path.field,
+        )
+        coerce = False
+    else:
+        parts = split_logical_series_path(series_path)
+        if len(parts) < 2:
+            raise ValueError(f"Invalid series path: {series_path}")
+        table_name, field_name, tag_parts = parts[0], parts[-1], parts[1:-1]
+        coerce = True
+
     if table_name not in catalog.table_id_by_name:
         raise ValueError(f"Series not found: {series_path}")
-
     table_id = catalog.table_id_by_name[table_name]
     table_entry = catalog.table_entries[table_id]
-    field_name = parts[-1]
     try:
         field_idx = table_entry.get_field_index(field_name)
     except ValueError as exc:
         raise ValueError(f"Series not found: {series_path}") from exc
 
-    tag_parts = parts[1:-1]
-    direct_device_id = None
-    direct_tag_values = _normalize_tag_values(
-        _coerce_path_component(raw_value, tag_type)
-        for raw_value, tag_type in zip(tag_parts, table_entry.tag_types)
-    )
-    direct_key = (table_id, direct_tag_values)
-    if direct_key in catalog.device_id_by_key:
-        direct_device_id = catalog.device_id_by_key[direct_key]
+    if coerce:
+        tag_values = _normalize_tag_values(
+            None if raw_value is None else _coerce_path_component(raw_value, tag_type)
+            for raw_value, tag_type in zip(tag_parts, table_entry.tag_types)
+        )
+    else:
+        tag_values = _normalize_tag_values(tag_parts)
 
-    if table_id not in catalog.tables_with_sparse_tag_values:
-        if direct_device_id is None:
-            raise ValueError(f"Series not found: {series_path}")
-        return table_id, direct_device_id, field_idx
-
-    compressed_key = (table_id, tuple(tag_parts))
-    sparse_device_ids = catalog.sparse_device_ids_by_compressed_path.get(
-        compressed_key, []
-    )
-    candidate_ids = []
-    seen_ids = set()
-    if direct_device_id is not None:
-        candidate_ids.append(direct_device_id)
-        seen_ids.add(direct_device_id)
-    for device_id in sparse_device_ids:
-        if device_id in seen_ids:
-            continue
-        candidate_ids.append(device_id)
-        seen_ids.add(device_id)
-    if not candidate_ids:
+    device_id = catalog.device_id_by_key.get((table_id, tag_values))
+    if device_id is None:
         raise ValueError(f"Series not found: {series_path}")
-    if len(candidate_ids) > 1:
-        raise ValueError(f"Ambiguous series path: {series_path}")
-
-    return table_id, candidate_ids[0], field_idx
+    return table_id, device_id, field_idx
 
 
 def _coerce_path_component(value: str, data_type: TSDataType) -> Any:

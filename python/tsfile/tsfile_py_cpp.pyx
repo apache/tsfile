@@ -1056,18 +1056,11 @@ cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):
 cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap):
     cdef dict out = {}
     cdef uint32_t di, ti
-    cdef char* p
     cdef char* tnp
-    cdef object key
     cdef object table_py
     cdef tuple segs_py
     cdef list series
     for di in range(mmap.device_count):
-        p = mmap.entries[di].device.path
-        if p == NULL:
-            key = None
-        else:
-            key = p.decode('utf-8')
         tnp = mmap.entries[di].device.table_name
         if tnp == NULL:
             table_py = None
@@ -1081,7 +1074,10 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
             series.append(
                 timeseries_metadata_c_to_py(
                     &mmap.entries[di].timeseries[ti]))
-        out[key] = DeviceTimeseriesMetadataGroupPy(
+        # Key by the full segments tuple, not the device path string: the path
+        # renders a null tag as "null", so keying by it would collide a real
+        # null tag with the literal string "null" and silently drop one device.
+        out[segs_py] = DeviceTimeseriesMetadataGroupPy(
             table_py, segs_py, series)
     return out
 

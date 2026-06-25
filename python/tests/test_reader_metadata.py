@@ -63,7 +63,7 @@ def test_get_all_devices_segments():
         assert d0.table_name == "root.sg"
         assert d0.segments == ("root.sg", "py_details")
 
-        grp = reader.get_timeseries_metadata(None)[device]
+        grp = reader.get_timeseries_metadata(None)[d0.segments]
         assert grp.table_name == "root.sg"
         assert grp.segments == ("root.sg", "py_details")
         assert len(grp.timeseries) == 1
@@ -103,8 +103,8 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
         assert devices[0].path == device
 
         meta_all = reader.get_timeseries_metadata(None)
-        assert list(meta_all.keys()) == [device]
-        grp = meta_all[device]
+        assert list(meta_all.keys()) == [devices[0].segments]
+        grp = meta_all[devices[0].segments]
         assert grp.table_name == "root.sg"
         assert grp.segments == ("root.sg", "py_meta")
         series = grp.timeseries
@@ -127,11 +127,11 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
         assert reader.get_timeseries_metadata([]) == {}
 
         sub = reader.get_timeseries_metadata([DeviceID(device, None, ())])
-        assert device in sub
-        assert len(sub[device].timeseries) == 1
+        assert devices[0].segments in sub
+        assert len(sub[devices[0].segments].timeseries) == 1
 
         sub_str = reader.get_timeseries_metadata([device])
-        assert device in sub_str
+        assert devices[0].segments in sub_str
     finally:
         reader.close()
         try:
@@ -163,7 +163,7 @@ def test_get_timeseries_metadata_boolean_statistic():
     reader = TsFileReader(path)
     try:
         meta_all = reader.get_timeseries_metadata(None)
-        st = meta_all[device].timeseries[0].statistic
+        st = meta_all[("root.sg", "py_bool")].timeseries[0].statistic
         assert isinstance(st, BoolTimeseriesStatistic)
         assert st.has_statistic
         assert st.sum == pytest.approx(2.0)
@@ -200,7 +200,7 @@ def test_get_timeseries_metadata_string_statistic():
     reader = TsFileReader(path)
     try:
         meta_all = reader.get_timeseries_metadata(None)
-        m = meta_all[device].timeseries[0]
+        m = meta_all[("root.sg", "py_str")].timeseries[0]
         assert m.measurement_name == "m_str"
         assert m.data_type == TSDataType.STRING
         st = m.statistic

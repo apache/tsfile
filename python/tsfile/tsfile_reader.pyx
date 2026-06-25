@@ -497,10 +497,14 @@ cdef class TsFileReaderPy:
 
     def get_timeseries_metadata(
             self, device_ids: Optional[List] = None
-    ) -> Dict[str, DeviceTimeseriesMetadataGroup]:
+    ) -> Dict[tuple, DeviceTimeseriesMetadataGroup]:
         """
-        Return map device path -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
+        Return map device-segments-tuple -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
         (table name, segments, and list of :class:`tsfile.schema.TimeseriesMetadata`).
+
+        The key is the device's full segment tuple (a null tag is ``None``), not
+        the dotted path string, so a real null tag and the literal string
+        ``"null"`` map to distinct entries instead of colliding.
 
         ``device_ids is None``: all devices. ``device_ids == []``: empty map.
         Non-empty list restricts to those devices (only existing devices appear).

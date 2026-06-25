@@ -28,7 +28,7 @@ from tsfile import (
     TableSchema,
     TsFileTableWriter,
 )
-from tsfile import AlignedTimeseries, Timeseries, TsFileDataFrame
+from tsfile import AlignedTimeseries, SeriesPath, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
 from tsfile.dataset.metadata import (
     MetadataCatalog,
@@ -334,12 +334,17 @@ def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
         series = tsdf.list_timeseries()
-        # Null tags are dropped from the compressed logical path.
+        # Null tags keep their position via the \N marker; trailing nulls drop.
         assert set(series) == {
-            "sensors.alpha.temperature",
+            "sensors.\\N.alpha.temperature",
             "sensors.north.temperature",
             "sensors.north.beta.temperature",
         }
+        # list_timeseries returns SeriesPath objects carrying structured tags.
+        by_tags = {sp.tags: sp for sp in series}
+        assert (None, "alpha") in by_tags
+        assert ("north",) in by_tags
+        assert ("north", "beta") in by_tags
 
         ordered = sorted(series)
         aligned = tsdf.loc[:, ordered]
@@ -347,7 +352,7 @@ def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
 
         # Non-trailing null device reads its own data (previously crashed / NaN).
         np.testing.assert_array_equal(
-            by_name["sensors.alpha.temperature"], np.array([10.0, 11.0, 12.0])
+            by_name["sensors.\\N.alpha.temperature"], np.array([10.0, 11.0, 12.0])
         )
         # Trailing-null device must NOT merge with the fully specified north.beta.
         np.testing.assert_array_equal(
@@ -355,6 +360,79 @@ def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
         )
         np.testing.assert_array_equal(
             by_name["sensors.north.beta.temperature"], np.array([30.0, 31.0, 32.0])
+        )
+
+
+def test_series_path_object_roundtrip_and_escaping():
+    from tsfile.dataset.metadata import split_logical_series_path
+
+    sp = SeriesPath("tbl", ("a.b", None, "x"), "f")
+    assert isinstance(sp, str)
+    assert sp.table == "tbl"
+    assert sp.tags == ("a.b", None, "x")
+    assert sp.field == "f"
+    # A dot in a value is escaped; a null tag uses the collision-proof \N marker.
+    assert str(sp) == "tbl.a\\.b.\\N.x.f"
+    # Splitting round-trips: the escaped dot stays in the value, \N decodes to None.
+    assert split_logical_series_path(str(sp)) == ["tbl", "a.b", None, "x", "f"]
+    # Trailing nulls are dropped (mirroring device-id normalization).
+    assert SeriesPath("tbl", ("a", None), "f").tags == ("a",)
+    assert str(SeriesPath("tbl", ("a", None), "f")) == "tbl.a.f"
+
+
+def test_dataset_null_tag_positions_and_string_null_are_distinct(tmp_path):
+    path = tmp_path / "null_positions.tsfile"
+    schema = TableSchema(
+        "a",
+        [
+            ColumnSchema("t1", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("t2", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("t3", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("v", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    rows = {
+        (None, "b", "c"): 10.0,  # null at position 1
+        ("b", None, "c"): 20.0,  # null at position 2 (distinct from the above)
+        ("null", "b", "c"): 30.0,  # the literal string "null", not a real null
+    }
+    with TsFileTableWriter(str(path), schema) as writer:
+        for tags, base in rows.items():
+            writer.write_dataframe(
+                pd.DataFrame(
+                    {
+                        "time": [0, 1],
+                        "t1": [tags[0], tags[0]],
+                        "t2": [tags[1], tags[1]],
+                        "t3": [tags[2], tags[2]],
+                        "v": [base, base + 1],
+                    }
+                )
+            )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        series = tsdf.list_timeseries()
+        # Nothing collapses: three physically distinct devices stay distinct.
+        assert len(series) == 3
+        by_tags = {sp.tags: sp for sp in series}
+        assert (None, "b", "c") in by_tags  # null position 1
+        assert ("b", None, "c") in by_tags  # null position 2
+        assert ("null", "b", "c") in by_tags  # the string "null"
+
+        # Each device reads its own data via SeriesPath and via the \N string form.
+        for tags, base in rows.items():
+            sp = by_tags[tags]
+            np.testing.assert_array_equal(
+                tsdf.loc[:, sp].values.ravel(), np.array([base, base + 1])
+            )
+            np.testing.assert_array_equal(
+                tsdf.loc[:, str(sp)].values.ravel(), np.array([base, base + 1])
+            )
+
+        # A hand-built SeriesPath resolves to the same null-tag device.
+        hand = SeriesPath("a", (None, "b", "c"), "v")
+        np.testing.assert_array_equal(
+            tsdf.loc[:, hand].values.ravel(), np.array([10.0, 11.0])
         )
 
 
@@ -882,8 +960,12 @@ def test_series_path_resolution_uses_named_tags_for_sparse_non_prefix_values():
     }
 
     series_path = build_series_path(catalog, device_id, 0)
-    assert series_path == "weather.device_a.temperature"
+    # The leading null tag is preserved at its position via the \N marker.
+    assert series_path == "weather.\\N.device_a.temperature"
+    assert series_path.tags == (None, "device_a")
     assert resolve_series_path(catalog, series_path) == (table_id, device_id, 0)
+    # The plain string form (with \N) round-trips to the same device.
+    assert resolve_series_path(catalog, str(series_path)) == (table_id, device_id, 0)
 
 
 def test_reader_metadata_tag_values_trim_trailing_none():
@@ -989,17 +1071,15 @@ def test_dataframe_resolves_named_sparse_tag_series_path():
     device_key = ("weather", (None, "device_a"))
     tsdf._index.device_order = [device_key]
     tsdf._index.device_index_by_key = {device_key: 0}
-    tsdf._index.tables_with_sparse_tag_values = {"weather"}
-    tsdf._index.sparse_device_indices_by_compressed_path = {
-        ("weather", ("device_a",)): [0]
-    }
     tsdf._index.device_refs = [[]]
     tsdf._index.series_refs_ordered = [(0, 0)]
     tsdf._index.series_ref_set = {(0, 0)}
     tsdf._index.series_ref_map = {(0, 0): []}
 
-    assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
-    assert tsdf._resolve_series_name("weather.device_a.temperature") == (0, 0)
+    assert tsdf.list_timeseries() == ["weather.\\N.device_a.temperature"]
+    # Resolvable by the \N string form and by the returned SeriesPath itself.
+    assert tsdf._resolve_series_name("weather.\\N.device_a.temperature") == (0, 0)
+    assert tsdf._resolve_series_name(tsdf.list_timeseries()[0]) == (0, 0)
 
 
 def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
@@ -1019,17 +1099,17 @@ def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
         ("weather", (None, "device_a")): 0,
         ("weather", ("beijing", "device_b")): 1,
     }
-    tsdf._index.tables_with_sparse_tag_values = {"weather"}
-    tsdf._index.sparse_device_indices_by_compressed_path = {
-        ("weather", ("device_a",)): [0],
-        ("weather", ("beijing", "device_b")): [1],
-    }
     tsdf._index.device_refs = [[], []]
     tsdf._index.series_refs_ordered = [(0, 0), (1, 0)]
     tsdf._index.series_ref_set = {(0, 0), (1, 0)}
     tsdf._index.series_ref_map = {(0, 0): [], (1, 0): []}
 
-    assert tsdf.list_timeseries("weather.device_a") == ["weather.device_a.temperature"]
+    # Prefix matching is position-aware: "weather.\N" selects the null-city
+    # device, "weather.beijing" selects the fully specified one.
+    assert tsdf.list_timeseries("weather.\\N") == ["weather.\\N.device_a.temperature"]
+    assert tsdf.list_timeseries("weather.beijing") == [
+        "weather.beijing.device_b.temperature"
+    ]
 
 
 def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
@@ -1050,7 +1130,7 @@ def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
         assert tsdf.list_timeseries("pvf") == []
 
 
-def test_series_path_resolution_reports_ambiguous_sparse_path():
+def test_series_path_resolution_distinguishes_null_position():
     catalog = MetadataCatalog()
     table_id = catalog.add_table(
         "weather",
@@ -1058,8 +1138,8 @@ def test_series_path_resolution_reports_ambiguous_sparse_path():
         (TSDataType.STRING, TSDataType.STRING),
         ("temperature",),
     )
-    first_id = catalog.add_device(table_id, ("beijing", None), 0, 1)
-    second_id = catalog.add_device(table_id, (None, "beijing"), 0, 1)
+    first_id = catalog.add_device(table_id, ("beijing", None), 0, 1)  # device IS NULL
+    second_id = catalog.add_device(table_id, (None, "beijing"), 0, 1)  # city IS NULL
     for device_id in (first_id, second_id):
         catalog.series_stats_by_ref[(device_id, 0)] = {
             "length": 1,
@@ -1070,10 +1150,17 @@ def test_series_path_resolution_reports_ambiguous_sparse_path():
             "timeline_max_time": 0,
         }
 
-    assert build_series_path(catalog, first_id, 0) == "weather.beijing.temperature"
-    assert build_series_path(catalog, second_id, 0) == "weather.beijing.temperature"
-    with pytest.raises(ValueError, match="Ambiguous series path"):
-        resolve_series_path(catalog, "weather.beijing.temperature")
+    # Null position is preserved, so these two devices get distinct paths
+    # (previously both compressed to "weather.beijing.temperature" -> ambiguous).
+    first_path = build_series_path(catalog, first_id, 0)
+    second_path = build_series_path(catalog, second_id, 0)
+    assert first_path == "weather.beijing.temperature"
+    assert second_path == "weather.\\N.beijing.temperature"
+    assert first_path != second_path
+
+    # Each resolves unambiguously back to its own device.
+    assert resolve_series_path(catalog, first_path) == (table_id, first_id, 0)
+    assert resolve_series_path(catalog, second_path) == (table_id, second_id, 0)
 
 
 def test_reader_show_progress_reports_start_immediately(tmp_path, capsys):
