@@ -128,10 +128,12 @@ class MetadataCatalog:
         )
 
 
-# Path marker for a null tag value. A real tag value can never escape to this
-# sequence because escaping always doubles a backslash, so it unambiguously
-# distinguishes a null tag from the literal string "null".
-_NULL_TOKEN = _PATH_ESCAPE + "N"
+# Path marker for a null tag value: a single backslash followed by N. A real
+# tag value can never produce this because escaping always doubles a backslash
+# (and never escapes "N"), so \N unambiguously distinguishes a null tag from the
+# literal string "null".
+_NULL_MARKER = "N"
+_NULL_TOKEN = _PATH_ESCAPE + _NULL_MARKER
 
 
 class SeriesPath(str):
@@ -183,21 +185,6 @@ def _render_path_component(value: Any) -> str:
     return _NULL_TOKEN if value is None else _escape_path_component(value)
 
 
-def _unescape_path_component(raw: str) -> str:
-    out: List[str] = []
-    escaping = False
-    for char in raw:
-        if escaping:
-            out.append(char)
-            escaping = False
-            continue
-        if char == _PATH_ESCAPE:
-            escaping = True
-            continue
-        out.append(char)
-    return "".join(out)
-
-
 def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
     values = list(tag_values)
     while values and values[-1] is None:
@@ -206,34 +193,39 @@ def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
 
 
 def split_logical_series_path(series_path: str) -> List[Any]:
-    """Split a path into components; a ``\\N`` component decodes to ``None``."""
-    raw_parts: List[str] = []
+    """Split a path into components, decoding escapes in a single pass.
+
+    ``\\.`` -> ``.``, ``\\\\`` -> ``\\``, and the null marker ``\\N`` -> ``None``.
+    Null is detected in the escape branch: a lone backslash only ever precedes
+    ``N`` for the null marker, since a real value's backslash is always doubled
+    and ``N`` itself is never escaped.
+    """
+    parts: List[Any] = []
     current: List[str] = []
+    is_null = False
     escaping = False
 
     for char in series_path:
         if escaping:
-            current.append(char)
+            if char == _NULL_MARKER:  # \N -> the whole component is a null tag
+                is_null = True
+            else:  # \\ -> \, \. -> ., any other \x -> x
+                current.append(char)
             escaping = False
-            continue
-        if char == _PATH_ESCAPE:
+        elif char == _PATH_ESCAPE:
             escaping = True
-            current.append(char)  # keep the escape char in the raw component
-            continue
-        if char == _PATH_SEPARATOR:
-            raw_parts.append("".join(current))
+        elif char == _PATH_SEPARATOR:
+            parts.append(None if is_null else "".join(current))
             current = []
-            continue
-        current.append(char)
+            is_null = False
+        else:
+            current.append(char)
 
     if escaping:
         raise ValueError(f"Invalid series path: {series_path}")
 
-    raw_parts.append("".join(current))
-    return [
-        None if raw == _NULL_TOKEN else _unescape_path_component(raw)
-        for raw in raw_parts
-    ]
+    parts.append(None if is_null else "".join(current))
+    return parts
 
 
 def _join_series_path(
