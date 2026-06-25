@@ -39,15 +39,41 @@ class TSDataType(IntEnum):
     BLOB = 10
     STRING = 11
 
+class TSEncoding(IntEnum):
+    """
+    Value encoding accepted by the writer. The comment after each
+    member lists the data types it can be used with.
+    """
+    PLAIN = 0         # all types
+    DICTIONARY = 1    # STRING, TEXT
+    RLE = 2           # INT32, INT64, TIMESTAMP, DATE
+    TS_2DIFF = 4      # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
+    GORILLA = 8       # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
+    ZIGZAG = 9        # INT32, INT64
+    SPRINTZ = 12      # INT32, INT64, FLOAT, DOUBLE
+
+class Compressor(IntEnum):
+    """
+    Compression accepted by the writer. The default is LZ4.
+    """
+    UNCOMPRESSED = 0
+    SNAPPY = 1
+    GZIP = 2
+    LZO = 3
+    LZ4 = 7
+
 class ColumnCategory(IntEnum):
     """
     Enumeration of column categories in TsFile.
-    TAG: Represents a tag column, used for metadata.
-    FIELD: Represents a field column, used for storing actual data values.
+    TAG: a tag column (part of the device identifier / joint primary key).
+    FIELD: a field column, holding the measured values.
+    ATTRIBUTE / TIME: reserved column roles.
     """
 
     TAG = 0
     FIELD = 1
+    ATTRIBUTE = 2
+    TIME = 3
 
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""
@@ -95,9 +121,11 @@ class TsFileTableWriter:
     """
     :param path: The path of tsfile, will create if it doesn't exist.
     :param table_schema: describes the schema of the tables want to write.
+    :param memory_threshold: bytes buffered before an automatic flush (default 128MB).
     :return: no return value.
     """
-    def __init__(self, path: str, table_schema: TableSchema)
+    def __init__(self, path: str, table_schema: TableSchema,
+                 memory_threshold: int = 128 * 1024 * 1024)
 
 
     """
@@ -106,20 +134,37 @@ class TsFileTableWriter:
     :return: no return value.
     """
     def write_table(self, tablet: Tablet)
-      
+
+    """
+    Write a pandas DataFrame into the table. Column encoding/compression follow
+    the table schema (or the engine defaults).
+    :param dataframe: the data to write.
+    :return: no return value.
+    """
+    def write_dataframe(self, dataframe: pandas.DataFrame)
+
+    """
+    Flush buffered data to disk.
+    :return: no return value.
+    """
+    def flush(self)
+
     """
     Close TsFileTableWriter and flush data automatically.
     :return: no return value.
     """
     def close(self)
 
+    # Usable as a context manager:
+    #   with TsFileTableWriter(path, schema) as w:
+    #       w.write_table(tablet)
+    def __enter__(self)
+    def __exit__(self, exc_type, exc_val, exc_tb)
 ```
 
 
 
 ### Tablet definition
-
-You can use Tablet to insert data into TsFile in batches.
 
 ```Python
 class Tablet(object)
@@ -140,6 +185,58 @@ class Tablet(object)
     
 ```
 
+### dataframe_to_tsfile
+
+```python
+def dataframe_to_tsfile(dataframe: pd.DataFrame,
+                        file_path: str,
+                        table_name: Optional[str] = None,
+                        time_column: Optional[str] = None,
+                        tag_column: Optional[list[str]] = None)
+    """
+    Write a pandas DataFrame to a TsFile.
+
+    :param dataframe:   the data to write.
+    :param file_path:   destination .tsfile path.
+    :param table_name:  output table name.
+    :param time_column: name of the column to use as the timestamp column.
+    :param tag_column:  names of the columns to treat as TAG columns.
+    """
+```
+
+## Configuration
+
+Global write defaults — the default per-type encodings, the default compression,
+and the time-column encoding/compression — are exposed as a single dictionary.
+Change them **before** creating a writer.
+
+```python
+from tsfile import get_tsfile_config, set_tsfile_config
+from tsfile import TSEncoding, Compressor
+
+cfg = get_tsfile_config()          # -> dict of all config values
+# e.g. cfg["default_compression_type_"], cfg["int64_encoding_type_"],
+#      cfg["time_encoding_type_"], cfg["time_compress_type_"], ...
+
+set_tsfile_config({
+    "default_compression_type_": Compressor.LZ4,
+    "int64_encoding_type_": TSEncoding.TS_2DIFF,
+})
+```
+
+`set_tsfile_config` validates each value and only updates the keys you pass.
+Encoding/compression values are `TSEncoding` / `Compressor` members. The allowed
+encodings per data type, and the default used when you do not change it:
+
+| Data type | Allowed encodings | Default |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
+| `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
+
 ## Read Interface
 
 ### TsFileReader
@@ -147,141 +244,71 @@ class Tablet(object)
 ```python
 class TsFileReader:
     """
-    Query table data and time-series data from TsFile, providing standardized file reading and query interfaces.
-    Supports full core capabilities including table model query, tree model query, metadata acquisition, and resource management.
+    Query table data from a TsFile.
     """
+    
+    """
+    Initialize a TsFile reader for the specified file path.
+    :param pathname: The path to the TsFile.
+    :return  no return value.
+    """
+    def __init__(self, pathname)
 
-    def __init__(self, pathname: str):
-        """
-        Initialize the TsFile reader for the specified path, complete file loading and underlying reader initialization,
-        and maintain all active query result sets to ensure all result sets are invalidated synchronously when the reader is closed.
 
-        :param pathname: Full path of the TsFile to be read
-        :return: No return value
-        """
+    """
+    Executes a time range query on the specified table and columns.
 
-    def query_table(self, table_name: str, column_names: List[str],
-                    start_time: int = np.iinfo(np.int64).min,
-                    end_time: int = np.iinfo(np.int64).max,
-                    tag_filter: Optional[object] = None,
-                    batch_size: int = 0) -> object:
-        """
-        Perform time-range query on the specified table and columns, supporting tag filtering and batch reading mode.
-        Adapts to both row-by-row return and fixed-size data block return modes to meet reading requirements in different scenarios.
+    :param table_name: The name of the table to query.
+    :param column_names: A list of column names to retrieve.
+    :param start_time: The start time of the query range (default: minimum int64 value).
+    :param end_time: The end time of the query range (default: maximum int64 value).
+    :return: A query result set handler.
+    """
+    def query_table(self, table_name : str, column_names : List[str],
+                    start_time : int = np.iinfo(np.int64).min, 
+                    end_time: int = np.iinfo(np.int64).max) -> ResultSet
 
-        :param table_name: Name of the target table to query, case-insensitive
-        :param column_names: List of target column names to retrieve; all columns are queried by default if empty
-        :param start_time: Start timestamp of the query range, default is the minimum value of int64 type
-        :param end_time: End timestamp of the query range, default is the maximum value of int64 type
-        :param tag_filter: Optional parameter, filter conditions based on tag columns, supporting equality, range, and logical combination filters
-        :param batch_size: Batch reading size; row-by-row mode is enabled when ≤ 0, data blocks are returned by the specified size when > 0
-        :return: Encapsulated query result set handler for traversing data, reading data, and obtaining metadata
-        """
+    """
+    Execute a table query by row, with offset/limit pushdown and an optional
+    tag filter. A TAG predicate restricts the query to the devices whose
+    TAG-column values match. Build a filter with the helpers in tsfile.tag_filter
+    (tag_eq, tag_neq, tag_lt, tag_lteq, tag_gt, tag_gteq, tag_between, ...) and
+    combine filters with &, | and ~.
 
-    def query_table_on_tree(self, column_names: List[str],
-                            start_time: int = np.iinfo(np.int64).min,
-                            end_time: int = np.iinfo(np.int64).max) -> object:
-        """
-        Perform table query on the tree model structure, adapted for query scenarios of native tree-structured time-series data.
-        Query directly based on measurement names without specifying a table name; path names are case-sensitive.
+    :param table_name: The name of the table to query.
+    :param column_names: A list of column names to retrieve.
+    :param offset: Number of leading rows to skip (default 0).
+    :param limit: Maximum number of rows to return; < 0 means unlimited.
+    :param tag_filter: Optional tag predicate (TagFilter), or None for no filtering.
+    :param batch_size: <= 0 returns rows one by one; > 0 returns blocks of that size.
+    :return: A query result set handler.
+    """
+    def query_table_by_row(self, table_name : str, column_names : List[str],
+                           offset : int = 0, limit : int = -1,
+                           tag_filter = None, batch_size : int = 0) -> ResultSet
 
-        :param column_names: List of measurement names to query, corresponding to node paths in the tree structure
-        :param start_time: Start timestamp of the query range, default is the minimum value of int64 type
-        :param end_time: End timestamp of the query range, default is the maximum value of int64 type
-        :return: Result set handler corresponding to the tree model query
-        """
+    """
+    Retrieves the schema of the specified table.
 
-    def query_tree_by_row(self, device_ids: List[str], measurement_names: List[str],
-                          offset: int = 0, limit: int = -1) -> object:
-        """
-        Query tree model time-series data by row with pagination, supporting offset skipping and maximum return row limit.
-        Adapted for large data volume pagination reading to avoid memory overflow caused by loading excessive data at once.
+    :param table_name: The name of the table.
+    :return: The schema of the specified table.
+    """
+    def get_table_schema(self, table_name : str)-> TableSchema
 
-        :param device_ids: List of device IDs to query, cannot be empty
-        :param measurement_names: List of measurement names to query, cannot be empty
-        :param offset: Number of starting rows to skip, starting from 0 by default
-        :param limit: Maximum number of rows to return; no limit if less than 0
-        :return: Result set handler for tree model pagination query
-        """
 
-    def query_table_by_row(self, table_name: str, column_names: List[str],
-                           offset: int = 0, limit: int = -1,
-                           tag_filter: Optional[object] = None,
-                           batch_size: int = 0) -> object:
-        """
-        Query table model data by row with pagination, supporting offset and row limit pushdown, and can be used with tag filtering.
-        Invalid data can be skipped at the data block level for dense devices, greatly improving pagination query efficiency.
+    """
+    Retrieves the schemas of all tables in the TsFile.
 
-        :param table_name: Name of the target table to query
-        :param column_names: List of column names to query
-        :param offset: Number of starting rows to skip, starting from 0 by default
-        :param limit: Maximum number of rows to return; no limit if less than 0
-        :param tag_filter: Optional parameter, tag filter condition to filter device data that meets the criteria
-        :param batch_size: Batch reading size, adapted to the underlying data block reading logic
-        :return: Result set handler for table model pagination query
-        """
+    :return: A dictionary mapping table names to their schemas.
+    """
+    def get_all_table_schemas(self) ->dict[str, TableSchema]
 
-    def query_timeseries(self, device_name: str, sensor_list: List[str],
-                         start_time: int = 0, end_time: int = 0) -> object:
-        """
-        Perform time-range time-series data query for a single specified device.
-        Adapted for precise query scenarios of a single device with multiple sensors, simplifying query invocation logic.
 
-        :param device_name: Name/path of the target device
-        :param sensor_list: List of sensor (measurement) names to query
-        :param start_time: Query start timestamp; starts from the earliest time of the file by default if 0
-        :param end_time: Query end timestamp; ends at the latest time of the file by default if 0
-        :return: Result set handler for single-device time-series query
-        """
+    """
+    Closes the TsFile reader. If the reader has active result sets, they will be invalidated.
+    """
+    def close(self)
 
-    def get_table_schema(self, table_name: str) -> object:
-        """
-        Get the complete schema information of the specified table, including full metadata such as column names, data types, tag columns, and time-series constraints.
-        Used to verify the legality of query fields in advance and parse data structures.
-
-        :param table_name: Name of the target table
-        :return: Schema information object of the corresponding table, containing full configuration of the table structure
-        """
-
-    def get_all_table_schemas(self) -> Dict[str, object]:
-        """
-        Get schema information of all tables in the current TsFile.
-        Traverse all data table structures in the file with one click without querying table by table.
-
-        :return: Dictionary structure, key is table name, value is schema information object of the corresponding table
-        """
-
-    def get_all_timeseries_schemas(self) -> List[object]:
-        """
-        Get schema information of all time-series in the TsFile.
-        Covers field, type, and constraint information of full time-series data in both tree model and table model.
-
-        :return: List of all time-series schema information
-        """
-
-    def get_all_devices(self) -> List[str]:
-        """
-        Get identification information of all devices in the TsFile.
-        Can traverse all devices in the file, adapted for full-device statistics and batch query pre-operations.
-
-        :return: List composed of all device IDs/device paths
-        """
-
-    def get_timeseries_metadata(self, device_ids: Optional[List[str]] = None) -> Dict[str, object]:
-        """
-        Get time-series metadata of specified devices, including data storage segments, field constraints, data ranges, etc.
-        Returns metadata of all devices by default if no device ID is passed, returns an empty dictionary if an empty list is passed.
-
-        :param device_ids: Optional parameter, list of device IDs to query metadata for
-        :return: Dictionary structure, key is device path, value is time-series metadata group of the corresponding device
-        """
-
-    def close(self) -> None:
-        """
-        Close the TsFile reader, release underlying file handles and memory resources.
-        Mark all current active query result sets as invalid and prohibit subsequent data reading operations.
-        No query or metadata acquisition operations can be performed after closing; the reader needs to be reinitialized.
-        """
 ```
 
 ### ResultSet
@@ -388,7 +415,6 @@ def to_dataframe(file_path: str,
        Read data from a TsFile and convert it into a Pandas DataFrame or
        an iterator of DataFrames.
 
-       This function supports both table-model and tree-model TsFiles.
        Users can filter data by table name, column names, time range,
        and maximum number of rows.
 

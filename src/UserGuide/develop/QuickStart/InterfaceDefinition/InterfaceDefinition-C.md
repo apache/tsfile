@@ -32,13 +32,46 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
-    TS_DATATYPE_STRING = 11
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
+    TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_INVALID = 255
 } TSDataType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+// Value encoding.
+typedef enum {
+    TS_ENCODING_PLAIN = 0,
+    TS_ENCODING_DICTIONARY = 1,
+    TS_ENCODING_RLE = 2,
+    TS_ENCODING_TS_2DIFF = 4,
+    TS_ENCODING_GORILLA = 8,
+    TS_ENCODING_ZIGZAG = 9,
+    TS_ENCODING_SPRINTZ = 12,
+    TS_ENCODING_INVALID = 255
+} TSEncoding;
 
-// ColumnSchema: Represents the schema of a single column, 
+// Compression type. LZ4 is the default.
+typedef enum {
+    TS_COMPRESSION_UNCOMPRESSED = 0,
+    TS_COMPRESSION_SNAPPY = 1,
+    TS_COMPRESSION_GZIP = 2,
+    TS_COMPRESSION_LZO = 3,
+    TS_COMPRESSION_LZ4 = 7,
+    TS_COMPRESSION_INVALID = 255
+} CompressionType;
+
+typedef enum column_category {
+    TAG = 0,
+    FIELD = 1,
+    ATTRIBUTE = 2,
+    TIME = 3
+} ColumnCategory;
+
+// ColumnSchema: Represents the schema of a single column,
 // including its name, data type, and category.
+// On write, encoding/compression for columns follow the global defaults
+// (see "Configuration" below).
 typedef struct column_schema {
     char* column_name;
     TSDataType data_type;
@@ -61,6 +94,10 @@ typedef struct result_set_meta_data {
     int column_num;
 } ResultSetMetaData;
 ```
+
+> `ColumnSchema` does not carry encoding/compression: on write, columns follow the
+> global defaults (see [Configuration](#configuration-encoding--compression)); on
+> read, each column is decoded with the file's actual settings.
 
 
 ## Write Interface
@@ -87,8 +124,12 @@ void free_write_file(WriteFile* write_file);
 
 ### TsFile Writer Create/Close
 
-When creating a TsFile Writer, you need to specify WriteFile and TableSchema. You can use the memory_threshold parameter in
-tsfile_writer_new_with_memory_threshold to limit the memory usage of the Writer during data writing, but in the current version, this parameter does not take effect.
+When creating a TsFile Writer, you specify a `WriteFile` and a `TableSchema`. As
+you write, data is buffered in memory and automatically flushed to disk once the
+buffered size exceeds `memory_threshold` bytes. `tsfile_writer_new` uses the
+default (128 MB); `tsfile_writer_new_with_memory_threshold` lets you override it
+— a larger value buffers more before flushing (more memory, larger chunk groups),
+a smaller value flushes more often.
 
 ```C
 /**
@@ -260,6 +301,46 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
 
 
 
+## Configuration (encoding & compression)
+
+Columns are stored with the **global default** encoding and compression for their
+data type (a `ColumnSchema` does not carry codec settings). Change those
+defaults *before* creating a writer with the functions below.
+
+Each setter returns `RET_OK` (0) on success, or `RET_NOT_SUPPORT` (40) for an
+unsupported data-type/encoding or compression combination.
+
+```C
+/* Default value encoding per data type, and default compression. */
+int     set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+int     set_global_compression(uint8_t compression);
+uint8_t get_datatype_encoding(uint8_t data_type);
+uint8_t get_global_compression();
+
+/* Time column (the time data type is fixed to INT64). */
+int     set_global_time_encoding(uint8_t encoding);
+int     set_global_time_compression(uint8_t compression);
+uint8_t get_global_time_encoding();
+uint8_t get_global_time_compression();
+```
+
+Allowed encodings per data type, and the default used when you do not change it:
+
+| Data type | Allowed encodings | Default |
+|---|---|---|
+| `BOOLEAN` | `PLAIN` | `PLAIN` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
+| `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
+
+```C
+// e.g. write every column with LZ4 compression
+ERRNO code = set_global_compression(TS_COMPRESSION_LZ4);
+if (code != RET_OK) { /* handle unsupported value */ }
+```
+
 ## Read  Interface
 
 ###  TsFile Reader Create/Close
@@ -291,20 +372,22 @@ ERRNO tsfile_reader_close(TsFileReader reader);
 
 
 
-###  Query table/get next/query by row
+###  Query table/get next
 
 ```C
+
 /**
- * @brief Queries data from the specified table and columns within a given time range.
+ * @brief Query data from the specific table and columns within time range.
  *
- * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new().
- * @param table_name [in] Name of the target table, which must exist in the TsFile.
- * @param columns [in] Array of column names to be queried.
- * @param column_num [in] Number of columns in the column name array.
+ * @param reader [in] Valid TsFileReader handle from tsfile_reader_new().
+ * @param table_name [in] Target table name. Must exist in the TsFile.
+ * @param columns [in] Array of column names to fetch.
+ * @param column_num [in] Number of columns in array.
  * @param start_time [in] Start timestamp.
- * @param end_time [in] End timestamp, which must be greater than or equal to start_time.
- * @param err_code [out] Returns RET_OK(0) on success, otherwise returns an error code defined in errno_define_c.h.
- * @return ResultSet Handle of the query result set. Must be released by free_tsfile_result_set() after use.
+ * @param end_time [in] End timestamp. Must ≥ start_time.
+ * @param err_code [out] RET_OK(0) on success, or error code in errno_define_c.h.
+ * @return ResultSet Query results handle. Must be freed with
+ * free_tsfile_result_set().
  */
 ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              char** columns, uint32_t column_num,
@@ -312,61 +395,149 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              ERRNO* err_code);
 
 /**
- * @brief Checks and retrieves the next row of data in the result set.
+ * @brief Check and fetch the next row in the ResultSet.
  *
- * @param result_set [in] A valid ResultSet handle.
- * @param error_code [out] Returns RET_OK(0) on success, otherwise returns an error code defined in errno_define_c.h.
- * @return bool - true: Next row exists, false: Reached the end or an error occurred.
+ * @param result_set [in] Valid ResultSet handle.
+ * @param error_code RET_OK(0) on success, or error code in errno_define_c.h.
+ * @return bool - true: Row available, false: End of data or error.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
 
 /**
- * @brief Releases the resources of the result set.
+ * @brief Free Result set 
  *
- * @param result_set [in] Pointer to a valid ResultSet handle.
+ * @param result_set [in] Valid ResultSet handle ptr.
  */
 void free_tsfile_result_set(ResultSet* result_set);
+```
+
+
+
+### Filtering by tag
+
+**TAG columns** form the device identity (a joint primary
+key) — their values are what distinguish one device from another within a table.
+A *tag filter* restricts a query to the devices whose TAG values match a
+predicate, so you read only the devices you care about. Build a filter from the
+reader, pass it to one of the table-query functions below, then release it with
+`tsfile_tag_filter_free()`.
+
+```C
+// Opaque handle to a tag filter. Build it with the functions below.
+typedef void* TagFilterHandle;
+
+// Comparison operators for a single-column TAG predicate.
+typedef enum {
+    TAG_FILTER_EQ = 0,          // column == value
+    TAG_FILTER_NEQ = 1,         // column != value
+    TAG_FILTER_LT = 2,          // column <  value
+    TAG_FILTER_LTEQ = 3,        // column <= value
+    TAG_FILTER_GT = 4,          // column >  value
+    TAG_FILTER_GTEQ = 5,        // column >= value
+    TAG_FILTER_REGEXP = 6,      // column matches the regex value
+    TAG_FILTER_NOT_REGEXP = 7,  // column does not match the regex value
+} TagFilterOp;
 
 /**
- * @brief Queries time-series data by row (tree model), supporting offset and row count limitation
+ * @brief Create a single-column TAG predicate: `<column_name> <op> <value>`.
  *
- * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new()
- * @param device_ids [in] Array of device IDs
- * @param device_ids_len [in] Number of device IDs
- * @param measurement_names [in] Array of measurement (sensor) names
- * @param measurement_names_len [in] Number of measurement names
- * @param offset [in] Number of starting rows to skip (must be >= 0)
- * @param limit [in] Maximum number of rows to return, < 0 means no limitation
- * @param err_code [out] Error code, returns E_OK(0) on success
- * @return Returns ResultSet handle on success, NULL on failure
+ * @param reader      [in] Valid TsFileReader handle.
+ * @param table_name  [in] Table whose schema defines the TAG columns.
+ * @param column_name [in] Name of the TAG column to filter on.
+ * @param value       [in] Comparison value (TAG columns are STRING).
+ * @param op          [in] Comparison operator (TagFilterOp).
+ * @param err_code    [out] RET_OK(0) on success, or error code in errno_define_c.h.
+ * @return TagFilterHandle on success; NULL on failure.
  */
-ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
-                                          char** device_ids, int device_ids_len,
-                                          char** measurement_names,
-                                          int measurement_names_len, int offset,
-                                          int limit, ERRNO* err_code);
+TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value, TagFilterOp op,
+                                         ERRNO* err_code);
 
 /**
- * @brief Queries table model data by row, supporting offset and row count limitation pushdown
+ * @brief Create a range predicate: lower <= column <= upper
+ *        (pass is_not = true for NOT BETWEEN).
+ */
+TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* lower, const char* upper,
+                                          bool is_not, ERRNO* err_code);
+
+// Combine predicates. AND/OR/NOT take ownership of their children; free the root only.
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left, TagFilterHandle right);
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left, TagFilterHandle right);
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+
+// Free a tag filter and all of its children.
+void tsfile_tag_filter_free(TagFilterHandle filter);
+```
+
+### Table queries with tag filter, paging and batching
+
+These query functions accept an optional `tag_filter` (pass `NULL`
+for no filtering) and a `batch_size` (`<= 0` returns rows one by one; `> 0`
+returns a block of that size).
+
+```C
+/**
+ * @brief Query a table by row, with offset/limit pushdown and an optional tag filter.
  *
- * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new()
- * @param table_name [in] Name of the target table
- * @param column_names [in] Array of column names to be queried
- * @param column_names_len [in] Number of columns to be queried
- * @param offset [in] Number of starting rows to skip (must be >= 0)
- * @param limit [in] Maximum number of rows to return, < 0 means no limitation
- * @param tag_filter [in] Tag filter handle
- * @param batch_size [in] Batch size for data query
- * @param err_code [out] Error code, returns E_OK(0) on success
- * @return Returns ResultSet handle on success, NULL on failure
+ * @param reader           [in] Valid TsFileReader handle.
+ * @param table_name       [in] Target table name.
+ * @param column_names     [in] Requested column names.
+ * @param column_names_len [in] Number of requested columns.
+ * @param offset           [in] Leading rows to skip (>= 0).
+ * @param limit            [in] Max rows to return; < 0 means unlimited.
+ * @param tag_filter       [in] TAG predicate, or NULL for no filtering.
+ * @param batch_size       [in] <= 0 row-by-row; > 0 block size.
+ * @param err_code         [out] RET_OK(0) on success, or error code.
+ * @return ResultSet handle; NULL on failure. Free with free_tsfile_result_set().
  */
 ResultSet tsfile_reader_query_table_by_row(
     TsFileReader reader, const char* table_name, char** column_names,
     int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
     int batch_size, ERRNO* err_code);
+
+/**
+ * @brief Query a table within a time range, with an optional tag filter and batching.
+ *
+ * @param batch_size <= 0 row-by-row return; > 0 returns a TsBlock of that size.
+ */
+ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
+                                   char** columns, uint32_t column_num,
+                                   Timestamp start_time, Timestamp end_time,
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code);
+
+/**
+ * @brief Query a table with a tag filter (time range + TAG predicate).
+ *
+ * @param batch_size <= 0 row-by-row return; > 0 returns a TsBlock of that size.
+ */
+ResultSet tsfile_query_table_with_tag_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
 ```
 
+Example — read `temperature` only for devices whose `region` TAG equals
+`shanghai`:
 
+```C
+ERRNO ec = RET_OK;
+TagFilterHandle f = tsfile_tag_filter_create(
+    reader, "weather", "region", "shanghai", TAG_FILTER_EQ, &ec);
+
+char* cols[] = {"temperature"};
+ResultSet rs = tsfile_reader_query_table_by_row(
+    reader, "weather", cols, 1, /*offset*/ 0, /*limit*/ -1, f, /*batch*/ 0, &ec);
+
+// ... iterate rs with tsfile_result_set_next(), then release:
+free_tsfile_result_set(&rs);
+tsfile_tag_filter_free(f);
+```
 
 ### Get Data from result set
 

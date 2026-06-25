@@ -60,6 +60,20 @@ export const zhSidebar = {
         { text: '接口定义-Python', link: 'InterfaceDefinition-Python' },
       ],
     },
+    {
+      text: 'TsFileDataFrame',
+      collapsible: true,
+      link: 'DataFrame/TsFileDataFrame',
+    },
+    {
+      text: '工具',
+      collapsible: true,
+      prefix: 'Tools/',
+      children: [
+        { text: 'tsfile-cli', link: 'Tsfile-CLI' },
+        { text: 'tsfile-viewer', link: 'Tsfile-Viewer' },
+      ],
+    },
     /* {
       text: '生态集成',
       collapsible: true,

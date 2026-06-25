@@ -20,6 +20,63 @@
 -->
 # 接口定义 - C++
 
+## 数据类型、编码与压缩
+
+```cpp
+// 支持的测点/列数据类型。
+enum TSDataType : uint8_t {
+    BOOLEAN = 0,
+    INT32 = 1,
+    INT64 = 2,
+    FLOAT = 3,
+    DOUBLE = 4,
+    TEXT = 5,
+    TIMESTAMP = 8,
+    DATE = 9,
+    BLOB = 10,
+    STRING = 11,
+};
+
+// 值编码。各编码适用于哪些类型见下表。
+enum TSEncoding : uint8_t {
+    PLAIN = 0,
+    DICTIONARY = 1,
+    RLE = 2,
+    TS_2DIFF = 4,
+    GORILLA = 8,
+    ZIGZAG = 9,
+    SPRINTZ = 12,
+};
+
+// 压缩类型。SNAPPY/GZIP/LZO/LZ4 取决于构建选项；默认压缩为 LZ4。
+enum CompressionType : uint8_t {
+    UNCOMPRESSED = 0,
+    SNAPPY = 1,
+    GZIP = 2,
+    LZO = 3,
+    LZ4 = 7,
+};
+
+// 列在表 schema 内的角色。
+enum class ColumnCategory { TAG = 0, FIELD = 1, ATTRIBUTE = 2, TIME = 3 };
+```
+
+各数据类型适用的编码：
+
+| 编码 | 适用类型 |
+|---|---|
+| `PLAIN` | 所有类型 |
+| `DICTIONARY` | `TEXT`、`STRING` |
+| `RLE` | `INT32`、`INT64`、`TIMESTAMP`、`DATE` |
+| `TS_2DIFF` | `INT32`、`INT64`、`TIMESTAMP`、`DATE`、`FLOAT`、`DOUBLE` |
+| `GORILLA` | `INT32`、`INT64`、`TIMESTAMP`、`DATE`、`FLOAT`、`DOUBLE` |
+| `ZIGZAG` | `INT32`、`INT64` |
+| `SPRINTZ` | `INT32`、`INT64`、`FLOAT`、`DOUBLE` |
+
+各类型的默认值编码：`BOOLEAN → PLAIN`、`INT32 / INT64 → TS_2DIFF`、
+`FLOAT / DOUBLE → GORILLA`、`TEXT / STRING / BLOB → PLAIN`。默认压缩为 `LZ4`。
+覆盖方式见[配置编码与压缩](#配置编码与压缩)。
+
 ## 写入接口
 
 ### TsFileTableWriter
@@ -27,89 +84,55 @@
 用于写入 TsFile.
 
 ```cpp
-namespace storage {
-class RestorableTsFileIOWriter;
-
 /**
- * @brief 支持按照指定表结构，将结构化表数据写入 TsFile 文件
+ * @brief 用于将结构化表格数据写入具有指定模式的 TsFile。
  *
- * TsFileTableWriter 类用于将结构化数据（特别适用于时序数据）
- * 写入专为高效存储与查询优化的 TsFile 文件。
- * 使用者可定义待写入表的结构，按照该结构添加数据行，
- * 并将数据序列化为 TsFile。
- * 同时，该类提供写入过程中的内存使用限制能力。
+ * TsFileTableWriter 类被设计用于写入结构化数据，特别适合时序数据，
+ * 数据将被写入一种为高效存储与检索优化的文件格式（即 TsFile）。该类允许用户定义
+ * 所需写入表的模式，按照该模式添加数据行，并将这些数据序列化写入 TsFile。
+ * 此外，还提供了在写入过程中限制内存使用的选项。
  */
 class TsFileTableWriter {
    public:
     /**
-     * TsFileTableWriter 用于根据指定的表结构，将表数据写入目标文件，
-     * 并可选择性地限制内存使用量。
+     * TsFileTableWriter 用于将表格数据写入具有指定模式的目标文件，
+     * 可选地限制内存使用。
      *
-     * @param writer_file 表数据的目标写入文件，不能为空指针
-     * @param table_schema 用于构建表结构，定义待写入表的 schema
-     * @param memory_threshold 可选参数。当已写入数据量超过该阈值时，
-     *                         数据将自动刷新到磁盘。默认值为 128MB
+     * @param writer_file 要写入表数据的目标文件。不能为空。
+     * @param table_schema 用于构造表结构，定义正在写入表的模式。
+     * @param memory_threshold 可选参数。当写入数据的大小超过该值时，
+     * 数据将自动刷新到磁盘。默认值为 128MB。
      */
-    template <typename T>
-    explicit TsFileTableWriter(storage::WriteFile* writer_file, T* table_schema,
-                               uint64_t memory_threshold = 128 * 1024 * 1024) {
-        static_assert(!std::is_same<T, std::nullptr_t>::value,
-                      "table_schema cannot be nullptr");
-        tsfile_writer_ = std::make_shared<TsFileWriter>();
-        tsfile_writer_->init(writer_file);
-        tsfile_writer_->set_generate_table_schema(false);
 
-        // 执行深拷贝。源 TableSchema 对象可能分配在栈/堆上
-        auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
-        error_number = tsfile_writer_->register_table(table_schema_ptr);
-        exclusive_table_name_ = table_schema->get_table_name();
-        common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
-    }
+    TsFileTableWriter(WriteFile* writer_file,
+                      TableSchema* table_schema,
+                      uint64_t memory_threshold = 128 * 1024 * 1024);
+    ~TsFileTableWriter();
+    /**
+     * 将给定的 Tablet 数据按照表的模式写入目标文件。
+     *
+     * @param tablet 包含待写入数据的 Tablet。不能为空。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
+     */
 
+    int write_table(const Tablet& tablet);
     /**
-     * 通过可恢复的 TsFileIOWriter 构建 TsFileTableWriter，
-     * 支持在故障恢复后追加表数据。Schema 从已恢复的文件中读取，
-     * 无需额外传入 TableSchema。
+     * 将所有缓冲数据刷新到底层存储介质，确保所有数据都已写出。
+     * 此方法确保所有未完成的写入操作被持久化。
      *
-     * @param restorable_writer 已恢复的 I/O 写入器；不能为空指针，
-     *                          且必须以截断模式打开，保证 can_write() 返回 true
-     * @param memory_threshold 可选的缓存数据内存阈值
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
-    explicit TsFileTableWriter(
-        storage::RestorableTsFileIOWriter* restorable_writer,
-        uint64_t memory_threshold = 128 * 1024 * 1024);
 
-    /**
-     * 向写入器注册表结构
-     *
-     * @param table_schema 待注册的表结构，不能为空指针
-     * @return 成功返回 0，失败返回非零错误码
-     */
-    int register_table(const std::shared_ptr<TableSchema>& table_schema);
-    /**
-     * 根据表结构，将指定的 Tablet 数据写入目标文件
-     *
-     * @param tablet 包含待写入数据的 Tablet，不能为空指针
-     * @return 成功返回 0，失败返回非零错误码
-     */
-    int write_table(Tablet& tablet) const;
-    /**
-     * 将所有缓存数据刷新到底层存储介质，确保所有数据都被持久化。
-     * 该方法保证所有待写入数据都被落盘。
-     *
-     * @return 成功返回 0，失败返回非零错误码
-     */
     int flush();
     /**
      * 关闭写入器并释放其占用的所有资源。
-     * 调用该方法后，不应对当前实例执行任何后续操作。
+     * 调用此方法后，不应再对该实例执行任何操作。
      *
-     * @return 成功返回 0，失败返回非零错误码
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
+
     int close();
 };
-
-}  // namespace storage
 ```
 
 ### TableSchema
@@ -147,45 +170,40 @@ class TableSchema {
 struct ColumnSchema {
     std::string column_name_;
     common::TSDataType data_type_;
+    common::CompressionType compression_;
+    common::TSEncoding encoding_;
     ColumnCategory column_category_;
 
-   /**
-     * @brief 使用给定参数构造一个 ColumnSchema 对象。
+    /**
+     * @brief 使用显式的压缩与编码构造 ColumnSchema。
      *
      * @param column_name 列的名称，必须为非空字符串。
-     *                    此名称用于在表中标识该列。
-     * @param data_type 该列的数据类型，例如 INT32、DOUBLE、TEXT 等。
-     *                  数据类型决定了数据的存储与解释方式。
-     * @param column_category 列的类别，用于标识其在模式中的角色或类型，
-     *                        例如 FIELD（字段）、TAG（标签）。
-     *                        如果未指定，默认为 ColumnCategory::FIELD。
-     * @note 调用者有责任确保 `column_name` 非空。
+     * @param data_type 该列的数据类型（INT32、DOUBLE、TEXT 等）。
+     * @param compression 该列 chunk 使用的压缩方式。
+     * @param encoding 该列值使用的编码方式。
+     * @param column_category 列的类别（FIELD、TAG 等），默认为 FIELD。
      */
     ColumnSchema(std::string column_name, common::TSDataType data_type,
-                 ColumnCategory column_category = ColumnCategory::FIELD) : column_name_(std::move(column_name)),
-                                                                           data_type_(data_type),
-                                                                           column_category_(column_category) {
-    }
-};
+                 common::CompressionType compression, common::TSEncoding encoding,
+                 ColumnCategory column_category = ColumnCategory::FIELD);
 
-/**
- * @brief Represents the data type of a measurement.
- *
- * This enumeration defines the supported data types for measurements in the system.
- */
-enum TSDataType : uint8_t {
-    BOOLEAN = 0,
-    INT32 = 1,
-    INT64 = 2,
-    FLOAT = 3,
-    DOUBLE = 4,
-    TEXT = 5,
-    STRING = 11
+    /**
+     * @brief 使用引擎对该数据类型的默认编码与压缩构造 ColumnSchema。
+     *
+     * @param column_name 列的名称，必须为非空字符串。
+     * @param data_type 该列的数据类型。
+     * @param column_category 列的类别，默认为 FIELD。
+     */
+    ColumnSchema(std::string column_name, common::TSDataType data_type,
+                 ColumnCategory column_category = ColumnCategory::FIELD);
 };
-
 ```
 
+> `TAG` 列是设备的唯一标识（联合主键），数据类型固定为 `STRING`；`FIELD` 列存储测量值。
+> 在 `ColumnSchema` 上设置的编码与压缩会在写入时作用于该列；双参数构造函数则回退到按类型的默认值。
+
 ### Tablet
+
 
 ```cpp
 /**
@@ -251,151 +269,110 @@ public:
 };
 ```
 
-### RestorableTsFileIOWriter
-> V2.3.1
+### 配置编码与压缩
+
+编码与压缩 **按数据类型** 选取：每种类型都有默认值（见上表）。你可以修改这些默认值，
+也可以在 schema 上传入显式的编码/压缩。
+
+**1. 在 schema 上指定**：在构造 `ColumnSchema` 时传入显式的编码与压缩：
 
 ```cpp
-namespace storage {
-/**
- * RestorableTsFileIOWriter 用于打开 TsFile 并对其进行可选的恢复操作
- * 继承自 TsFileIOWriter，支持在文件恢复后继续写入
- *
- * (1) 若 TsFile 正常关闭：has_crashed()=false，can_write()=false
- *
- * (2) 若 TsFile 不完整/程序崩溃：has_crashed()=true，
- * can_write()=true，写入器会截断损坏数据并允许继续写入
- *
- * 基于标准 C++11 实现，通过 RAII 和智能指针避免内存泄漏
- */
-class RestorableTsFileIOWriter : public TsFileIOWriter {
-   public:
-    RestorableTsFileIOWriter();
-
-    /**
-     * 打开 TsFile 用于恢复/追加写入
-     * 使用 O_RDWR|O_CREAT 模式，不使用 O_TRUNC，因此会保留文件原有内容
-     *
-     * @param file_path TsFile 文件路径
-     * @param truncate_corrupted 若为 true，则截断损坏的数据；
-     *        若为 false，则不截断（不完整文件保持原样）
-     * @return 成功返回 E_OK，失败返回错误码
-     */
-    int open(const std::string& file_path, bool truncate_corrupted = true);
-
-    /**
-     * 关闭文件
-     */
-    void close();
-};
-
-}  // namespace storage
+// 将 "temperature" 列以 TS_2DIFF + LZ4 存储。
+common::ColumnSchema col("temperature", common::INT64,
+                         common::LZ4, common::TS_2DIFF,
+                         common::ColumnCategory::FIELD);
 ```
 
+**2. 按类型的默认值**：在创建写入器 *之前* 修改默认值；它们会作用于所有未在 schema 中
+指定自身编码/压缩的列。这些函数位于 `common`/`storage` 命名空间，会校验参数（不支持的组合返回
+`E_NOT_SUPPORT`）：
+
+```cpp
+// 按数据类型的默认值编码，以及默认压缩。
+int  common::set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+int  common::set_global_compression(uint8_t compression);
+uint8_t common::get_datatype_encoding(uint8_t data_type);
+uint8_t common::get_global_compression();
+
+// 时间列的编码/压缩（数据类型固定为 INT64）。
+int  common::set_global_time_encoding(uint8_t encoding);
+int  common::set_global_time_compression(uint8_t compression);
+```
 
 ## 读取接口
 ### Tsfile Reader
 ```cpp
 /**
- * @brief TsFileReader 提供查询所有后缀为 .tsfile 的文件的能力
+ * @brief TsFileReader 提供了查询所有以 .tsfile 为后缀的文件的能力。
  *
- * TsFileReader 专为查询 .tsfile 文件设计，支持树模型查询和表模型查询，
- * 同时支持查询表结构（TableSchema）、时间序列结构（TimeseriesSchema）等元数据。
+ * TsFileReader 旨在用于查询 .tsfile 文件，支持表模型查询，
+ * 并支持查询元数据信息，如 TableSchema。
  */
+
 class TsFileReader {
    public:
     TsFileReader();
+    ~TsFileReader();
     /**
-     * @brief 打开 tsfile 文件
+     * @brief 打开 tsfile 文件。
      *
-     * @param file_path 待打开的 tsfile 文件路径
-     * @return 成功返回0，失败返回非零错误码
+     * @param file_path 要打开的 tsfile 文件路径。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
-    int open(const std::string& file_path);
+
+    int open(const std::string &file_path);
     /**
-     * @brief 关闭 tsfile 文件，该方法应在查询完成后调用
+     * @brief 关闭 tsfile，查询完成后应调用此方法。
      *
-     * @return 成功返回0，失败返回非零错误码
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int close();
     /**
-     * @brief 通过查询表达式查询 tsfile 文件，用户可自行构造查询表达式进行查询
+     * @brief 通过查询表达式对 tsfile 进行查询，用户可以自行构造查询表达式来查询 tsfile。
      *
-     * @param [in] qe 查询表达式
-     * @param [out] ret_qds 结果集
-     * @return 成功返回0，失败返回非零错误码
+     * @param [in] qe 查询表达式。
+     * @param [out] ret_qds 查询结果集。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
-    int query(storage::QueryExpression* qe, ResultSet*& ret_qds);
+    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
-     * @brief 通过路径列表、起始时间和结束时间查询 tsfile 文件
-     * 该方法用于树模型下的 tsfile 文件查询
+     * @brief 通过表名、列名、起始时间和结束时间查询 tsfile。
      *
-     * @param [in] path_list 路径列表
-     * @param [in] start_time 起始时间
-     * @param [in] end_time 结束时间
-     * @param [out] result_set 结果集
+     * @param [in] table_name 表名。
+     * @param [in] columns_names 列名列表。
+     * @param [in] start_time 起始时间。
+     * @param [in] end_time 结束时间。
+     * @param [out] result_set 查询结果集。
      */
-    int query(std::vector<std::string>& path_list, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set);
+    int query(const std::string &table_name,
+              const std::vector<std::string> &columns_names, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set);
+              
     /**
-     * @brief 通过表名、列名、起始时间和结束时间查询 tsfile 文件
-     * 该方法用于表模型下的 tsfile 文件查询
+     * @brief 通过表名、列名、开始时间、结束时间和标签过滤器查询 tsfile。
      *
      * @param [in] table_name 表名
-     * @param [in] columns_names 列名列表
-     * @param [in] start_time 起始时间
+     * @param [in] columns_names 列名
+     * @param [in] start_time 开始时间
      * @param [in] end_time 结束时间
-     * @param [out] result_set 结果集
-     * @param [in] batch_size 小于等于0表示逐行返回模式，
-     *             大于0表示按指定大小返回TsBlock数据块
-     */
-    int query(const std::string& table_name,
-              const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, int batch_size = -1);
-
-    /**
-     * @brief 通过表名、列名、起始时间、结束时间和标签过滤条件查询 tsfile 文件
-     * 该方法用于表模型下的 tsfile 文件查询
-     *
-     * @param [in] table_name 表名
-     * @param [in] columns_names 列名列表
-     * @param [in] start_time 起始时间
-     * @param [in] end_time 结束时间
-     * @param [in] tag_filter 标签过滤条件
+     * @param [in] tag_filter 标签过滤器
      * @param [out] result_set 结果集
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
-              int batch_size = 0);
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
 
     /**
-     * @brief 基于偏移量和限制条数，按行查询树模型时间序列数据
+     * @brief 按行查询表，支持偏移量/行数限制下推与可选的标签过滤。
      *
-     * @param path_list  待查询的完整路径（设备.测量项）
-     * @param offset     需要跳过的起始行数（>=0）
-     * @param limit      最大返回行数，小于0表示无限制
-     * @param[out] result_set  存储查询结果的结果集
-     * @return 成功返回0，失败返回非零错误码
-     */
-    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
-                   ResultSet*& result_set);
-
-    /**
-     * @brief 基于偏移量和限制条数下推，按行查询表模型数据
-     *
-     * 对于密集型设备（所有列行数相同），
-     * 偏移量/限制条数会通过SSI下推至数据块/数据页级别，
-     * 无需解码即可跳过整个数据块/数据页。
-     * 对于稀疏型设备，偏移量/限制条数在行合并阶段生效。
-     * 当设备总行数处于偏移量范围内时，可直接跳过整个设备。
-     *
-     * @param table_name     待查询的表名
-     * @param column_names   待查询的列名
-     * @param offset         需要跳过的起始行数（>=0）
-     * @param limit          最大返回行数，小于0表示无限制
-     * @param[out] result_set  存储查询结果的结果集
-     * @param tag_filter     可选的标签过滤条件，用于按标签列过滤数据
-     * @return 成功返回0，失败返回非零错误码
+     * @param [in] table_name 表名
+     * @param [in] column_names 列名
+     * @param [in] offset 需要跳过的起始行数（>= 0）
+     * @param [in] limit 最多返回行数；< 0 表示不限制
+     * @param [out] result_set 结果集
+     * @param [in] tag_filter 可选标签过滤器（用 TagFilterBuilder 构造），或 nullptr
+     * @param [in] batch_size <= 0 逐行返回；> 0 按该大小返回数据块
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int queryByRow(const std::string& table_name,
                    const std::vector<std::string>& column_names, int offset,
@@ -403,110 +380,34 @@ class TsFileReader {
                    Filter* tag_filter = nullptr, int batch_size = 0);
 
     /**
-     * @brief 在树模型上执行表查询
+     * @brief 销毁结果集，该方法应在查询完成并使用完 result_set 后调用。
      *
-     * @param measurement_names 测量项名称列表
-     * @param star_time 起始时间
-     * @param end_time 结束时间
-     * @param result_set 结果集
+     * @param qds 查询结果集。
      */
-    int query_table_on_tree(const std::vector<std::string>& measurement_names,
-                            int64_t star_time, int64_t end_time,
-                            ResultSet*& result_set);
+    void destroy_query_data_set(ResultSet *qds);
     /**
-     * @brief 销毁结果集，该方法应在查询完成、使用完结果集后调用
+     * @brief 根据表名获取表的模式信息。
      *
-     * @param qds 结果集对象
-     */
-    void destroy_query_data_set(ResultSet* qds);
-    /**
-     * @brief 根据设备ID和测量项名称读取时间序列数据
-     *
-     * @param device_id 设备ID
-     * @param measurement_name 测量项名称列表
-     * @return 结果集对象
-     */
-    ResultSet* read_timeseries(
-        const std::shared_ptr<IDeviceID>& device_id,
-        const std::vector<std::string>& measurement_name);
-    /**
-     * @brief 获取 tsfile 文件中的所有设备
-     *
-     * @param table_name 表名
-     * @return 设备ID列表
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
-        std::string table_name);
-
-    /**
-     * @brief 获取 tsfile 文件中的所有设备
-     *
-     * @return 设备ID列表
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
-
-    /**
-     * @brief 获取文件中的所有设备ID（与get_all_device_ids功能一致）
-     *
-     * @return 设备列表
-     */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
-
-    /**
-     * @brief 根据设备ID和测量项名称获取时间序列结构
-     *
-     * @param [in] device_id 设备ID
-     * @param [out] result 测量项结构列表
-     * @return 成功返回0，失败返回非零错误码
-     */
-    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
-                              std::vector<MeasurementSchema>& result);
-
-    /**
-     * @brief 获取指定设备的时间序列元数据
-     *
-     * 仅文件中存在的设备会被包含在结果中
-     * 若设备ID列表为空，返回空映射表
-     *
-     * @param device_ids 待查询的设备列表
-     * @return 映射关系：设备ID -> 时间序列元数据列表（仅包含存在的数据）
-     */
-    DeviceTimeseriesMetadataMap get_timeseries_metadata(
-        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
-
-    /**
-     * @brief 获取文件中所有设备的时间序列元数据
-     *
-     * @return 映射关系：设备ID -> 时间序列元数据列表
-     */
-    DeviceTimeseriesMetadataMap get_timeseries_metadata();
-
-    /**
-     * @brief 根据表名获取表结构
-     *
-     * @param table_name 表名
-     * @return 表结构智能指针
+     * @param table_name 表名。
+     * @return std::shared_ptr<TableSchema> 表的模式信息。
      */
     std::shared_ptr<TableSchema> get_table_schema(
-        const std::string& table_name);
+        const std::string &table_name);
     /**
-     * @brief 获取 tsfile 文件中的所有表结构
+     * @brief 获取 tsfile 中所有表的模式信息。
      *
-     * @return 表结构列表
+     * @return std::vector<std::shared_ptr<TableSchema>> 表模式信息列表。
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
 ```
-
 ### ResultSet
 ```cpp
 /**
  * @brief ResultSet 是 TsFileReader 的查询结果集，用于访问查询结果。
  *
  * ResultSet 是一个虚类，使用时应转换为相应的实现类。
- * @note 当使用树模型且过滤器是全局时间过滤器时，应转换为 QDSWithoutTimeGenerator。
- * @note 当使用树模型但过滤器不是全局时间过滤器时，应转换为 QDSWithTimeGenerator。
- * @note 如果查询使用的是表模型，则应转换为 TableResultSet。
+ * @note 结果集的具体类型为 TableResultSet。
  */
 class ResultSet {
    public:
