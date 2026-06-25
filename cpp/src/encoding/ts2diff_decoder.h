@@ -793,6 +793,12 @@ template <>
 inline bool TS2DIFFDecoder<int64_t>::peek_next_block_range_int64(
     common::ByteStream& in, int64_t& block_min, int64_t& block_max,
     int& block_count) {
+    // Precondition: this must only be driven on the monotonically-increasing
+    // time column (all callers invoke it via time_decoder_).  The block_min =
+    // first_value / block_max = next-block-first_value shortcuts below rely on
+    // that ordering; an unsorted INT64 *value* column that happens to use
+    // TS_2DIFF would get a wrong range here, so it must never be called on a
+    // value decoder (value decoders decode normally and never call this).
     if (current_index_ != 0 || !has_remaining(in)) return false;
 
     read_header(in);

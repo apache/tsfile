@@ -126,13 +126,10 @@ int TsFileIOWriter::start_flush_chunk_group(
     cur_device_name_ = device_name;
     ASSERT(cur_chunk_group_meta_ == nullptr);
     use_prev_alloc_cgm_ = false;
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        if (*iter.get()->device_id_ == *cur_device_name_) {
-            use_prev_alloc_cgm_ = true;
-            cur_chunk_group_meta_ = iter.get();
-            break;
-        }
+    auto idx_it = chunk_group_meta_index_.find(cur_device_name_);
+    if (idx_it != chunk_group_meta_index_.end()) {
+        use_prev_alloc_cgm_ = true;
+        cur_chunk_group_meta_ = idx_it->second;
     }
     if (!use_prev_alloc_cgm_) {
         void* buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
@@ -256,8 +253,9 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
         cur_chunk_group_meta_ = nullptr;
         return common::E_OK;
     }
-    chunk_group_meta_index_[cur_device_name_->get_device_name()] =
-        cur_chunk_group_meta_;
+    // First CGM per device wins (emplace, no overwrite); reached only when the
+    // device was not already present, so this records its first CGM.
+    chunk_group_meta_index_.emplace(cur_device_name_, cur_chunk_group_meta_);
     int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;
     return ret;

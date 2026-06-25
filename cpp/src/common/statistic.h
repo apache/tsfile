@@ -703,9 +703,15 @@ class Int32Statistic : public Statistic {
             count_ = 1;
             start = 1;
         }
+        // Timestamps are monotonic (verified by TimePageWriter),
+        // so only first/last matter for start_time_/end_time_.
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
         for (uint32_t i = start; i < count; i++) {
-            if (timestamps[i] < start_time_) start_time_ = timestamps[i];
-            if (timestamps[i] > end_time_) end_time_ = timestamps[i];
             if (values[i] < min_value_) min_value_ = values[i];
             if (values[i] > max_value_) max_value_ = values[i];
             sum_value_ += (int64_t)values[i];

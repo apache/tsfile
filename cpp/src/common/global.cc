@@ -64,14 +64,16 @@ void init_config_value() {
     g_config_value_.float_encoding_type_ = GORILLA;
     g_config_value_.double_encoding_type_ = GORILLA;
     g_config_value_.string_encoding_type_ = PLAIN;
-    // Pick the strongest compressor that was actually compiled in. Gating on
-    // ENABLE_LZ4 while setting SNAPPY (the original code) would request a
-    // compressor that the factory can't produce when the build disables
-    // Snappy, returning nullptr at write time.
-#ifdef ENABLE_SNAPPY
-    g_config_value_.default_compression_type_ = SNAPPY;
-#elif defined(ENABLE_LZ4)
+    // Default compression is LZ4, matching the Java reference implementation
+    // (TSFileConfig.compressor) and the previous C++ default; LZ4 generally
+    // matches or beats Snappy on both ratio and decompression speed.  Fall
+    // back to whatever was actually compiled in so the factory can always
+    // produce the chosen compressor (an earlier revision gated on ENABLE_LZ4
+    // but set SNAPPY, returning nullptr at write time when Snappy was off).
+#ifdef ENABLE_LZ4
     g_config_value_.default_compression_type_ = LZ4;
+#elif defined(ENABLE_SNAPPY)
+    g_config_value_.default_compression_type_ = SNAPPY;
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif

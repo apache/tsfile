@@ -484,12 +484,15 @@ TEST(DefaultCompressorTest, DefaultIsAllocatable) {
     Compressor* c = CompressorFactory::alloc_compressor(
         common::g_config_value_.default_compression_type_);
     ASSERT_NE(c, nullptr);
-#ifdef ENABLE_SNAPPY
-    EXPECT_EQ(common::g_config_value_.default_compression_type_,
-              common::CompressionType::SNAPPY);
-#elif defined(ENABLE_LZ4)
+    // Priority mirrors init_config_value(): LZ4 first (matches the Java
+    // reference default and the previous C++ default), then SNAPPY, then
+    // UNCOMPRESSED.
+#ifdef ENABLE_LZ4
     EXPECT_EQ(common::g_config_value_.default_compression_type_,
               common::CompressionType::LZ4);
+#elif defined(ENABLE_SNAPPY)
+    EXPECT_EQ(common::g_config_value_.default_compression_type_,
+              common::CompressionType::SNAPPY);
 #else
     EXPECT_EQ(common::g_config_value_.default_compression_type_,
               common::CompressionType::UNCOMPRESSED);

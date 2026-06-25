@@ -62,6 +62,17 @@ class UncompressedCompressor : public Compressor {
 
     int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                    char*& uncompressed_buf, uint32_t& uncompressed_buf_len) {
+        // Allocate + copy rather than aliasing compressed_buf, even though the
+        // "uncompressed" bytes equal the input.  Every caller and the leak
+        // safety-net below assume the same ownership contract as the real
+        // compressors: uncompress() returns a heap buffer released by
+        // after_uncompress(), and cached in uncompressed_buf_ so
+        // reset()/destroy()/the dtor can reclaim it when an error path (e.g. a
+        // corrupted page that returns before after_uncompress() runs) would
+        // otherwise leak it.  Aliasing would point uncompressed_buf_ into the
+        // caller's shared page buffer, so those mem_free() calls would free a
+        // mid-buffer pointer -> heap corruption / double free.  A zero-copy
+        // fast path would need an explicit "not owned" flag in the contract.
         char* buf = static_cast<char*>(
             common::mem_alloc(compressed_buf_len, common::MOD_COMPRESSOR_OBJ));
         if (buf == nullptr) {

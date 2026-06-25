@@ -367,7 +367,9 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
 TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
     ChunkHeader& ch = chunk_reader_->get_chunk_header();
 
-    // TODO config
+    // Time column encoding/compression are placeholders: this ColumnSchema
+    // describes the already-decoded in-memory result TsBlock, where only
+    // data_type (always INT64 for time) is used (see alloc_tsblock_multi).
     ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
                          common::TS_2DIFF);
     ColumnSchema value_cd(ch.measurement_name_, ch.data_type_,
@@ -387,7 +389,10 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
 TsBlock* TsFileSeriesScanIterator::alloc_tsblock_multi() {
     auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
 
-    // Time column
+    // Time column.  The encoding/compression fields only matter for on-disk
+    // serialization; this ColumnSchema describes the already-decoded in-memory
+    // result TsBlock, where only data_type (always INT64 for time) is used, so
+    // the encoding/compression are placeholders.
     ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
                          common::TS_2DIFF);
     tuple_desc_.push_back(time_cd);

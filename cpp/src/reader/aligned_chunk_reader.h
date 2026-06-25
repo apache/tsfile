@@ -221,20 +221,13 @@ class AlignedChunkReader : public IChunkReader {
                                          common::ByteStream& value_in,
                                          common::RowAppender& row_appender,
                                          Filter* filter);
-    int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
-                            common::ByteStream& value_in,
-                            common::RowAppender& row_appender, Filter* filter);
-    int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
-                            common::ByteStream& value_in,
-                            common::RowAppender& row_appender, Filter* filter);
-    int float_DECODE_TV_BATCH(common::ByteStream& time_in,
-                              common::ByteStream& value_in,
-                              common::RowAppender& row_appender,
-                              Filter* filter);
-    int double_DECODE_TV_BATCH(common::ByteStream& time_in,
-                               common::ByteStream& value_in,
-                               common::RowAppender& row_appender,
-                               Filter* filter);
+    // Unified fixed-width aligned time+value page decode for
+    // INT32/INT64/FLOAT/DOUBLE.  Defined in the .cc; instantiated there for
+    // each value type by decode_tv_buf_into_tsblock_by_datatype().
+    template <typename T>
+    int decode_tv_batch(common::ByteStream& time_in,
+                        common::ByteStream& value_in,
+                        common::RowAppender& row_appender, Filter* filter);
     int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
                                             common::ByteStream& value_in,
                                             common::RowAppender& row_appender,

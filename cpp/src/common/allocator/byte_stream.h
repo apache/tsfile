@@ -23,6 +23,9 @@
 #include <common/constant/tsfile_constant.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef _MSC_VER
+#include <intrin.h>  // _BitScanReverse
+#endif
 
 #include <atomic>
 #include <iostream>
@@ -40,7 +43,7 @@ namespace common {
 // non-atomic mode we still go through the atomic interface but with
 // memory_order_relaxed, which on x86/ARM compiles to a plain load/store.
 // std::atomic<T> is non-copyable, so neither is OptionalAtomic; existing
-// callers either construct in place or use shallow_clone_from / store.
+// callers either construct in place or use store.
 template <typename T>
 class OptionalAtomic {
    public:
@@ -235,18 +238,23 @@ FORCE_INLINE double bytes_to_double(uint8_t bytes[8]) {
 // Round n up to the next power of two (>=1). Used to normalize ByteStream
 // page sizes so that `& page_mask_` is equivalent to `% page_size_`.
 // Values above the largest power-of-two that fits in uint32_t are clamped to
-// 0x80000000 — the previous `while (ps < n) ps <<= 1` would shift past 2^31
-// and overflow to 0, looping forever.
+// 0x80000000 — a naive `while (ps < n) ps <<= 1` would shift past 2^31 and
+// overflow to 0, looping forever.
+//
+// Derived from the index of the highest set bit of (n-1): the next power of
+// two >= n is 1 << (bits needed to represent n-1).  The two guards keep the
+// bit-scan input in [1, 2^31-1] where it is well-defined (clz(0) is UB), so
+// the shift amount stays in [1, 31] and never hits the `1u << 32` UB.
 FORCE_INLINE uint32_t round_up_pow2(uint32_t n) {
     if (n <= 1) return 1;
     if (n > 0x80000000u) return 0x80000000u;
-    uint32_t v = n - 1;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    return v + 1;
+#if defined(_MSC_VER)
+    unsigned long idx;
+    _BitScanReverse(&idx, n - 1);
+    return 1u << (idx + 1);
+#else
+    return 1u << (32 - __builtin_clz(n - 1));
+#endif
 }
 
 // auto extend buffer for serialization
@@ -363,16 +371,6 @@ class ByteStream {
         read_page_ = nullptr;
         total_size_.store(0);
         read_pos_ = 0;
-    }
-
-    // never used TODO
-    void shallow_clone_from(ByteStream& other) {
-        this->page_size_ = other.page_size_;
-        this->page_mask_ = other.page_mask_;
-        this->mid_ = other.mid_;
-        this->head_.store(other.head_.load());
-        this->tail_.store(other.tail_.load());
-        this->total_size_.store(other.total_size_.load());
     }
 
     FORCE_INLINE uint64_t total_size() const { return total_size_.load(); }

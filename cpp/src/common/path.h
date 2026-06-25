@@ -76,6 +76,9 @@ struct Path {
                     full_path_ =
                         device_id_->get_device_name() + "." + measurement_;
                 } else {
+                    // Single-node path (no separator): there is no device
+                    // prefix, so the lone token is the measurement and the
+                    // device id is left empty.
                     full_path_ = path_sc;
                     device_id_ = std::make_shared<StringArrayDeviceID>();
                     measurement_ = path_sc;

@@ -21,7 +21,6 @@
 #define FILE_TSFILE_IO_WRITER_H
 
 #include <map>
-#include <unordered_map>
 #include <vector>
 
 #include "common/allocator/page_arena.h"
@@ -194,7 +193,11 @@ class TsFileIOWriter {
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
         if (cgm->device_id_) {
-            chunk_group_meta_index_[cgm->device_id_->get_device_name()] = cgm;
+            // First CGM per device wins, matching the previous linear scan
+            // (which returned the earliest match in list order).  Recovery may
+            // push several CGMs for one device; the lookup must resolve to the
+            // first so reuse targets the same CGM the scan did.
+            chunk_group_meta_index_.emplace(cgm->device_id_, cgm);
         }
     }
     /** Chunks/CGMs allocated from meta_allocator_ via start_flush_chunk*()
@@ -222,9 +225,14 @@ class TsFileIOWriter {
     ChunkGroupMeta* cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta*> chunk_group_meta_list_;
-    // O(1) lookup for existing ChunkGroupMeta by device name, avoiding the
-    // O(N) linear scan through chunk_group_meta_list_ per device.
-    std::unordered_map<std::string, ChunkGroupMeta*> chunk_group_meta_index_;
+    // O(log N) lookup for an existing ChunkGroupMeta by device id, replacing
+    // the O(N) linear scan through chunk_group_meta_list_ per device.  Keyed by
+    // IDeviceID *content* (IDeviceIDComparator compares segment-by-segment), so
+    // distinct devices whose joined name strings would collide — e.g.
+    // ("a.","b") and ("a",".b") both render as "a..b" via get_device_name() —
+    // stay separate.
+    std::map<std::shared_ptr<IDeviceID>, ChunkGroupMeta*, IDeviceIDComparator>
+        chunk_group_meta_index_;
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
     WriteFile* file_;

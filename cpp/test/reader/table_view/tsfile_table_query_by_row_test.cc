@@ -763,7 +763,7 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at device/SSI/Chunk level; old query then manual next decodes every
-// row. Timing tolerance 5% to allow measurement noise.
+// row. Timing tolerance 50% to allow cross-platform measurement noise.
 TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
     const int num_rows = 80000;
     const int offset = 30000;

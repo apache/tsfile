@@ -1646,8 +1646,10 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
 // Every C-API entry must validate its pointers: a null reader would deref
 // during the static_cast, and null table/column/value would feed std::string
 // a null pointer (UB / crash).
-#define DEFINE_TAG_FILTER_FACTORY(name, method)                               \
-    TagFilterHandle tsfile_tag_filter_##name(                                 \
+// The function-name suffix and the TagFilterBuilder method are always the same
+// operator, so the macro takes a single argument used for both.
+#define DEFINE_TAG_FILTER_FACTORY(op)                                         \
+    TagFilterHandle tsfile_tag_filter_##op(                                   \
         TsFileReader reader, const char* table_name, const char* column_name, \
         const char* value) {                                                  \
         if (reader == nullptr || table_name == nullptr ||                     \
@@ -1658,15 +1660,15 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
         auto schema = r->get_table_schema(table_name);                        \
         if (!schema) return nullptr;                                          \
         storage::TagFilterBuilder builder(schema.get());                      \
-        return builder.method(column_name, value);                            \
+        return builder.op(column_name, value);                                \
     }
 
-DEFINE_TAG_FILTER_FACTORY(eq, eq)
-DEFINE_TAG_FILTER_FACTORY(neq, neq)
-DEFINE_TAG_FILTER_FACTORY(lt, lt)
-DEFINE_TAG_FILTER_FACTORY(lteq, lteq)
-DEFINE_TAG_FILTER_FACTORY(gt, gt)
-DEFINE_TAG_FILTER_FACTORY(gteq, gteq)
+DEFINE_TAG_FILTER_FACTORY(eq)
+DEFINE_TAG_FILTER_FACTORY(neq)
+DEFINE_TAG_FILTER_FACTORY(lt)
+DEFINE_TAG_FILTER_FACTORY(lteq)
+DEFINE_TAG_FILTER_FACTORY(gt)
+DEFINE_TAG_FILTER_FACTORY(gteq)
 
 #undef DEFINE_TAG_FILTER_FACTORY
 

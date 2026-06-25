@@ -110,7 +110,11 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
                 /*stat*/ false, /*data*/ false);
             if (IS_SUCC(ret)) {
                 save_first_page_data(value_page_writer_);
-                // value_page_writer_.destroy_page_data();
+                // Intentionally no destroy_page_data() here:
+                // save_first_page_data() transferred ownership of the page
+                // buffers to first_page_data_, which is freed later via
+                // free_first_writer_data() once the deferred first page is
+                // written.  Destroying them here would double-free.
                 value_page_writer_.reset();
             }
         }

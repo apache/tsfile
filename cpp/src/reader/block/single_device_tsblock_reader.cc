@@ -69,8 +69,8 @@ int32_t SingleDeviceTsBlockReader::compute_dense_row_count(
     // (see TsFileIOWriter / TimeseriesIndex::deserialize_from); when the
     // chunk-level statistic is null, fall back to the TimeseriesIndex's
     // top-level statistic, which summarizes that lone chunk.
-    auto chunk_count = [](const common::SimpleList<ChunkMeta*>& list,
-                          Statistic* fallback) -> int64_t {
+    auto count_chunk_points = [](const common::SimpleList<ChunkMeta*>& list,
+                                 Statistic* fallback) -> int64_t {
         int64_t total = 0;
         int nchunks = 0;
         for (auto it = list.begin(); it != list.end(); it++) {
@@ -114,14 +114,14 @@ int32_t SingleDeviceTsBlockReader::compute_dense_row_count(
                 aligned_ti->value_ts_idx_ != nullptr
                     ? aligned_ti->value_ts_idx_->get_statistic()
                     : nullptr;
-            time_count = chunk_count(*time_list, time_top_stat);
-            value_count = chunk_count(*value_list, value_top_stat);
+            time_count = count_chunk_points(*time_list, time_top_stat);
+            value_count = count_chunk_points(*value_list, value_top_stat);
         } else {
             auto* list = ts_index->get_chunk_meta_list();
             if (list == nullptr) {
                 return -1;
             }
-            time_count = chunk_count(*list, ts_index->get_statistic());
+            time_count = count_chunk_points(*list, ts_index->get_statistic());
             value_count = time_count;
         }
 
@@ -186,6 +186,10 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     // count across time + value chunks), bulk-copy from SSI tsblock to caller
     // tsblock instead of per-row merging.  compute_dense_row_count() returns
     // -1 if the device is not provably dense, which gates safety.
+    // Compile-time kill-switch for the dense aligned fast path below: flip to
+    // false to force the safe per-row merge path when debugging a suspected
+    // fast-path correctness issue.  The real gating is the runtime conditions
+    // at the use site (dense_row_count_ >= 0, all columns aligned).
     const bool enable_dense_aligned_fast_path = true;
     // Early device-level time skip: if time_filter is set and ALL chunks of
     // this device have statistics that fall outside the filter range, skip the
@@ -204,6 +208,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                                    ? ts_idx->get_time_chunk_meta_list()
                                    : ts_idx->get_chunk_meta_list();
             if (chunk_list == nullptr) {
+                // No chunk metadata for this column means we can't prove it
+                // lies outside the filter, so the device can't be safely
+                // skipped.  The decision is final, so stop scanning.
                 all_outside = false;
                 break;
             }

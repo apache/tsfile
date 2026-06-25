@@ -98,9 +98,9 @@ class TimeChunkWriter {
     Statistic* get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
-    int64_t estimate_max_series_mem_size();
-
     bool hasData();
+
+    int64_t estimate_max_series_mem_size();
 
     // Current (unsealed) page point count.
     FORCE_INLINE uint32_t get_point_numer() const {

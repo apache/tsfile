@@ -1209,6 +1209,12 @@ int TsFileWriter::write_table(Tablet& tablet) {
                     return ret;
                 }
 
+                // device_ctx_index tracks devices seen in *this* tablet, but
+                // do_check_schema_table returns the device's persistent chunk
+                // writer, which may already hold points from earlier
+                // tablets/records in the same un-flushed chunk group — so
+                // time_cur_points can be > 0 even on first sight in this
+                // tablet.
                 uint32_t time_cur_points = time_chunk_writer->get_point_numer();
                 if (time_cur_points >= page_max_points) {
                     // Seal the time page first, then every value page in
@@ -1266,6 +1272,11 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 uint32_t initial_page_points) -> int {
             int r = E_OK;
             tcw->set_enable_page_seal_if_full(false);
+            // The caller seals and resets time_cur_points to 0 once it reaches
+            // page_max_points, so initial_page_points is always in
+            // [0, page_max_points): >0 means a partial page (room is the
+            // leftover), ==0 means a fresh page (a full page of room).  The
+            // `< page_max_points` guard is defensive; that case can't occur.
             uint32_t page_remaining =
                 (initial_page_points > 0 &&
                  initial_page_points < page_max_points)

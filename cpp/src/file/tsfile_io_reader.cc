@@ -418,9 +418,13 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
     const int64_t read_size_i64 = end_offset - start_offset;
     // read_file_->read() takes int32_t; a meta index node larger than 2 GiB
     // is implausible but explicitly reject it instead of silently truncating
-    // the read length and corrupting the parse.
-    if (read_size_i64 <= 0 || read_size_i64 > INT32_MAX) {
+    // the read length and corrupting the parse.  Distinguish the two cases:
+    // an inverted/empty range is corruption, an oversized one is an overflow.
+    if (read_size_i64 <= 0) {
         return E_TSFILE_CORRUPTED;
+    }
+    if (read_size_i64 > INT32_MAX) {
+        return E_OVERFLOW;
     }
     const int32_t read_size = static_cast<int32_t>(read_size_i64);
     int32_t ret_read_len = 0;

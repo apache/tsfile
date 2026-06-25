@@ -29,6 +29,8 @@
 #include <thread>
 #include <vector>
 
+#include "common/logger/elog.h"
+
 namespace common {
 
 // Unified fixed-size thread pool supporting both fire-and-forget tasks
@@ -127,8 +129,13 @@ class ThreadPool {
             // tasks where the alternative is termination.
             try {
                 task();
+            } catch (const std::exception& e) {
+                // Suppressed to keep the worker alive and wait_all() unblocked
+                // (see comment above); logged so the failure is not silent.
+                LOGE("ThreadPool worker: task threw std::exception: "
+                     << e.what());
             } catch (...) {
-                // Intentionally suppressed; see comment above.
+                LOGE("ThreadPool worker: task threw a non-standard exception");
             }
             {
                 std::lock_guard<std::mutex> lk(mu_);

@@ -24,9 +24,8 @@
 
 #include "encoder.h"
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h>
-#define TSFILE_HAS_NEON 1
+#ifdef ENABLE_SIMD
+#include "simde/x86/ssse3.h"
 #endif
 
 namespace storage {
@@ -98,12 +97,15 @@ class PlainEncoder : public Encoder {
             uint8_t* dst = (uint8_t*)buf.buf_;
             const int64_t* src = values + offset;
             uint32_t i = 0;
-#if TSFILE_HAS_NEON
-            // NEON: byte-reverse 2 x int64 per iteration
+#ifdef ENABLE_SIMD
+            // SIMDe: byte-reverse 2 x int64 per iteration
+            const simde__m128i bswap64_shuf = simde_mm_set_epi8(
+                8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
             for (; i + 2 <= batch; i += 2) {
-                uint8x16_t v = vld1q_u8((const uint8_t*)&src[i]);
-                v = vrev64q_u8(v);
-                vst1q_u8(dst, v);
+                simde__m128i v = simde_mm_loadu_si128(
+                    (const simde__m128i*)&src[i]);
+                v = simde_mm_shuffle_epi8(v, bswap64_shuf);
+                simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
             }
 #endif
@@ -142,12 +144,15 @@ class PlainEncoder : public Encoder {
             uint8_t* dst = (uint8_t*)buf.buf_;
             const double* src = values + offset;
             uint32_t i = 0;
-#if TSFILE_HAS_NEON
-            // NEON byte-reverse of raw bytes works for double bits too.
+#ifdef ENABLE_SIMD
+            // SIMDe: byte-reverse 2 x double (64-bit) per iteration
+            const simde__m128i bswap64_shuf = simde_mm_set_epi8(
+                8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
             for (; i + 2 <= batch; i += 2) {
-                uint8x16_t v = vld1q_u8((const uint8_t*)&src[i]);
-                v = vrev64q_u8(v);
-                vst1q_u8(dst, v);
+                simde__m128i v = simde_mm_loadu_si128(
+                    (const simde__m128i*)&src[i]);
+                v = simde_mm_shuffle_epi8(v, bswap64_shuf);
+                simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
             }
 #endif
@@ -189,12 +194,15 @@ class PlainEncoder : public Encoder {
             uint8_t* dst = (uint8_t*)buf.buf_;
             const float* src = values + offset;
             uint32_t i = 0;
-#if TSFILE_HAS_NEON
-            // NEON: byte-reverse 4 x float (32-bit) per iteration
+#ifdef ENABLE_SIMD
+            // SIMDe: byte-reverse 4 x float (32-bit) per iteration
+            const simde__m128i bswap32_shuf = simde_mm_set_epi8(
+                12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
             for (; i + 4 <= batch; i += 4) {
-                uint8x16_t v = vld1q_u8((const uint8_t*)&src[i]);
-                v = vrev32q_u8(v);
-                vst1q_u8(dst, v);
+                simde__m128i v = simde_mm_loadu_si128(
+                    (const simde__m128i*)&src[i]);
+                v = simde_mm_shuffle_epi8(v, bswap32_shuf);
+                simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
             }
 #endif
