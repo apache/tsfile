@@ -220,10 +220,12 @@ def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
 def split_logical_series_path(series_path: str) -> List[Any]:
     """Split a path into components, decoding escapes in a single pass.
 
-    ``\\.`` -> ``.``, ``\\\\`` -> ``\\``, and the null marker ``\\N`` -> ``None``.
-    Null is detected in the escape branch: a lone backslash only ever precedes
-    ``N`` for the null marker, since a real value's backslash is always doubled
-    and ``N`` itself is never escaped.
+    ``\\.`` -> ``.``, ``\\\\`` -> ``\\``, and a component that is *exactly* the null
+    marker ``\\N`` -> ``None``. The marker is only valid as a whole component: a
+    real value's backslash is always doubled, so a lone ``\\N`` never occurs in a
+    real value. ``\\N`` combined with any other characters (e.g. ``a\\N`` or
+    ``\\Nfoo``) is therefore invalid input and raises, rather than being silently
+    parsed as a null tag (which could otherwise resolve the wrong device).
     """
     parts: List[Any] = []
     current: List[str] = []
@@ -232,8 +234,12 @@ def split_logical_series_path(series_path: str) -> List[Any]:
 
     for char in series_path:
         if escaping:
-            if char == _NULL_MARKER:  # \N -> the whole component is a null tag
+            if char == _NULL_MARKER:  # \N is a null tag only as a whole component
+                if is_null or current:
+                    raise ValueError(f"Invalid series path: {series_path}")
                 is_null = True
+            elif is_null:  # nothing may follow the null marker in a component
+                raise ValueError(f"Invalid series path: {series_path}")
             else:  # \\ -> \, \. -> ., any other \x -> x
                 current.append(char)
             escaping = False
@@ -243,6 +249,8 @@ def split_logical_series_path(series_path: str) -> List[Any]:
             parts.append(None if is_null else "".join(current))
             current = []
             is_null = False
+        elif is_null:  # nothing may follow the null marker in a component
+            raise ValueError(f"Invalid series path: {series_path}")
         else:
             current.append(char)
 

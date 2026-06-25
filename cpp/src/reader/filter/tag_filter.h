@@ -199,7 +199,7 @@ class TagFilterBuilder {
     static Filter* not_filter(Filter* filter);
 
    private:
-    int get_id_column_index(const std::string& columnName);
+    int get_tag_column_index(const std::string& columnName);
 };
 
 }  // namespace storage

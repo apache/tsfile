@@ -228,68 +228,68 @@ TagFilterBuilder::TagFilterBuilder(TableSchema* schema)
 
 Filter* TagFilterBuilder::eq(const std::string& columnName,
                              const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagEq(idx, value);
 }
 
 Filter* TagFilterBuilder::neq(const std::string& columnName,
                               const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagNeq(idx, value);
 }
 
 Filter* TagFilterBuilder::lt(const std::string& columnName,
                              const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagLt(idx, value);
 }
 
 Filter* TagFilterBuilder::lteq(const std::string& columnName,
                                const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagLteq(idx, value);
 }
 
 Filter* TagFilterBuilder::gt(const std::string& columnName,
                              const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagGt(idx, value);
 }
 
 Filter* TagFilterBuilder::gteq(const std::string& columnName,
                                const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagGteq(idx, value);
 }
 
 Filter* TagFilterBuilder::reg_exp(const std::string& columnName,
                                   const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagRegExp(idx, value);
 }
 
 Filter* TagFilterBuilder::not_reg_exp(const std::string& columnName,
                                       const std::string& value) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagNotRegExp(idx, value);
 }
 
 Filter* TagFilterBuilder::is_null(const std::string& columnName) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagIsNull(idx);
 }
 
 Filter* TagFilterBuilder::is_not_null(const std::string& columnName) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagIsNotNull(idx);
 }
@@ -297,7 +297,7 @@ Filter* TagFilterBuilder::is_not_null(const std::string& columnName) {
 Filter* TagFilterBuilder::between_and(const std::string& columnName,
                                       const std::string& lower,
                                       const std::string& upper) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagBetween(idx, lower, upper);
 }
@@ -305,7 +305,7 @@ Filter* TagFilterBuilder::between_and(const std::string& columnName,
 Filter* TagFilterBuilder::not_between_and(const std::string& columnName,
                                           const std::string& lower,
                                           const std::string& upper) {
-    auto idx = get_id_column_index(columnName);
+    auto idx = get_tag_column_index(columnName);
     if (idx < 0) return nullptr;
     return new TagNotBetween(idx, lower, upper);
 }
@@ -324,7 +324,7 @@ Filter* TagFilterBuilder::not_filter(Filter* filter) {
     return new TagNot(dynamic_cast<TagFilter*>(filter));
 }
 
-int TagFilterBuilder::get_id_column_index(const std::string& columnName) {
+int TagFilterBuilder::get_tag_column_index(const std::string& columnName) {
     int idColumnOrder = table_schema_->find_id_column_order(columnName);
     if (idColumnOrder == -1) {
         return -1;

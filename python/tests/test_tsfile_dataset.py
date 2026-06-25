@@ -397,6 +397,27 @@ def test_series_path_construction_forms_are_equivalent():
         SeriesPath(["tbl"])
 
 
+def test_split_logical_series_path_null_marker_only_whole_component():
+    from tsfile.dataset.metadata import split_logical_series_path
+
+    # \N is a null tag only as a complete component.
+    assert split_logical_series_path("a.\\N.b.f") == ["a", None, "b", "f"]
+    assert split_logical_series_path("a.\\N.\\N.f") == ["a", None, None, "f"]
+    # A real value "\N" (doubled backslash) stays a string, never null.
+    assert split_logical_series_path("a.\\\\N.b.f") == ["a", "\\N", "b", "f"]
+
+    # \N mixed with other characters is invalid input and fails fast, instead of
+    # being silently parsed as a null tag (which could resolve the wrong device).
+    for bad in (
+        "tbl.a\\N.b.f",  # characters before the marker
+        "tbl.\\Nfoo.x.f",  # characters after the marker
+        "a.\\N\\N.f",  # two markers in one component
+        "a.\\N\\.b.f",  # an escape after the marker
+    ):
+        with pytest.raises(ValueError, match="Invalid series path"):
+            split_logical_series_path(bad)
+
+
 def test_dataset_null_tag_positions_and_string_null_are_distinct(tmp_path):
     path = tmp_path / "null_positions.tsfile"
     schema = TableSchema(
