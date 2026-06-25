@@ -29,10 +29,13 @@ from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from .metadata import (
     MetadataCatalog,
+    SeriesStats,
     build_series_path,
-    iter_series_refs,
     resolve_series_path,
 )
+
+MODEL_TABLE = "table"
+MODEL_TREE = "tree"
 
 _NUMERIC_FIELD_TYPES = {
     TSDataType.BOOLEAN,
@@ -93,6 +96,10 @@ class TsFileSeriesReader:
         except Exception as e:
             raise ValueError(f"Failed to open TsFile: {e}") from e
 
+        # Probe the file model: an empty table-schema map signals tree model
+        self._table_schemas = self._reader.get_all_table_schemas()
+        self._model_kind: str = MODEL_TREE if not self._table_schemas else MODEL_TABLE
+
         self._catalog = MetadataCatalog()
         self._cache_metadata()
 
@@ -104,19 +111,23 @@ class TsFileSeriesReader:
         return self._catalog
 
     @property
+    def model_kind(self) -> str:
+        return self._model_kind
+
+    @property
     def series_paths(self) -> List[str]:
         return list(self.iter_series_paths())
 
     @property
     def series_count(self) -> int:
-        return self._catalog.series_count
+        return len(self._catalog.series_stats_by_ref)
 
     def iter_series_paths(self) -> Iterator[str]:
-        for device_id, field_idx in iter_series_refs(self._catalog):
+        for device_id, field_idx in self._catalog.series_stats_by_ref:
             yield build_series_path(self._catalog, device_id, field_idx)
 
     def iter_series_refs(self) -> Iterator[Tuple[str, int, int]]:
-        for device_id, field_idx in iter_series_refs(self._catalog):
+        for device_id, field_idx in self._catalog.series_stats_by_ref:
             yield build_series_path(
                 self._catalog, device_id, field_idx
             ), device_id, field_idx
@@ -131,8 +142,10 @@ class TsFileSeriesReader:
     def _cache_metadata(self):
         """Wrap metadata discovery so reader construction surfaces one stable error shape."""
         try:
-            self._cache_metadata_table_model()
-            # todo: we should support tree model
+            if self._model_kind == MODEL_TABLE:
+                self._cache_metadata_table_model()
+            else:
+                self._cache_metadata_tree_model()
         except Exception as e:
             raise ValueError(
                 f"Failed to read TsFile metadata. Please ensure the TsFile is valid and readable. Error: {e}"
@@ -140,7 +153,7 @@ class TsFileSeriesReader:
 
     def _cache_metadata_table_model(self):
         """Build the in-memory catalog from table schemas and native metadata."""
-        table_schemas = self._reader.get_all_table_schemas()
+        table_schemas = self._table_schemas
         if not table_schemas:
             raise ValueError("No tables found in TsFile")
 
@@ -204,18 +217,13 @@ class TsFileSeriesReader:
                 for field_idx, field_name in enumerate(table_entry.field_columns):
                     field_stats = stats_by_field.get(field_name)
                     if field_stats is None:
-                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = {
-                            "length": 0,
-                            "min_time": None,
-                            "max_time": None,
-                            "timeline_length": 0,
-                            "timeline_min_time": None,
-                            "timeline_max_time": None,
-                        }
-                    else:
-                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = (
-                            field_stats
-                        )
+                        # Schema declares this field but the device never
+                        # wrote it (or wrote it entirely as NaN). Skip --
+                        # the dataset surface only carries real series.
+                        continue
+                    self._catalog.series_stats_by_ref[(device_id, field_idx)] = (
+                        field_stats
+                    )
 
             if self.show_progress:
                 sys.stderr.write(
@@ -227,6 +235,107 @@ class TsFileSeriesReader:
         if self.show_progress:
             sys.stderr.write(
                 f"\rReading TsFile metadata: {len(table_names)} table(s), {self.series_count} series ... done\n"
+            )
+            sys.stderr.flush()
+
+    def _cache_metadata_tree_model(self):
+        """Build the in-memory catalog by synthesizing one virtual table.
+
+        Tree TsFiles have no schema, so we materialize a single
+        ``TableEntry``: table name = the shared root segment, tag columns
+        = ``_col_1..._col_{N_max}`` (one per remaining path segment),
+        fields = union of measurements across devices. Per-device
+        ownership is preserved by registering only the
+        ``(device_id, field_idx)`` pairs actually written on disk in
+        ``series_stats_by_ref``.
+        """
+        metadata_groups = self._reader.get_timeseries_metadata(None)
+        if not metadata_groups:
+            raise ValueError("No devices found in tree-model TsFile")
+
+        # 1) Walk every device once to collect: root-segment, max depth, and
+        #    the union of measurements that pass the numeric filter.
+        root_name = None
+        max_depth = 0  # segments after the root (i.e. virtual tag depth)
+        device_specs = []  # list of (tail_segments, group, stats_by_field)
+        union_fields = []  # ordered union of measurement names
+        seen_field_names = set()
+
+        for device_path, group in metadata_groups.items():
+            if not device_path:
+                continue
+            full_segments = tuple(device_path.split("."))
+            if not full_segments:
+                continue
+            current_root = full_segments[0]
+            if root_name is None:
+                root_name = current_root
+            elif current_root != root_name:
+                raise ValueError(
+                    f"Tree-model TsFile contains multiple root segments: "
+                    f"{root_name!r} vs {current_root!r}. A single load set "
+                    f"must share one tree root."
+                )
+
+            tail = full_segments[1:]
+            depth = len(tail)
+            if depth > max_depth:
+                max_depth = depth
+
+            stats_by_field = self._metadata_field_stats(group)
+            if not stats_by_field:
+                continue
+            for measurement in stats_by_field.keys():
+                if measurement not in seen_field_names:
+                    seen_field_names.add(measurement)
+                    union_fields.append(measurement)
+            device_specs.append((tail, group, stats_by_field))
+
+        if root_name is None:
+            raise ValueError("No devices found in tree-model TsFile")
+        if not union_fields:
+            raise ValueError("No numeric measurements found in tree-model TsFile")
+
+        # 2) Materialize the synthetic table entry. Tag columns are 1-based
+        #    so the rendered headers match the requirement ("_col_1").
+        tag_columns = tuple(f"_col_{i + 1}" for i in range(max_depth))
+        tag_types = (TSDataType.STRING,) * max_depth
+
+        self._catalog = MetadataCatalog()
+        table_id = self._catalog.add_table(
+            root_name, tag_columns, tag_types, union_fields
+        )
+        table_entry = self._catalog.table_entries[table_id]
+
+        # 3) Stable device order: keep input iteration order so the dataset
+        #    layer's row index stays deterministic across reloads.
+        total = len(device_specs)
+        if self.show_progress:
+            sys.stderr.write(f"\rReading TsFile metadata: 0/{total} devices")
+            sys.stderr.flush()
+
+        for idx, (tail, group, stats_by_field) in enumerate(device_specs, start=1):
+            device_stats = self._metadata_device_stats(group)
+            if device_stats is None:
+                continue
+            # Pad shorter devices with None to length max_depth; the catalog
+            # normalizer strips trailing Nones so this never enters the
+            # sparse-tag bookkeeping.
+            padded = tuple(list(tail) + [None] * (max_depth - len(tail)))
+            device_id = self._add_device(
+                table_id, padded, device_stats["min_time"], device_stats["max_time"]
+            )
+            for measurement, field_stats in stats_by_field.items():
+                field_idx = table_entry.get_field_index(measurement)
+                self._catalog.series_stats_by_ref[(device_id, field_idx)] = field_stats
+            if self.show_progress and (idx % 64 == 0 or idx == total):
+                sys.stderr.write(f"\rReading TsFile metadata: {idx}/{total} devices")
+                sys.stderr.flush()
+
+        if self.show_progress:
+            sys.stderr.write(
+                f"\rReading TsFile metadata (tree): {total} device(s), "
+                f"{self.series_count} series ... done\n"
             )
             sys.stderr.flush()
 
@@ -269,28 +378,29 @@ class TsFileSeriesReader:
         return tuple(values)
 
     @staticmethod
-    def _metadata_field_stats(group) -> Dict[str, dict]:
-        stats = {}
+    def _metadata_field_stats(group) -> Dict[str, SeriesStats]:
+        """Collect per-measurement stats for cells that have real values.
+
+        A measurement appears in the result iff its native ``statistic`` block
+        is populated and reports a positive ``row_count``. Columns that the
+        device never wrote (Tablet skip / all-NaN pandas column) carry no
+        real values and are intentionally absent -- the dataset layer
+        surfaces only series that physically exist.
+        """
+        stats: Dict[str, SeriesStats] = {}
         for timeseries in group.timeseries:
             statistic = timeseries.statistic
-            timeline_statistic = timeseries.timeline_statistic
-            if (
-                not timeline_statistic.has_statistic
-                or timeline_statistic.row_count <= 0
-            ):
+            if not statistic.has_statistic or statistic.row_count <= 0:
                 continue
-            stats[timeseries.measurement_name] = {
-                "length": int(statistic.row_count) if statistic.has_statistic else 0,
-                "min_time": (
-                    int(statistic.start_time) if statistic.has_statistic else None
-                ),
-                "max_time": (
-                    int(statistic.end_time) if statistic.has_statistic else None
-                ),
-                "timeline_length": int(timeline_statistic.row_count),
-                "timeline_min_time": int(timeline_statistic.start_time),
-                "timeline_max_time": int(timeline_statistic.end_time),
-            }
+            timeline_statistic = timeseries.timeline_statistic
+            stats[timeseries.measurement_name] = SeriesStats(
+                length=int(statistic.row_count),
+                min_time=int(statistic.start_time),
+                max_time=int(statistic.end_time),
+                timeline_length=int(timeline_statistic.row_count),
+                timeline_min_time=int(timeline_statistic.start_time),
+                timeline_max_time=int(timeline_statistic.end_time),
+            )
         return stats
 
     def _add_device(
@@ -330,12 +440,12 @@ class TsFileSeriesReader:
         )
         field_stats = self._catalog.series_stats_by_ref[(device_id, field_idx)]
         return {
-            "length": field_stats["length"],
-            "min_time": field_stats["min_time"],
-            "max_time": field_stats["max_time"],
-            "timeline_length": field_stats["timeline_length"],
-            "timeline_min_time": field_stats["timeline_min_time"],
-            "timeline_max_time": field_stats["timeline_max_time"],
+            "length": field_stats.length,
+            "min_time": field_stats.min_time,
+            "max_time": field_stats.max_time,
+            "timeline_length": field_stats.timeline_length,
+            "timeline_min_time": field_stats.timeline_min_time,
+            "timeline_max_time": field_stats.timeline_max_time,
             "table_name": table_entry.table_name,
             "column_name": field_name,
             "device_id": device_id,
@@ -375,6 +485,11 @@ class TsFileSeriesReader:
         table_entry, device_entry, field_name = self._resolve_series_ref(
             device_id, field_idx
         )
+
+        if self._model_kind == MODEL_TREE:
+            device_path = self._build_tree_device_path(table_entry, device_entry)
+            return self._read_series_by_row_tree(device_path, field_name, offset, limit)
+
         tag_values = _device_exact_tag_values(table_entry, device_entry)
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
@@ -416,6 +531,58 @@ class TsFileSeriesReader:
             return timestamp_parts[0], value_parts[0]
         return np.concatenate(timestamp_parts), np.concatenate(value_parts)
 
+    def _read_series_by_row_tree(
+        self, device_path: str, field_name: str, offset: int, limit: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Tree-model row read: scan on-tree result, filter device, apply offset/limit."""
+        target_path_segments = device_path.split(".")
+        # +1 because cwrapper prepends the root as an extra col_i cell.
+        expected_path_len = (
+            max(len(t.tag_columns) for t in self._catalog.table_entries) + 1
+        )
+        timestamps = []
+        values = []
+        skipped = 0
+        with self._reader.query_table_on_tree([field_name]) as result_set:
+            md = result_set.get_metadata()
+            num_cols = md.get_column_num()
+            col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
+            try:
+                field_idx = col_names.index(field_name) + 1
+            except ValueError:
+                return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+            all_col_indices = [
+                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
+            ]
+            # Only the trailing expected_path_len col_i cells are genuine; the
+            # leading duplicates are stale from prior queries on this reader.
+            col_indices = all_col_indices[-expected_path_len:]
+            while result_set.next():
+                row_path_segments = [
+                    result_set.get_value_by_index(ci) for ci in col_indices
+                ]
+                # Trim trailing Nones for the (possibly-shorter) device path.
+                while row_path_segments and row_path_segments[-1] is None:
+                    row_path_segments.pop()
+                if row_path_segments != target_path_segments:
+                    continue
+                if skipped < offset:
+                    skipped += 1
+                    continue
+                if len(timestamps) >= limit:
+                    break
+                ts = result_set.get_value_by_index(1)
+                raw = result_set.get_value_by_index(field_idx)
+                timestamps.append(int(ts))
+                values.append(np.nan if raw is None else float(raw))
+
+        if not timestamps:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+        return (
+            np.asarray(timestamps, dtype=np.int64),
+            np.asarray(values, dtype=np.float64),
+        )
+
     def read_device_fields_by_time_range(
         self, device_id: int, field_indices: List[int], start_time: int, end_time: int
     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
@@ -425,7 +592,12 @@ class TsFileSeriesReader:
         requested_field_columns = [
             table_entry.field_columns[field_idx] for field_idx in field_indices
         ]
-        timestamps, field_values = self._read_arrow(
+        if self._model_kind == MODEL_TREE:
+            device_path = self._build_tree_device_path(table_entry, device_entry)
+            return self._read_arrow_tree(
+                device_path, requested_field_columns, start_time, end_time
+            )
+        return self._read_arrow_table(
             table_entry.table_name,
             requested_field_columns,
             table_entry.tag_columns,
@@ -433,9 +605,36 @@ class TsFileSeriesReader:
             start_time,
             end_time,
         )
-        return timestamps, field_values
 
-    def _read_arrow(
+    @staticmethod
+    def _build_tree_device_path(table_entry, device_entry) -> str:
+        """Reassemble the cwrapper-facing tree device path from catalog state.
+
+        The native ``query_timeseries`` / ``query_tree_by_row`` APIs split the
+        device path on ``.`` internally, so segments themselves must not
+        contain ``.``. Tree-model writers enforce this convention; we surface
+        an explicit error if a future writer ever violates it.
+        """
+        components = [str(table_entry.table_name)]
+        for value in device_entry.tag_values:
+            if value is None:
+                # Should not happen: trailing-None devices are normalized to a
+                # shorter tag tuple. An interior None signals a sparse-tag
+                # device, which is not part of the tree-model contract.
+                raise ValueError(
+                    f"Tree device path cannot include a null segment: "
+                    f"{device_entry.tag_values!r}"
+                )
+            text = str(value)
+            if "." in text:
+                raise NotImplementedError(
+                    f"Tree device segment with '.' is not supported by the "
+                    f"underlying cwrapper path API: {text!r}"
+                )
+            components.append(text)
+        return ".".join(components)
+
+    def _read_arrow_table(
         self,
         table_name: str,
         field_columns: List[str],
@@ -504,3 +703,79 @@ class TsFileSeriesReader:
         }
 
         return timestamps, field_values
+
+    def _read_arrow_tree(
+        self,
+        device_path: str,
+        field_columns: List[str],
+        start_time: int,
+        end_time: int,
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        """Tree-model time-range read for one device (multi-field)."""
+        field_columns = list(field_columns)
+        if not field_columns:
+            return (
+                np.array([], dtype=np.int64),
+                {},
+            )
+
+        target_path_segments = device_path.split(".")
+        expected_path_len = (
+            max(len(t.tag_columns) for t in self._catalog.table_entries) + 1
+        )
+        timestamps = []
+        value_buckets = {col: [] for col in field_columns}
+
+        with self._reader.query_table_on_tree(
+            field_columns, start_time, end_time
+        ) as result_set:
+            md = result_set.get_metadata()
+            num_cols = md.get_column_num()
+            col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
+            value_indices = {}
+            for col in field_columns:
+                try:
+                    value_indices[col] = col_names.index(col) + 1
+                except ValueError:
+                    # Column missing (no device in file owns it). Yield empty.
+                    return (
+                        np.array([], dtype=np.int64),
+                        {
+                            col2: np.array([], dtype=np.float64)
+                            for col2 in field_columns
+                        },
+                    )
+            all_col_indices = [
+                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
+            ]
+            col_indices = all_col_indices[-expected_path_len:]
+            while result_set.next():
+                row_path_segments = [
+                    result_set.get_value_by_index(ci) for ci in col_indices
+                ]
+                while row_path_segments and row_path_segments[-1] is None:
+                    row_path_segments.pop()
+                if row_path_segments != target_path_segments:
+                    continue
+                ts = int(result_set.get_value_by_index(1))
+                # The on-tree scan already honors start/end_time at the
+                # cwrapper level, but defensively re-clip on the boundary.
+                if ts < start_time or ts > end_time:
+                    continue
+                timestamps.append(ts)
+                for col, vidx in value_indices.items():
+                    raw = result_set.get_value_by_index(vidx)
+                    value_buckets[col].append(np.nan if raw is None else float(raw))
+
+        if not timestamps:
+            return (
+                np.array([], dtype=np.int64),
+                {col: np.array([], dtype=np.float64) for col in field_columns},
+            )
+
+        timestamps_arr = np.asarray(timestamps, dtype=np.int64)
+        field_values = {
+            col: np.asarray(value_buckets[col], dtype=np.float64)
+            for col in field_columns
+        }
+        return timestamps_arr, field_values

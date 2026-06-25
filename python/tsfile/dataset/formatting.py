@@ -106,8 +106,14 @@ def format_dataframe_table(
     total_count: int,
     truncated: bool = False,
     split_index: Optional[int] = None,
+    is_table_model: bool = True,
 ) -> str:
-    """Render the metadata table used by TsFileDataFrame.__repr__."""
+    """Render the metadata table used by TsFileDataFrame.__repr__.
+
+    When ``is_table_model`` is False (tree-model layout) the leading
+    ``table`` column is omitted; ``tag_columns`` is then expected to carry the
+    tree-model headers (e.g. ``_col_1``, ``_col_2``, ...).
+    """
     if not rows:
         return "Empty TsFileDataFrame"
 
@@ -115,23 +121,31 @@ def format_dataframe_table(
     for row in rows:
         rendered = {
             "index": row["index"],
-            "table": row["table"],
             "field": row["field"],
             "start_time": format_timestamp(row["start_time"]),
             "end_time": format_timestamp(row["end_time"]),
             "count": row["count"],
         }
+        if is_table_model:
+            rendered["table"] = row["table"]
         for tag_col in tag_columns:
-            rendered[tag_col] = row.get(tag_col, "")
+            value = row.get(tag_col)
+            rendered[tag_col] = "None" if value is None else value
         rendered_rows.append(rendered)
 
-    headers = ["", "table"] + tag_columns + ["field", "start_time", "end_time", "count"]
+    headers = [""]
+    if is_table_model:
+        headers.append("table")
+    headers.extend(tag_columns)
+    headers.extend(["field", "start_time", "end_time", "count"])
+
     widths = {header: len(header) for header in headers}
     widths[""] = max(len(str(row["index"])) for row in rendered_rows)
 
     for row in rendered_rows:
         widths[""] = max(widths[""], len(str(row["index"])))
-        widths["table"] = max(widths["table"], len(row["table"]))
+        if is_table_model:
+            widths["table"] = max(widths["table"], len(row["table"]))
         widths["field"] = max(widths["field"], len(row["field"]))
         widths["start_time"] = max(widths["start_time"], len(row["start_time"]))
         widths["end_time"] = max(widths["end_time"], len(row["end_time"]))
@@ -144,10 +158,9 @@ def format_dataframe_table(
     for row_idx, row in enumerate(rendered_rows):
         if truncated and row_idx == split:
             lines.append("...")
-        parts = [
-            str(row["index"]).rjust(widths[""]),
-            row["table"].rjust(widths["table"]),
-        ]
+        parts = [str(row["index"]).rjust(widths[""])]
+        if is_table_model:
+            parts.append(row["table"].rjust(widths["table"]))
         for tag_col in tag_columns:
             parts.append(str(row[tag_col]).rjust(widths[tag_col]))
         parts.extend(

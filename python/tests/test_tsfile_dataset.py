@@ -32,10 +32,15 @@ from tsfile import AlignedTimeseries, SeriesPath, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
 from tsfile.dataset.metadata import (
     MetadataCatalog,
+    SeriesStats,
     build_series_path,
     resolve_series_path,
 )
-from tsfile.dataset.reader import TsFileSeriesReader, _build_exact_tag_filter
+from tsfile.dataset.reader import (
+    MODEL_TABLE,
+    TsFileSeriesReader,
+    _build_exact_tag_filter,
+)
 
 
 def _write_weather_file(path, start):
@@ -247,7 +252,7 @@ def test_dataset_basic_access_patterns(tmp_path, capsys):
 
         assert list(tsdf["field"]) == ["temperature", "humidity"]
 
-        assert "TsFileDataFrame(2 time series, 2 files)" in repr(tsdf)
+        assert "TsFileDataFrame(table model, 2 time series, 2 files)" in repr(tsdf)
         aligned.show(2)
         assert "AlignedTimeseries(6 rows, 2 series)" in capsys.readouterr().out
 
@@ -490,6 +495,54 @@ def test_dataset_loc_supports_single_timestamp_and_mixed_series_specifiers(tmp_p
         np.testing.assert_array_equal(aligned.values, np.array([[21.5, 52.0]]))
 
 
+def test_dataset_loc_dedups_repeated_series_specifiers(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        humidity = "weather.device_a.humidity"
+        humidity_idx = tsdf.list_timeseries().index(humidity)
+
+        # 1) name + matching idx pointing at the same series.
+        aligned_two_dup = tsdf.loc[0:2, [humidity, humidity_idx]]
+        assert aligned_two_dup.shape == (3, 2)
+        np.testing.assert_array_equal(
+            aligned_two_dup.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
+        np.testing.assert_array_equal(
+            aligned_two_dup.values,
+            np.array([[50.0, 50.0], [52.0, 52.0], [55.0, 55.0]]),
+        )
+
+        # 2) same name twice -- single-group, single-key dedup path.
+        aligned_name_twice = tsdf.loc[0:2, [humidity, humidity]]
+        assert aligned_name_twice.shape == (3, 2)
+        np.testing.assert_array_equal(
+            aligned_name_twice.values,
+            np.array([[50.0, 50.0], [52.0, 52.0], [55.0, 55.0]]),
+        )
+
+        # 3) duplicate among other distinct series must not regress the
+        #    historically-passing case either.
+        aligned_mixed = tsdf.loc[
+            0:2, [humidity, "weather.device_a.temperature", humidity_idx]
+        ]
+        assert aligned_mixed.shape == (3, 3)
+        np.testing.assert_array_equal(
+            aligned_mixed.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
+        np.testing.assert_array_equal(
+            aligned_mixed.values,
+            np.array(
+                [
+                    [50.0, 20.0, 50.0],
+                    [52.0, 21.5, 52.0],
+                    [55.0, 23.0, 55.0],
+                ]
+            ),
+        )
+
+
 def test_dataset_loc_supports_open_ended_ranges_and_negative_series_index(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 100)
@@ -570,7 +623,7 @@ def test_dataset_repr_only_builds_preview_rows(tmp_path, monkeypatch):
     _write_weather_file(path, 0)
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
-        tsdf._index.series_refs_ordered = [(0, 0)] * 1000
+        tsdf._index.series = [(0, 0)] * 1000
 
         built_rows = []
 
@@ -595,7 +648,7 @@ def test_dataset_repr_only_builds_preview_rows(tmp_path, monkeypatch):
         monkeypatch.setattr(tsdf, "_build_series_name", fail_build_series_name)
 
         rendered = repr(tsdf)
-        assert "TsFileDataFrame(1000 time series, 1 files)" in rendered
+        assert "TsFileDataFrame(table model, 1000 time series, 1 files)" in rendered
         assert "..." in rendered
         assert len(built_rows) == 20
 
@@ -620,6 +673,78 @@ def test_dataset_exposes_only_numeric_fields_and_keeps_nan(tmp_path):
         assert np.isnan(sliced[1])
         assert sliced[2] == 23.5
         assert series[1:1].shape == (0,)
+
+
+def test_dataset_omits_table_model_phantom_series_for_skipped_cells(tmp_path):
+    """Schema-declared fields that a device never wrote must NOT appear.
+
+    The dataset surface treats a series as "data physically written for one
+    (device, field) pair". A Tablet that skips ``add_value_by_name`` for a
+    column produces a chunk with ``length=0``; that cell is not a real series
+    and must not be exposed via ``list_timeseries`` / ``len(tsdf)`` /
+    ``series_shards`` -- table-model and tree-model behave identically here.
+    """
+    from tsfile import Tablet
+
+    path = tmp_path / "sparse_table.tsfile"
+    schema = TableSchema(
+        "bench",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("v1", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("v2", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("v3", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        # d1: writes only v1 and v2 (skip v3)
+        t1 = Tablet(
+            ["device", "v1", "v2", "v3"],
+            [
+                TSDataType.STRING,
+                TSDataType.DOUBLE,
+                TSDataType.DOUBLE,
+                TSDataType.DOUBLE,
+            ],
+            1,
+        )
+        t1.add_timestamp(0, 1)
+        t1.add_value_by_name("device", 0, "d1")
+        t1.add_value_by_name("v1", 0, 100.0)
+        t1.add_value_by_name("v2", 0, 200.0)
+        writer.write_table(t1)
+
+        # d2: writes only v1 and v3 (skip v2)
+        t2 = Tablet(
+            ["device", "v1", "v2", "v3"],
+            [
+                TSDataType.STRING,
+                TSDataType.DOUBLE,
+                TSDataType.DOUBLE,
+                TSDataType.DOUBLE,
+            ],
+            1,
+        )
+        t2.add_timestamp(0, 2)
+        t2.add_value_by_name("device", 0, "d2")
+        t2.add_value_by_name("v1", 0, 110.0)
+        t2.add_value_by_name("v3", 0, 330.0)
+        writer.write_table(t2)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        # 4 real cells: (d1,v1), (d1,v2), (d2,v1), (d2,v3); NO phantoms.
+        assert len(tsdf) == 4
+        assert sorted(tsdf.list_timeseries()) == [
+            "bench.d1.v1",
+            "bench.d1.v2",
+            "bench.d2.v1",
+            "bench.d2.v3",
+        ]
+
+        with pytest.raises(KeyError):
+            tsdf["bench.d1.v3"]
+        with pytest.raises(KeyError):
+            tsdf["bench.d2.v2"]
 
 
 def test_dataset_timeseries_supports_negative_step_slices(tmp_path):
@@ -921,6 +1046,7 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
             return _FakeResultSet(rows)
 
     reader = object.__new__(TsFileSeriesReader)
+    reader._model_kind = MODEL_TABLE
     reader._reader = _FakeNativeReader(
         np.arange(30, dtype=np.int64), np.arange(30, dtype=np.float64), boundary=10
     )
@@ -942,14 +1068,14 @@ def test_series_path_resolution_allows_prefix_tag_values():
         ("temperature",),
     )
     device_id = catalog.add_device(table_id, ("site_a", "device_a"), 0, 1)
-    catalog.series_stats_by_ref[(device_id, 0)] = {
-        "length": 1,
-        "min_time": 0,
-        "max_time": 0,
-        "timeline_length": 1,
-        "timeline_min_time": 0,
-        "timeline_max_time": 0,
-    }
+    catalog.series_stats_by_ref[(device_id, 0)] = SeriesStats(
+        length=1,
+        min_time=0,
+        max_time=0,
+        timeline_length=1,
+        timeline_min_time=0,
+        timeline_max_time=0,
+    )
 
     series_path = build_series_path(catalog, device_id, 0)
     assert series_path == "weather.site_a.device_a.temperature"
@@ -965,14 +1091,14 @@ def test_series_path_resolution_allows_missing_trailing_tag_value():
         ("temperature",),
     )
     device_id = catalog.add_device(table_id, (), 0, 1)
-    catalog.series_stats_by_ref[(device_id, 0)] = {
-        "length": 1,
-        "min_time": 0,
-        "max_time": 0,
-        "timeline_length": 1,
-        "timeline_min_time": 0,
-        "timeline_max_time": 0,
-    }
+    catalog.series_stats_by_ref[(device_id, 0)] = SeriesStats(
+        length=1,
+        min_time=0,
+        max_time=0,
+        timeline_length=1,
+        timeline_min_time=0,
+        timeline_max_time=0,
+    )
 
     series_path = build_series_path(catalog, device_id, 0)
     assert series_path == "weather.temperature"
@@ -988,14 +1114,14 @@ def test_series_path_resolution_uses_named_tags_for_sparse_non_prefix_values():
         ("temperature",),
     )
     device_id = catalog.add_device(table_id, (None, "device_a", None), 0, 1)
-    catalog.series_stats_by_ref[(device_id, 0)] = {
-        "length": 1,
-        "min_time": 0,
-        "max_time": 0,
-        "timeline_length": 1,
-        "timeline_min_time": 0,
-        "timeline_max_time": 0,
-    }
+    catalog.series_stats_by_ref[(device_id, 0)] = SeriesStats(
+        length=1,
+        min_time=0,
+        max_time=0,
+        timeline_length=1,
+        timeline_min_time=0,
+        timeline_max_time=0,
+    )
 
     series_path = build_series_path(catalog, device_id, 0)
     # The leading null tag is preserved at its position via the \N marker.
@@ -1101,6 +1227,7 @@ def test_reader_exact_match_with_none_tag_values_issues_is_null_query():
             return _EmptyResultSet()
 
     reader = object.__new__(TsFileSeriesReader)
+    reader._model_kind = MODEL_TABLE
     reader._reader = _FakeNativeReader()
     reader._catalog = MetadataCatalog()
     table_id = reader._catalog.add_table(
@@ -1110,14 +1237,14 @@ def test_reader_exact_match_with_none_tag_values_issues_is_null_query():
         ("temperature",),
     )
     device_id = reader._catalog.add_device(table_id, (None, "device_a", "north"), 0, 1)
-    reader._catalog.series_stats_by_ref[(device_id, 0)] = {
-        "length": 2,
-        "min_time": 0,
-        "max_time": 1,
-        "timeline_length": 2,
-        "timeline_min_time": 0,
-        "timeline_max_time": 1,
-    }
+    reader._catalog.series_stats_by_ref[(device_id, 0)] = SeriesStats(
+        length=2,
+        min_time=0,
+        max_time=1,
+        timeline_length=2,
+        timeline_min_time=0,
+        timeline_max_time=1,
+    )
 
     # Both read paths now issue a native query that encodes the null tag as
     # IS NULL instead of failing fast.
@@ -1130,7 +1257,7 @@ def test_reader_exact_match_with_none_tag_values_issues_is_null_query():
 
 def test_dataframe_resolves_named_sparse_tag_series_path():
     tsdf = object.__new__(TsFileDataFrame)
-    tsdf._index = dataframe_module._LogicalIndex()
+    tsdf._index = dataframe_module._DataFrameCatalog()
     tsdf._index.table_entries["weather"] = dataframe_module.TableEntry(
         table_name="weather",
         tag_columns=("city", "device", "region"),
@@ -1138,12 +1265,11 @@ def test_dataframe_resolves_named_sparse_tag_series_path():
         field_columns=("temperature",),
     )
     device_key = ("weather", (None, "device_a"))
-    tsdf._index.device_order = [device_key]
-    tsdf._index.device_index_by_key = {device_key: 0}
-    tsdf._index.device_refs = [[]]
-    tsdf._index.series_refs_ordered = [(0, 0)]
-    tsdf._index.series_ref_set = {(0, 0)}
-    tsdf._index.series_ref_map = {(0, 0): []}
+    tsdf._index.devices = [device_key]
+    tsdf._index.device_index = {device_key: 0}
+    tsdf._index.device_time_bounds = [(0, 1)]
+    tsdf._index.series = [(0, 0)]
+    tsdf._index.series_shards = {(0, 0): []}
 
     assert tsdf.list_timeseries() == ["weather.\\N.device_a.temperature"]
     # Resolvable by the \N string form and by the returned SeriesPath itself.
@@ -1153,25 +1279,24 @@ def test_dataframe_resolves_named_sparse_tag_series_path():
 
 def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
     tsdf = object.__new__(TsFileDataFrame)
-    tsdf._index = dataframe_module._LogicalIndex()
+    tsdf._index = dataframe_module._DataFrameCatalog()
     tsdf._index.table_entries["weather"] = dataframe_module.TableEntry(
         table_name="weather",
         tag_columns=("city", "device", "region"),
         tag_types=(TSDataType.STRING, TSDataType.STRING, TSDataType.STRING),
         field_columns=("temperature",),
     )
-    tsdf._index.device_order = [
+    tsdf._index.devices = [
         ("weather", (None, "device_a")),
         ("weather", ("beijing", "device_b")),
     ]
-    tsdf._index.device_index_by_key = {
+    tsdf._index.device_index = {
         ("weather", (None, "device_a")): 0,
         ("weather", ("beijing", "device_b")): 1,
     }
-    tsdf._index.device_refs = [[], []]
-    tsdf._index.series_refs_ordered = [(0, 0), (1, 0)]
-    tsdf._index.series_ref_set = {(0, 0), (1, 0)}
-    tsdf._index.series_ref_map = {(0, 0): [], (1, 0): []}
+    tsdf._index.device_time_bounds = [(0, 1), (0, 1)]
+    tsdf._index.series = [(0, 0), (1, 0)]
+    tsdf._index.series_shards = {(0, 0): [], (1, 0): []}
 
     # Prefix matching is position-aware: "weather.\N" selects the null-city
     # device, "weather.beijing" selects the fully specified one.
@@ -1188,7 +1313,7 @@ def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
     _write_weather_file(path, 0)
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
-        tsdf._index.series_refs_ordered = [(0, 0)] * 1000
+        tsdf._index.series = [(0, 0)] * 1000
 
         def fail_build_series_name(_series_ref):
             raise AssertionError(
@@ -1210,14 +1335,14 @@ def test_series_path_resolution_distinguishes_null_position():
     first_id = catalog.add_device(table_id, ("beijing", None), 0, 1)  # device IS NULL
     second_id = catalog.add_device(table_id, (None, "beijing"), 0, 1)  # city IS NULL
     for device_id in (first_id, second_id):
-        catalog.series_stats_by_ref[(device_id, 0)] = {
-            "length": 1,
-            "min_time": 0,
-            "max_time": 0,
-            "timeline_length": 1,
-            "timeline_min_time": 0,
-            "timeline_max_time": 0,
-        }
+        catalog.series_stats_by_ref[(device_id, 0)] = SeriesStats(
+            length=1,
+            min_time=0,
+            max_time=0,
+            timeline_length=1,
+            timeline_min_time=0,
+            timeline_max_time=0,
+        )
 
     # Null position is preserved, so these two devices get distinct paths
     # (previously both compressed to "weather.beijing.temperature" -> ambiguous).
@@ -1257,3 +1382,138 @@ def test_dataframe_parallel_show_progress_reports_start_immediately(tmp_path, ca
     stderr = capsys.readouterr().err
     assert "Loading TsFile shards: 0/2" in stderr
     assert "Loading TsFile shards: 2/2 (4 series) ... done" in stderr
+
+
+# --- Tree-model tests -------------------------------------------------------
+
+
+def _write_tree_file(path):
+    """Tree-model TsFile with two devices; the second device is shorter and
+    only has one of the two declared measurements, exercising None-pad +
+    union-field paths in the synthetic table layer.
+    """
+    from tsfile import (
+        Field,
+        RowRecord,
+        TimeseriesSchema,
+        TsFileWriter,
+    )
+
+    writer = TsFileWriter(str(path))
+    writer.register_timeseries(
+        "root.ln.wf01.wt01", TimeseriesSchema("status", TSDataType.INT32)
+    )
+    writer.register_timeseries(
+        "root.ln.wf01.wt01", TimeseriesSchema("temperature", TSDataType.DOUBLE)
+    )
+    writer.register_timeseries(
+        "root.ln.wf02.wt02", TimeseriesSchema("status", TSDataType.INT32)
+    )
+    for t in range(5):
+        writer.write_row_record(
+            RowRecord(
+                "root.ln.wf01.wt01",
+                t,
+                [
+                    Field("status", t, TSDataType.INT32),
+                    Field("temperature", float(t) + 0.5, TSDataType.DOUBLE),
+                ],
+            )
+        )
+        writer.write_row_record(
+            RowRecord(
+                "root.ln.wf02.wt02",
+                t,
+                [Field("status", t * 2, TSDataType.INT32)],
+            )
+        )
+    writer.close()
+
+
+def test_dataset_tree_model_metadata_and_repr(tmp_path):
+    path = tmp_path / "tree.tsfile"
+    _write_tree_file(path)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        assert tsdf.model == "tree"
+        assert len(tsdf) == 3
+        assert sorted(tsdf.list_timeseries()) == [
+            "root.ln.wf01.wt01.status",
+            "root.ln.wf01.wt01.temperature",
+            "root.ln.wf02.wt02.status",
+        ]
+
+        rendered = repr(tsdf)
+        # Header carries the model marker; tag headers use _col_i (1-based).
+        assert "TsFileDataFrame(tree model, 3 time series, 1 files)" in rendered
+        assert "_col_1" in rendered and "_col_2" in rendered and "_col_3" in rendered
+        assert "table" not in rendered.splitlines()[1]  # no 'table' header
+
+        # Metadata column projection: _col_i and field; 'table' is rejected.
+        assert list(tsdf["_col_1"]) == ["ln", "ln", "ln"]
+        assert list(tsdf["_col_3"]) == ["wt01", "wt01", "wt02"]
+        assert list(tsdf["field"]) == ["status", "temperature", "status"]
+        with pytest.raises(KeyError):
+            tsdf["table"]
+
+
+def test_dataset_tree_model_series_access(tmp_path):
+    path = tmp_path / "tree.tsfile"
+    _write_tree_file(path)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        ts = tsdf["root.ln.wf01.wt01.temperature"]
+        assert isinstance(ts, Timeseries)
+        assert ts.name == "root.ln.wf01.wt01.temperature"
+        assert len(ts) == 5
+        np.testing.assert_array_equal(ts.timestamps, np.arange(5, dtype=np.int64))
+        # __getitem__ slice routes through _read_series_by_row_tree.
+        first_three = ts[0:3]
+        np.testing.assert_array_equal(first_three, np.array([0.5, 1.5, 2.5]))
+
+        # Aligned read across two co-located series.
+        aligned = tsdf.loc[
+            0:5,
+            [
+                "root.ln.wf01.wt01.temperature",
+                "root.ln.wf01.wt01.status",
+            ],
+        ]
+        assert isinstance(aligned, AlignedTimeseries)
+        assert aligned.shape == (5, 2)
+        np.testing.assert_array_equal(aligned.timestamps, np.arange(5, dtype=np.int64))
+
+
+def test_dataset_tree_model_list_timeseries_metadata(tmp_path):
+    path = tmp_path / "tree.tsfile"
+    _write_tree_file(path)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        meta = tsdf.list_timeseries_metadata()
+        assert isinstance(meta, pd.DataFrame)
+        assert list(meta.columns) == [
+            "field",
+            "start_time",
+            "end_time",
+            "count",
+            "_col_1",
+            "_col_2",
+            "_col_3",
+        ]
+        assert sorted(meta.index.tolist()) == sorted(tsdf.list_timeseries())
+        # Time bounds surface as pandas.Timestamp for ergonomic comparison.
+        assert pd.api.types.is_datetime64_any_dtype(meta["start_time"])
+        assert pd.api.types.is_datetime64_any_dtype(meta["end_time"])
+        # Per-series count comes from the catalog, not the synthetic union.
+        assert meta.loc["root.ln.wf01.wt01.temperature", "count"] == 5
+        assert meta.loc["root.ln.wf02.wt02.status", "count"] == 5
+
+
+def test_dataset_rejects_mixed_model_load(tmp_path):
+    table_path = tmp_path / "weather.tsfile"
+    tree_path = tmp_path / "tree.tsfile"
+    _write_weather_file(table_path, 0)
+    _write_tree_file(tree_path)
+
+    with pytest.raises(ValueError, match="Mixed table-model and tree-model"):
+        TsFileDataFrame([str(table_path), str(tree_path)], show_progress=False)
