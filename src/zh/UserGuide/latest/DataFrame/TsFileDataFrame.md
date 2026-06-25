@@ -106,17 +106,18 @@ TsFileDataFrame 以**序列名**（一个字符串）作为序列的唯一标识
 {表名}.{标签值1}.{标签值2}...{字段名}
 ```
 
-`list_timeseries()` 返回的即为序列名；按名称索引（`df[...]`）与 `df.loc[...]` 中的序列选择均以序列名为参数。
+`list_timeseries()` 返回 `SeriesPath` 对象——`str` 的子类，其字符串值即上面的转义路径，可直接用作 `df[...]`、`df.loc[...]` 的键；它还以 `.table`、`.tags`（元组，`None` 表示空标签）、`.field` 暴露各组成部分。
 
 示例：
 
 - `weather.Beijing.humidity` — 表 `weather`，标签 `Beijing`，字段 `humidity`
 - `sensor.s1.pressure` — 表 `sensor`，标签 `s1`，字段 `pressure`
 
-**名称中含点号时。** 由于 `.` 用作分隔符，属于表名/标签/字段名本身的 `.` 会用反斜杠转义。`list_timeseries()` 返回的是转义后的形式——例如表 `weather`、标签值 `Bei.jing`、字段 `humidity`，渲染为 `weather.Bei\.jing.humidity`（字面 `\` 转义为 `\\`）。选取时也要用这种转义形式：若传未转义的 `weather.Bei.jing.humidity`，会被当成 `Bei`、`jing` 两个标签。直接复用 `list_timeseries()` 的返回值，或用 raw string 让 Python 保留反斜杠：
+**名称中的转义。** `.` 用作分隔符，因此属于表名/标签/字段名本身的 `.` 会用反斜杠转义；空标签值写作 `\N`（与字面字符串 `"null"` 区分）。`list_timeseries()` 返回的就是这种转义形式——例如表 `weather` 中标签值 `Bei.jing`、字段 `humidity` 渲染为 `weather.Bei\.jing.humidity`（字面 `\` 转义为 `\\`）。选取时也要用这种转义形式，因此请直接复用 `list_timeseries()` 返回的 `SeriesPath`（或读取它的 `.table`/`.tags`/`.field`），不要手拼；若确需手写，请用 raw string 让 Python 保留反斜杠：
 
 ```python
-df[r"weather.Bei\.jing.humidity"]     # 选中标签为 "Bei.jing" 的设备
+df[r"weather.Bei\.jing.humidity"]     # 标签 "Bei.jing"（点号是值的一部分）
+df[r"weather.\N.Beijing.humidity"]    # 标签 (null, "Beijing")
 ```
 
 > 序列名可由 `list_timeseries()` 获取，无需手工构造；亦可改用整数索引（`df[0]`）或元数据过滤

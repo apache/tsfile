@@ -113,25 +113,28 @@ with `.`, in that order:
 {table_name}.{tag_value_1}.{tag_value_2}...{field_name}
 ```
 
-`list_timeseries()` returns series names; name-based indexing (`df[...]`) and
-series selection in `df.loc[...]` both take a series name.
+`list_timeseries()` returns `SeriesPath` objects — a `str` subclass whose value
+is the escaped path above, so each works directly as a key in `df[...]` and
+`df.loc[...]`. A `SeriesPath` also exposes its parts as `.table`, `.tags` (a
+tuple, with `None` for a null tag), and `.field`.
 
 Examples:
 
 - `weather.Beijing.humidity` — table `weather`, tag `Beijing`, field `humidity`
 - `sensor.s1.pressure` — table `sensor`, tag `s1`, field `pressure`
 
-**Dots inside a name.** Because `.` separates the parts, a `.` that belongs to a
-table, tag, or field name is escaped with a backslash. `list_timeseries()`
-returns the escaped form — e.g. a `weather` table with tag value `Bei.jing` and
-field `humidity` is rendered as `weather.Bei\.jing.humidity` (a literal `\`
-becomes `\\`). Selecting it needs the same escaped form: the unescaped
-`weather.Bei.jing.humidity` would be read as two tags `Bei` and `jing`. Reuse the
-string `list_timeseries()` returns, or type it as a raw string so Python keeps
-the backslash:
+**Escaping in a name.** `.` separates the parts, so a `.` inside a table, tag, or
+field name is escaped with a backslash, and a null tag value is written as `\N`
+(distinct from the literal string `"null"`). `list_timeseries()` returns this
+escaped form — e.g. tag value `Bei.jing` in table `weather` renders as
+`weather.Bei\.jing.humidity` (a literal `\` becomes `\\`). Selecting needs the
+same escaped form, so reuse the `SeriesPath` from `list_timeseries()` (or read
+its `.table` / `.tags` / `.field` parts) rather than hand-building it; if you do
+type one, use a raw string so Python keeps the backslash:
 
 ```python
-df[r"weather.Bei\.jing.humidity"]     # selects the device whose tag is "Bei.jing"
+df[r"weather.Bei\.jing.humidity"]     # tag "Bei.jing" (the dot is part of the value)
+df[r"weather.\N.Beijing.humidity"]    # tags (null, "Beijing")
 ```
 
 > A series name can be obtained from `list_timeseries()` and need not be
