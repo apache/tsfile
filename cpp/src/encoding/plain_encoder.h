@@ -102,8 +102,8 @@ class PlainEncoder : public Encoder {
             const simde__m128i bswap64_shuf = simde_mm_set_epi8(
                 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
             for (; i + 2 <= batch; i += 2) {
-                simde__m128i v = simde_mm_loadu_si128(
-                    (const simde__m128i*)&src[i]);
+                simde__m128i v =
+                    simde_mm_loadu_si128((const simde__m128i*)&src[i]);
                 v = simde_mm_shuffle_epi8(v, bswap64_shuf);
                 simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
@@ -149,8 +149,8 @@ class PlainEncoder : public Encoder {
             const simde__m128i bswap64_shuf = simde_mm_set_epi8(
                 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
             for (; i + 2 <= batch; i += 2) {
-                simde__m128i v = simde_mm_loadu_si128(
-                    (const simde__m128i*)&src[i]);
+                simde__m128i v =
+                    simde_mm_loadu_si128((const simde__m128i*)&src[i]);
                 v = simde_mm_shuffle_epi8(v, bswap64_shuf);
                 simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
@@ -199,8 +199,8 @@ class PlainEncoder : public Encoder {
             const simde__m128i bswap32_shuf = simde_mm_set_epi8(
                 12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
             for (; i + 4 <= batch; i += 4) {
-                simde__m128i v = simde_mm_loadu_si128(
-                    (const simde__m128i*)&src[i]);
+                simde__m128i v =
+                    simde_mm_loadu_si128((const simde__m128i*)&src[i]);
                 v = simde_mm_shuffle_epi8(v, bswap32_shuf);
                 simde_mm_storeu_si128((simde__m128i*)dst, v);
                 dst += 16;
