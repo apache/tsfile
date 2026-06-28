@@ -872,10 +872,24 @@ def test_reader_catalog_shares_device_metadata_and_resolves_paths(tmp_path):
 
 
 def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
+    class _FakeColumn:
+        def __init__(self, values):
+            self._values = values
+
+        def to_numpy(self):
+            return np.asarray(self._values)
+
+    class _FakeArrowTable:
+        def __init__(self, rows):
+            self._rows = rows
+            self.num_rows = len(rows)
+
+        def column(self, name):
+            return _FakeColumn([row[name] for row in self._rows])
+
     class _FakeResultSet:
         def __init__(self, rows):
             self._rows = rows
-            self._index = -1
 
         def __enter__(self):
             return self
@@ -883,12 +897,12 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
         def __exit__(self, exc_type, exc_val, exc_tb):
             return False
 
-        def next(self):
-            self._index += 1
-            return self._index < len(self._rows)
-
-        def get_value_by_name(self, name):
-            return self._rows[self._index][name]
+        def read_arrow_batch(self):
+            if self._rows is None:
+                return None
+            rows = self._rows
+            self._rows = None
+            return _FakeArrowTable(rows)
 
     class _FakeNativeReader:
         def __init__(self, timestamps, values, boundary):
@@ -897,11 +911,18 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
             self._boundary = boundary
 
         def query_table_by_row(
-            self, table_name, column_names, offset=0, limit=-1, tag_filter=None
+            self,
+            table_name,
+            column_names,
+            offset=0,
+            limit=-1,
+            tag_filter=None,
+            batch_size=0,
         ):
             assert table_name == "pvf"
             assert column_names == ["totalcloudcover"]
             assert tag_filter is None
+            assert batch_size > 0
             if limit < 0:
                 stop = len(self._timestamps)
             else:
@@ -931,6 +952,9 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
     ts_arr, values = reader.read_series_by_row(device_id, 0, 5, 12)
     np.testing.assert_array_equal(ts_arr, np.arange(5, 17, dtype=np.int64))
     np.testing.assert_array_equal(values, np.arange(5, 17, dtype=np.float64))
+
+    values_only = reader.read_series_values_by_row(device_id, 0, 5, 12)
+    np.testing.assert_array_equal(values_only, np.arange(5, 17, dtype=np.float64))
 
 
 def test_series_path_resolution_allows_prefix_tag_values():

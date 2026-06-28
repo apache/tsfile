@@ -78,15 +78,25 @@ class Timeseries:
         stats: dict,
         ensure_open: Callable[[], None],
         load_timestamps: Callable[[], np.ndarray],
-        read_by_position: Callable[[int, int], Tuple[np.ndarray, np.ndarray]],
+        read_values_by_position: Callable[[int, int], np.ndarray],
     ):
         self._name = name
         self._series_refs = series_refs
         self._stats = dict(stats)
         self._ensure_open = ensure_open
         self._load_timestamps = load_timestamps
-        self._read_by_position = read_by_position
+        self._read_values_by_position = read_values_by_position
         self._timestamps = None
+
+    def _read_values_only(self, start: int, limit: int) -> np.ndarray:
+        if limit <= 0:
+            return np.array([], dtype=np.float64)
+        return self._read_values_by_position(start, limit)
+
+    def _read_contiguous_slice(self, start: int, stop: int) -> np.ndarray:
+        if start >= stop:
+            return np.array([], dtype=np.float64)
+        return self._read_values_only(start, stop - start)
 
     @property
     def name(self) -> str:
@@ -119,7 +129,7 @@ class Timeseries:
                 key += length
             if key < 0 or key >= length:
                 raise IndexError(f"Index {key} out of range [0, {length})")
-            _, values = self._read_by_position(key, 1)
+            values = self._read_values_only(key, 1)
             return float(values[0]) if len(values) > 0 else None
 
         if isinstance(key, slice):
@@ -131,13 +141,12 @@ class Timeseries:
             # [a:b:1]. Avoid materializing the full position list for large
             # series; read the window directly.
             if step == 1:
-                _, values = self._read_by_position(start, stop - start)
-                return values
+                return self._read_contiguous_slice(start, stop)
 
             positions = np.arange(start, stop, step, dtype=np.int64)
             min_pos = int(positions.min())
             max_pos = int(positions.max())
-            _, values = self._read_by_position(min_pos, max_pos - min_pos + 1)
+            values = self._read_contiguous_slice(min_pos, max_pos + 1)
             if len(values) == 0:
                 return np.array([], dtype=np.float64)
             relative = positions - min_pos

@@ -20,7 +20,7 @@
 
 import os
 import sys
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 
@@ -42,6 +42,10 @@ _NUMERIC_FIELD_TYPES = {
     TSDataType.DOUBLE,
     TSDataType.TIMESTAMP,
 }
+
+# Use by-row batch mode so position reads consume TsBlocks/Arrow batches
+# instead of iterating one row at a time through ResultSet.next().
+_ROW_BATCH_SIZE = 8192
 
 
 def _to_python_scalar(value):
@@ -387,25 +391,29 @@ class TsFileSeriesReader:
         next_offset = offset
 
         while remaining > 0:
-            batch_timestamps = []
-            batch_values = []
             with self._reader.query_table_by_row(
                 table_entry.table_name,
                 [field_name],
                 offset=next_offset,
                 limit=remaining,
                 tag_filter=tag_filter,
+                batch_size=min(remaining, _ROW_BATCH_SIZE),
             ) as result_set:
-                while result_set.next():
-                    batch_timestamps.append(result_set.get_value_by_name("time"))
-                    value = result_set.get_value_by_name(field_name)
-                    batch_values.append(np.nan if value is None else float(value))
+                batch_timestamps, batch_field_values = (
+                    self._collect_arrow_numeric_batches(
+                        result_set,
+                        [field_name],
+                        include_timestamps=True,
+                        table_name=table_entry.table_name,
+                    )
+                )
+            batch_values = batch_field_values[field_name]
 
-            if not batch_timestamps:
+            if len(batch_timestamps) == 0:
                 break
 
-            timestamp_parts.append(np.asarray(batch_timestamps, dtype=np.int64))
-            value_parts.append(np.asarray(batch_values, dtype=np.float64))
+            timestamp_parts.append(batch_timestamps)
+            value_parts.append(batch_values)
             read_count = len(batch_timestamps)
             next_offset += read_count
             remaining -= read_count
@@ -415,6 +423,53 @@ class TsFileSeriesReader:
         if len(timestamp_parts) == 1:
             return timestamp_parts[0], value_parts[0]
         return np.concatenate(timestamp_parts), np.concatenate(value_parts)
+
+    def read_series_values_by_row(
+        self, device_id: int, field_idx: int, offset: int, limit: int
+    ) -> np.ndarray:
+        """Read one logical series by device-local row offset/limit and return values only."""
+        if limit <= 0:
+            return np.array([], dtype=np.float64)
+
+        table_entry, device_entry, field_name = self._resolve_series_ref(
+            device_id, field_idx
+        )
+        tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
+        tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
+        value_parts = []
+        remaining = limit
+        next_offset = offset
+
+        while remaining > 0:
+            with self._reader.query_table_by_row(
+                table_entry.table_name,
+                [field_name],
+                offset=next_offset,
+                limit=remaining,
+                tag_filter=tag_filter,
+                batch_size=min(remaining, _ROW_BATCH_SIZE),
+            ) as result_set:
+                _, field_values = self._collect_arrow_numeric_batches(
+                    result_set,
+                    [field_name],
+                    include_timestamps=False,
+                    table_name=table_entry.table_name,
+                )
+            batch_values = field_values[field_name]
+
+            if len(batch_values) == 0:
+                break
+
+            value_parts.append(batch_values)
+            read_count = len(batch_values)
+            next_offset += read_count
+            remaining -= read_count
+
+        if not value_parts:
+            return np.array([], dtype=np.float64)
+        if len(value_parts) == 1:
+            return value_parts[0]
+        return np.concatenate(value_parts)
 
     def read_device_fields_by_time_range(
         self, device_id: int, field_indices: List[int], start_time: int, end_time: int
@@ -448,8 +503,6 @@ class TsFileSeriesReader:
         tag_columns = list(tag_columns)
         field_columns = list(field_columns)
         query_columns = list(field_columns)
-        timestamp_parts = []
-        field_parts = {field_column: [] for field_column in field_columns}
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
         with self._reader.query_table(
@@ -460,47 +513,83 @@ class TsFileSeriesReader:
             tag_filter=tag_filter,
             batch_size=65536,
         ) as result_set:
-            while True:
-                arrow_table = result_set.read_arrow_batch()
-                if arrow_table is None:
-                    break
+            timestamps, field_values = self._collect_arrow_numeric_batches(
+                result_set,
+                field_columns,
+                include_timestamps=True,
+                table_name=table_name,
+            )
 
-                if arrow_table.num_rows == 0:
-                    continue
+        if len(timestamps) == 0:
+            return timestamps, field_values
 
-                timestamp_parts.append(arrow_table.column("time").to_numpy())
-                for field_column in field_columns:
-                    raw_values = arrow_table.column(field_column).to_numpy()
-                    try:
-                        field_parts[field_column].append(
-                            np.asarray(raw_values, dtype=np.float64)
-                        )
-                    except (TypeError, ValueError) as e:
-                        raise TypeError(
-                            f"Field column '{field_column}' in table '{table_name}' is not numeric-compatible."
-                        ) from e
+        # Keep the dataset layer strict about the requested time window even if
+        # the underlying query path returns boundary-adjacent null rows.
+        if timestamps[0] < start_time or timestamps[-1] > end_time:
+            mask = (timestamps >= start_time) & (timestamps <= end_time)
+            timestamps = timestamps[mask]
+            field_values = {
+                field_column: values[mask]
+                for field_column, values in field_values.items()
+            }
 
-        if not timestamp_parts:
+        return timestamps, field_values
+
+    def _collect_arrow_numeric_batches(
+        self,
+        result_set,
+        field_columns: List[str],
+        *,
+        include_timestamps: bool,
+        table_name: Optional[str] = None,
+    ) -> Tuple[Optional[np.ndarray], Dict[str, np.ndarray]]:
+        """Consume a batch-mode ResultSet and return owning numpy arrays."""
+        arrow_batches = []
+        total_rows = 0
+        while True:
+            arrow_table = result_set.read_arrow_batch()
+            if arrow_table is None:
+                break
+            if arrow_table.num_rows == 0:
+                continue
+            arrow_batches.append(arrow_table)
+            total_rows += arrow_table.num_rows
+
+        if total_rows == 0:
             return (
-                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64) if include_timestamps else None,
                 {
                     field_column: np.array([], dtype=np.float64)
                     for field_column in field_columns
                 },
             )
 
-        timestamps = np.concatenate(timestamp_parts).astype(np.int64)
+        timestamps = (
+            np.empty(total_rows, dtype=np.int64) if include_timestamps else None
+        )
         field_values = {
-            field_column: np.concatenate(field_parts[field_column])
+            field_column: np.empty(total_rows, dtype=np.float64)
             for field_column in field_columns
         }
 
-        # Keep the dataset layer strict about the requested time window even if
-        # the underlying query path returns boundary-adjacent null rows.
-        mask = (timestamps >= start_time) & (timestamps <= end_time)
-        timestamps = timestamps[mask]
-        field_values = {
-            field_column: values[mask] for field_column, values in field_values.items()
-        }
+        offset = 0
+        for arrow_table in arrow_batches:
+            batch_rows = arrow_table.num_rows
+            if include_timestamps:
+                timestamps[offset : offset + batch_rows] = arrow_table.column(
+                    "time"
+                ).to_numpy()
+            for field_column in field_columns:
+                try:
+                    field_values[field_column][offset : offset + batch_rows] = (
+                        arrow_table.column(field_column).to_numpy()
+                    )
+                except (TypeError, ValueError) as e:
+                    target = table_name or "<unknown>"
+                    raise TypeError(
+                        f"Field column '{field_column}' in table '{target}' "
+                        "is not numeric-compatible."
+                    ) from e
+            offset += batch_rows
 
         return timestamps, field_values
