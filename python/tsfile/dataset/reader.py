@@ -81,6 +81,13 @@ def _device_exact_tag_values(table_entry, device_entry) -> Dict[str, object]:
     }
 
 
+def _expand_tree_device_segments(segments: Tuple[object, ...]) -> Tuple[object, ...]:
+    """Expand the native tree DeviceID prefix into logical path segments."""
+    if not segments or segments[0] is None:
+        return tuple(segments)
+    return tuple(str(segments[0]).split(".")) + tuple(segments[1:])
+
+
 class TsFileSeriesReader:
     """Wrap ``TsFileReaderPy`` with numeric dataset discovery and batch reads."""
 
@@ -261,10 +268,8 @@ class TsFileSeriesReader:
         union_fields = []  # ordered union of measurement names
         seen_field_names = set()
 
-        for device_path, group in metadata_groups.items():
-            if not device_path:
-                continue
-            full_segments = tuple(device_path.split("."))
+        for group in metadata_groups.values():
+            full_segments = _expand_tree_device_segments(tuple(group.segments))
             if not full_segments:
                 continue
             current_root = full_segments[0]
