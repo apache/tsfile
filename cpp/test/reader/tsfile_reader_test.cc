@@ -762,25 +762,31 @@ TEST_F(TsFileReaderTest, MultiValueAlignedSkipsBatchPreservesValueAlignment) {
         if (ret == common::E_NO_MORE_DATA) break;
         ASSERT_EQ(ret, common::E_OK);
         ASSERT_NE(block, nullptr);
-        // Columns: time, v0, v1.
-        common::ColIterator t_iter(0, block);
-        common::ColIterator v0_iter(1, block);
-        common::ColIterator v1_iter(2, block);
-        const uint32_t rows = block->get_row_count();
-        for (uint32_t r = 0; r < rows; ++r) {
-            uint32_t len = 0;
-            int64_t t = *reinterpret_cast<int64_t*>(t_iter.read(&len));
-            int64_t v0 = *reinterpret_cast<int64_t*>(v0_iter.read(&len));
-            int64_t v1 = *reinterpret_cast<int64_t*>(v1_iter.read(&len));
-            got.push_back({t, v0});
-            // The decoder must have advanced exactly nonnull_count values
-            // when it skipped batch #1.  If it under-advanced (the latent
-            // bug), v1 would land on the wrong row's bytes here.
-            EXPECT_EQ(v1, 1000000 + t);
-            EXPECT_EQ(v0, t);
-            t_iter.next();
-            v0_iter.next();
-            v1_iter.next();
+        // Scope the ColIterators so they are destroyed *before*
+        // revert_tsblock() frees the block.  ~ColIterator() writes back to its
+        // vector (reset_offset()), so reverting while an iterator is still in
+        // scope would touch freed memory.
+        {
+            // Columns: time, v0, v1.
+            common::ColIterator t_iter(0, block);
+            common::ColIterator v0_iter(1, block);
+            common::ColIterator v1_iter(2, block);
+            const uint32_t rows = block->get_row_count();
+            for (uint32_t r = 0; r < rows; ++r) {
+                uint32_t len = 0;
+                int64_t t = *reinterpret_cast<int64_t*>(t_iter.read(&len));
+                int64_t v0 = *reinterpret_cast<int64_t*>(v0_iter.read(&len));
+                int64_t v1 = *reinterpret_cast<int64_t*>(v1_iter.read(&len));
+                got.push_back({t, v0});
+                // The decoder must have advanced exactly nonnull_count values
+                // when it skipped batch #1.  If it under-advanced (the latent
+                // bug), v1 would land on the wrong row's bytes here.
+                EXPECT_EQ(v1, 1000000 + t);
+                EXPECT_EQ(v0, t);
+                t_iter.next();
+                v0_iter.next();
+                v1_iter.next();
+            }
         }
         ssi->revert_tsblock();
     }
@@ -863,24 +869,29 @@ TEST_F(TsFileReaderTest, MultiValueAlignedWideChunkParallelDecode) {
         ASSERT_NE(block, nullptr);
         const uint32_t rows = block->get_row_count();
 
-        common::ColIterator t_iter(0, block);
-        std::vector<int64_t> times;
-        times.reserve(rows);
-        for (uint32_t r = 0; r < rows; ++r) {
-            uint32_t len = 0;
-            times.push_back(*reinterpret_cast<int64_t*>(t_iter.read(&len)));
-            t_iter.next();
-        }
-        // One independent iterator per value column so we never rely on
-        // vector<ColIterator> being movable.
-        for (uint32_t c = 0; c < kCols; ++c) {
-            common::ColIterator it(c + 1, block);
+        // Scope all ColIterators so they are destroyed *before*
+        // revert_tsblock() frees the block — ~ColIterator() writes back to its
+        // vector (reset_offset()), which would be use-after-free otherwise.
+        {
+            common::ColIterator t_iter(0, block);
+            std::vector<int64_t> times;
+            times.reserve(rows);
             for (uint32_t r = 0; r < rows; ++r) {
                 uint32_t len = 0;
-                int64_t v = *reinterpret_cast<int64_t*>(it.read(&len));
-                int64_t i = times[r] - 1000;  // timestamp == 1000 + i
-                EXPECT_EQ(v, static_cast<int64_t>(c) * 1000000 + i);
-                it.next();
+                times.push_back(*reinterpret_cast<int64_t*>(t_iter.read(&len)));
+                t_iter.next();
+            }
+            // One independent iterator per value column so we never rely on
+            // vector<ColIterator> being movable.
+            for (uint32_t c = 0; c < kCols; ++c) {
+                common::ColIterator it(c + 1, block);
+                for (uint32_t r = 0; r < rows; ++r) {
+                    uint32_t len = 0;
+                    int64_t v = *reinterpret_cast<int64_t*>(it.read(&len));
+                    int64_t i = times[r] - 1000;  // timestamp == 1000 + i
+                    EXPECT_EQ(v, static_cast<int64_t>(c) * 1000000 + i);
+                    it.next();
+                }
             }
         }
         collected += static_cast<int>(rows);
