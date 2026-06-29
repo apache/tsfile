@@ -218,6 +218,10 @@ TEST_F(TreeQueryByRowTest, SparseAlignedChunkOffsetCrossesChunks) {
     using namespace storage;
     libtsfile_destroy();
     libtsfile_init();
+    // This test manages its own writer instead of the fixture's write_file_;
+    // close the fixture handle first so the remove() below succeeds on Windows
+    // (which can't delete a file that still has an open handle).
+    write_file_.close();
     remove(file_name_.c_str());
 
     // Tighten per-chunk capacity so two write_tablet_aligned calls produce

@@ -375,6 +375,11 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
     ColumnSchema value_cd(ch.measurement_name_, ch.data_type_,
                           ch.compression_type_, ch.encoding_type_);
 
+    // Reset first: this is called once per get_next(), and TsBlock holds a
+    // pointer to tuple_desc_.  Without the reset, columns from previous calls
+    // accumulate (each new block would carry duplicated columns and a
+    // reallocated descriptor), corrupting the block layout.
+    tuple_desc_.reset();
     tuple_desc_.push_back(time_cd);
     tuple_desc_.push_back(value_cd);
 
@@ -395,6 +400,10 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock_multi() {
     // the encoding/compression are placeholders.
     ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
                          common::TS_2DIFF);
+    // Reset first (see alloc_tsblock): tuple_desc_ is reused across get_next()
+    // calls and TsBlock holds a pointer to it, so stale columns must be
+    // cleared.
+    tuple_desc_.reset();
     tuple_desc_.push_back(time_cd);
 
     // Value columns

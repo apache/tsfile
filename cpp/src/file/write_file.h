@@ -30,6 +30,12 @@ namespace storage {
 class WriteFile {
    public:
     WriteFile() : path_(), fd_(-1) {}
+    // Release the OS file handle on destruction.  Without this, a writer left
+    // in an unrecoverable state (whose close() refuses to finalize) would leak
+    // the fd — harmless on POSIX (unlink works on open files) but on Windows it
+    // keeps the file locked so a subsequent remove() fails.  close() is
+    // idempotent, so this is a no-op when the file was already closed normally.
+    ~WriteFile() { close(); }
     int create(const std::string& file_name, int flags, mode_t mode);
     bool file_opened() const { return fd_ > 0; }
     int write(const char* buf, uint32_t len);

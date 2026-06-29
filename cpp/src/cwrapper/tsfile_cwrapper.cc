@@ -124,13 +124,20 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
     if (err_code == nullptr) {
         return nullptr;
     }
-    if (file == nullptr || schema == nullptr ||
-        schema->column_schemas == nullptr || schema->table_name == nullptr) {
+    if (file == nullptr || schema == nullptr || schema->table_name == nullptr) {
         *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
+    // An empty schema (no columns) is an invalid *schema*, not an invalid arg;
+    // check it before the column_schemas pointer, which is legitimately null
+    // when column_num == 0.  (Matches develop, which the C API test expects;
+    // otherwise an uninitialized/null column_schemas would flip the code.)
     if (schema->column_num == 0) {
         *err_code = common::E_INVALID_SCHEMA;
+        return nullptr;
+    }
+    if (schema->column_schemas == nullptr) {
+        *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
 
@@ -172,13 +179,18 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
     if (err_code == nullptr) {
         return nullptr;
     }
-    if (file == nullptr || schema == nullptr ||
-        schema->column_schemas == nullptr || schema->table_name == nullptr) {
+    if (file == nullptr || schema == nullptr || schema->table_name == nullptr) {
         *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
+    // Empty schema is INVALID_SCHEMA; check before the (legitimately null when
+    // column_num == 0) column_schemas pointer.  See tsfile_writer_new().
     if (schema->column_num == 0) {
         *err_code = common::E_INVALID_SCHEMA;
+        return nullptr;
+    }
+    if (schema->column_schemas == nullptr) {
+        *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
     init_tsfile_config();
