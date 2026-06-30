@@ -75,6 +75,42 @@ public class SourceBatch {
     return rowCount == 0;
   }
 
+  /** Concatenates multiple batches with identical column names into one batch. */
+  public static SourceBatch concat(List<SourceBatch> batches) {
+    if (batches == null || batches.isEmpty()) {
+      return new SourceBatch(new String[0], new Object[0][0], 0);
+    }
+    SourceBatch first = batches.get(0);
+    if (batches.size() == 1) {
+      return first;
+    }
+    int totalRows = 0;
+    for (SourceBatch batch : batches) {
+      totalRows += batch.getRowCount();
+    }
+    int colCount = first.getColumnCount();
+    String[] names = first.getColumnNames();
+    Object[][] colData = new Object[colCount][totalRows];
+    int offset = 0;
+    for (SourceBatch batch : batches) {
+      if (batch.getColumnCount() != colCount) {
+        throw new IllegalArgumentException("Cannot concat batches with different column counts");
+      }
+      for (int c = 0; c < colCount; c++) {
+        if (!names[c].equals(batch.getColumnName(c))) {
+          throw new IllegalArgumentException(
+              "Cannot concat batches with different column names: "
+                  + names[c]
+                  + " vs "
+                  + batch.getColumnName(c));
+        }
+        System.arraycopy(batch.getColumn(c), 0, colData[c], offset, batch.getRowCount());
+      }
+      offset += batch.getRowCount();
+    }
+    return new SourceBatch(names, colData, totalRows);
+  }
+
   @Override
   public String toString() {
     return "SourceBatch{columns=" + Arrays.toString(columnNames) + ", rows=" + rowCount + '}';

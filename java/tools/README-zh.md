@@ -45,6 +45,44 @@ mvn clean package -P with-java -DskipTests
 mvn install -P with-java -DskipTests
 ```
 
+## 混合 CSV 导入
+
+将一条带真实时间列的主时序 CSV，与多条不含时间列的附属 CSV（列与主表 TAG/FIELD 相同）合并写入**单个** TsFile。附属行使用合成时间戳 `1, 2, …, N`（按文件内连续）；通过虚拟 TAG `batch_id` 隔离，每个附属文件对应一个 ChunkGroup（在同一业务 TAG 组合下）。
+
+配置示例（`hybrid.conf`）：
+
+```
+output_tsfile=combined.tsfile
+shared_schema=main.schema
+main_csv=timeseries.csv
+main_batch_id=main
+batch_id_tag=batch_id
+validate_uniform_tags=true
+supplement_sort_by_variance=true
+supplement_csv=experiment_1.csv
+supplement_batch_id=experiment_1
+supplement_csv=experiment_2.csv
+supplement_batch_id=experiment_2
+```
+
+运行：
+
+```sh
+java -jar tsfile-tools.jar --hybrid_config hybrid.conf
+```
+
+附属 CSV 表头须包含 `shared_schema` 中除时间列外的全部业务 TAG 与 FIELD 列（例如 `Region,DeviceId,Temperature,Pressure`）。
+
+对每个附属 CSV 单独处理（默认 `supplement_sort_by_variance=true`）：
+
+1. 仅在该 CSV 内计算各 **FIELD** 列方差。
+2. 按方差降序确定列排序优先级。
+3. 对该 CSV 行做升序多键排序。
+4. 写入一个 ChunkGroup；组内时间戳连续（`startId`, `startId+1`, …）。
+5. 下一个附属文件从 `maxId + 1` 继续编号（file1: `1..n1`，file2: `n1+1..n1+n2`，…）。
+
+编程接口：`HybridCsvTsFileAssembler.execute(HybridImportConfig)`。
+
 ## schema 定义
 
 ### 参数
