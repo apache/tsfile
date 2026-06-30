@@ -383,16 +383,22 @@ class TsFileSeriesReader:
 
     @staticmethod
     def _metadata_field_stats(group) -> Dict[str, SeriesStats]:
-        """Collect per-measurement stats for cells that have real values.
+        """Collect per-measurement stats for numeric cells that have real values.
 
-        A measurement appears in the result iff its native ``statistic`` block
-        is populated and reports a positive ``row_count``. Columns that the
-        device never wrote (Tablet skip / all-NaN pandas column) carry no
-        real values and are intentionally absent -- the dataset layer
-        surfaces only series that physically exist.
+        A measurement appears iff it is numeric AND its native ``statistic``
+        block is populated with a positive ``row_count``. Non-numeric
+        measurements (STRING/TEXT) are dropped because the dataset surface reads
+        values as ``float64`` -- the same reason table mode filters non-numeric
+        fields out of its schema. Columns that the device never wrote (Tablet
+        skip / all-NaN pandas column) carry no real values and are intentionally
+        absent -- the dataset layer surfaces only series that physically exist.
         """
         stats: Dict[str, SeriesStats] = {}
         for timeseries in group.timeseries:
+            # Drop non-numeric measurements (see docstring): tree mode relies on
+            # this to avoid surfacing a string/text series that crashes on read.
+            if timeseries.data_type not in _NUMERIC_FIELD_TYPES:
+                continue
             statistic = timeseries.statistic
             # Gate on the value statistic's non-null row_count, not the
             # timeline. A skipped/all-NaN field still carries a value-stat

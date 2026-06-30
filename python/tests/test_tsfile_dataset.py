@@ -1615,3 +1615,37 @@ def test_dataset_tree_model_unions_different_depths_across_files(tmp_path):
         np.testing.assert_array_equal(
             tsdf["root.a.b.c.m1"][:], np.array([0.5, 1.5, 2.5])
         )
+
+
+def test_dataset_tree_model_omits_non_numeric_measurements(tmp_path):
+    # The dataset surface is numeric (float64); a STRING tree measurement must
+    # be dropped, not surfaced as a series that crashes on read.
+    from tsfile import Field, RowRecord, TimeseriesSchema, TsFileWriter
+
+    path = tmp_path / "tree_mixed.tsfile"
+    writer = TsFileWriter(str(path))
+    writer.register_timeseries("root.a.b", TimeseriesSchema("temp", TSDataType.DOUBLE))
+    writer.register_timeseries(
+        "root.a.b", TimeseriesSchema("status", TSDataType.STRING)
+    )
+    for t in range(3):
+        writer.write_row_record(
+            RowRecord(
+                "root.a.b",
+                t,
+                [
+                    Field("temp", float(t) + 0.5, TSDataType.DOUBLE),
+                    Field("status", "ok", TSDataType.STRING),
+                ],
+            )
+        )
+    writer.close()
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        # Only the numeric measurement is exposed; the STRING one is dropped.
+        assert tsdf.list_timeseries() == ["root.a.b.temp"]
+        with pytest.raises(KeyError):
+            tsdf["root.a.b.status"]
+        np.testing.assert_array_equal(
+            tsdf["root.a.b.temp"][:], np.array([0.5, 1.5, 2.5])
+        )
