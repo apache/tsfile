@@ -29,13 +29,12 @@ from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from .metadata import (
     MetadataCatalog,
+    MODEL_TABLE,
+    MODEL_TREE,
     SeriesStats,
     build_series_path,
     resolve_series_path,
 )
-
-MODEL_TABLE = "table"
-MODEL_TREE = "tree"
 
 _NUMERIC_FIELD_TYPES = {
     TSDataType.BOOLEAN,
@@ -127,7 +126,7 @@ class TsFileSeriesReader:
 
     @property
     def series_count(self) -> int:
-        return len(self._catalog.series_stats_by_ref)
+        return self._catalog.series_count
 
     def iter_series_paths(self) -> Iterator[str]:
         for device_id, field_idx in self._catalog.series_stats_by_ref:
@@ -395,8 +394,17 @@ class TsFileSeriesReader:
         stats: Dict[str, SeriesStats] = {}
         for timeseries in group.timeseries:
             statistic = timeseries.statistic
+            # Gate on the value statistic's non-null row_count, not the
+            # timeline. A skipped/all-NaN field still carries a value-stat
+            # block (has_statistic=True) and shares the device's timeline
+            # rows, so a timeline gate would surface a phantom series whose
+            # value row_count is 0. See
+            # test_dataset_omits_table_model_phantom_series_for_skipped_cells.
             if not statistic.has_statistic or statistic.row_count <= 0:
                 continue
+            # timeline_statistic is always a TimeseriesStatistic (never None;
+            # the native binding fills row_count/start/end even when
+            # has_statistic is False), so the reads below cannot raise.
             timeline_statistic = timeseries.timeline_statistic
             stats[timeseries.measurement_name] = SeriesStats(
                 length=int(statistic.row_count),
@@ -548,6 +556,12 @@ class TsFileSeriesReader:
         timestamps = []
         values = []
         skipped = 0
+        # PERF: O(total_rows). query_table_on_tree scans every device's rows
+        # for this field and we filter down to one device client-side, so an
+        # aligned read over N devices is O(N * total_rows). Per-device tree
+        # pushdown (query_tree_by_row) isn't reliable in the cwrapper yet
+        # (stale col_i path columns leak across queries on a reused reader);
+        # see PR #816. Hot path for profilers.
         with self._reader.query_table_on_tree([field_name]) as result_set:
             md = result_set.get_metadata()
             num_cols = md.get_column_num()
@@ -562,6 +576,17 @@ class TsFileSeriesReader:
             # Only the trailing expected_path_len col_i cells are genuine; the
             # leading duplicates are stale from prior queries on this reader.
             col_indices = all_col_indices[-expected_path_len:]
+            # Fail fast if the cwrapper col_ leak pattern changes: the trailing
+            # slice assumes at least expected_path_len col_ cells. A count
+            # mismatch means the heuristic is stale and could silently pick the
+            # wrong path columns (returning wrong-device data). Guards the count
+            # only -- it can't catch a leak where the genuine columns are no
+            # longer the trailing ones.
+            assert len(col_indices) == expected_path_len, (
+                f"tree path col_ columns: expected {expected_path_len}, got "
+                f"{len(col_indices)} of {len(all_col_indices)}; cwrapper col_ "
+                f"leak pattern may have changed"
+            )
             while result_set.next():
                 row_path_segments = [
                     result_set.get_value_by_index(ci) for ci in col_indices
@@ -731,6 +756,10 @@ class TsFileSeriesReader:
         timestamps = []
         value_buckets = {col: [] for col in field_columns}
 
+        # PERF: O(total_rows) full tree scan filtered to one device
+        # client-side; aligned reads over N devices are O(N * total_rows).
+        # See _read_series_by_row_tree / PR #816 for the cwrapper limitation
+        # that blocks per-device pushdown (query_timeseries). Hot path.
         with self._reader.query_table_on_tree(
             field_columns, start_time, end_time
         ) as result_set:
@@ -754,6 +783,17 @@ class TsFileSeriesReader:
                 idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
             ]
             col_indices = all_col_indices[-expected_path_len:]
+            # Fail fast if the cwrapper col_ leak pattern changes: the trailing
+            # slice assumes at least expected_path_len col_ cells. A count
+            # mismatch means the heuristic is stale and could silently pick the
+            # wrong path columns (returning wrong-device data). Guards the count
+            # only -- it can't catch a leak where the genuine columns are no
+            # longer the trailing ones.
+            assert len(col_indices) == expected_path_len, (
+                f"tree path col_ columns: expected {expected_path_len}, got "
+                f"{len(col_indices)} of {len(all_col_indices)}; cwrapper col_ "
+                f"leak pattern may have changed"
+            )
             while result_set.next():
                 row_path_segments = [
                     result_set.get_value_by_index(ci) for ci in col_indices

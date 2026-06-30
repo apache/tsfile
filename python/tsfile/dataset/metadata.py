@@ -28,6 +28,9 @@ _PATH_SEPARATOR = "."
 _PATH_ESCAPE = "\\"
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
+MODEL_TABLE = "table"
+MODEL_TREE = "tree"
+
 
 class SeriesStats(NamedTuple):
     """Statistics for a single time series."""
@@ -133,10 +136,11 @@ class MetadataCatalog:
 
     @property
     def series_count(self) -> int:
-        return sum(
-            len(self.table_entries[device.table_id].field_columns)
-            for device in self.device_entries
-        )
+        # Count only physically-present series -- the (device, field) pairs that
+        # actually carry data -- so this matches len(tsdf) / series_paths and
+        # the reader's series_count. A schema cross-product (devices x declared
+        # fields) would overcount sparse schemas where a device skips fields.
+        return len(self.series_stats_by_ref)
 
 
 # Path marker for a null tag value: a single backslash followed by N. A real

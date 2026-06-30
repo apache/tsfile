@@ -30,6 +30,8 @@ import numpy as np
 
 from .formatting import format_dataframe_table
 from .metadata import (
+    MODEL_TABLE,
+    MODEL_TREE,
     SeriesPath,
     TableEntry,
     _normalize_tag_values,
@@ -52,9 +54,6 @@ _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 # large enough to avoid excessive query_by_row round-trips when overlap spans
 # multiple shards.
 _OVERLAP_ROW_CHUNK_SIZE = 256
-
-MODEL_TABLE = "table"
-MODEL_TREE = "tree"
 
 
 @dataclass(**_DATACLASS_SLOTS)

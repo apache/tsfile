@@ -746,6 +746,16 @@ def test_dataset_omits_table_model_phantom_series_for_skipped_cells(tmp_path):
         with pytest.raises(KeyError):
             tsdf["bench.d2.v2"]
 
+    # series_count must report the 4 physically-present series, not the 2x3
+    # schema cross-product -- regression guard for the sparse-schema case
+    # (catalog and reader must agree).
+    reader = TsFileSeriesReader(str(path), show_progress=False)
+    try:
+        assert reader.series_count == 4
+        assert reader.catalog.series_count == 4
+    finally:
+        reader.close()
+
 
 def test_dataset_timeseries_supports_negative_step_slices(tmp_path):
     path = tmp_path / "weather.tsfile"
