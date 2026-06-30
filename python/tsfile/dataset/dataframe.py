@@ -140,6 +140,38 @@ def _validate_table_schema(
     )
 
 
+def _merge_tree_table_entries(existing: TableEntry, incoming: TableEntry) -> TableEntry:
+    """Widen two per-file synthetic tree tables into one global table.
+
+    Tree TsFiles carry no authored schema, so each file synthesizes its own
+    table (root name, ``_col_i`` tag columns sized to that file's deepest
+    device, fields = the measurements present in that file). When several tree
+    files are loaded together we widen to their union: field columns are
+    unioned (existing order first, then new measurements) and the tag
+    columns/types grow to the deepest file's depth so shallower devices pad
+    with nulls. Per-(device, field) ownership stays exact because each shard is
+    keyed by the global field index resolved by measurement name.
+    """
+    if len(incoming.tag_columns) > len(existing.tag_columns):
+        tag_columns, tag_types = incoming.tag_columns, incoming.tag_types
+    else:
+        tag_columns, tag_types = existing.tag_columns, existing.tag_types
+
+    field_columns = list(existing.field_columns)
+    seen = set(field_columns)
+    for name in incoming.field_columns:
+        if name not in seen:
+            seen.add(name)
+            field_columns.append(name)
+
+    return TableEntry(
+        table_name=existing.table_name,
+        tag_columns=tag_columns,
+        tag_types=tag_types,
+        field_columns=tuple(field_columns),
+    )
+
+
 def _register_reader(
     readers: Dict[str, object],
     index: _DataFrameCatalog,
@@ -165,6 +197,13 @@ def _register_reader(
         existing_entry = index.table_entries.get(table_entry.table_name)
         if existing_entry is None:
             index.table_entries[table_entry.table_name] = table_entry
+        elif index.model == MODEL_TREE:
+            # Tree shards carry no authored schema; widen the synthetic table to
+            # the union of fields and the deepest tag layout across files
+            # instead of rejecting differing subsets/depths.
+            index.table_entries[table_entry.table_name] = _merge_tree_table_entries(
+                existing_entry, table_entry
+            )
         else:
             _validate_table_schema(existing_entry, table_entry, file_path)
 
@@ -193,13 +232,22 @@ def _register_reader(
             )
             index.device_time_bounds[device_idx] = (new_min, new_max)
 
-    # Register every (device, field) pair the reader physically holds.
+    # Register every (device, field) pair the reader physically holds. The
+    # logical series is keyed by the GLOBAL field index (resolved by measurement
+    # name against the merged table), while the per-shard tuple keeps the
+    # reader-local field index for the read path. This lets tree shards with
+    # different field subsets/orders merge without mis-mapping measurements
+    # (for table model the global and local indices always coincide).
     for device_id, field_idx in catalog.series_stats_by_ref:
         device_entry = catalog.device_entries[device_id]
-        table_entry = catalog.table_entries[device_entry.table_id]
-        device_key = (table_entry.table_name, tuple(device_entry.tag_values))
+        reader_table_entry = catalog.table_entries[device_entry.table_id]
+        field_name = reader_table_entry.field_columns[field_idx]
+        device_key = (reader_table_entry.table_name, tuple(device_entry.tag_values))
         device_idx = index.device_index[device_key]
-        series_ref = (device_idx, field_idx)
+        global_field_idx = index.table_entries[
+            reader_table_entry.table_name
+        ].get_field_index(field_name)
+        series_ref = (device_idx, global_field_idx)
         if series_ref not in index.series_shards:
             index.series.append(series_ref)
             index.series_shards[series_ref] = []

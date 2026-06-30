@@ -1527,3 +1527,91 @@ def test_dataset_rejects_mixed_model_load(tmp_path):
 
     with pytest.raises(ValueError, match="Mixed table-model and tree-model"):
         TsFileDataFrame([str(table_path), str(tree_path)], show_progress=False)
+
+
+def _write_tree_rows(path, device_measurements, t_start=0, t_count=3):
+    """Write a tree-model TsFile from a device -> [(measurement, dtype)] map.
+
+    Each device's measurements are written for timestamps
+    ``t_start .. t_start + t_count - 1``; numeric values are ``float(t) + 0.5``
+    (INT32 measurements use ``t``), so series read back deterministically.
+    """
+    from tsfile import Field, RowRecord, TimeseriesSchema, TsFileWriter
+
+    writer = TsFileWriter(str(path))
+    for device, measurements in device_measurements.items():
+        for name, dtype in measurements:
+            writer.register_timeseries(device, TimeseriesSchema(name, dtype))
+    for t in range(t_start, t_start + t_count):
+        for device, measurements in device_measurements.items():
+            fields = [
+                Field(name, (t if dtype == TSDataType.INT32 else float(t) + 0.5), dtype)
+                for name, dtype in measurements
+            ]
+            writer.write_row_record(RowRecord(device, t, fields))
+    writer.close()
+
+
+def test_dataset_tree_model_merges_identical_structure_across_files(tmp_path):
+    # Two tree files, same device/measurement, disjoint time ranges: one logical
+    # series whose shards and time bounds merge.
+    path1 = tmp_path / "t1.tsfile"
+    path2 = tmp_path / "t2.tsfile"
+    _write_tree_rows(path1, {"root.a.b": [("m1", TSDataType.DOUBLE)]}, t_start=0)
+    _write_tree_rows(path2, {"root.a.b": [("m1", TSDataType.DOUBLE)]}, t_start=10)
+
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        assert tsdf.model == "tree"
+        assert tsdf.list_timeseries() == ["root.a.b.m1"]
+        ts = tsdf["root.a.b.m1"]
+        assert len(ts) == 6
+        np.testing.assert_array_equal(
+            ts.timestamps, np.array([0, 1, 2, 10, 11, 12], dtype=np.int64)
+        )
+        meta = tsdf.list_timeseries_metadata()
+        assert meta.loc["root.a.b.m1", "count"] == 6
+
+
+def test_dataset_tree_model_unions_fields_across_files(tmp_path):
+    # Same device, different measurement subsets across files -> union of fields.
+    path1 = tmp_path / "t1.tsfile"
+    path2 = tmp_path / "t2.tsfile"
+    _write_tree_rows(path1, {"root.a.b": [("m1", TSDataType.DOUBLE)]}, t_start=0)
+    _write_tree_rows(path2, {"root.a.b": [("m2", TSDataType.DOUBLE)]}, t_start=0)
+
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        assert tsdf.model == "tree"
+        assert sorted(tsdf.list_timeseries()) == ["root.a.b.m1", "root.a.b.m2"]
+        # Each field reads its own file's data, not the other's.
+        np.testing.assert_array_equal(tsdf["root.a.b.m1"][:], np.array([0.5, 1.5, 2.5]))
+        np.testing.assert_array_equal(tsdf["root.a.b.m2"][:], np.array([0.5, 1.5, 2.5]))
+        # Aligned read spans the unioned fields on the one device.
+        aligned = tsdf.loc[0:2, ["root.a.b.m1", "root.a.b.m2"]]
+        assert aligned.shape == (3, 2)
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
+
+
+def test_dataset_tree_model_unions_different_depths_across_files(tmp_path):
+    # Files with different max depth -> global tag layout widens; the shallower
+    # device pads its deepest tag column with null.
+    path1 = tmp_path / "t1.tsfile"
+    path2 = tmp_path / "t2.tsfile"
+    _write_tree_rows(path1, {"root.a.b": [("m1", TSDataType.DOUBLE)]}, t_start=0)
+    _write_tree_rows(path2, {"root.a.b.c": [("m1", TSDataType.DOUBLE)]}, t_start=0)
+
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        assert tsdf.model == "tree"
+        assert sorted(tsdf.list_timeseries()) == ["root.a.b.c.m1", "root.a.b.m1"]
+        meta = tsdf.list_timeseries_metadata()
+        # Global depth widened to the deeper file (a, b, c -> _col_3 exists).
+        assert "_col_3" in meta.columns
+        assert meta.loc["root.a.b.c.m1", "_col_3"] == "c"
+        # The shallower device's deepest tag column is null (padded).
+        assert pd.isna(meta.loc["root.a.b.m1", "_col_3"])
+        # Each device still reads its own data.
+        np.testing.assert_array_equal(tsdf["root.a.b.m1"][:], np.array([0.5, 1.5, 2.5]))
+        np.testing.assert_array_equal(
+            tsdf["root.a.b.c.m1"][:], np.array([0.5, 1.5, 2.5])
+        )
