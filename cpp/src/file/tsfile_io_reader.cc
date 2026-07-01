@@ -384,10 +384,29 @@ int TsFileIOReader::load_tsfile_meta() {
     return ret;
 }
 
+std::string TsFileIOReader::device_node_cache_key(
+    const std::shared_ptr<IDeviceID>& device_id) {
+    // Length-prefixed, null-flagged encoding: for each segment emit either
+    // "N;" (null) or "<len>:<bytes>;".  Distinct segment sequences always map
+    // to distinct keys, so a real null tag never aliases the literal "null".
+    std::string key;
+    for (const std::string* seg : device_id->get_segments()) {
+        if (seg == nullptr) {
+            key += "N;";
+        } else {
+            key += std::to_string(seg->size());
+            key += ':';
+            key += *seg;
+            key += ';';
+        }
+    }
+    return key;
+}
+
 int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
                                            common::PageArena& pa,
                                            CachedDeviceNode& out) {
-    std::string dev_name = device_id->get_device_name();
+    std::string dev_name = device_node_cache_key(device_id);
 
     {
         std::lock_guard<std::mutex> lk(device_node_cache_mu_);

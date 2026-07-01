@@ -195,6 +195,15 @@ class TsFileIOReader {
                                common::PageArena& pa, CachedDeviceNode& out);
 
    private:
+    // Build a collision-free key for device_node_cache_.  get_device_name()
+    // renders a null tag segment as the literal "null", so a device with a
+    // real null tag and one whose tag value is the string "null" produce the
+    // same name and would alias in the cache — the second device would read
+    // the first device's chunks.  Encode each segment length-prefixed and
+    // flag null segments explicitly so the two can never collide.
+    static std::string device_node_cache_key(
+        const std::shared_ptr<IDeviceID>& device_id);
+
     ReadFile* read_file_;
     common::PageArena tsfile_meta_page_arena_;
     TsFileMeta tsfile_meta_;
