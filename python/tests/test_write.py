@@ -106,6 +106,33 @@ def test_table_write():
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
 
+def test_flush():
+    file_name = "table_flush.tsfile"
+    try:
+        with TsFileWriter(file_name) as writer:
+            origin_size = os.path.getsize(file_name)
+            column1 = ColumnSchema("item_id", TSDataType.STRING, ColumnCategory.TAG)
+            column2 = ColumnSchema("value", TSDataType.DOUBLE)
+            table = TableSchema("test_flush", [column1, column2])
+            writer.register_table(table)
+            row_num = 100
+
+            tablet = Tablet(["item_id", "value"],
+                            [TSDataType.STRING, TSDataType.DOUBLE],
+                            row_num)
+            tablet.set_table_name("test_flush")
+            for i in range(100):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("item_id", i, str(i))
+                tablet.add_value_by_name("value", i, i * 10.1)
+            writer.write_table(tablet)
+            assert os.path.getsize(file_name) == origin_size
+            writer.flush()
+            assert os.path.getsize(file_name) > origin_size
+    finally:
+        if os.path.exists(file_name):
+            os.remove(file_name)
+
 
 
 

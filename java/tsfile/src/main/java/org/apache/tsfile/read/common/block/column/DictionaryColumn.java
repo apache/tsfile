@@ -26,8 +26,6 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
-import org.apache.commons.lang3.ArrayUtils;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -347,7 +345,7 @@ public final class DictionaryColumn implements Column {
     }
     Column compactDictionary =
         dictionary.copyPositions(
-            ArrayUtils.toPrimitive(positionsToCopy.toArray(new Integer[0])),
+            positionsToCopy.stream().mapToInt(Integer::intValue).toArray(),
             0,
             positionsToCopy.size());
     if (positionsToCopy.size() == length) {
@@ -512,7 +510,7 @@ public final class DictionaryColumn implements Column {
     try {
       Column compactDictionary =
           dictionary.copyPositions(
-              ArrayUtils.toPrimitive(dictionaryPositionsToCopy.toArray(new Integer[0])),
+              dictionaryPositionsToCopy.stream().mapToInt(Integer::intValue).toArray(),
               0,
               dictionaryPositionsToCopy.size());
       return new DictionaryColumn(

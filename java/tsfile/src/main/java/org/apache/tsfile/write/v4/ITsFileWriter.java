@@ -21,6 +21,7 @@ package org.apache.tsfile.write.v4;
 
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 
 import java.io.IOException;
@@ -32,4 +33,7 @@ public interface ITsFileWriter extends AutoCloseable {
 
   @TsFileApi
   void close();
+
+  @TsFileApi
+  void write(TSRecord record) throws IOException, WriteProcessException;
 }

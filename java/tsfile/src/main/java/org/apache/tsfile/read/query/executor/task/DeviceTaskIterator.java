@@ -23,7 +23,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
-import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor.ColumnMapping;
 import org.apache.tsfile.utils.Pair;
 
@@ -41,11 +41,11 @@ public class DeviceTaskIterator implements Iterator<DeviceQueryTask> {
       MetadataIndexNode indexRoot,
       ColumnMapping columnMapping,
       IMetadataQuerier metadataQuerier,
-      ExpressionTree idFilter,
+      Filter tagFilter,
       TableSchema tableSchema) {
     this.columnNames = columnNames;
     this.columnMapping = columnMapping;
-    this.deviceMetaIterator = metadataQuerier.deviceIterator(indexRoot, idFilter);
+    this.deviceMetaIterator = metadataQuerier.deviceIterator(indexRoot, tagFilter);
     this.tableSchema = tableSchema;
   }
 

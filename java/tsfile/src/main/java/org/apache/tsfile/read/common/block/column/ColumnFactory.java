@@ -35,6 +35,7 @@ public class ColumnFactory {
       case TEXT:
       case STRING:
       case BLOB:
+      case OBJECT:
         return new BinaryColumn(initialCapacity);
       case INT32:
       case DATE:

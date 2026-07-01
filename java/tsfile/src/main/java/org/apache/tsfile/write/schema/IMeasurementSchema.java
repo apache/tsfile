@@ -23,6 +23,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.Accountable;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public interface IMeasurementSchema {
+public interface IMeasurementSchema extends Accountable {
 
   MeasurementSchemaType getSchemaType();
 

@@ -51,9 +51,9 @@ struct InjectPoint {
     } while (0)
 
 // close injection
-#define DISABLE_INJECTION(inject_point_name)              \
-    do {                                                  \
-        g_all_inject_points.erase(inject_point_name);     \
+#define DISABLE_INJECTION(inject_point_name)          \
+    do {                                              \
+        g_all_inject_points.erase(inject_point_name); \
     } while (0)
 
 // the map save all inject points

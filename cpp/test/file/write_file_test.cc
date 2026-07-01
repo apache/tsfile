@@ -44,9 +44,9 @@ TEST_F(WriteFileTest, CreateFile) {
     remove(file_name.c_str());
 }
 
-#if defined(__GNUC__) && !defined(__clang__)  
-    #pragma GCC push_options
-    #pragma GCC optimize ("O0")  
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 #endif
 TEST_F(WriteFileTest, WriteToFile) {
     WriteFile write_file;
@@ -73,7 +73,7 @@ TEST_F(WriteFileTest, WriteToFile) {
     remove(file_name.c_str());
 }
 #if defined(__GNUC__) && !defined(__clang__)
-    #pragma GCC pop_options
+#pragma GCC pop_options
 #endif
 
 TEST_F(WriteFileTest, SyncFile) {

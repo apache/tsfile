@@ -1,0 +1,4561 @@
+package org.apache.iotdb.tsfile.encoding;
+
+import org.junit.Test;
+
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.*;
+
+public class BPStrongRL {
+
+    static final int CHUNK_SIZE = 1024;
+    /**
+     * 训练/DP 奖励里每个逻辑「octad」包含多少原始数值，必须与后续评测时的 {@code octadSize} 一致，否则策略学在
+     * 错误粒度上（例如用 1 训练却在 {@code octadSize=8} 上比压缩比，会弱于在同样为 8 下训练的 {@link BPRL}）。
+     * 与 {@link #trainModelFromDirectory} 中 bitWidth 切段、{@link DPPackingWrapper#computeOptimalCostDP} 的 pack 宽度参数一致。
+     */
+    static final int TRAINING_OCTAD_PACK_SIZE = 8;
+    /**
+     * {@code false}：与 {@link BPRL} 一致——单条轨迹 + 标量奖励的 REINFORCE，无 GRPO/熵/PPO/梯度裁剪；
+     * 在 octadSize=8 上通常比复杂 GRPO 更稳、压缩比更接近或优于旧版 RL。{@code true}：多轨迹 GRPO（实验向）。
+     */
+    static final boolean USE_GRPO_TRAINING = true;
+    static final int INPUT_DIM = 5;
+    /** 两层隐层，表达能力强于原单层 48 维 MLP。 */
+    static final int HIDDEN1_DIM = 64;
+    static final int HIDDEN2_DIM = 64;
+    /**
+     * GRPO（Group Relative Policy Optimization）：同一条序列上采样多条轨迹，对回报做组内标准化得到优势。
+     * 比单轨迹 REINFORCE 方差更小，但每个序列需 pack GRPO_GROUP_SIZE 次，训练更慢。
+     */
+    static final int GRPO_GROUP_SIZE = 4;
+    /**
+     * 同一条序列上多次采样的回报往往高度相关、方差极小；纯 z-score 会使优势≈0，策略几乎不学。
+     * 对分母设下限，使相对项仍有有效步长（类似 GRPO 文献中的温度/裁剪思想）。
+     */
+    static final float GRPO_MIN_STD = 0.08f;
+    /**
+     * 混合标量回报（与组内 z-score 同量级）：纯 GRPO 只保留「组内谁更好」，丢掉与 BPRL 相当的绝对尺度；
+     * 混入 {@link ImprovedRewardFunction#calculateRewardGroupRelative} 可恢复对「压低 totalCost」的直接梯度。
+     */
+    static final float GRPO_RAW_REWARD_MIX = 0.45f;
+    /** 裁剪混合后的优势，抑制偶发大梯度（策略梯度里「loss」本身不应期望像监督学习一样单调降）。 */
+    static final float GRPO_ADV_CLIP = 2.5f;
+    /** 熵奖励系数：鼓励策略别过早塌缩到 0/1，与 PPO/SAC 中 entropy bonus 同角色。 */
+    static final float GRPO_ENTROPY_COEF = 0.02f;
+    /** 每个 epoch 末尾对学习率乘的衰减因子（下限见 {@link RLDecisionModel#decayLearningRate()}）。 */
+    static final float GRPO_LR_EPOCH_DECAY = 0.9985f;
+    /**
+     * 组内回报方差低于该阈值时，z-score 不可靠，改用秩次优势（-1…1），避免「全差不多」时学不到相对好坏。
+     */
+    static final float GRPO_RANK_VAR_THRESHOLD = 1e-6f;
+    /** 跨序列回报 EMA，用于弱化 raw 项的非平稳性（类似 value baseline，无额外网络）。 */
+    static final float GRPO_REWARD_EMA_DECAY = 0.995f;
+    /** 组内回报最高的一条轨迹，优势再乘该系数，加强「向当前最好行为」更新。 */
+    static final float GRPO_BEST_ADV_BOOST = 1.18f;
+    /** 单次 {@link RLDecisionModel#train} 内梯度全局 L2 范数上限（按整条轨迹累积梯度后裁剪）。 */
+    static final float GRPO_MAX_GRAD_NORM = 12.0f;
+    /**
+     * PPO 式 ratio 裁剪区间 [1-ε, 1+ε]；0 表示关闭（仅 REINFORCE+熵）。开启后使用 {@link DecisionPoint#probability}
+     * 作为采样时策略概率。
+     */
+    static final float GRPO_PPO_CLIP_EPS = 0.12f;
+    static int max_octad_size = 4;
+    /** REINFORCE 默认与 BPRL 一致；若开启 {@link #USE_GRPO_TRAINING} 可适当加大。 */
+    static int all_epochs = 300;
+    static int all_time_of_repeat = 100;
+    /**
+     * 对真实数据写 {@code compressedData} 时使用的探索率。训练后 {@link RLDecisionModel#explorationRate}
+     * 仍约 0.05，若评测仍用该值则约 5% 拆/合决策随机，会明显拉低压缩比，故推理默认 0（纯贪心）。
+     */
+    static final float INFERENCE_EXPLORATION = 0.0f;
+    /**
+     * 推理时对同一 octad 序列多次重打包取最低 {@link PackingResult#totalCost}；
+     * 第 1 次贪心，其余用小探索率换多样性。1=仅一次贪心；4~8 可能略增压缩比但编码更慢。
+     */
+    static int INFERENCE_PACK_TRIALS = 1;
+    /** {@link #INFERENCE_PACK_TRIALS}&gt;1 时第 2 次起的试探用探索率。 */
+    static final float INFERENCE_MULTI_TRIAL_EXPLORATION = 0.06f;
+    /** 奖励中主项（负比特代价）的权重，略 &gt;1 使策略更直接对齐压缩比。 */
+    static final float REWARD_COST_WEIGHT = 1.12f;
+
+    /** 按回报降序将秩 0…G-1 映射到 [-1, 1]，用于方差极小时的组内相对优势。 */
+    static float[] grpoRankScores(float[] rewards) {
+        int g = rewards.length;
+        Integer[] idx = new Integer[g];
+        for (int i = 0; i < g; i++) {
+            idx[i] = i;
+        }
+        Arrays.sort(idx, (a, b) -> Float.compare(rewards[b], rewards[a]));
+        float[] z = new float[g];
+        if (g <= 1) {
+            z[0] = 0.0f;
+            return z;
+        }
+        for (int i = 0; i < g; i++) {
+            // i=0 为回报最高，映射到 +1；最低到 -1
+            float pos = 1.0f - 2.0f * i / (g - 1);
+            z[idx[i]] = pos;
+        }
+        return z;
+    }
+
+    // ========== Pack / Result / DecisionPoint ==========
+    static class Pack {
+        int size = 0;                    // 这个pack包含多少个octad
+        int maxBitWidth = 0;             // 这个pack中所有octad的最大位宽
+        int startIndex = 0;              // 第一个octad的索引
+        List<Integer> indices = new ArrayList<>();    // octad索引列表
+        List<Integer> bitWidths = new ArrayList<>();  // 每个octad的原始位宽
+
+        void addOctad(int index, int bitWidth) {
+            if (size == 0) {
+                startIndex = index;
+                maxBitWidth = bitWidth;
+            } else {
+                if (bitWidth > maxBitWidth) maxBitWidth = bitWidth;
+            }
+            indices.add(index);
+            bitWidths.add(bitWidth);
+            size++;
+        }
+
+        long dataCost(int octadSize) {
+            // 数据成本: octad数量 × octadSize × pack的位宽
+            return (long) size * octadSize * maxBitWidth;
+        }
+
+        int logSize() {
+            if (size <= 0) return 0;
+            return 32 - Integer.numberOfLeadingZeros(size);
+        }
+    }
+
+    static class PackingResult {
+        int packCount = 0;           // pack的数量
+        long dataCostA = 0;          // 数据存储成本
+        int bitWidthCostB = 0;       // 位宽存储成本 (每个pack 6 bits)
+        int packSizeCostC = 0;       // pack大小存储成本
+        long totalCost = 0;          // 总成本
+        List<Pack> packs = new ArrayList<>();  // 所有的pack
+        byte[] compressedData;
+
+        void calculateCost(int maxLog) {
+            bitWidthCostB = 6 * packCount;
+            packSizeCostC = packCount * maxLog;
+            totalCost = dataCostA + bitWidthCostB + packSizeCostC;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Packs: %d, Cost: %d (A=%d, B=%d, C=%d)",
+                    packCount, totalCost, dataCostA, bitWidthCostB, packSizeCostC);
+        }
+    }
+
+    static class DecisionPoint {
+        int currentPackSize;     // 当前pack中的octad数量
+        int currentPackMaxB;     // 当前pack的最大位宽
+        int newOctadB;          // 新octad的位宽
+        int packCount;          // 已创建的pack数量
+        int currentMaxLog;      // 当前最大的log(octad数量)
+        boolean action;         // 是否合并到当前pack
+        float probability;      // 模型预测的概率
+
+        DecisionPoint(int cps, int cpm, int nob, int pc, int cml, boolean a, float p) {
+            currentPackSize = cps;
+            currentPackMaxB = cpm;
+            newOctadB = nob;
+            packCount = pc;
+            currentMaxLog = cml;
+            action = a;
+            probability = p;
+        }
+    }
+
+    // ========== 新增：固定packsize=8方案的结果类 ==========
+    static class FixedPackResult {
+        long totalCost = 0;           // 总成本（比特数）
+        long compressedBits = 0;      // 压缩后的比特数
+        byte[] compressedData;        // 压缩数据
+
+        @Override
+        public String toString() {
+            return String.format("FixedPack Cost: %d bits", totalCost);
+        }
+    }
+
+    // ========== 改进的奖励函数类 ==========
+    static class ImprovedRewardFunction {
+        private float baselineCost = 0;
+        private float bestCost = Float.MAX_VALUE;
+        private float alpha = 0.1f;  // 基线更新率
+        private int optimalDPCost = 0;  // 动态规划最优解
+
+        public ImprovedRewardFunction() {}
+
+        public ImprovedRewardFunction(int optimalDPCost) {
+            this.optimalDPCost = optimalDPCost;
+        }
+
+        // 设置动态规划最优解
+        public void setOptimalDPCost(int optimalDPCost) {
+            this.optimalDPCost = optimalDPCost;
+        }
+
+        // 计算奖励
+        public float calculateReward(PackingResult result) {
+            float reward = 0.0f;
+
+            // 1. 基础奖励：负的总成本（成本越低，奖励越高）
+            float costReward = -result.totalCost / 100000.0f * REWARD_COST_WEIGHT;
+            reward += costReward;
+
+            // 2. 如果动态规划最优解已知，计算相对改进
+            if (optimalDPCost > 0) {
+                float ratio = (float)result.totalCost / optimalDPCost;
+                // 如果比动态规划好，给予正奖励；否则负奖励
+                if (ratio < 1.0f) {
+                    reward += (1.0f - ratio) * 2.0f;  // 优于动态规划，额外奖励
+                } else {
+                    reward -= (ratio - 1.0f) * 0.5f;  // 差于动态规划，惩罚
+                }
+            }
+
+            // 3. 奖励压缩比提升
+            if (baselineCost == 0) {
+                baselineCost = result.totalCost;
+            } else {
+                float improvement = (baselineCost - result.totalCost) / baselineCost;
+                reward += improvement * 5.0f;  // 改进越大，奖励越大
+
+                // 更新基线
+                baselineCost = baselineCost * (1 - alpha) + result.totalCost * alpha;
+            }
+
+            // 4. 如果创造了新的最好成绩，额外奖励
+            if (result.totalCost < bestCost) {
+                reward += 1.0f;
+                bestCost = result.totalCost;
+            }
+
+            // 5. 惩罚过大的pack数量（鼓励合并）
+            float packCountPenalty = -result.packCount * 0.01f;
+            reward += packCountPenalty;
+
+            // 6. 鼓励合理的pack大小分布
+            float sizeBalanceReward = calculateSizeBalanceReward(result.packs);
+            reward += sizeBalanceReward;
+
+            return reward;
+        }
+
+        private float calculateSizeBalanceReward(List<Pack> packs) {
+            if (packs.size() < 2) return 0.0f;
+
+            float avgSize = 0;
+            for (Pack pack : packs) {
+                avgSize += pack.size;
+            }
+            avgSize /= packs.size();
+
+            float variance = 0;
+            for (Pack pack : packs) {
+                float diff = pack.size - avgSize;
+                variance += diff * diff;
+            }
+            variance /= packs.size();
+
+            // 方差越小，奖励越高（鼓励均匀分组）
+            return -variance / 1000.0f;
+        }
+
+        public void reset() {
+            baselineCost = 0;
+            bestCost = Float.MAX_VALUE;
+        }
+
+        /**
+         * GRPO 组内标量：与 {@link #calculateReward} 主项一致，但<strong>不更新</strong> baseline / best，
+         * 避免同一条序列上采样 G 条轨迹时重复刷新基线。
+         */
+        float calculateRewardGroupRelative(PackingResult result) {
+            float reward = -result.totalCost / 100000.0f * REWARD_COST_WEIGHT;
+            if (optimalDPCost > 0) {
+                float ratio = (float) result.totalCost / optimalDPCost;
+                if (ratio < 1.0f) {
+                    reward += (1.0f - ratio) * 2.0f;
+                } else {
+                    reward -= (ratio - 1.0f) * 0.5f;
+                }
+            }
+            reward -= result.packCount * 0.01f;
+            reward += calculateSizeBalanceReward(result.packs);
+            return reward;
+        }
+    }
+
+    // ========== 两层隐层 MLP 策略 + GRPO（组相对优势，替代简单 REINFORCE） ==========
+    static class RLDecisionModel {
+        float[] W1; // HIDDEN1_DIM * INPUT_DIM
+        float[] b1; // HIDDEN1_DIM
+        float[] W2; // HIDDEN2_DIM * HIDDEN1_DIM
+        float[] b2; // HIDDEN2_DIM
+        float[] W3; // HIDDEN2_DIM
+        float b3;
+
+        float explorationRate = 0.3f;
+        /** 与 BPRL 中策略网络默认步长一致，避免深层网络 + 过小步长导致欠拟合。 */
+        float learningRate = 0.01f;
+        float minLearningRate = 0.002f;
+        ImprovedRewardFunction rewardFunction;
+
+        Random rng;
+
+        void decayLearningRate() {
+            learningRate *= GRPO_LR_EPOCH_DECAY;
+            if (learningRate < minLearningRate) {
+                learningRate = minLearningRate;
+            }
+        }
+
+        /** 二元分布熵 H(p) = -p log p - (1-p) log(1-p)，用于熵正则。 */
+        static float binaryEntropy(float p) {
+            float pc = Math.min(Math.max(p, 1e-7f), 1.0f - 1e-7f);
+            return -(pc * (float) Math.log(pc) + (1.0f - pc) * (float) Math.log(1.0f - pc));
+        }
+
+        RLDecisionModel() {
+            rng = new Random();
+            float s1 = (float) Math.sqrt(2.0 / (INPUT_DIM + HIDDEN1_DIM));
+            float s2 = (float) Math.sqrt(2.0 / (HIDDEN1_DIM + HIDDEN2_DIM));
+            float s3 = (float) Math.sqrt(2.0 / (HIDDEN2_DIM + 1));
+            W1 = new float[HIDDEN1_DIM * INPUT_DIM];
+            b1 = new float[HIDDEN1_DIM];
+            W2 = new float[HIDDEN2_DIM * HIDDEN1_DIM];
+            b2 = new float[HIDDEN2_DIM];
+            W3 = new float[HIDDEN2_DIM];
+            for (int i = 0; i < W1.length; ++i) {
+                W1[i] = randUniform(-s1, s1);
+            }
+            for (int i = 0; i < b1.length; ++i) {
+                b1[i] = randUniform(-s1, s1);
+            }
+            for (int i = 0; i < W2.length; ++i) {
+                W2[i] = randUniform(-s2, s2);
+            }
+            for (int i = 0; i < b2.length; ++i) {
+                b2[i] = randUniform(-s2, s2);
+            }
+            for (int i = 0; i < W3.length; ++i) {
+                W3[i] = randUniform(-s3, s3);
+            }
+            b3 = randUniform(-s3, s3);
+            rewardFunction = new ImprovedRewardFunction();
+        }
+
+        public void setOptimalDPCost(int optimalDPCost) {
+            rewardFunction.setOptimalDPCost(optimalDPCost);
+        }
+
+        private float randUniform(float a, float b) {
+            return a + rng.nextFloat() * (b - a);
+        }
+
+        static float relu(float x) {
+            return x > 0.0f ? x : 0.0f;
+        }
+
+        static float reluDeriv(float x) {
+            return x > 0.0f ? 1.0f : 0.0f;
+        }
+
+        static float sigmoid(float x) {
+            if (x >= 0) {
+                double z = Math.exp(-x);
+                return (float) (1.0 / (1.0 + z));
+            } else {
+                double z = Math.exp(x);
+                return (float) (z / (1.0 + z));
+            }
+        }
+
+        /**
+         * 前向：feat → relu → relu → sigmoid；若传入缓存则写出 h1,z1,h2,z2 供反传。
+         */
+        float forwardProb(float[] feat, float[] h1, float[] z1, float[] h2, float[] z2) {
+            if (h1 != null) {
+                Arrays.fill(h1, 0.0f);
+            }
+            if (z1 != null) {
+                Arrays.fill(z1, 0.0f);
+            }
+            if (h2 != null) {
+                Arrays.fill(h2, 0.0f);
+            }
+            if (z2 != null) {
+                Arrays.fill(z2, 0.0f);
+            }
+
+            float[] bufH1 = h1;
+            float[] bufZ1 = z1;
+            if (bufH1 == null) {
+                bufH1 = new float[HIDDEN1_DIM];
+            }
+            if (bufZ1 == null) {
+                bufZ1 = new float[HIDDEN1_DIM];
+            }
+
+            for (int h = 0; h < HIDDEN1_DIM; ++h) {
+                float z = b1[h];
+                int base = h * INPUT_DIM;
+                for (int j = 0; j < INPUT_DIM; ++j) {
+                    z += W1[base + j] * feat[j];
+                }
+                bufZ1[h] = z;
+                bufH1[h] = relu(z);
+            }
+
+            float[] bufH2 = h2;
+            float[] bufZ2 = z2;
+            if (bufH2 == null) {
+                bufH2 = new float[HIDDEN2_DIM];
+            }
+            if (bufZ2 == null) {
+                bufZ2 = new float[HIDDEN2_DIM];
+            }
+
+            for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                float z = b2[h];
+                int base = h * HIDDEN1_DIM;
+                for (int j = 0; j < HIDDEN1_DIM; ++j) {
+                    z += W2[base + j] * bufH1[j];
+                }
+                bufZ2[h] = z;
+                bufH2[h] = relu(z);
+            }
+
+            float z3 = b3;
+            for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                z3 += W3[h] * bufH2[h];
+            }
+            return sigmoid(z3);
+        }
+
+        float forwardProb(float[] feat) {
+            return forwardProb(feat, null, null, null, null);
+        }
+
+        /**
+         * 与 BPRL 中单次 REINFORCE 相同（整条轨迹共享标量 {@code reward}），适配本类双层隐层网络；
+         * 在 {@link #USE_GRPO_TRAINING} 为 false 时使用（octadSize 与 TRAINING_OCTAD_PACK_SIZE 一致）。
+         */
+        float trainReinforce(List<DecisionPoint> decisions, float reward) {
+            if (decisions == null || decisions.isEmpty()) {
+                return 0.0f;
+            }
+            explorationRate *= 0.99f;
+            if (explorationRate < 0.05f) {
+                explorationRate = 0.05f;
+            }
+
+            float[] dW1 = new float[W1.length];
+            float[] db1 = new float[b1.length];
+            float[] dW2 = new float[W2.length];
+            float[] db2 = new float[b2.length];
+            float[] dW3 = new float[W3.length];
+            float[] db3Box = new float[1];
+
+            float totalLoss = 0.0f;
+            float[] feat = new float[INPUT_DIM];
+            float[] h1 = new float[HIDDEN1_DIM];
+            float[] z1 = new float[HIDDEN1_DIM];
+            float[] h2 = new float[HIDDEN2_DIM];
+            float[] z2 = new float[HIDDEN2_DIM];
+
+            for (DecisionPoint dp : decisions) {
+                feat[0] = dp.currentPackSize / 1024.0f;
+                feat[1] = dp.currentPackMaxB / 64.0f;
+                feat[2] = dp.newOctadB / 64.0f;
+                feat[3] = dp.packCount / 1024.0f;
+                feat[4] = dp.currentMaxLog / 10.0f;
+
+                float p = forwardProb(feat, h1, z1, h2, z2);
+                float pClipped = Math.min(Math.max(p, 1e-6f), 1.0f - 1e-6f);
+                float piA = dp.action ? pClipped : (1.0f - pClipped);
+                if (piA <= 0.0f) {
+                    piA = 1e-6f;
+                }
+                float lossI = -reward * (float) Math.log(piA);
+                if (Float.isNaN(lossI) || Float.isInfinite(lossI)) {
+                    System.err.printf(
+                            "Warning: loss is NaN or Infinite. p=%.8f, piA=%.8f, reward=%.8f\n",
+                            p, piA, reward);
+                    lossI = 0.0f;
+                }
+                totalLoss += lossI;
+
+                float dL_dz3 = reward * (p - (dp.action ? 1.0f : 0.0f));
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    dW3[h] += dL_dz3 * h2[h];
+                }
+                db3Box[0] += dL_dz3;
+
+                float[] dh2 = new float[HIDDEN2_DIM];
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    dh2[h] = dL_dz3 * W3[h];
+                }
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    float dz2 = dh2[h] * reluDeriv(z2[h]);
+                    int base = h * HIDDEN1_DIM;
+                    for (int j = 0; j < HIDDEN1_DIM; ++j) {
+                        dW2[base + j] += dz2 * h1[j];
+                    }
+                    db2[h] += dz2;
+                }
+
+                float[] dh1 = new float[HIDDEN1_DIM];
+                Arrays.fill(dh1, 0.0f);
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    float dz2 = dh2[h] * reluDeriv(z2[h]);
+                    int base = h * HIDDEN1_DIM;
+                    for (int j = 0; j < HIDDEN1_DIM; ++j) {
+                        dh1[j] += dz2 * W2[base + j];
+                    }
+                }
+                for (int h = 0; h < HIDDEN1_DIM; ++h) {
+                    float dz1 = dh1[h] * reluDeriv(z1[h]);
+                    int base = h * INPUT_DIM;
+                    for (int j = 0; j < INPUT_DIM; ++j) {
+                        dW1[base + j] += dz1 * feat[j];
+                    }
+                    db1[h] += dz1;
+                }
+            }
+
+            float lr = learningRate;
+            for (int i = 0; i < W1.length; ++i) {
+                W1[i] -= lr * dW1[i];
+                W1[i] = clip(W1[i], -10f, 10f);
+            }
+            for (int i = 0; i < b1.length; ++i) {
+                b1[i] -= lr * db1[i];
+                b1[i] = clip(b1[i], -10f, 10f);
+            }
+            for (int i = 0; i < W2.length; ++i) {
+                W2[i] -= lr * dW2[i];
+                W2[i] = clip(W2[i], -10f, 10f);
+            }
+            for (int i = 0; i < b2.length; ++i) {
+                b2[i] -= lr * db2[i];
+                b2[i] = clip(b2[i], -10f, 10f);
+            }
+            for (int i = 0; i < W3.length; ++i) {
+                W3[i] -= lr * dW3[i];
+                W3[i] = clip(W3[i], -10f, 10f);
+            }
+            b3 -= lr * db3Box[0];
+            b3 = clip(b3, -10f, 10f);
+
+            return totalLoss;
+        }
+
+        /**
+         * 策略梯度一步：最小化 {@code -A·log π(a|s) - β·H(π)}（β=GRPO_ENTROPY_COEF）。
+         * 打印的标量「loss」是沿整条轨迹对决策点求和，且 A 随序列变化，不必单调下降；看 reward / 压缩比更可靠。
+         */
+        float train(List<DecisionPoint> decisions, float advantage) {
+            if (decisions == null || decisions.isEmpty()) {
+                return 0.0f;
+            }
+
+            float adv = clip(advantage, -GRPO_ADV_CLIP, GRPO_ADV_CLIP);
+
+            float[] dW1 = new float[W1.length];
+            float[] db1 = new float[b1.length];
+            float[] dW2 = new float[W2.length];
+            float[] db2 = new float[b2.length];
+            float[] dW3 = new float[W3.length];
+            float[] db3Box = new float[1];
+
+            float totalLoss = 0.0f;
+            float[] feat = new float[INPUT_DIM];
+            float[] h1 = new float[HIDDEN1_DIM];
+            float[] z1 = new float[HIDDEN1_DIM];
+            float[] h2 = new float[HIDDEN2_DIM];
+            float[] z2 = new float[HIDDEN2_DIM];
+
+            for (DecisionPoint dp : decisions) {
+                feat[0] = dp.currentPackSize / 1024.0f;
+                feat[1] = dp.currentPackMaxB / 64.0f;
+                feat[2] = dp.newOctadB / 64.0f;
+                feat[3] = dp.packCount / 1024.0f;
+                feat[4] = dp.currentMaxLog / 10.0f;
+
+                float p = forwardProb(feat, h1, z1, h2, z2);
+                float pClipped = Math.min(Math.max(p, 1e-6f), 1.0f - 1e-6f);
+                float piA = dp.action ? pClipped : (1.0f - pClipped);
+                if (piA <= 0.0f) {
+                    piA = 1e-6f;
+                }
+                if (GRPO_PPO_CLIP_EPS > 1e-6f) {
+                    float pOld = dp.probability;
+                    float piOld = dp.action ? pOld : (1.0f - pOld);
+                    piOld = Math.max(piOld, 1e-8f);
+                    float piNew = dp.action ? pClipped : (1.0f - pClipped);
+                    float ratio = piNew / piOld;
+                    float clipLo = 1.0f - GRPO_PPO_CLIP_EPS;
+                    float clipHi = 1.0f + GRPO_PPO_CLIP_EPS;
+                    if (adv > 0 && ratio > clipHi) {
+                        continue;
+                    }
+                    if (adv < 0 && ratio < clipLo) {
+                        continue;
+                    }
+                }
+                float policyTerm = -adv * (float) Math.log(piA);
+                float ent = binaryEntropy(p);
+                float lossI = policyTerm - GRPO_ENTROPY_COEF * ent;
+                if (Float.isNaN(lossI) || Float.isInfinite(lossI)) {
+                    System.err.printf(
+                            "Warning: loss is NaN or Infinite. p=%.8f, piA=%.8f, adv=%.8f\n",
+                            p, piA, adv);
+                    lossI = 0.0f;
+                }
+                totalLoss += lossI;
+
+                float dL_dz3 = adv * (p - (dp.action ? 1.0f : 0.0f));
+                float dHdp = (float) Math.log((1.0f - pClipped) / pClipped);
+                float dpdz = p * (1.0f - p);
+                dL_dz3 -= GRPO_ENTROPY_COEF * dHdp * dpdz;
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    dW3[h] += dL_dz3 * h2[h];
+                }
+                db3Box[0] += dL_dz3;
+
+                float[] dh2 = new float[HIDDEN2_DIM];
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    dh2[h] = dL_dz3 * W3[h];
+                }
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    float dz2 = dh2[h] * reluDeriv(z2[h]);
+                    int base = h * HIDDEN1_DIM;
+                    for (int j = 0; j < HIDDEN1_DIM; ++j) {
+                        dW2[base + j] += dz2 * h1[j];
+                    }
+                    db2[h] += dz2;
+                }
+
+                float[] dh1 = new float[HIDDEN1_DIM];
+                Arrays.fill(dh1, 0.0f);
+                for (int h = 0; h < HIDDEN2_DIM; ++h) {
+                    float dz2 = dh2[h] * reluDeriv(z2[h]);
+                    int base = h * HIDDEN1_DIM;
+                    for (int j = 0; j < HIDDEN1_DIM; ++j) {
+                        dh1[j] += dz2 * W2[base + j];
+                    }
+                }
+                for (int h = 0; h < HIDDEN1_DIM; ++h) {
+                    float dz1 = dh1[h] * reluDeriv(z1[h]);
+                    int base = h * INPUT_DIM;
+                    for (int j = 0; j < INPUT_DIM; ++j) {
+                        dW1[base + j] += dz1 * feat[j];
+                    }
+                    db1[h] += dz1;
+                }
+            }
+
+            scalePolicyGradients(dW1, db1, dW2, db2, dW3, db3Box, GRPO_MAX_GRAD_NORM);
+
+            float lr = learningRate;
+            for (int i = 0; i < W1.length; ++i) {
+                W1[i] -= lr * dW1[i];
+                W1[i] = clip(W1[i], -10f, 10f);
+            }
+            for (int i = 0; i < b1.length; ++i) {
+                b1[i] -= lr * db1[i];
+                b1[i] = clip(b1[i], -10f, 10f);
+            }
+            for (int i = 0; i < W2.length; ++i) {
+                W2[i] -= lr * dW2[i];
+                W2[i] = clip(W2[i], -10f, 10f);
+            }
+            for (int i = 0; i < b2.length; ++i) {
+                b2[i] -= lr * db2[i];
+                b2[i] = clip(b2[i], -10f, 10f);
+            }
+            for (int i = 0; i < W3.length; ++i) {
+                W3[i] -= lr * dW3[i];
+                W3[i] = clip(W3[i], -10f, 10f);
+            }
+            b3 -= lr * db3Box[0];
+            b3 = clip(b3, -10f, 10f);
+
+            return totalLoss;
+        }
+
+        static float clip(float v, float low, float high) {
+            return Math.min(Math.max(v, low), high);
+        }
+
+        /** 整条轨迹累积梯度后做全局范数裁剪，抑制长序列上的梯度爆炸。 */
+        static void scalePolicyGradients(
+                float[] dW1,
+                float[] db1,
+                float[] dW2,
+                float[] db2,
+                float[] dW3,
+                float[] db3Box,
+                float maxNorm) {
+            float db3 = db3Box[0];
+            double sq = (double) db3 * db3;
+            for (float x : dW1) {
+                sq += (double) x * x;
+            }
+            for (float x : db1) {
+                sq += (double) x * x;
+            }
+            for (float x : dW2) {
+                sq += (double) x * x;
+            }
+            for (float x : db2) {
+                sq += (double) x * x;
+            }
+            for (float x : dW3) {
+                sq += (double) x * x;
+            }
+            float n = (float) Math.sqrt(sq);
+            if (n <= maxNorm || n < 1e-8f) {
+                return;
+            }
+            float s = maxNorm / n;
+            for (int i = 0; i < dW1.length; i++) {
+                dW1[i] *= s;
+            }
+            for (int i = 0; i < db1.length; i++) {
+                db1[i] *= s;
+            }
+            for (int i = 0; i < dW2.length; i++) {
+                dW2[i] *= s;
+            }
+            for (int i = 0; i < db2.length; i++) {
+                db2[i] *= s;
+            }
+            for (int i = 0; i < dW3.length; i++) {
+                dW3[i] *= s;
+            }
+            db3Box[0] *= s;
+        }
+
+        public float calculateReward(PackingResult result) {
+            return rewardFunction.calculateReward(result);
+        }
+
+        /** GRPO 组内回报（无基线状态），与 {@link ImprovedRewardFunction#calculateRewardGroupRelative} 一致。 */
+        public float calculateRewardGroupRelative(PackingResult result) {
+            return rewardFunction.calculateRewardGroupRelative(result);
+        }
+
+        public void resetRewardFunction() {
+            rewardFunction.reset();
+        }
+    }
+
+    // ========== 动态规划包装器 ==========
+    static class DPPackingWrapper {
+        public static int computeOptimalCostDP(int[] bitWidths, int pack_size) {
+            int N = bitWidths.length;
+            if (N == 0) return 0;
+
+            // 预计算所有区间的最大位宽
+            int[][] maxB = new int[N][N];
+            for (int l = 0; l < N; l++) {
+                maxB[l][l] = bitWidths[l];
+                for (int r = l + 1; r < N; r++) {
+                    maxB[l][r] = Math.max(maxB[l][r - 1], bitWidths[r]);
+                }
+            }
+
+            int minTotalCost = Integer.MAX_VALUE;
+            int maxPossibleC = 64 - Integer.numberOfLeadingZeros(N);
+
+            for (int C = 1; C <= maxPossibleC; C++) {
+                int low_C = (C == 1) ? 1 : (1 << (C - 1));
+                int high_C = Math.min((1 << C) - 1, N);
+
+                int[][] dp = new int[N + 1][2];
+                for (int i = 0; i <= N; i++) {
+                    dp[i][0] = Integer.MAX_VALUE / 2;
+                    dp[i][1] = Integer.MAX_VALUE / 2;
+                }
+                dp[0][0] = 0;
+
+                for (int i = 1; i <= N; i++) {
+                    for (int k = Math.max(1, i - high_C + 1); k <= i; k++) {
+                        int packLength = i - k + 1;
+                        int currentMaxB = maxB[k - 1][i - 1];
+                        int packCost = pack_size * packLength * currentMaxB + 6 + C;
+
+                        if (packLength < low_C) {
+                            // 小分组，不能改变状态
+                            if (dp[k - 1][0] + packCost < dp[i][0]) {
+                                dp[i][0] = dp[k - 1][0] + packCost;
+                            }
+                            if (dp[k - 1][1] + packCost < dp[i][1]) {
+                                dp[i][1] = dp[k - 1][1] + packCost;
+                            }
+                        } else {
+                            // 大分组，可以改变状态到1
+                            if (dp[k - 1][0] + packCost < dp[i][1]) {
+                                dp[i][1] = dp[k - 1][0] + packCost;
+                            }
+                            if (dp[k - 1][1] + packCost < dp[i][1]) {
+                                dp[i][1] = dp[k - 1][1] + packCost;
+                            }
+                        }
+                    }
+                }
+
+                if (dp[N][1] < minTotalCost) {
+                    minTotalCost = dp[N][1];
+                }
+            }
+
+            return minTotalCost;
+        }
+    }
+
+    // ========== 新增：计算固定packsize=8方案的成本 ==========
+    static FixedPackResult calculateFixedPackCost(long[] data, int originalLength) {
+        FixedPackResult result = new FixedPackResult();
+
+        // 确保数据长度是8的倍数
+        int octadSize = 8;
+        int remainder = data.length % octadSize;
+        int padding = (remainder == 0) ? 0 : octadSize - remainder;
+        long[] padded = new long[data.length + padding];
+        System.arraycopy(data, 0, padded, 0, data.length);
+        if (padding > 0) Arrays.fill(padded, data.length, padded.length, 0L);
+
+        // 计算每个octad的bitwidth和存储成本
+        long totalBits = 0;
+        List<Integer> bitWidths = new ArrayList<>();
+
+        for (int i = 0; i < padded.length; i += octadSize) {
+            long maxInOctad = 0;
+            for (int j = i; j < i + octadSize && j < padded.length; j++) {
+                if (padded[j] > maxInOctad) maxInOctad = padded[j];
+            }
+            int bitWidth = 0;
+            if (maxInOctad > 0) {
+                bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+            }
+            bitWidths.add(bitWidth);
+
+            // 每个octad的成本：6位存储bitwidth + 8个值按bitwidth存储
+            totalBits += 6 + (octadSize * bitWidth);
+        }
+
+        result.totalCost = totalBits;
+        result.compressedBits = totalBits;
+
+        // 生成压缩数据
+        result.compressedData = performFixedPackCompression(padded, bitWidths, octadSize);
+
+        return result;
+    }
+
+    // 执行固定packsize=8的压缩
+    static byte[] performFixedPackCompression(long[] data, List<Integer> bitWidths, int octadSize) {
+        BitWriter writer = new BitWriter();
+
+        // 每个octad: 6位bitwidth + 8个值
+        for (int octadIdx = 0; octadIdx < bitWidths.size(); octadIdx++) {
+            int bitWidth = bitWidths.get(octadIdx);
+            int startPos = octadIdx * octadSize;
+
+            // 写入bitwidth (6位)
+            writer.writeBits(bitWidth, 6);
+
+            // 写入8个值
+            for (int j = 0; j < octadSize; j++) {
+                int pos = startPos + j;
+                if (pos < data.length) {
+                    long val = data[pos];
+                    writer.writeBits(val, bitWidth);
+                } else {
+                    writer.writeBits(0L, bitWidth); // 填充
+                }
+            }
+        }
+
+        return writer.finish();
+    }
+
+    /** 与 {@link #performFixedPackCompression} 对称的解压，用于测固定 pack=8 方案的解码耗时。 */
+    static long[] decompressFixedPack(byte[] compressed, int octadSize, int originalLength) {
+        if (compressed == null || compressed.length == 0) {
+            return new long[0];
+        }
+        BitReader reader = new BitReader(compressed, 0);
+        long[] result = new long[originalLength];
+        int idx = 0;
+        while (idx < originalLength) {
+            int bitWidth = (int) reader.readBits(6);
+            if (bitWidth == 63) {
+                bitWidth = 64;
+            }
+            for (int j = 0; j < octadSize && idx < originalLength; j++) {
+                long value;
+                if (bitWidth == 0) {
+                    value = 0L;
+                } else if (bitWidth == 64) {
+                    long high = reader.readBits(32);
+                    long low = reader.readBits(32);
+                    value = (high << 32) | low;
+                } else {
+                    value = reader.readBits(bitWidth);
+                }
+                result[idx++] = value;
+            }
+        }
+        return result;
+    }
+
+    // ========== 训练方法（改进版） ==========
+    static RLDecisionModel trainModelFromDirectory(int epochs, String directoryPath) {
+        if (USE_GRPO_TRAINING) {
+            System.err.println(
+                    "Training GRPO policy (group size=" + GRPO_GROUP_SIZE + ") from directory: " + directoryPath);
+        } else {
+            System.err.println(
+                    "Training REINFORCE policy (BPRL-style, TRAINING_OCTAD_PACK_SIZE="
+                            + TRAINING_OCTAD_PACK_SIZE
+                            + ") from directory: "
+                            + directoryPath);
+        }
+        RLDecisionModel model = new RLDecisionModel();
+
+        // 加载训练数据
+        List<List<Long>> sequences = loadRawValuesFromDirectory(directoryPath);
+        if (sequences.isEmpty()) {
+            System.err.println("No data loaded from directory. Returning initial model.");
+            return model;
+        }
+
+        System.err.println("Loaded " + sequences.size() + " sequences of 1024 values from directory");
+        if (!USE_GRPO_TRAINING) {
+            System.err.println(
+                    "REINFORCE: 策略梯度使用 calculateRewardGroupRelative（无运行期 baseline/best），Avg policyReward 可比、随压缩变好应总体上升。"
+                            + " surrogate=mean(-r*logπ)。请看 Avg totalCost(bits) 与 Avg policyReward。"
+                            + " 评测 octadSize 请为 "
+                            + TRAINING_OCTAD_PACK_SIZE
+                            + "。");
+        }
+
+        List<DecisionPoint> decisionTrace = new ArrayList<>();
+
+        // 为每个序列预计算动态规划最优解（用于奖励计算）
+        Map<Integer, Integer> dpOptimalCosts = new HashMap<>();
+        System.err.println("Pre-computing DP optimal costs for each sequence...");
+        for (int seqIdx = 0; seqIdx < sequences.size(); seqIdx++) {
+            List<Long> rawSequence = sequences.get(seqIdx);
+            int octadSize = TRAINING_OCTAD_PACK_SIZE;
+
+            // 转换为数组
+            long[] sequenceArray = new long[rawSequence.size()];
+            for (int i = 0; i < rawSequence.size(); i++) {
+                sequenceArray[i] = rawSequence.get(i);
+            }
+
+            // 计算每个octad的bitwidth
+            List<Integer> bitWidths = new ArrayList<>();
+            for (int i = 0; i < sequenceArray.length; i += octadSize) {
+                long maxInOctad = 0;
+                for (int j = i; j < i + octadSize && j < sequenceArray.length; j++) {
+                    if (sequenceArray[j] > maxInOctad) maxInOctad = sequenceArray[j];
+                }
+                int bitWidth = 0;
+                if (maxInOctad > 0) {
+                    bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                }
+                bitWidths.add(bitWidth);
+            }
+
+            // 转换为数组并计算动态规划最优解
+            int[] bitWidthsArray = bitWidths.stream().mapToInt(Integer::intValue).toArray();
+            int optimalDPCost = DPPackingWrapper.computeOptimalCostDP(bitWidthsArray, octadSize);
+            dpOptimalCosts.put(seqIdx, optimalDPCost);
+
+            if (seqIdx % 10 == 0) {
+                System.err.println("  Sequence " + seqIdx + ": DP optimal cost = " + optimalDPCost);
+            }
+        }
+
+        if (USE_GRPO_TRAINING) {
+            float grpoRewardEma = 0.0f;
+            boolean grpoRewardEmaInit = false;
+
+            for (int epoch = 1; epoch <= epochs; ++epoch) {
+                long startTime = System.nanoTime();
+                float totalReward = 0.0f;
+                float totalLoss = 0.0f;
+                int processedSequences = 0;
+
+                // 每5个epoch重置奖励函数
+                if (epoch % 5 == 1) {
+                    model.resetRewardFunction();
+                    grpoRewardEmaInit = false;
+                }
+
+            for (int seqIdx = 0; seqIdx < sequences.size(); seqIdx++) {
+                List<Long> rawSequence = sequences.get(seqIdx);
+                int octadSize = TRAINING_OCTAD_PACK_SIZE;
+
+                // 转换为数组
+                long[] sequenceArray = new long[rawSequence.size()];
+                for (int i = 0; i < rawSequence.size(); i++) {
+                    sequenceArray[i] = rawSequence.get(i);
+                }
+
+                // 计算每个octad的bitwidth
+                List<Integer> bitWidths = new ArrayList<>();
+                for (int i = 0; i < sequenceArray.length; i += octadSize) {
+                    long maxInOctad = 0;
+                    for (int j = i; j < i + octadSize && j < sequenceArray.length; j++) {
+                        if (sequenceArray[j] > maxInOctad) maxInOctad = sequenceArray[j];
+                    }
+                    int bitWidth = 0;
+                    if (maxInOctad > 0) {
+                        bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                    }
+                    bitWidths.add(bitWidth);
+                }
+
+                // 设置当前序列的动态规划最优解
+                model.setOptimalDPCost(dpOptimalCosts.get(seqIdx));
+
+                float[] groupRewards = new float[GRPO_GROUP_SIZE];
+                List<List<DecisionPoint>> groupTraces = new ArrayList<>(GRPO_GROUP_SIZE);
+                PackingResult[] groupResults = new PackingResult[GRPO_GROUP_SIZE];
+                for (int g = 0; g < GRPO_GROUP_SIZE; g++) {
+                    decisionTrace.clear();
+                    PackingResult result = packOctads(bitWidths, model, decisionTrace, octadSize, null, 0);
+                    groupResults[g] = result;
+                    groupRewards[g] = model.calculateRewardGroupRelative(result);
+                    groupTraces.add(new ArrayList<>(decisionTrace));
+                }
+
+                float mean = 0.0f;
+                for (float r : groupRewards) {
+                    mean += r;
+                }
+                mean /= GRPO_GROUP_SIZE;
+                float var = 0.0f;
+                for (float r : groupRewards) {
+                    float d = r - mean;
+                    var += d * d;
+                }
+                var /= GRPO_GROUP_SIZE;
+                float std = (float) Math.sqrt(var + 1e-8f);
+                float denom = Math.max(std, GRPO_MIN_STD);
+
+                float[] rankZ = grpoRankScores(groupRewards);
+                boolean useRank = var < GRPO_RANK_VAR_THRESHOLD;
+
+                int bestG = 0;
+                for (int g = 1; g < GRPO_GROUP_SIZE; g++) {
+                    if (groupRewards[g] > groupRewards[bestG]) {
+                        bestG = g;
+                    }
+                }
+
+                float seqRewardSum = 0.0f;
+                for (int g = 0; g < GRPO_GROUP_SIZE; g++) {
+                    float z =
+                            useRank
+                                    ? rankZ[g]
+                                    : (groupRewards[g] - mean) / denom;
+                    float rawPart = groupRewards[g];
+                    if (grpoRewardEmaInit) {
+                        rawPart = groupRewards[g] - grpoRewardEma;
+                    }
+                    float adv =
+                            (1.0f - GRPO_RAW_REWARD_MIX) * z
+                                    + GRPO_RAW_REWARD_MIX * rawPart;
+                    if (g == bestG) {
+                        adv *= GRPO_BEST_ADV_BOOST;
+                    }
+                    adv = RLDecisionModel.clip(adv, -GRPO_ADV_CLIP, GRPO_ADV_CLIP);
+                    seqRewardSum += groupRewards[g];
+                    totalLoss += model.train(groupTraces.get(g), adv);
+                }
+                totalReward += seqRewardSum / GRPO_GROUP_SIZE;
+
+                model.calculateReward(groupResults[bestG]);
+
+                if (!grpoRewardEmaInit) {
+                    grpoRewardEma = mean;
+                    grpoRewardEmaInit = true;
+                } else {
+                    grpoRewardEma =
+                            GRPO_REWARD_EMA_DECAY * grpoRewardEma
+                                    + (1.0f - GRPO_REWARD_EMA_DECAY) * mean;
+                }
+
+                model.explorationRate *= 0.99f;
+                if (model.explorationRate < 0.05f) {
+                    model.explorationRate = 0.05f;
+                }
+
+                processedSequences++;
+            }
+
+            model.decayLearningRate();
+
+            long durationMs = (System.nanoTime() - startTime) / 1_000_000L;
+
+            if (epoch % 10 == 0 || epoch == 1 || epoch == epochs) {
+                int gradSteps = processedSequences * GRPO_GROUP_SIZE;
+                System.out.printf(
+                        "Epoch %d: Avg Reward = %.6f, Surrogate Loss = %.6f (per grad step, -A·logπ - βH), lr=%.6f, Time = %d ms%n",
+                        epoch,
+                        totalReward / processedSequences,
+                        gradSteps > 0 ? totalLoss / gradSteps : 0.0f,
+                        model.learningRate,
+                        durationMs);
+            } else {
+                System.out.printf("Epoch %d done. lr=%.6f, Time = %d ms%n", epoch, model.learningRate, durationMs);
+            }
+            }
+        } else {
+            for (int epoch = 1; epoch <= epochs; ++epoch) {
+                long startTime = System.nanoTime();
+                float totalRewardSimple = 0.0f;
+                float totalLossSimple = 0.0f;
+                long totalCostSumSimple = 0L;
+                int processedSequencesSimple = 0;
+
+                for (int seqIdx = 0; seqIdx < sequences.size(); seqIdx++) {
+                    List<Long> rawSequence = sequences.get(seqIdx);
+                    int octadSizeR = TRAINING_OCTAD_PACK_SIZE;
+
+                    long[] sequenceArray = new long[rawSequence.size()];
+                    for (int i = 0; i < rawSequence.size(); i++) {
+                        sequenceArray[i] = rawSequence.get(i);
+                    }
+
+                    List<Integer> bitWidths = new ArrayList<>();
+                    for (int i = 0; i < sequenceArray.length; i += octadSizeR) {
+                        long maxInOctad = 0;
+                        for (int j = i; j < i + octadSizeR && j < sequenceArray.length; j++) {
+                            if (sequenceArray[j] > maxInOctad) {
+                                maxInOctad = sequenceArray[j];
+                            }
+                        }
+                        int bitWidth = 0;
+                        if (maxInOctad > 0) {
+                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                        }
+                        bitWidths.add(bitWidth);
+                    }
+
+                    model.setOptimalDPCost(dpOptimalCosts.get(seqIdx));
+
+                    decisionTrace.clear();
+                    PackingResult result = packOctads(bitWidths, model, decisionTrace, octadSizeR, null, 0);
+                    totalCostSumSimple += result.totalCost;
+                    float reward = model.calculateRewardGroupRelative(result);
+                    totalRewardSimple += reward;
+                    totalLossSimple += model.trainReinforce(decisionTrace, reward);
+                    processedSequencesSimple++;
+                }
+
+                long durationMsSimple = (System.nanoTime() - startTime) / 1_000_000L;
+
+                if (epoch % 10 == 0 || epoch == 1 || epoch == epochs) {
+                    float avgCost =
+                            processedSequencesSimple > 0
+                                    ? (float) totalCostSumSimple / processedSequencesSimple
+                                    : 0.0f;
+                    System.out.printf(
+                            "Epoch %d: Avg totalCost=%.0f bits, Avg policyReward=%.6f, surrogate(-r*logπ)=%.6f, lr=%.6f, Time=%d ms%n",
+                            epoch,
+                            avgCost,
+                            totalRewardSimple / processedSequencesSimple,
+                            processedSequencesSimple > 0 ? totalLossSimple / processedSequencesSimple : 0.0f,
+                            model.learningRate,
+                            durationMsSimple);
+                } else {
+                    System.out.printf("Epoch %d done. Time = %d ms%n", epoch, durationMsSimple);
+                }
+            }
+        }
+
+        return model;
+    }
+
+    // ========== 以下是未修改的原有方法，为保持完整性包含 ==========
+
+    static int getBitWidth(long num) {
+        if (num == 0)
+            return 1;
+        else
+            return 64 - Long.numberOfLeadingZeros(num);
+    }
+
+    public static int bitPacking(long[] values, int start, int length, int bitWidth, int encodePos,
+                                 byte[] encodedResult) {
+        if (values == null || length <= 0 || bitWidth == 0) {
+            return encodePos;
+        }
+
+        int currentByte = 0;
+        int bitsInCurrentByte = 0;
+        int bytePos = encodePos;
+
+        for (int i = 0; i < length; i++) {
+            long value = values[start + i];
+            int remainingBits = bitWidth;
+
+            while (remainingBits > 0) {
+                int bitsToWrite = Math.min(remainingBits, 8 - bitsInCurrentByte);
+                int shift = remainingBits - bitsToWrite;
+                long bits = (value >>> shift) & ((1L << bitsToWrite) - 1);
+                currentByte = (currentByte << bitsToWrite) | (int)bits;
+                bitsInCurrentByte += bitsToWrite;
+
+                if (bitsInCurrentByte == 8) {
+                    encodedResult[bytePos] = (byte) currentByte;
+                    bytePos++;
+                    currentByte = 0;
+                    bitsInCurrentByte = 0;
+                }
+
+                remainingBits -= bitsToWrite;
+            }
+        }
+
+        if (bitsInCurrentByte > 0) {
+            currentByte = currentByte << (8 - bitsInCurrentByte);
+            encodedResult[bytePos] = (byte) currentByte;
+            bytePos++;
+        }
+
+        return bytePos;
+    }
+
+    public static long[] decodeBitPacking(byte[] encoded, int decodePos, int bitWidth,
+                                          int numValues, int octadSize) {
+        if (encoded == null || bitWidth == 0 || numValues == 0) {
+            return new long[0];
+        }
+
+        long[] result = new long[numValues];
+        int currentByte = 0;
+        int bitsInCurrentByte = 0;
+        int bytePos = decodePos;
+
+        for (int i = 0; i < numValues; i++) {
+            long value = 0;
+            int bitsRead = 0;
+
+            while (bitsRead < bitWidth) {
+                if (bitsInCurrentByte == 0) {
+                    if (bytePos >= encoded.length) {
+                        return Arrays.copyOf(result, i);
+                    }
+                    currentByte = encoded[bytePos] & 0xFF;
+                    bytePos++;
+                    bitsInCurrentByte = 8;
+                }
+
+                int bitsToRead = Math.min(bitWidth - bitsRead, bitsInCurrentByte);
+                int shift = bitsInCurrentByte - bitsToRead;
+                int bits = (currentByte >>> shift) & ((1 << bitsToRead) - 1);
+                value = (value << bitsToRead) | bits;
+                bitsRead += bitsToRead;
+                currentByte &= (1 << shift) - 1;
+                bitsInCurrentByte -= bitsToRead;
+            }
+
+            result[i] = value;
+        }
+
+        return result;
+    }
+
+    static List<List<Long>> loadRawValuesFromDirectory(String directoryPath) {
+        List<List<Long>> allSequences = new ArrayList<>();
+        File dir = new File(directoryPath);
+
+        if (!dir.exists() || !dir.isDirectory()) {
+            System.err.println("Directory not found: " + directoryPath);
+            return allSequences;
+        }
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".csv"));
+        if (files == null || files.length == 0) {
+            System.err.println("No CSV files found in directory: " + directoryPath);
+            return allSequences;
+        }
+
+        for (File file : files) {
+            if (!BenchmarkDatasetFilter.includeDatasetFile(file.getName())) {
+                continue;
+            }
+
+            System.out.println("Loading training data from: " + file.getName());
+
+            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+                List<Double> allValues = new ArrayList<>();
+                String line;
+
+                boolean hasHeader = true;
+                int lineCount = 0;
+
+                while ((line = br.readLine()) != null) {
+                    lineCount++;
+                    String[] tokens = line.split(",");
+
+                    for (String token : tokens) {
+                        String s = token.trim();
+                        if (!s.isEmpty() && !s.equals("value") && !s.equals("timestamp")) {
+                            try {
+                                double val = Double.parseDouble(s);
+                                allValues.add(val);
+                            } catch (NumberFormatException e) {
+                            }
+                        }
+                    }
+                }
+
+                System.out.println("  Total values in file: " + allValues.size());
+
+                if (allValues.isEmpty()) {
+                    continue;
+                }
+
+                int targetCount = (int) Math.ceil(allValues.size() * 0.1);
+                System.out.println("  Target count (10%): " + targetCount);
+
+                if (targetCount < 1024) {
+                    targetCount = Math.min(1024, allValues.size());
+                    System.out.println("  Adjusted to: " + targetCount + " (min 1024 or all if less)");
+                } else {
+                    targetCount = targetCount - (targetCount % 1024);
+                    targetCount = Math.min(targetCount, allValues.size());
+                    System.out.println("  Adjusted to: " + targetCount + " (1024 multiples)");
+                }
+
+                List<Long> selectedValues = new ArrayList<>();
+                for (int i = 0; i < targetCount && i < allValues.size(); i++) {
+                    selectedValues.add(Math.round(allValues.get(i)));
+                }
+
+                System.out.println("  Selected values: " + selectedValues.size());
+
+                for (int i = 0; i < selectedValues.size(); i += 1024) {
+                    int end = Math.min(i + 1024, selectedValues.size());
+                    if (end - i == 1024) {
+                        List<Long> sequence = new ArrayList<>(selectedValues.subList(i, end));
+                        allSequences.add(sequence);
+                    }
+                }
+
+                System.out.println("  Created " + (selectedValues.size() / 1024) + " sequences of 1024 values");
+
+            } catch (IOException e) {
+                System.err.println("Error reading file: " + file.getName() + " - " + e.getMessage());
+            }
+        }
+
+        System.out.println("Total training sequences loaded: " + allSequences.size());
+        return allSequences;
+    }
+
+    static String trimStr(String s) {
+        if (s == null) return "";
+        int a = 0;
+        while (a < s.length() && Character.isWhitespace(s.charAt(a))) a++;
+        if (a == s.length()) return "";
+        int b = s.length() - 1;
+        while (b >= 0 && Character.isWhitespace(s.charAt(b))) b--;
+        return s.substring(a, b + 1);
+    }
+
+    static String stripEnclosingQuotes(String s) {
+        if (s == null) return "";
+        if (s.length() >= 2) {
+            char f = s.charAt(0);
+            char l = s.charAt(s.length() - 1);
+            if ((f == '"' && l == '"') || (f == '\'' && l == '\'')) {
+                return s.substring(1, s.length() - 1);
+            }
+        }
+        return s;
+    }
+
+
+    private static class BitWriter {
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        private long acc = 0L;
+        private int accBits = 0;
+
+        void writeBits(long bits, int bitCount) {
+            if (bitCount == 0) return;
+            if (bitCount == 64) {
+                writeBits((bits >>> 32) & 0xFFFFFFFFL, 32);
+                writeBits(bits & 0xFFFFFFFFL, 32);
+                return;
+            }
+            long mask = (bitCount == 64) ? ~0L : ((1L << bitCount) - 1L);
+            long v = bits & mask;
+            acc = (acc << bitCount) | v;
+            accBits += bitCount;
+            while (accBits >= 8) {
+                int shift = accBits - 8;
+                int outb = (int) ((acc >>> shift) & 0xFFL);
+                out.write(outb);
+                if (shift > 0) {
+                    acc &= ((1L << shift) - 1L);
+                } else {
+                    acc = 0L;
+                }
+                accBits = shift;
+            }
+        }
+
+        byte[] finish() {
+            if (accBits > 0) {
+                int outb = (int) ((acc << (8 - accBits)) & 0xFFL);
+                out.write(outb);
+                acc = 0L;
+                accBits = 0;
+            }
+            return out.toByteArray();
+        }
+    }
+
+    public static final class BitReader {
+        private final byte[] data;
+        private int bitPos;
+
+        public BitReader(byte[] data) {
+            this(data, 0);
+        }
+
+        public BitReader(byte[] data, int byteOffset) {
+            this.data = data;
+            this.bitPos = byteOffset * 8;
+        }
+
+        public long readBits(int n) {
+            if (n == 0) return 0L;
+            if (n < 0 || n > 64) {
+                throw new IllegalArgumentException("n must be between 0 and 64");
+            }
+
+            long result = 0L;
+            int bitsRemaining = n;
+
+            while (bitsRemaining > 0) {
+                int byteIndex = bitPos >>> 3;
+                int bitOffset = bitPos & 7;
+
+                if (byteIndex >= data.length) {
+                    result = (result << bitsRemaining);
+                    bitPos += bitsRemaining;
+                    return result;
+                }
+
+                int bitsFromCurrentByte = Math.min(8 - bitOffset, bitsRemaining);
+                int curByte = data[byteIndex] & 0xFF;
+                int shift = 8 - bitOffset - bitsFromCurrentByte;
+                int chunk = (curByte >>> shift) & ((1 << bitsFromCurrentByte) - 1);
+
+                result = (result << bitsFromCurrentByte) | chunk;
+
+                bitPos += bitsFromCurrentByte;
+                bitsRemaining -= bitsFromCurrentByte;
+            }
+
+            return result;
+        }
+
+        public int consumedBits() {
+            return bitPos;
+        }
+
+        public int bitPosition() {
+            return bitPos;
+        }
+
+        public int remainingBits() {
+            return (data.length * 8) - bitPos;
+        }
+    }
+
+    private static byte[] performBitPackingCompression(long[] dataArray, List<Pack> packs,
+                                                       int octadSize, int originalLength) throws IOException {
+        int totalPacks = packs.size();
+        int maxOctadsInAnyPack = 0;
+        for (Pack p : packs) {
+            if (p.size > maxOctadsInAnyPack) maxOctadsInAnyPack = p.size;
+        }
+
+        int bitsForCount = 1;
+        while ((1L << bitsForCount) <= maxOctadsInAnyPack) bitsForCount++;
+        if (bitsForCount <= 0) bitsForCount = 1;
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+
+        dos.writeByte(totalPacks);
+        dos.writeByte(bitsForCount);
+        dos.flush();
+
+        BitWriter metaWriter = new BitWriter();
+
+        for (Pack pack : packs) {
+            metaWriter.writeBits(pack.size, bitsForCount);
+            metaWriter.writeBits(pack.maxBitWidth, 6);
+        }
+
+        byte[] metaBytes = metaWriter.finish();
+        dos.write(metaBytes);
+        dos.flush();
+
+        BitWriter dataWriter = new BitWriter();
+
+        for (Pack pack : packs) {
+            int packBitWidth = pack.maxBitWidth;
+
+            for (int octadIdx = 0; octadIdx < pack.size; ++octadIdx) {
+                int originalOctadIndex = pack.indices.get(octadIdx);
+                int startPos = originalOctadIndex * octadSize;
+
+                for (int j = 0; j < octadSize; ++j) {
+                    if (startPos + j >= dataArray.length) {
+                        dataWriter.writeBits(0L, packBitWidth);
+                    } else {
+                        long val = dataArray[startPos + j];
+                        if (packBitWidth == 64) {
+                            dataWriter.writeBits(val, 64);
+                        } else {
+                            long mask = (1L << packBitWidth) - 1L;
+                            long masked = val & mask;
+                            dataWriter.writeBits(masked, packBitWidth);
+                        }
+                    }
+                }
+            }
+        }
+
+        byte[] dataBytes = dataWriter.finish();
+        dos.write(dataBytes);
+        dos.flush();
+
+        return baos.toByteArray();
+    }
+
+    /**
+     * 只生成 pack 划分与代价，不写压缩字节；{@code explorationRate} 与训练时 {@link RLDecisionModel#explorationRate}
+     * 解耦，便于推理用 0。
+     */
+    static PackingResult packOctadsPlan(
+            List<Integer> bitWidths,
+            RLDecisionModel model,
+            List<DecisionPoint> decisionTrace,
+            int octadSize,
+            float explorationRate) {
+        PackingResult result = new PackingResult();
+        Pack currentPack = new Pack();
+        int globalMaxLog = 0;
+        int packCount = 0;
+
+        Random localRng = ThreadLocalRandom.current();
+
+        for (int i = 0; i < bitWidths.size(); ++i) {
+            int b = bitWidths.get(i);
+
+            if (currentPack.size == 0) {
+                currentPack.addOctad(i, b);
+            } else if (b == currentPack.maxBitWidth) {
+                currentPack.addOctad(i, b);
+            } else {
+                float[] feat = new float[INPUT_DIM];
+                feat[0] = currentPack.size / 1024.0f;
+                feat[1] = currentPack.maxBitWidth / 64.0f;
+                feat[2] = b / 64.0f;
+                feat[3] = packCount / 1024.0f;
+                feat[4] = globalMaxLog / 10.0f;
+
+                float probability = model.forwardProb(feat);
+
+                boolean shouldMerge;
+                if (localRng.nextFloat() < explorationRate) {
+                    shouldMerge = (localRng.nextFloat() > 0.5f);
+                } else {
+                    shouldMerge = probability > 0.5f;
+                }
+
+                if (decisionTrace != null) {
+                    decisionTrace.add(
+                            new DecisionPoint(
+                                    currentPack.size,
+                                    currentPack.maxBitWidth,
+                                    b,
+                                    packCount,
+                                    globalMaxLog,
+                                    shouldMerge,
+                                    probability));
+                }
+
+                if (shouldMerge) {
+                    currentPack.addOctad(i, b);
+                } else {
+                    result.dataCostA += currentPack.dataCost(octadSize);
+                    int logSize = currentPack.logSize();
+                    if (logSize > globalMaxLog) {
+                        globalMaxLog = logSize;
+                    }
+                    result.packs.add(currentPack);
+                    packCount++;
+
+                    currentPack = new Pack();
+                    currentPack.addOctad(i, b);
+                }
+            }
+        }
+
+        if (currentPack.size > 0) {
+            result.dataCostA += currentPack.dataCost(octadSize);
+            int logSize = currentPack.logSize();
+            if (logSize > globalMaxLog) {
+                globalMaxLog = logSize;
+            }
+            result.packs.add(currentPack);
+            packCount++;
+        }
+
+        result.packCount = packCount;
+        result.calculateCost(globalMaxLog);
+        return result;
+    }
+
+    static PackingResult packOctads(
+            List<Integer> bitWidths,
+            RLDecisionModel model,
+            List<DecisionPoint> decisionTrace,
+            int octadSize,
+            long[] dataArray,
+            int originalLength) {
+        if (dataArray != null && INFERENCE_PACK_TRIALS > 1) {
+            PackingResult best = null;
+            for (int t = 0; t < INFERENCE_PACK_TRIALS; t++) {
+                float er = (t == 0) ? INFERENCE_EXPLORATION : INFERENCE_MULTI_TRIAL_EXPLORATION;
+                PackingResult cand = packOctadsPlan(bitWidths, model, null, octadSize, er);
+                if (best == null || cand.totalCost < best.totalCost) {
+                    best = cand;
+                }
+            }
+            if (best == null) {
+                best = packOctadsPlan(bitWidths, model, null, octadSize, INFERENCE_EXPLORATION);
+            }
+            try {
+                best.compressedData =
+                        performBitPackingCompression(dataArray, best.packs, octadSize, originalLength);
+            } catch (IOException e) {
+                System.err.println("Compression failed: " + e.getMessage());
+                best.compressedData = null;
+            }
+            return best;
+        }
+
+        float exploreUsed = (dataArray != null) ? INFERENCE_EXPLORATION : model.explorationRate;
+        PackingResult result = packOctadsPlan(bitWidths, model, decisionTrace, octadSize, exploreUsed);
+
+        if (dataArray != null) {
+            try {
+                result.compressedData =
+                        performBitPackingCompression(dataArray, result.packs, octadSize, originalLength);
+            } catch (IOException e) {
+                System.err.println("Compression failed: " + e.getMessage());
+                result.compressedData = null;
+            }
+        }
+
+        return result;
+    }
+
+    public static long[] fastDecompress(byte[] compressedData, int octadSize, int originalLength) {
+        if (compressedData == null || compressedData.length == 0) {
+            System.err.println("Compressed data is null or empty");
+            return new long[0];
+        }
+
+        try {
+            ByteArrayInputStream bais = new ByteArrayInputStream(compressedData);
+            DataInputStream dis = new DataInputStream(bais);
+
+            int totalPacks = dis.readUnsignedByte();
+            int bitsForCount = dis.readUnsignedByte();
+            int storedOctadSize = dis.readUnsignedByte();
+
+            // if (storedOctadSize != octadSize) {
+            //     System.err.println("Warning: octadSize mismatch. Expected " + octadSize +
+            //             ", got " + storedOctadSize);
+            // }
+
+            int metaStartOffset = 3;
+            BitReader metaReader = new BitReader(compressedData, metaStartOffset);
+
+            List<PackInfo> packInfos = new ArrayList<>();
+            int totalValuesToDecode = 0;
+
+            for (int p = 0; p < totalPacks; ++p) {
+                int octadCount = (int) metaReader.readBits(bitsForCount);
+                int packBitWidth = (int) metaReader.readBits(6);
+                if (packBitWidth == 63) packBitWidth = 64;
+
+                packInfos.add(new PackInfo(octadCount, packBitWidth));
+                totalValuesToDecode += octadCount * octadSize;
+            }
+
+            int metaBitsUsed = metaReader.consumedBits();
+            int dataStartByte = metaStartOffset + (metaBitsUsed + 7) / 8;
+
+            if (dataStartByte >= compressedData.length) {
+                return new long[0];
+            }
+
+            BitReader dataReader = new BitReader(compressedData, dataStartByte);
+            List<Long> resultList = new ArrayList<>();
+
+            for (PackInfo packInfo : packInfos) {
+                int octadCount = packInfo.octadCount;
+                int bitWidth = packInfo.bitWidth;
+
+                if (dataReader.remainingBits() < (long) octadCount * octadSize * bitWidth) {
+                    break;
+                }
+
+                for (int i = 0; i < octadCount; ++i) {
+                    for (int j = 0; j < octadSize; ++j) {
+                        long value;
+                        if (bitWidth == 0) {
+                            value = 0L;
+                        } else if (bitWidth == 64) {
+                            long high = dataReader.readBits(32);
+                            long low = dataReader.readBits(32);
+                            value = (high << 32) | low;
+                        } else {
+                            value = dataReader.readBits(bitWidth);
+                        }
+                        resultList.add(value);
+                    }
+                }
+            }
+
+            long[] result = new long[Math.min(resultList.size(), originalLength)];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = resultList.get(i);
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            System.err.println("Fast decompression failed: " + e.getMessage());
+            e.printStackTrace();
+            return new long[0];
+        }
+    }
+
+    static class PackInfo {
+        int octadCount;
+        int bitWidth;
+
+        PackInfo(int octadCount, int bitWidth) {
+            this.octadCount = octadCount;
+            this.bitWidth = bitWidth;
+        }
+    }
+
+
+    // 8. 修复：sprintz编码解码
+    public static long[] zigzag(long[] numbers) {
+        if (numbers == null || numbers.length == 0) {
+            return new long[0];
+        }
+
+        long[] result = new long[numbers.length];
+
+        for (int i = 0; i < numbers.length; i++) {
+            // ZigZag编码
+            result[i] = (numbers[i] << 1) ^ (numbers[i] >> 31);
+        }
+
+        return result;
+    }
+
+    public static long[] zigzagDecode(long[] encodedData) {
+        if (encodedData == null || encodedData.length == 0) {
+            return new long[0];
+        }
+
+        long[] result = new long[encodedData.length+1];
+
+        for (int i = 0; i < encodedData.length; i++) {
+            // ZigZag解码
+            long zigzag = encodedData[i];
+            result[i] = (zigzag >>> 1) ^ -(zigzag & 1);
+        }
+
+        return result;
+    }
+
+    // 封装结果类
+    public static class SprintzEncodedResult {
+        private final long[] encodedData;  // 编码后的数据
+        private final long firstValue;     // 第一个原始值
+
+        public SprintzEncodedResult(long[] encodedData, long firstValue) {
+            this.encodedData = encodedData;
+            this.firstValue = firstValue;
+        }
+
+        public long[] getEncodedData() {
+            return encodedData;
+        }
+
+        public long getFirstValue() {
+            return firstValue;
+        }
+
+
+        @Override
+        public String toString() {
+            return String.format("EncodedResult{firstValue=%d, minDiff=%d, encodedData=%s}",
+                    firstValue, java.util.Arrays.toString(encodedData));
+        }
+    }
+
+    // 8. 修复：sprintz编码解码
+    public static SprintzEncodedResult sprintz(long[] numbers) {
+        if (numbers == null || numbers.length == 0) {
+            return new SprintzEncodedResult(new long[0],  0);
+        }
+
+        long[] result = new long[numbers.length];
+
+        for (int i = 1; i < numbers.length; i++) {
+            long diff = numbers[i] - numbers[i-1];
+            // ZigZag编码
+            result[i-1] = (diff << 1) ^ (diff >> 31);
+        }
+
+        return new SprintzEncodedResult(result, numbers[0]);
+    }
+
+    public static long[] sprintzDecode(long[] encodedData, long firstValue) {
+        if (encodedData == null || encodedData.length == 0) {
+            return new long[0];
+        }
+
+        long[] result = new long[encodedData.length+1];
+        result[0] = firstValue;
+
+        for (int i = 0; i < encodedData.length; i++) {
+            // ZigZag解码
+            long zigzag = encodedData[i];
+            long diff = (zigzag >>> 1) ^ -(zigzag & 1);
+            result[i+1] = result[i] + diff;
+        }
+
+        return result;
+    }
+
+    // 封装结果类
+    public static class TSDIFFEncodedResult {
+        private final long[] encodedData;  // 编码后的数据
+        private final long firstValue;     // 第一个原始值
+        private final long minDiff;        // 最小差分值
+
+        public TSDIFFEncodedResult(long[] encodedData, long firstValue, long minDiff) {
+            this.encodedData = encodedData;
+            this.firstValue = firstValue;
+            this.minDiff = minDiff;
+        }
+
+        public long[] getEncodedData() {
+            return encodedData;
+        }
+
+        public long getFirstValue() {
+            return firstValue;
+        }
+
+        public long getMinDiff() {
+            return minDiff;
+        }
+
+
+        @Override
+        public String toString() {
+            return String.format("EncodedResult{firstValue=%d, minDiff=%d, encodedData=%s}",
+                    firstValue, java.util.Arrays.toString(encodedData));
+        }
+    }
+
+    public static TSDIFFEncodedResult ts2diff(long[] numbers) {
+        if (numbers == null || numbers.length == 0) {
+            return new TSDIFFEncodedResult(new long[0],0,0);
+        }
+
+        long[] result = new long[numbers.length-1];
+
+        // 第一个值保持不变
+        long firstValue = numbers[0];
+//        result[0] = numbers[0];
+
+        // 计算差分并找到最小差分
+        long minDiff = Long.MAX_VALUE;
+        long[] diffs = new long[numbers.length - 1];
+
+        for (int i = 1; i < numbers.length; i++) {
+            long diff = numbers[i] - numbers[i - 1];
+            diffs[i - 1] = diff;
+
+            if (diff < minDiff) {
+                minDiff = diff;
+            }
+        }
+
+        // 如果数组长度大于1，处理差分值
+        if (numbers.length > 1) {
+            // 使用最小差分进行归一化处理
+            for (int i = 1; i < numbers.length; i++) {
+                long normalizedDiff = diffs[i - 1] - minDiff;
+                // ZigZag编码
+                result[i-1] = normalizedDiff; // << 1) ^ (normalizedDiff >> 31);
+            }
+        }
+
+        return new TSDIFFEncodedResult(result, firstValue, minDiff);
+    }
+
+    public static long[] ts2diffDecode(long[] result, long firstValue, long minDiff) {
+        if (result == null || result.length == 0) {
+            return new long[0];
+        }
+
+        long[] numbers = new long[result.length];
+        numbers[0] = firstValue;
+
+        for (int i = 1; i < result.length; i++) {
+            // ZigZag解码
+            long n = result[i];
+            long normalizedDiff = (n >>> 1) ^ -(n & 1);
+
+            // 还原原始差分
+            long diff = normalizedDiff + minDiff;
+
+            // 累加得到原始值
+            numbers[i] = numbers[i - 1] + diff;
+        }
+
+        return numbers;
+    }
+
+    private static long[] scaleNumbers(List<String> numbers, int decimalMax) {
+        // 1. 预先计算缩放因子
+        BigDecimal scale = BigDecimal.TEN.pow(decimalMax);
+        int size = numbers.size();
+        long[] result = new long[size];
+
+        if (size == 0) {
+            return result;
+        }
+
+        // 2. 直接缩放所有数值
+        for (int i = 0; i < size; i++) {
+            // 清理输入字符串：移除引号和其他非数字字符（除了数字、小数点、负号、指数符号）
+            String cleaned = numbers.get(i)
+                    .replace("\"", "")  // 移除双引号
+                    .replace("'", "")   // 移除单引号
+                    .trim();            // 移除首尾空格
+
+            // 检查是否为空或null
+            if (cleaned == null || cleaned.isEmpty()) {
+                result[i] = 0L; // 或根据需求设置默认值
+                continue;
+            }
+
+            try {
+                // 缩放并转换为long
+                BigDecimal scaledVal = new BigDecimal(cleaned).multiply(scale);
+                result[i] = scaledVal.longValue();
+            } catch (NumberFormatException e) {
+                // 记录错误并设置默认值
+                System.err.println("无法解析数字: " + numbers.get(i) + ", 使用默认值0");
+                result[i] = 0L;
+            }
+        }
+
+        return result;
+    }
+
+
+
+    // ========== 修改后的性能测试方法（选择更优方案） ==========
+    static void performanceTest(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 10;
+
+                    for (int octadSizeExp = 3; octadSizeExp < 4; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        long hybridCost = 0;
+                        long hybridTime = 0;
+                        long hybridDecodeTime = 0;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInts = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+//
+//                                long[] scaledInts = sprintz(scaledInt);
+
+                                // 只在octadSize=8时考虑固定方案
+                                if (octadSize == 8) {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime += duration;
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            fastDecompress(res.compressedData, octadSize, scaledInts.length);
+                                        }
+                                    } else {
+                                        decompressFixedPack(fixedResult.compressedData, octadSize, scaledInts.length);
+                                    }
+                                    hybridDecodeTime += System.nanoTime() - decodeStart;
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost += rlCostBits;
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost += fixedCostBits;
+                                        fixedBetterCount++;
+                                    }
+                                } else {
+                                    // 对于非8的octadSize，只使用RL方案
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime += duration;
+                                    hybridCost += (res.compressedData.length * 8);
+
+                                    long decodeStart = System.nanoTime();
+                                    if (res.compressedData != null) {
+                                        fastDecompress(res.compressedData, octadSize, scaledInts.length);
+                                    }
+                                    hybridDecodeTime += System.nanoTime() - decodeStart;
+                                }
+                            }
+                        }
+
+                        hybridCost /= time_of_repeat;
+                        hybridTime /= time_of_repeat;
+                        hybridDecodeTime /= time_of_repeat;
+
+                        double hybrid_ratio = (double) hybridCost / (double) (numbers.size() * 64);
+                        double hybridTime_throughput = (double) (numbers.size() * 8000) / (double) hybridTime;
+                        double hybridDecode_throughput =
+                                hybridDecodeTime > 0 ? (double) (numbers.size() * 8000) / (double) hybridDecodeTime : 0.0;
+
+                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(hybridTime_throughput) + ",");
+                        writer.write(String.valueOf(hybridDecode_throughput) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(hybrid_ratio) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void BPRL0() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL";
+
+        int epochs = 20;
+
+        RLDecisionModel model = new RLDecisionModel();
+        if (!trainDir.isEmpty()) {
+            model = trainModelFromDirectory(epochs, trainDir);
+        } else {
+            System.err.println("No training directory given. Using randomly initialized RL model.");
+        }
+
+        if (!dataDir.isEmpty()) {
+            performanceTest(model, dataDir, outDir);
+        } else {
+            System.err.println("No data directory provided for performanceTest. Exiting.");
+        }
+    }
+
+    static void performanceTestVaryPackSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+
+                    for (int octadSizeExp = 0; octadSizeExp < max_octad_size; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        long hybridCost = 0;
+                        long hybridTime = 0;
+                        long hybridDecodeTime = 0;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInts = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+
+
+                                // 只在octadSize=8时考虑固定方案
+                                if (octadSize == 8) {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime += duration;
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            fastDecompress(res.compressedData, octadSize, scaledInts.length);
+                                        }
+                                    } else {
+                                        decompressFixedPack(fixedResult.compressedData, octadSize, scaledInts.length);
+                                    }
+                                    hybridDecodeTime += System.nanoTime() - decodeStart;
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost += rlCostBits;
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost += fixedCostBits;
+                                        fixedBetterCount++;
+                                    }
+                                } else {
+                                    // 对于非8的octadSize，只使用RL方案
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime += duration;
+                                    hybridCost += (res.compressedData.length * 8);
+
+                                    long decodeStart = System.nanoTime();
+                                    if (res.compressedData != null) {
+                                        fastDecompress(res.compressedData, octadSize, scaledInts.length);
+                                    }
+                                    hybridDecodeTime += System.nanoTime() - decodeStart;
+                                }
+                            }
+                        }
+
+                        hybridCost /= time_of_repeat;
+                        hybridTime /= time_of_repeat;
+                        hybridDecodeTime /= time_of_repeat;
+
+                        double hybrid_ratio = (double) hybridCost / (double) (numbers.size() * 64);
+                        double hybridTime_throughput = (double) (numbers.size() * 8000) / (double) hybridTime;
+                        double hybridDecode_throughput =
+                                hybridDecodeTime > 0 ? (double) (numbers.size() * 8000) / (double) hybridDecodeTime : 0.0;
+
+                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(hybridTime_throughput) + ",");
+                        writer.write(String.valueOf(hybridDecode_throughput) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(hybrid_ratio) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+    @Test
+    public void TestVarPackSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_vary_pack_size";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceTestVaryPackSize(model, dataDir, outDir);
+    }
+
+    // ========== 测试不同chunk size的方法（修改版） ==========
+    static void performanceTestVariableChunkSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        int[] chunkSizes = {16*8, 32*8, 64*8, 128*8, 256*8, 512*8, 1024*8};
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + " with variable chunk sizes...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname.replace(".", "_chunksize_test."));
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "m,Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+                    int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+                    int octadSize = 8;
+
+                    // 分批处理，每1024个元素一批进行scaling
+                    int batchSize = 1024;
+                    List<long[]> batches = new ArrayList<>();
+
+                    for (int i = 0; i < numbers.size(); i += batchSize) {
+                        int end = Math.min(numbers.size(), i + batchSize);
+                        List<String> batch = numbers.subList(i, end);
+                        long[] scaledBatch = scaleNumbers(batch, decimalMax);
+                        batches.add(scaledBatch);
+                    }
+
+                    // 计算总长度并拼接所有批次的结果
+                    int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+                    long[] scaledInts_all = new long[totalLength];
+
+                    int currentIndex = 0;
+                    for (long[] batch : batches) {
+                        System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                        currentIndex += batch.length;
+                    }
+
+                    for (int chunkSize : chunkSizes) {
+                        System.out.println("Testing chunk size: " + chunkSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += chunkSize) {
+                                int end = Math.min(i + chunkSize, scaledInts_all.length);
+                                long[] scaledInts = new long[end - i];
+                                System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                                long startTime = System.nanoTime();
+
+
+                                // 计算固定方案成本
+                                FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                // 计算RL方案成本
+                                int remainder = scaledInts.length % octadSize;
+                                int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                long[] padded = new long[scaledInts.length + padding];
+                                System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                int octadCount = padded.length / octadSize;
+                                List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                for (int si = 0; si < padded.length; si += octadSize) {
+                                    long maxInOctad = 0;
+                                    for (int sj = si; sj < si + octadSize; ++sj) {
+                                        long v = padded[sj];
+                                        if (v > maxInOctad) maxInOctad = v;
+                                    }
+                                    int bitWidth = 0;
+                                    if (maxInOctad > 0) {
+                                        bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                    }
+                                    bitWidths.add(bitWidth);
+                                }
+
+                                PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                long duration = System.nanoTime() - startTime;
+                                long rlCostBits = res.compressedData.length * 8;
+                                long fixedCostBits = fixedResult.totalCost;
+                                hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                long decodeStart = System.nanoTime();
+                                if (rlCostBits <= fixedCostBits) {
+                                    if (res.compressedData != null) {
+                                        fastDecompress(res.compressedData, octadSize, scaledInts.length);
+                                    }
+                                } else {
+                                    decompressFixedPack(fixedResult.compressedData, octadSize, scaledInts.length);
+                                }
+                                hybridDecodeTime =
+                                        hybridDecodeTime.add(BigDecimal.valueOf(System.nanoTime() - decodeStart));
+                                if (rlCostBits <= fixedCostBits) {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                    rlBetterCount++;
+                                } else {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                    fixedBetterCount++;
+                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime = hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+
+                        System.out.println("  Hybrid: RL better " + rlBetterCount + " times, Fixed better " + fixedBetterCount + " times");
+//                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+
+                        writer.write(String.valueOf(chunkSize) + ",");
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("sprintz-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void TestVariableChunkSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_vary_m";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceTestVariableChunkSize(model, dataDir, outDir);
+    }
+
+    // ========== 修改后的性能测试方法（选择更优方案） ==========
+    static void performanceZigzag(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 10;
+
+                    for (int octadSizeExp = 3; octadSizeExp < 4; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+                                long[] scaledInts = zigzag(scaledInt);
+//
+//                                long[] scaledInts = sprintz(scaledInt);
+
+                                // 只在octadSize=8时考虑固定方案
+                                {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                }
+                            }
+                        }
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+//                        double hybrid_ratio = (double) hybridCost / (double) (numbers.size() * 64);
+//                        double hybridTime_throughput = (double) (numbers.size() * 8000) / (double) hybridTime;
+
+//                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void ZigzagRL() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Zigzag";
+
+        int epochs = 200;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceZigzag(model, dataDir, outDir);
+    }
+
+    static void performanceZigzagVaryPackSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 100;
+
+                    for (int octadSizeExp = 0; octadSizeExp < max_octad_size; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+                                long[] scaledInts = zigzag(scaledInt);
+
+
+                                // 只在octadSize=8时考虑固定方案
+                                if (octadSize == 8) {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                } else {
+                                    // 对于非8的octadSize，只使用RL方案
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(res.compressedData.length * 8));
+
+                                    long decodeStart = System.nanoTime();
+                                    if (res.compressedData != null) {
+                                        long[] dec =
+                                                fastDecompress(
+                                                        res.compressedData, octadSize, scaledInts.length);
+                                        Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+    @Test
+    public void ZigzagVarPackSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Zigzag_vary_pack_size";
+
+        int epochs = 300;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceZigzagVaryPackSize(model, dataDir, outDir);
+    }
+
+    // ========== 测试不同chunk size的方法（修改版） ==========
+    static void performanceZigzagVarChunkSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        int[] chunkSizes = {16*8, 32*8, 64*8, 128*8, 256*8, 512*8}; //, 1024*8
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + " with variable chunk sizes...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname.replace(".", "_chunksize_test."));
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "m,Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+                    int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+                    int octadSize = 8;
+
+                    // 分批处理，每1024个元素一批进行scaling
+                    int batchSize = 1024;
+                    List<long[]> batches = new ArrayList<>();
+
+                    for (int i = 0; i < numbers.size(); i += batchSize) {
+                        int end = Math.min(numbers.size(), i + batchSize);
+                        List<String> batch = numbers.subList(i, end);
+                        long[] scaledBatch = scaleNumbers(batch, decimalMax);
+                        batches.add(scaledBatch);
+                    }
+
+                    // 计算总长度并拼接所有批次的结果
+                    int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+                    long[] scaledInts_all = new long[totalLength];
+
+                    int currentIndex = 0;
+                    for (long[] batch : batches) {
+                        System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                        currentIndex += batch.length;
+                    }
+
+                    for (int chunkSize : chunkSizes) {
+                        System.out.println("Testing chunk size: " + chunkSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += chunkSize) {
+                                int end = Math.min(i + chunkSize, scaledInts_all.length);
+                                long[] scaledInt = new long[end - i];
+                                System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                                long startTime = System.nanoTime();
+                                long[] scaledInts = zigzag(scaledInt);
+
+//                                // 计算固定方案成本
+//                                FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                // 计算RL方案成本
+                                int remainder = scaledInts.length % octadSize;
+                                int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                long[] padded = new long[scaledInts.length + padding];
+                                System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                int octadCount = padded.length / octadSize;
+                                List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                for (int si = 0; si < padded.length; si += octadSize) {
+                                    long maxInOctad = 0;
+                                    for (int sj = si; sj < si + octadSize; ++sj) {
+                                        long v = padded[sj];
+                                        if (v > maxInOctad) maxInOctad = v;
+                                    }
+                                    int bitWidth = 0;
+                                    if (maxInOctad > 0) {
+                                        bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                    }
+                                    bitWidths.add(bitWidth);
+                                }
+
+                                PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                long duration = System.nanoTime() - startTime;
+                                long rlCostBits = res.compressedData.length * 8L;
+//                                long fixedCostBits = fixedResult.totalCost;
+                                hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                long decodeStart = System.nanoTime();
+                                if (res.compressedData != null) {
+                                    long[] dec =
+                                            fastDecompress(
+                                                    res.compressedData, octadSize, scaledInts.length);
+                                    Arrays.copyOf(zigzagDecode(dec), scaledInt.length);
+                                }
+                                hybridDecodeTime =
+                                        hybridDecodeTime.add(
+                                                BigDecimal.valueOf(System.nanoTime() - decodeStart));
+//                                if (rlCostBits <= fixedCostBits) {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                    rlBetterCount++;
+//                                } else {
+//                                    hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+//                                    fixedBetterCount++;
+//                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+
+                        System.out.println("  Hybrid: RL better " + rlBetterCount + " times, Fixed better " + fixedBetterCount + " times");
+
+                        writer.write(String.valueOf(chunkSize) + ",");
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("sprintz-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void ZigzagVarChunkSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Zigzag_vary_m";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceZigzagVarChunkSize(model, dataDir, outDir);
+    }
+
+
+    // ========== 修改后的性能测试方法（选择更优方案） ==========
+    static void performanceSprintz(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 10;
+
+                    for (int octadSizeExp = 3; octadSizeExp < 4; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+
+                                long startTime = System.nanoTime();
+                                SprintzEncodedResult ser = sprintz(scaledInt);
+                                long[] scaledInts = ser.getEncodedData();
+//
+//                                long[] scaledInts = sprintz(scaledInt);
+
+                                // 只在octadSize=8时考虑固定方案
+                                {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            sprintzDecode(dec, ser.getFirstValue());
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        sprintzDecode(dec, ser.getFirstValue());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                }
+                            }
+                        }
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+//                        double hybrid_ratio = (double) hybridCost / (double) (numbers.size() * 64);
+//                        double hybridTime_throughput = (double) (numbers.size() * 8000) / (double) hybridTime;
+
+//                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void SprintzRL() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Sprintz";
+
+        int epochs = 200;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceSprintz(model, dataDir, outDir);
+    }
+
+    static void performanceSprintzVaryPackSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+
+                    for (int octadSizeExp = 0; octadSizeExp < max_octad_size; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+                                SprintzEncodedResult ser = sprintz(scaledInt);
+                                long[] scaledInts = ser.getEncodedData();
+
+
+                                // 只在octadSize=8时考虑固定方案
+                                if (octadSize == 8 || octadSize == 16) {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            sprintzDecode(dec, ser.getFirstValue());
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        sprintzDecode(dec, ser.getFirstValue());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                } else {
+                                    // 对于非8的octadSize，只使用RL方案
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(res.compressedData.length * 8));
+
+                                    long decodeStart = System.nanoTime();
+                                    if (res.compressedData != null) {
+                                        long[] dec =
+                                                fastDecompress(
+                                                        res.compressedData, octadSize, scaledInts.length);
+                                        sprintzDecode(dec, ser.getFirstValue());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, RoundingMode.HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, RoundingMode.HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, RoundingMode.HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+    @Test
+    public void SprintzVarPackSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Sprintz_vary_pack_size";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceSprintzVaryPackSize(model, dataDir, outDir);
+    }
+
+    // ========== 测试不同chunk size的方法（修改版） ==========
+    static void performanceSprintzVarChunkSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        int[] chunkSizes = {16*8, 32*8, 64*8, 128*8, 256*8, 512*8, 1024*8};
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + " with variable chunk sizes...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname.replace(".", "_chunksize_test."));
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "m,Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+                    int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+                    int octadSize = 8;
+
+                    // 分批处理，每1024个元素一批进行scaling
+                    int batchSize = 1024;
+                    List<long[]> batches = new ArrayList<>();
+
+                    for (int i = 0; i < numbers.size(); i += batchSize) {
+                        int end = Math.min(numbers.size(), i + batchSize);
+                        List<String> batch = numbers.subList(i, end);
+                        long[] scaledBatch = scaleNumbers(batch, decimalMax);
+                        batches.add(scaledBatch);
+                    }
+
+                    // 计算总长度并拼接所有批次的结果
+                    int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+                    long[] scaledInts_all = new long[totalLength];
+
+                    int currentIndex = 0;
+                    for (long[] batch : batches) {
+                        System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                        currentIndex += batch.length;
+                    }
+
+                    for (int chunkSize : chunkSizes) {
+                        System.out.println("Testing chunk size: " + chunkSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += chunkSize) {
+                                int end = Math.min(i + chunkSize, scaledInts_all.length);
+                                long[] scaledInt = new long[end - i];
+                                System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                                long startTime = System.nanoTime();
+                                SprintzEncodedResult ser = sprintz(scaledInt);
+                                long[] scaledInts = ser.getEncodedData();
+
+                                // 计算固定方案成本
+                                FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                // 计算RL方案成本
+                                int remainder = scaledInts.length % octadSize;
+                                int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                long[] padded = new long[scaledInts.length + padding];
+                                System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                int octadCount = padded.length / octadSize;
+                                List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                for (int si = 0; si < padded.length; si += octadSize) {
+                                    long maxInOctad = 0;
+                                    for (int sj = si; sj < si + octadSize; ++sj) {
+                                        long v = padded[sj];
+                                        if (v > maxInOctad) maxInOctad = v;
+                                    }
+                                    int bitWidth = 0;
+                                    if (maxInOctad > 0) {
+                                        bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                    }
+                                    bitWidths.add(bitWidth);
+                                }
+
+                                PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                long duration = System.nanoTime() - startTime;
+                                hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                long rlCostBits = res.compressedData.length * 8;
+                                long fixedCostBits = fixedResult.totalCost;
+
+                                long decodeStart = System.nanoTime();
+                                if (rlCostBits <= fixedCostBits) {
+                                    if (res.compressedData != null) {
+                                        long[] dec =
+                                                fastDecompress(
+                                                        res.compressedData, octadSize, scaledInts.length);
+                                        sprintzDecode(dec, ser.getFirstValue());
+                                    }
+                                } else {
+                                    long[] dec =
+                                            decompressFixedPack(
+                                                    fixedResult.compressedData,
+                                                    octadSize,
+                                                    scaledInts.length);
+                                    sprintzDecode(dec, ser.getFirstValue());
+                                }
+                                hybridDecodeTime =
+                                        hybridDecodeTime.add(
+                                                BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                if (rlCostBits <= fixedCostBits) {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                    rlBetterCount++;
+                                } else {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                    fixedBetterCount++;
+                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+
+                        System.out.println("  Hybrid: RL better " + rlBetterCount + " times, Fixed better " + fixedBetterCount + " times");
+
+                        writer.write(String.valueOf(chunkSize) + ",");
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("sprintz-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void SprintzVarChunkSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_Sprintz_vary_m";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceSprintzVarChunkSize(model, dataDir, outDir);
+    }
+
+    // ========== 修改后的性能测试方法（选择更优方案） ==========
+    static void performanceTS2DIFF(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 10;
+
+                    for (int octadSizeExp = 3; octadSizeExp < 4; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                                int end = Math.min(numbers.size(), i + CHUNK_SIZE);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+
+                                long startTime = System.nanoTime();
+                                TSDIFFEncodedResult ter = ts2diff(scaledInt);
+                                long[] scaledInts = ter.getEncodedData();
+//
+//                                long[] scaledInts = sprintz(scaledInt);
+
+                                // 只在octadSize=8时考虑固定方案
+                                {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                }
+                            }
+                        }
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+//                        double hybrid_ratio = (double) hybridCost / (double) (numbers.size() * 64);
+//                        double hybridTime_throughput = (double) (numbers.size() * 8000) / (double) hybridTime;
+
+//                        System.out.println("  Compression ratio: " + (1.0/hybrid_ratio));
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void TS2DIFFRL() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_TS2DIFF";
+
+        int epochs = 200;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceTS2DIFF(model, dataDir, outDir);
+    }
+
+    static void performanceTS2DIFFVaryPackSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with varying octadSize...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + "...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname);
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = all_time_of_repeat;
+
+                    for (int octadSizeExp = 0; octadSizeExp < max_octad_size; octadSizeExp++) {
+                        int octadSize = (int) Math.pow(2, octadSizeExp);
+                        System.out.println("Testing octadSize = " + octadSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            int chunksize = CHUNK_SIZE + 1;
+                            for (int i = 0; i < numbers.size(); i += chunksize) {
+                                int end = Math.min(numbers.size(), i + chunksize);
+                                if (end - i <= 2) continue;
+
+                                List<String> chunkNumbers = numbers.subList(i, end);
+                                int decimalMax = 0;
+                                for (int k = i; k < end; ++k) {
+                                    if (decimalPlaces.get(k) > decimalMax) decimalMax = decimalPlaces.get(k);
+                                }
+
+                                long[] scaledInt = scaleNumbers(chunkNumbers, decimalMax);
+                                long startTime = System.nanoTime();
+                                TSDIFFEncodedResult ter = ts2diff(scaledInt);
+                                long[] scaledInts = ter.getEncodedData();
+
+
+                                // 只在octadSize=8时考虑固定方案
+                                if (octadSize == 8) {
+                                    // 计算固定方案成本
+                                    FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                    // 计算RL方案成本
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+
+                                    // 选择更优方案
+                                    long rlCostBits = res.compressedData.length * 8;
+                                    long fixedCostBits = fixedResult.totalCost;
+
+                                    long decodeStart = System.nanoTime();
+                                    if (rlCostBits <= fixedCostBits) {
+                                        if (res.compressedData != null) {
+                                            long[] dec =
+                                                    fastDecompress(
+                                                            res.compressedData, octadSize, scaledInts.length);
+                                            ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                        }
+                                    } else {
+                                        long[] dec =
+                                                decompressFixedPack(
+                                                        fixedResult.compressedData,
+                                                        octadSize,
+                                                        scaledInts.length);
+                                        ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+
+                                    if (rlCostBits <= fixedCostBits) {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                        rlBetterCount++;
+                                    } else {
+                                        hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+                                        fixedBetterCount++;
+                                    }
+                                } else {
+                                    // 对于非8的octadSize，只使用RL方案
+                                    int remainder = scaledInts.length % octadSize;
+                                    int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                    long[] padded = new long[scaledInts.length + padding];
+                                    System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                    if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                    int octadCount = padded.length / octadSize;
+                                    List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                    for (int si = 0; si < padded.length; si += octadSize) {
+                                        long maxInOctad = 0;
+                                        for (int sj = si; sj < si + octadSize; ++sj) {
+                                            long v = padded[sj];
+                                            if (v > maxInOctad) maxInOctad = v;
+                                        }
+                                        int bitWidth = 0;
+                                        if (maxInOctad > 0) {
+                                            bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                        }
+                                        bitWidths.add(bitWidth);
+                                    }
+
+                                    PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                    long duration = System.nanoTime() - startTime;
+                                    hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(res.compressedData.length * 8));
+
+                                    long decodeStart = System.nanoTime();
+                                    if (res.compressedData != null) {
+                                        long[] dec =
+                                                fastDecompress(
+                                                        res.compressedData, octadSize, scaledInts.length);
+                                        ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                    }
+                                    hybridDecodeTime =
+                                            hybridDecodeTime.add(
+                                                    BigDecimal.valueOf(System.nanoTime() - decodeStart));
+                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+//
+
+                        if (octadSize == 8) {
+                            System.out.println("  RL better in " + rlBetterCount + " cases, Fixed better in " + fixedBetterCount + " cases");
+                        }
+
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("SPRINTZ-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+    @Test
+    public void TS2DIFFVarPackSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_TS2DIFF_vary_pack_size";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceTS2DIFFVaryPackSize(model, dataDir, outDir);
+    }
+
+    // ========== 测试不同chunk size的方法（修改版） ==========
+    static void performanceTS2DIFFVarChunkSize(RLDecisionModel model, String directory, String outputDirStr) {
+        System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
+        Path outdir = Paths.get(outputDirStr);
+        try {
+            if (!Files.exists(outdir)) Files.createDirectories(outdir);
+        } catch (IOException e) {
+            System.err.println("Cannot create output dir: " + outputDirStr);
+            return;
+        }
+
+        int[] chunkSizes = {16*8+1, 32*8+1, 64*8+1, 128*8+1, 256*8+1, 512*8+1}; // 1024*8
+
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path entry : ds) {
+                if (!Files.isRegularFile(entry)) continue;
+                String fname = entry.getFileName().toString();
+                if (!BenchmarkDatasetFilter.includeDatasetFile(fname)) continue;
+
+                System.out.println("Processing " + fname + " with variable chunk sizes...");
+                List<String> numbers = new ArrayList<>();
+                List<Integer> decimalPlaces = new ArrayList<>();
+
+                try (BufferedReader br = Files.newBufferedReader(entry)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String[] tokens = line.split(",");
+                        for (String token : tokens) {
+                            String t = trimStr(token);
+                            if (!t.isEmpty()) {
+                                numbers.add(t);
+                                int dec = 0;
+                                int pos = t.indexOf('.');
+                                if (pos != -1) dec = t.length() - pos - 1;
+                                decimalPlaces.add(dec);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Cannot open " + entry.toString());
+                    continue;
+                }
+
+                if (numbers.isEmpty()) continue;
+
+                Path outPath = outdir.resolve(fname.replace(".", "_chunksize_test."));
+                try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+                    writer.write(
+                            "m,Pack Size,Input Direction,Encoding Algorithm,Compression Throughput,Decompression Throughput,Points,Compressed Size,Compression Ratio,RL Better Count,Fixed Better Count\n");
+
+                    int time_of_repeat = 10;
+                    int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+                    int octadSize = 8;
+
+                    // 分批处理，每1024个元素一批进行scaling
+                    int batchSize = 1024;
+                    List<long[]> batches = new ArrayList<>();
+
+                    for (int i = 0; i < numbers.size(); i += batchSize) {
+                        int end = Math.min(numbers.size(), i + batchSize);
+                        List<String> batch = numbers.subList(i, end);
+                        long[] scaledBatch = scaleNumbers(batch, decimalMax);
+                        batches.add(scaledBatch);
+                    }
+
+                    // 计算总长度并拼接所有批次的结果
+                    int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+                    long[] scaledInts_all = new long[totalLength];
+
+                    int currentIndex = 0;
+                    for (long[] batch : batches) {
+                        System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                        currentIndex += batch.length;
+                    }
+
+                    for (int chunkSize : chunkSizes) {
+                        System.out.println("Testing chunk size: " + chunkSize);
+
+                        BigDecimal hybridCost = BigDecimal.ZERO;
+                        BigDecimal hybridTime = BigDecimal.ZERO;
+                        BigDecimal hybridDecodeTime = BigDecimal.ZERO;
+                        int rlBetterCount = 0;
+                        int fixedBetterCount = 0;
+
+                        for (int rep = 0; rep < time_of_repeat; ++rep) {
+                            for (int i = 0; i < numbers.size(); i += chunkSize) {
+                                int end = Math.min(i + chunkSize, scaledInts_all.length);
+                                long[] scaledInt = new long[end - i];
+                                System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                                long startTime = System.nanoTime();
+                                TSDIFFEncodedResult ter = ts2diff(scaledInt);
+                                long[] scaledInts = ter.getEncodedData();
+
+                                // 计算固定方案成本
+//                                FixedPackResult fixedResult = calculateFixedPackCost(scaledInts, scaledInts.length);
+
+                                // 计算RL方案成本
+                                int remainder = scaledInts.length % octadSize;
+                                int padding = (remainder == 0) ? 0 : octadSize - remainder;
+                                long[] padded = new long[scaledInts.length + padding];
+                                System.arraycopy(scaledInts, 0, padded, 0, scaledInts.length);
+                                if (padding > 0) Arrays.fill(padded, scaledInts.length, padded.length, 0L);
+
+                                int octadCount = padded.length / octadSize;
+                                List<Integer> bitWidths = new ArrayList<>(octadCount);
+
+                                for (int si = 0; si < padded.length; si += octadSize) {
+                                    long maxInOctad = 0;
+                                    for (int sj = si; sj < si + octadSize; ++sj) {
+                                        long v = padded[sj];
+                                        if (v > maxInOctad) maxInOctad = v;
+                                    }
+                                    int bitWidth = 0;
+                                    if (maxInOctad > 0) {
+                                        bitWidth = 64 - Long.numberOfLeadingZeros(maxInOctad);
+                                    }
+                                    bitWidths.add(bitWidth);
+                                }
+
+                                PackingResult res = packOctads(bitWidths, model, null, octadSize, padded, scaledInts.length);
+                                long duration = System.nanoTime() - startTime;
+                                long rlCostBits = res.compressedData.length * 8;
+//                                long fixedCostBits = fixedResult.totalCost;
+                                hybridTime = hybridTime.add(BigDecimal.valueOf(duration));
+                                long decodeStart = System.nanoTime();
+                                if (res.compressedData != null) {
+                                    long[] dec =
+                                            fastDecompress(
+                                                    res.compressedData, octadSize, scaledInts.length);
+                                    ts2diffDecode(dec, ter.getFirstValue(), ter.getMinDiff());
+                                }
+                                hybridDecodeTime =
+                                        hybridDecodeTime.add(
+                                                BigDecimal.valueOf(System.nanoTime() - decodeStart));
+//                                if (rlCostBits <= fixedCostBits) {
+                                    hybridCost = hybridCost.add(BigDecimal.valueOf(rlCostBits));
+                                    rlBetterCount++;
+//                                } else {
+//                                    hybridCost = hybridCost.add(BigDecimal.valueOf(fixedCostBits));
+//                                    fixedBetterCount++;
+//                                }
+                            }
+                        }
+
+                        BigDecimal timeOfRepeatBD = BigDecimal.valueOf(time_of_repeat);
+                        hybridCost = hybridCost.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridTime = hybridTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+                        hybridDecodeTime =
+                                hybridDecodeTime.divide(timeOfRepeatBD, 10, BigDecimal.ROUND_HALF_UP);
+
+                        BigDecimal numbersSizeBD = BigDecimal.valueOf(numbers.size());
+                        BigDecimal model_ratio = hybridCost.divide(numbersSizeBD.multiply(BigDecimal.valueOf(64)), 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelTime_throughput = numbersSizeBD.multiply(BigDecimal.valueOf(8000L)).divide(hybridTime, 10, BigDecimal.ROUND_HALF_UP);
+                        BigDecimal modelDecode_throughput =
+                                hybridDecodeTime.signum() > 0
+                                        ? numbersSizeBD
+                                                .multiply(BigDecimal.valueOf(8000L))
+                                                .divide(hybridDecodeTime, 10, BigDecimal.ROUND_HALF_UP)
+                                        : BigDecimal.ZERO;
+
+                        System.out.println("  Hybrid: RL better " + rlBetterCount + " times, Fixed better " + fixedBetterCount + " times");
+
+                        writer.write(String.valueOf(chunkSize - 1) + ",");
+                        writer.write(String.valueOf(octadSize) + ",");
+                        writer.write(entry.toString() + ",");
+                        writer.write("sprintz-RL-FixedHybrid,");
+                        writer.write(String.valueOf(modelTime_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(modelDecode_throughput.doubleValue()) + ",");
+                        writer.write(String.valueOf(numbers.size()) + ",");
+                        writer.write(String.valueOf(hybridCost) + ",");
+                        writer.write(String.valueOf(model_ratio.doubleValue()) + ",");
+                        writer.write(String.valueOf(rlBetterCount) + ",");
+                        writer.write(String.valueOf(fixedBetterCount) + "\n");
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error writing output file for " + fname);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error iterating directory: " + directory);
+        }
+    }
+
+    @Test
+    public void TS2DIFFVarChunkSize() {
+        String trainDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String dataDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/ElfTestData_camel";
+        String outDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-block/elf_resources/output_BPStrongRL_TS2DIFF_vary_m";
+
+        int epochs = all_epochs;
+
+        RLDecisionModel model = new RLDecisionModel();
+        model = trainModelFromDirectory(epochs, trainDir);
+        performanceTS2DIFFVarChunkSize(model, dataDir, outDir);
+    }
+
+
+}

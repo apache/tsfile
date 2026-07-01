@@ -45,6 +45,13 @@ typedef struct ConfigValue {
     int32_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;
     bool encrypt_flag_ = false;
+    TSEncoding boolean_encoding_type_;
+    TSEncoding int32_encoding_type_;
+    TSEncoding int64_encoding_type_;
+    TSEncoding float_encoding_type_;
+    TSEncoding double_encoding_type_;
+    TSEncoding string_encoding_type_;
+    CompressionType default_compression_type_;
 } ConfigValue;
 
 extern void init_config_value();

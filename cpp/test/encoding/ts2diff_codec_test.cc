@@ -190,15 +190,50 @@ TEST_F(TS2DIFFCodecTest, LargeDataTest) {
     std::vector<int32_t> decoded(row_num);
     auto start_decode = std::chrono::steady_clock::now();
     for (int i = 0; i < row_num; i++) {
-        EXPECT_EQ(decoder_int_->read_int32(decoded[i], out_stream), common::E_OK);
+        EXPECT_EQ(decoder_int_->read_int32(decoded[i], out_stream),
+                  common::E_OK);
     }
     auto end_decode = std::chrono::steady_clock::now();
 
-    auto encode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_encode - start_encode);
-    auto decode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_decode - start_decode);
+    auto encode_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_encode -
+                                                              start_encode);
+    auto decode_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_decode -
+                                                              start_decode);
 
     std::cout << "Encode time: " << encode_duration.count() << "ms\n";
     std::cout << "Decode time: " << decode_duration.count() << "ms\n";
+}
+
+TEST_F(TS2DIFFCodecTest, TestEncodingLast) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    common::ByteStream out_stream_int32(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 6;
+    int64_t data[row_num];
+    memset(data, 0, sizeof(int64_t) * row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = i * i;
+    }
+
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
+        EXPECT_EQ(encoder_int_->encode((int32_t)data[i], out_stream_int32),
+                  common::E_OK);
+    }
+    EXPECT_EQ(encoder_long_->flush(out_stream), common::E_OK);
+    EXPECT_EQ(encoder_int_->flush(out_stream_int32), common::E_OK);
+
+    int64_t x;
+    int32_t y;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_long_->read_int64(x, out_stream), common::E_OK);
+        EXPECT_EQ(x, data[i]);
+        EXPECT_EQ(decoder_int_->read_int32(y, out_stream_int32), common::E_OK);
+        EXPECT_EQ(y, data[i]);
+    }
+    EXPECT_FALSE(decoder_long_->has_remaining(out_stream));
+    EXPECT_FALSE(decoder_int_->has_remaining(out_stream_int32));
 }
 
 }  // namespace storage

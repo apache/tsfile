@@ -21,9 +21,8 @@
 
 #include "common/schema.h"
 #include "expression.h"
-namespace storage
-{
-class ColumnMapping { 
+namespace storage {
+class ColumnMapping {
    public:
     int add(const std::string &column_name, int index, TableSchema &schema) {
         int column_index = schema.find_column_index(column_name);
@@ -50,7 +49,8 @@ class ColumnMapping {
         return common::E_OK;
     }
 
-    const std::vector<int> &get_column_pos(const std::string &column_name) const {
+    const std::vector<int> &get_column_pos(
+        const std::string &column_name) const {
         static const std::vector<int> empty;
         auto it = column_pos_map.find(column_name);
         return it != column_pos_map.end() ? it->second : empty;
@@ -77,7 +77,7 @@ class ColumnMapping {
     std::unordered_set<std::string> tag_columns_;
     std::unordered_set<std::string> field_columns_;
 };
-    
-} // namespace storage
 
-#endif // READER_COLUMN_MAPPING_H
+}  // namespace storage
+
+#endif  // READER_COLUMN_MAPPING_H

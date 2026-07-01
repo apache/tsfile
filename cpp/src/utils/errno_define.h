@@ -73,6 +73,8 @@ const int E_TABLE_NOT_EXIST = 49;
 const int E_COLUMN_NOT_EXIST = 50;
 const int E_UNSUPPORTED_ORDER = 51;
 const int E_INVALID_NODE_TYPE = 52;
+const int E_ENCODE_ERR = 53;
+const int E_DECODE_ERR = 54;
 
 }  // end namespace common
 

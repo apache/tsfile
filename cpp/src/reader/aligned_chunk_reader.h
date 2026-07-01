@@ -102,25 +102,32 @@ class AlignedChunkReader : public IChunkReader {
     int decode_cur_time_page_data();
     int decode_cur_value_page_data();
     int decode_time_value_buf_into_tsblock(common::TsBlock *&ret_tsblock,
-                                           Filter *filter);
+                                           Filter *filter,
+                                           common::PageArena *pa);
     bool prev_time_page_not_finish() const {
-        return (time_decoder_ && time_decoder_->has_remaining()) ||
+        return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
     }
 
     bool prev_value_page_not_finish() const {
-        return (value_decoder_ && value_decoder_->has_remaining()) ||
+        return (value_decoder_ && value_decoder_->has_remaining(value_in_)) ||
                value_in_.has_remaining();
     }
 
     int decode_tv_buf_into_tsblock_by_datatype(common::ByteStream &time_in,
                                                common::ByteStream &value_in,
                                                common::TsBlock *ret_tsblock,
-                                               Filter *filter);
+                                               Filter *filter,
+                                               common::PageArena *pa);
     int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
                                          common::ByteStream &value_in,
                                          common::RowAppender &row_appender,
                                          Filter *filter);
+    int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
+                                            common::ByteStream &value_in,
+                                            common::RowAppender &row_appender,
+                                            common::PageArena &pa,
+                                            Filter *filter);
 
    private:
     ReadFile *read_file_;

@@ -72,7 +72,7 @@ class BitSet {
     void set(int32_t pos) {
         int32_t word_idx = pos / 64;
         int32_t word_offset = pos % 64;
-        words_[word_idx] |= (1ul << word_offset);
+        words_[word_idx] |= (1ull << word_offset);
     }
     int32_t get_words_in_use() const {
         for (int32_t i = word_count_ - 1; i >= 0; i--) {
@@ -109,6 +109,7 @@ class BloomFilter {
                        const common::String &measurement_name);
     int serialize_to(common::ByteStream &out);
     int deserialize_from(common::ByteStream &in);
+    BitSet *get_bit_set() { return &bitset_; }
 
    private:
     common::String get_entry_string(const common::String &device_name,

@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.writer.RestorableTsFileIOWriter;
@@ -33,17 +35,36 @@ public class TsFileRestorableReader extends TsFileSequenceReader {
   private static final Logger logger = LoggerFactory.getLogger(TsFileRestorableReader.class);
 
   public TsFileRestorableReader(String file) throws IOException {
-    this(file, true);
+    this(
+        file,
+        true,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()));
+  }
+
+  public TsFileRestorableReader(String file, EncryptParameter param) throws IOException {
+    this(file, true, param);
   }
 
   public TsFileRestorableReader(String file, boolean autoRepair) throws IOException {
+    this(
+        file,
+        autoRepair,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()));
+  }
+
+  public TsFileRestorableReader(String file, boolean autoRepair, EncryptParameter param)
+      throws IOException {
     // if autoRepair == true, then it means the file is likely broken, so we can not
     // read metadata
     // otherwise, the user may consider that either the file is complete, or the
     // user can accept an
     // Exception when reading broken data. Therefore, we set loadMetadata as true in
     // this case.
-    super(file, !autoRepair);
+    super(file, param, !autoRepair);
     if (autoRepair) {
       try {
         checkAndRepair();
@@ -62,8 +83,9 @@ public class TsFileRestorableReader extends TsFileSequenceReader {
       // Try to close it
       logger.info("File {} has no correct tail magic, try to repair...", file);
       try (RestorableTsFileIOWriter rWriter =
-              new RestorableTsFileIOWriter(FSFactoryProducer.getFSFactory().getFile(file));
-          TsFileWriter writer = new TsFileWriter(rWriter)) {
+              new RestorableTsFileIOWriter(
+                  FSFactoryProducer.getFSFactory().getFile(file), getFirstEncryptParam());
+          TsFileWriter writer = new TsFileWriter(rWriter, getFirstEncryptParam())) {
         // This writes the right magic string
       }
     }

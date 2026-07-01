@@ -38,5 +38,6 @@ public enum TypeEnum {
   TIMESTAMP,
   DATE,
   BLOB,
-  STRING
+  STRING,
+  OBJECT
 }

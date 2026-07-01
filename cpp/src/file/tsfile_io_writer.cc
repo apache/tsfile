@@ -409,7 +409,6 @@ int TsFileIOWriter::write_file_index() {
             // Time column also need add to bloom filter.
             ret = filter.add_path_entry(tmp_device_name, measurement_name);
 
-
             if (RET_FAIL(ts_index.serialize_to(write_stream_))) {
             } else {
 #if DEBUG_SE
@@ -461,11 +460,11 @@ int TsFileIOWriter::write_file_index() {
         tsfile_meta.table_metadata_index_node_map_ = table_nodes_map;
         tsfile_meta.table_schemas_ = schema_->table_schema_map_;
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptLevel", encrypt_level_));
+            std::make_pair("encryptLevel", new std::string(encrypt_level_)));
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptType", encrypt_type_));
+            std::make_pair("encryptType", new std::string(encrypt_type_)));
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptKey", encrypt_key_));
+            std::make_pair("encryptKey", nullptr));
 #if DEBUG_SE
         auto tsfile_meta_offset = write_stream_.total_size();
 #endif
@@ -730,6 +729,9 @@ int TsFileIOWriter::generate_root(
             alloc_and_init_meta_index_node(wmm, cur_index_node, node_type))) {
     }
     while (IS_SUCC(ret)) {
+        for (auto iter = to->begin(); iter != to->end(); iter++) {
+            iter.get().reset();
+        }
         to->clear();
         SimpleList<std::shared_ptr<MetaIndexNode>>::Iterator from_iter;
         for (from_iter = from->begin();

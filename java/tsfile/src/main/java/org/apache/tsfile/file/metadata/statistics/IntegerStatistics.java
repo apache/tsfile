@@ -121,6 +121,16 @@ public class IntegerStatistics extends Statistics<Integer> {
   }
 
   @Override
+  public void updateStats(int minValue, int maxValue) {
+    if (minValue < this.minValue) {
+      this.minValue = minValue;
+    }
+    if (maxValue > this.maxValue) {
+      this.maxValue = maxValue;
+    }
+  }
+
+  @Override
   public Integer getMinValue() {
     return minValue;
   }

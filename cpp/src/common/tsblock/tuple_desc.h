@@ -71,6 +71,11 @@ class TupleDesc {
         return column_list_[index].data_type_;
     }
 
+    FORCE_INLINE common::ColumnCategory get_column_category(
+        const uint32_t index) const {
+        return column_list_[index].column_category_;
+    }
+
     FORCE_INLINE std::string get_column_name(uint32_t index) {
         return column_list_[index].column_name_;
     }

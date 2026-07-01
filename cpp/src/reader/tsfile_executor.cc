@@ -112,6 +112,9 @@ int TsFileExecutor::execute_with_timegenerator(QueryExpression *qe,
     return ret;
 }
 
-void TsFileExecutor::destroy_query_data_set(ResultSet *qds) { delete qds; }
+void TsFileExecutor::destroy_query_data_set(ResultSet *qds) {
+    delete qds;
+    qds = nullptr;
+}
 
 }  // namespace storage

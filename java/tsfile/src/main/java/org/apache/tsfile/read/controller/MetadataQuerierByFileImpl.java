@@ -34,7 +34,7 @@ import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.TsFileSequenceReader.LocateStatus;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Pair;
 
 import java.io.IOException;
@@ -306,7 +306,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(
-      MetadataIndexNode root, ExpressionTree idFilter) {
-    return new DeviceMetaIterator(tsFileReader, root, idFilter);
+      MetadataIndexNode root, Filter tagFilter) {
+    return new DeviceMetaIterator(tsFileReader, root, tagFilter);
   }
 }

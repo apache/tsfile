@@ -28,7 +28,7 @@ import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Pair;
 
 import java.io.IOException;
@@ -87,5 +87,5 @@ public interface IMetadataQuerier {
   void clear();
 
   Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(
-      MetadataIndexNode root, ExpressionTree idFilter);
+      MetadataIndexNode root, Filter idFilter);
 }

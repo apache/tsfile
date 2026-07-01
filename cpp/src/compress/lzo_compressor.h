@@ -38,8 +38,8 @@ namespace storage {
 
 class LZOCompressor : public Compressor {
    public:
-    LZOCompressor() : compressed_buf_(nullptr), uncompressed_buf_(nullptr) {};
-    ~LZOCompressor() {};
+    LZOCompressor() : compressed_buf_(nullptr), uncompressed_buf_(nullptr){};
+    ~LZOCompressor(){};
     // @for_compress
     //  true  - for compressiom
     //  false - for uncompression

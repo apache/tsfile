@@ -55,8 +55,8 @@ public class TimeseriesSchema implements Comparable<TimeseriesSchema>, Serializa
     this(
         fullPath,
         tsDataType,
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(tsDataType)),
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getValueEncoder(tsDataType),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(tsDataType),
         Collections.emptyMap());
   }
 
@@ -66,7 +66,7 @@ public class TimeseriesSchema implements Comparable<TimeseriesSchema>, Serializa
         fullPath,
         type,
         encoding,
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(type),
         Collections.emptyMap());
   }
 

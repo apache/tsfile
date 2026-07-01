@@ -59,7 +59,8 @@ class TsFileWriter {
     void set_generate_table_schema(bool generate_table_schema);
     int register_timeseries(const std::string &device_id,
                             const MeasurementSchema &measurement_schema);
-    int register_timeseries(const std::string &device_path,
+    int register_timeseries(
+        const std::string &device_path,
         const std::vector<MeasurementSchema *> &measurement_schema_vec);
     int register_aligned_timeseries(
         const std::string &device_id,
@@ -72,6 +73,8 @@ class TsFileWriter {
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
     int write_tablet_aligned(const Tablet &tablet);
+    int write_tree(const Tablet &tablet);
+    int write_tree(const TsRecord &record);
     int write_table(Tablet &tablet);
 
     typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup *,
@@ -103,11 +106,12 @@ class TsFileWriter {
 
    private:
     int write_point(storage::ChunkWriter *chunk_writer, int64_t timestamp,
-                    const DataPoint &point);
+                    common::TSDataType data_type, const DataPoint &point);
     bool check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
                                  bool is_aligned);
     int write_point_aligned(ValueChunkWriter *value_chunk_writer,
-                            int64_t timestamp, const DataPoint &point);
+                            int64_t timestamp, common::TSDataType data_type,
+                            const DataPoint &point);
     int flush_chunk_group(MeasurementSchemaGroup *chunk_group, bool is_aligned);
 
     int write_typed_column(storage::ChunkWriter *chunk_writer,
@@ -139,14 +143,16 @@ class TsFileWriter {
     int do_check_schema(
         std::shared_ptr<IDeviceID> device_id,
         MeasurementNamesGetter &measurement_names,
-        common::SimpleVector<storage::ChunkWriter *> &chunk_writers);
+        common::SimpleVector<storage::ChunkWriter *> &chunk_writers,
+        common::SimpleVector<common::TSDataType> &data_types);
 
     template <typename MeasurementNamesGetter>
     int do_check_schema_aligned(
         std::shared_ptr<IDeviceID> device_id,
         MeasurementNamesGetter &measurement_names,
         storage::TimeChunkWriter *&time_chunk_writer,
-        common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers);
+        common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers,
+        common::SimpleVector<common::TSDataType> &data_types);
     int do_check_schema_table(
         std::shared_ptr<IDeviceID> device_id, Tablet &tablet,
         storage::TimeChunkWriter *&time_chunk_writer,
@@ -210,8 +216,7 @@ class TsFileWriter {
 
     int value_write_column(ValueChunkWriter *value_chunk_writer,
                            const Tablet &tablet, int col_idx,
-                           uint32_t start_idx,
-                           uint32_t end_idx);
+                           uint32_t start_idx, uint32_t end_idx);
 };
 
 }  // end namespace storage

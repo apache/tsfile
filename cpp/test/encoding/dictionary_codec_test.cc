@@ -18,7 +18,9 @@
  */
 #include <gtest/gtest.h>
 
+#include <random>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "encoding/dictionary_decoder.h"
@@ -80,21 +82,91 @@ TEST_F(DictionaryTest, DictionaryEncoderAndDecoder) {
     ASSERT_EQ(decoder.read_string(stream), "apple");
 }
 
-TEST_F(DictionaryTest, DictionaryEncoderAndDecoderLargeQuantities) {
+TEST_F(DictionaryTest, DictionaryEncoderAndDecoderOneItem) {
     DictionaryEncoder encoder;
     common::ByteStream stream(1024, common::MOD_DICENCODE_OBJ);
     encoder.init();
 
-    for (int64_t value = 1; value < 10000; value++) {
-        encoder.encode(std::to_string(value), stream);
+    encoder.encode("apple", stream);
+    encoder.flush(stream);
+
+    DictionaryDecoder decoder;
+    decoder.init();
+
+    ASSERT_TRUE(decoder.has_next(stream));
+    ASSERT_EQ(decoder.read_string(stream), "apple");
+
+    ASSERT_FALSE(decoder.has_next(stream));
+}
+
+TEST_F(DictionaryTest, DictionaryEncoderAndDecoderRepeatedItems) {
+    DictionaryEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DICENCODE_OBJ);
+    encoder.init();
+
+    for (char c = 'a'; c <= 'z'; c++) {
+        for (int i = 0; i < 100; i++) {
+            encoder.encode(std::string(c, 3), stream);
+        }
     }
     encoder.flush(stream);
 
     DictionaryDecoder decoder;
     decoder.init();
 
-    for (int64_t value = 1; value < 10000; value++) {
-        ASSERT_EQ(decoder.read_string(stream), std::to_string(value));
+    for (char c = 'a'; c <= 'z'; c++) {
+        for (int i = 0; i < 100; i++) {
+            ASSERT_EQ(decoder.read_string(stream), std::string(c, 3));
+        }
+    }
+}
+
+TEST_F(DictionaryTest,
+       DictionaryEncoderAndDecoderLargeQuantitiesWithRandomStrings) {
+    DictionaryEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DICENCODE_OBJ);
+    encoder.init();
+
+    // Prepare random string generator
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> length_dist(5, 20);  // String length range
+    std::uniform_int_distribution<> char_dist(33,
+                                              126);  // Printable ASCII range
+
+    // Generate 10000 random strings
+    const int num_strings = 10000;
+    std::vector<std::string> test_strings;
+    std::unordered_set<std::string> string_set;  // For ensuring uniqueness
+
+    while (test_strings.size() < num_strings) {
+        int length = length_dist(gen);
+        std::string str;
+        str.reserve(length);
+
+        for (int i = 0; i < length; ++i) {
+            str.push_back(static_cast<char>(char_dist(gen)));
+        }
+
+        // Ensure string uniqueness
+        if (string_set.insert(str).second) {
+            test_strings.push_back(str);
+        }
+    }
+
+    // Encode all strings
+    for (const auto& str : test_strings) {
+        encoder.encode(str, stream);
+    }
+    encoder.flush(stream);
+
+    DictionaryDecoder decoder;
+    decoder.init();
+
+    // Decode and verify all strings
+    for (const auto& expected_str : test_strings) {
+        std::string decoded_str = decoder.read_string(stream);
+        ASSERT_EQ(decoded_str, expected_str);
     }
 }
 

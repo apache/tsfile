@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "common/allocator/my_string.h"
+#include "common/datatype/date_converter.h"
 #include "common/db_common.h"
 
 namespace storage {
@@ -30,18 +31,15 @@ struct Field {
     Field() : type_(common::INVALID_DATATYPE) {}
     Field(common::TSDataType type) : type_(type) {}
 
-    ~Field() {
-        free_memory();
-    }
+    ~Field() { free_memory(); }
 
     FORCE_INLINE void free_memory() {
-        if (type_ == common::TEXT && value_.sval_ != nullptr) {
-            free(value_.sval_);
-            value_.sval_ = nullptr;
-        }
-        if (type_ == common::STRING && value_.strval_ != nullptr) {
-            delete value_.strval_;
-            value_.strval_ = nullptr;
+        if (type_ == common::BLOB || type_ == common::TEXT ||
+            type_ == common::STRING) {
+            if (value_.strval_ != nullptr) {
+                delete value_.strval_;
+                value_.strval_ = nullptr;
+            }
         }
     }
 
@@ -55,9 +53,8 @@ struct Field {
                is_type(common::NULL_TYPE);
     }
 
-    template <class T>
-    FORCE_INLINE void set_value(common::TSDataType type, T val,
-                                common::PageArena &pa) {
+    void set_value(common::TSDataType type, void *val, size_t len,
+                   common::PageArena &pa) {
         if (val == nullptr) {
             type_ = common::NULL_TYPE;
             return;
@@ -68,10 +65,12 @@ struct Field {
                 value_.bval_ = *(bool *)val;
                 break;
             }
+            case common::DATE:
             case common::INT32: {
                 value_.ival_ = *(int32_t *)val;
                 break;
             }
+            case common::TIMESTAMP:
             case common::INT64: {
                 value_.lval_ = *(int64_t *)val;
                 break;
@@ -84,15 +83,14 @@ struct Field {
                 value_.dval_ = *(double *)val;
                 break;
             }
+            case common::TEXT:
+            case common::BLOB:
             case common::STRING: {
                 value_.strval_ = new common::String();
-                value_.strval_->dup_from(*(common::String *)val, pa);
+                value_.strval_->dup_from(
+                    std::string(static_cast<char *>(val), len), pa);
                 break;
             }
-            // case common::TEXT: {
-            //   value_.sval_ = strdup(val);
-            //   break;
-            // }
             default: {
                 assert(false);
                 std::cout << "unknown data type" << std::endl;
@@ -107,14 +105,13 @@ struct Field {
                 return value_.bval_;
             case common::TSDataType::INT32:
                 return value_.ival_;
+            case common::TSDataType::TIMESTAMP:
             case common::TSDataType::INT64:
                 return value_.lval_;
             case common::TSDataType::FLOAT:
                 return value_.fval_;
             case common::TSDataType::DOUBLE:
                 return value_.dval_;
-            // case common::TSDataType::TEXT :
-            //     return value_.sval_;
             default:
                 std::cout << "unknown data type" << std::endl;
                 break;
@@ -122,8 +119,18 @@ struct Field {
         return -1;  // when data type is unknown
     }
 
+    FORCE_INLINE std::tm get_date_value() {
+        std::tm date_value{};
+        if (type_ == common::DATE) {
+            common::DateConverter::int_to_date(value_.ival_, date_value);
+            return date_value;
+        }
+        return date_value;
+    }
+
     FORCE_INLINE common::String *get_string_value() {
-        if (type_ == common::STRING) {
+        if (type_ == common::STRING || type_ == common::TEXT ||
+            type_ == common::BLOB) {
             return value_.strval_;
         } else {
             return nullptr;
@@ -211,6 +218,7 @@ class RowRecord {
     FORCE_INLINE void reset() {
         for (uint32_t i = 0; i < col_num_; ++i) {
             if ((*fields_)[i]->type_ == common::TEXT ||
+                (*fields_)[i]->type_ == common::BLOB ||
                 (*fields_)[i]->type_ == common::STRING) {
                 (*fields_)[i]->free_memory();
             }

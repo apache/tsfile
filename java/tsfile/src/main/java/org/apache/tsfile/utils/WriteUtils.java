@@ -61,4 +61,9 @@ public class WriteUtils {
     }
     return a.compareTo(b);
   }
+
+  @FunctionalInterface
+  public interface TabletAddValueFunction {
+    void addValue(Tablet tablet, int row, int column);
+  }
 }

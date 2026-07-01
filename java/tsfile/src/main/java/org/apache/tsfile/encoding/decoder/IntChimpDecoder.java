@@ -102,18 +102,18 @@ public class IntChimpDecoder extends GorillaDecoderV2 {
         current = (current + 1) % PREVIOUS_VALUES;
         storedValues[current] = storedValue;
         return storedValue;
-        // case 10: use the previous leading zeros and
-        // and just read the meaningful XORed value.
+      // case 10: use the previous leading zeros and
+      // and just read the meaningful XORed value.
       case 2:
         value = (int) readLong(VALUE_BITS_LENGTH_32BIT - storedLeadingZeros, in);
         storedValue = storedValue ^ value;
         current = (current + 1) % PREVIOUS_VALUES;
         storedValues[current] = storedValue;
         return storedValue;
-        // case 01:  read the index of the previous value, the length of
-        // the number of leading zeros in the next 3 bits, then read
-        // the length of the meaningful XORed value in the next 5
-        // bits. Finally read the meaningful bits of the XORed value.
+      // case 01:  read the index of the previous value, the length of
+      // the number of leading zeros in the next 3 bits, then read
+      // the length of the meaningful XORed value in the next 5
+      // bits. Finally read the meaningful bits of the XORed value.
       case 1:
         int fill = CASE_ONE_METADATA_LENGTH;
         int temp = (int) readLong(fill, in);
@@ -132,8 +132,8 @@ public class IntChimpDecoder extends GorillaDecoderV2 {
         current = (current + 1) % PREVIOUS_VALUES;
         storedValues[current] = storedValue;
         return storedValue;
-        // case 00: the values are identical, just read
-        // the index of the previous value
+      // case 00: the values are identical, just read
+      // the index of the previous value
       default:
         int previousIndex = (int) readLong(PREVIOUS_VALUES_LOG2, in);
         storedValue = storedValues[previousIndex];

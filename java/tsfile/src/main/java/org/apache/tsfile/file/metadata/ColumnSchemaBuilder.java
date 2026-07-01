@@ -56,6 +56,21 @@ public class ColumnSchemaBuilder {
     return this;
   }
 
+  @TsFileApi
+  public String getColumnName() {
+    return columnName;
+  }
+
+  @TsFileApi
+  public TSDataType getDataType() {
+    return columnDataType;
+  }
+
+  @TsFileApi
+  public ColumnCategory getColumnCategory() {
+    return columnCategory;
+  }
+
   private void validateParameters() {
     if (columnName == null) {
       throw new IllegalStateException("Column name must be set before building");

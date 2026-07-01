@@ -52,11 +52,6 @@ TEST_F(TimeChunkWriterTest, InitWithParameters) {
     writer.destroy();
 }
 
-TEST_F(TimeChunkWriterTest, WriteBoolean) {
-    EXPECT_EQ(time_chunk_writer.write(true), E_OK);
-    EXPECT_EQ(time_chunk_writer.write(false), E_OK);
-}
-
 TEST_F(TimeChunkWriterTest, WriteLargeDataSet) {
     for (int i = 0; i < 10000; ++i) {
         time_chunk_writer.write(i);

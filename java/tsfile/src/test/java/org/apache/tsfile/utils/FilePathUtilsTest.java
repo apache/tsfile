@@ -16,9 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.utils;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -26,6 +26,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+
+import static org.apache.tsfile.external.commons.io.FileUtils.forceMkdirParent;
 
 public class FilePathUtilsTest {
 
@@ -51,7 +53,7 @@ public class FilePathUtilsTest {
     tsFile = new File(fullPath);
     boolean success = false;
     try {
-      FileUtils.forceMkdirParent(tsFile);
+      forceMkdirParent(tsFile);
       success = tsFile.createNewFile();
     } catch (IOException e) {
       Assert.fail(e.getMessage());

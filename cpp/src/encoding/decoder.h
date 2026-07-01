@@ -29,7 +29,7 @@ class Decoder {
     Decoder() {}
     virtual ~Decoder() {}
     virtual void reset() = 0;
-    virtual bool has_remaining() = 0;
+    virtual bool has_remaining(const common::ByteStream &buffer) = 0;
     virtual int read_boolean(bool &ret_value, common::ByteStream &in) = 0;
     virtual int read_int32(int32_t &ret_value, common::ByteStream &in) = 0;
     virtual int read_int64(int64_t &ret_value, common::ByteStream &in) = 0;

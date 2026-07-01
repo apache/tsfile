@@ -79,10 +79,7 @@ struct PageData {
         int ret = common::E_OK;                                                \
         /* std::cout << "page_writer writer: time=" << timestamp << ", value=" \
          * << value << std::endl; */                                           \
-        if (UNLIKELY(data_type_ != TSDATATYPE)) {                              \
-            ret = common::E_TYPE_NOT_MATCH;                                    \
-        } else if (RET_FAIL(                                                   \
-                       time_encoder_->encode(timestamp, time_out_stream_))) {  \
+        if (RET_FAIL(time_encoder_->encode(timestamp, time_out_stream_))) {    \
         } else if (RET_FAIL(                                                   \
                        value_encoder_->encode(value, value_out_stream_))) {    \
         } else {                                                               \
@@ -113,22 +110,44 @@ class PageWriter {
     void destroy();
 
     FORCE_INLINE int write(int64_t timestamp, bool value) {
-        PW_DO_WRITE_FOR_TYPE(common::BOOLEAN);
+        if (UNLIKELY(data_type_ != common::BOOLEAN)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int32_t value) {
-        PW_DO_WRITE_FOR_TYPE(common::INT32);
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int64_t value) {
-        PW_DO_WRITE_FOR_TYPE(common::INT64);
+        if (UNLIKELY(data_type_ != common::INT64 &&
+                     data_type_ != common::TIMESTAMP)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, float value) {
-        PW_DO_WRITE_FOR_TYPE(common::FLOAT);
+        if (UNLIKELY(data_type_ != common::FLOAT)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, double value) {
-        PW_DO_WRITE_FOR_TYPE(common::DOUBLE);
+        if (UNLIKELY(data_type_ != common::DOUBLE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        PW_DO_WRITE_FOR_TYPE(common::STRING);
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        PW_DO_WRITE_FOR_TYPE();
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }

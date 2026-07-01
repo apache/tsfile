@@ -52,12 +52,11 @@ class Cache {
     typedef std::list<KeyValuePair<Key, Value>> list_type;
     typedef Map map_type;
     /**
-     * the maxSize is the soft limit of entries and (maxSize + elasticity) is the
-     * hard limit
-     * the cache is allowed to grow till (maxSize + elasticity) and is pruned
-     * back to maxSize entries
-     * set maxSize = 0 for an unbounded cache (but in that
-     * case, you're better off using a std::unordered_map directly anyway! :)
+     * the maxSize is the soft limit of entries and (maxSize + elasticity) is
+     * the hard limit the cache is allowed to grow till (maxSize + elasticity)
+     * and is pruned back to maxSize entries set maxSize = 0 for an unbounded
+     * cache (but in that case, you're better off using a std::unordered_map
+     * directly anyway! :)
      */
     explicit Cache(size_t maxSize = 64, size_t elasticity = 10)
         : maxSize_(maxSize), elasticity_(elasticity) {}

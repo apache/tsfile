@@ -40,7 +40,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
                                        Filter* time_filter,
                                        Filter* field_filter);
     ~SingleDeviceTsBlockReader() { close(); }
-    int has_next(bool &has_next) override;
+    int has_next(bool& has_next) override;
     int next(common::TsBlock*& ret_block) override;
     int init(DeviceQueryTask* device_query_task, uint32_t block_size,
              Filter* time_filter, Filter* field_filter);
@@ -48,7 +48,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
 
    private:
     int construct_column_context(const ITimeseriesIndex* time_series_index,
-                                  Filter* time_filter);
+                                 Filter* time_filter);
     int fill_measurements(
         std::vector<MeasurementColumnContext*>& column_contexts);
     int fill_ids();
@@ -124,13 +124,11 @@ class SingleMeasurementColumnContext final : public MeasurementColumnContext {
                          column_context_map) override;
     int init(DeviceQueryTask* device_query_task,
              const ITimeseriesIndex* time_series_index, Filter* time_filter,
-             const std::vector<int32_t>& pos_in_result,
-             common::PageArena& pa);
+             const std::vector<int32_t>& pos_in_result, common::PageArena& pa);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;
     int move_iter() override;
-
 
    private:
     std::string column_name_;

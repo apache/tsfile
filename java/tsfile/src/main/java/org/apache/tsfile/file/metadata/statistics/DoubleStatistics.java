@@ -129,6 +129,16 @@ public class DoubleStatistics extends Statistics<Double> {
   }
 
   @Override
+  public void updateStats(double minValue, double maxValue) {
+    if (minValue < this.minValue) {
+      this.minValue = minValue;
+    }
+    if (maxValue > this.maxValue) {
+      this.maxValue = maxValue;
+    }
+  }
+
+  @Override
   public Double getMinValue() {
     return minValue;
   }

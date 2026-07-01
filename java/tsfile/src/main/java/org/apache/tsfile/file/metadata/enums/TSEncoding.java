@@ -41,7 +41,9 @@ public enum TSEncoding {
   FREQ((byte) 10),
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
-  RLBE((byte) 13);
+  RLBE((byte) 13),
+  CAMEL((byte) 14),
+  SUBCOLUMN((byte) 15);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
@@ -63,6 +65,7 @@ public enum TSEncoding {
     intSet.add(TSEncoding.CHIMP);
     intSet.add(TSEncoding.SPRINTZ);
     intSet.add(TSEncoding.RLBE);
+    intSet.add(TSEncoding.SUBCOLUMN);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
@@ -78,9 +81,15 @@ public enum TSEncoding {
     floatSet.add(TSEncoding.CHIMP);
     floatSet.add(TSEncoding.SPRINTZ);
     floatSet.add(TSEncoding.RLBE);
+    floatSet.add(TSEncoding.SUBCOLUMN);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
-    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
+
+    Set<TSEncoding> doubleSet = new HashSet<>(floatSet);
+    doubleSet.remove(TSEncoding.SUBCOLUMN);
+    doubleSet.add(TSEncoding.CAMEL);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, doubleSet);
 
     Set<TSEncoding> textSet = new HashSet<>();
     textSet.add(TSEncoding.PLAIN);
@@ -91,6 +100,8 @@ public enum TSEncoding {
     Set<TSEncoding> blobSet = new HashSet<>();
     blobSet.add(TSEncoding.PLAIN);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.BLOB, blobSet);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.OBJECT, blobSet);
   }
 
   TSEncoding(byte type) {
@@ -135,6 +146,10 @@ public enum TSEncoding {
         return TSEncoding.SPRINTZ;
       case 13:
         return TSEncoding.RLBE;
+      case 14:
+        return TSEncoding.CAMEL;
+      case 15:
+        return TSEncoding.SUBCOLUMN;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }

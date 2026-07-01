@@ -24,7 +24,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.read.TsFileSequenceReader;
-import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Pair;
 
 import org.slf4j.Logger;
@@ -43,15 +43,15 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
   private final TsFileSequenceReader tsFileSequenceReader;
   private final Queue<MetadataIndexNode> metadataIndexNodes = new ArrayDeque<>();
   private final Queue<Pair<IDeviceID, MetadataIndexNode>> resultCache = new ArrayDeque<>();
-  private final ExpressionTree idFilter;
+  private final Filter tagFilter;
 
   public DeviceMetaIterator(
       TsFileSequenceReader tsFileSequenceReader,
       MetadataIndexNode metadataIndexNode,
-      ExpressionTree idFilter) {
+      Filter tagFilter) {
     this.tsFileSequenceReader = tsFileSequenceReader;
     this.metadataIndexNodes.add(metadataIndexNode);
-    this.idFilter = idFilter;
+    this.tagFilter = tagFilter;
   }
 
   @Override
@@ -74,7 +74,8 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
     for (int i = 0; i < leafChildren.size(); i++) {
       IMetadataIndexEntry child = leafChildren.get(i);
       final IDeviceID deviceID = ((DeviceMetadataIndexEntry) child).getDeviceID();
-      if (idFilter != null && !idFilter.satisfy(deviceID)) {
+      // time is only a placeholder here
+      if (tagFilter != null && !tagFilter.satisfyRow(0, deviceID.getSegments())) {
         continue;
       }
 
@@ -114,6 +115,7 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
           if (!resultCache.isEmpty()) {
             return;
           }
+          break;
         case INTERNAL_DEVICE:
           loadInternalNode(currentNode);
           break;

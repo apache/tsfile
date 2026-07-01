@@ -27,8 +27,9 @@ using namespace storage;
 
 namespace storage {
 TsFileReader::TsFileReader()
-    : read_file_(nullptr), tsfile_executor_(nullptr), table_query_executor_(nullptr) {
-}
+    : read_file_(nullptr),
+      tsfile_executor_(nullptr),
+      table_query_executor_(nullptr) {}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -83,12 +84,20 @@ int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
     return ret;
 }
 
-int TsFileReader::query(const std::string &table_name,
-                        const std::vector<std::string> &columns_names,
+int TsFileReader::query(const std::string& table_name,
+                        const std::vector<std::string>& columns_names,
                         int64_t start_time, int64_t end_time,
-                        ResultSet *&result_set) {
+                        ResultSet*& result_set) {
+    return this->query(table_name, columns_names, start_time, end_time,
+                       result_set, nullptr);
+}
+
+int TsFileReader::query(const std::string& table_name,
+                        const std::vector<std::string>& columns_names,
+                        int64_t start_time, int64_t end_time,
+                        ResultSet*& result_set, Filter* tag_filter) {
     int ret = E_OK;
-    TsFileMeta *tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
         return E_TSFILE_WRITER_META_ERR;
     }
@@ -97,19 +106,92 @@ int TsFileReader::query(const std::string &table_name,
     if (table_schema == nullptr) {
         return E_TABLE_NOT_EXIST;
     }
-    std::vector<std::string> columns_names_lowercase(columns_names);
-    for (auto &column_name : columns_names_lowercase) {
-        to_lowercase_inplace(column_name);
-    }
-
-    std::vector<TSDataType> data_types = table_schema->get_data_types();
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ret = table_query_executor_->query(to_lower(table_name), columns_names_lowercase, time_filter, nullptr, nullptr, result_set);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names,
+                                       time_filter, tag_filter, nullptr,
+                                       result_set);
     return ret;
 }
 
-void TsFileReader::destroy_query_data_set(storage::ResultSet *qds) {
+int TsFileReader::query_table_on_tree(
+    const std::vector<std::string>& measurement_names, int64_t star_time,
+    int64_t end_time, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    auto device_ids = this->get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;
+    std::unordered_set<std::string> measurement_names_set_to_query;
+    size_t device_max_len = 0;
+
+    if (measurement_names.empty()) {
+        for (auto& device_name : device_ids) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+            satisfied_device_ids.push_back(device_name);
+            for (auto& schema : schemas) {
+                measurement_names_set_to_query.insert(schema.measurement_name_);
+            }
+            device_name->split_table_name();
+            if (device_name->get_split_seg_num() > device_max_len) {
+                device_max_len = device_name->get_split_seg_num();
+            }
+        }
+    } else {
+        std::unordered_set<std::string> found_measurement_names;
+        std::unordered_set<std::string> required_measurement_names(
+            measurement_names.begin(), measurement_names.end());
+        for (auto& device_name : device_ids) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+
+            bool device_has_required_measurement_names = false;
+            for (auto& schema : schemas) {
+                if (required_measurement_names.find(schema.measurement_name_) !=
+                    required_measurement_names.end()) {
+                    found_measurement_names.insert(schema.measurement_name_);
+                    device_has_required_measurement_names = true;
+                }
+            }
+            if (device_has_required_measurement_names) {
+                device_name->split_table_name();
+                satisfied_device_ids.push_back(device_name);
+                if (device_name->get_split_seg_num() > device_max_len) {
+                    device_max_len = device_name->get_split_seg_num();
+                }
+            }
+        }
+
+        if (found_measurement_names.size() <
+            required_measurement_names.size()) {
+            return E_COLUMN_NOT_EXIST;
+        }
+        measurement_names_set_to_query = found_measurement_names;
+    }
+    std::vector<std::string> measurement_names_to_query;
+    // Get all columns.
+    if (measurement_names.empty() && !measurement_names_set_to_query.empty()) {
+        for (auto& measurement_name : measurement_names_set_to_query) {
+            measurement_names_to_query.push_back(measurement_name);
+        }
+    } else {
+        measurement_names_to_query = measurement_names;
+    }
+    std::vector<std::string> columns_names(device_max_len);
+    for (int i = 0; i < device_max_len; i++) {
+        columns_names[i] = "col_" + std::to_string(i);
+    }
+    Filter* time_filter = new TimeBetween(star_time, end_time, false);
+    ret = table_query_executor_->query_on_tree(
+        satisfied_device_ids, columns_names, measurement_names_to_query,
+        time_filter, result_set);
+    return ret;
+}
+
+void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
     tsfile_executor_->destroy_query_data_set(qds);
 }
 
@@ -124,6 +206,20 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
         auto index_node =
             tsfile_meta->table_metadata_index_node_map_[table_name];
         get_all_devices(device_ids, index_node, pa);
+    }
+    return device_ids;
+}
+
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    if (tsfile_meta != nullptr) {
+        PageArena pa;
+        pa.init(512, MOD_TSFILE_READER);
+        for (auto entry : tsfile_meta->table_metadata_index_node_map_) {
+            auto index_node = entry.second;
+            get_all_devices(device_ids, index_node, pa);
+        }
     }
     return device_ids;
 }
@@ -201,26 +297,27 @@ ResultSet* TsFileReader::read_timeseries(
     return nullptr;
 }
 
-std::shared_ptr<TableSchema> TsFileReader::get_table_schema(const std::string &table_name) {
-    TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
-    MetaIndexNode *table_root = nullptr;
+std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
+    const std::string& table_name) {
+    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
+    MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
     if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
-                                                         table_root))) {
-    } else if (IS_FAIL(
-                   file_metadata->get_table_schema(to_lower(table_name), table_schema))) {
+                                                        table_root))) {
+    } else if (IS_FAIL(file_metadata->get_table_schema(to_lower(table_name),
+                                                       table_schema))) {
     }
     return table_schema;
 }
 
-std::vector<std::shared_ptr<TableSchema>> TsFileReader::get_all_table_schemas() {
-    TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
+std::vector<std::shared_ptr<TableSchema>>
+TsFileReader::get_all_table_schemas() {
+    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
     std::vector<std::shared_ptr<TableSchema>> table_schemas;
     for (const auto& table_schema : file_metadata->table_schemas_) {
         table_schemas.push_back(table_schema.second);
     }
     return table_schemas;
 }
-
 
 }  // namespace storage

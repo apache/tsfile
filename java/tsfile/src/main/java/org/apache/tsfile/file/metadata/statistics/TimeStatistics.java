@@ -76,22 +76,22 @@ public class TimeStatistics extends Statistics<Long> {
 
   @Override
   public Long getMinValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "min value"));
+    return getStartTime();
   }
 
   @Override
   public Long getMaxValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "max value"));
+    return getEndTime();
   }
 
   @Override
   public Long getFirstValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "first value"));
+    return getStartTime();
   }
 
   @Override
   public Long getLastValue() {
-    throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, "last value"));
+    return getEndTime();
   }
 
   @Override

@@ -1,15 +1,11 @@
-package org.apache.tsfile.encoding;
+package org.apache.iotdb.tsfile.encoding;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
 
 import org.junit.Test;
 
@@ -496,24 +492,66 @@ public class BUFFTest {
     }
 
     @Test
-    public void testSubcolumn() throws IOException {
-        String parent_dir = "D:/github/xjz17/subcolumn/";
+    public void test0() {
+        // float f = -6.1415f;
+        float f = 444804.97f;
+        int decimal = 4;
+        // float f = 23.1415f;
+        // int decimal = 4;
 
-        String input_parent_dir = parent_dir + "dataset/";
+        int bits = Float.floatToIntBits(f);
 
-        String output_parent_dir = "D:/encoding-subcolumn/result/";
-        // String output_parent_dir = parent_dir + "result/";
+        int sign = (bits >> 31) & 1;
+        int exponent = (bits >> 23) & 0xFF;
+        int mantissa = bits & 0x7FFFFF;
+
+        int actualExponent = exponent - 127;
+
+        if (actualExponent >= 0) {
+            int mask = (1 << (23 - actualExponent)) - 1;
+            mantissa &= mask;
+        } else {
+            mantissa += 1 << 23;
+        }
+
+        int shift = 23 - actualExponent - bits_needed[decimal];
+
+        if (shift < 0) {
+            mantissa <<= -shift;
+        } else {
+            mantissa >>= shift;
+        }
+
+        if (exponent == 0) {
+            mantissa = 0;
+        }
+
+        System.out.println(mantissa);
+
+        double expectedFractionalPart = Math.abs(f) - Math.floor(Math.abs(f));
+        double calculatedFractionalPart = mantissa / Math.pow(2, bits_needed[decimal]);
+
+        System.out.println(expectedFractionalPart);
+        System.out.println(calculatedFractionalPart);
+
+        assert Math.abs(expectedFractionalPart - calculatedFractionalPart) < Math.pow(10, -decimal);
+    }
+
+    @Test
+    public void testBUFF() throws IOException {
+        String parent_dir = "D:/github/xjz17/subcolumn/elf_resources/dataset/";
+        // String parent_dir = "D:/compress-subcolumn/dataset/";
+
+        String output_parent_dir = "D:/compress-subcolumn/";
 
         String outputPath = output_parent_dir + "buff.csv";
 
         int block_size = 1024;
+        // int block_size = 8192;
 
-        int repeatTime = 100;
-
+        int repeatTime = 500;
+        // TODO 真正计算时，记得注释掉将下面的内容
         // repeatTime = 1;
-
-        List<String> integerDatasets = new ArrayList<>();
-        integerDatasets.add("Wine-Tasting");
 
         CsvWriter writer = new CsvWriter(outputPath, ',', StandardCharsets.UTF_8);
         writer.setRecordDelimiter('\n');
@@ -529,7 +567,7 @@ public class BUFFTest {
         };
         writer.writeRecord(head);
 
-        File directory = new File(input_parent_dir);
+        File directory = new File(parent_dir);
         // File[] csvFiles = directory.listFiles();
         File[] csvFiles = directory.listFiles((dir, name) -> name.endsWith(".csv"));
 
@@ -545,9 +583,6 @@ public class BUFFTest {
             int max_decimal = 0;
             while (loader.readRecord()) {
                 String f_str = loader.getValues()[0];
-                if (f_str.isEmpty()) {
-                    continue;
-                }
                 int cur_decimal = getDecimalPrecision(f_str);
                 if (cur_decimal > max_decimal)
                     max_decimal = cur_decimal;
@@ -580,26 +615,27 @@ public class BUFFTest {
 
             long e = System.nanoTime();
             encodeTime += ((e - s) / repeatTime);
+            // compressed_size += length / 8;
             compressed_size += length;
-
-            double ratioTmp;
-
-            if (integerDatasets.contains(datasetName)) {
-                ratioTmp = compressed_size / (double) (data1.size() * Integer.BYTES);
-            } else {
-                ratioTmp = compressed_size / (double) (data1.size() * Long.BYTES);
-            }
-
+            double ratioTmp = compressed_size / (double) (data1.size() * Long.BYTES);
             ratio += ratioTmp;
 
             System.out.println("Decode");
 
-            float[] data2_arr_decoded = new float[data1.size()];
-
             s = System.nanoTime();
 
             for (int repeat = 0; repeat < repeatTime; repeat++) {
-                data2_arr_decoded = Decoder(encoded_result);
+                float[] data2_arr_decoded = Decoder(encoded_result);
+                for (int i = 0; i < data2_arr_decoded.length; i++) {
+                    // assert Math.abs(data2_arr[i] - data2_arr_decoded[i]) < Math.pow(10,
+                    // -max_decimal);
+                    // if (!(Math.abs(data2_arr[i] - data2_arr_decoded[i]) < Math.pow(10,
+                    // -max_decimal))) {
+                    // System.out.println(data2_arr[i] + " " + data2_arr_decoded[i]);
+                    // System.out.println(i);
+                    // break;
+                    // }
+                }
             }
 
             e = System.nanoTime();
@@ -618,138 +654,6 @@ public class BUFFTest {
             System.out.println(ratio);
         }
 
-        writer.close();
-    }
-
-    @Test
-    public void testTransData() throws IOException {
-        String parent_dir = "D:/github/xjz17/subcolumn/";
-
-        String output_parent_dir = "D:/encoding-subcolumn/trans_data_result/";
-        // String output_parent_dir = parent_dir + "trans_data_result/";
-
-        String input_parent_dir = parent_dir + "trans_data/";
-
-        ArrayList<String> input_path_list = new ArrayList<>();
-        ArrayList<String> output_path_list = new ArrayList<>();
-        ArrayList<String> dataset_name = new ArrayList<>();
-        ArrayList<Integer> dataset_block_size = new ArrayList<>();
-
-        try (Stream<Path> paths = Files.walk(Paths.get(input_parent_dir))) {
-            paths.filter(Files::isDirectory)
-                    .filter(path -> !path.equals(Paths.get(input_parent_dir)))
-                    .forEach(dir -> {
-                        String name = dir.getFileName().toString();
-                        dataset_name.add(name);
-                        input_path_list.add(dir.toString());
-                        dataset_block_size.add(1024);
-                    });
-        }
-
-        String outputPath = output_parent_dir + "buff.csv";
-        CsvWriter writer = new CsvWriter(outputPath, ',', StandardCharsets.UTF_8);
-        writer.setRecordDelimiter('\n');
-
-        String[] head = {
-                "Dataset",
-                "Encoding Algorithm",
-                "Encoding Time",
-                "Decoding Time",
-                "Points",
-                "Compressed Size",
-                "Compression Ratio"
-        };
-        writer.writeRecord(head);
-
-        int repeatTime = 100;
-
-        for (int file_i = 0; file_i < input_path_list.size(); file_i++) {
-
-            String inputPath = input_path_list.get(file_i);
-            System.out.println(inputPath);
-
-            File file = new File(inputPath);
-            File[] tempList = file.listFiles();
-
-            long totalEncodeTime = 0;
-            long totalDecodeTime = 0;
-            double totalCompressedSize = 0;
-            int totalPoints = 0;
-
-            for (File f : tempList) {
-                String datasetName = extractFileName(f.toString());
-                InputStream inputStream = Files.newInputStream(f.toPath());
-
-                CsvReader loader = new CsvReader(inputStream, StandardCharsets.UTF_8);
-                ArrayList<Integer> data1 = new ArrayList<>();
-                ArrayList<Integer> data2 = new ArrayList<>();
-
-                int max_decimal = 0;
-                loader.readHeaders();
-                while (loader.readRecord()) {
-                    // String value = loader.getValues()[index];
-                    data1.add(Integer.valueOf(loader.getValues()[0]));
-                    data2.add(Integer.valueOf(loader.getValues()[1]));
-                    int cur_decimal = getDecimalPrecision(loader.getValues()[1]);
-                    max_decimal = Math.max(max_decimal, cur_decimal);
-                    // data.add(Integer.valueOf(value));
-                }
-                inputStream.close();
-                float[] data2_arr = new float[data1.size()];
-                for (int i = 0; i < data2.size(); i++) {
-                    data2_arr[i] = data2.get(i);
-                }
-                byte[] encoded_result = new byte[data2_arr.length * 4];
-                long encodeTime = 0;
-                long decodeTime = 0;
-                double ratio = 0;
-                double compressed_size = 0;
-
-                int length = 0;
-
-                long s = System.nanoTime();
-                for (int repeat = 0; repeat < repeatTime; repeat++) {
-                    length = Encoder(data2_arr, dataset_block_size.get(file_i), max_decimal, encoded_result);
-                }
-
-                long e = System.nanoTime();
-                encodeTime += ((e - s) / repeatTime);
-                compressed_size += length;
-                double ratioTmp = compressed_size / (double) (data1.size() * Integer.BYTES);
-                ratio += ratioTmp;
-                s = System.nanoTime();
-
-                float[] data2_arr_decoded = new float[data1.size()];
-
-                for (int repeat = 0; repeat < repeatTime; repeat++) {
-                    data2_arr_decoded = Decoder(encoded_result);
-                }
-
-                e = System.nanoTime();
-                decodeTime += ((e - s) / repeatTime);
-
-                totalEncodeTime += encodeTime;
-                totalDecodeTime += decodeTime;
-                totalCompressedSize += compressed_size;
-                totalPoints += data1.size();
-
-            }
-
-            double compressionRatio = totalCompressedSize / (totalPoints * Integer.BYTES);
-
-            String[] record = {
-                    dataset_name.get(file_i),
-                    "BUFF",
-                    String.valueOf(totalEncodeTime),
-                    String.valueOf(totalDecodeTime),
-                    String.valueOf(totalPoints),
-                    String.valueOf(totalCompressedSize),
-                    String.valueOf(compressionRatio)
-            };
-
-            writer.writeRecord(record);
-            System.out.println(compressionRatio);
-        }
         writer.close();
     }
 }

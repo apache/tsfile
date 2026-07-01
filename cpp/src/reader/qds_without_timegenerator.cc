@@ -68,8 +68,9 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
 
     for (size_t i = 0; i < path_count; i++) {
         get_next_tsblock(i, true);
-        data_types.push_back(value_iters_[i] != nullptr ?
-            value_iters_[i]->get_data_type() : TSDataType::NULL_TYPE);
+        data_types.push_back(value_iters_[i] != nullptr
+                                 ? value_iters_[i]->get_data_type()
+                                 : TSDataType::NULL_TYPE);
     }
     result_set_metadata_ =
         std::make_shared<ResultSetMetadata>(column_names, data_types);
@@ -117,15 +118,16 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
     }
     int64_t time = heap_time_.begin()->first;
     row_record_->set_timestamp(time);
-    row_record_->get_field(0)->set_value(INT64, &time, pa_);
+    row_record_->get_field(0)->set_value(INT64, &time, get_len(INT64), pa_);
 
     uint32_t count = heap_time_.count(time);
     std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
+        auto val_datatype = value_iters_[iter->second]->get_data_type();
+        void *val_ptr = value_iters_[iter->second]->read(&len);
         row_record_->get_field(iter->second + 1)
-            ->set_value(value_iters_[iter->second]->get_data_type(),
-                        value_iters_[iter->second]->read(&len), pa_);
+            ->set_value(val_datatype, val_ptr, len, pa_);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));
