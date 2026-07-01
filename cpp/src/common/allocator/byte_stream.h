@@ -20,6 +20,7 @@
 #ifndef COMMON_ALLOCATOR_BYTE_STREAM_H
 #define COMMON_ALLOCATOR_BYTE_STREAM_H
 
+#include <common/constant/tsfile_constant.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -823,6 +824,78 @@ class SerializationUtil {
         ui64 = (ui64 << 8) | (buf[7] & 0xFF);
         return ret;
     }
+
+    FORCE_INLINE static int write_int_little_endian_padded_on_bit_width(
+        int32_t value, ByteStream &out, int bitWidth) {
+        int paddedByteNum = (bitWidth + 7) / 8;
+        if (paddedByteNum > 4) {
+            return E_TSFILE_CORRUPTED;
+        }
+        auto u = static_cast<uint32_t>(value);
+        for (int i = 0; i < paddedByteNum; ++i) {
+            uint8_t byte = (u >> (i * 8)) & 0xFF;
+            out.write_buf(&byte, 1);
+        }
+        return E_OK;
+    }
+
+    FORCE_INLINE static int write_int64_little_endian_padded_on_bit_width(
+        int64_t value, ByteStream &out, int bit_width) {
+        int padded_byte_num = (bit_width + 7) / 8;
+        if (padded_byte_num > 8) {
+            return E_TSFILE_CORRUPTED;
+        }
+        auto u = static_cast<uint64_t>(value);
+        for (int i = 0; i < padded_byte_num; ++i) {
+            uint8_t byte = (u >> (i * 8)) & 0xFF;
+            out.write_buf(&byte, 1);
+        }
+        return E_OK;
+    }
+
+    FORCE_INLINE static int read_int_little_endian_padded_on_bit_width(
+        ByteStream &in, int bitWidth, int32_t &out_val) {
+        int padded_byte_num = (bitWidth + 7) / 8;
+        if (padded_byte_num > 4) {
+            return E_TSFILE_CORRUPTED;
+        }
+        uint8_t buf[4] = {0};
+        uint32_t read_len = 0;
+        int ret = in.read_buf(buf, padded_byte_num, read_len);
+        if (ret != E_OK || read_len != static_cast<uint32_t>(padded_byte_num)) {
+            return E_TSFILE_CORRUPTED;
+        }
+        uint32_t result = 0;
+        for (int i = 0; i < padded_byte_num; ++i) {
+            result |= static_cast<uint32_t>(buf[i]) << (i * 8);
+        }
+        out_val = static_cast<int32_t>(result);
+        return E_OK;
+    }
+
+    FORCE_INLINE static int chunk_read_all_data(ByteStream &in, ByteStream &out,
+                                                size_t chunk_size = 4096) {
+        char *buffer = new char[chunk_size];
+        int ret = common::E_OK;
+        while (in.remaining_size() > 0) {
+            // Adjust read size based on remaining input size
+            uint32_t bytes_to_read = static_cast<uint32_t>(
+                std::min(chunk_size, static_cast<size_t>(in.remaining_size())));
+
+            uint32_t bytes_read = 0;
+            ret = in.read_buf(buffer, bytes_to_read, bytes_read);
+            if (ret != E_OK || bytes_read == 0) {
+                break;
+            }
+            if (RET_FAIL(out.write_buf(buffer, bytes_read))) {
+                ret = common::E_ENCODE_ERR;
+                break;
+            }
+        }
+        delete[] buffer;
+        return ret;
+    }
+
     // caller guarantee buffer has at least 1 byte
     FORCE_INLINE static uint8_t read_ui8(char *buffer) {
         return *(uint8_t *)buffer;
@@ -1003,17 +1076,22 @@ class SerializationUtil {
         return common::E_OK;
     }
     FORCE_INLINE static int write_var_int(int32_t i32, ByteStream &out) {
-        // TODO 8byte to 4byte.
-        // but in IoTDB java, it has only write_var_uint(i32)
-        i32 = i32 << 1;
-        return do_write_var_uint((uint32_t)i32, out);
+        uint32_t ui32 = static_cast<uint32_t>(i32) << 1;
+        if (i32 < 0) {
+            ui32 = ~ui32;
+        }
+        return do_write_var_uint(ui32, out);
     }
+
     FORCE_INLINE static int read_var_int(int32_t &i32, ByteStream &in) {
         int ret = common::E_OK;
         uint32_t ui32;
         if (RET_FAIL(do_read_var_uint(ui32, in))) {
         } else {
             i32 = (int32_t)(ui32 >> 1);
+            if ((ui32 & 1) != 0) {
+                i32 = ~i32;
+            }
         }
         return ret;
     }
@@ -1041,6 +1119,54 @@ class SerializationUtil {
         }
         return ret;
     }
+
+    // If the str is nullptr, NO_STR_TO_READ will be added instead.
+    FORCE_INLINE static int write_var_char_ptr(const std::string *str,
+                                               ByteStream &out) {
+        int ret = common::E_OK;
+        if (str == nullptr) {
+            write_var_int(storage::NO_STR_TO_READ, out);
+            return ret;
+        }
+        size_t str_len = str->length();
+        if (RET_FAIL(write_var_int(str_len, out))) {
+            return ret;
+        } else if (RET_FAIL(out.write_buf(str->c_str(), str_len))) {
+            return ret;
+        }
+        return ret;
+    }
+
+    // If `str` is not a nullptr after calling `read_var_char_ptr`, it
+    // indicates that memory has been allocated and must be freed.
+    FORCE_INLINE static int read_var_char_ptr(std::string *&str,
+                                              ByteStream &in) {
+        int ret = common::E_OK;
+        int32_t len = 0;
+        int32_t read_len = 0;
+        if (RET_FAIL(read_var_int(len, in))) {
+            return ret;
+        } else {
+            if (len == storage::NO_STR_TO_READ) {
+                str = nullptr;
+                return ret;
+            } else {
+                char *tmp_buf = static_cast<char *>(malloc(len));
+                if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
+                    free(tmp_buf);
+                    return ret;
+                } else if (len != read_len) {
+                    free(tmp_buf);
+                    ret = E_BUF_NOT_ENOUGH;
+                } else {
+                    str = new std::string(tmp_buf, len);
+                    free(tmp_buf);
+                }
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
         int ret = common::E_OK;
         int32_t len = 0;

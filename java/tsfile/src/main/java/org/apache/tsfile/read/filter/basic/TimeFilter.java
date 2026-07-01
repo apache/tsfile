@@ -75,6 +75,11 @@ public abstract class TimeFilter extends Filter {
   }
 
   @Override
+  public boolean satisfyString(long time, String value) {
+    return timeSatisfy(time);
+  }
+
+  @Override
   public boolean satisfyRow(long time, Object[] values) {
     // only use time to filter
     return timeSatisfy(time);
@@ -137,7 +142,7 @@ public abstract class TimeFilter extends Filter {
     return satisfyInfo;
   }
 
-  protected abstract boolean timeSatisfy(long time);
+  public abstract boolean timeSatisfy(long time);
 
   @Override
   public boolean canSkip(IMetadata metadata) {

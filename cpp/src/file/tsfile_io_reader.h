@@ -77,8 +77,7 @@ class TsFileIOReader {
                                 std::vector<ChunkMeta *> &chunk_meta_list);
     int read_device_meta_index(int32_t start_offset, int32_t end_offset,
                                common::PageArena &pa,
-                               MetaIndexNode *&device_meta_index,
-                               bool leaf);
+                               MetaIndexNode *&device_meta_index, bool leaf);
     int get_timeseries_indexes(
         std::shared_ptr<IDeviceID> device_id,
         const std::unordered_set<std::string> &measurement_names,
@@ -92,13 +91,15 @@ class TsFileIOReader {
 
     int load_tsfile_meta_if_necessary();
 
-    int load_device_index_entry(std::shared_ptr<IComparable> target_name,
-                                std::shared_ptr<IMetaIndexEntry> &device_index_entry,
-                                int64_t &end_offset);
+    int load_device_index_entry(
+        std::shared_ptr<IComparable> target_name,
+        std::shared_ptr<IMetaIndexEntry> &device_index_entry,
+        int64_t &end_offset);
 
     int load_measurement_index_entry(
-        const std::string &measurement_name, int64_t start_offset,
-        int64_t end_offset, std::shared_ptr<IMetaIndexEntry> &ret_measurement_index_entry,
+        const std::string &measurement_name,
+        std::shared_ptr<MetaIndexNode> top_node,
+        std::shared_ptr<IMetaIndexEntry> &ret_measurement_index_entry,
         int64_t &ret_end_offset);
 
     int load_all_measurement_index_entry(
@@ -106,10 +107,17 @@ class TsFileIOReader {
         std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t> >
             &ret_measurement_index_entry);
 
+    bool is_aligned_device(std::shared_ptr<MetaIndexNode> measurement_node);
+
+    int get_time_column_metadata(
+        std::shared_ptr<MetaIndexNode> measurement_node,
+        TimeseriesIndex *&ret_timeseries_index, common::PageArena &pa);
+
     int do_load_timeseries_index(const std::string &measurement_name_str,
                                  int64_t start_offset, int64_t end_offset,
                                  common::PageArena &pa,
-                                 ITimeseriesIndex *&ts_index);
+                                 ITimeseriesIndex *&ts_index,
+                                 bool is_aligned = false);
 
     int do_load_all_timeseries_index(
         std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t> >
@@ -126,10 +134,11 @@ class TsFileIOReader {
                               std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
                               int64_t &ret_end_offset);
 
-    int search_from_internal_node(std::shared_ptr<IComparable> target_name,
-                                  std::shared_ptr<MetaIndexNode> index_node,
-                                  std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-                                  int64_t &ret_end_offset);
+    int search_from_internal_node(
+        std::shared_ptr<IComparable> target_name, bool is_device,
+        std::shared_ptr<MetaIndexNode> index_node,
+        std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
+        int64_t &ret_end_offset);
 
     bool filter_stasify(ITimeseriesIndex *ts_index, Filter *time_filter);
 

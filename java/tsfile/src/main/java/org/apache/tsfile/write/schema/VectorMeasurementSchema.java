@@ -25,6 +25,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
 
@@ -42,13 +43,23 @@ import java.util.Objects;
 
 public class VectorMeasurementSchema
     implements IMeasurementSchema, Comparable<VectorMeasurementSchema>, Serializable {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(VectorMeasurementSchema.class);
+  private static final long BUILDER_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
+  private static final byte NO_UNIFIED_COMPRESSOR = -1;
 
   private String deviceId;
   private Map<String, Integer> measurementsToIndexMap;
   private byte[] types;
   private byte[] encodings;
   private TSEncodingBuilder[] encodingConverters;
-  private byte compressor;
+
+  /** For compatibility of old versions. */
+  private byte unifiedCompressor;
+
+  /** [0] is for the time column. */
+  private byte[] compressors;
 
   public VectorMeasurementSchema() {}
 
@@ -75,7 +86,34 @@ public class VectorMeasurementSchema
     }
     this.encodings = encodingsInByte;
     this.encodingConverters = new TSEncodingBuilder[subMeasurements.length];
-    this.compressor = compressionType.serialize();
+    this.unifiedCompressor = compressionType.serialize();
+  }
+
+  public VectorMeasurementSchema(
+      String deviceId,
+      String[] subMeasurements,
+      TSDataType[] types,
+      TSEncoding[] encodings,
+      byte[] compressors) {
+    this.deviceId = deviceId;
+    this.measurementsToIndexMap = new HashMap<>();
+    for (int i = 0; i < subMeasurements.length; i++) {
+      measurementsToIndexMap.put(subMeasurements[i], i);
+    }
+    byte[] typesInByte = new byte[types.length];
+    for (int i = 0; i < types.length; i++) {
+      typesInByte[i] = types[i].serialize();
+    }
+    this.types = typesInByte;
+
+    byte[] encodingsInByte = new byte[encodings.length];
+    for (int i = 0; i < encodings.length; i++) {
+      encodingsInByte[i] = encodings[i].serialize();
+    }
+    this.encodings = encodingsInByte;
+    this.encodingConverters = new TSEncodingBuilder[subMeasurements.length];
+    this.unifiedCompressor = NO_UNIFIED_COMPRESSOR;
+    this.compressors = compressors;
   }
 
   public VectorMeasurementSchema(String deviceId, String[] subMeasurements, TSDataType[] types) {
@@ -92,11 +130,18 @@ public class VectorMeasurementSchema
     this.encodings = new byte[types.length];
     for (int i = 0; i < types.length; i++) {
       this.encodings[i] =
-          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(types[i]))
-              .serialize();
+          TSFileDescriptor.getInstance().getConfig().getValueEncoder(types[i]).serialize();
     }
     this.encodingConverters = new TSEncodingBuilder[subMeasurements.length];
-    this.compressor = TSFileDescriptor.getInstance().getConfig().getCompressor().serialize();
+    this.unifiedCompressor = NO_UNIFIED_COMPRESSOR;
+    // the first column is time
+    this.compressors = new byte[subMeasurements.length + 1];
+    compressors[0] =
+        TSFileDescriptor.getInstance().getConfig().getCompressor(TSDataType.INT64).serialize();
+    for (int i = 0; i < types.length; i++) {
+      compressors[i + 1] =
+          TSFileDescriptor.getInstance().getConfig().getCompressor(types[i]).serialize();
+    }
   }
 
   public VectorMeasurementSchema(
@@ -119,9 +164,24 @@ public class VectorMeasurementSchema
     return deviceId;
   }
 
+  @Deprecated // Aligned series should not invoke this method
   @Override
   public CompressionType getCompressor() {
-    return CompressionType.deserialize(compressor);
+    throw new UnsupportedOperationException("Aligned series should not invoke this method");
+  }
+
+  public CompressionType getTimeCompressor() {
+    if (compressors != null) {
+      return CompressionType.deserialize(compressors[0]);
+    }
+    return CompressionType.deserialize(unifiedCompressor);
+  }
+
+  public CompressionType getValueCompressor(int index) {
+    if (compressors != null) {
+      return CompressionType.deserialize(compressors[index + 1]);
+    }
+    return CompressionType.deserialize(unifiedCompressor);
   }
 
   @Override
@@ -271,7 +331,11 @@ public class VectorMeasurementSchema
     for (byte encoding : encodings) {
       byteLen += ReadWriteIOUtils.write(encoding, buffer);
     }
-    byteLen += ReadWriteIOUtils.write(compressor, buffer);
+    byteLen += ReadWriteIOUtils.write(unifiedCompressor, buffer);
+    if (unifiedCompressor == NO_UNIFIED_COMPRESSOR) {
+      buffer.put(compressors);
+      byteLen += compressors.length;
+    }
 
     return byteLen;
   }
@@ -292,7 +356,11 @@ public class VectorMeasurementSchema
     for (byte encoding : encodings) {
       byteLen += ReadWriteIOUtils.write(encoding, outputStream);
     }
-    byteLen += ReadWriteIOUtils.write(compressor, outputStream);
+    byteLen += ReadWriteIOUtils.write(unifiedCompressor, outputStream);
+    if (unifiedCompressor == NO_UNIFIED_COMPRESSOR) {
+      outputStream.write(compressors);
+      byteLen += compressors.length;
+    }
 
     return byteLen;
   }
@@ -343,7 +411,15 @@ public class VectorMeasurementSchema
     }
     vectorMeasurementSchema.encodings = encodings;
 
-    vectorMeasurementSchema.compressor = ReadWriteIOUtils.readByte(inputStream);
+    vectorMeasurementSchema.unifiedCompressor = ReadWriteIOUtils.readByte(inputStream);
+    if (vectorMeasurementSchema.unifiedCompressor == NO_UNIFIED_COMPRESSOR) {
+      byte[] compressors = new byte[measurementSize + 1];
+      int read = inputStream.read(compressors);
+      if (read != measurementSize) {
+        throw new IOException("Unexpected end of stream when reading compressors");
+      }
+      vectorMeasurementSchema.compressors = compressors;
+    }
     return vectorMeasurementSchema;
   }
 
@@ -370,7 +446,12 @@ public class VectorMeasurementSchema
     }
     vectorMeasurementSchema.encodings = encodings;
 
-    vectorMeasurementSchema.compressor = ReadWriteIOUtils.readByte(buffer);
+    vectorMeasurementSchema.unifiedCompressor = ReadWriteIOUtils.readByte(buffer);
+    if (vectorMeasurementSchema.unifiedCompressor == NO_UNIFIED_COMPRESSOR) {
+      byte[] compressors = new byte[measurementSize + 1];
+      buffer.get(compressors);
+      vectorMeasurementSchema.compressors = compressors;
+    }
     return vectorMeasurementSchema;
   }
 
@@ -386,12 +467,13 @@ public class VectorMeasurementSchema
     return Arrays.equals(types, that.types)
         && Arrays.equals(encodings, that.encodings)
         && Objects.equals(deviceId, that.deviceId)
-        && Objects.equals(compressor, that.compressor);
+        && Objects.equals(unifiedCompressor, that.unifiedCompressor)
+        && Objects.equals(compressors, that.compressors);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(deviceId, types, encodings, compressor);
+    return Objects.hash(deviceId, types, encodings, unifiedCompressor, compressors);
   }
 
   /** compare by vector name */
@@ -419,7 +501,26 @@ public class VectorMeasurementSchema
           TSEncoding.deserialize(encodings[entry.getValue()]).toString());
       sc.addTail("],");
     }
-    sc.addTail(CompressionType.deserialize(compressor).toString());
+    if (unifiedCompressor != NO_UNIFIED_COMPRESSOR) {
+      sc.addTail(CompressionType.deserialize(unifiedCompressor).toString());
+    } else {
+      for (byte compressor : compressors) {
+        sc.addTail(CompressionType.deserialize(compressor).toString()).addTail(",");
+      }
+    }
+
     return sc.toString();
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOf(deviceId)
+        + RamUsageEstimator.sizeOf(types)
+        + RamUsageEstimator.sizeOf(encodings)
+        + (long) encodingConverters.length * RamUsageEstimator.NUM_BYTES_OBJECT_REF
+        + Arrays.stream(encodingConverters)
+            .map(o -> Objects.nonNull(o) ? BUILDER_SIZE : 0)
+            .reduce(0L, Long::sum);
   }
 }

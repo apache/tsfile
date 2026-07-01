@@ -221,4 +221,4 @@ TEST(TimeStatisticTest, BasicFunctionality) {
     EXPECT_EQ(stat.end_time_, 2000);
 }
 
-} // namespace storage
+}  // namespace storage

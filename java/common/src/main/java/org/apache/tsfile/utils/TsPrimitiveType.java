@@ -48,6 +48,7 @@ public abstract class TsPrimitiveType implements Serializable {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return new TsPrimitiveType.TsBinary();
       case VECTOR:
         return new TsPrimitiveType.TsVector();
@@ -79,6 +80,7 @@ public abstract class TsPrimitiveType implements Serializable {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return new TsPrimitiveType.TsBinary((Binary) v);
       case VECTOR:
         return new TsPrimitiveType.TsVector((TsPrimitiveType[]) v);

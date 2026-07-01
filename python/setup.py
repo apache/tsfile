@@ -16,16 +16,18 @@
 # under the License.
 #
 
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
-from Cython.Build import cythonize
-import numpy as np
+import os
 import platform
 import shutil
-import os
+
+import numpy as np
+from Cython.Build import cythonize
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 
 version = "2.1.0.dev0"
 system = platform.system()
+
 
 def copy_tsfile_lib(source_dir, target_dir, suffix):
     lib_file_name = f"libtsfile.{suffix}"
@@ -47,19 +49,32 @@ def copy_tsfile_lib(source_dir, target_dir, suffix):
         os.symlink(lib_file_name, link_name)
 
 
-def copy_tsfile_header(source, target):
-    if os.path.exists(source):
-        shutil.copyfile(source, target)
-
 project_dir = os.path.dirname(os.path.abspath(__file__))
+tsfile_py_include = os.path.join(project_dir, "tsfile", "include")
+
+if os.path.exists(tsfile_py_include):
+    shutil.rmtree(tsfile_py_include)
+
+shutil.copytree(
+    os.path.join(project_dir, "..", "cpp", "target", "build", "include"),
+    os.path.join(tsfile_py_include, ""),
+)
+
+
+def copy_tsfile_header(source):
+    for file in source:
+        if os.path.exists(file):
+            target = os.path.join(tsfile_py_include, os.path.basename(file))
+            shutil.copyfile(file, target)
+
 
 ## Copy C wrapper header.
 # tsfile/cpp/src/cwrapper/tsfile_cwrapper.h
-tsfile_c_include_file = os.path.join(
-    project_dir, "..", "cpp", "src", "cwrapper", "tsfile_cwrapper.h"
-)
-tsfile_py_include_file = os.path.join(project_dir, "tsfile", "tsfile_cwrapper.h")
-copy_tsfile_header(tsfile_c_include_file, tsfile_py_include_file)
+source_headers = [
+    os.path.join(project_dir, "..", "cpp", "src", "cwrapper", "tsfile_cwrapper.h"),
+]
+
+copy_tsfile_header(source_headers)
 
 ## Copy shared library
 tsfile_shared_source_dir = os.path.join(project_dir, "..", "cpp", "target", "build", "lib")
@@ -72,8 +87,7 @@ elif system == "Linux":
 else:
     copy_tsfile_lib(tsfile_shared_source_dir, tsfile_shared_dir, "dll")
 
-tsfile_include_dir=os.path.join(project_dir, "tsfile")
-
+tsfile_include_dir = os.path.join(project_dir, "tsfile", "include")
 
 ext_modules_tsfile = [
     # utils: from python to c or c to python.

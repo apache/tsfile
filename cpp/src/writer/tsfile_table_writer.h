@@ -61,7 +61,7 @@ class TsFileTableWriter {
         // Perform a deep copy. The source TableSchema object may be
         // stack/heap-allocated.
         auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
-        tsfile_writer_->register_table(table_schema_ptr);
+        error_number = tsfile_writer_->register_table(table_schema_ptr);
         exclusive_table_name_ = table_schema->get_table_name();
         common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
     }
@@ -106,6 +106,10 @@ class TsFileTableWriter {
     // if this TsFile only contains one table, this will be its name, otherwise,
     // it will be an empty string
     std::string exclusive_table_name_;
+
+    // Some errors may not be conveyed during the construction phase, so it's
+    // necessary to maintain an internal error code.
+    int error_number = common::E_OK;
 };
 
 }  // namespace storage

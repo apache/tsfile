@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.write.writer;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.exception.write.TsFileNotCompleteException;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
@@ -44,18 +46,28 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
   private static Logger logger = LoggerFactory.getLogger(ForceAppendTsFileWriter.class);
 
   public ForceAppendTsFileWriter(File file) throws IOException {
+    this(
+        file,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()));
+  }
+
+  public ForceAppendTsFileWriter(File file, EncryptParameter param) throws IOException {
     if (logger.isDebugEnabled()) {
       logger.debug("{} writer is opened.", file.getName());
     }
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
     this.file = file;
+    setEncryptParam(param);
 
     // file doesn't exist
     if (file.length() == 0 || !file.exists()) {
       throw new TsFileNotCompleteException("File " + file.getPath() + " is not a complete TsFile");
     }
 
-    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath(), true)) {
+    try (TsFileSequenceReader reader =
+        new TsFileSequenceReader(file.getAbsolutePath(), param, true)) {
 
       // this tsfile is not complete
       if (!reader.isComplete()) {

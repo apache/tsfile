@@ -19,22 +19,32 @@
 package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
@@ -49,10 +59,13 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
 
 public class TsFileIOWriterTest {
 
@@ -100,13 +113,93 @@ public class TsFileIOWriterTest {
   }
 
   @Test
+  public void changeTypeCompressionTest() throws IOException, WriteProcessException {
+    TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
+    CompressionType prevInt32Compression = config.getCompressor(TSDataType.INT32);
+    CompressionType prevTextCompression = config.getCompressor(TSDataType.TEXT);
+    config.setInt32Compression("UNCOMPRESSED");
+    config.setTextCompression("GZIP");
+
+    try (TsFileIOWriter ioWriter =
+            new TsFileIOWriter(
+                new File(
+                    TestConstant.BASE_OUTPUT_PATH.concat("changeTypeCompressionTest.tsfile")));
+        TsFileWriter fileWriter = new TsFileWriter(ioWriter)) {
+      fileWriter.registerTimeseries(
+          Factory.DEFAULT_FACTORY.create("root.db1.d1"),
+          new MeasurementSchema("s1", TSDataType.INT32));
+      fileWriter.registerTimeseries(
+          Factory.DEFAULT_FACTORY.create("root.db1.d1"),
+          new MeasurementSchema("s2", TSDataType.TEXT));
+      TableSchema tableSchema =
+          new TableSchema(
+              "t1",
+              Arrays.asList(
+                  new ColumnSchema("s1", TSDataType.INT32, ColumnCategory.FIELD),
+                  new ColumnSchema("s2", TSDataType.TEXT, ColumnCategory.FIELD)));
+      fileWriter.registerTableSchema(tableSchema);
+
+      Tablet treeTablet =
+          new Tablet(
+              "root.db1.d1",
+              Arrays.asList(
+                  new MeasurementSchema("s1", TSDataType.INT32),
+                  new MeasurementSchema("s2", TSDataType.TEXT)));
+      treeTablet.addTimestamp(0, 0);
+      treeTablet.addValue(0, 0, 0);
+      treeTablet.addValue(0, 1, "0");
+      fileWriter.writeTree(treeTablet);
+
+      Tablet tableTablet =
+          new Tablet(
+              "t1",
+              Arrays.asList("s1", "s2"),
+              Arrays.asList(TSDataType.INT32, TSDataType.TEXT),
+              Arrays.asList(ColumnCategory.FIELD, ColumnCategory.FIELD));
+      tableTablet.addTimestamp(0, 0);
+      tableTablet.addValue(0, 0, 0);
+      tableTablet.addValue(0, 1, "0");
+      fileWriter.writeTable(tableTablet);
+      fileWriter.flush();
+
+      ChunkMetadata s1TreeChunkMeta =
+          ioWriter.getChunkGroupMetadataList().get(0).getChunkMetadataList().get(0);
+      ChunkMetadata s2TreeChunkMeta =
+          ioWriter.getChunkGroupMetadataList().get(0).getChunkMetadataList().get(1);
+      ChunkMetadata s1TableChunkMeta =
+          ioWriter.getChunkGroupMetadataList().get(1).getChunkMetadataList().get(1);
+      ChunkMetadata s2TableChunkMeta =
+          ioWriter.getChunkGroupMetadataList().get(1).getChunkMetadataList().get(2);
+
+      fileWriter.close();
+
+      try (TsFileSequenceReader sequenceReader =
+          new TsFileSequenceReader(
+              TestConstant.BASE_OUTPUT_PATH.concat("changeTypeCompressionTest.tsfile"))) {
+        Chunk chunk = sequenceReader.readMemChunk(s1TreeChunkMeta);
+        assertEquals(CompressionType.UNCOMPRESSED, chunk.getHeader().getCompressionType());
+        chunk = sequenceReader.readMemChunk(s2TreeChunkMeta);
+        assertEquals(CompressionType.GZIP, chunk.getHeader().getCompressionType());
+        chunk = sequenceReader.readMemChunk(s1TableChunkMeta);
+        assertEquals(CompressionType.UNCOMPRESSED, chunk.getHeader().getCompressionType());
+        chunk = sequenceReader.readMemChunk(s2TableChunkMeta);
+        assertEquals(CompressionType.GZIP, chunk.getHeader().getCompressionType());
+      }
+
+    } finally {
+      config.setInt32Compression(prevInt32Compression.name());
+      config.setTextCompression(prevTextCompression.name());
+    }
+  }
+
+  @Test
   public void endFileTest() throws IOException {
     TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH);
 
     // magic_string
-    Assert.assertEquals(TSFileConfig.MAGIC_STRING, reader.readHeadMagic());
-    Assert.assertEquals(TSFileConfig.VERSION_NUMBER, reader.readVersionNumber());
-    Assert.assertEquals(TSFileConfig.MAGIC_STRING, reader.readTailMagic());
+    assertEquals(TSFileConfig.MAGIC_STRING, reader.readHeadMagic());
+    assertEquals(TSFileConfig.VERSION_NUMBER, reader.readVersionNumber());
+    assertEquals(TSFileConfig.MAGIC_STRING, reader.readTailMagic());
 
     reader.position(TSFileConfig.MAGIC_STRING.getBytes().length + 1);
 
@@ -114,39 +207,39 @@ public class TsFileIOWriterTest {
     ChunkGroupHeader chunkGroupHeader;
     for (int i = 0; i < CHUNK_GROUP_NUM; i++) {
       // chunk group header
-      Assert.assertEquals(MetaMarker.CHUNK_GROUP_HEADER, reader.readMarker());
+      assertEquals(MetaMarker.CHUNK_GROUP_HEADER, reader.readMarker());
       chunkGroupHeader = reader.readChunkGroupHeader();
-      Assert.assertEquals(DEVICE_1, chunkGroupHeader.getDeviceID());
+      assertEquals(DEVICE_1, chunkGroupHeader.getDeviceID());
       // ordinary chunk header
-      Assert.assertEquals(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER, reader.readMarker());
+      assertEquals(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER, reader.readMarker());
       header = reader.readChunkHeader(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER);
-      Assert.assertEquals(SENSOR_1, header.getMeasurementID());
+      assertEquals(SENSOR_1, header.getMeasurementID());
     }
 
     for (int i = 0; i < CHUNK_GROUP_NUM; i++) {
       // chunk group header
-      Assert.assertEquals(MetaMarker.CHUNK_GROUP_HEADER, reader.readMarker());
+      assertEquals(MetaMarker.CHUNK_GROUP_HEADER, reader.readMarker());
       chunkGroupHeader = reader.readChunkGroupHeader();
-      Assert.assertEquals(DEVICE_2, chunkGroupHeader.getDeviceID());
+      assertEquals(DEVICE_2, chunkGroupHeader.getDeviceID());
       // vector chunk header (time)
-      Assert.assertEquals(MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER, reader.readMarker());
+      assertEquals(MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER, reader.readMarker());
       header = reader.readChunkHeader(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER);
-      Assert.assertEquals("", header.getMeasurementID());
+      assertEquals("", header.getMeasurementID());
       // vector chunk header (values)
-      Assert.assertEquals(MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER, reader.readMarker());
+      assertEquals(MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER, reader.readMarker());
       header = reader.readChunkHeader(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER);
-      Assert.assertEquals("s1", header.getMeasurementID());
-      Assert.assertEquals(MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER, reader.readMarker());
+      assertEquals("s1", header.getMeasurementID());
+      assertEquals(MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER, reader.readMarker());
       header = reader.readChunkHeader(MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER);
-      Assert.assertEquals("s2", header.getMeasurementID());
+      assertEquals("s2", header.getMeasurementID());
     }
 
-    Assert.assertEquals(MetaMarker.OPERATION_INDEX_RANGE, reader.readMarker());
+    assertEquals(MetaMarker.OPERATION_INDEX_RANGE, reader.readMarker());
     reader.readPlanIndex();
-    Assert.assertEquals(100, reader.getMinPlanIndex());
-    Assert.assertEquals(10000, reader.getMaxPlanIndex());
+    assertEquals(100, reader.getMinPlanIndex());
+    assertEquals(10000, reader.getMaxPlanIndex());
 
-    Assert.assertEquals(MetaMarker.SEPARATOR, reader.readMarker());
+    assertEquals(MetaMarker.SEPARATOR, reader.readMarker());
 
     // make sure timeseriesMetadata is only
     Map<IDeviceID, List<TimeseriesMetadata>> deviceTimeseriesMetadataMap =
@@ -167,7 +260,7 @@ public class TsFileIOWriterTest {
     for (MetadataIndexNode node : metaData.getTableMetadataIndexNodeMap().values()) {
       cnt += node.getChildren().size();
     }
-    Assert.assertEquals(2, cnt);
+    assertEquals(2, cnt);
   }
 
   private void writeChunkGroup(TsFileIOWriter writer, IMeasurementSchema measurementSchema)
@@ -200,7 +293,7 @@ public class TsFileIOWriterTest {
       // vector chunk (time)
       writer.startFlushChunk(
           vectorMeasurementSchema.getMeasurementName(),
-          vectorMeasurementSchema.getCompressor(),
+          vectorMeasurementSchema.getTimeCompressor(),
           vectorMeasurementSchema.getType(),
           vectorMeasurementSchema.getTimeTSEncoding(),
           Statistics.getStatsByType(vectorMeasurementSchema.getType()),
@@ -216,7 +309,7 @@ public class TsFileIOWriterTest {
         subStatistics.updateStats(0L, 0L);
         writer.startFlushChunk(
             vectorMeasurementSchema.getSubMeasurementsList().get(j),
-            vectorMeasurementSchema.getCompressor(),
+            vectorMeasurementSchema.getValueCompressor(j),
             vectorMeasurementSchema.getSubMeasurementsTSDataTypeList().get(j),
             vectorMeasurementSchema.getSubMeasurementsTSEncodingList().get(j),
             subStatistics,

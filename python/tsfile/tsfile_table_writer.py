@@ -31,12 +31,13 @@ class TsFileTableWriter:
     according to that schema, and serialize this data into a TsFile.
     """
 
-    def __init__(self, path: str, table_schema: TableSchema):
+    def __init__(self, path: str, table_schema: TableSchema, memory_threshold = 128 * 1024 * 1024):
         """
         :param path: The path of tsfile, will create if it doesn't exist.
         :param table_schema: describes the schema of the tables they want to write.
+        :param memory_threshold(Byte): memory usage threshold for flushing data.
         """
-        self.writer = TsFileWriter(path)
+        self.writer = TsFileWriter(path, memory_threshold)
         self.writer.register_table(table_schema)
         self.exclusive_table_name_ = table_schema.get_table_name()
 
@@ -59,6 +60,13 @@ class TsFileTableWriter:
         :return: no return value.
         """
         self.writer.close()
+
+    def flush(self):
+        """
+        Flush current data to tsfile.
+        :return: no return value.
+        """
+        self.writer.flush()
 
     def __dealloc__(self):
         self.close()

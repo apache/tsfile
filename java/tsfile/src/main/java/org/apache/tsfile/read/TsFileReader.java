@@ -20,6 +20,8 @@
 package org.apache.tsfile.read;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
@@ -27,9 +29,14 @@ import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class TsFileReader implements AutoCloseable {
 
@@ -59,6 +66,22 @@ public class TsFileReader implements AutoCloseable {
       QueryExpression queryExpression, long partitionStartOffset, long partitionEndOffset)
       throws IOException {
     return tsfileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset);
+  }
+
+  public List<String> getAllDeviceIds() throws IOException {
+    List<IDeviceID> deviceIDList = fileReader.getAllDevices();
+    List<String> deviceIds = new ArrayList<>(deviceIDList.size());
+    for (IDeviceID deviceID : deviceIDList) {
+      deviceIds.add(deviceID.toString());
+    }
+    return deviceIds;
+  }
+
+  public List<MeasurementSchema> getMeasurement(IDeviceID deviceID) throws IOException {
+    Map<String, TSDataType> measurementMap = fileReader.getMeasurement(deviceID);
+    return measurementMap.entrySet().stream()
+        .map(entry -> new MeasurementSchema(entry.getKey(), entry.getValue()))
+        .collect(Collectors.toList());
   }
 
   @Override

@@ -51,7 +51,8 @@ struct Path {
                     PathNodesGenerator::invokeParser(path_sc);
                 if (nodes.size() > 1) {
                     device_id_ = std::make_shared<StringArrayDeviceID>(
-                        std::vector<std::string>(nodes.begin(), nodes.end() - 1));
+                        std::vector<std::string>(nodes.begin(),
+                                                 nodes.end() - 1));
                     measurement_ = nodes[nodes.size() - 1];
                     full_path_ =
                         device_id_->get_device_name() + "." + measurement_;

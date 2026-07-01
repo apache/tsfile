@@ -127,49 +127,40 @@ TEST_F(PathNameTest, TestLegalPath) {
 }
 
 TEST_F(PathNameTest, TestIllegalPathName) {
-    EXPECT_THROW ({
-      Path("root.sg`", true);
-    } , std::runtime_error);
+    EXPECT_THROW({ Path("root.sg`", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.sg\na", true);
-    }, std::runtime_error);
+    EXPECT_THROW({ Path("root.sg\na", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.select`", true);
-    } , std::runtime_error);
+    EXPECT_THROW({ Path("root.select`", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      // pure digits
-      Path("root.111", true);
-    } , std::runtime_error);
+    EXPECT_THROW(
+        {
+            // pure digits
+            Path("root.111", true);
+        },
+        std::runtime_error);
 
-    EXPECT_THROW ({
-      // single ` in quoted node
-      Path("root.`a``", true);
-    } , std::runtime_error);
+    EXPECT_THROW(
+        {
+            // single ` in quoted node
+            Path("root.`a``", true);
+        },
+        std::runtime_error);
 
-    EXPECT_THROW ({
-      // single ` in quoted node
-      Path("root.``a`", true);
-    } , std::runtime_error);
+    EXPECT_THROW(
+        {
+            // single ` in quoted node
+            Path("root.``a`", true);
+        },
+        std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.a*%", true);
-    } , std::runtime_error);
+    EXPECT_THROW({ Path("root.a*%", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.a*b", true);
-    } , std::runtime_error);
+    EXPECT_THROW({ Path("root.a*b", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.0e38", true);
-    } , std::runtime_error);
+    EXPECT_THROW({ Path("root.0e38", true); }, std::runtime_error);
 
-    EXPECT_THROW ({
-      Path("root.0000", true);
-    }, std::runtime_error);
+    EXPECT_THROW({ Path("root.0000", true); }, std::runtime_error);
 }
- 
 
 }  // namespace storage

@@ -49,6 +49,8 @@ public class TypeFactory {
         return StringType.getInstance();
       case BLOB:
         return BlobType.getInstance();
+      case OBJECT:
+        return ObjectType.getInstance();
       default:
         throw new UnsupportedOperationException(
             String.format("Invalid TSDataType for TypeFactory: %s", tsDataType));

@@ -20,10 +20,12 @@
 package org.apache.tsfile.write.record;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -32,13 +34,19 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class TabletTest {
@@ -296,5 +304,311 @@ public class TabletTest {
     Assert.assertTrue(deserializeTablet.isNull(0, 1));
     Assert.assertEquals(tablet.getValue(1, 1), deserializeTablet.getValue(1, 1));
     Assert.assertTrue(deserializeTablet.isNull(1, 0));
+  }
+
+  @Test
+  public void testAppendInconsistent() {
+    Tablet t1 =
+        new Tablet(
+            "table1",
+            Arrays.asList("tag1", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+
+    Tablet tWrongTable =
+        new Tablet(
+            "table2",
+            Arrays.asList("tag1", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    assertFalse(t1.append(tWrongTable));
+
+    Tablet tWrongColName =
+        new Tablet(
+            "table1",
+            Arrays.asList("tag2", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    assertFalse(t1.append(tWrongColName));
+
+    Tablet tWrongColType =
+        new Tablet(
+            "table1",
+            Arrays.asList("tag1", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT64),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    assertFalse(t1.append(tWrongColType));
+
+    Tablet tWrongColCategory =
+        new Tablet(
+            "table1",
+            Arrays.asList("tag1", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.TAG));
+    assertFalse(t1.append(tWrongColCategory));
+  }
+
+  private void fillTablet(Tablet t, int valueOffset, int length) {
+    for (int i = 0; i < length; i++) {
+      t.addTimestamp(i, i + valueOffset);
+      for (int j = 0; j < t.getSchemas().size(); j++) {
+        switch (t.getSchemas().get(j).getType()) {
+          case INT32:
+            t.addValue(i, j, i + valueOffset);
+            break;
+          case TIMESTAMP:
+          case INT64:
+            t.addValue(i, j, (long) (i + valueOffset));
+            break;
+          case FLOAT:
+            t.addValue(i, j, (i + valueOffset) * 1.0f);
+            break;
+          case DOUBLE:
+            t.addValue(i, j, (i + valueOffset) * 1.0);
+            break;
+          case BOOLEAN:
+            t.addValue(i, j, (i + valueOffset) % 2 == 0);
+            break;
+          case TEXT:
+          case STRING:
+          case BLOB:
+            t.addValue(i, j, String.valueOf(i + valueOffset));
+            break;
+          case DATE:
+            t.addValue(i, j, LocalDate.of(i + valueOffset, 1, 1));
+            break;
+        }
+      }
+    }
+  }
+
+  private final List<String> colNamesForAppendTest =
+      Arrays.asList(
+          "tag1",
+          TSDataType.INT32.name(),
+          TSDataType.INT64.name(),
+          TSDataType.FLOAT.name(),
+          TSDataType.DOUBLE.name(),
+          TSDataType.BOOLEAN.name(),
+          TSDataType.TEXT.name(),
+          TSDataType.STRING.name(),
+          TSDataType.BLOB.name(),
+          TSDataType.TIMESTAMP.name(),
+          TSDataType.DATE.name());
+  private final List<TSDataType> dataTypesForAppendTest =
+      Arrays.asList(
+          TSDataType.STRING,
+          TSDataType.INT32,
+          TSDataType.INT64,
+          TSDataType.FLOAT,
+          TSDataType.DOUBLE,
+          TSDataType.BOOLEAN,
+          TSDataType.TEXT,
+          TSDataType.STRING,
+          TSDataType.BLOB,
+          TSDataType.TIMESTAMP,
+          TSDataType.DATE);
+  private final List<ColumnCategory> categoriesForAppendTest =
+      Arrays.asList(
+          ColumnCategory.TAG,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD,
+          ColumnCategory.FIELD);
+
+  @Test
+  public void testAppendNoNull() {
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+
+    assertTrue(t1.append(t2));
+    checkAppendedTablet(t1, t1Size + t2Size, null);
+  }
+
+  @Test
+  public void testPreferredCapacity() {
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+
+    assertTrue(t1.append(t2, 10000));
+    checkAppendedTablet(t1, t1Size + t2Size, null);
+    assertEquals(10000, t1.getMaxRowNumber());
+  }
+
+  @Test
+  public void testAppendNullPoints() {
+    Set<Pair<Integer, Integer>> nullPositions = new HashSet<>();
+    int nullPointNum = 10;
+    Random random = new Random();
+
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+    for (int i = 0; i < nullPointNum; i++) {
+      int rowIndex = random.nextInt(t1Size);
+      int columnIndex = random.nextInt(colNamesForAppendTest.size());
+      nullPositions.add(new Pair<>(rowIndex, columnIndex));
+      t1.getBitMaps()[columnIndex].mark(rowIndex);
+    }
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+    for (int i = 0; i < nullPointNum; i++) {
+      int rowIndex = random.nextInt(t1Size);
+      int columnIndex = random.nextInt(colNamesForAppendTest.size());
+      nullPositions.add(new Pair<>(rowIndex + t1Size, columnIndex));
+      t2.getBitMaps()[columnIndex].mark(rowIndex);
+    }
+
+    assertTrue(t1.append(t2));
+    checkAppendedTablet(t1, t1Size + t2Size, nullPositions);
+  }
+
+  @Test
+  public void testAppendNullBitMapColumn() {
+    int nullBitMapNum = 5;
+    Random random = new Random();
+
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+    for (int i = 0; i < nullBitMapNum; i++) {
+      int columnIndex = random.nextInt(colNamesForAppendTest.size());
+      t1.getBitMaps()[columnIndex] = null;
+    }
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+    for (int i = 0; i < nullBitMapNum; i++) {
+      int columnIndex = random.nextInt(colNamesForAppendTest.size());
+      t2.getBitMaps()[columnIndex] = null;
+    }
+
+    assertTrue(t1.append(t2));
+    assertEquals(t1Size + t2Size, t1.getRowSize());
+
+    checkAppendedTablet(t1, t1Size + t2Size, null);
+  }
+
+  @Test
+  public void testAppendThisNullBitMap() {
+
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+    t1.setBitMaps(null);
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+
+    assertTrue(t1.append(t2));
+    checkAppendedTablet(t1, t1Size + t2Size, null);
+  }
+
+  @Test
+  public void testMultipleAppend() {
+    List<Tablet> tablets = new ArrayList<>();
+    int tabletNum = 10;
+    int singleTabletSize = 100;
+    for (int i = 0; i < tabletNum; i++) {
+      Tablet tablet =
+          new Tablet(
+              "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+      fillTablet(tablet, i * singleTabletSize, singleTabletSize);
+      tablets.add(tablet);
+    }
+    for (int i = 1; i < tabletNum; i++) {
+      assertTrue(tablets.get(0).append(tablets.get(i)));
+    }
+    checkAppendedTablet(tablets.get(0), singleTabletSize * tabletNum, null);
+  }
+
+  private void checkAppendedTablet(
+      Tablet result, int totalSize, Set<Pair<Integer, Integer>> nullPositions) {
+    assertEquals(totalSize, result.getRowSize());
+
+    for (int i = 0; i < totalSize; i++) {
+      assertEquals(i, result.getTimestamp(i));
+      for (int j = 0; j < result.getSchemas().size(); j++) {
+        if (nullPositions != null && nullPositions.contains(new Pair<>(i, j))) {
+          assertTrue(result.isNull(i, j));
+          continue;
+        }
+
+        assertFalse(result.isNull(i, j));
+        switch (result.getSchemas().get(j).getType()) {
+          case INT32:
+            assertEquals(i, result.getValue(i, j));
+            break;
+          case TIMESTAMP:
+          case INT64:
+            assertEquals((long) i, result.getValue(i, j));
+            break;
+          case FLOAT:
+            assertEquals(i * 1.0f, (float) result.getValue(i, j), 0.0001f);
+            break;
+          case DOUBLE:
+            assertEquals(i * 1.0, (double) result.getValue(i, j), 0.0001);
+            break;
+          case BOOLEAN:
+            assertEquals(i % 2 == 0, result.getValue(i, j));
+            break;
+          case TEXT:
+          case BLOB:
+          case STRING:
+            assertEquals(
+                new Binary(String.valueOf(i).getBytes(StandardCharsets.UTF_8)),
+                result.getValue(i, j));
+            break;
+          case DATE:
+            assertEquals(LocalDate.of(i, 1, 1), result.getValue(i, j));
+            break;
+        }
+      }
+    }
   }
 }

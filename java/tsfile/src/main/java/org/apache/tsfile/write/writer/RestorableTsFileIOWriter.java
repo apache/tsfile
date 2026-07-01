@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.write.writer;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
@@ -72,6 +74,8 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
   private final Map<IDeviceID, Map<String, List<ChunkMetadata>>> metadatasForQuery =
       new HashMap<>();
 
+  private EncryptParameter param;
+
   /**
    * @param file a given tsfile path you want to (continue to) write
    * @throws IOException if write failed, or the file is broken but autoRepair==false.
@@ -80,23 +84,49 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     this(file, true);
   }
 
+  public RestorableTsFileIOWriter(File file, EncryptParameter param) throws IOException {
+    this(file, true, param);
+  }
+
   /**
    * @param file a given tsfile path you want to (continue to) write
    * @throws IOException if write failed, or the file is broken but autoRepair==false.
    */
   public RestorableTsFileIOWriter(File file, long maxMetadataSize) throws IOException {
-    this(file, true);
+    this(
+        file,
+        true,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()));
+  }
+
+  public RestorableTsFileIOWriter(File file, long maxMetadataSize, EncryptParameter param)
+      throws IOException {
+    this(file, true, param);
     this.maxMetadataSize = maxMetadataSize;
     this.chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
     this.checkMetadataSizeAndMayFlush();
   }
 
   public RestorableTsFileIOWriter(File file, boolean truncate) throws IOException {
+    this(
+        file,
+        truncate,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()));
+  }
+
+  public RestorableTsFileIOWriter(File file, boolean truncate, EncryptParameter param)
+      throws IOException {
     if (logger.isDebugEnabled()) {
       logger.debug("{} is opened.", file.getName());
     }
     this.file = file;
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
+    this.param = param;
+    setEncryptParam(param);
 
     // file doesn't exist
     if (file.length() == 0) {
@@ -109,7 +139,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     try {
       if (file.exists()) {
         try (TsFileSequenceReader reader =
-            new TsFileSequenceReader(file.getAbsolutePath(), false)) {
+            new TsFileSequenceReader(file.getAbsolutePath(), param, false)) {
           schema.setEnabledUpdateSchema(false);
           truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
           minPlanIndex = reader.getMinPlanIndex();

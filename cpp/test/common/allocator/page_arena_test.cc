@@ -55,4 +55,30 @@ TEST(PageArenaTest, AllocMoreThanPageSize) {
     page_arena.reset();
 }
 
+struct MyStruct {
+    double x;
+    int64_t y;
+    char buf[1721];
+};
+
+TEST(PageArenaAlignedTest, AlignmentWithBuildinTypes) {
+    PageArena page_arena;
+    int page_size = 1024;
+    page_arena.init(page_size, MOD_DEFAULT);
+    for (int i = 0; i < 10; i++) {
+        void* p1 = page_arena.alloc(sizeof(double));
+        ASSERT_NE(p1, nullptr);
+        EXPECT_EQ(reinterpret_cast<uintptr_t>(p1) % alignof(double), 0u);
+
+        void* p2 = page_arena.alloc(sizeof(int64_t));
+        ASSERT_NE(p2, nullptr);
+        EXPECT_EQ(reinterpret_cast<uintptr_t>(p2) % alignof(int64_t), 0u);
+
+        void* p3 = page_arena.alloc(sizeof(MyStruct));
+        ASSERT_NE(p3, nullptr);
+        EXPECT_EQ(reinterpret_cast<uintptr_t>(p3) % alignof(MyStruct), 0u);
+    }
+    page_arena.reset();
+}
+
 }  // namespace common

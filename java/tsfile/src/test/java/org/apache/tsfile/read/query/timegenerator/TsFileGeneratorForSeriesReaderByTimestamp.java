@@ -25,8 +25,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
-import org.apache.tsfile.utils.FileUtils;
-import org.apache.tsfile.utils.FileUtils.Unit;
+import org.apache.tsfile.utils.FileTestUtils;
 import org.apache.tsfile.utils.RecordUtils;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.write.TsFileWriter;
@@ -263,8 +262,11 @@ public class TsFileGeneratorForSeriesReaderByTimestamp {
     in.close();
     endTime = System.currentTimeMillis();
     LOG.info("write total:{},use time:{}s", lineCount, (endTime - startTime) / 1000);
-    LOG.info("src file size:{}GB", FileUtils.getLocalFileByte(inputDataFile, Unit.GB));
-    LOG.info("src file size:{}MB", FileUtils.getLocalFileByte(outputDataFile, Unit.MB));
+    LOG.info(
+        "src file size:{}GB", FileTestUtils.getLocalFileByte(inputDataFile, FileTestUtils.Unit.GB));
+    LOG.info(
+        "src file size:{}MB",
+        FileTestUtils.getLocalFileByte(outputDataFile, FileTestUtils.Unit.MB));
   }
 
   private static Scanner getDataFile(String path) {

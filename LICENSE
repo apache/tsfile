@@ -295,3 +295,45 @@ The following files include code is copied from lzokay project.
 Copyright: (c) 2018 Jack Andersen
 Project page: https://github.com/AxioDL/lzokay
 License: https://github.com/AxioDL/lzokay/blob/master/LICENSE
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from Apache Commons Lang project.
+
+./java/tsfile/src/main/java/org/apache/tsfile/external/commons/lang3/*
+
+Apache Commons Lang is open source software licensed under the Apache License 2.0 and supported by the Apache Software Foundation.
+Project page: https://github.com/apache/commons-lang
+License: https://github.com/apache/commons-lang/blob/master/LICENSE.txt
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from Apache Commons IO project.
+
+./java/tsfile/src/main/java/org/apache/tsfile/external/commons/io/*
+
+Apache Commons IO is open source software licensed under the Apache License 2.0 and supported by the Apache Software Foundation.
+Project page: https://github.com/apache/commons-io
+License: https://github.com/apache/commons-io/blob/master/LICENSE.txt
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from Apache Commons CodeC project.
+
+./java/tsfile/src/main/java/org/apache/tsfile/external/commons/codec/*
+
+Apache Commons CodeC is open source software licensed under the Apache License 2.0 and supported by the Apache Software Foundation.
+Project page: https://github.com/apache/commons-codec
+License: https://github.com/apache/commons-codec/blob/master/LICENSE.txt
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from Apache Commons Collections project.
+
+./java/tsfile/src/main/java/org/apache/tsfile/external/commons/collections4/*
+
+Apache Commons Collections is open source software licensed under the Apache License 2.0 and supported by the Apache Software Foundation.
+Project page: https://github.com/apache/commons-collections
+License: https://github.com/apache/commons-collections/blob/master/LICENSE.txt
+
+--------------------------------------------------------------------------------

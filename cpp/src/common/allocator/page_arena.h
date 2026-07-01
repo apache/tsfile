@@ -20,6 +20,8 @@
 #ifndef COMMON_ALLOCATOR_PAGE_ARENA_H
 #define COMMON_ALLOCATOR_PAGE_ARENA_H
 
+#include <cstddef>
+
 #include "alloc_base.h"
 
 namespace common {
@@ -68,20 +70,17 @@ class PageArena {
                 (char *)this + sizeof(Page);  // equals to (char*)(this+1)
             page_end_ = cur_alloc_ + page_size;
         }
-        INLINE char *alloc(uint32_t size) {
-            if (cur_alloc_ + size > page_end_) {
+        INLINE char *alloc(uint32_t size,
+                           size_t alignment = alignof(std::max_align_t)) {
+            auto current = reinterpret_cast<uintptr_t>(cur_alloc_);
+            uintptr_t aligned = (current + alignment - 1) & ~(alignment - 1);
+            char *ret = reinterpret_cast<char *>(aligned);
+            if (ret + size > page_end_) {
                 return nullptr;
-            } else {
-                char *ret = cur_alloc_;
-                cur_alloc_ += size;
-                return ret;
-                //        char *ret = cur_alloc_;
-                //        cur_alloc_ += size;
-                //        int address = reinterpret_cast<uintptr_t>(cur_alloc_);
-                //        int new_addr = (address + 3) & (~3);
-                //        cur_alloc_ = reinterpret_cast<char *>(new_addr);
-                //        return ret;
             }
+
+            cur_alloc_ = ret + size;
+            return ret;
         }
 
        public:

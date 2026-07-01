@@ -154,6 +154,7 @@ public class NullColumn implements Column {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return new RunLengthEncodedColumn(BinaryColumnBuilder.NULL_VALUE_BLOCK, positionCount);
       default:
         throw new IllegalArgumentException("Unknown data type: " + dataType);

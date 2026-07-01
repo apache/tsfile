@@ -172,7 +172,7 @@ cdef class ResultSetPy:
             return tsfile_result_set_get_value_by_index_double(self.result, index)
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
-        elif data_type == TSDataTypePy.STRING:
+        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
                 py_str = string.decode('utf-8')
@@ -291,6 +291,21 @@ cdef class TsFileReaderPy:
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
+    
+    def query_table_on_tree(self, column_names : List[str],
+                    start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
+        """
+        Execute a time range query on specified columns on tree structure.
+        :return: query result handler.
+        """
+        cdef ResultSet result;
+        result = tsfile_reader_query_table_on_tree_c(self.reader,
+                                             [column_name.lower() for column_name in column_names], start_time,
+                                             end_time)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, "root")
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
 
     def query_timeseries(self, device_name : str, sensor_list : List[str], start_time : int = 0,
                          end_time : int = 0) -> ResultSetPy:
@@ -323,6 +338,12 @@ cdef class TsFileReaderPy:
         Get all tables schemas
         """
         return get_all_table_schema(self.reader)
+
+    def get_all_timeseries_schemas(self):
+        """
+        Get all timeseries schemas
+        """
+        return get_all_timeseries_schema(self.reader)
 
     def close(self):
         """

@@ -19,6 +19,13 @@
 
 package org.apache.tsfile.read.filter.factory;
 
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeEq;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeGt;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeGtEq;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeLt;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeLtEq;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.ExtractTimeNotEq;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators.Field;
 import org.apache.tsfile.read.filter.operator.GroupByFilter;
 import org.apache.tsfile.read.filter.operator.GroupByMonthFilter;
 import org.apache.tsfile.read.filter.operator.TimeFilterOperators.TimeBetweenAnd;
@@ -33,6 +40,7 @@ import org.apache.tsfile.read.filter.operator.TimeFilterOperators.TimeNotEq;
 import org.apache.tsfile.read.filter.operator.TimeFilterOperators.TimeNotIn;
 import org.apache.tsfile.utils.TimeDuration;
 
+import java.time.ZoneId;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -97,5 +105,35 @@ public class TimeFilterApi {
       TimeUnit currPrecision) {
     return new GroupByMonthFilter(
         startTime, endTime, interval, slidingStep, timeZone, currPrecision);
+  }
+
+  public static ExtractTimeGt extractTimeGt(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeGt(value, field, zoneId, currPrecision);
+  }
+
+  public static ExtractTimeGtEq extractTimeGtEq(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeGtEq(value, field, zoneId, currPrecision);
+  }
+
+  public static ExtractTimeLt extractTimeLt(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeLt(value, field, zoneId, currPrecision);
+  }
+
+  public static ExtractTimeLtEq extractTimeLtEq(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeLtEq(value, field, zoneId, currPrecision);
+  }
+
+  public static ExtractTimeEq extractTimeEq(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeEq(value, field, zoneId, currPrecision);
+  }
+
+  public static ExtractTimeNotEq extractTimeNotEq(
+      long value, Field field, ZoneId zoneId, TimeUnit currPrecision) {
+    return new ExtractTimeNotEq(value, field, zoneId, currPrecision);
   }
 }

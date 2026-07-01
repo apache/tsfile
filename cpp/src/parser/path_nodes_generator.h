@@ -24,9 +24,9 @@
 
 namespace storage {
 class PathNodesGenerator {
-    public:
-        static std::vector<std::string> invokeParser(const std::string& path);
+   public:
+    static std::vector<std::string> invokeParser(const std::string& path);
 };
-}
+}  // namespace storage
 
 #endif

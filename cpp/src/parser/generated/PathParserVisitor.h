@@ -20,38 +20,38 @@
 
 #pragma once
 
-
-#include "antlr4-runtime.h"
 #include "PathParser.h"
-
-
+#include "antlr4-runtime.h"
 
 /**
  * This class defines an abstract visitor for a parse tree
  * produced by PathParser.
  */
-class  PathParserVisitor : public antlr4::tree::AbstractParseTreeVisitor {
-public:
-
-  /**
-   * Visit parse trees produced by PathParser.
-   */
+class PathParserVisitor : public antlr4::tree::AbstractParseTreeVisitor {
+   public:
+    /**
+     * Visit parse trees produced by PathParser.
+     */
     virtual antlrcpp::Any visitPath(PathParser::PathContext *context) = 0;
 
-    virtual antlrcpp::Any visitPrefixPath(PathParser::PrefixPathContext *context) = 0;
+    virtual antlrcpp::Any visitPrefixPath(
+        PathParser::PrefixPathContext *context) = 0;
 
-    virtual antlrcpp::Any visitSuffixPath(PathParser::SuffixPathContext *context) = 0;
+    virtual antlrcpp::Any visitSuffixPath(
+        PathParser::SuffixPathContext *context) = 0;
 
-    virtual antlrcpp::Any visitNodeName(PathParser::NodeNameContext *context) = 0;
+    virtual antlrcpp::Any visitNodeName(
+        PathParser::NodeNameContext *context) = 0;
 
-    virtual antlrcpp::Any visitNodeNameWithoutWildcard(PathParser::NodeNameWithoutWildcardContext *context) = 0;
+    virtual antlrcpp::Any visitNodeNameWithoutWildcard(
+        PathParser::NodeNameWithoutWildcardContext *context) = 0;
 
-    virtual antlrcpp::Any visitNodeNameSlice(PathParser::NodeNameSliceContext *context) = 0;
+    virtual antlrcpp::Any visitNodeNameSlice(
+        PathParser::NodeNameSliceContext *context) = 0;
 
-    virtual antlrcpp::Any visitIdentifier(PathParser::IdentifierContext *context) = 0;
+    virtual antlrcpp::Any visitIdentifier(
+        PathParser::IdentifierContext *context) = 0;
 
-    virtual antlrcpp::Any visitWildcard(PathParser::WildcardContext *context) = 0;
-
-
+    virtual antlrcpp::Any visitWildcard(
+        PathParser::WildcardContext *context) = 0;
 };
-

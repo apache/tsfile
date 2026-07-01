@@ -144,6 +144,7 @@ public class BatchData {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return getBinary();
       case VECTOR:
         return getVector();
@@ -169,6 +170,7 @@ public class BatchData {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return new TsBinary(getBinary());
       case VECTOR:
         return new TsVector(getVector());
@@ -231,6 +233,7 @@ public class BatchData {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         binaryRet = new ArrayList<>();
         binaryRet.add(new Binary[capacity]);
         break;
@@ -575,6 +578,7 @@ public class BatchData {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         putBinary(t, (Binary) v);
         break;
       case VECTOR:
@@ -699,6 +703,7 @@ public class BatchData {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         for (int i = 0; i < length(); i++) {
           outputStream.writeLong(getTimeByIndex(i));
           Binary binary = getBinaryByIndex(i);
@@ -744,6 +749,7 @@ public class BatchData {
                 case TEXT:
                 case BLOB:
                 case STRING:
+                case OBJECT:
                   Binary binary = value.getBinary();
                   outputStream.writeInt(binary.getLength());
                   outputStream.write(binary.getValues());

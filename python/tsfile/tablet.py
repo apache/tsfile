@@ -137,7 +137,8 @@ class Tablet(object):
         if not isinstance(value, expected_type.to_py_type()):
             raise TypeError(f"Expected {expected_type.to_py_type()} got {type(value)}")
 
-        self._check_numeric_range(value, expected_type)
+        if expected_type in (TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE):
+            self._check_numeric_range(value, expected_type)
 
         self.data_list[col_index][row_index] = value
 

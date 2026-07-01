@@ -36,7 +36,8 @@ class IMetadataQuerier {
 
     virtual std::vector<std::vector<std::shared_ptr<ChunkMeta>>>
     get_chunk_metadata_lists(
-        std::shared_ptr<IDeviceID> device_id, const std::unordered_set<std::string>& field_names,
+        std::shared_ptr<IDeviceID> device_id,
+        const std::unordered_set<std::string>& field_names,
         const MetaIndexNode* field_node = nullptr) const = 0;
 
     virtual std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>>
@@ -56,7 +57,10 @@ class IMetadataQuerier {
 
     virtual std::unique_ptr<DeviceMetaIterator> device_iterator(
         MetaIndexNode* root, const Filter* id_filter) = 0;
-};
 
+    // FIXME(Colin): refine this.
+    virtual std::unique_ptr<DeviceMetaIterator> device_iterator(
+        std::vector<MetaIndexNode*> root, const Filter* id_filter) = 0;
+};
 }  // end namespace storage
 #endif  // READER_IMETA_DATA_QUERIER_H

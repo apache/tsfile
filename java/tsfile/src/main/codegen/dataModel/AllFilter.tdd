@@ -52,6 +52,11 @@
       "dataType": "Binary",
       "javaBoxName": "String",
       "classSerializeName": "STRING"
+    },
+    {
+      "dataType": "String",
+      "javaBoxName": "Tag",
+      "classSerializeName": "TAG"
     }
   ]
 }

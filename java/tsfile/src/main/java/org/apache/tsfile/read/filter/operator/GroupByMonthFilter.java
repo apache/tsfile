@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.filter.operator;
 
+import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -29,6 +30,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -137,6 +140,14 @@ public class GroupByMonthFilter extends GroupByFilter {
       // judge single interval that contains start time
       return isContainedByCurrentInterval(startTime, endTime);
     }
+  }
+
+  @Override
+  public List<TimeRange> getTimeRanges() {
+    // this.startTime will be modified dynamically
+    return originalStartTime >= originalEndTime
+        ? Collections.emptyList()
+        : Collections.singletonList(new TimeRange(originalStartTime, originalEndTime - 1));
   }
 
   private boolean isContainedByCurrentInterval(long startTime, long endTime) {

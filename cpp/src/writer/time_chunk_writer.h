@@ -28,6 +28,8 @@
 
 namespace storage {
 
+// TODO: TimeChunkWriter, ValueChunkWriter, ChunkWriter can be further
+// abstracted.
 class TimeChunkWriter {
    public:
     static const int32_t PAGES_DATA_PAGE_SIZE = 1024;
@@ -68,6 +70,8 @@ class TimeChunkWriter {
 
     int64_t estimate_max_series_mem_size();
 
+    bool hasData();
+
    private:
     FORCE_INLINE bool is_cur_page_full() const {
         // FIXME
@@ -86,13 +90,14 @@ class TimeChunkWriter {
         // free memory
         first_page_data_.destroy();
         if (first_page_statistic_ != nullptr) {
-          StatisticFactory::free(first_page_statistic_);
-          first_page_statistic_ = nullptr;
+            StatisticFactory::free(first_page_statistic_);
+            first_page_statistic_ = nullptr;
         }
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(TimePageWriter &first_time_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data, bool with_statistic = true);
+    int write_first_page_data(common::ByteStream &pages_data,
+                              bool with_statistic = true);
 
    private:
     TimePageWriter time_page_writer_;

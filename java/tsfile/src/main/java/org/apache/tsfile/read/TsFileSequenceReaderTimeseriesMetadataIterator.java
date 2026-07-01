@@ -33,8 +33,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -96,7 +96,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
       throw new NoSuchElementException();
     }
 
-    final Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap = new HashMap<>();
+    final Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap = new LinkedHashMap<>();
 
     while (currentTimeseriesMetadataCount < timeseriesBatchReadNumber) {
       // 1. Check Buffer

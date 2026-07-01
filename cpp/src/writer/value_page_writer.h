@@ -63,13 +63,9 @@ struct ValuePageData {
     }
 };
 
-#define VPW_DO_WRITE_FOR_TYPE(TSDATATYPE, ISNULL)                         \
+#define VPW_DO_WRITE_FOR_TYPE(ISNULL)                                     \
     {                                                                     \
         int ret = common::E_OK;                                           \
-        if (UNLIKELY(data_type_ != TSDATATYPE)) {                         \
-            ret = common::E_TYPE_NOT_MATCH;                               \
-            return ret;                                                   \
-        }                                                                 \
         if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {               \
             col_notnull_bitmap_.push_back(0);                             \
         }                                                                 \
@@ -109,19 +105,50 @@ class ValuePageWriter {
     void destroy();
 
     FORCE_INLINE int write(int64_t timestamp, bool value, bool isnull) {
-        VPW_DO_WRITE_FOR_TYPE(common::BOOLEAN, isnull);
+        if (UNLIKELY(data_type_ != common::BOOLEAN)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
     }
+
     FORCE_INLINE int write(int64_t timestamp, int32_t value, bool isnull) {
-        VPW_DO_WRITE_FOR_TYPE(common::INT32, isnull);
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
     }
+
     FORCE_INLINE int write(int64_t timestamp, int64_t value, bool isnull) {
-        VPW_DO_WRITE_FOR_TYPE(common::INT64, isnull);
+        if (UNLIKELY(data_type_ != common::INT64 &&
+                     data_type_ != common::TIMESTAMP)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
     }
+
     FORCE_INLINE int write(int64_t timestamp, float value, bool isnull) {
-        VPW_DO_WRITE_FOR_TYPE(common::FLOAT, isnull);
+        if (UNLIKELY(data_type_ != common::FLOAT)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
     }
+
     FORCE_INLINE int write(int64_t timestamp, double value, bool isnull) {
-        VPW_DO_WRITE_FOR_TYPE(common::DOUBLE, isnull);
+        if (UNLIKELY(data_type_ != common::DOUBLE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
+    }
+
+    FORCE_INLINE int write(int64_t timestamp, common::String value,
+                           bool isnull) {
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        VPW_DO_WRITE_FOR_TYPE(isnull);
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }

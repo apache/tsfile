@@ -61,6 +61,9 @@ class MetadataQuerier : public IMetadataQuerier {
     std::unique_ptr<DeviceMetaIterator> device_iterator(
         MetaIndexNode* root, const Filter* id_filter) override;
 
+    std::unique_ptr<DeviceMetaIterator> device_iterator(
+        std::vector<MetaIndexNode*> root, const Filter* id_filter) override;
+
     void clear() override;
 
    private:

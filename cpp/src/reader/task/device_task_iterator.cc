@@ -30,8 +30,8 @@ int DeviceTaskIterator::next(DeviceQueryTask *&task) {
     if (RET_FAIL(device_meta_iterator_->next(device_meta_pair))) {
     } else {
         task = DeviceQueryTask::create_device_query_task(
-            device_meta_pair.first, column_names_, column_mapping_, device_meta_pair.second,
-            table_schema_, pa_);
+            device_meta_pair.first, column_names_, column_mapping_,
+            device_meta_pair.second, table_schema_, pa_);
     }
     return ret;
 }
