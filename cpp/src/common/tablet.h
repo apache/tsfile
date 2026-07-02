@@ -72,6 +72,7 @@ class Tablet {
             if (buffer) common::mem_free(buffer);
             buffer = nullptr;
             buf_capacity = buf_used = 0;
+            this->~StringColumn();
         }
 
         void reset() {
