@@ -177,10 +177,17 @@ class TsFileIOReader {
     bool bloom_filter_contains(const std::string& device_name,
                                const std::string& measurement_name);
 
+    // Collect every leaf index entry under index_node. Intermediate index
+    // nodes read while descending are allocated from @pa, NOT a local arena:
+    // the collected entries are shared_ptrs whose backing memory lives in that
+    // arena (self_deleter only runs the dtor, it does not free), so @pa must
+    // outlive index_node_entry_list. Callers pass the same arena they later
+    // hand to do_load_all_timeseries_index().
     int get_all_leaf(
         std::shared_ptr<MetaIndexNode> index_node,
         std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>&
-            index_node_entry_list);
+            index_node_entry_list,
+        common::PageArena& pa);
 
     struct CachedDeviceNode {
         std::shared_ptr<MetaIndexNode> top_node;

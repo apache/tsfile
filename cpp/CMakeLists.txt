@@ -261,6 +261,11 @@ message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
 if (ENABLE_SIMD)
     add_definitions(-DENABLE_SIMD)
+    # common/statistic.h is a public header included by src, tools, tests and
+    # the cwrapper; under ENABLE_SIMD it pulls in <simde/x86/sse4.2.h>. Add the
+    # SIMDe include path here (before every add_subdirectory below) so all
+    # targets inherit it, instead of repeating it per subdirectory.
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.

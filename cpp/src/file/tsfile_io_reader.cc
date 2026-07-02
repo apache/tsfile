@@ -145,7 +145,7 @@ int TsFileIOReader::alloc_multi_ssi(
     // the index tree — cheaper than N separate binary searches + file reads.
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
         all_leaves;
-    if (RET_FAIL(get_all_leaf(top_node, all_leaves))) {
+    if (RET_FAIL(get_all_leaf(top_node, all_leaves, ssi_pa))) {
         ssi->destroy();
         mem_free(ssi);
         ssi = nullptr;
@@ -253,7 +253,7 @@ int TsFileIOReader::get_device_timeseries_meta_by_offset(
         }
     }
 
-    get_all_leaf(top_node, meta_index_entry_list);
+    get_all_leaf(top_node, meta_index_entry_list, pa);
 
     if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
                                               timeseries_indexs))) {
@@ -658,7 +658,7 @@ int TsFileIOReader::load_all_measurement_index_entry(
 #endif
     // 2. search from top_node in top-down way
     if (IS_SUCC(ret)) {
-        get_all_leaf(top_node, ret_measurement_index_entry);
+        get_all_leaf(top_node, ret_measurement_index_entry, pa);
     }
     if (ret == E_NOT_EXIST) {
         ret = E_MEASUREMENT_NOT_EXIST;
@@ -1028,7 +1028,8 @@ int TsFileIOReader::do_load_all_timeseries_index(
 int TsFileIOReader::get_all_leaf(
     std::shared_ptr<MetaIndexNode> index_node,
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>&
-        index_node_entry_list) {
+        index_node_entry_list,
+    common::PageArena& pa) {
     int ret = E_OK;
     if (index_node->node_type_ == LEAF_MEASUREMENT ||
         index_node->node_type_ == LEAF_DEVICE) {
@@ -1057,14 +1058,18 @@ int TsFileIOReader::get_all_leaf(
                       << index_node->children_[i]->get_offset() << std::endl;
 #endif
             ASSERT(read_size > 0 && read_size < (1 << 30));
-            PageArena cur_level_index_node_pa;
-            void* buf = cur_level_index_node_pa.alloc(sizeof(MetaIndexNode));
-            char* data_buf = (char*)cur_level_index_node_pa.alloc(read_size);
+            // Allocate the intermediate node and its children from @pa (which
+            // outlives index_node_entry_list), not a function-local PageArena:
+            // the leaf entries collected below are shared_ptrs into this
+            // node's arena and must stay valid after this call returns. A
+            // local arena freed the entries on scope exit -> use-after-free in
+            // do_load_all_timeseries_index().
+            void* buf = pa.alloc(sizeof(MetaIndexNode));
+            char* data_buf = (char*)pa.alloc(read_size);
             if (IS_NULL(buf) || IS_NULL(data_buf)) {
                 return E_OOM;
             }
-            auto* cur_level_index_node_ptr =
-                new (buf) MetaIndexNode(&cur_level_index_node_pa);
+            auto* cur_level_index_node_ptr = new (buf) MetaIndexNode(&pa);
             auto cur_level_index_node = std::shared_ptr<MetaIndexNode>(
                 cur_level_index_node_ptr, MetaIndexNode::self_deleter);
 
@@ -1077,7 +1082,8 @@ int TsFileIOReader::get_all_leaf(
             } else if (RET_FAIL(cur_level_index_node->deserialize_from(
                            data_buf, read_size))) {
             } else {
-                ret = get_all_leaf(cur_level_index_node, index_node_entry_list);
+                ret = get_all_leaf(cur_level_index_node, index_node_entry_list,
+                                   pa);
             }
         }
     }
