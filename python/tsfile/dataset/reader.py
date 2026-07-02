@@ -91,11 +91,23 @@ class TsFileSeriesReader:
     """Wrap ``TsFileReaderPy`` with numeric dataset discovery and batch reads."""
 
     def __init__(self, file_path: str, show_progress: bool = True):
+        self.show_progress = show_progress
+        self._open_and_probe(file_path)
+
+        self._catalog = MetadataCatalog()
+        self._cache_metadata()
+
+    def _open_and_probe(self, file_path: str) -> None:
+        """Open the native reader and probe the file model (the cheap half).
+
+        This is everything ``__init__`` does except the expensive
+        ``_cache_metadata`` metadata walk, so both the normal constructor and
+        the cache-backed ``from_cached_catalog`` share it.
+        """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"TsFile not found: {file_path}")
 
         self.file_path = file_path
-        self.show_progress = show_progress
 
         try:
             self._reader = TsFileReaderPy(file_path)
@@ -106,8 +118,25 @@ class TsFileSeriesReader:
         self._table_schemas = self._reader.get_all_table_schemas()
         self._model_kind: str = MODEL_TREE if not self._table_schemas else MODEL_TABLE
 
-        self._catalog = MetadataCatalog()
-        self._cache_metadata()
+    @classmethod
+    def from_cached_catalog(
+        cls,
+        file_path: str,
+        catalog: MetadataCatalog,
+        show_progress: bool = False,
+    ) -> "TsFileSeriesReader":
+        """Build a reader whose catalog comes from an on-disk index cache.
+
+        Opens the file and re-probes the model kind exactly like ``__init__``
+        (both cheap), but SKIPS the expensive ``_cache_metadata`` walk, using
+        the supplied catalog instead. The caller is trusted to pass a catalog
+        matching the file (source files are not validated, per design).
+        """
+        obj = cls.__new__(cls)
+        obj.show_progress = show_progress
+        obj._open_and_probe(file_path)
+        obj._catalog = catalog
+        return obj
 
     def __del__(self):
         self.close()
