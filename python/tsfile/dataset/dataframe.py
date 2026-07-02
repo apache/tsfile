@@ -28,6 +28,7 @@ import warnings
 
 import numpy as np
 
+from . import index_cache
 from .formatting import format_dataframe_table
 from .metadata import (
     MODEL_TABLE,
@@ -620,9 +621,19 @@ class _LocIndexer:
 class TsFileDataFrame:
     """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
 
-    def __init__(self, paths: Union[str, List[str]], show_progress: bool = True):
+    def __init__(
+        self,
+        paths: Union[str, List[str]],
+        show_progress: bool = True,
+        use_cache: bool = True,
+    ):
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
+        self._use_cache = use_cache
+        # Resolve from the ORIGINAL paths arg (before expansion): the on-disk
+        # cache is only enabled when a single directory is passed. None means
+        # "no cache location" -- single-file / list inputs behave as before.
+        self._cache_path = index_cache.resolve_cache_path(paths) if use_cache else None
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -669,13 +680,73 @@ class TsFileDataFrame:
         """Build the logical cross-file index and the derived per-series caches."""
         from .reader import TsFileSeriesReader
 
-        if len(self._paths) >= 2:
-            self._load_metadata_parallel(TsFileSeriesReader)
-        else:
-            self._load_metadata_serial(TsFileSeriesReader)
+        loaded_from_cache = False
+        if self._use_cache and self._cache_path and os.path.exists(self._cache_path):
+            loaded_from_cache = self._load_metadata_from_cache(TsFileSeriesReader)
+
+        if not loaded_from_cache:
+            if len(self._paths) >= 2:
+                self._load_metadata_parallel(TsFileSeriesReader)
+            else:
+                self._load_metadata_serial(TsFileSeriesReader)
 
         if not self._index.series:
             raise ValueError("No valid time series found in the provided TsFile files")
+
+        # Persist the freshly built catalogs so the next load skips the walk.
+        # Only after a fresh build (never re-writing a cache we just read) and
+        # only when non-empty (the empty check above already guarded this).
+        if not loaded_from_cache and self._use_cache and self._cache_path:
+            self._write_index_cache()
+
+    def _load_metadata_from_cache(self, reader_class) -> bool:
+        """Rebuild readers + index from the on-disk cache; False falls back to a fresh build."""
+        try:
+            cached_paths, catalogs = index_cache.load_catalogs(self._cache_path)
+        except Exception:
+            # Corrupt / old / unreadable cache -> rebuild from source.
+            return False
+
+        # Source files are not validated (per design), but the resolved file
+        # SET must match: cached device/series indices are positional, so a
+        # changed set (file added/removed) would misalign. Rebuild if so.
+        if cached_paths != self._paths:
+            return False
+
+        catalog_by_path = dict(zip(cached_paths, catalogs))
+        total = len(self._paths)
+        self._show_loading_progress(0, total)
+        # Iterate in self._paths order so _register_reader replays the exact
+        # same merge order as a fresh build -> identical series/device order.
+        for index, file_path in enumerate(self._paths, start=1):
+            _register_reader(
+                self._readers,
+                self._index,
+                file_path,
+                reader_class.from_cached_catalog(
+                    file_path, catalog_by_path[file_path], show_progress=False
+                ),
+            )
+            self._show_loading_progress(index, total)
+
+        self._show_loading_progress(
+            total, total, sum(reader.series_count for reader in self._readers.values())
+        )
+        return True
+
+    def _write_index_cache(self):
+        """Write per-file catalogs to the cache; best-effort (warn on failure)."""
+        # Emit catalogs in self._paths order so the reload replays merges
+        # identically. self._readers is keyed by file_path for both build paths.
+        catalogs = [self._readers[path].catalog for path in self._paths]
+        try:
+            index_cache.save_catalogs(self._cache_path, list(self._paths), catalogs)
+        except Exception as e:
+            warnings.warn(
+                f"Failed to write TsFile index cache: {e}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     def _show_loading_progress(self, done: int, total: int, total_series: int = None):
         if not self._show_progress or total <= 0:
