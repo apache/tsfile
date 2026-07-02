@@ -182,15 +182,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         return ret;
     }
     dense_row_count_ = compute_dense_row_count(time_series_indexs);
-    // Fast path: when every aligned column is provably dense (same total row
-    // count across time + value chunks), bulk-copy from SSI tsblock to caller
-    // tsblock instead of per-row merging.  compute_dense_row_count() returns
-    // -1 if the device is not provably dense, which gates safety.
-    // Compile-time kill-switch for the dense aligned fast path below: flip to
-    // false to force the safe per-row merge path when debugging a suspected
-    // fast-path correctness issue.  The real gating is the runtime conditions
-    // at the use site (dense_row_count_ >= 0, all columns aligned).
-    const bool enable_dense_aligned_fast_path = true;
     // Early device-level time skip: if time_filter is set and ALL chunks of
     // this device have statistics that fall outside the filter range, skip the
     // entire device.  Chunks without statistics are assumed to satisfy.
@@ -365,8 +356,7 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
-    if (!field_column_contexts_.empty() && enable_dense_aligned_fast_path &&
-        dense_row_count_ >= 0 &&
+    if (!field_column_contexts_.empty() && dense_row_count_ >= 0 &&
         aligned_col_count_ == field_column_contexts_.size()) {
         all_aligned_ = true;
         aligned_vec_.reserve(field_column_contexts_.size());

@@ -55,7 +55,7 @@ void TsFileSeriesScanIterator::destroy() {
         chunk_reader_ = nullptr;
     }
     if (tsblock_ != nullptr) {
-        delete tsblock_;
+        tsblock_->~TsBlock();
         tsblock_ = nullptr;
     }
 }
@@ -230,7 +230,7 @@ void TsFileSeriesScanIterator::revert_tsblock() {
     if (tsblock_ == nullptr) {
         return;
     }
-    delete tsblock_;
+    tsblock_->~TsBlock();
     tsblock_ = nullptr;
 }
 
@@ -367,11 +367,10 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
 TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
     ChunkHeader& ch = chunk_reader_->get_chunk_header();
 
-    // Time column encoding/compression are placeholders: this ColumnSchema
-    // describes the already-decoded in-memory result TsBlock, where only
-    // data_type (always INT64 for time) is used (see alloc_tsblock_multi).
-    ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
-                         common::TS_2DIFF);
+    // Encoding/compression are unused for the in-memory result TsBlock;
+    // only data_type (INT64) matters here.
+    ColumnSchema time_cd("time", common::INT64, common::INVALID_COMPRESSION,
+                         common::INVALID_ENCODING);
     ColumnSchema value_cd(ch.measurement_name_, ch.data_type_,
                           ch.compression_type_, ch.encoding_type_);
 
@@ -383,9 +382,11 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
     tuple_desc_.push_back(time_cd);
     tuple_desc_.push_back(value_cd);
 
-    tsblock_ = new TsBlock(&tuple_desc_);
+    void* tsblock_buf = data_pa_->alloc(sizeof(TsBlock));
+    if (IS_NULL(tsblock_buf)) return nullptr;
+    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_);
     if (E_OK != tsblock_->init()) {
-        delete tsblock_;
+        tsblock_->~TsBlock();
         tsblock_ = nullptr;
     }
     return tsblock_;
@@ -394,12 +395,10 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
 TsBlock* TsFileSeriesScanIterator::alloc_tsblock_multi() {
     auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
 
-    // Time column.  The encoding/compression fields only matter for on-disk
-    // serialization; this ColumnSchema describes the already-decoded in-memory
-    // result TsBlock, where only data_type (always INT64 for time) is used, so
-    // the encoding/compression are placeholders.
-    ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
-                         common::TS_2DIFF);
+    // Encoding/compression are unused for the in-memory result TsBlock;
+    // only data_type (INT64) matters here.
+    ColumnSchema time_cd("time", common::INT64, common::INVALID_COMPRESSION,
+                         common::INVALID_ENCODING);
     // Reset first (see alloc_tsblock): tuple_desc_ is reused across get_next()
     // calls and TsBlock holds a pointer to it, so stale columns must be
     // cleared.
@@ -415,9 +414,11 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock_multi() {
         tuple_desc_.push_back(value_cd);
     }
 
-    tsblock_ = new TsBlock(&tuple_desc_);
+    void* tsblock_buf = data_pa_->alloc(sizeof(TsBlock));
+    if (IS_NULL(tsblock_buf)) return nullptr;
+    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_);
     if (E_OK != tsblock_->init()) {
-        delete tsblock_;
+        tsblock_->~TsBlock();
         tsblock_ = nullptr;
     }
     return tsblock_;

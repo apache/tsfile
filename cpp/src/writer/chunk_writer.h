@@ -152,6 +152,13 @@ class ChunkWriter {
             }
             uint32_t page_remaining = page_cap - cur_points;
             uint32_t batch_size = std::min(count - offset, page_remaining);
+            // TODO: for variable-length types (STRING/TEXT/BLOB), batch_size is
+            // capped by row count alone; a single sub-batch can push the page
+            // memory far past page_writer_max_memory_bytes_ before
+            // seal_cur_page_if_full() runs.  Add byte-budget tracking here:
+            // estimate bytes remaining in the current page and cap batch_size
+            // so that one write cannot exceed the memory limit by more than one
+            // value.
             if (RET_FAIL(page_writer_.write_string_batch(
                     timestamps + offset, buffer, offsets, start_idx + offset,
                     batch_size))) {

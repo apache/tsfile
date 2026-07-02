@@ -1374,6 +1374,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 // all of their rows; the per-column row counts no longer
                 // line up.  Mark the writer unrecoverable so flush/close
                 // can't seal a corrupt aligned chunk group.
+                // TODO: a future PR should add per-device cleanup so that a
+                // partial write can be rolled back rather than poisoning the
+                // entire writer.
                 unrecoverable_ = true;
                 return ret;
             }

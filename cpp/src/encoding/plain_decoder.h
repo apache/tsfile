@@ -104,6 +104,7 @@ class PlainDecoder : public Decoder {
     //
     // INT32: PLAIN encoding uses varint (variable stride).  Override to avoid
     // virtual dispatch per element; actual decode is still per-value.
+    // No PLAIN_READ_BATCH_FIXED macro: varint has no fixed stride.
     int read_batch_int32(int32_t* out, int capacity, int& actual,
                          common::ByteStream& in) override {
         actual = 0;
@@ -115,6 +116,7 @@ class PlainDecoder : public Decoder {
         return common::E_OK;
     }
 
+    // No PLAIN_SKIP_FIXED macro: varint has no fixed stride.
     int skip_int32(int count, int& skipped, common::ByteStream& in) override {
         skipped = 0;
         int32_t dummy;

@@ -67,7 +67,10 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                                       measurement_name)) {
         return E_NO_MORE_DATA;
     } else {
-        ssi = new TsFileSeriesScanIterator;
+        void* ssi_buf =
+            mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
+        if (IS_NULL(ssi_buf)) return E_OOM;
+        ssi = new (ssi_buf) TsFileSeriesScanIterator;
         ssi->init(device_id, measurement_name, read_file_, time_filter, pa);
         if (RET_FAIL(load_timeseries_index_for_ssi(device_id, measurement_name,
                                                    ssi))) {
@@ -78,7 +81,7 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
         }
         if (ret != E_OK) {
             ssi->destroy();
-            delete ssi;
+            mem_free(ssi);
             ssi = nullptr;
         }
     }
@@ -93,7 +96,10 @@ int TsFileIOReader::alloc_multi_ssi(
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
 
-    ssi = new TsFileSeriesScanIterator;
+    void* ssi_buf =
+        mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
+    if (IS_NULL(ssi_buf)) return E_OOM;
+    ssi = new (ssi_buf) TsFileSeriesScanIterator;
     ssi->init(device_id, measurement_names.empty() ? "" : measurement_names[0],
               read_file_, time_filter, pa);
 
@@ -102,13 +108,15 @@ int TsFileIOReader::alloc_multi_ssi(
     // Use cached device measurement node (avoids repeated file I/O)
     CachedDeviceNode cached;
     if (RET_FAIL(get_cached_device_node(device_id, ssi_pa, cached))) {
-        delete ssi;
+        ssi->destroy();
+        mem_free(ssi);
         ssi = nullptr;
         return ret;
     }
     auto top_node = cached.top_node;
     if (!cached.is_aligned) {
-        delete ssi;
+        ssi->destroy();
+        mem_free(ssi);
         ssi = nullptr;
         return E_NOT_SUPPORT;
     }
@@ -116,7 +124,8 @@ int TsFileIOReader::alloc_multi_ssi(
     // Get time column metadata
     TimeseriesIndex* time_ts_idx = nullptr;
     if (RET_FAIL(get_time_column_metadata(top_node, time_ts_idx, ssi_pa))) {
-        delete ssi;
+        ssi->destroy();
+        mem_free(ssi);
         ssi = nullptr;
         return ret;
     }
@@ -124,42 +133,46 @@ int TsFileIOReader::alloc_multi_ssi(
     // Create MultiAlignedTimeseriesIndex
     void* multi_buf = ssi_pa.alloc(sizeof(MultiAlignedTimeseriesIndex));
     if (IS_NULL(multi_buf)) {
-        delete ssi;
+        ssi->destroy();
+        mem_free(ssi);
         ssi = nullptr;
         return E_OOM;
     }
     auto* multi_idx = new (multi_buf) MultiAlignedTimeseriesIndex;
     multi_idx->time_ts_idx_ = time_ts_idx;
 
-    // Load each measurement's TimeseriesIndex
+    // Batch-load all measurement TimeseriesIndex entries in a single pass over
+    // the index tree — cheaper than N separate binary searches + file reads.
+    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
+        all_leaves;
+    if (RET_FAIL(get_all_leaf(top_node, all_leaves))) {
+        ssi->destroy();
+        mem_free(ssi);
+        ssi = nullptr;
+        return ret;
+    }
+    std::vector<ITimeseriesIndex*> all_ts_idxs;
+    if (RET_FAIL(
+            do_load_all_timeseries_index(all_leaves, ssi_pa, all_ts_idxs))) {
+        ssi->destroy();
+        mem_free(ssi);
+        ssi = nullptr;
+        return ret;
+    }
+    std::unordered_map<std::string, TimeseriesIndex*> name_to_idx;
+    for (ITimeseriesIndex* idx : all_ts_idxs) {
+        auto* ts = static_cast<TimeseriesIndex*>(idx);
+        name_to_idx[ts->get_measurement_name().to_std_string()] = ts;
+    }
     for (const auto& meas_name : measurement_names) {
-        std::shared_ptr<IMetaIndexEntry> meas_entry;
-        int64_t meas_end_offset = 0;
-        if (RET_FAIL(load_measurement_index_entry(
-                meas_name, top_node, meas_entry, meas_end_offset))) {
-            // Measurement not found — abort multi path
-            delete ssi;
-            ssi = nullptr;
-            return ret;
-        }
-
-        ITimeseriesIndex* ts_idx = nullptr;
-        if (RET_FAIL(do_load_timeseries_index(
-                meas_name, meas_entry->get_offset(), meas_end_offset, ssi_pa,
-                ts_idx, /*is_aligned=*/true))) {
-            delete ssi;
-            ssi = nullptr;
-            return ret;
-        }
-
-        auto* aligned_idx = dynamic_cast<AlignedTimeseriesIndex*>(ts_idx);
-        if (aligned_idx && aligned_idx->value_ts_idx_) {
-            multi_idx->value_ts_idxs_.push_back(aligned_idx->value_ts_idx_);
-        } else {
-            delete ssi;
+        auto it = name_to_idx.find(meas_name);
+        if (it == name_to_idx.end()) {
+            ssi->destroy();
+            mem_free(ssi);
             ssi = nullptr;
             return E_NOT_EXIST;
         }
+        multi_idx->value_ts_idxs_.push_back(it->second);
     }
 
     ssi->itimeseries_index_ = multi_idx;
@@ -168,7 +181,7 @@ int TsFileIOReader::alloc_multi_ssi(
 
     if (RET_FAIL(ssi->init_chunk_reader())) {
         ssi->destroy();
-        delete ssi;
+        mem_free(ssi);
         ssi = nullptr;
     }
     return ret;
@@ -177,7 +190,7 @@ int TsFileIOReader::alloc_multi_ssi(
 void TsFileIOReader::revert_ssi(TsFileSeriesScanIterator* ssi) {
     if (ssi != nullptr) {
         ssi->destroy();
-        delete ssi;
+        mem_free(ssi);
     }
 }
 

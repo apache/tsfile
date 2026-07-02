@@ -29,9 +29,8 @@
 #include "common/allocator/byte_stream.h"
 #include "common/db_common.h"
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h>
-#define TSFILE_HAS_NEON 1
+#ifdef ENABLE_SIMD
+#include "simde/x86/sse4.2.h"
 #endif
 
 namespace storage {
@@ -846,25 +845,31 @@ class Int64Statistic : public Statistic {
                 end_time_ = timestamps[count - 1];
         }
         uint32_t i = start;
-#if TSFILE_HAS_NEON
+#ifdef ENABLE_SIMD
         {
-            int64x2_t vmin = vdupq_n_s64(min_value_);
-            int64x2_t vmax = vdupq_n_s64(max_value_);
-            float64x2_t vsum = vdupq_n_f64(0.0);
+            simde__m128i vmin = simde_mm_set1_epi64x(min_value_);
+            simde__m128i vmax = simde_mm_set1_epi64x(max_value_);
+            simde__m128d vsum = simde_mm_setzero_pd();
             for (; i + 2 <= count; i += 2) {
-                int64x2_t v = vld1q_s64(&values[i]);
-                // min/max via compare+select (no vminq_s64 in NEON)
-                uint64x2_t lt = vcltq_s64(v, vmin);
-                vmin = vbslq_s64(lt, v, vmin);
-                uint64x2_t gt = vcgtq_s64(v, vmax);
-                vmax = vbslq_s64(gt, v, vmax);
-                vsum = vaddq_f64(vsum, vcvtq_f64_s64(v));
+                simde__m128i v =
+                    simde_mm_loadu_si128((const simde__m128i*)&values[i]);
+                // no vminq_s64 equivalent in SSE; use cmpgt + blendv
+                simde__m128i lt = simde_mm_cmpgt_epi64(vmin, v);
+                vmin = simde_mm_blendv_epi8(vmin, v, lt);
+                simde__m128i gt = simde_mm_cmpgt_epi64(v, vmax);
+                vmax = simde_mm_blendv_epi8(vmax, v, gt);
+                // no direct int64→double in SSE; extract and cast per lane
+                int64_t v0 = simde_mm_cvtsi128_si64(v);
+                int64_t v1 = simde_mm_extract_epi64(v, 1);
+                vsum = simde_mm_add_pd(vsum,
+                                       simde_mm_set_pd((double)v1, (double)v0));
             }
-            min_value_ =
-                std::min(vgetq_lane_s64(vmin, 0), vgetq_lane_s64(vmin, 1));
-            max_value_ =
-                std::max(vgetq_lane_s64(vmax, 0), vgetq_lane_s64(vmax, 1));
-            sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
+            min_value_ = std::min(simde_mm_cvtsi128_si64(vmin),
+                                  simde_mm_extract_epi64(vmin, 1));
+            max_value_ = std::max(simde_mm_cvtsi128_si64(vmax),
+                                  simde_mm_extract_epi64(vmax, 1));
+            sum_value_ += simde_mm_cvtsd_f64(vsum) +
+                          simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vsum, vsum));
         }
 #endif
         for (; i < count; i++) {
@@ -1068,22 +1073,25 @@ class DoubleStatistic : public Statistic {
                 end_time_ = timestamps[count - 1];
         }
         uint32_t i = start;
-#if TSFILE_HAS_NEON
+#ifdef ENABLE_SIMD
         {
-            float64x2_t vmin = vdupq_n_f64(min_value_);
-            float64x2_t vmax = vdupq_n_f64(max_value_);
-            float64x2_t vsum = vdupq_n_f64(0.0);
+            simde__m128d vmin = simde_mm_set1_pd(min_value_);
+            simde__m128d vmax = simde_mm_set1_pd(max_value_);
+            simde__m128d vsum = simde_mm_setzero_pd();
             for (; i + 2 <= count; i += 2) {
-                float64x2_t v = vld1q_f64(&values[i]);
-                vmin = vminq_f64(vmin, v);
-                vmax = vmaxq_f64(vmax, v);
-                vsum = vaddq_f64(vsum, v);
+                simde__m128d v = simde_mm_loadu_pd(&values[i]);
+                vmin = simde_mm_min_pd(vmin, v);
+                vmax = simde_mm_max_pd(vmax, v);
+                vsum = simde_mm_add_pd(vsum, v);
             }
             min_value_ =
-                std::min(vgetq_lane_f64(vmin, 0), vgetq_lane_f64(vmin, 1));
+                std::min(simde_mm_cvtsd_f64(vmin),
+                         simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vmin, vmin)));
             max_value_ =
-                std::max(vgetq_lane_f64(vmax, 0), vgetq_lane_f64(vmax, 1));
-            sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
+                std::max(simde_mm_cvtsd_f64(vmax),
+                         simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vmax, vmax)));
+            sum_value_ += simde_mm_cvtsd_f64(vsum) +
+                          simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vsum, vsum));
         }
 #endif
         for (; i < count; i++) {

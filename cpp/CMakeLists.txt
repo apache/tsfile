@@ -256,11 +256,11 @@ if (ENABLE_THREADS)
     link_libraries(Threads::Threads)
 endif()
 
-option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
-message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+option(ENABLE_SIMD "Enable SIMDe (SIMD Everywhere)" OFF)
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
-if (ENABLE_SIMDE)
-    add_definitions(-DENABLE_SIMDE)
+if (ENABLE_SIMD)
+    add_definitions(-DENABLE_SIMD)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.

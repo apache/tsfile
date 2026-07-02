@@ -2417,7 +2417,7 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
             // bufs are owned by the caller-provided PageArena.
             std::vector<common::String> str_vals;
         };
-        // One ColBatch per value column, heap-allocated for the batch.
+        // One ColBatch per value column.
         std::vector<ColBatch> col_batches(num_cols);
 
         for (uint32_t c = 0; c < num_cols; c++) {
