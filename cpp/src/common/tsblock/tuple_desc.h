@@ -52,6 +52,16 @@ class TupleDesc {
         time_column_index_ = -1;
     }
 
+    // Release the column vector's heap storage (not just clear() it).  Needed
+    // when a TupleDesc lives inside an object that is placement-new'd into a
+    // PageArena and torn down with a manual destroy() + mem_free() instead of
+    // its destructor: the arena frees raw bytes without running ~vector(), so
+    // column_list_'s buffer would otherwise leak.
+    FORCE_INLINE void release() {
+        std::vector<ColumnSchema>().swap(column_list_);
+        time_column_index_ = -1;
+    }
+
     FORCE_INLINE void push_back(ColumnSchema schema) {
         if (schema.column_category_ == ColumnCategory::TIME) {
             ASSERT(time_column_index_ == -1);

@@ -58,6 +58,16 @@ void TsFileSeriesScanIterator::destroy() {
         tsblock_->~TsBlock();
         tsblock_ = nullptr;
     }
+    // This SSI is placement-new'd into mem_alloc'd memory and torn down with
+    // destroy() + mem_free() (see TsFileIOReader::revert_ssi / alloc_*_ssi),
+    // so ~TsFileSeriesScanIterator() never runs and the heap-owning members
+    // below would leak their backing storage on every query.  Release them
+    // explicitly (after the TsBlock that pointed at tuple_desc_ is gone).
+    tuple_desc_.release();
+    std::vector<common::SimpleList<ChunkMeta*>::Iterator>().swap(
+        value_chunk_meta_cursors_);
+    device_id_.reset();
+    std::string().swap(measurement_name_);
 }
 
 bool TsFileSeriesScanIterator::should_skip_chunk_by_time(
