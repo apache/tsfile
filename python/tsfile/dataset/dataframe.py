@@ -23,13 +23,15 @@ from dataclasses import dataclass, field
 import heapq
 import os
 import sys
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import warnings
 
 import numpy as np
 
 from .formatting import format_dataframe_table
 from .metadata import (
+    MODEL_TABLE,
+    MODEL_TREE,
     SeriesPath,
     TableEntry,
     _normalize_tag_values,
@@ -43,7 +45,6 @@ from .timeseries import AlignedTimeseries, Timeseries
 DeviceKey = Tuple[str, tuple]
 SeriesRefKey = Tuple[int, int]
 SeriesRef = Tuple[object, int, int]
-DeviceRef = Tuple[object, int]
 
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
@@ -56,35 +57,35 @@ _OVERLAP_ROW_CHUNK_SIZE = 256
 
 
 @dataclass(**_DATACLASS_SLOTS)
-class _LogicalIndex:
-    """Cross-reader logical mapping for devices and series."""
+class _DataFrameCatalog:
+    """TsFileDataFrame's cross-file unified catalog: merges each tsfile's
+    ``MetadataCatalog`` into one user-facing global view.
+    """
+
+    # Model kind for the entire load set: "table" or "tree". A single
+    # TsFileDataFrame is not allowed to mix table-model and tree-model files.
+    model: Optional[str] = None
 
     # Shared table schema references keyed by table name.
     table_entries: Dict[str, TableEntry] = field(default_factory=dict)
 
     # Stable logical device order, each item is (table_name, tag_values).
-    device_order: List[DeviceKey] = field(default_factory=list)
+    devices: List[DeviceKey] = field(default_factory=list)
     # Map one logical device key to its dataframe-local device index. The key's
     # tag tuple keeps interior nulls (None) and drops trailing ones, so every
     # device -- including null-tagged ones -- resolves by a single direct lookup.
-    device_index_by_key: Dict[DeviceKey, int] = field(default_factory=dict)
-    # For each logical device, keep the contributing reader-local device refs.
-    device_refs: List[List[DeviceRef]] = field(default_factory=list)
+    device_index: Dict[DeviceKey, int] = field(default_factory=dict)
+    # Aggregated (min_time, max_time) per logical device, computed once at
+    # registration so query-time lookups are O(1).
+    device_time_bounds: List[Tuple[Optional[int], Optional[int]]] = field(
+        default_factory=list
+    )
 
     # Stable logical series order, each item is (device_idx, field_idx).
-    series_refs_ordered: List[SeriesRefKey] = field(default_factory=list)
-    # Map one logical series ref to the contributing reader-local series refs.
-    series_ref_map: Dict[SeriesRefKey, List[SeriesRef]] = field(default_factory=dict)
-    # Fast membership check for resolved series refs.
-    series_ref_set: Set[SeriesRefKey] = field(default_factory=set)
-
-
-@dataclass(**_DATACLASS_SLOTS)
-class _DerivedCache:
-    """Merged metadata derived from the logical index."""
-
-    devices: List[dict] = field(default_factory=list)
-    field_stats: Dict[SeriesRefKey, dict] = field(default_factory=dict)
+    series: List[SeriesRefKey] = field(default_factory=list)
+    # For each logical series: which shards hold it, plus its (device_id,
+    # field_idx) coordinates inside each shard.
+    series_shards: Dict[SeriesRefKey, List[SeriesRef]] = field(default_factory=dict)
 
 
 def _expand_paths(paths: Union[str, List[str]]) -> List[str]:
@@ -139,13 +140,56 @@ def _validate_table_schema(
     )
 
 
+def _merge_tree_table_entries(existing: TableEntry, incoming: TableEntry) -> TableEntry:
+    """Widen two per-file synthetic tree tables into one global table.
+
+    Tree TsFiles carry no authored schema, so each file synthesizes its own
+    table (root name, ``_col_i`` tag columns sized to that file's deepest
+    device, fields = the measurements present in that file). When several tree
+    files are loaded together we widen to their union: field columns are
+    unioned (existing order first, then new measurements) and the tag
+    columns/types grow to the deepest file's depth so shallower devices pad
+    with nulls. Per-(device, field) ownership stays exact because each shard is
+    keyed by the global field index resolved by measurement name.
+    """
+    if len(incoming.tag_columns) > len(existing.tag_columns):
+        tag_columns, tag_types = incoming.tag_columns, incoming.tag_types
+    else:
+        tag_columns, tag_types = existing.tag_columns, existing.tag_types
+
+    field_columns = list(existing.field_columns)
+    seen = set(field_columns)
+    for name in incoming.field_columns:
+        if name not in seen:
+            seen.add(name)
+            field_columns.append(name)
+
+    return TableEntry(
+        table_name=existing.table_name,
+        tag_columns=tag_columns,
+        tag_types=tag_types,
+        field_columns=tuple(field_columns),
+    )
+
+
 def _register_reader(
     readers: Dict[str, object],
-    index: _LogicalIndex,
+    index: _DataFrameCatalog,
     file_path: str,
     reader,
 ) -> None:
     """Merge one reader's catalog into the dataframe-wide logical index."""
+    cur_tsfile_model = reader.model_kind
+    if index.model is None:
+        index.model = cur_tsfile_model
+    elif index.model != cur_tsfile_model:
+        raise ValueError(
+            f"Mixed table-model and tree-model TsFiles detected. The first "
+            f"loaded file is {index.model!r} but '{file_path}' is "
+            f"{cur_tsfile_model!r}. A single TsFileDataFrame load set must be "
+            f"entirely table-model or entirely tree-model."
+        )
+
     readers[file_path] = reader
     catalog = reader.catalog
 
@@ -153,44 +197,61 @@ def _register_reader(
         existing_entry = index.table_entries.get(table_entry.table_name)
         if existing_entry is None:
             index.table_entries[table_entry.table_name] = table_entry
+        elif index.model == MODEL_TREE:
+            # Tree shards carry no authored schema; widen the synthetic table to
+            # the union of fields and the deepest tag layout across files
+            # instead of rejecting differing subsets/depths.
+            index.table_entries[table_entry.table_name] = _merge_tree_table_entries(
+                existing_entry, table_entry
+            )
         else:
             _validate_table_schema(existing_entry, table_entry, file_path)
 
     for device_id, device_entry in enumerate(catalog.device_entries):
         table_entry = catalog.table_entries[device_entry.table_id]
         device_key = (table_entry.table_name, tuple(device_entry.tag_values))
-        device_idx = index.device_index_by_key.get(device_key)
+        device_idx = index.device_index.get(device_key)
         if device_idx is None:
-            device_idx = len(index.device_order)
-            index.device_index_by_key[device_key] = device_idx
-            index.device_order.append(device_key)
-            index.device_refs.append([])
-        index.device_refs[device_idx].append((reader, device_id))
+            device_idx = len(index.devices)
+            index.device_index[device_key] = device_idx
+            index.devices.append(device_key)
+            index.device_time_bounds.append(
+                (device_entry.min_time, device_entry.max_time)
+            )
+        else:
+            cur_min, cur_max = index.device_time_bounds[device_idx]
+            new_min = (
+                device_entry.min_time
+                if cur_min is None
+                else min(cur_min, device_entry.min_time)
+            )
+            new_max = (
+                device_entry.max_time
+                if cur_max is None
+                else max(cur_max, device_entry.max_time)
+            )
+            index.device_time_bounds[device_idx] = (new_min, new_max)
 
-        for field_idx in range(len(table_entry.field_columns)):
-            series_ref = (device_idx, field_idx)
-            if series_ref not in index.series_ref_map:
-                index.series_refs_ordered.append(series_ref)
-                index.series_ref_map[series_ref] = []
-            index.series_ref_map[series_ref].append((reader, device_id, field_idx))
-
-
-def _build_device_entry(refs: List[DeviceRef]) -> dict:
-    """Compute per-device time bounds from cheap metadata only.
-
-    We intentionally do not validate duplicates at the device level because
-    table-model fields do not necessarily share one complete timestamp axis.
-    Duplicate detection stays on the logical-series paths that materialize or
-    merge one field's timestamps.
-    """
-    infos = [reader.get_device_info(device_id) for reader, device_id in refs]
-    min_time = min(info["min_time"] for info in infos)
-    max_time = max(info["max_time"] for info in infos)
-
-    return {
-        "min_time": min_time,
-        "max_time": max_time,
-    }
+    # Register every (device, field) pair the reader physically holds. The
+    # logical series is keyed by the GLOBAL field index (resolved by measurement
+    # name against the merged table), while the per-shard tuple keeps the
+    # reader-local field index for the read path. This lets tree shards with
+    # different field subsets/orders merge without mis-mapping measurements
+    # (for table model the global and local indices always coincide).
+    for device_id, field_idx in catalog.series_stats_by_ref:
+        device_entry = catalog.device_entries[device_id]
+        reader_table_entry = catalog.table_entries[device_entry.table_id]
+        field_name = reader_table_entry.field_columns[field_idx]
+        device_key = (reader_table_entry.table_name, tuple(device_entry.tag_values))
+        device_idx = index.device_index[device_key]
+        global_field_idx = index.table_entries[
+            reader_table_entry.table_name
+        ].get_field_index(field_name)
+        series_ref = (device_idx, global_field_idx)
+        if series_ref not in index.series_shards:
+            index.series.append(series_ref)
+            index.series_shards[series_ref] = []
+        index.series_shards[series_ref].append((reader, device_id, field_idx))
 
 
 def _build_runtime_series_stats(refs: List[SeriesRef]) -> dict:
@@ -470,10 +531,10 @@ class _LocIndexer:
             if isinstance(item, (int, np.integer)):
                 idx = int(item)
                 if idx < 0:
-                    idx += len(self._df._index.series_refs_ordered)
-                if idx < 0 or idx >= len(self._df._index.series_refs_ordered):
+                    idx += len(self._df._index.series)
+                if idx < 0 or idx >= len(self._df._index.series):
                     raise IndexError(f"Series index {item} out of range")
-                series_ref = self._df._index.series_refs_ordered[idx]
+                series_ref = self._df._index.series[idx]
             elif isinstance(item, str):
                 series_ref = self._df._resolve_series_name(item)
             else:
@@ -497,17 +558,17 @@ class _LocIndexer:
         groups = defaultdict(list)
         for col_idx, series_ref in enumerate(series_refs):
             device_idx, field_idx = series_ref
-            device_info = self._df._cache.devices[device_idx]
+            min_time_dev, max_time_dev = self._df._index.device_time_bounds[device_idx]
             if (
-                device_info["max_time"] is None
-                or device_info["max_time"] < start_time
-                or device_info["min_time"] > end_time
+                max_time_dev is None
+                or max_time_dev < start_time
+                or (min_time_dev is not None and min_time_dev > end_time)
             ):
                 continue
 
             _, table_entry, _ = self._df._get_series_components(series_ref)
             field_name = table_entry.field_columns[field_idx]
-            for reader, device_id, reader_field_idx in self._df._index.series_ref_map[
+            for reader, device_id, reader_field_idx in self._df._index.series_shards[
                 series_ref
             ]:
                 groups[(id(reader), device_id)].append(
@@ -530,10 +591,15 @@ class _LocIndexer:
             ts_arr, field_vals = reader.read_device_fields_by_time_range(
                 device_id, field_indices, start_time, end_time
             )
+            if len(ts_arr) == 0:
+                continue
+            appended_series = set()
             for _, _, field_name, series_name, _, _ in entries:
-                if len(ts_arr) > 0:
-                    series_time_parts[series_name].append(ts_arr)
-                    series_value_parts[series_name].append(field_vals[field_name])
+                if series_name in appended_series:
+                    continue
+                appended_series.add(series_name)
+                series_time_parts[series_name].append(ts_arr)
+                series_value_parts[series_name].append(field_vals[field_name])
 
         series_data = {}
         for name in series_names:
@@ -558,8 +624,7 @@ class TsFileDataFrame:
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
         self._readers: Dict[str, object] = {}
-        self._index = _LogicalIndex()
-        self._cache = _DerivedCache()
+        self._index = _DataFrameCatalog()
         self._is_view = False
         self._root = None
         self._closed = False
@@ -576,17 +641,19 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._readers = parent._readers
-        obj._index = _LogicalIndex(
+        # Reuse the parent's full mapping but restrict the membership scope to
+        # the requested subset.
+        subset_refs = list(series_refs)
+        parent_shards = parent._index.series_shards
+        subset_shards = {ref: parent_shards[ref] for ref in subset_refs}
+        obj._index = _DataFrameCatalog(
+            model=parent._index.model,
             table_entries=parent._index.table_entries,
-            device_order=parent._index.device_order,
-            device_index_by_key=parent._index.device_index_by_key,
-            device_refs=parent._index.device_refs,
-            series_refs_ordered=list(series_refs),
-            series_ref_map=parent._index.series_ref_map,
-            series_ref_set=set(series_refs),
-        )
-        obj._cache = _DerivedCache(
-            devices=parent._cache.devices, field_stats=parent._cache.field_stats
+            devices=parent._index.devices,
+            device_index=parent._index.device_index,
+            device_time_bounds=parent._index.device_time_bounds,
+            series=subset_refs,
+            series_shards=subset_shards,
         )
         obj._closed = False
         return obj
@@ -607,16 +674,7 @@ class TsFileDataFrame:
         else:
             self._load_metadata_serial(TsFileSeriesReader)
 
-        self._cache.devices = [
-            _build_device_entry(refs) for refs in self._index.device_refs
-        ]
-        for series_ref in self._index.series_refs_ordered:
-            self._cache.field_stats[series_ref] = _build_field_stats(
-                self._index.series_ref_map[series_ref]
-            )
-
-        self._index.series_ref_set = set(self._index.series_refs_ordered)
-        if not self._index.series_refs_ordered:
+        if not self._index.series:
             raise ValueError("No valid time series found in the provided TsFile files")
 
     def _show_loading_progress(self, done: int, total: int, total_series: int = None):
@@ -687,7 +745,7 @@ class TsFileDataFrame:
         self, series_ref: SeriesRefKey
     ) -> Tuple[DeviceKey, TableEntry, int]:
         device_idx, field_idx = series_ref
-        device_key = self._index.device_order[device_idx]
+        device_key = self._index.devices[device_idx]
         return device_key, self._index.table_entries[device_key[0]], field_idx
 
     def _build_series_name(self, series_ref: SeriesRefKey) -> SeriesPath:
@@ -728,37 +786,50 @@ class TsFileDataFrame:
             raise KeyError(_series_lookup_hint(series_name)) from exc
 
         device_key = (table_name, _normalize_tag_values(tag_parts))
-        device_idx = self._index.device_index_by_key.get(device_key)
+        device_idx = self._index.device_index.get(device_key)
         if device_idx is None:
             raise KeyError(_series_lookup_hint(series_name))
 
         series_ref = (device_idx, field_idx)
-        if series_ref not in self._index.series_ref_set:
+        if series_ref not in self._index.series_shards:
             raise KeyError(_series_lookup_hint(series_name))
         return series_ref
 
     def _build_series_info(self, series_ref: SeriesRefKey) -> dict:
         device_idx, field_idx = series_ref
         device_key, table_entry, _ = self._get_series_components(series_ref)
-        field_stats = self._cache.field_stats[series_ref]
+        # Aggregate per-shard timeline stats lazily on demand for this series.
+        field_stats = _build_field_stats(self._index.series_shards[series_ref])
+        # Pad short tag tuples (tree-model devices whose path is shorter than
+        # the synthetic table's max depth) with None so positional access by
+        # `_col_i` index always lands on a defined cell.
+        tag_values_ordered = list(device_key[1])
+        if len(tag_values_ordered) < len(table_entry.tag_columns):
+            tag_values_ordered.extend(
+                [None] * (len(table_entry.tag_columns) - len(tag_values_ordered))
+            )
         return {
             "table_name": table_entry.table_name,
             "field": table_entry.field_columns[field_idx],
             "tag_columns": table_entry.tag_columns,
-            "tag_values": dict(zip(table_entry.tag_columns, device_key[1])),
+            "tag_values": dict(zip(table_entry.tag_columns, tag_values_ordered)),
+            "tag_values_ordered": tag_values_ordered,
             "min_time": field_stats["min_time"],
             "max_time": field_stats["max_time"],
             "count": field_stats["count"],
         }
 
     def __len__(self) -> int:
-        return len(self._index.series_refs_ordered)
+        return len(self._index.series)
+
+    @property
+    def model(self) -> str:
+        return self._index.model
 
     def list_timeseries(self, path_prefix: str = "") -> List[SeriesPath]:
         if not path_prefix:
             return [
-                self._build_series_name(series_ref)
-                for series_ref in self._index.series_refs_ordered
+                self._build_series_name(series_ref) for series_ref in self._index.series
             ]
 
         try:
@@ -767,7 +838,7 @@ class TsFileDataFrame:
             return []
 
         matched = []
-        for series_ref in self._index.series_refs_ordered:
+        for series_ref in self._index.series:
             device_key, table_entry, field_idx = self._get_series_components(series_ref)
             components = build_logical_series_components(
                 table_entry.table_name,
@@ -779,19 +850,79 @@ class TsFileDataFrame:
                 matched.append(self._build_series_name(series_ref))
         return matched
 
+    def list_timeseries_metadata(self, path_prefix: str = ""):
+        """Return a pandas DataFrame of per-series metadata.
+
+        The returned frame is indexed by the logical series name and includes
+        per-series ``field``, time-bound (start/end) statistics, observation
+        ``count``, and the per-device tag values (named ``_col_1``, ``_col_2``,
+        ... in tree mode, or by their declared tag-column names in table
+        mode). Time bounds are exposed as ``pandas.Timestamp`` for ergonomic
+        comparison; ``count`` is an integer.
+
+        ``path_prefix`` filters by the same logical-path prefix semantics as
+        ``list_timeseries`` (no prefix returns the full catalog).
+        """
+        import pandas as pd
+
+        # Reuse list_timeseries to apply prefix filtering, then map names back
+        # to the underlying series_ref (this respects view subsetting too).
+        names = self.list_timeseries(path_prefix)
+
+        rows = []
+        for series_name in names:
+            series_ref = self._resolve_series_name(series_name)
+            info = self._build_series_info(series_ref)
+            row = {
+                "field": info["field"],
+                "start_time": pd.to_datetime(info["min_time"], unit="ms"),
+                "end_time": pd.to_datetime(info["max_time"], unit="ms"),
+                "count": int(info["count"]),
+            }
+            if self._index.model != MODEL_TREE:
+                row["table"] = info["table_name"]
+            tag_columns = info["tag_columns"]
+            tag_values_ordered = info["tag_values_ordered"]
+            for column, value in zip(tag_columns, tag_values_ordered):
+                row[column] = value
+            rows.append((series_name, row))
+
+        if not rows:
+            columns = ["field", "start_time", "end_time", "count"]
+            if self._index.model != MODEL_TREE:
+                columns.insert(0, "table")
+            columns.extend(self._collect_tag_columns())
+            return pd.DataFrame(columns=columns)
+
+        index = [name for name, _ in rows]
+        data = [row for _, row in rows]
+        df = pd.DataFrame(data, index=index)
+
+        # Stable, predictable column order: leading bookkeeping, then tags.
+        leading = ["field", "start_time", "end_time", "count"]
+        if self._index.model != MODEL_TREE:
+            leading.insert(0, "table")
+        tag_order = list(self._collect_tag_columns())
+        ordered_columns = leading + [c for c in tag_order if c in df.columns]
+        # Preserve any extra columns at the end (defensive against schema drift).
+        for extra in df.columns:
+            if extra not in ordered_columns:
+                ordered_columns.append(extra)
+        return df.reindex(columns=ordered_columns)
+
     def _get_timeseries(self, series_ref: SeriesRefKey) -> Timeseries:
         self._assert_open()
         series_name = self._build_series_name(series_ref)
         return Timeseries(
             series_name,
-            self._index.series_ref_map[series_ref],
-            _build_runtime_series_stats(self._index.series_ref_map[series_ref]),
+            self._index.series_shards[series_ref],
+            _build_runtime_series_stats(self._index.series_shards[series_ref]),
             self._assert_open,
             lambda: _merge_field_timestamps(
-                series_name, self._index.series_ref_map[series_ref]
+                series_name, self._index.series_shards[series_ref]
             ),
             lambda offset, limit: _read_field_by_position(
-                series_name, self._index.series_ref_map[series_ref], offset, limit
+                series_name, self._index.series_shards[series_ref], offset, limit
             ),
         )
 
@@ -800,9 +931,7 @@ class TsFileDataFrame:
             import pandas as pd
 
             if isinstance(key, pd.Series) and key.dtype == bool:
-                selected = [
-                    self._index.series_refs_ordered[idx] for idx in key.index[key]
-                ]
+                selected = [self._index.series[idx] for idx in key.index[key]]
                 return TsFileDataFrame._from_subset(self, selected)
         except ImportError:
             pass
@@ -810,12 +939,12 @@ class TsFileDataFrame:
         if isinstance(key, (int, np.integer)):
             idx = int(key)
             if idx < 0:
-                idx += len(self._index.series_refs_ordered)
-            if idx < 0 or idx >= len(self._index.series_refs_ordered):
+                idx += len(self._index.series)
+            if idx < 0 or idx >= len(self._index.series):
                 raise IndexError(
-                    f"Index {idx} out of range [0, {len(self._index.series_refs_ordered)})"
+                    f"Index {idx} out of range [0, {len(self._index.series)})"
                 )
-            return self._get_timeseries(self._index.series_refs_ordered[idx])
+            return self._get_timeseries(self._index.series[idx])
 
         if isinstance(key, str):
             try:
@@ -823,7 +952,9 @@ class TsFileDataFrame:
             except KeyError:
                 pass
 
-            valid_columns = {"table", "field", "start_time", "end_time", "count"}
+            valid_columns = {"field", "start_time", "end_time", "count"}
+            if self._index.model != MODEL_TREE:
+                valid_columns.add("table")
             valid_columns.update(self._collect_tag_columns())
             if key not in valid_columns:
                 raise KeyError(_series_lookup_hint(key))
@@ -831,7 +962,7 @@ class TsFileDataFrame:
             import pandas as pd
 
             values = []
-            for series_ref in self._index.series_refs_ordered:
+            for series_ref in self._index.series:
                 info = self._build_series_info(series_ref)
                 if key == "table":
                     values.append(info["table_name"])
@@ -844,15 +975,15 @@ class TsFileDataFrame:
                 elif key == "count":
                     values.append(info["count"])
                 else:
-                    values.append(info["tag_values"].get(key, ""))
+                    values.append(info["tag_values"].get(key))
             return pd.Series(values, name=key)
 
         if isinstance(key, slice):
             return TsFileDataFrame._from_subset(
                 self,
                 [
-                    self._index.series_refs_ordered[idx]
-                    for idx in range(*key.indices(len(self._index.series_refs_ordered)))
+                    self._index.series[idx]
+                    for idx in range(*key.indices(len(self._index.series)))
                 ],
             )
 
@@ -865,12 +996,12 @@ class TsFileDataFrame:
                     )
                 idx = int(item)
                 if idx < 0:
-                    idx += len(self._index.series_refs_ordered)
-                if idx < 0 or idx >= len(self._index.series_refs_ordered):
+                    idx += len(self._index.series)
+                if idx < 0 or idx >= len(self._index.series):
                     raise IndexError(
-                        f"Index {item} out of range [0, {len(self._index.series_refs_ordered)})"
+                        f"Index {item} out of range [0, {len(self._index.series)})"
                     )
-                selected.append(self._index.series_refs_ordered[idx])
+                selected.append(self._index.series[idx])
             return TsFileDataFrame._from_subset(self, selected)
 
         raise TypeError(f"Unsupported key type: {type(key)}")
@@ -881,7 +1012,7 @@ class TsFileDataFrame:
 
     def _collect_tag_columns(self) -> List[str]:
         seen = {}
-        for table_name, _ in self._index.device_order:
+        for table_name, _ in self._index.devices:
             for column in self._index.table_entries[table_name].tag_columns:
                 seen.setdefault(column, True)
         return list(seen.keys())
@@ -900,25 +1031,27 @@ class TsFileDataFrame:
 
     def _format_table(self, indices=None, max_rows: int = 20) -> str:
         if indices is None:
-            indices = list(range(len(self._index.series_refs_ordered)))
+            indices = list(range(len(self._index.series)))
         else:
             indices = list(indices)
 
         preview_indices, truncated, split_index = self._preview_indices(
             indices, max_rows
         )
+        is_tree = self._index.model == MODEL_TREE
         rows = []
         for idx in preview_indices:
-            series_ref = self._index.series_refs_ordered[idx]
+            series_ref = self._index.series[idx]
             info = self._build_series_info(series_ref)
             row = {
                 "index": idx,
-                "table": info["table_name"],
                 "field": info["field"],
                 "start_time": info["min_time"],
                 "end_time": info["max_time"],
                 "count": info["count"],
             }
+            if not is_tree:
+                row["table"] = info["table_name"]
             row.update(info["tag_values"])
             rows.append(row)
 
@@ -928,13 +1061,21 @@ class TsFileDataFrame:
             total_count=len(indices),
             truncated=truncated,
             split_index=split_index,
+            is_table_model=not is_tree,
         )
 
     def _repr_header(self) -> str:
-        total = len(self._index.series_refs_ordered)
+        total = len(self._index.series)
+        model_marker = self._index.model
         if self._is_view:
-            return f"TsFileDataFrame({total} time series, subset of {len(self._root._index.series_refs_ordered)})\n"
-        return f"TsFileDataFrame({total} time series, {len(self._paths)} files)\n"
+            return (
+                f"TsFileDataFrame({model_marker} model, {total} time series, "
+                f"subset of {len(self._root._index.series)})\n"
+            )
+        return (
+            f"TsFileDataFrame({model_marker} model, {total} time series, "
+            f"{len(self._paths)} files)\n"
+        )
 
     def __repr__(self):
         return self._repr_header() + self._format_table()

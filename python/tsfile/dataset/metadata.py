@@ -20,13 +20,27 @@
 
 from dataclasses import dataclass, field
 import sys
-from typing import Any, Dict, Iterable, Iterator, List, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, NamedTuple, Tuple
 
 from ..constants import TSDataType
 
 _PATH_SEPARATOR = "."
 _PATH_ESCAPE = "\\"
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
+
+MODEL_TABLE = "table"
+MODEL_TREE = "tree"
+
+
+class SeriesStats(NamedTuple):
+    """Statistics for a single time series."""
+
+    length: int
+    min_time: int
+    max_time: int
+    timeline_length: int
+    timeline_min_time: int
+    timeline_max_time: int
 
 
 @dataclass(**_DATACLASS_SLOTS)
@@ -73,7 +87,7 @@ class MetadataCatalog:
     device_entries: List[DeviceEntry] = field(default_factory=list)
     table_id_by_name: Dict[str, int] = field(default_factory=dict)
     device_id_by_key: Dict[Tuple[int, tuple], int] = field(default_factory=dict)
-    series_stats_by_ref: Dict[Tuple[int, int], Dict[str, int]] = field(
+    series_stats_by_ref: Dict[Tuple[int, int], SeriesStats] = field(
         default_factory=dict
     )
 
@@ -122,10 +136,11 @@ class MetadataCatalog:
 
     @property
     def series_count(self) -> int:
-        return sum(
-            len(self.table_entries[device.table_id].field_columns)
-            for device in self.device_entries
-        )
+        # Count only physically-present series -- the (device, field) pairs that
+        # actually carry data -- so this matches len(tsdf) / series_paths and
+        # the reader's series_count. A schema cross-product (devices x declared
+        # fields) would overcount sparse schemas where a device skips fields.
+        return len(self.series_stats_by_ref)
 
 
 # Path marker for a null tag value: a single backslash followed by N. A real
