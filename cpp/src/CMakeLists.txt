@@ -37,6 +37,9 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
 message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 
+# ENABLE_SIMD is defined in the top-level CMakeLists.txt
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
+
 message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
@@ -87,6 +90,13 @@ if (ENABLE_ANTLR4)
             ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
     )
     message("Adding ANTLR4 include directory")
+endif()
+
+if (ENABLE_SIMD)
+    add_definitions(-DENABLE_SIMD)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3
+    )
 endif()
 
 include_directories(${PROJECT_INCLUDE_DIR})
@@ -144,10 +154,17 @@ add_library(tsfile SHARED)
 
 if (${COV_ENABLED})
     message("Enable code cov...")
-    if (ENABLE_ANTLR4)
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj -lgcov)
+    # Apple clang ships coverage runtime via --coverage; libgcov isn't a
+    # standalone library on macOS.  Use --coverage there.
+    if (APPLE)
+        set(COV_LINK_LIB --coverage)
     else()
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj -lgcov)
+        set(COV_LINK_LIB -lgcov)
+    endif()
+    if (ENABLE_ANTLR4)
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj ${COV_LINK_LIB})
+    else()
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj ${COV_LINK_LIB})
     endif()
 else()
     message("Disable code cov...")

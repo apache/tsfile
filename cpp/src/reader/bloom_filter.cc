@@ -208,6 +208,26 @@ int BloomFilter::add_path_entry(const String& device_name,
     return E_OK;
 }
 
+bool BloomFilter::contains(const String& device_name,
+                           const String& measurement_name) {
+    if (size_ == 0) {
+        return true;  // empty filter — assume present
+    }
+    String entry = get_entry_string(device_name, measurement_name);
+    if (IS_NULL(entry.buf_)) {
+        return true;  // OOM — conservatively assume present
+    }
+    for (uint32_t i = 0; i < hash_func_count_; i++) {
+        int32_t hv = hash_func_arr_[i].hash(entry);
+        if (!bitset_.get(hv)) {
+            free_entry_buf(entry.buf_);
+            return false;  // definitely not present
+        }
+    }
+    free_entry_buf(entry.buf_);
+    return true;  // probably present
+}
+
 int BloomFilter::serialize_to(ByteStream& out) {
     int ret = E_OK;
     uint8_t* filter_data_bytes = nullptr;

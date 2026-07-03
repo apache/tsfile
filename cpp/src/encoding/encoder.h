@@ -48,6 +48,81 @@ class Encoder {
      * @return the maximal size of possible memory occupied by current encoder
      */
     virtual int get_max_byte_size() = 0;
+
+    /*
+     * Batch encoding interfaces.
+     * Default implementations fall back to per-value encode().
+     * Subclasses may override for better performance.
+     */
+    virtual int encode_batch(const bool* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const int32_t* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const int64_t* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const float* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const double* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+
+    // Batch encode strings from a contiguous buffer with offset array
+    // (Arrow-style layout from Tablet::StringColumn).
+    // string[i] = buffer + offsets[start_idx + i], length = offsets[start_idx +
+    // i + 1] - offsets[start_idx + i].
+    virtual int encode_string_batch(const char* buffer, const uint32_t* offsets,
+                                    uint32_t start_idx, uint32_t count,
+                                    common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t idx = start_idx + i;
+            uint32_t len = offsets[idx + 1] - offsets[idx];
+            common::String val(buffer + offsets[idx], len);
+            if (RET_FAIL(encode(val, out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
 };
 
 }  // end namespace storage

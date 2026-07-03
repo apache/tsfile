@@ -108,6 +108,7 @@ class TsFileIOWriter {
 
     FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }
     FORCE_INLINE std::shared_ptr<Schema> get_schema() { return schema_; }
+    int64_t get_meta_size() const;
 
    private:
     int write_log_index_range();
@@ -191,13 +192,23 @@ class TsFileIOWriter {
     /** For RestorableTsFileIOWriter: append a recovered ChunkGroupMeta. */
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
+        if (cgm->device_id_) {
+            // First CGM per device wins, matching the previous linear scan
+            // (which returned the earliest match in list order).  Recovery may
+            // push several CGMs for one device; the lookup must resolve to the
+            // first so reuse targets the same CGM the scan did.
+            chunk_group_meta_index_.emplace(cgm->device_id_, cgm);
+        }
     }
-    /** True when chunk_group_meta_list_ has a prefix loaded from recovery;
-     * destroy() must not free device_id_/statistic_ for that prefix only. */
-    bool chunk_group_meta_from_recovery_ = false;
-    /** Recovered ChunkGroupMeta* -> chunk_meta_list_.size() at attach (pointer
-     * keys avoid idx skew). */
-    std::map<ChunkGroupMeta*, uint32_t> recovery_chunk_meta_prefix_;
+    /** Chunks/CGMs allocated from meta_allocator_ via start_flush_chunk*()
+     * (post-recovery for the restorable writer, all chunks for the normal
+     * writer).  destroy() iterates these directly to free the heap-allocated
+     * PageArena owned by each statistic and the shared_ptr<IDeviceID> held
+     * by each new CGM, without touching recovery-owned entries that live in
+     * RestorableTsFileIOWriter::self_check_arena_. */
+    std::vector<ChunkMeta*> appended_chunk_metas_;
+    std::vector<ChunkGroupMeta*> appended_chunk_group_metas_;
+    bool destroyed_ = false;
     /**
      * Recovery only: set file_base_offset_ so that cur_file_position() returns
      * correct absolute offsets.  After recovery the writer behaves as if the
@@ -214,6 +225,14 @@ class TsFileIOWriter {
     ChunkGroupMeta* cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta*> chunk_group_meta_list_;
+    // O(log N) lookup for an existing ChunkGroupMeta by device id, replacing
+    // the O(N) linear scan through chunk_group_meta_list_ per device.  Keyed by
+    // IDeviceID *content* (IDeviceIDComparator compares segment-by-segment), so
+    // distinct devices whose joined name strings would collide — e.g.
+    // ("a.","b") and ("a",".b") both render as "a..b" via get_device_name() —
+    // stay separate.
+    std::map<std::shared_ptr<IDeviceID>, ChunkGroupMeta*, IDeviceIDComparator>
+        chunk_group_meta_index_;
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
     WriteFile* file_;
@@ -227,10 +246,6 @@ class TsFileIOWriter {
     /** Recovery only: absolute file offset at which write_stream_ logically
      * begins.  Normal (non-recovery) path keeps this at 0. */
     int64_t file_base_offset_ = 0;
-    /** Set after destroy() completes; avoids double cleanup when
-     * RestorableTsFileIOWriter::close() calls destroy() before
-     * self_check_arena_.destroy(), then ~TsFileIOWriter runs again. */
-    bool destroyed_ = false;
 
     friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta
 };

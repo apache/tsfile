@@ -29,12 +29,9 @@
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
-#if defined(__SSE4_2__)
-#include <smmintrin.h>
-#define USE_SSE 1
-#elif defined(__AVX2__)
-#include <immintrin.h>
-#define USE_AVX2 1
+
+#ifdef ENABLE_SIMD
+#include "simde/x86/avx2.h"
 #endif
 
 namespace storage {
@@ -44,15 +41,16 @@ struct SIMDOps;
 
 template <>
 struct SIMDOps<int32_t> {
-#ifdef USE_SSE
+#ifdef ENABLE_SIMD
     static void rebase(int32_t* arr, int32_t min_val, size_t size) {
-        const __m128i min_vec = _mm_set1_epi32(min_val);
+        const simde__m128i min_vec = simde_mm_set1_epi32(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
-            __m128i vec =
-                _mm_loadu_si128(reinterpret_cast<const __m128i*>(arr + i));
-            vec = _mm_sub_epi32(vec, min_vec);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(arr + i), vec);
+            simde__m128i vec = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(arr + i));
+            vec = simde_mm_sub_epi32(vec, min_vec);
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(arr + i),
+                                  vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
@@ -69,15 +67,16 @@ struct SIMDOps<int32_t> {
 
 template <>
 struct SIMDOps<int64_t> {
-#ifdef USE_AVX2
+#ifdef ENABLE_SIMD
     static void rebase(int64_t* arr, int64_t min_val, size_t size) {
-        const __m256i min_vec = _mm256_set1_epi64x(min_val);
+        const simde__m256i min_vec = simde_mm256_set1_epi64x(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
-            __m256i vec =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(arr + i));
-            vec = _mm256_sub_epi64(vec, min_vec);
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(arr + i), vec);
+            simde__m256i vec = simde_mm256_loadu_si256(
+                reinterpret_cast<const simde__m256i*>(arr + i));
+            vec = simde_mm256_sub_epi64(vec, min_vec);
+            simde_mm256_storeu_si256(reinterpret_cast<simde__m256i*>(arr + i),
+                                     vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
@@ -99,7 +98,7 @@ class TS2DIFFEncoder : public Encoder {
 
     ~TS2DIFFEncoder() { destroy(); }
 
-    void reset() { write_index_ = -1; }
+    void reset() override { write_index_ = -1; }
 
     void init() {
         block_size_ = 128;
@@ -115,7 +114,7 @@ class TS2DIFFEncoder : public Encoder {
         previous_value_ = 0;
     }
 
-    void destroy() {
+    void destroy() override {
         if (delta_arr_ != nullptr) {
             common::mem_free(delta_arr_);
             delta_arr_ = nullptr;
@@ -167,17 +166,71 @@ class TS2DIFFEncoder : public Encoder {
         return bit_width;
     }
 
+    // Batch bit-pack `count` values (each `bit_width` bits, MSB-first within
+    // byte) into a single contiguous buffer and write it to out_stream in one
+    // call. Avoids the per-byte write_buf overhead of the scalar write_bits
+    // loop.
+    //
+    // Result codes:
+    //   E_OK  → written successfully.
+    //   -1    → caller must fall back to write_bits + flush_remaining because
+    //           bit_width exceeds the safe accumulator width.
+    //   any other non-zero value → real write_buf error; the caller must
+    //           propagate it instead of treating the flush as successful.
+    template <typename U>
+    static int pack_bits_msb(const U* values, int count, int bit_width,
+                             common::ByteStream& out_stream) {
+        if (count <= 0 || bit_width <= 0) return common::E_OK;
+        if (bit_width > 56) return -1;  // fall back
+
+        size_t total_bytes = ((size_t)count * (size_t)bit_width + 7) / 8;
+        std::vector<uint8_t> buf(total_bytes, 0);
+
+        uint64_t accum = 0;
+        int bits_in_accum = 0;
+        size_t pos = 0;
+        const uint64_t mask = (1ULL << bit_width) - 1;
+
+        for (int i = 0; i < count; i++) {
+            uint64_t v = static_cast<uint64_t>(values[i]) & mask;
+            accum = (accum << bit_width) | v;
+            bits_in_accum += bit_width;
+            while (bits_in_accum >= 8) {
+                buf[pos++] = static_cast<uint8_t>(accum >> (bits_in_accum - 8));
+                bits_in_accum -= 8;
+            }
+            if (bits_in_accum > 0) {
+                accum &= ((1ULL << bits_in_accum) - 1);
+            } else {
+                accum = 0;
+            }
+        }
+        if (bits_in_accum > 0) {
+            buf[pos++] = static_cast<uint8_t>(accum << (8 - bits_in_accum));
+        }
+        // Surface write failures.  Previously the return code was dropped on
+        // the floor and flush() returned E_OK, then reset() wiped the
+        // encoder state — the on-disk page ended up missing its delta block
+        // but the caller thought the data was safe.
+        return out_stream.write_buf(buf.data(), pos);
+    }
+
     int do_encode(T value, common::ByteStream& out_stream);
-    int encode(bool value, common::ByteStream& out_stream);
-    int encode(int32_t value, common::ByteStream& out_stream);
-    int encode(int64_t value, common::ByteStream& out_stream);
-    int encode(float value, common::ByteStream& out_stream);
-    int encode(double value, common::ByteStream& out_stream);
-    int encode(common::String value, common::ByteStream& out_stream);
+    int encode(bool value, common::ByteStream& out_stream) override;
+    int encode(int32_t value, common::ByteStream& out_stream) override;
+    int encode(int64_t value, common::ByteStream& out_stream) override;
+    int encode(float value, common::ByteStream& out_stream) override;
+    int encode(double value, common::ByteStream& out_stream) override;
+    int encode(common::String value, common::ByteStream& out_stream) override;
 
-    int flush(common::ByteStream& out_stream);
+    int encode_batch(const int32_t* values, uint32_t count,
+                     common::ByteStream& out_stream) override;
+    int encode_batch(const int64_t* values, uint32_t count,
+                     common::ByteStream& out_stream) override;
 
-    int get_max_byte_size() {
+    int flush(common::ByteStream& out_stream) override;
+
+    int get_max_byte_size() override {
         // The meaning of 24 is: index(4)+width(4)+minDeltaBase(8)+firstValue(8)
         return 24 + write_index_ * 8;
     }
@@ -235,16 +288,39 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream& out_stream) {
     SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
     // Calculate the bit length of each value to writer
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
-    // writer header
-    common::SerializationUtil::write_ui32(write_index_, out_stream);
-    common::SerializationUtil::write_ui32(bit_width, out_stream);
-    common::SerializationUtil::write_ui32(delta_arr_min_, out_stream);
-    common::SerializationUtil::write_ui32(first_value_, out_stream);
-    // writer data
-    for (int i = 0; i < write_index_; i++) {
-        write_bits(delta_arr_[i], bit_width, out_stream);
+    // Header writes can fail too (back-pressure / OOM on the underlying
+    // stream); a half-written header followed by reset() leaves the page
+    // corrupted but the caller thinking the data was flushed.
+    if (RET_FAIL(
+            common::SerializationUtil::write_ui32(write_index_, out_stream))) {
+        return ret;
     }
-    flush_remaining(out_stream);
+    if (RET_FAIL(
+            common::SerializationUtil::write_ui32(bit_width, out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(delta_arr_min_,
+                                                       out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(
+            common::SerializationUtil::write_ui32(first_value_, out_stream))) {
+        return ret;
+    }
+    // writer data — batched bit-pack + single write_buf for the common case;
+    // fall back to per-bit path for the rare wide bit_width.
+    const int pack_ret =
+        pack_bits_msb(delta_arr_, write_index_, bit_width, out_stream);
+    if (pack_ret == -1) {
+        for (int i = 0; i < write_index_; i++) {
+            write_bits(delta_arr_[i], bit_width, out_stream);
+        }
+        flush_remaining(out_stream);
+    } else if (pack_ret != common::E_OK) {
+        // Real write failure — don't clear encoder state so the higher
+        // layer can detect the page is poisoned.
+        return pack_ret;
+    }
     reset();
     return ret;
 }
@@ -259,18 +335,220 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
     SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
     // Calculate the bit length of each value to writer
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
-    // writer header
-    common::SerializationUtil::write_i32(write_index_, out_stream);
-    common::SerializationUtil::write_i32(bit_width, out_stream);
-    common::SerializationUtil::write_i64(delta_arr_min_, out_stream);
-    common::SerializationUtil::write_i64(first_value_, out_stream);
-    // writer data
-    for (int i = 0; i < write_index_; i++) {
-        write_bits(delta_arr_[i], bit_width, out_stream);
+    // Header writes can fail too — see int32 specialization for rationale.
+    if (RET_FAIL(
+            common::SerializationUtil::write_i32(write_index_, out_stream))) {
+        return ret;
     }
-    flush_remaining(out_stream);
+    if (RET_FAIL(common::SerializationUtil::write_i32(bit_width, out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(
+            common::SerializationUtil::write_i64(delta_arr_min_, out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(
+            common::SerializationUtil::write_i64(first_value_, out_stream))) {
+        return ret;
+    }
+    // writer data — batched bit-pack + single write_buf for the common case;
+    // fall back to per-bit path for the rare wide bit_width (>56).
+    const int pack_ret =
+        pack_bits_msb(delta_arr_, write_index_, bit_width, out_stream);
+    if (pack_ret == -1) {
+        for (int i = 0; i < write_index_; i++) {
+            write_bits(delta_arr_[i], bit_width, out_stream);
+        }
+        flush_remaining(out_stream);
+    } else if (pack_ret != common::E_OK) {
+        return pack_ret;
+    }
     reset();  // 语义，writeIndex=-1;
     return ret;
+}
+
+// ============================================================================
+// Batch encode: INT32
+// Adjacent-difference removes sequential dependency; SIMD for delta + min/max.
+// ============================================================================
+
+template <>
+inline int TS2DIFFEncoder<int32_t>::encode_batch(
+    const int32_t* values, uint32_t count, common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    uint32_t offset = 0;
+
+    while (offset < count) {
+        // Start of new block: store first_value
+        if (write_index_ == -1) {
+            first_value_ = values[offset];
+            previous_value_ = first_value_;
+            write_index_ = 0;
+            offset++;
+            continue;
+        }
+
+        // How many deltas fit in current block
+        uint32_t space = static_cast<uint32_t>(block_size_) - write_index_;
+        uint32_t batch = std::min(count - offset, space);
+
+        // ── Adjacent difference: delta[i] = values[i] - values[i-1] ──
+        // First delta uses previous_value_
+        delta_arr_[write_index_] = values[offset] - previous_value_;
+
+        uint32_t i = 1;
+#ifdef ENABLE_SIMD
+        // SIMD: 4 adjacent differences at a time
+        for (; i + 3 < batch; i += 4) {
+            simde__m128i cur = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i));
+            simde__m128i prv = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i - 1));
+            simde__m128i diff = simde_mm_sub_epi32(cur, prv);
+            simde_mm_storeu_si128(
+                reinterpret_cast<simde__m128i*>(delta_arr_ + write_index_ + i),
+                diff);
+        }
+#endif
+        for (; i < batch; i++) {
+            delta_arr_[write_index_ + i] =
+                values[offset + i] - values[offset + i - 1];
+        }
+        previous_value_ = values[offset + batch - 1];
+
+        // ── Min/max of new deltas ──
+        int32_t local_min = delta_arr_[write_index_];
+        int32_t local_max = delta_arr_[write_index_];
+
+        uint32_t j = 1;
+#ifdef ENABLE_SIMD
+        if (batch >= 5) {
+            simde__m128i vmin = simde_mm_set1_epi32(local_min);
+            simde__m128i vmax = vmin;
+            for (; j + 3 < batch; j += 4) {
+                simde__m128i v =
+                    simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(
+                        delta_arr_ + write_index_ + j));
+                vmin = simde_mm_min_epi32(vmin, v);
+                vmax = simde_mm_max_epi32(vmax, v);
+            }
+            // Horizontal reduce
+            int32_t tmp[4];
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(tmp), vmin);
+            for (int k = 0; k < 4; k++)
+                if (tmp[k] < local_min) local_min = tmp[k];
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(tmp), vmax);
+            for (int k = 0; k < 4; k++)
+                if (tmp[k] > local_max) local_max = tmp[k];
+        }
+#endif
+        for (; j < batch; j++) {
+            int32_t d = delta_arr_[write_index_ + j];
+            if (d < local_min) local_min = d;
+            if (d > local_max) local_max = d;
+        }
+
+        // Merge with block min/max
+        if (write_index_ == 0) {
+            delta_arr_min_ = local_min;
+            delta_arr_max_ = local_max;
+        } else {
+            if (local_min < delta_arr_min_) delta_arr_min_ = local_min;
+            if (local_max > delta_arr_max_) delta_arr_max_ = local_max;
+        }
+
+        write_index_ += batch;
+        offset += batch;
+
+        if (write_index_ >= block_size_) {
+            if (RET_FAIL(flush(out_stream))) return ret;
+        }
+    }
+    return ret;
+}
+
+// ============================================================================
+// Batch encode: INT64
+// ============================================================================
+
+template <>
+inline int TS2DIFFEncoder<int64_t>::encode_batch(
+    const int64_t* values, uint32_t count, common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    uint32_t offset = 0;
+
+    while (offset < count) {
+        if (write_index_ == -1) {
+            first_value_ = values[offset];
+            previous_value_ = first_value_;
+            write_index_ = 0;
+            offset++;
+            continue;
+        }
+
+        uint32_t space = static_cast<uint32_t>(block_size_) - write_index_;
+        uint32_t batch = std::min(count - offset, space);
+
+        // Adjacent difference
+        delta_arr_[write_index_] = values[offset] - previous_value_;
+
+        uint32_t i = 1;
+#ifdef ENABLE_SIMD
+        // SIMD: 2 adjacent differences at a time (128-bit, native NEON)
+        for (; i + 1 < batch; i += 2) {
+            simde__m128i cur = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i));
+            simde__m128i prv = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i - 1));
+            simde__m128i diff = simde_mm_sub_epi64(cur, prv);
+            simde_mm_storeu_si128(
+                reinterpret_cast<simde__m128i*>(delta_arr_ + write_index_ + i),
+                diff);
+        }
+#endif
+        for (; i < batch; i++) {
+            delta_arr_[write_index_ + i] =
+                values[offset + i] - values[offset + i - 1];
+        }
+        previous_value_ = values[offset + batch - 1];
+
+        // Min/max (scalar — no efficient 64-bit SIMD min/max before AVX-512)
+        int64_t local_min = delta_arr_[write_index_];
+        int64_t local_max = delta_arr_[write_index_];
+        for (uint32_t j = 1; j < batch; j++) {
+            int64_t d = delta_arr_[write_index_ + j];
+            if (d < local_min) local_min = d;
+            if (d > local_max) local_max = d;
+        }
+
+        if (write_index_ == 0) {
+            delta_arr_min_ = local_min;
+            delta_arr_max_ = local_max;
+        } else {
+            if (local_min < delta_arr_min_) delta_arr_min_ = local_min;
+            if (local_max > delta_arr_max_) delta_arr_max_ = local_max;
+        }
+
+        write_index_ += batch;
+        offset += batch;
+
+        if (write_index_ >= block_size_) {
+            if (RET_FAIL(flush(out_stream))) return ret;
+        }
+    }
+    return ret;
+}
+
+// Default: unsupported types fall back to base class loop
+template <typename T>
+int TS2DIFFEncoder<T>::encode_batch(const int32_t* values, uint32_t count,
+                                    common::ByteStream& out) {
+    return Encoder::encode_batch(values, count, out);
+}
+template <typename T>
+int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
+                                    common::ByteStream& out) {
+    return Encoder::encode_batch(values, count, out);
 }
 
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
@@ -279,6 +557,14 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     int do_encode(float value, common::ByteStream& out_stream) {
         int32_t value_int = convert_float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
+    }
+    // PageWriter resets the encoder between pages without going through a
+    // successful flush() (e.g. when the prior page was aborted).  The base
+    // reset() only clears write_index_; underflow_flags_ would otherwise
+    // leak the prior page's overflow markers into the next page's bitmap.
+    void reset() override {
+        TS2DIFFEncoder<int32_t>::reset();
+        underflow_flags_.clear();
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -331,6 +617,12 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
     int do_encode(double value, common::ByteStream& out_stream) {
         int64_t value_long = convert_double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
+    }
+    // See FloatTS2DIFFEncoder::reset for rationale — the prior page's
+    // overflow markers must not bleed into the next.
+    void reset() override {
+        TS2DIFFEncoder<int64_t>::reset();
+        underflow_flags_.clear();
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -518,7 +810,6 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         write_bits(delta_arr_[i], bit_width, inner);
     }
     flush_remaining(inner);
-    reset();
 
     const bool overflow = has_overflow();
     if (overflow) {
@@ -564,7 +855,12 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
         return ret;
     }
+    // Defer encoder-state wipe until after every write into out_stream has
+    // committed.  An earlier reset() let a mid-flush failure leave
+    // write_index_ at -1, so the next flush() short-circuited at the top
+    // and the data was silently lost.
     underflow_flags_.clear();
+    TS2DIFFEncoder<int32_t>::reset();
     return ret;
 }
 
@@ -597,7 +893,6 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         write_bits(delta_arr_[i], bit_width, inner);
     }
     flush_remaining(inner);
-    reset();
 
     const bool overflow = has_overflow();
     if (overflow) {
@@ -643,7 +938,11 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
         return ret;
     }
+    // Same deferred-reset rationale as FloatTS2DIFFEncoder::flush — keeping
+    // write_index_ live until every committed write succeeds avoids the
+    // "next flush returns E_OK on lost data" pattern.
     underflow_flags_.clear();
+    TS2DIFFEncoder<int64_t>::reset();
     return ret;
 }
 

@@ -162,6 +162,35 @@ class ResultSet : std::enable_shared_from_this<ResultSet> {
         return common::E_INVALID_ARG;
     }
 
+    // Typed direct accessors.  Default implementation routes through the
+    // generic RowRecord / Field path so existing subclasses keep working.
+    // Fast subclasses (TableResultSet) override these to read straight from
+    // the underlying columnar buffer, skipping the per-cell Field round-trip
+    // (and the eager materialization in next()).
+    virtual bool get_bool_at(uint32_t column_index) {
+        return get_row_record()->get_field(column_index - 1)->get_value<bool>();
+    }
+    virtual int32_t get_int32_at(uint32_t column_index) {
+        return get_row_record()
+            ->get_field(column_index - 1)
+            ->get_value<int32_t>();
+    }
+    virtual int64_t get_int64_at(uint32_t column_index) {
+        return get_row_record()
+            ->get_field(column_index - 1)
+            ->get_value<int64_t>();
+    }
+    virtual float get_float_at(uint32_t column_index) {
+        return get_row_record()
+            ->get_field(column_index - 1)
+            ->get_value<float>();
+    }
+    virtual double get_double_at(uint32_t column_index) {
+        return get_row_record()
+            ->get_field(column_index - 1)
+            ->get_value<double>();
+    }
+
     /**
      * @brief Get the row record of the result set
      *
@@ -245,6 +274,29 @@ inline std::tm ResultSet::get_value(uint32_t column_index) {
     return row_record->get_field(column_index)->get_date_value();
 }
 
+// Index-based primitive specializations route to the typed virtual
+// accessors so TableResultSet can serve them without materializing a Field.
+template <>
+inline bool ResultSet::get_value(uint32_t column_index) {
+    return get_bool_at(column_index);
+}
+template <>
+inline int32_t ResultSet::get_value(uint32_t column_index) {
+    return get_int32_at(column_index);
+}
+template <>
+inline int64_t ResultSet::get_value(uint32_t column_index) {
+    return get_int64_at(column_index);
+}
+template <>
+inline float ResultSet::get_value(uint32_t column_index) {
+    return get_float_at(column_index);
+}
+template <>
+inline double ResultSet::get_value(uint32_t column_index) {
+    return get_double_at(column_index);
+}
+
 /**
  * @brief Simple iterator for ResultSet with smart pointers
  */
@@ -306,7 +358,7 @@ inline ResultSetIterator ResultSet::iterator() {
     return ResultSetIterator(this);
 }
 
-static MAYBE_UNUSED void print_table_result_set(
+MAYBE_UNUSED static void print_table_result_set(
     storage::ResultSet* table_result_set) {
     if (table_result_set == nullptr) {
         std::cout << "TableResultSet is nullptr" << std::endl;

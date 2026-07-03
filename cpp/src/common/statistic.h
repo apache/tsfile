@@ -22,11 +22,16 @@
 
 #include <inttypes.h>
 
+#include <algorithm>
 #include <sstream>
 
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "common/db_common.h"
+
+#ifdef ENABLE_SIMD
+#include "simde/x86/sse4.2.h"
+#endif
 
 namespace storage {
 
@@ -175,6 +180,48 @@ class Statistic {
         ASSERT(false);
     }
     virtual FORCE_INLINE void update(int64_t time) { ASSERT(false); }
+
+    virtual void update_time_batch(const int64_t* timestamps, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps, const bool* values,
+                              uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps, const int32_t* values,
+                              uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps, const int64_t* values,
+                              uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps, const float* values,
+                              uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps, const double* values,
+                              uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const common::String* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
 
     virtual int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
@@ -554,17 +601,17 @@ class BooleanStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         sum_value_ = 0;
         first_value_ = false;
         last_value_ = false;
     }
 
-    FORCE_INLINE void update(int64_t time, bool value) {
+    FORCE_INLINE void update(int64_t time, bool value) override {
         BOOL_STAT_UPDATE(time, value);
     }
-    int serialize_typed_stat(common::ByteStream& out) {
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui8(first_value_ ? 1 : 0,
                                                           out))) {
@@ -575,7 +622,7 @@ class BooleanStatistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui8((uint8_t&)first_value_,
                                                          in))) {
@@ -587,13 +634,15 @@ class BooleanStatistic : public Statistic {
         return ret;
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::BOOLEAN; }
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::BOOLEAN;
+    }
 
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_BOOL_STAT_FROM(BooleanStatistic, stat);
     }
 
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_BOOL_STAT_FROM(BooleanStatistic, stat);
     }
 };
@@ -625,7 +674,7 @@ class Int32Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -634,13 +683,47 @@ class Int32Statistic : public Statistic {
         last_value_ = 0;
     }
 
-    FORCE_INLINE void update(int64_t time, int32_t value) {
+    FORCE_INLINE void update(int64_t time, int32_t value) override {
         NUM_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::INT32; }
+    void update_batch(const int64_t* timestamps, const int32_t* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = (int64_t)values[0];
+            count_ = 1;
+            start = 1;
+        }
+        // Timestamps are monotonic (verified by TimePageWriter),
+        // so only first/last matter for start_time_/end_time_.
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
+        for (uint32_t i = start; i < count; i++) {
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += (int64_t)values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::INT32;
+    }
+
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui32(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui32(max_value_,
@@ -654,7 +737,7 @@ class Int32Statistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui32((uint32_t&)min_value_,
                                                           in))) {
@@ -676,15 +759,15 @@ class Int32Statistic : public Statistic {
         //           << std::endl;
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_NUM_STAT_FROM(Int32Statistic, stat);
     }
 
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_NUM_STAT_FROM(Int32Statistic, stat);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         std::ostringstream oss;
         oss << "{count=" << count_ << ", start_time=" << start_time_
             << ", end_time=" << end_time_ << ", first_val=" << first_value_
@@ -696,7 +779,7 @@ class Int32Statistic : public Statistic {
 };
 
 class DateStatistic : public Int32Statistic {
-    FORCE_INLINE common::TSDataType get_type() { return common::DATE; }
+    FORCE_INLINE common::TSDataType get_type() override { return common::DATE; }
 };
 
 class Int64Statistic : public Statistic {
@@ -726,7 +809,7 @@ class Int64Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -734,13 +817,75 @@ class Int64Statistic : public Statistic {
         first_value_ = 0;
         last_value_ = 0;
     }
-    FORCE_INLINE void update(int64_t time, int64_t value) {
+    FORCE_INLINE void update(int64_t time, int64_t value) override {
         NUM_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::INT64; }
+    void update_batch(const int64_t* timestamps, const int64_t* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = (double)values[0];
+            count_ = 1;
+            start = 1;
+        }
+        // Timestamps are monotonic (verified by TimePageWriter),
+        // so only first/last matter for start_time_/end_time_.
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
+        uint32_t i = start;
+#ifdef ENABLE_SIMD
+        {
+            simde__m128i vmin = simde_mm_set1_epi64x(min_value_);
+            simde__m128i vmax = simde_mm_set1_epi64x(max_value_);
+            simde__m128d vsum = simde_mm_setzero_pd();
+            for (; i + 2 <= count; i += 2) {
+                simde__m128i v =
+                    simde_mm_loadu_si128((const simde__m128i*)&values[i]);
+                // no vminq_s64 equivalent in SSE; use cmpgt + blendv
+                simde__m128i lt = simde_mm_cmpgt_epi64(vmin, v);
+                vmin = simde_mm_blendv_epi8(vmin, v, lt);
+                simde__m128i gt = simde_mm_cmpgt_epi64(v, vmax);
+                vmax = simde_mm_blendv_epi8(vmax, v, gt);
+                // no direct int64→double in SSE; extract and cast per lane
+                int64_t v0 = simde_mm_cvtsi128_si64(v);
+                int64_t v1 = simde_mm_extract_epi64(v, 1);
+                vsum = simde_mm_add_pd(vsum,
+                                       simde_mm_set_pd((double)v1, (double)v0));
+            }
+            min_value_ = std::min(simde_mm_cvtsi128_si64(vmin),
+                                  simde_mm_extract_epi64(vmin, 1));
+            max_value_ = std::max(simde_mm_cvtsi128_si64(vmax),
+                                  simde_mm_extract_epi64(vmax, 1));
+            sum_value_ += simde_mm_cvtsd_f64(vsum) +
+                          simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vsum, vsum));
+        }
+#endif
+        for (; i < count; i++) {
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += (double)values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::INT64;
+    }
+
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui64(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui64(max_value_,
@@ -754,7 +899,7 @@ class Int64Statistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui64((uint64_t&)min_value_,
                                                           in))) {
@@ -769,15 +914,15 @@ class Int64Statistic : public Statistic {
         }
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_NUM_STAT_FROM(Int64Statistic, stat);
     }
 
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_NUM_STAT_FROM(Int64Statistic, stat);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         std::ostringstream oss;
         oss << "{count=" << count_ << ", start_time=" << start_time_
             << ", end_time=" << end_time_ << ", first_val=" << first_value_
@@ -815,7 +960,7 @@ class FloatStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -823,13 +968,15 @@ class FloatStatistic : public Statistic {
         first_value_ = 0;
         last_value_ = 0;
     }
-    FORCE_INLINE void update(int64_t time, float value) {
+    FORCE_INLINE void update(int64_t time, float value) override {
         NUM_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::FLOAT; }
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::FLOAT;
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_float(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_float(max_value_,
@@ -843,7 +990,7 @@ class FloatStatistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_float(min_value_, in))) {
         } else if (RET_FAIL(
@@ -857,10 +1004,10 @@ class FloatStatistic : public Statistic {
         }
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_NUM_STAT_FROM(FloatStatistic, stat);
     }
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_NUM_STAT_FROM(FloatStatistic, stat);
     }
 };
@@ -892,7 +1039,7 @@ class DoubleStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -900,13 +1047,67 @@ class DoubleStatistic : public Statistic {
         first_value_ = 0;
         last_value_ = 0;
     }
-    FORCE_INLINE void update(int64_t time, double value) {
+    FORCE_INLINE void update(int64_t time, double value) override {
         NUM_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::DOUBLE; }
+    void update_batch(const int64_t* timestamps, const double* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = values[0];
+            count_ = 1;
+            start = 1;
+        }
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
+        uint32_t i = start;
+#ifdef ENABLE_SIMD
+        {
+            simde__m128d vmin = simde_mm_set1_pd(min_value_);
+            simde__m128d vmax = simde_mm_set1_pd(max_value_);
+            simde__m128d vsum = simde_mm_setzero_pd();
+            for (; i + 2 <= count; i += 2) {
+                simde__m128d v = simde_mm_loadu_pd(&values[i]);
+                vmin = simde_mm_min_pd(vmin, v);
+                vmax = simde_mm_max_pd(vmax, v);
+                vsum = simde_mm_add_pd(vsum, v);
+            }
+            min_value_ =
+                std::min(simde_mm_cvtsd_f64(vmin),
+                         simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vmin, vmin)));
+            max_value_ =
+                std::max(simde_mm_cvtsd_f64(vmax),
+                         simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vmax, vmax)));
+            sum_value_ += simde_mm_cvtsd_f64(vsum) +
+                          simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vsum, vsum));
+        }
+#endif
+        for (; i < count; i++) {
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::DOUBLE;
+    }
+
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::write_double(min_value_, out))) {
@@ -921,7 +1122,7 @@ class DoubleStatistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_double(min_value_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_double(max_value_,
@@ -935,10 +1136,10 @@ class DoubleStatistic : public Statistic {
         }
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_NUM_STAT_FROM(DoubleStatistic, stat);
     }
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_NUM_STAT_FROM(DoubleStatistic, stat);
     }
 };
@@ -960,30 +1161,50 @@ class TimeStatistic : public Statistic {
         end_time_ = that.end_time_;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         start_time_ = 0;
         end_time_ = 0;
     }
 
-    FORCE_INLINE void update(int64_t time) {
+    FORCE_INLINE void update(int64_t time) override {
         TIME_STAT_UPDATE((time));
         count_++;
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
+    void update_time_batch(const int64_t* timestamps, uint32_t count) override {
+        if (count == 0) return;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+        }
+        // Timestamps are already verified monotonic in TimePageWriter,
+        // so first element is min candidate and last is max candidate.
+        if (timestamps[0] < start_time_) start_time_ = timestamps[0];
+        if (timestamps[count - 1] > end_time_)
+            end_time_ = timestamps[count - 1];
+        count_ += count;
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) { return common::E_OK; }
-    int deserialize_typed_stat(common::ByteStream& in) { return common::E_OK; }
-    int merge_with(Statistic* stat) {
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::VECTOR;
+    }
+
+    int serialize_typed_stat(common::ByteStream& out) override {
+        return common::E_OK;
+    }
+    int deserialize_typed_stat(common::ByteStream& in) override {
+        return common::E_OK;
+    }
+    int merge_with(Statistic* stat) override {
         MERGE_TIME_STAT_FROM(TimeStatistic, stat);
     }
 
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_TIME_STAT_FROM(TimeStatistic, stat);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         std::ostringstream oss;
         oss << "{count=" << count_ << ", start_time=" << start_time_
             << ", end_time=" << end_time_ << "}";
@@ -992,7 +1213,9 @@ class TimeStatistic : public Statistic {
 };
 
 class TimestampStatistics : public Int64Statistic {
-    FORCE_INLINE common::TSDataType get_type() { return common::TIMESTAMP; }
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::TIMESTAMP;
+    }
 };
 
 class StringStatistic : public Statistic {
@@ -1002,35 +1225,24 @@ class StringStatistic : public Statistic {
     common::String first_value_;
     common::String last_value_;
     StringStatistic()
-        : min_value_(),
-          max_value_(),
-          first_value_(),
-          last_value_(),
-          pa_(nullptr),
-          owns_pa_(true) {
+        : min_value_(), max_value_(), first_value_(), last_value_() {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
     StringStatistic(common::PageArena* pa)
-        : min_value_(),
-          max_value_(),
-          first_value_(),
-          last_value_(),
-          pa_(pa),
-          owns_pa_(false) {}
+        : min_value_(), max_value_(), first_value_(), last_value_(), pa_(pa) {}
 
     ~StringStatistic() { destroy(); }
 
-    void destroy() {
-        if (owns_pa_ && pa_) {
+    void destroy() override {
+        if (pa_) {
             delete pa_;
             pa_ = nullptr;
         }
-        owns_pa_ = false;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         start_time_ = 0;
         end_time_ = 0;
@@ -1050,13 +1262,15 @@ class StringStatistic : public Statistic {
         last_value_.dup_from(that.last_value_, *pa_);
     }
 
-    FORCE_INLINE void update(int64_t time, common::String value) {
+    FORCE_INLINE void update(int64_t time, common::String value) override {
         STRING_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::STRING; }
+    FORCE_INLINE common::TSDataType get_type() override {
+        return common::STRING;
+    }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
@@ -1068,7 +1282,7 @@ class StringStatistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::read_str(first_value_, pa_, in))) {
@@ -1081,42 +1295,39 @@ class StringStatistic : public Statistic {
         }
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_STRING_STAT_FROM(StringStatistic, stat);
     }
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_STRING_STAT_FROM(StringStatistic, stat);
     }
 
    private:
     common::PageArena* pa_;
-    bool owns_pa_;
 };
 
 class TextStatistic : public Statistic {
    public:
     common::String first_value_;
     common::String last_value_;
-    TextStatistic()
-        : first_value_(), last_value_(), pa_(nullptr), owns_pa_(true) {
+    TextStatistic() : first_value_(), last_value_() {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
     TextStatistic(common::PageArena* pa)
-        : first_value_(), last_value_(), pa_(pa), owns_pa_(false) {}
+        : first_value_(), last_value_(), pa_(pa) {}
 
     ~TextStatistic() { destroy(); }
 
-    void destroy() {
-        if (owns_pa_ && pa_) {
+    void destroy() override {
+        if (pa_) {
             delete pa_;
             pa_ = nullptr;
         }
-        owns_pa_ = false;
     }
 
-    FORCE_INLINE void reset() {
+    FORCE_INLINE void reset() override {
         count_ = 0;
         start_time_ = 0;
         end_time_ = 0;
@@ -1132,13 +1343,13 @@ class TextStatistic : public Statistic {
         last_value_.dup_from(that.last_value_, *pa_);
     }
 
-    FORCE_INLINE void update(int64_t time, common::String value) {
+    FORCE_INLINE void update(int64_t time, common::String value) override {
         TEXT_STAT_UPDATE(time, value);
     }
 
-    FORCE_INLINE common::TSDataType get_type() { return common::TEXT; }
+    FORCE_INLINE common::TSDataType get_type() override { return common::TEXT; }
 
-    int serialize_typed_stat(common::ByteStream& out) {
+    int serialize_typed_stat(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
@@ -1146,7 +1357,7 @@ class TextStatistic : public Statistic {
         }
         return ret;
     }
-    int deserialize_typed_stat(common::ByteStream& in) {
+    int deserialize_typed_stat(common::ByteStream& in) override {
         int ret = common::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::read_str(first_value_, pa_, in))) {
@@ -1155,35 +1366,33 @@ class TextStatistic : public Statistic {
         }
         return ret;
     }
-    int merge_with(Statistic* stat) {
+    int merge_with(Statistic* stat) override {
         MERGE_TEXT_STAT_FROM(TextStatistic, stat);
     }
-    int deep_copy_from(Statistic* stat) {
+    int deep_copy_from(Statistic* stat) override {
         DEEP_COPY_TEXT_STAT_FROM(TextStatistic, stat);
     }
 
    private:
     common::PageArena* pa_;
-    bool owns_pa_;
 };
 
 class BlobStatistic : public Statistic {
    public:
-    BlobStatistic() : pa_(nullptr), owns_pa_(true) {
+    BlobStatistic() {
         pa_ = new common::PageArena();
         pa_->init(512, common::MOD_STATISTIC_OBJ);
     }
 
-    BlobStatistic(common::PageArena* pa) : pa_(pa), owns_pa_(false) {}
+    BlobStatistic(common::PageArena* pa) {}
 
     ~BlobStatistic() { destroy(); }
 
     void destroy() {
-        if (owns_pa_ && pa_) {
+        if (pa_) {
             delete pa_;
             pa_ = nullptr;
         }
-        owns_pa_ = false;
     }
 
     FORCE_INLINE void reset() {
@@ -1214,7 +1423,6 @@ class BlobStatistic : public Statistic {
 
    private:
     common::PageArena* pa_;
-    bool owns_pa_;
 };
 
 FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {

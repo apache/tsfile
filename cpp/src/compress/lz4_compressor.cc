@@ -76,9 +76,13 @@ int LZ4Compressor::compress(char* uncompressed_buf,
 }
 
 void LZ4Compressor::after_compress(char* compressed_buf) {
+    // See SnappyCompressor::after_compress for the same reasoning: the member
+    // pointer can lag behind the caller-known buffer across page reuse.
     if (compressed_buf != nullptr) {
-        mem_free(compressed_buf_);
-        compressed_buf_ = nullptr;
+        mem_free(compressed_buf);
+        if (compressed_buf_ == compressed_buf) {
+            compressed_buf_ = nullptr;
+        }
     }
 }
 
@@ -132,8 +136,10 @@ int LZ4Compressor::uncompress(char* compressed_buf, uint32_t compressed_buf_len,
 
 void LZ4Compressor::after_uncompress(char* uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
-        mem_free(uncompressed_buf_);
-        uncompressed_buf_ = nullptr;
+        mem_free(uncompressed_buf);
+        if (uncompressed_buf_ == uncompressed_buf) {
+            uncompressed_buf_ = nullptr;
+        }
     }
 }
 

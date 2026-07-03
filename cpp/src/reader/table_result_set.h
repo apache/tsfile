@@ -48,8 +48,23 @@ class TableResultSet : public ResultSet {
     void close() override;
     int get_next_tsblock(common::TsBlock*& block) override;
 
+    // Fast typed accessors: read straight from the current TsBlock vector
+    // without going through RowRecord/Field.  Caller is expected to have
+    // checked is_null() — when the cell is null the underlying buffer pointer
+    // is nullptr and these return a default (0 / 0.0 / false) without
+    // dereferencing it.
+    bool get_bool_at(uint32_t column_index) override;
+    int32_t get_int32_at(uint32_t column_index) override;
+    int64_t get_int64_at(uint32_t column_index) override;
+    float get_float_at(uint32_t column_index) override;
+    double get_double_at(uint32_t column_index) override;
+
    private:
     void init();
+    // Lazy materialization: fill row_record_ from the current row when a
+    // caller actually requests the RowRecord (or a non-fast accessor).
+    void materialize_current_row();
+
     std::unique_ptr<TsBlockReader> tsblock_reader_;
     common::RowIterator* row_iterator_ = nullptr;
     common::TsBlock* tsblock_ = nullptr;
@@ -58,6 +73,11 @@ class TableResultSet : public ResultSet {
     std::vector<std::string> column_names_;
     std::vector<common::TSDataType> data_types_;
     const int return_mode_;
+    bool closed_ = false;
+    // True when row_iterator_ points at a row that hasn't been consumed yet.
+    bool row_ready_ = false;
+    // True when row_record_ has been populated for the current row.
+    bool row_materialized_ = false;
 };
 }  // namespace storage
 #endif  // TABLE_RESULT_SET_H

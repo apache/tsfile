@@ -45,7 +45,7 @@ TsFileTableWriter::TsFileTableWriter(
 
 }  // namespace storage
 
-storage::TsFileTableWriter::~TsFileTableWriter() = default;
+storage::TsFileTableWriter::~TsFileTableWriter() { close(); }
 
 int storage::TsFileTableWriter::register_table(
     const std::shared_ptr<TableSchema>& table_schema) {
@@ -66,21 +66,48 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
                tablet.get_table_name() != exclusive_table_name_) {
         return common::E_TABLE_NOT_EXIST;
     }
+    // Always lowercase the incoming tablet's table / column / schema-map
+    // names: each call may carry a fresh tablet with mixed-case identifiers,
+    // and the underlying engine expects lowercase. Lowering is idempotent so
+    // reusing the same tablet across calls remains cheap.
     tablet.set_table_name(to_lower(tablet.get_table_name()));
     for (size_t i = 0; i < tablet.get_column_count(); i++) {
         tablet.set_column_name(i, to_lower(tablet.get_column_name(i)));
     }
 
     auto schema_map = tablet.get_schema_map();
-    std::map<std::string, int> schema_map_;
+    std::map<std::string, int> new_schema_map;
     for (auto iter = schema_map.begin(); iter != schema_map.end(); iter++) {
-        schema_map_[to_lower(iter->first)] = iter->second;
+        new_schema_map[to_lower(iter->first)] = iter->second;
     }
-    tablet.set_schema_map(schema_map_);
+    tablet.set_schema_map(new_schema_map);
 
     return tsfile_writer_->write_table(tablet);
 }
 
-int storage::TsFileTableWriter::flush() { return tsfile_writer_->flush(); }
+int storage::TsFileTableWriter::flush() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    return tsfile_writer_->flush();
+}
 
-int storage::TsFileTableWriter::close() { return tsfile_writer_->close(); }
+int storage::TsFileTableWriter::close() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    if (!tsfile_writer_) {
+        closed_ = true;
+        return common::E_OK;
+    }
+    // Don't latch closed_ until the underlying writer reports success: a
+    // failed footer write / sync / file close should be retryable, and the
+    // destructor must still be able to drive a final close attempt.  The
+    // previous order returned E_OK on every retry after the first failure,
+    // potentially leaving the file unfinished and leaking the fd.
+    int ret = tsfile_writer_->close();
+    if (ret == common::E_OK) {
+        closed_ = true;
+    }
+    return ret;
+}

@@ -110,4 +110,90 @@ TEST(PlainEncoderDecoderTest, EncodeDecodeDouble) {
     EXPECT_DOUBLE_EQ(original, decoded);
 }
 
+// Regression: read_batch_int64/float/double used to dereference
+// in.get_wrapped_buf() unconditionally, which is null for a normal paged
+// ByteStream. Verify the fallback path produces correct results.
+TEST(PlainEncoderDecoderTest, ReadBatchInt64PagedStream) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    // Tiny page size forces multi-page write so the stream is paged, not
+    // wrapped.
+    common::ByteStream stream(16, common::MOD_DEFAULT);
+    const int N = 32;
+    int64_t values[N];
+    for (int i = 0; i < N; i++) {
+        values[i] = static_cast<int64_t>(i) * 7 - 3;
+        encoder.encode(values[i], stream);
+    }
+    int64_t out[N];
+    int actual = 0;
+    EXPECT_EQ(decoder.read_batch_int64(out, N, actual, stream), common::E_OK);
+    EXPECT_EQ(actual, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_EQ(out[i], values[i]) << "mismatch at " << i;
+    }
+}
+
+TEST(PlainEncoderDecoderTest, ReadBatchFloatPagedStream) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    common::ByteStream stream(16, common::MOD_DEFAULT);
+    const int N = 32;
+    float values[N];
+    for (int i = 0; i < N; i++) {
+        values[i] = static_cast<float>(i) * 0.5f - 1.25f;
+        encoder.encode(values[i], stream);
+    }
+    float out[N];
+    int actual = 0;
+    EXPECT_EQ(decoder.read_batch_float(out, N, actual, stream), common::E_OK);
+    EXPECT_EQ(actual, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_FLOAT_EQ(out[i], values[i]);
+    }
+}
+
+// Regression: encode_batch(const double*) used to reinterpret_cast to
+// int64_t* and dispatch into the int64 path, which read the doubles through
+// an int64_t pointer — a strict-aliasing violation under -O.  The dedicated
+// double path now memcpys per element; verify a full round-trip through it.
+TEST(PlainEncoderDecoderTest, EncodeBatchDoubleRoundTrip) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const uint32_t N = 64;
+    double values[N];
+    for (uint32_t i = 0; i < N; i++) {
+        values[i] = static_cast<double>(i) * 0.125 - 3.14;
+    }
+    ASSERT_EQ(encoder.encode_batch(values, N, stream), common::E_OK);
+
+    double out[N];
+    int actual = 0;
+    EXPECT_EQ(decoder.read_batch_double(out, N, actual, stream), common::E_OK);
+    EXPECT_EQ(actual, static_cast<int>(N));
+    for (uint32_t i = 0; i < N; i++) {
+        EXPECT_DOUBLE_EQ(out[i], values[i]) << "mismatch at " << i;
+    }
+}
+
+TEST(PlainEncoderDecoderTest, ReadBatchDoublePagedStream) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    common::ByteStream stream(16, common::MOD_DEFAULT);
+    const int N = 32;
+    double values[N];
+    for (int i = 0; i < N; i++) {
+        values[i] = static_cast<double>(i) * 1.25 + 3.14;
+        encoder.encode(values[i], stream);
+    }
+    double out[N];
+    int actual = 0;
+    EXPECT_EQ(decoder.read_batch_double(out, N, actual, stream), common::E_OK);
+    EXPECT_EQ(actual, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_DOUBLE_EQ(out[i], values[i]);
+    }
+}
+
 }  // end namespace storage

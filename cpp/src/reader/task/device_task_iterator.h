@@ -58,7 +58,17 @@ class DeviceTaskIterator {
         pa_.init(512, common::MOD_DEVICE_TASK_ITER);
     }
 
-    ~DeviceTaskIterator() { pa_.destroy(); }
+    ~DeviceTaskIterator() {
+        // The tasks are placement-new'd into pa_ memory; pa_.destroy() only
+        // releases the raw bytes, so we must call their destructors here to
+        // release the heap-allocated members (std::vector<std::string>,
+        // shared_ptr's, etc.) they own.
+        for (DeviceQueryTask* t : created_tasks_) {
+            t->~DeviceQueryTask();
+        }
+        created_tasks_.clear();
+        pa_.destroy();
+    }
 
     void flush_remaining_device_meta_cache();
 
@@ -72,6 +82,7 @@ class DeviceTaskIterator {
     std::unique_ptr<DeviceMetaIterator> device_meta_iterator_;
     std::shared_ptr<TableSchema> table_schema_;
     common::PageArena pa_;
+    std::vector<DeviceQueryTask*> created_tasks_;
 };
 
 }  // namespace storage

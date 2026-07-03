@@ -908,32 +908,68 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           bool is_not, ERRNO* err_code);
 
 /**
- * @brief Combine two tag filters with AND.
+ * @brief Create a tag equality filter: column == value.
+ *
+ * @param reader [in] Valid TsFileReader handle (used to resolve column index).
+ * @param table_name [in] Target table name.
+ * @param column_name [in] Tag column name.
+ * @param value [in] Value to compare against.
+ * @return TagFilterHandle on success, NULL on failure.
+ */
+TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
+                                      const char* table_name,
+                                      const char* column_name,
+                                      const char* value);
+
+TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+/**
+ * @brief Logical AND of two tag filters. Takes ownership of left and right.
  */
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
                                       TagFilterHandle right);
 
 /**
- * @brief Combine two tag filters with OR.
+ * @brief Logical OR of two tag filters. Takes ownership of left and right.
  */
 TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
                                      TagFilterHandle right);
 
 /**
- * @brief Negate a tag filter.
+ * @brief Logical NOT of a tag filter. Takes ownership of filter.
  */
 TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
 
 /**
- * @brief Free a tag filter and all its children.
+ * @brief Free a tag filter handle.
  */
 void tsfile_tag_filter_free(TagFilterHandle filter);
 
 /**
- * @brief Query table with tag filter.
- *
- * @param batch_size <= 0 means row-by-row return mode,
- *                   > 0 means return TsBlock with the specified block size.
+ * @brief Batch query with tag filter support.
  */
 ResultSet tsfile_query_table_with_tag_filter(
     TsFileReader reader, const char* table_name, char** columns,

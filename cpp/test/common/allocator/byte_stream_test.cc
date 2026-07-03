@@ -87,7 +87,6 @@ TEST_F(ByteStreamTest, WriteReadLargeQuantities) {
         write_to_stream(&data, 1);
     }
 
-    // 1 MiB buffer: keep it off the stack (MSVC's default stack is only 1 MiB).
     static uint8_t read_buffer[1024 * 1024];
     for (int i = 0; i < 1024 * 1024; i++) {
         uint32_t read_len = 0;
@@ -184,6 +183,42 @@ TEST_F(ByteStreamTest, ReadMoreThanAvailableTest) {
 
     ASSERT_EQ(readResult, common::E_PARTIAL_READ);
     ASSERT_EQ(read_len, data_size);
+}
+
+// Regression: the ctor used to take page_size verbatim, but hot read/write
+// paths use `& (page_size-1)` as a bitmask.  A non-power-of-2 page_size
+// would cause page-crossing logic to misfire, corrupting written data.
+// Constructing with 1000 should still round-trip cleanly across many pages.
+// Regression: round_up_pow2 used `while (ps < n) ps <<= 1`, which overflows
+// to 0 once ps passes 2^31 and never matches, looping forever.  Verify the
+// clamped helper returns the largest representable power of two instead.
+TEST(ByteStreamCtorTest, RoundUpPow2ClampsHugeInput) {
+    EXPECT_EQ(round_up_pow2(0u), 1u);
+    EXPECT_EQ(round_up_pow2(1u), 1u);
+    EXPECT_EQ(round_up_pow2(1000u), 1024u);
+    EXPECT_EQ(round_up_pow2(1024u), 1024u);
+    EXPECT_EQ(round_up_pow2(0x80000000u), 0x80000000u);
+    EXPECT_EQ(round_up_pow2(0x80000001u), 0x80000000u);
+    EXPECT_EQ(round_up_pow2(0xFFFFFFFFu), 0x80000000u);
+}
+
+TEST(ByteStreamCtorTest, NonPowerOfTwoPageSizeRoundTrip) {
+    ByteStream bs(1000, MOD_DEFAULT, false);
+    // Span ~5 pages: 1024 * 5 = 5120 bytes.
+    const uint32_t N = 5120;
+    std::vector<uint8_t> data(N);
+    for (uint32_t i = 0; i < N; i++) {
+        data[i] = static_cast<uint8_t>((i * 31 + 7) & 0xff);
+    }
+    ASSERT_EQ(bs.write_buf(data.data(), N), common::E_OK);
+
+    std::vector<uint8_t> out(N, 0);
+    uint32_t read_len = 0;
+    ASSERT_EQ(bs.read_buf(out.data(), N, read_len), common::E_OK);
+    ASSERT_EQ(read_len, N);
+    for (uint32_t i = 0; i < N; i++) {
+        ASSERT_EQ(out[i], data[i]) << "mismatch at idx " << i;
+    }
 }
 
 TEST_F(ByteStreamTest, WrapAndClearTest) {
@@ -314,6 +349,72 @@ TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidthBoundaryValue) {
         EXPECT_EQ(read_value, original_value)
             << "Mismatch with bit_width = " << bit_width;
     }
+}
+
+// Regression: total_size_ was widened to uint64_t but the read-cursor APIs
+// stayed uint32_t.  A stream that legitimately reaches >4 GiB would have
+// remaining_size() / read_pos() / set_read_pos() truncating to the low 32
+// bits and silently mis-positioning later reads.  Lock the widened type at
+// compile time so a partial revert can't reintroduce truncation, and
+// round-trip a moderate value via the API to catch arithmetic mistakes.
+TEST(ByteStreamWidthTest, ReadCursorApisAre64Bit) {
+    ByteStream s(64, common::MOD_DEFAULT);
+    static_assert(sizeof(decltype(s.read_pos())) >= sizeof(uint64_t),
+                  "ByteStream::read_pos() must return a 64-bit type");
+    static_assert(sizeof(decltype(s.remaining_size())) >= sizeof(uint64_t),
+                  "ByteStream::remaining_size() must return a 64-bit type");
+    static_assert(sizeof(decltype(s.get_mark_len())) >= sizeof(uint64_t),
+                  "ByteStream::get_mark_len() must return a 64-bit type");
+
+    // Round-trip a position via set_read_pos / read_pos on a small wrapped
+    // buffer.  Combined with the static_asserts above this guards the path
+    // arithmetic: a partial revert that kept the signature 64-bit but
+    // truncated read_pos_ to uint32_t internally would fail set_read_pos →
+    // read_pos on values near a 32-bit boundary.
+    constexpr int32_t kLen = 256;
+    std::vector<char> backing(kLen, 0);
+    ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from(backing.data(), kLen);
+    wrapped.set_read_pos(static_cast<uint64_t>(kLen - 7));
+    EXPECT_EQ(wrapped.read_pos(), static_cast<uint64_t>(kLen - 7));
+    EXPECT_EQ(wrapped.remaining_size(), 7u);
+}
+
+// Regression for the 64 KiB page memory-pressure account: ByteStream pages
+// are allocated up to OUT_STREAM_PAGE_SIZE bytes even when only a handful of
+// bytes have been written, so a chunk-group with many sparse measurements
+// can pin tens of megabytes that total_size() can't see.  allocated_bytes()
+// must reflect the real allocated footprint.
+TEST(ByteStreamAllocatedBytesTest, ReportsPageAllocationsNotLogicalSize) {
+    constexpr uint32_t kPageSize = 4096;
+    ByteStream s(kPageSize, common::MOD_DEFAULT);
+    EXPECT_EQ(s.allocated_bytes(), 0u);
+
+    // First write triggers one page allocation; logical size is 4 bytes but
+    // the real footprint should be the rounded page size.
+    uint8_t payload[4] = {1, 2, 3, 4};
+    ASSERT_EQ(s.write_buf(payload, 4), common::E_OK);
+    EXPECT_EQ(s.total_size(), 4u);
+    EXPECT_GE(s.allocated_bytes(), kPageSize);
+    EXPECT_EQ(s.allocated_bytes() % kPageSize, 0u);
+}
+
+// Regression for finding 21 (MSVC reinterpret_cast<atomic<T>*> UB): the
+// OptionalAtomic storage is now a real std::atomic<T>, so atomic ops never
+// observe a non-atomic backing object.  Lock the storage type at compile
+// time so a future refactor can't reintroduce the bare T fallback.
+TEST(OptionalAtomicStorageTest, BackingStorageIsRealAtomic) {
+    OptionalAtomic<uint64_t> oa(0, /*enable_atomic=*/true);
+    static_assert(!std::is_copy_constructible<OptionalAtomic<uint64_t>>::value,
+                  "OptionalAtomic must not be copyable — the std::atomic<T> "
+                  "storage forces explicit load/store");
+    EXPECT_EQ(oa.load(), 0u);
+    oa.store(42);
+    EXPECT_EQ(oa.load(), 42u);
+    EXPECT_EQ(oa.atomic_aaf(8), 50u);
+    EXPECT_EQ(oa.load(), 50u);
+    EXPECT_EQ(oa.atomic_faa(1), 50u);
+    EXPECT_EQ(oa.load(), 51u);
 }
 
 }  // namespace common

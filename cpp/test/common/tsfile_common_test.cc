@@ -21,6 +21,9 @@
 #include <common/schema.h>
 #include <gtest/gtest.h>
 
+#include "common/global.h"
+#include "compress/compressor_factory.h"
+
 namespace storage {
 TEST(PageHeaderTest, DefaultConstructor) {
     PageHeader header;
@@ -470,5 +473,30 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
         new_meta.table_schemas_[table_name]->get_column_categories().size(), 1);
     ASSERT_EQ(*new_meta.tsfile_properties_["key"], std::string("value"));
     ASSERT_EQ(new_meta.tsfile_properties_["null_key"], nullptr);
+}
+
+// Regression: the default-compression configuration must name a compressor
+// that the build actually provides; otherwise CompressorFactory returns
+// nullptr at write time. init_config_value() previously gated SNAPPY on
+// ENABLE_LZ4, which broke --disable-snappy --enable-lz4 builds.
+TEST(DefaultCompressorTest, DefaultIsAllocatable) {
+    common::init_config_value();
+    Compressor* c = CompressorFactory::alloc_compressor(
+        common::g_config_value_.default_compression_type_);
+    ASSERT_NE(c, nullptr);
+    // Priority mirrors init_config_value(): LZ4 first (matches the Java
+    // reference default and the previous C++ default), then SNAPPY, then
+    // UNCOMPRESSED.
+#ifdef ENABLE_LZ4
+    EXPECT_EQ(common::g_config_value_.default_compression_type_,
+              common::CompressionType::LZ4);
+#elif defined(ENABLE_SNAPPY)
+    EXPECT_EQ(common::g_config_value_.default_compression_type_,
+              common::CompressionType::SNAPPY);
+#else
+    EXPECT_EQ(common::g_config_value_.default_compression_type_,
+              common::CompressionType::UNCOMPRESSED);
+#endif
+    CompressorFactory::free(c);
 }
 }  // namespace storage

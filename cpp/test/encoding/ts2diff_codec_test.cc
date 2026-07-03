@@ -364,4 +364,120 @@ TEST_F(TS2DIFFCodecTest, TestEncodingLast) {
     EXPECT_FALSE(decoder_int_->has_remaining(out_stream_int32));
 }
 
+// Regression: skip_int32/skip_int64 used to advance the stream by the full
+// block size even when the requested skip count fell short of the block,
+// which silently dropped values from the next read in aligned nullable
+// columns.  Verify that skipping a count smaller than the first block leaves
+// the remainder of that block intact and decodable.
+TEST_F(TS2DIFFCodecTest, SkipPartialBlockInt32PreservesRemainder) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 1024;
+    std::vector<int32_t> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = i * 3 + 7;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_int_->encode(data[i], out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_int_->flush(out_stream), common::E_OK);
+
+    const int skip_count = 5;
+    int skipped = 0;
+    ASSERT_EQ(decoder_int_->skip_int32(skip_count, skipped, out_stream),
+              common::E_OK);
+    EXPECT_EQ(skipped, skip_count);
+
+    int32_t v;
+    for (int i = skip_count; i < row_num; i++) {
+        ASSERT_EQ(decoder_int_->read_int32(v, out_stream), common::E_OK);
+        EXPECT_EQ(v, data[i]) << "mismatch at idx " << i;
+    }
+}
+
+TEST_F(TS2DIFFCodecTest, SkipPartialBlockInt64PreservesRemainder) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 1024;
+    std::vector<int64_t> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<int64_t>(i) * 13 + 11;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_long_->flush(out_stream), common::E_OK);
+
+    const int skip_count = 7;
+    int skipped = 0;
+    ASSERT_EQ(decoder_long_->skip_int64(skip_count, skipped, out_stream),
+              common::E_OK);
+    EXPECT_EQ(skipped, skip_count);
+
+    int64_t v;
+    for (int i = skip_count; i < row_num; i++) {
+        ASSERT_EQ(decoder_long_->read_int64(v, out_stream), common::E_OK);
+        EXPECT_EQ(v, data[i]) << "mismatch at idx " << i;
+    }
+}
+
+// Regression: pack_bits_msb used to drop ByteStream::write_buf's return value
+// on the floor and unconditionally return 0 (success).  flush() then reported
+// E_OK and reset() wiped encoder state even when the actual data never made
+// it onto the stream.  The fix surfaces the underlying error code via the
+// helper's return value.
+//
+// We can't easily inject a real write failure without a custom allocator
+// (ByteStream::write_buf only fails on OOM), so this test pins down the
+// contract on the visible boundary: a wide bit_width must return the
+// dedicated "fallback" sentinel (-1) so flush() knows to take the per-bit
+// path, and the helper's return type must be the error code from write_buf
+// otherwise.  Future refactors that swallow the write error would either
+// stop returning -1 for fallback (caught here) or break round-trip in the
+// happy-path test below.
+TEST_F(TS2DIFFCodecTest, PackBitsMsbFallbackSentinelStillReported) {
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    int64_t values[4] = {1, 2, 3, 4};
+    EXPECT_EQ(TS2DIFFEncoder<int64_t>::pack_bits_msb(values, 4, 57, out), -1);
+    // Healthy small bit_width writes succeed.
+    int32_t small_values[4] = {1, 2, 3, 4};
+    EXPECT_EQ(TS2DIFFEncoder<int32_t>::pack_bits_msb(small_values, 4, 3, out),
+              common::E_OK);
+}
+
+// Regression: FloatTS2DIFFEncoder / DoubleTS2DIFFEncoder kept the previous
+// page's overflow markers in underflow_flags_ when reset() was called
+// directly (PageWriter drops a partial page that way).  The next page would
+// then read the stale flags and emit a wrong overflow bitmap.  reset() now
+// clears underflow_flags_; verify a reset between pages doesn't leak the
+// first page's overflow state into the second.
+TEST(FloatTS2DIFFEncoderResetTest, ResetClearsUnderflowFlags) {
+    storage::FloatTS2DIFFEncoder enc;
+    common::ByteStream out1(1024, common::MOD_TS2DIFF_OBJ, false);
+    // Encode a value that overflows the scale factor so the encoder records
+    // an underflow flag.
+    const float overflow_value = 1e30f;  // scaled > INT32_MAX
+    ASSERT_EQ(enc.encode(0.0f, out1), common::E_OK);
+    ASSERT_EQ(enc.encode(overflow_value, out1), common::E_OK);
+
+    // Drop the page without flushing.  PageWriter does exactly this when
+    // discarding a half-built page.
+    enc.reset();
+
+    // Encode a clean page that should not have any overflow markers.
+    common::ByteStream out2(1024, common::MOD_TS2DIFF_OBJ, false);
+    ASSERT_EQ(enc.encode(0.0f, out2), common::E_OK);
+    ASSERT_EQ(enc.encode(1.0f, out2), common::E_OK);
+    ASSERT_EQ(enc.encode(2.0f, out2), common::E_OK);
+    ASSERT_EQ(enc.flush(out2), common::E_OK);
+
+    // Round-trip the clean page; if reset() leaked the stale overflow flags
+    // the decoder would misinterpret the leading bytes as an overflow
+    // bitmap header and fail to recover the original values.
+    storage::FloatTS2DIFFDecoder dec;
+    float v = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        ASSERT_EQ(dec.read_float(v, out2), common::E_OK);
+        EXPECT_NEAR(v, static_cast<float>(i), 1e-5f);
+    }
+}
+
 }  // namespace storage

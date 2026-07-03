@@ -45,8 +45,15 @@ class VariableLengthVector : public Vector {
 
     // cppcheck-suppress missingOverride
     FORCE_INLINE void update_offset() OVERRIDE {
-        offset_ += variable_type_len_;
-        offset_ += last_value_len_;
+        // Self-contained advance: read the length prefix at the current
+        // offset from the buffer rather than relying on a side effect from
+        // a prior read(). This makes update_offset safe when callers skip
+        // reading variable-length columns for some rows (e.g. a row
+        // iterator that only consumes fixed-width columns).
+        uint32_t value_len = 0;
+        std::memcpy(&value_len, values_.get_data() + offset_,
+                    sizeof(value_len));
+        offset_ += variable_type_len_ + value_len;
     }
 
     // cppcheck-suppress missingOverride

@@ -53,8 +53,7 @@ class ValueChunkWriter {
           first_page_data_(),
           first_page_statistic_(nullptr),
           chunk_header_(),
-          num_of_pages_(0),
-          enable_page_seal_if_full_(true) {}
+          num_of_pages_(0) {}
     ~ValueChunkWriter() { destroy(); }
     int init(const common::ColumnSchema& col_schema);
     int init(const std::string& measurement_name, common::TSDataType data_type,
@@ -110,6 +109,71 @@ class ValueChunkWriter {
         VCW_DO_WRITE_FOR_TYPE(isnull);
     }
 
+    template <typename T>
+    int write_batch(const int64_t* timestamps, const T* values,
+                    const common::BitMap& col_notnull_bitmap,
+                    uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        uint32_t offset = 0;
+        const uint32_t page_cap =
+            common::g_config_value_.page_writer_max_point_num_;
+        while (offset < count) {
+            uint32_t cur_points = value_page_writer_.get_point_numer();
+            // get_point_numer() now returns size_ (rows including nulls and
+            // the just-written batch), so it can momentarily exceed page_cap;
+            // seal whenever we are at or past the cap to avoid uint32 wrap.
+            if (cur_points >= page_cap) {
+                if (RET_FAIL(seal_cur_page(false))) {
+                    return ret;
+                }
+                cur_points = 0;
+            }
+            uint32_t page_remaining = page_cap - cur_points;
+            uint32_t batch_size = std::min(count - offset, page_remaining);
+            if (RET_FAIL(value_page_writer_.write_batch(
+                    timestamps, values, col_notnull_bitmap, start_idx + offset,
+                    batch_size))) {
+                return ret;
+            }
+            offset += batch_size;
+            if (RET_FAIL(seal_cur_page_if_full())) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+
+    int write_string_batch(const int64_t* timestamps, const char* buffer,
+                           const uint32_t* offsets,
+                           const common::BitMap& col_notnull_bitmap,
+                           uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        uint32_t offset = 0;
+        const uint32_t page_cap =
+            common::g_config_value_.page_writer_max_point_num_;
+        while (offset < count) {
+            uint32_t cur_points = value_page_writer_.get_point_numer();
+            if (cur_points >= page_cap) {
+                if (RET_FAIL(seal_cur_page(false))) {
+                    return ret;
+                }
+                cur_points = 0;
+            }
+            uint32_t page_remaining = page_cap - cur_points;
+            uint32_t batch_size = std::min(count - offset, page_remaining);
+            if (RET_FAIL(value_page_writer_.write_string_batch(
+                    timestamps, buffer, offsets, col_notnull_bitmap,
+                    start_idx + offset, batch_size))) {
+                return ret;
+            }
+            offset += batch_size;
+            if (RET_FAIL(seal_cur_page_if_full())) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+
     int end_encode_chunk();
     common::ByteStream& get_chunk_data() { return chunk_data_; }
     Statistic* get_chunk_statistic() { return chunk_statistic_; }
@@ -119,25 +183,21 @@ class ValueChunkWriter {
 
     bool hasData();
 
-    /** True if the current (unsealed) page has at least one write (including
-     * nulls). */
+    /** True if the current (unsealed) page has at least one write
+     *  (including NULLs). */
     bool has_current_page_data() const {
-        return value_page_writer_.get_total_write_count() > 0;
+        return value_page_writer_.get_point_numer() > 0;
     }
 
     FORCE_INLINE uint32_t get_point_numer() const {
         return value_page_writer_.get_point_numer();
     }
 
-    /**
-     * Force seal the current page (for aligned table model: when time page
-     * seals due to memory/point threshold, all value pages must seal together).
-     * @return E_OK on success.
-     */
+    /** Force seal the current page. */
     int seal_current_page() { return seal_cur_page(false); }
 
-    // For aligned writer: allow disabling the automatic page-size/point-number
-    // check so the caller can seal pages at chosen boundaries.
+    // Allow disabling the automatic page-size/point-number check so the
+    // caller can seal pages at chosen boundaries.
     FORCE_INLINE void set_enable_page_seal_if_full(bool enable) {
         enable_page_seal_if_full_ = enable;
     }
@@ -183,8 +243,7 @@ class ValueChunkWriter {
 
     ChunkHeader chunk_header_;
     int32_t num_of_pages_;
-    // If false, write() won't auto-seal when the current page becomes full.
-    bool enable_page_seal_if_full_;
+    bool enable_page_seal_if_full_ = true;
 };
 
 }  // end namespace storage

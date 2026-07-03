@@ -19,31 +19,31 @@
 
 #include "global.h"
 
-#ifndef _WIN32
-#include <execinfo.h>
-#endif
-#include <stdlib.h>
-
-#include <thread>
-
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
 #endif
+
+#ifndef _WIN32
+#include <execinfo.h>
+#include <strings.h>  // strncasecmp
+#endif
+#include <stdlib.h>
+#include <string.h>  // strlen
+
 #include "utils/injection.h"
-#include "utils/util_define.h"  // strncasecmp and other platform-compat shims
+#include "utils/util_define.h"  // strncasecmp -> _strnicmp shim on Windows
 
 namespace common {
 
 ColumnSchema g_time_column_schema;
-#ifdef ENABLE_THREADS
-ThreadPool* g_write_thread_pool_ = nullptr;
-#endif
 ConfigValue g_config_value_;
+#ifdef ENABLE_THREADS
+ThreadPool* g_thread_pool_ = nullptr;
+#endif
 
 void init_config_value() {
-    g_config_value_.tsblock_mem_inc_step_size_ = 8000;  // 8k
-    g_config_value_.tsblock_max_memory_ = 64000;        // 64k
-    // g_config_value_.tsblock_max_memory_ = 32;
+    g_config_value_.tsblock_mem_inc_step_size_ = 8000;      // 8k
+    g_config_value_.tsblock_max_memory_ = 2 * 1024 * 1024;  // 2 MB
     g_config_value_.page_writer_max_point_num_ = 10000;
     g_config_value_.page_writer_max_memory_bytes_ = 128 * 1024;  // 128 k
     g_config_value_.max_degree_of_index_node_ = 256;
@@ -64,19 +64,23 @@ void init_config_value() {
     g_config_value_.float_encoding_type_ = GORILLA;
     g_config_value_.double_encoding_type_ = GORILLA;
     g_config_value_.string_encoding_type_ = PLAIN;
-    // Default compression type is LZ4
+    // Default compression is LZ4, matching the Java reference implementation
+    // (TSFileConfig.compressor) and the previous C++ default; LZ4 generally
+    // matches or beats Snappy on both ratio and decompression speed.  Fall
+    // back to whatever was actually compiled in so the factory can always
+    // produce the chosen compressor (an earlier revision gated on ENABLE_LZ4
+    // but set SNAPPY, returning nullptr at write time when Snappy was off).
 #ifdef ENABLE_LZ4
     g_config_value_.default_compression_type_ = LZ4;
+#elif defined(ENABLE_SNAPPY)
+    g_config_value_.default_compression_type_ = SNAPPY;
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
-    unsigned int hw_cores = std::thread::hardware_concurrency();
-    if (hw_cores == 0) hw_cores = 1;  // fallback if detection fails
-    g_config_value_.parallel_write_enabled_ = (hw_cores > 1);
-    g_config_value_.write_thread_count_ =
-        static_cast<int32_t>(std::min(hw_cores, 64u));
-    // Enforce aligned page size limits strictly by default.
-    g_config_value_.strict_page_size_ = true;
+    g_config_value_.parallel_read_enabled_ = true;
+    g_config_value_.parallel_write_enabled_ = true;
+    // thread_count_ keeps its in-class default (see config.h) so a
+    // set_thread_count() before libtsfile_init() is not reset here.
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {
@@ -113,16 +117,20 @@ extern CompressionType get_default_compressor() {
     return g_config_value_.default_compression_type_;
 }
 
-void config_set_page_max_point_count(uint32_t page_max_point_count) {
+int config_set_page_max_point_count(uint32_t page_max_point_count) {
+    if (page_max_point_count == 0) {
+        return E_INVALID_ARG;
+    }
     g_config_value_.page_writer_max_point_num_ = page_max_point_count;
+    return E_OK;
 }
 
-void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
+int config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
+    if (max_degree_of_index_node < 2u) {
+        return E_INVALID_ARG;
+    }
     g_config_value_.max_degree_of_index_node_ = max_degree_of_index_node;
-}
-
-void config_set_strict_page_size(bool strict_page_size) {
-    g_config_value_.strict_page_size_ = strict_page_size;
+    return E_OK;
 }
 
 void set_config_value() {}
@@ -145,15 +153,33 @@ int init_common() {
     g_time_column_schema.compression_ = UNCOMPRESSED;
     g_time_column_schema.column_name_ = storage::TIME_COLUMN_NAME;
 #ifdef ENABLE_THREADS
-    // (Re)create the global write thread pool with the configured size.
-    delete g_write_thread_pool_;
-    size_t pool_size =
-        g_config_value_.write_thread_count_ > 0
-            ? static_cast<size_t>(g_config_value_.write_thread_count_)
-            : size_t{1};
-    g_write_thread_pool_ = new ThreadPool(pool_size);
+    // (Re)create the single global worker pool with the configured size.  All
+    // parallel write/read paths submit here; torn down in libtsfile_destroy().
+    delete g_thread_pool_;
+    size_t pool_size = g_config_value_.thread_count_ > 0
+                           ? static_cast<size_t>(g_config_value_.thread_count_)
+                           : size_t{1};
+    g_thread_pool_ = new ThreadPool(pool_size);
 #endif
     return ret;
+}
+
+int set_thread_count(int32_t count) {
+    if (count < 1 || count > 64) return E_INVALID_ARG;
+    g_config_value_.thread_count_ = count;
+#ifdef ENABLE_THREADS
+    // If the global pool already exists (libtsfile_init has run) rebuild it at
+    // the new size so the change takes effect immediately instead of only at
+    // the next libtsfile_init().  This joins all current workers and recreates
+    // them, so the caller must ensure no read/write is concurrently using the
+    // pool — intended for setup / benchmark reconfiguration, not mid-operation
+    // resizing.
+    if (g_thread_pool_ != nullptr) {
+        delete g_thread_pool_;
+        g_thread_pool_ = new ThreadPool(static_cast<size_t>(count));
+    }
+#endif
+    return E_OK;
 }
 
 bool is_timestamp_column_name(const char* time_col_name) {

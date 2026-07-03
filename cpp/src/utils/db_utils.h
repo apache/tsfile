@@ -195,8 +195,6 @@ struct ColumnSchema {
 };
 
 FORCE_INLINE int64_t get_cur_timestamp() {
-    // Milliseconds since the Unix epoch. Uses the C++11 standard library so it
-    // is portable across platforms (gettimeofday is not available on MSVC).
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch())
         .count();

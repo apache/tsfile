@@ -105,6 +105,15 @@ else ()
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
+# Tune Release builds for the build-host CPU (-march=native). OFF by default:
+# native is non-portable (a binary built on a newer CPU can fault with an
+# illegal instruction on an older one) and must not leak into CI artifacts or
+# shipped wheels. On virtualized CI hosts native can even mis-detect the
+# feature set (e.g. drop +crc), which breaks third_party/snappy's crc32 path.
+# Turn ON only for local-only builds where the binary never leaves the machine.
+option(TSFILE_ENABLE_NATIVE_ARCH
+        "Tune Release builds for the build host CPU via -march=native (local-only, non-portable)"
+        OFF)
 # Keep optimization policy external by default (caller/toolchain/CMake defaults).
 set(TSFILE_OPTIMIZATION_FLAGS ""
         CACHE STRING
@@ -129,7 +138,20 @@ else ()
         if (CMAKE_BUILD_TYPE STREQUAL "Debug")
             set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
         elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+            # -flto + MinGW gcc + statically-linked antlr4_static produces
+            # unresolved-reference errors at link time (LTO intermediate
+            # objects can't see the .a's vtable thunks), so LTO is Linux/macOS
+            # only. -march=native is portable poison for shipped/CI binaries
+            # (see TSFILE_ENABLE_NATIVE_ARCH above): the default target for the
+            # deployment platform is the portable baseline, and on macOS arm64
+            # it still includes +crc so snappy's fast path stays available.
+            if (MINGW OR WIN32)
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+            elseif (TSFILE_ENABLE_NATIVE_ARCH)
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -flto")
+            else ()
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto")
+            endif ()
         elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
             set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
         elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
@@ -234,11 +256,16 @@ if (ENABLE_THREADS)
     link_libraries(Threads::Threads)
 endif()
 
-option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
-message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+option(ENABLE_SIMD "Enable SIMDe (SIMD Everywhere)" OFF)
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
-if (ENABLE_SIMDE)
-    add_definitions(-DENABLE_SIMDE)
+if (ENABLE_SIMD)
+    add_definitions(-DENABLE_SIMD)
+    # common/statistic.h is a public header included by src, tools, tests and
+    # the cwrapper; under ENABLE_SIMD it pulls in <simde/x86/sse4.2.h>. Add the
+    # SIMDe include path here (before every add_subdirectory below) so all
+    # targets inherit it, instead of repeating it per subdirectory.
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.

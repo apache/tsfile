@@ -99,8 +99,8 @@
                                     plugin's generate goal throw an NPE.
                                 -->
                             </options>
-                            <sourcePath />
-                            <targetPath />
+                            <sourcePath/>
+                            <targetPath/>
                         </configuration>
                     </execution>
                     <!-- Compile the test code -->

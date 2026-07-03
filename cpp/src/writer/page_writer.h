@@ -150,10 +150,63 @@ class PageWriter {
         PW_DO_WRITE_FOR_TYPE();
     }
 
+    template <typename T>
+    FORCE_INLINE int write_batch(const int64_t* timestamps, const T* values,
+                                 uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        if (UNLIKELY(partial_failure_)) return common::E_DATA_INCONSISTENCY;
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                 time_out_stream_))) {
+            // Time stream wasn't advanced (encode_batch is atomic w.r.t. the
+            // stream cursor on failure for these encoders) — leave the page
+            // intact so the caller can retry.
+        } else if (RET_FAIL(value_encoder_->encode_batch(values, count,
+                                                         value_out_stream_))) {
+            // Time stream already advanced; we can't roll it back here.
+            // Mark the page poisoned so write_to_chunk() refuses to seal a
+            // page where time and value rows are out of sync.
+            partial_failure_ = true;
+        } else {
+            statistic_->update_batch(timestamps, values, count);
+        }
+        return ret;
+    }
+
+    // Batch write strings from Arrow-style offset+buffer layout.
+    FORCE_INLINE int write_string_batch(const int64_t* timestamps,
+                                        const char* buffer,
+                                        const uint32_t* offsets,
+                                        uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        if (UNLIKELY(partial_failure_)) return common::E_DATA_INCONSISTENCY;
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                 time_out_stream_))) {
+        } else if (RET_FAIL(value_encoder_->encode_string_batch(
+                       buffer, offsets, start_idx, count, value_out_stream_))) {
+            partial_failure_ = true;
+        } else {
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t idx = start_idx + i;
+                uint32_t len = offsets[idx + 1] - offsets[idx];
+                common::String val(buffer + offsets[idx], len);
+                statistic_->update(timestamps[i], val);
+            }
+        }
+        return ret;
+    }
+
+    FORCE_INLINE bool has_partial_failure() const { return partial_failure_; }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_time_out_stream_size() const {
         return time_out_stream_.total_size();
     }
+    // Logical bytes written — used by the page-seal-when-full heuristic.
+    // Memory-pressure accounting should use estimate_max_mem_size() below,
+    // which reflects the real 64 KiB-page footprint of the underlying
+    // ByteStreams.
     FORCE_INLINE uint32_t get_page_memory_size() const {
         return time_out_stream_.total_size() + value_out_stream_.total_size();
     }
@@ -162,10 +215,17 @@ class PageWriter {
      * outputStream and value outputStream, because size outputStream is never
      * used until flushing.
      *
+     * Reports the *allocated* stream footprint (sum of backing 64 KiB pages)
+     * rather than the logical bytes written.  Sparse workloads with many
+     * measurements would otherwise look like they hold ~0 memory while
+     * actually pinning a full 64 KiB page per stream, so chunk-group memory
+     * thresholds couldn't keep peak memory under the configured cap.
+     *
      * @return allocated size in time, value and outputStream
      */
     FORCE_INLINE uint32_t estimate_max_mem_size() const {
-        return time_out_stream_.total_size() + value_out_stream_.total_size() +
+        return static_cast<uint32_t>(time_out_stream_.allocated_bytes() +
+                                     value_out_stream_.allocated_bytes()) +
                time_encoder_->get_max_byte_size() +
                value_encoder_->get_max_byte_size();
     }
@@ -179,6 +239,11 @@ class PageWriter {
     }
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     PageData get_cur_page_data() { return cur_page_data_; }
+    // See ValuePageWriter::release_cur_page_data for rationale.
+    void release_cur_page_data() {
+        cur_page_data_.uncompressed_buf_ = nullptr;
+        cur_page_data_.compressed_buf_ = nullptr;
+    }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
    private:
@@ -193,7 +258,6 @@ class PageWriter {
                           common::ByteStream& pages_data);
 
    private:
-    // static const uint32_t OUT_STREAM_PAGE_SIZE = 48;
     static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
 
    private:
@@ -206,6 +270,11 @@ class PageWriter {
     PageData cur_page_data_;
     Compressor* compressor_;
     bool is_inited_;
+    // Set when write_batch advanced the time stream but value encoding
+    // failed.  We can't unwind the partial time write, so refuse further
+    // writes and surface the poisoning to the higher layer via
+    // write_to_chunk().
+    bool partial_failure_ = false;
 };
 
 }  // end namespace storage

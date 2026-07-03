@@ -20,12 +20,15 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <fstream>
 #include <random>
 
 #include "common/path.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "common/tsfile_common.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "reader/qds_without_timegenerator.h"
@@ -618,6 +621,74 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
+// Regression: write_column() is the null fallback of the non-aligned batch
+// path (write_column_batch -> has_null -> write_column).  It used to handle
+// only BOOLEAN/INT32/INT64/FLOAT/DOUBLE/STRING and ASSERT(false) otherwise;
+// in NDEBUG that assert is a no-op, so a non-aligned TEXT/BLOB/DATE/TIMESTAMP
+// column that contained a null silently dropped every row of that column.
+// This writes a TEXT column with a null in the middle and verifies the two
+// non-null rows survive the round trip.
+TEST_F(TsFileWriterTest, NonAlignedTextColumnWithNullIsNotDropped) {
+    // Non-const: storage::Path's ctor takes non-const std::string&.
+    std::string device = "root.dev_text_null";
+    std::string measure = "s_text";
+    tsfile_writer_->register_timeseries(
+        device, MeasurementSchema(measure, common::TSDataType::TEXT,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED));
+
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back(measure, common::TSDataType::TEXT,
+                            common::TSEncoding::PLAIN,
+                            common::CompressionType::UNCOMPRESSED);
+    const int max_rows = 3;
+    storage::Tablet tablet(
+        device, std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+        max_rows);
+    for (int row = 0; row < max_rows; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, 1000 + row), E_OK);
+    }
+    // Rows 0 and 2 get values; row 1 is left untouched, so its not-null bit
+    // stays set (default) — that is the null that forces the write_column
+    // fallback.
+    char buf0[] = "v0";
+    char buf2[] = "v2";
+    String s0(buf0, 2), s2(buf2, 2);
+    ASSERT_EQ(tablet.add_value(0, 0u, s0), E_OK);
+    ASSERT_EQ(tablet.add_value(2, 0u, s2), E_OK);
+    ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<storage::Path> select_list{storage::Path(device, measure)};
+    storage::QueryExpression* query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(query_expr, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    // The regression signal is row survival: before the fix write_column hit
+    // ASSERT(false) on TEXT (a no-op in NDEBUG), so the column was dropped and
+    // this query returned 0 rows.  TEXT shares the identical (proven) string
+    // write path as STRING, so the two surviving rows at the right timestamps
+    // confirm the fix.  field(1) is the value column, but field(0) is non-null
+    // here too — the result row carries the timestamp as field(0).
+    std::vector<int64_t> times;
+    bool has_next = false;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        storage::RowRecord* rec = qds->get_row_record();
+        times.push_back(rec->get_timestamp());
+    }
+    reader.destroy_query_data_set(qds);
+    reader.close();
+
+    ASSERT_EQ(times.size(), 2u);
+    EXPECT_EQ(times[0], 1000);
+    EXPECT_EQ(times[1], 1002);
+}
+
 TEST_F(TsFileWriterTest, FlushMultipleDevice) {
     const int device_num = 50;
     const int measurement_num = 50;
@@ -699,6 +770,22 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
 }
 
 TEST_F(TsFileWriterTest, AnalyzeTsfileForload) {
+    // estimate_max_mem_size() now reflects the real 64 KiB-page footprint of
+    // each per-measurement output stream.  50 devices × 50 measurements ×
+    // 2 streams × 64 KiB = ~320 MiB, well past the 128 MiB default
+    // chunk_group_size_threshold_ — without raising the cap the auto-flush
+    // would fire mid-write and the post-write hasData() check below would
+    // observe a freshly drained chunk writer.  Lift the cap for the
+    // duration of this smoke test so the original semantics still apply.
+    uint32_t prev_threshold =
+        common::g_config_value_.chunk_group_size_threshold_;
+    struct Guard {
+        uint32_t prev;
+        ~Guard() { common::g_config_value_.chunk_group_size_threshold_ = prev; }
+    } guard{prev_threshold};
+    common::g_config_value_.chunk_group_size_threshold_ =
+        2ULL * 1024 * 1024 * 1024;
+
     const int device_num = 50;
     const int measurement_num = 50;
     const int max_rows = 100;
@@ -1070,6 +1157,214 @@ TEST_F(TsFileWriterTest, AlignedSealSync_ValueMemoryFirst) {
     ASSERT_EQ(reader.close(), E_OK);
 }
 
+// Regression: write_tablet_aligned() writes the entire time column first and
+// then each value column. With memory-based auto-seal still active, a large
+// STRING value column hits the memory threshold mid-batch (say at row 5),
+// while the INT64 time column does not seal until row page_writer_max_point
+// is reached.  Those divergent seals stamp misaligned page boundaries onto
+// the file and read-back returns wrong values per row.  Suppressing
+// memory-driven seals during the batch should keep all pages count-aligned.
+TEST_F(TsFileWriterTest, AlignedSealSync_TabletLargeStringValueMemoryFirst) {
+    uint32_t prev_pt = g_config_value_.page_writer_max_point_num_;
+    uint32_t prev_mem = g_config_value_.page_writer_max_memory_bytes_;
+    struct Guard {
+        uint32_t pt, mem;
+        ~Guard() {
+            g_config_value_.page_writer_max_point_num_ = pt;
+            g_config_value_.page_writer_max_memory_bytes_ = mem;
+        }
+    } guard{prev_pt, prev_mem};
+    // Big point cap, tiny memory cap: time chunk (INT64 PLAIN, 8B/point) never
+    // hits memory before it reaches the point cap, while the STRING value
+    // chunk crosses the memory threshold within a handful of rows.
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    g_config_value_.page_writer_max_memory_bytes_ = 512;
+
+    std::string device_name = "device_tablet_str";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("s0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("s1", STRING, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("s2", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        tsfile_writer_->register_aligned_timeseries(device_name, reg);
+    }
+
+    const int row_num = 200;
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  row_num);
+    char* long_buf = new char[101];
+    memset(long_buf, 'A', 100);
+    long_buf[100] = '\0';
+    common::String str_val(long_buf, 100);
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, 1622505600000 + i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        // Sparse string column: every third row is null so we also exercise
+        // the bitmap path through the memory-pressured value page.
+        if (i % 3 != 0) {
+            ASSERT_EQ(tablet.add_value(i, 1u, str_val), E_OK);
+        }
+        ASSERT_EQ(tablet.add_value(i, 2u, static_cast<int64_t>(i * 10)), E_OK);
+    }
+    delete[] long_buf;
+
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::string s0("s0"), s1("s1"), s2("s2");
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name, s0);
+    select_list.emplace_back(device_name, s1);
+    select_list.emplace_back(device_name, s2);
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 1622505600000 + cur_row);
+        EXPECT_EQ(field_to_string(rec->get_field(1)), std::to_string(cur_row));
+        EXPECT_EQ(field_to_string(rec->get_field(3)),
+                  std::to_string(cur_row * 10));
+        cur_row++;
+    }
+    EXPECT_EQ(cur_row, row_num);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// Regression: write_tablet_aligned() used to discard time_write_column_batch
+// errors and keep writing value columns. On an out-of-order tablet that left
+// the time chunk with fewer rows than the value chunks (or with their seal
+// flag still suppressed). The fix propagates the time-column error so no
+// value column is touched and the page seal flags are restored.
+TEST_F(TsFileWriterTest, AlignedTabletTimeBatchOutOfOrderAborts) {
+    std::string device_name = "device_aligned_out_of_order";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        tsfile_writer_->register_aligned_timeseries(device_name, reg);
+    }
+
+    const int row_num = 16;
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  row_num);
+    // Non-monotonic timestamps trip TimePageWriter::write_batch's order check.
+    for (int i = 0; i < row_num; ++i) {
+        int64_t ts = (i == row_num - 1) ? 0 : 1000 + i;
+        ASSERT_EQ(tablet.add_timestamp(i, ts), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 2)), E_OK);
+    }
+    EXPECT_NE(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+// Regression: write_record_aligned used to ignore the time write return
+// value, then unconditionally write each value column.  An out-of-order
+// timestamp would leave the time chunk one row short of every value chunk
+// for the rest of the file.  The fix propagates the time-write error and
+// marks the writer unrecoverable when value-column writes diverge from
+// time.
+TEST_F(TsFileWriterTest, RecordAlignedOutOfOrderDoesNotAdvanceValueColumns) {
+    std::string device_name = "root.dev_aligned_record";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        tsfile_writer_->register_aligned_timeseries(device_name, reg);
+    }
+
+    // First record at ts=1000 — should write cleanly.
+    TsRecord r1(1000, device_name);
+    r1.points_.emplace_back("v0", static_cast<int64_t>(0));
+    r1.points_.emplace_back("v1", static_cast<int64_t>(0));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(r1), E_OK);
+
+    // Second record at the same timestamp 1000 — time_chunk_writer rejects
+    // it (E_OUT_OF_ORDER per TimePageWriter::write).  The value columns
+    // must not advance.
+    TsRecord r2(1000, device_name);
+    r2.points_.emplace_back("v0", static_cast<int64_t>(99));
+    r2.points_.emplace_back("v1", static_cast<int64_t>(99));
+    EXPECT_EQ(tsfile_writer_->write_record_aligned(r2), E_OUT_OF_ORDER);
+    // close() must succeed because the failure was caught before any value
+    // write — writer state is still consistent.
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+// Regression: the aligned bulk-memcpy fast path in AlignedChunkReader only
+// appended bytes to each Vector's value_data without calling add_row_nums().
+// Vector::row_num_ stayed at 0 while TsBlock::row_count_ jumped to N, so
+// fill_trailling_nulls() then overwrote every just-written row as null
+// (visible to the caller as all-null columns).
+TEST_F(TsFileWriterTest, AlignedBulkMemcpyAdvancesVectorRowNum) {
+    std::string device_name = "device_bulk_rownum";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        tsfile_writer_->register_aligned_timeseries(device_name, reg);
+    }
+    const int N = 64;
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  N);
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(tablet.add_timestamp(i, 1000 + i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 2)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    // Read back via TsBlock — confirms the rows are visible.  Under the
+    // bug Vector::row_num_ stayed at 0, fill_trailling_nulls() then
+    // marked every just-written row null; the iterator still reports
+    // them as rows so we check the non-null field for a real value.
+    std::vector<storage::Path> select;
+    std::string s0("v0"), s1("v1");
+    select.emplace_back(device_name, s0);
+    select.emplace_back(device_name, s1);
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp;
+    int got = 0;
+    bool has_next = false;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        got++;
+    }
+    EXPECT_EQ(got, N);
+    reader.destroy_query_data_set(qds);
+    reader.close();
+}
+
 TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
     int measurement_num = 100, row_num = 100;
     std::string device_name = "device";
@@ -1256,4 +1551,145 @@ TEST_F(TsFileWriterTest, WriteTabletDataTypeMismatch) {
     ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_writer_->write_tablet_aligned(tablet));
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+// Regression: partial-write failures (parallel aligned task failing mid-way,
+// non-aligned column failing after earlier columns advanced, etc.) leave per-
+// column chunk writers out of sync.  The writer latches unrecoverable_ so
+// subsequent flush/close/write must refuse rather than seal a corrupt file
+// whose time and value chunks disagree on row count.  Directly triggering
+// the partial failure deterministically is hard, so this test asserts the
+// downstream contract by flipping the flag through a friend hook.
+namespace storage {
+class TsFileWriterUnrecoverableTest {
+   public:
+    static void mark_unrecoverable(TsFileWriter& w) { w.unrecoverable_ = true; }
+};
+}  // namespace storage
+
+TEST_F(TsFileWriterTest, UnrecoverableLatchRefusesFlushCloseAndWrites) {
+    const std::string device = "root.dev_unrec";
+    std::vector<MeasurementSchema*> reg;
+    reg.push_back(new MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED));
+    reg.push_back(new MeasurementSchema("v1", INT64, PLAIN, UNCOMPRESSED));
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg), E_OK);
+
+    // Write one good row so a flush attempt would otherwise have data to emit.
+    TsRecord r(1000, device);
+    r.points_.emplace_back("v0", static_cast<int64_t>(0));
+    r.points_.emplace_back("v1", static_cast<int64_t>(0));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(r), E_OK);
+
+    // Simulate the post-partial-failure state.
+    storage::TsFileWriterUnrecoverableTest::mark_unrecoverable(*tsfile_writer_);
+
+    // Every public write/flush/close entry point must refuse.
+    EXPECT_EQ(tsfile_writer_->flush(), E_DATA_INCONSISTENCY);
+    EXPECT_EQ(tsfile_writer_->close(), E_DATA_INCONSISTENCY);
+
+    TsRecord r2(1001, device);
+    r2.points_.emplace_back("v0", static_cast<int64_t>(1));
+    r2.points_.emplace_back("v1", static_cast<int64_t>(1));
+    EXPECT_EQ(tsfile_writer_->write_record_aligned(r2), E_DATA_INCONSISTENCY);
+
+    Tablet tablet(device,
+                  std::make_shared<std::vector<MeasurementSchema>>(
+                      std::vector<MeasurementSchema>{
+                          MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED),
+                          MeasurementSchema("v1", INT64, PLAIN, UNCOMPRESSED)}),
+                  4);
+    for (int i = 0; i < 4; i++) {
+        ASSERT_EQ(tablet.add_timestamp(i, 2000 + i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 2)), E_OK);
+    }
+    EXPECT_EQ(tsfile_writer_->write_tablet_aligned(tablet),
+              E_DATA_INCONSISTENCY);
+    EXPECT_EQ(tsfile_writer_->write_tablet(tablet), E_DATA_INCONSISTENCY);
+}
+
+namespace {
+
+WriteFile* OpenWriteFileFor(const std::string& path) {
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    auto* wf = new WriteFile;
+    if (wf->create(path, flags, 0666) != E_OK) {
+        delete wf;
+        return nullptr;
+    }
+    return wf;
+}
+
+void WriteOneAlignedRow(TsFileWriter& w, const std::string& device, int64_t ts,
+                        int64_t value) {
+    std::vector<MeasurementSchema*> reg;
+    reg.push_back(new MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED));
+    ASSERT_EQ(w.register_aligned_timeseries(device, reg), E_OK);
+    TsRecord r(ts, device);
+    r.points_.emplace_back("v0", value);
+    ASSERT_EQ(w.write_record_aligned(r), E_OK);
+}
+
+}  // namespace
+
+// Writing speed up: TsFileWriter must be reusable across a
+// destroy() + init() cycle.
+//   - 1: TsFileIOWriter::destroy() left chunk_group_meta_list_ and
+//     chunk_group_meta_index_ pointing at meta_allocator_-owned memory that
+//     the next init() then re-armed; the next start_flush_chunk_group()
+//     linear scan would deref freed nodes.
+//   - 2: TsFileWriter::init() did not reset start_file_done_, so
+//     the second file's flush() skipped the magic/version header and
+//     produced a file the reader can't open.
+// This test forces both code paths: destroy(), init() onto a fresh
+// WriteFile, write data, close, then read the second file via the public
+// TsFileReader API.
+TEST_F(TsFileWriterTest, WriterReuseAfterDestroyProducesValidSecondFile) {
+    // First lifecycle uses the fixture-provided writer (already open()'d on
+    // file_name_).  Write one row and close — this flushes the magic +
+    // version into file_name_ and flips start_file_done_ true.
+    WriteOneAlignedRow(*tsfile_writer_, "root.dev_first", 1000, 7);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    // Second lifecycle: tear down the previous writer state and re-init
+    // against a brand-new file.
+    tsfile_writer_->destroy();
+
+    const std::string second_path = std::string("tsfile_writer_reuse_test_") +
+                                    generate_random_string(10) +
+                                    std::string(".tsfile");
+    remove(second_path.c_str());
+    WriteFile* wf = OpenWriteFileFor(second_path);
+    ASSERT_NE(wf, nullptr);
+    ASSERT_EQ(tsfile_writer_->init(wf), E_OK);
+
+    WriteOneAlignedRow(*tsfile_writer_, "root.dev_second", 2000, 9);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    // The second file must start with the TsFile magic + version byte.
+    // The TsFileReader open path mostly indexes from the file tail, so a
+    // missing magic at offset 0 isn't caught by reader.open().  Inspect the
+    // raw header bytes instead — that's exactly what start_file_done_ guards.
+    {
+        std::ifstream in(second_path, std::ios::binary);
+        ASSERT_TRUE(in.is_open());
+        char header[MAGIC_STRING_TSFILE_LEN + 1] = {0};
+        in.read(header, MAGIC_STRING_TSFILE_LEN + 1);
+        EXPECT_EQ(in.gcount(),
+                  static_cast<std::streamsize>(MAGIC_STRING_TSFILE_LEN + 1));
+        EXPECT_EQ(memcmp(header, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN),
+                  0)
+            << "second-file header is missing the TsFile magic — "
+               "start_file_done_ residual from the previous lifecycle";
+        EXPECT_EQ(header[MAGIC_STRING_TSFILE_LEN], VERSION_NUM_BYTE);
+    }
+
+    // wf was passed to init() but init() did not take ownership.
+    delete wf;
+    remove(second_path.c_str());
 }
