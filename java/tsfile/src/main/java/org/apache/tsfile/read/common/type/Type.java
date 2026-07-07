@@ -136,6 +136,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the value at {@code rowIndex} from an array column in Tablet. */
+  default Object getValue(Object column, int rowIndex) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /**
    * Creates the preferred column builder for this type. This is the builder used to store values
    * after an expression projection within the read.

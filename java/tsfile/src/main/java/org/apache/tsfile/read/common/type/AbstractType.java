@@ -94,6 +94,11 @@ public abstract class AbstractType implements Type {
   }
 
   @Override
+  public Object getValue(Object column, int rowIndex) {
+    return Array.get(column, rowIndex);
+  }
+
+  @Override
   public String toString() {
     return getDisplayName();
   }

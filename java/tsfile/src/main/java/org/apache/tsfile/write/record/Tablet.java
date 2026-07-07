@@ -987,29 +987,7 @@ public class Tablet implements Accountable {
     if (isNull(i, j)) {
       return null;
     }
-    switch (schemas.get(j).getType()) {
-      case BLOB:
-      case TEXT:
-      case STRING:
-      case OBJECT:
-        return ((Binary[]) values[j])[i];
-      case INT32:
-        return ((int[]) values[j])[i];
-      case FLOAT:
-        return ((float[]) values[j])[i];
-      case DOUBLE:
-        return ((double[]) values[j])[i];
-      case BOOLEAN:
-        return ((boolean[]) values[j])[i];
-      case INT64:
-      case TIMESTAMP:
-        return ((long[]) values[j])[i];
-      case DATE:
-        return ((LocalDate[]) values[j])[i];
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.write.tablet_unsupported_type", schemas.get(j).getType()));
-    }
+    return Type.fromTsDataType(schemas.get(j).getType()).getValue(values[j], i);
   }
 
   /**
