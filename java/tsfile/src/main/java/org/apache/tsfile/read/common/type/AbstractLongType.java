@@ -22,7 +22,10 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -77,6 +80,20 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public Object createArray(int capacity) {
     return new long[capacity];
+  }
+
+  @Override
+  public int serializedSize(Object column, int rowSize) {
+    return Math.multiplyExact(Long.BYTES, rowSize);
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    long[] values = (long[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(values[i], stream);
+    }
   }
 
   @Override

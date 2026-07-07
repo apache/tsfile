@@ -19,6 +19,11 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 
 public class DateType extends AbstractIntType {
@@ -37,6 +42,19 @@ public class DateType extends AbstractIntType {
   @Override
   public Object createArray(int capacity) {
     return new LocalDate[capacity];
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    LocalDate[] values = (LocalDate[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(
+          values[i] == null
+              ? DateUtils.EMPTY_DATE_INT
+              : DateUtils.parseDateExpressionToInt(values[i]),
+          stream);
+    }
   }
 
   @Override

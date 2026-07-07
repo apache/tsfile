@@ -20,6 +20,12 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+
+import java.io.DataOutputStream;
+import java.io.IOException;
 
 public abstract class AbstractType implements Type {
 
@@ -31,6 +37,29 @@ public abstract class AbstractType implements Type {
               expectedType,
               getDisplayName(),
               value.getClass().getName()));
+    }
+  }
+
+  protected int serializedSizeOfBinaryValues(Object column, int rowSize) {
+    Binary[] binaryValues = (Binary[]) column;
+    int size = 0;
+    for (int i = 0; i < rowSize; i++) {
+      size = Math.addExact(size, Byte.BYTES);
+      if (binaryValues[i] != null) {
+        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[i]));
+      }
+    }
+    return size;
+  }
+
+  protected void serializeBinaryValues(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    Binary[] binaryValues = (Binary[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[i] != null), stream);
+      if (binaryValues[i] != null) {
+        ReadWriteIOUtils.write(binaryValues[i], stream);
+      }
     }
   }
 

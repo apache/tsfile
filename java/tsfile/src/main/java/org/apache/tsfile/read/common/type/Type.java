@@ -24,6 +24,8 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.List;
 
 public interface Type {
@@ -109,6 +111,17 @@ public interface Type {
 
   /** Creates an array column with {@code capacity} entries for this type. */
   default Object createArray(int capacity) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns the serialized byte size of the array column with {@code rowSize} entries. */
+  default int serializedSize(Object column, int rowSize) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes the array column with {@code rowSize} entries. */
+  default void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

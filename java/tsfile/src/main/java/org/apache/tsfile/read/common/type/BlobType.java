@@ -26,6 +26,8 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -68,6 +70,17 @@ public class BlobType extends AbstractType {
   @Override
   public Object createArray(int capacity) {
     return new Binary[capacity];
+  }
+
+  @Override
+  public int serializedSize(Object column, int rowSize) {
+    return serializedSizeOfBinaryValues(column, rowSize);
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    serializeBinaryValues(array, rowSize, stream);
   }
 
   @Override

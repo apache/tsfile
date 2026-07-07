@@ -22,7 +22,10 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -81,6 +84,20 @@ public class FloatType extends AbstractType {
   @Override
   public Object createArray(int capacity) {
     return new float[capacity];
+  }
+
+  @Override
+  public int serializedSize(Object column, int rowSize) {
+    return Math.multiplyExact(Float.BYTES, rowSize);
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    float[] values = (float[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(values[i], stream);
+    }
   }
 
   @Override

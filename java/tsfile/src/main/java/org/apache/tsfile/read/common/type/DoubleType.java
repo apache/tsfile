@@ -22,7 +22,10 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -81,6 +84,20 @@ public class DoubleType extends AbstractType {
   @Override
   public Object createArray(int capacity) {
     return new double[capacity];
+  }
+
+  @Override
+  public int serializedSize(Object column, int rowSize) {
+    return Math.multiplyExact(Double.BYTES, rowSize);
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    double[] values = (double[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(values[i], stream);
+    }
   }
 
   @Override

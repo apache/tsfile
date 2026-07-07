@@ -679,55 +679,21 @@ public class Tablet implements Accountable {
     if (values != null) {
       final int columnCount = schemas == null ? 0 : schemas.size();
       for (int i = 0; i < columnCount; i++) {
-        size = Math.addExact(size, serializedSizeOfColumn(schemas.get(i).getType(), values[i]));
+        size =
+            Math.addExact(
+                size,
+                serializedSizeOfColumn(Type.fromTsDataType(schemas.get(i).getType()), values[i]));
       }
     }
     return size;
   }
 
-  private int serializedSizeOfColumn(final TSDataType dataType, final Object column) {
+  private int serializedSizeOfColumn(final Type type, final Object column) {
     int size = Byte.BYTES;
     if (column == null) {
       return size;
     }
-    switch (dataType) {
-      case INT32:
-        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
-      case DATE:
-        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
-      case INT64:
-      case TIMESTAMP:
-        return Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
-      case FLOAT:
-        return Math.addExact(size, Math.multiplyExact(Float.BYTES, rowSize));
-      case DOUBLE:
-        return Math.addExact(size, Math.multiplyExact(Double.BYTES, rowSize));
-      case BOOLEAN:
-        return Math.addExact(size, rowSize);
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        return Math.addExact(size, serializedSizeOfBinaryValues((Binary[]) column));
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
-  }
-
-  private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
-    int size = 0;
-    for (int j = 0; j < rowSize; j++) {
-      size = Math.addExact(size, Byte.BYTES);
-      if (binaryValues[j] != null) {
-        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[j]));
-      }
-    }
-    return size;
-  }
-
-  private int serializedSizeOfBinaryValues(final Binary[] binaryValues) {
-    return serializedSizeOfBinaryValues(binaryValues, rowSize);
+    return Math.addExact(size, type.serializedSize(column, rowSize));
   }
 
   /** Serialize {@link MeasurementSchema}s */
@@ -781,75 +747,17 @@ public class Tablet implements Accountable {
     if (values != null) {
       int size = (schemas == null ? 0 : schemas.size());
       for (int i = 0; i < size; i++) {
-        serializeColumn(schemas.get(i).getType(), values[i], stream, columnCategories.get(i));
+        serializeColumn(Type.fromTsDataType(schemas.get(i).getType()), values[i], stream);
       }
     }
   }
 
-  private void serializeColumn(
-      TSDataType dataType, Object column, DataOutputStream stream, ColumnCategory columnCategory)
+  private void serializeColumn(Type type, Object column, DataOutputStream stream)
       throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(column != null), stream);
 
     if (column != null) {
-      switch (dataType) {
-        case INT32:
-          int[] intValues = (int[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(intValues[j], stream);
-          }
-          break;
-        case DATE:
-          LocalDate[] dateValues = (LocalDate[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(
-                dateValues[j] == null
-                    ? DateUtils.EMPTY_DATE_INT
-                    : DateUtils.parseDateExpressionToInt(dateValues[j]),
-                stream);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long[] longValues = (long[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(longValues[j], stream);
-          }
-          break;
-        case FLOAT:
-          float[] floatValues = (float[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(floatValues[j], stream);
-          }
-          break;
-        case DOUBLE:
-          double[] doubleValues = (double[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(doubleValues[j], stream);
-          }
-          break;
-        case BOOLEAN:
-          boolean[] boolValues = (boolean[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(BytesUtils.boolToByte(boolValues[j]), stream);
-          }
-          break;
-        case TEXT:
-        case STRING:
-        case BLOB:
-        case OBJECT:
-          Binary[] binaryValues = (Binary[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
-            if (binaryValues[j] != null) {
-              ReadWriteIOUtils.write(binaryValues[j], stream);
-            }
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", dataType));
-      }
+      type.serializeArray(column, rowSize, stream);
     }
   }
 

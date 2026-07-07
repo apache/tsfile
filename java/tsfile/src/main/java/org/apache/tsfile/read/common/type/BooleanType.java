@@ -22,7 +22,11 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -51,6 +55,20 @@ public class BooleanType extends AbstractType {
   @Override
   public Object createArray(int capacity) {
     return new boolean[capacity];
+  }
+
+  @Override
+  public int serializedSize(Object column, int rowSize) {
+    return rowSize;
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    boolean[] values = (boolean[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(BytesUtils.boolToByte(values[i]), stream);
+    }
   }
 
   @Override
