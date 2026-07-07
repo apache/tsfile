@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -32,6 +33,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public abstract class AbstractVarcharType extends AbstractType {
   @Override
@@ -95,6 +97,12 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public long arrayRamBytesUsed(Object array) {
     return RamUsageEstimator.sizeOf((Binary[]) array);
+  }
+
+  @Override
+  public Column createColumn(int positionCount) {
+    return new BinaryColumn(
+        positionCount, Optional.of(new boolean[positionCount]), new Binary[positionCount]);
   }
 
   @Override

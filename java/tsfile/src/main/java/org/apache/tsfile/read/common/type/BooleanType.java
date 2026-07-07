@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -32,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class BooleanType extends AbstractType {
 
@@ -92,6 +94,12 @@ public class BooleanType extends AbstractType {
   @Override
   public long arrayRamBytesUsed(Object array) {
     return RamUsageEstimator.sizeOf((boolean[]) array);
+  }
+
+  @Override
+  public Column createColumn(int positionCount) {
+    return new BooleanColumn(
+        positionCount, Optional.of(new boolean[positionCount]), new boolean[positionCount]);
   }
 
   @Override

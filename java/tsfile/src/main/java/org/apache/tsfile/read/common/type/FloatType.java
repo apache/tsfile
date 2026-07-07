@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -31,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class FloatType extends AbstractType {
 
@@ -121,6 +123,12 @@ public class FloatType extends AbstractType {
   @Override
   public long arrayRamBytesUsed(Object array) {
     return RamUsageEstimator.sizeOf((float[]) array);
+  }
+
+  @Override
+  public Column createColumn(int positionCount) {
+    return new FloatColumn(
+        positionCount, Optional.of(new boolean[positionCount]), new float[positionCount]);
   }
 
   @Override

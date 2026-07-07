@@ -19,6 +19,9 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -28,6 +31,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Optional;
 
 public class DateType extends AbstractIntType {
 
@@ -78,6 +82,15 @@ public class DateType extends AbstractIntType {
   @Override
   public long arrayRamBytesUsed(Object array) {
     return RamUsageEstimator.sizeOf((LocalDate[]) array);
+  }
+
+  @Override
+  public Column createColumn(int positionCount) {
+    return new IntColumn(
+        positionCount,
+        Optional.of(new boolean[positionCount]),
+        new int[positionCount],
+        TSDataType.DATE);
   }
 
   @Override
