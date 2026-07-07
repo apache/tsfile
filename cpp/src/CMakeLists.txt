@@ -37,6 +37,12 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
 message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 
+option(ENABLE_ZSTD "Enable Zstandard compression" ON)
+message("cmake using: ENABLE_ZSTD=${ENABLE_ZSTD}")
+
+option(ENABLE_LZMA2 "Enable LZMA2 compression" ON)
+message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
+
 # ENABLE_SIMD is defined in the top-level CMakeLists.txt
 message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
@@ -82,6 +88,18 @@ if (ENABLE_ZLIB)
             # build tree by zlib's own CMake, so both directories are needed.
             ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
             ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+    )
+endif()
+
+if (ENABLE_ZSTD)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/zstd-1.5.7/lib
+    )
+endif()
+
+if (ENABLE_LZMA2)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/xz-5.8.3/src/liblzma/api
     )
 endif()
 
@@ -136,6 +154,14 @@ endif()
 
 if (ENABLE_ZLIB)
     list(APPEND COMPRESSION_LIBS zlibstatic)
+endif()
+
+if (ENABLE_ZSTD)
+    list(APPEND COMPRESSION_LIBS libzstd_static)
+endif()
+
+if (ENABLE_LZMA2)
+    list(APPEND COMPRESSION_LIBS liblzma)
 endif()
 
 message("Compression libraries: ${COMPRESSION_LIBS}")

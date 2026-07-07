@@ -147,8 +147,14 @@ const char* tsencoding_name(common::TSEncoding e) {
             return "ZIGZAG";
         case common::FREQ:
             return "FREQ";
+        case common::CHIMP:
+            return "CHIMP";
         case common::SPRINTZ:
             return "SPRINTZ";
+        case common::RLBE:
+            return "RLBE";
+        case common::CAMEL:
+            return "CAMEL";
         case common::INVALID_ENCODING:
         default:
             return "UNKNOWN";
@@ -173,6 +179,10 @@ const char* compression_name(common::CompressionType c) {
             return "PLA";
         case common::LZ4:
             return "LZ4";
+        case common::ZSTD:
+            return "ZSTD";
+        case common::LZMA2:
+            return "LZMA2";
         case common::INVALID_COMPRESSION:
         default:
             return "UNKNOWN";

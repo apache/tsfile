@@ -247,6 +247,23 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
+option(ENABLE_ZSTD "Enable Zstandard compression" ON)
+message("cmake using: ENABLE_ZSTD=${ENABLE_ZSTD}")
+
+if (ENABLE_ZSTD)
+    add_definitions(-DENABLE_ZSTD)
+endif()
+
+option(ENABLE_LZMA2 "Enable LZMA2 compression through bundled XZ Utils" ON)
+message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
+
+if (ENABLE_LZMA2)
+    if (CMAKE_VERSION VERSION_LESS 3.20)
+        message(FATAL_ERROR "ENABLE_LZMA2 requires CMake 3.20 or newer because bundled XZ Utils 5.8.3 requires it")
+    endif()
+    add_definitions(-DENABLE_LZMA2)
+endif()
+
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 

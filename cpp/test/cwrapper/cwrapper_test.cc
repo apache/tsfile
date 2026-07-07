@@ -52,6 +52,37 @@ class CWrapperTest : public testing::Test {
     }
 };
 
+TEST_F(CWrapperTest, CodecAndCompressionConfigIncludesJavaIds) {
+    uint8_t old_int32_encoding = get_datatype_encoding(TS_DATATYPE_INT32);
+    uint8_t old_int64_encoding = get_datatype_encoding(TS_DATATYPE_INT64);
+    uint8_t old_float_encoding = get_datatype_encoding(TS_DATATYPE_FLOAT);
+    uint8_t old_double_encoding = get_datatype_encoding(TS_DATATYPE_DOUBLE);
+    uint8_t old_compression = get_global_compression();
+
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_CHIMP),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT64, TS_ENCODING_RLBE),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, TS_ENCODING_CHIMP),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_DOUBLE, TS_ENCODING_CAMEL),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, TS_ENCODING_CAMEL),
+              common::E_NOT_SUPPORT);
+    EXPECT_EQ(set_global_compression(TS_COMPRESSION_ZSTD), common::E_OK);
+    EXPECT_EQ(set_global_compression(TS_COMPRESSION_LZMA2), common::E_OK);
+
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT32, old_int32_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT64, old_int64_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, old_float_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_DOUBLE, old_double_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_global_compression(old_compression), common::E_OK);
+}
+
 TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     ERRNO code = 0;
     const char* filename = "cwrapper_for_python.tsfile";

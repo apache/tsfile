@@ -172,6 +172,14 @@ if (ENABLE_ZLIB)
     include_directories(${THIRD_PARTY_INCLUDE}/zlib-1.3.1)
 endif()
 
+if (ENABLE_ZSTD)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/zstd-1.5.7/lib)
+endif()
+
+if (ENABLE_LZMA2)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/xz-5.8.3/src/liblzma/api)
+endif()
+
 if (ENABLE_ANTLR4)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
 endif()
@@ -213,6 +221,16 @@ endif()
 if (ENABLE_ZLIB)
     file(GLOB_RECURSE ZLIB_TEST_SRCS "compress/*gzip*_test.cc")
     list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
+endif()
+
+if (ENABLE_ZSTD)
+    file(GLOB_RECURSE ZSTD_TEST_SRCS "compress/*zstd*_test.cc")
+    list(APPEND TEST_SRCS ${ZSTD_TEST_SRCS})
+endif()
+
+if (ENABLE_LZMA2)
+    file(GLOB_RECURSE LZMA2_TEST_SRCS "compress/*lzma2*_test.cc")
+    list(APPEND TEST_SRCS ${LZMA2_TEST_SRCS})
 endif()
 
 if (BUILD_TOOLS)

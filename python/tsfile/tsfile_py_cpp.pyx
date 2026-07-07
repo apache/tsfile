@@ -129,6 +129,10 @@ cdef dict TS_ENCODING_MAP = {
     TSEncodingPy.REGULAR: TSEncoding.TS_ENCODING_REGULAR,
     TSEncodingPy.GORILLA: TSEncoding.TS_ENCODING_GORILLA,
     TSEncodingPy.ZIGZAG: TSEncoding.TS_ENCODING_ZIGZAG,
+    TSEncodingPy.CHIMP: TSEncoding.TS_ENCODING_CHIMP,
+    TSEncodingPy.SPRINTZ: TSEncoding.TS_ENCODING_SPRINTZ,
+    TSEncodingPy.RLBE: TSEncoding.TS_ENCODING_RLBE,
+    TSEncodingPy.CAMEL: TSEncoding.TS_ENCODING_CAMEL,
 }
 
 cdef dict COMPRESSION_TYPE_MAP = {
@@ -140,6 +144,8 @@ cdef dict COMPRESSION_TYPE_MAP = {
     CompressorPy.PAA: CompressionType.TS_COMPRESSION_PAA,
     CompressorPy.PLA: CompressionType.TS_COMPRESSION_PLA,
     CompressorPy.LZ4: CompressionType.TS_COMPRESSION_LZ4,
+    CompressorPy.ZSTD: CompressionType.TS_COMPRESSION_ZSTD,
+    CompressorPy.LZMA2: CompressionType.TS_COMPRESSION_LZMA2,
 }
 
 cdef dict CATEGORY_MAP = {
