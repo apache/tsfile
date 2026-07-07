@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
@@ -72,6 +73,11 @@ public class DateType extends AbstractIntType {
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return hasEnoughLength(left, right, rowSize)
         && Arrays.equals((LocalDate[]) left, 0, rowSize, (LocalDate[]) right, 0, rowSize);
+  }
+
+  @Override
+  public long arrayRamBytesUsed(Object array) {
+    return RamUsageEstimator.sizeOf((LocalDate[]) array);
   }
 
   @Override

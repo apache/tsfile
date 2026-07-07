@@ -25,6 +25,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -89,6 +90,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return binaryArrayEquals(left, right, rowSize);
+  }
+
+  @Override
+  public long arrayRamBytesUsed(Object array) {
+    return RamUsageEstimator.sizeOf((Binary[]) array);
   }
 
   @Override
