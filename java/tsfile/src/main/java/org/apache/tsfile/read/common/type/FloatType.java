@@ -79,6 +79,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new float[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new FloatColumnBuilder(null, expectedEntries);
   }

@@ -79,6 +79,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new double[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new DoubleColumnBuilder(null, expectedEntries);
   }

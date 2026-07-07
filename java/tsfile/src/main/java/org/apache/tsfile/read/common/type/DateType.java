@@ -35,6 +35,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new LocalDate[capacity];
+  }
+
+  @Override
   public TypeEnum getTypeEnum() {
     return TypeEnum.DATE;
   }

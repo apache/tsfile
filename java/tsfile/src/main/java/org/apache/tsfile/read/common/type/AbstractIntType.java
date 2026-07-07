@@ -75,6 +75,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new int[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new IntColumnBuilder(null, expectedEntries);
   }

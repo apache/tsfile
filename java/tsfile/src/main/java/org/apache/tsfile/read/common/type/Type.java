@@ -107,6 +107,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Creates an array column with {@code capacity} entries for this type. */
+  default Object createArray(int capacity) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /**
    * Creates the preferred column builder for this type. This is the builder used to store values
    * after an expression projection within the read.

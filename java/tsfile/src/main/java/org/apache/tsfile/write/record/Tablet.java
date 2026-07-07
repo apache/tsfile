@@ -598,39 +598,7 @@ public class Tablet implements Accountable {
   }
 
   private Object createValueColumnOfDataType(TSDataType dataType, int capacity) {
-
-    Object valueColumn;
-    switch (dataType) {
-      case INT32:
-        valueColumn = new int[capacity];
-        break;
-      case INT64:
-      case TIMESTAMP:
-        valueColumn = new long[capacity];
-        break;
-      case FLOAT:
-        valueColumn = new float[capacity];
-        break;
-      case DOUBLE:
-        valueColumn = new double[capacity];
-        break;
-      case BOOLEAN:
-        valueColumn = new boolean[capacity];
-        break;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        valueColumn = new Binary[capacity];
-        break;
-      case DATE:
-        valueColumn = new LocalDate[capacity];
-        break;
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
-    return valueColumn;
+    return Type.fromTsDataType(dataType).createArray(capacity);
   }
 
   /** Serialize {@link Tablet} */

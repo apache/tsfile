@@ -66,6 +66,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new Binary[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BinaryColumnBuilder(null, expectedEntries);
   }

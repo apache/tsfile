@@ -75,6 +75,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new long[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new LongColumnBuilder(null, expectedEntries);
   }

@@ -49,6 +49,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public Object createArray(int capacity) {
+    return new boolean[capacity];
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BooleanColumnBuilder(null, expectedEntries);
   }
