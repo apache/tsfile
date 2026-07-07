@@ -43,6 +43,12 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void addValue(int rowIndex, Object value, Object column) {
+    checkValueType(value, Boolean.class, "Boolean");
+    ((boolean[]) column)[rowIndex] = value != null && (boolean) value;
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BooleanColumnBuilder(null, expectedEntries);
   }

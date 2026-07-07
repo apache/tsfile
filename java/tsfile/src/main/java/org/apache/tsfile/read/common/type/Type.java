@@ -21,11 +21,16 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 
 import java.util.List;
 
 public interface Type {
+
+  static Type fromTsDataType(TSDataType tsDataType) {
+    return TypeFactory.getType(tsDataType);
+  }
 
   /** Gets a boolean at {@code position}. */
   default boolean getBoolean(Column c, int position) {
@@ -95,6 +100,11 @@ public interface Type {
   /** Write a Object to the current entry; */
   default void writeObject(ColumnBuilder builder, Object value) {
     builder.writeObject(value);
+  }
+
+  /** Adds a value to the array column at {@code rowIndex}. */
+  default void addValue(int rowIndex, Object value, Object column) {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /**

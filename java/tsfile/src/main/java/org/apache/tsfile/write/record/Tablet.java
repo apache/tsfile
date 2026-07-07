@@ -28,6 +28,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
@@ -67,7 +68,6 @@ import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
 public class Tablet implements Accountable {
   private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
-  private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
   private String insertTargetName;
@@ -310,120 +310,7 @@ public class Tablet implements Accountable {
 
     // Mark the null value position
     updateBitMap(rowIndex, indexOfSchema, value == null);
-    switch (dataType) {
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        {
-          if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Binary or String",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final Binary[] sensor = (Binary[]) values[indexOfSchema];
-          if (value instanceof Binary) {
-            sensor[rowIndex] = (Binary) value;
-          } else {
-            sensor[rowIndex] =
-                value != null
-                    ? new Binary(((String) value).getBytes(TSFileConfig.STRING_CHARSET))
-                    : Binary.EMPTY_VALUE;
-          }
-          break;
-        }
-      case FLOAT:
-        {
-          if (value != null && !(value instanceof Float)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Float",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final float[] sensor = (float[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
-          break;
-        }
-      case INT32:
-        {
-          if (value != null && !(value instanceof Integer)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Integer",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final int[] sensor = (int[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
-          break;
-        }
-      case DATE:
-        {
-          if (value != null && !(value instanceof LocalDate)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "LocalDate",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
-          break;
-        }
-      case INT64:
-      case TIMESTAMP:
-        {
-          if (value != null && !(value instanceof Long)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Long",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final long[] sensor = (long[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
-          break;
-        }
-      case DOUBLE:
-        {
-          if (value != null && !(value instanceof Double)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Double",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final double[] sensor = (double[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
-          break;
-        }
-      case BOOLEAN:
-        {
-          if (value != null && !(value instanceof Boolean)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Boolean",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final boolean[] sensor = (boolean[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null && (boolean) value;
-          break;
-        }
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
+    Type.fromTsDataType(dataType).addValue(rowIndex, value, values[indexOfSchema]);
   }
 
   @TsFileApi

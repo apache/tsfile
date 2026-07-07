@@ -21,6 +21,8 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 
@@ -41,6 +43,26 @@ public class BlobType extends AbstractType {
   @Override
   public void writeBinary(ColumnBuilder builder, Binary value) {
     builder.writeBinary(value);
+  }
+
+  @Override
+  public void addValue(int rowIndex, Object value, Object column) {
+    if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
+      throw new IllegalArgumentException(
+          Messages.format(
+              "error.write.tablet_expected_type",
+              "Binary or String",
+              getDisplayName(),
+              value.getClass().getName()));
+    }
+    if (value instanceof Binary) {
+      ((Binary[]) column)[rowIndex] = (Binary) value;
+    } else {
+      ((Binary[]) column)[rowIndex] =
+          value != null
+              ? new Binary(((String) value).getBytes(TSFileConfig.STRING_CHARSET))
+              : Binary.EMPTY_VALUE;
+    }
   }
 
   @Override

@@ -69,6 +69,12 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void addValue(int rowIndex, Object value, Object column) {
+    checkValueType(value, Long.class, "Long");
+    ((long[]) column)[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new LongColumnBuilder(null, expectedEntries);
   }

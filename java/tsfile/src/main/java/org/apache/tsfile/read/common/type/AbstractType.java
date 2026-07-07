@@ -19,7 +19,20 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.i18n.Messages;
+
 public abstract class AbstractType implements Type {
+
+  protected void checkValueType(Object value, Class<?> expectedClass, String expectedType) {
+    if (value != null && !expectedClass.isInstance(value)) {
+      throw new IllegalArgumentException(
+          Messages.format(
+              "error.write.tablet_expected_type",
+              expectedType,
+              getDisplayName(),
+              value.getClass().getName()));
+    }
+  }
 
   @Override
   public String toString() {

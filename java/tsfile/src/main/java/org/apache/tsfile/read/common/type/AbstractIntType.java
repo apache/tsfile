@@ -69,6 +69,12 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void addValue(int rowIndex, Object value, Object column) {
+    checkValueType(value, Integer.class, "Integer");
+    ((int[]) column)[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new IntColumnBuilder(null, expectedEntries);
   }

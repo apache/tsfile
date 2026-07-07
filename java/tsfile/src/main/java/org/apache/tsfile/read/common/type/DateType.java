@@ -19,11 +19,20 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.time.LocalDate;
+
 public class DateType extends AbstractIntType {
 
   public static final DateType DATE = new DateType();
+  private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   private DateType() {}
+
+  @Override
+  public void addValue(int rowIndex, Object value, Object column) {
+    checkValueType(value, LocalDate.class, "LocalDate");
+    ((LocalDate[]) column)[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {
