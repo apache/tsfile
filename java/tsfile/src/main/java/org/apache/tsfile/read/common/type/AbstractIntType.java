@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
@@ -111,6 +112,11 @@ public abstract class AbstractIntType extends AbstractType {
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return hasEnoughLength(left, right, rowSize)
         && Arrays.equals((int[]) left, 0, rowSize, (int[]) right, 0, rowSize);
+  }
+
+  @Override
+  public long arrayRamBytesUsed(Object array) {
+    return RamUsageEstimator.sizeOf((int[]) array);
   }
 
   @Override

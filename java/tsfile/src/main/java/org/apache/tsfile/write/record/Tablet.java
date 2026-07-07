@@ -1287,33 +1287,7 @@ public class Tablet implements Accountable {
         if (values == null || values.length <= column) {
           continue;
         }
-        switch (tsDataType) {
-          case INT64:
-          case TIMESTAMP:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((long[]) values[column]);
-            break;
-          case DATE:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((LocalDate[]) values[column]);
-            break;
-          case INT32:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((int[]) values[column]);
-            break;
-          case DOUBLE:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((double[]) values[column]);
-            break;
-          case FLOAT:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((float[]) values[column]);
-            break;
-          case BOOLEAN:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((boolean[]) values[column]);
-            break;
-          case STRING:
-          case TEXT:
-          case BLOB:
-          case OBJECT:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
-            break;
-        }
+        totalSizeInBytes += Type.fromTsDataType(tsDataType).arrayRamBytesUsed(values[column]);
       }
     }
 
