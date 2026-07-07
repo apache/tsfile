@@ -51,4 +51,6 @@ set_target_properties(tsfile_cli PROPERTIES
         OUTPUT_NAME tsfile-cli
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
-install(TARGETS tsfile_cli RUNTIME DESTINATION bin)
+install(TARGETS tsfile_cli
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT tools)

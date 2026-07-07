@@ -23,29 +23,31 @@ if (ENABLE_ANTLR4)
     # pre-seeding it in the cache makes its option() call a no-op.
     set(WITH_STATIC_CRT OFF CACHE BOOL
         "Link the ANTLR4 runtime against the dynamic CRT" FORCE)
-    add_subdirectory(antlr4-cpp-runtime-4)
+    add_subdirectory(antlr4-cpp-runtime-4 EXCLUDE_FROM_ALL)
     message("ANTLR4 runtime is enabled")
 else()
     message("ANTLR4 runtime is disabled")
 endif()
 if (ENABLE_SNAPPY)
-    add_subdirectory(google_snappy)
+    set(SNAPPY_INSTALL OFF CACHE BOOL "Install Snappy's header and library" FORCE)
+    add_subdirectory(google_snappy EXCLUDE_FROM_ALL)
 endif()
 
 if (ENABLE_LZ4)
-    add_subdirectory(lz4)
+    add_subdirectory(lz4 EXCLUDE_FROM_ALL)
 endif()
 
 if (ENABLE_LZOKAY)
-    add_subdirectory(lzokay)
+    add_subdirectory(lzokay EXCLUDE_FROM_ALL)
 endif()
 
 if (ENABLE_ZLIB)
-    add_subdirectory(zlib-1.3.1)
+    set(SKIP_INSTALL_ALL ON CACHE BOOL "Skip bundled zlib install rules" FORCE)
+    add_subdirectory(zlib-1.3.1 EXCLUDE_FROM_ALL)
 endif()
 
 if (ENABLE_SIMD)
-    add_subdirectory(simde-0.8.4-rc3)
+    add_subdirectory(simde-0.8.4-rc3 EXCLUDE_FROM_ALL)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
