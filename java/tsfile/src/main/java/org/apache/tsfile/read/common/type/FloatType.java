@@ -27,6 +27,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -108,6 +109,12 @@ public class FloatType extends AbstractType {
       values[i] = ReadWriteIOUtils.readFloat(buffer);
     }
     return values;
+  }
+
+  @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return hasEnoughLength(left, right, rowSize)
+        && Arrays.equals((float[]) left, 0, rowSize, (float[]) right, 0, rowSize);
   }
 
   @Override

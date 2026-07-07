@@ -36,7 +36,6 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -908,98 +907,9 @@ public class Tablet implements Accountable {
         return false;
       }
 
-      switch (schemas.get(i).getType()) {
-        case INT32:
-          int[] thisIntValues = (int[]) values[i];
-          int[] thatIntValues = (int[]) thatValues[i];
-          if (thisIntValues.length < rowSize || thatIntValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisIntValues[j] != thatIntValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case DATE:
-          LocalDate[] thisDateValues = (LocalDate[]) values[i];
-          LocalDate[] thatDateValues = (LocalDate[]) thatValues[i];
-          if (thisDateValues.length < rowSize || thatDateValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (!thisDateValues[j].equals(thatDateValues[j])) {
-              return false;
-            }
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long[] thisLongValues = (long[]) values[i];
-          long[] thatLongValues = (long[]) thatValues[i];
-          if (thisLongValues.length < rowSize || thatLongValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisLongValues[j] != thatLongValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case FLOAT:
-          float[] thisFloatValues = (float[]) values[i];
-          float[] thatFloatValues = (float[]) thatValues[i];
-          if (thisFloatValues.length < rowSize || thatFloatValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisFloatValues[j] != thatFloatValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case DOUBLE:
-          double[] thisDoubleValues = (double[]) values[i];
-          double[] thatDoubleValues = (double[]) thatValues[i];
-          if (thisDoubleValues.length < rowSize || thatDoubleValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisDoubleValues[j] != thatDoubleValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case BOOLEAN:
-          boolean[] thisBooleanValues = (boolean[]) values[i];
-          boolean[] thatBooleanValues = (boolean[]) thatValues[i];
-          if (thisBooleanValues.length < rowSize || thatBooleanValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisBooleanValues[j] != thatBooleanValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case TEXT:
-        case STRING:
-        case BLOB:
-        case OBJECT:
-          Binary[] thisBinaryValues = (Binary[]) values[i];
-          Binary[] thatBinaryValues = (Binary[]) thatValues[i];
-          if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (!thisBinaryValues[j].equals(thatBinaryValues[j])) {
-              return false;
-            }
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", schemas.get(i).getType()));
+      if (!Type.fromTsDataType(schemas.get(i).getType())
+          .arrayEquals(values[i], thatValues[i], rowSize)) {
+        return false;
       }
     }
 

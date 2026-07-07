@@ -90,6 +90,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return binaryArrayEquals(left, right, rowSize);
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BinaryColumnBuilder(null, expectedEntries);
   }

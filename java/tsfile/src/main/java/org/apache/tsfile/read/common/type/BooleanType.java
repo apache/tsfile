@@ -28,6 +28,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -79,6 +80,12 @@ public class BooleanType extends AbstractType {
       values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
     }
     return values;
+  }
+
+  @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return hasEnoughLength(left, right, rowSize)
+        && Arrays.equals((boolean[]) left, 0, rowSize, (boolean[]) right, 0, rowSize);
   }
 
   @Override

@@ -26,7 +26,9 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 public abstract class AbstractType implements Type {
 
@@ -71,6 +73,24 @@ public abstract class AbstractType implements Type {
       values[i] = isNotNull ? ReadWriteIOUtils.readBinary(buffer) : Binary.EMPTY_VALUE;
     }
     return values;
+  }
+
+  protected boolean hasEnoughLength(Object left, Object right, int rowSize) {
+    return Array.getLength(left) >= rowSize && Array.getLength(right) >= rowSize;
+  }
+
+  protected boolean binaryArrayEquals(Object left, Object right, int rowSize) {
+    if (!hasEnoughLength(left, right, rowSize)) {
+      return false;
+    }
+    Binary[] leftValues = (Binary[]) left;
+    Binary[] rightValues = (Binary[]) right;
+    for (int i = 0; i < rowSize; i++) {
+      if (!Objects.equals(leftValues[i], rightValues[i])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override

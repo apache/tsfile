@@ -26,6 +26,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
+import java.util.Arrays;
 
 public class DateType extends AbstractIntType {
 
@@ -65,6 +66,12 @@ public class DateType extends AbstractIntType {
       values[i] = DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(buffer));
     }
     return values;
+  }
+
+  @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return hasEnoughLength(left, right, rowSize)
+        && Arrays.equals((LocalDate[]) left, 0, rowSize, (LocalDate[]) right, 0, rowSize);
   }
 
   @Override

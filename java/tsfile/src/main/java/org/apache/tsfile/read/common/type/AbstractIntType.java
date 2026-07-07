@@ -27,6 +27,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -104,6 +105,12 @@ public abstract class AbstractIntType extends AbstractType {
       values[i] = ReadWriteIOUtils.readInt(buffer);
     }
     return values;
+  }
+
+  @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return hasEnoughLength(left, right, rowSize)
+        && Arrays.equals((int[]) left, 0, rowSize, (int[]) right, 0, rowSize);
   }
 
   @Override
