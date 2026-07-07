@@ -24,6 +24,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.LocalDate;
 
 public class DateType extends AbstractIntType {
@@ -55,6 +56,15 @@ public class DateType extends AbstractIntType {
               : DateUtils.parseDateExpressionToInt(values[i]),
           stream);
     }
+  }
+
+  @Override
+  public Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    LocalDate[] values = new LocalDate[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(buffer));
+    }
+    return values;
   }
 
   @Override

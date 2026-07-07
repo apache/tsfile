@@ -27,6 +27,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 
@@ -69,6 +70,15 @@ public class BooleanType extends AbstractType {
     for (int i = 0; i < rowSize; i++) {
       ReadWriteIOUtils.write(BytesUtils.boolToByte(values[i]), stream);
     }
+  }
+
+  @Override
+  public Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    boolean[] values = new boolean[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
+    }
+    return values;
   }
 
   @Override

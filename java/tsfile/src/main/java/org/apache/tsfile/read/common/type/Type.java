@@ -26,6 +26,7 @@ import org.apache.tsfile.utils.Binary;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 
 public interface Type {
@@ -122,6 +123,11 @@ public interface Type {
   /** Serializes the array column with {@code rowSize} entries. */
   default void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Deserializes an array with {@code rowSize} entries from {@code buffer}. */
+  default Object deserializeArray(ByteBuffer buffer, int rowSize) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

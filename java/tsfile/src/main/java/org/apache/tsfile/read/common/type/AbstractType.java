@@ -26,6 +26,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public abstract class AbstractType implements Type {
 
@@ -61,6 +62,15 @@ public abstract class AbstractType implements Type {
         ReadWriteIOUtils.write(binaryValues[i], stream);
       }
     }
+  }
+
+  protected Object deserializeBinaryValues(ByteBuffer buffer, int rowSize) {
+    Binary[] values = new Binary[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
+      values[i] = isNotNull ? ReadWriteIOUtils.readBinary(buffer) : Binary.EMPTY_VALUE;
+    }
+    return values;
   }
 
   @Override

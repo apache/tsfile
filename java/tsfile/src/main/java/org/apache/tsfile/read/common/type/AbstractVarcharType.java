@@ -28,6 +28,7 @@ import org.apache.tsfile.utils.Binary;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 
@@ -78,6 +79,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
     serializeBinaryValues(array, rowSize, stream);
+  }
+
+  @Override
+  public Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    return deserializeBinaryValues(buffer, rowSize);
   }
 
   @Override

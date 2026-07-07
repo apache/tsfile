@@ -33,7 +33,6 @@ import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
-import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -844,70 +843,7 @@ public class Tablet implements Accountable {
       boolean isValueColumnsNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
 
       if (isValueColumnsNotNull) {
-        switch (types[i]) {
-          case BOOLEAN:
-            boolean[] boolValues = new boolean[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              boolValues[index] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
-            }
-            values[i] = boolValues;
-            break;
-          case INT32:
-            int[] intValues = new int[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              intValues[index] = ReadWriteIOUtils.readInt(byteBuffer);
-            }
-            values[i] = intValues;
-            break;
-          case DATE:
-            LocalDate[] dateValues = new LocalDate[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              dateValues[index] =
-                  DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(byteBuffer));
-            }
-            values[i] = dateValues;
-            break;
-          case INT64:
-          case TIMESTAMP:
-            long[] longValues = new long[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              longValues[index] = ReadWriteIOUtils.readLong(byteBuffer);
-            }
-            values[i] = longValues;
-            break;
-          case FLOAT:
-            float[] floatValues = new float[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              floatValues[index] = ReadWriteIOUtils.readFloat(byteBuffer);
-            }
-            values[i] = floatValues;
-            break;
-          case DOUBLE:
-            double[] doubleValues = new double[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              doubleValues[index] = ReadWriteIOUtils.readDouble(byteBuffer);
-            }
-            values[i] = doubleValues;
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-          case OBJECT:
-            Binary[] binaryValues = new Binary[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
-              if (isNotNull) {
-                binaryValues[index] = ReadWriteIOUtils.readBinary(byteBuffer);
-              } else {
-                binaryValues[index] = Binary.EMPTY_VALUE;
-              }
-            }
-            values[i] = binaryValues;
-            break;
-          default:
-            throw new UnSupportedDataTypeException(
-                Messages.format("error.write.tablet_client_type_not_supported", types[i]));
-        }
+        values[i] = Type.fromTsDataType(types[i]).deserializeArray(byteBuffer, rowSize);
       }
     }
     return values;

@@ -26,6 +26,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 
@@ -98,6 +99,15 @@ public class FloatType extends AbstractType {
     for (int i = 0; i < rowSize; i++) {
       ReadWriteIOUtils.write(values[i], stream);
     }
+  }
+
+  @Override
+  public Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    float[] values = new float[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readFloat(buffer);
+    }
+    return values;
   }
 
   @Override
