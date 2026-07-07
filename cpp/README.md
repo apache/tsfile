@@ -93,7 +93,16 @@ TsFile C++ supports three toolchains:
 **Linux (GCC/Clang):**
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake make g++ clang-format libuuid-dev
+sudo apt-get install -y cmake make g++ clang-format libuuid-dev dpkg-dev
+```
+
+On RHEL/CentOS/Fedora systems, install the equivalent packages with `yum` or
+`dnf`:
+
+```bash
+sudo yum install -y cmake make gcc-c++ clang-tools-extra libuuid-devel rpm-build
+# or
+sudo dnf install -y cmake make gcc-c++ clang-tools-extra libuuid-devel rpm-build
 ```
 
 **Windows (MSVC):**
@@ -135,6 +144,47 @@ mvn clean verify -P with-cpp -Dcpp.toolchain=msvc
 Then you can find the shared library at `./cpp/target/build/lib`.
 
 Before you submit your code to GitHub, please ensure that the compilation is correct.
+
+### Build Linux Packages
+
+The C++ CMake build can generate installable packages for Linux distributions:
+
+- Debian/Ubuntu: `libtsfile`, `libtsfile-dev`, `tsfile-cli` DEB packages
+- RHEL/CentOS/Fedora: `libtsfile`, `libtsfile-devel`, `tsfile-cli` RPM packages
+
+From the `cpp/` directory:
+
+```bash
+cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release
+cmake --build build/package --target package
+```
+
+To generate only one package format, run `cpack` from the build directory:
+
+```bash
+cd build/package
+cpack -G DEB
+cpack -G RPM
+```
+
+Install the generated DEB packages with `apt`:
+
+```bash
+sudo apt install ./libtsfile_*.deb ./libtsfile-dev_*.deb ./tsfile-cli_*.deb
+```
+
+Install the generated RPM packages with `yum` or `dnf`:
+
+```bash
+sudo yum install ./libtsfile-*.rpm ./libtsfile-devel-*.rpm ./tsfile-cli-*.rpm
+# or
+sudo dnf install ./libtsfile-*.rpm ./libtsfile-devel-*.rpm ./tsfile-cli-*.rpm
+```
+
+The packages install the shared library under the system library directory,
+headers under `/usr/include/tsfile`, CMake package files under
+`/usr/lib/cmake/tsfile` or `/usr/lib64/cmake/tsfile`, and the CLI as
+`/usr/bin/tsfile-cli`.
 
 ### configure the cross-compilation toolchain
 

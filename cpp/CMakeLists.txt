@@ -29,6 +29,7 @@ endif ()
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif ()
+include(GNUInstallDirs)
 set(TsFile_CPP_VERSION 2.3.2.dev)
 
 if (MSVC)
@@ -305,3 +306,5 @@ else()
 endif ()
 
 add_subdirectory(examples)
+
+include(${CMAKE_SOURCE_DIR}/cmake/TsFileCPack.cmake)
