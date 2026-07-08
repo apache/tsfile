@@ -167,7 +167,12 @@ class RLBEDecoder : public Decoder {
                 if (RET_FAIL(bit_reader_.read_bits(bits, segment_length, in))) {
                     return ret;
                 }
-                T delta = static_cast<T>(static_cast<Unsigned>(bits));
+                Unsigned delta_bits = static_cast<Unsigned>(bits);
+                if (segment_length == Traits::VALUE_BITS) {
+                    delta_bits |= static_cast<Unsigned>(1)
+                                  << (Traits::VALUE_BITS - 1);
+                }
+                T delta = static_cast<T>(delta_bits);
                 if (write_index_ == -1) {
                     data_[++write_index_] = delta;
                 } else {

@@ -128,6 +128,14 @@ class RLBEEncoder : public Encoder {
         return Traits::VALUE_BITS - number_of_leading_zeros(value);
     }
 
+    Unsigned java_rlbe_delta_bits(T value, int bit_width) const {
+        Unsigned bits = static_cast<Unsigned>(value);
+        if (bit_width == Traits::VALUE_BITS) {
+            bits &= ~(static_cast<Unsigned>(1) << (Traits::VALUE_BITS - 1));
+        }
+        return bits;
+    }
+
     uint64_t calc_fibonacci(uint64_t value) const {
         uint64_t fib[RLBE_BLOCK_DEFAULT_SIZE * 2 + 1] = {0};
         fib[0] = 1;
@@ -209,7 +217,8 @@ class RLBEEncoder : public Encoder {
         do {
             int diff_len = binary_length(diff_value_[j]);
             if (RET_FAIL(byte_writer_.write_bits(
-                    static_cast<Unsigned>(diff_value_[j]), diff_len, out))) {
+                    java_rlbe_delta_bits(diff_value_[j], diff_len), diff_len,
+                    out))) {
                 return ret;
             }
             ++j;
