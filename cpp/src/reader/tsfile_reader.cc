@@ -256,8 +256,10 @@ int TsFileReader::query_table_on_tree(
                 measurement_names_set_to_query.insert(schema.measurement_name_);
             }
             device_name->split_table_name();
-            if (device_name->get_split_seg_num() > device_max_len) {
-                device_max_len = device_name->get_split_seg_num();
+            size_t split_seg_num =
+                static_cast<size_t>(device_name->get_split_seg_num());
+            if (split_seg_num > device_max_len) {
+                device_max_len = split_seg_num;
             }
         }
     } else {
@@ -279,8 +281,10 @@ int TsFileReader::query_table_on_tree(
             if (device_has_required_measurement_names) {
                 device_name->split_table_name();
                 satisfied_device_ids.push_back(device_name);
-                if (device_name->get_split_seg_num() > device_max_len) {
-                    device_max_len = device_name->get_split_seg_num();
+                size_t split_seg_num =
+                    static_cast<size_t>(device_name->get_split_seg_num());
+                if (split_seg_num > device_max_len) {
+                    device_max_len = split_seg_num;
                 }
             }
         }
@@ -301,7 +305,7 @@ int TsFileReader::query_table_on_tree(
         measurement_names_to_query = measurement_names;
     }
     std::vector<std::string> columns_names(device_max_len);
-    for (int i = 0; i < device_max_len; i++) {
+    for (size_t i = 0; i < device_max_len; i++) {
         columns_names[i] = "col_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);

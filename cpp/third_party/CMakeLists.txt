@@ -16,6 +16,8 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if (ENABLE_ANTLR4)
     # Build the ANTLR4 runtime against the dynamic CRT (/MD) so it links the
     # same C runtime as the rest of the project (avoiding LNK2038 mismatches).
@@ -80,6 +82,7 @@ if (ENABLE_LZMA2)
     set(_tsfile_build_testing "${BUILD_TESTING}")
     set(BUILD_TESTING OFF)
     add_subdirectory(xz-5.8.3)
+    set_target_properties(liblzma PROPERTIES POSITION_INDEPENDENT_CODE ON)
     set(BUILD_TESTING "${_tsfile_build_testing}")
     unset(_tsfile_build_testing)
 endif()
@@ -87,5 +90,3 @@ endif()
 if (ENABLE_SIMD)
     add_subdirectory(simde-0.8.4-rc3)
 endif()
-
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
