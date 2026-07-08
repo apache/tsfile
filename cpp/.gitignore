@@ -1,4 +1,7 @@
 build/
+!third_party/zstd-1.5.7/build/
+!third_party/zstd-1.5.7/build/cmake/
+!third_party/zstd-1.5.7/build/cmake/**
 .idea/
 .cproject
 .project
