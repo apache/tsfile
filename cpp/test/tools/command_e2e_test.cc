@@ -594,12 +594,12 @@ TEST(CliE2E, SchemaTableShowsEncodingAndCompression) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"schema", "-f", "tsv", f.path}, out, err);
     EXPECT_EQ(code, 0);
-    // Table-model schema must report real (non-empty) encoding and compression
-    // rather than blanks. The INT64 field encodes as TS_2DIFF; the compression
-    // is the engine default (build-dependent) but must not be empty.
-    EXPECT_NE(out.str().find("\ts1\tINT64\tTS_2DIFF\t"), std::string::npos)
+    // Table-model schema must report the explicitly registered encoding and
+    // compression rather than blanks or type defaults.
+    EXPECT_NE(out.str().find("\ts1\tINT64\tPLAIN\tUNCOMPRESSED"),
+              std::string::npos)
         << out.str();
-    EXPECT_EQ(out.str().find("\ts1\tINT64\tTS_2DIFF\t\n"), std::string::npos)
+    EXPECT_EQ(out.str().find("\ts1\tINT64\tPLAIN\t\n"), std::string::npos)
         << out.str();
 }
 
