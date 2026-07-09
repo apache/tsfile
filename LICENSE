@@ -347,3 +347,23 @@ Project page: https://github.com/simd-everywhere/simde
 License: https://github.com/simd-everywhere/simde/blob/master/COPYING (MIT)
 
 --------------------------------------------------------------------------------
+
+The following files include code from Zstandard project.
+
+./cpp/third_party/zstd-1.5.7/
+
+Copyright: Meta Platforms, Inc. and affiliates.
+Project page: https://github.com/facebook/zstd
+License: ./cpp/third_party/zstd-1.5.7/LICENSE (BSD)
+
+--------------------------------------------------------------------------------
+
+The following files include code from XZ Utils project.
+
+./cpp/third_party/xz-5.8.3/
+
+Copyright: The XZ Utils authors and contributors
+Project page: https://github.com/tukaani-project/xz
+License: ./cpp/third_party/xz-5.8.3/COPYING.0BSD (0BSD)
+
+--------------------------------------------------------------------------------
