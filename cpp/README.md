@@ -152,7 +152,19 @@ The C++ CMake build can generate installable packages for Linux distributions:
 - Debian/Ubuntu: `libtsfile`, `libtsfile-dev`, `tsfile-cli` DEB packages
 - RHEL/CentOS/Fedora: `libtsfile`, `libtsfile-devel`, `tsfile-cli` RPM packages
 
-From the `cpp/` directory:
+From the repository root, Maven builds the C++ module and then invokes CPack:
+
+```bash
+./mvnw package -P with-cpp
+```
+
+For a faster package-only build without running C++ tests:
+
+```bash
+./mvnw package -P with-cpp -Dbuild.test=OFF -DskipTests
+```
+
+To invoke CMake directly from the `cpp/` directory:
 
 ```bash
 cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release

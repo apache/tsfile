@@ -130,7 +130,19 @@ C++ CMake 构建可以生成 Linux 发行版可安装包：
 - Debian/Ubuntu：`libtsfile`、`libtsfile-dev`、`tsfile-cli` DEB 包
 - RHEL/CentOS/Fedora：`libtsfile`、`libtsfile-devel`、`tsfile-cli` RPM 包
 
-在 `cpp/` 目录下执行：
+在仓库根目录下，Maven 会先构建 C++ 模块，然后调用 CPack：
+
+```bash
+./mvnw package -P with-cpp
+```
+
+如果只需要快速生成安装包、不运行 C++ 测试：
+
+```bash
+./mvnw package -P with-cpp -Dbuild.test=OFF -DskipTests
+```
+
+也可以在 `cpp/` 目录下直接调用 CMake：
 
 ```bash
 cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release
