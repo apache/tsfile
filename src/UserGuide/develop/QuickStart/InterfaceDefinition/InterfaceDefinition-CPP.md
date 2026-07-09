@@ -54,15 +54,11 @@ enum TSEncoding : uint8_t {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
-    CHIMP = 11,
     SPRINTZ = 12,
-    RLBE = 13,
-    CAMEL = 14,
     INVALID_ENCODING = 255,
 };
 
-// Compression type. SNAPPY/GZIP/LZO/LZ4/ZSTD/LZMA2 depend on build options;
-// LZ4 is the default.
+// Compression type. SNAPPY/GZIP/LZO/LZ4 depend on build options; LZ4 is the default.
 enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,
     SNAPPY = 1,
@@ -72,8 +68,6 @@ enum CompressionType : uint8_t {
     PAA = 5,
     PLA = 6,
     LZ4 = 7,
-    ZSTD = 8,
-    LZMA2 = 9,
     INVALID_COMPRESSION = 255,
 };
 
@@ -92,8 +86,6 @@ Encodings applicable to each data type:
 | `GORILLA` | `INT32`, `INT64`, `TIMESTAMP`, `DATE`, `FLOAT`, `DOUBLE` |
 | `ZIGZAG` | `INT32`, `INT64` |
 | `SPRINTZ` | `INT32`, `INT64`, `FLOAT`, `DOUBLE` |
-| `CHIMP`, `RLBE` | `INT32`, `INT64`, `TIMESTAMP`, `DATE`, `FLOAT`, `DOUBLE` |
-| `CAMEL` | `DOUBLE` |
 
 Default value encoding per type: `BOOLEAN → PLAIN`, `INT32 / INT64 → TS_2DIFF`,
 `FLOAT / DOUBLE → GORILLA`, `TEXT / STRING / BLOB → PLAIN`. The default
@@ -385,9 +377,9 @@ uint8_t common::get_global_time_encoding();
 uint8_t common::get_global_time_compression();
 ```
 
-Global compression accepts `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, `LZ4`,
-`ZSTD`, and `LZMA2`. The codec enum also contains legacy values such as `SDT`,
-`PAA`, and `PLA`, but the global compression setter rejects them.
+Global compression accepts `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, and `LZ4`.
+The codec enum also contains legacy values such as `SDT`, `PAA`, and `PLA`, but
+the global compression setter rejects them.
 
 ## Read Interface 
 ### Tsfile Reader

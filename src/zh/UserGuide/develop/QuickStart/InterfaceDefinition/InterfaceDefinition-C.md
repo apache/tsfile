@@ -54,10 +54,7 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
-    TS_ENCODING_CHIMP = 11,
     TS_ENCODING_SPRINTZ = 12,
-    TS_ENCODING_RLBE = 13,
-    TS_ENCODING_CAMEL = 14,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -71,8 +68,6 @@ typedef enum {
     TS_COMPRESSION_PAA = 5,
     TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
-    TS_COMPRESSION_ZSTD = 8,
-    TS_COMPRESSION_LZMA2 = 9,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
@@ -403,12 +398,13 @@ uint8_t get_global_time_compression();
 | 数据类型 | 允许的编码 | 默认值 |
 |---|---|---|
 | `BOOLEAN` | `PLAIN` | `PLAIN` |
-| `INT32`、`INT64`、`TIMESTAMP`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ`、`CHIMP`、`RLBE` | `TS_2DIFF` |
-| `FLOAT` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE` | `GORILLA` |
-| `DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE`、`CAMEL` | `GORILLA` |
+| `INT32`、`INT64`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
 | `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
 
-压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`、`ZSTD`、`LZMA2`（默认 `LZ4`）。
+时间列使用全局时间配置，支持 `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE` 或 `SPRINTZ`。
+
+压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。
 
 ```C
 // 例如：所有列均以 LZ4 压缩写入

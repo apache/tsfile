@@ -57,7 +57,6 @@ class TSEncoding(IntEnum):
     CHIMP = 11        # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
     SPRINTZ = 12      # INT32, INT64, FLOAT, DOUBLE
     RLBE = 13         # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
-    CAMEL = 14        # DOUBLE
 
 class Compressor(IntEnum):
     """
@@ -311,15 +310,17 @@ encodings per data type, and the default used when you do not change it:
 | Data type | Allowed encodings | Default |
 |---|---|---|
 | `BOOLEAN` | `PLAIN` | `PLAIN` |
-| `INT32`, `INT64`, `TIMESTAMP`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ`, `CHIMP`, `RLBE` | `TS_2DIFF` |
-| `FLOAT` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ`, `CHIMP`, `RLBE` | `GORILLA` |
-| `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ`, `CHIMP`, `RLBE`, `CAMEL` | `GORILLA` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
 | `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
 
+The time column uses the global time configuration and accepts `PLAIN`,
+`TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, or `SPRINTZ`.
+
 Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`,
-`LZ4`, `ZSTD`, or `LZMA2` (default `LZ4`). The enum also exposes legacy values
-such as `SDT`, `PAA`, and `PLA`, but the global configuration setter rejects
-them.
+or `LZ4` (default `LZ4`). The Python enum also exposes values such as `CHIMP`,
+`RLBE`, `ZSTD`, and `LZMA2`, but the current writer/config conversion on
+`origin/develop` rejects them.
 
 ## Read Interface
 

@@ -55,7 +55,6 @@ class TSEncoding(IntEnum):
     CHIMP = 11        # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
     SPRINTZ = 12      # INT32、INT64、FLOAT、DOUBLE
     RLBE = 13         # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
-    CAMEL = 14        # DOUBLE
 
 class Compressor(IntEnum):
     """
@@ -303,12 +302,13 @@ set_tsfile_config({
 | 数据类型 | 允许的编码 | 默认值 |
 |---|---|---|
 | `BOOLEAN` | `PLAIN` | `PLAIN` |
-| `INT32`、`INT64`、`TIMESTAMP`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ`、`CHIMP`、`RLBE` | `TS_2DIFF` |
-| `FLOAT` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE` | `GORILLA` |
-| `DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE`、`CAMEL` | `GORILLA` |
+| `INT32`、`INT64`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
 | `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
 
-压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`、`ZSTD`、`LZMA2`（默认 `LZ4`）。枚举还暴露 `SDT`、`PAA`、`PLA` 等历史值，但全局配置 setter 会拒绝这些值。
+时间列使用全局时间配置，支持 `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE` 或 `SPRINTZ`。
+
+压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。Python 枚举还暴露 `CHIMP`、`RLBE`、`ZSTD`、`LZMA2` 等值，但 `origin/develop` 当前的 writer/config 转换会拒绝它们。
 
 ## 读取接口
 

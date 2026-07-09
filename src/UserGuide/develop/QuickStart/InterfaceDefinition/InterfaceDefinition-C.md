@@ -54,10 +54,7 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
-    TS_ENCODING_CHIMP = 11,
     TS_ENCODING_SPRINTZ = 12,
-    TS_ENCODING_RLBE = 13,
-    TS_ENCODING_CAMEL = 14,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -71,8 +68,6 @@ typedef enum {
     TS_COMPRESSION_PAA = 5,
     TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
-    TS_COMPRESSION_ZSTD = 8,
-    TS_COMPRESSION_LZMA2 = 9,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
@@ -423,13 +418,15 @@ Allowed encodings per data type, and the default used when you do not change it:
 | Data type | Allowed encodings | Default |
 |---|---|---|
 | `BOOLEAN` | `PLAIN` | `PLAIN` |
-| `INT32`, `INT64`, `TIMESTAMP`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ`, `CHIMP`, `RLBE` | `TS_2DIFF` |
-| `FLOAT` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ`, `CHIMP`, `RLBE` | `GORILLA` |
-| `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ`, `CHIMP`, `RLBE`, `CAMEL` | `GORILLA` |
+| `INT32`, `INT64`, `DATE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, `SPRINTZ` | `TS_2DIFF` |
+| `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
 | `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
 
+The time column uses the global time configuration and accepts `PLAIN`,
+`TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, or `SPRINTZ`.
+
 Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`,
-`LZ4`, `ZSTD`, or `LZMA2` (default `LZ4`).
+or `LZ4` (default `LZ4`).
 
 ```C
 // e.g. write every column with LZ4 compression
@@ -866,6 +863,5 @@ ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
 void tsfile_free_device_timeseries_metadata_map(
     DeviceTimeseriesMetadataMap* map);
 ```
-
 
 

@@ -54,15 +54,11 @@ enum TSEncoding : uint8_t {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
-    CHIMP = 11,
     SPRINTZ = 12,
-    RLBE = 13,
-    CAMEL = 14,
     INVALID_ENCODING = 255,
 };
 
-// 压缩类型。SNAPPY/GZIP/LZO/LZ4/ZSTD/LZMA2 取决于构建选项；
-// 默认压缩为 LZ4。
+// 压缩类型。SNAPPY/GZIP/LZO/LZ4 取决于构建选项；默认压缩为 LZ4。
 enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,
     SNAPPY = 1,
@@ -72,8 +68,6 @@ enum CompressionType : uint8_t {
     PAA = 5,
     PLA = 6,
     LZ4 = 7,
-    ZSTD = 8,
-    LZMA2 = 9,
     INVALID_COMPRESSION = 255,
 };
 
@@ -92,8 +86,6 @@ enum class ColumnCategory { TAG = 0, FIELD = 1, ATTRIBUTE = 2, TIME = 3 };
 | `GORILLA` | `INT32`、`INT64`、`TIMESTAMP`、`DATE`、`FLOAT`、`DOUBLE` |
 | `ZIGZAG` | `INT32`、`INT64` |
 | `SPRINTZ` | `INT32`、`INT64`、`FLOAT`、`DOUBLE` |
-| `CHIMP`、`RLBE` | `INT32`、`INT64`、`TIMESTAMP`、`DATE`、`FLOAT`、`DOUBLE` |
-| `CAMEL` | `DOUBLE` |
 
 各类型的默认值编码：`BOOLEAN → PLAIN`、`INT32 / INT64 → TS_2DIFF`、
 `FLOAT / DOUBLE → GORILLA`、`TEXT / STRING / BLOB → PLAIN`。默认压缩为 `LZ4`。
@@ -381,9 +373,8 @@ uint8_t common::get_global_time_encoding();
 uint8_t common::get_global_time_compression();
 ```
 
-全局压缩支持 `UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`、`ZSTD`
-和 `LZMA2`。压缩枚举中也包含 `SDT`、`PAA`、`PLA` 等历史值，但全局压缩
-setter 会拒绝这些值。
+全局压缩支持 `UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO` 和 `LZ4`。
+压缩枚举中也包含 `SDT`、`PAA`、`PLA` 等历史值，但全局压缩 setter 会拒绝这些值。
 
 ## 读取接口
 ### Tsfile Reader
