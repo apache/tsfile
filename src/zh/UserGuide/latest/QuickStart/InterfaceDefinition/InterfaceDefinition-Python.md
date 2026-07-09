@@ -45,10 +45,17 @@ class TSEncoding(IntEnum):
     PLAIN = 0         # 所有类型
     DICTIONARY = 1    # STRING、TEXT
     RLE = 2           # INT32、INT64、TIMESTAMP、DATE
+    DIFF = 3
     TS_2DIFF = 4      # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
+    BITMAP = 5
+    GORILLA_V1 = 6
+    REGULAR = 7
     GORILLA = 8       # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
     ZIGZAG = 9        # INT32、INT64
+    CHIMP = 11        # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
     SPRINTZ = 12      # INT32、INT64、FLOAT、DOUBLE
+    RLBE = 13         # INT32、INT64、TIMESTAMP、DATE、FLOAT、DOUBLE
+    CAMEL = 14        # DOUBLE
 
 class Compressor(IntEnum):
     """
@@ -58,7 +65,12 @@ class Compressor(IntEnum):
     SNAPPY = 1
     GZIP = 2
     LZO = 3
+    SDT = 4
+    PAA = 5
+    PLA = 6
     LZ4 = 7
+    ZSTD = 8
+    LZMA2 = 9
 
 class ColumnCategory(IntEnum):
     """
@@ -99,6 +111,32 @@ class ResultSetMetaData:
 
     def __init__(self, column_list: List[str], data_types: List[TSDataType])
 
+@dataclass(frozen=True)
+class DeviceID:
+    path: Optional[str]
+    table_name: Optional[str]
+    segments: tuple[Optional[str], ...]
+
+@dataclass(frozen=True)
+class TimeseriesStatistic:
+    has_statistic: bool
+    row_count: int
+    start_time: int
+    end_time: int
+
+@dataclass(frozen=True)
+class TimeseriesMetadata:
+    measurement_name: str
+    data_type: TSDataType
+    chunk_meta_count: int
+    statistic: TimeseriesStatistic
+    timeline_statistic: TimeseriesStatistic
+
+@dataclass(frozen=True)
+class DeviceTimeseriesMetadataGroup:
+    table_name: Optional[str]
+    segments: tuple[Optional[str], ...]
+    timeseries: list[TimeseriesMetadata]
 
 ```
 
@@ -106,7 +144,7 @@ class ResultSetMetaData:
 
 ## 写入接口
 
-### TsFileWriter 
+### TsFileTableWriter
 
 ```python
 class TsFileTableWriter:
@@ -155,6 +193,48 @@ class TsFileTableWriter:
     def __enter__(self)
     def __exit__(self, exc_type, exc_val, exc_tb)
 
+```
+
+### TsFileWriter
+
+`TsFileWriter` 是 `writer.pyx` 暴露的低层写入接口。它可以写入 tree 模型数据
+（`register_timeseries`、`register_device`、`write_tablet`、`write_row_record`），
+也可以写入 table 模型数据（`register_table`、`write_table`、`write_dataframe`、
+`write_arrow_batch`）。
+
+```python
+class TsFileWriter:
+    """
+    :param pathname: 目标 TsFile 路径。
+    :param memory_threshold: 触发自动刷盘前缓冲的字节数（默认 128MB）。
+    """
+    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024)
+
+    def register_timeseries(self, device_name: str,
+                            timeseries_schema: TimeseriesSchema)
+
+    def register_device(self, device_schema: DeviceSchema)
+
+    def register_table(self, table_schema: TableSchema)
+
+    def write_tablet(self, tablet: Tablet)
+
+    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame,
+                        tableschema: TableSchema)
+
+    def write_row_record(self, record: RowRecord)
+
+    def write_table(self, tablet: Tablet)
+
+    def write_arrow_batch(self, table_name: str, data,
+                          time_col_index: int = -1)
+
+    def flush(self)
+
+    def close(self)
+
+    def __enter__(self)
+    def __exit__(self, exc_type, exc_val, exc_tb)
 ```
 
 
@@ -223,11 +303,12 @@ set_tsfile_config({
 | 数据类型 | 允许的编码 | 默认值 |
 |---|---|---|
 | `BOOLEAN` | `PLAIN` | `PLAIN` |
-| `INT32`、`INT64`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ` | `TS_2DIFF` |
-| `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
+| `INT32`、`INT64`、`TIMESTAMP`、`DATE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE`、`SPRINTZ`、`CHIMP`、`RLBE` | `TS_2DIFF` |
+| `FLOAT` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE` | `GORILLA` |
+| `DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ`、`CHIMP`、`RLBE`、`CAMEL` | `GORILLA` |
 | `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
 
-压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。
+压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`、`ZSTD`、`LZMA2`（默认 `LZ4`）。枚举还暴露 `SDT`、`PAA`、`PLA` 等历史值，但全局配置 setter 会拒绝这些值。
 
 ## 读取接口
 
@@ -253,11 +334,39 @@ class TsFileReader:
     :param column_names: 要检索的列名列表。
     :param start_time: 查询范围的起始时间（默认：int64 最小值）。
     :param end_time: 查询范围的结束时间（默认：int64 最大值）。
+    :param tag_filter: 可选的 table 模型 TAG 列谓词。
+    :param batch_size: <= 0 逐行返回；> 0 按该大小返回数据块。
     :return: 查询结果集处理器。
     """
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = np.iinfo(np.int64).min,
-                    end_time: int = np.iinfo(np.int64).max) -> ResultSet
+                    end_time: int = np.iinfo(np.int64).max,
+                    tag_filter = None, batch_size : int = 0) -> ResultSet
+
+    """
+    对 tree 模型测点列执行时间范围查询。
+
+    :param column_names: 要检索的测点名列表。
+    :param start_time: 查询范围的起始时间。
+    :param end_time: 查询范围的结束时间。
+    :return: 查询结果集处理器。
+    """
+    def query_table_on_tree(self, column_names : List[str],
+                            start_time : int = np.iinfo(np.int64).min,
+                            end_time : int = np.iinfo(np.int64).max) -> ResultSet
+
+    """
+    按行查询 tree 模型数据，支持 offset/limit。
+
+    :param device_ids: 要查询的设备标识列表。
+    :param measurement_names: 要检索的测点名列表。
+    :param offset: 需要跳过的起始行数。
+    :param limit: 最多返回行数；< 0 表示不限制。
+    :return: 查询结果集处理器。
+    """
+    def query_tree_by_row(self, device_ids : List[str],
+                          measurement_names : List[str],
+                          offset : int = 0, limit : int = -1) -> ResultSet
 
     """
     按行查询表，支持偏移量/行数限制下推与可选的标签过滤。标签谓词把查询限定到
@@ -278,6 +387,18 @@ class TsFileReader:
                            tag_filter = None, batch_size : int = 0) -> ResultSet
 
     """
+    对单个设备执行 tree 模型时间范围查询。
+
+    :param device_name: 设备标识。
+    :param sensor_list: 要检索的测点名列表。
+    :param start_time: 查询起始时间。
+    :param end_time: 查询结束时间。
+    :return: 查询结果集处理器。
+    """
+    def query_timeseries(self, device_name : str, sensor_list : List[str],
+                         start_time : int = 0, end_time : int = 0) -> ResultSet
+
+    """
     获取指定表的模式信息。
 
     :param table_name: 表名。
@@ -291,6 +412,31 @@ class TsFileReader:
     :return: 一个将表名映射到其模式的字典。
     """
     def get_all_table_schemas(self) -> dict[str, TableSchema]
+
+    """
+    获取所有 tree 模型 timeseries schema，按设备分组。
+
+    :return: DeviceSchema 对象列表。
+    """
+    def get_all_timeseries_schemas(self) -> list[DeviceSchema]
+
+    """
+    获取文件中的所有设备标识。
+
+    :return: DeviceID(path, table_name, segments) 列表。
+    """
+    def get_all_devices(self) -> List[DeviceID]
+
+    """
+    获取所有设备或指定设备的 per-timeseries metadata。
+
+    :param device_ids: None 表示全部设备，[] 表示空结果，或传入 DeviceID /
+        路径兼容的设备标识列表。
+    :return: dict，key 为设备 segment tuple，value 为 DeviceTimeseriesMetadataGroup。
+    """
+    def get_timeseries_metadata(
+        self, device_ids: Optional[List] = None
+    ) -> Dict[tuple, DeviceTimeseriesMetadataGroup]
 
     """
     关闭 TsFile 读取器。如果读取器中有活动的结果集，它们将失效。
@@ -331,6 +477,12 @@ class ResultSet:
     :return: 包含查询结果数据的 DataFrame。
     """
     def read_data_frame(self, max_row_num : int = 1024) -> DataFrame
+
+    """
+    将下一个批结果读取为 pyarrow.Table。没有更多 TsBlock 批时返回 None。
+    仅适用于通过 batch_size > 0 创建的结果集。
+    """
+    def read_arrow_batch(self) -> Optional[pyarrow.Table]
 
     """
     从查询结果集中按索引获取值。
@@ -375,6 +527,9 @@ class ResultSet:
     关闭结果集并释放相关资源。
     """
     def close(self)
+
+    def __enter__(self)
+    def __exit__(self, exc_type, exc_val, exc_tb)
 
 ```
 
