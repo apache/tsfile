@@ -130,9 +130,9 @@ field name is escaped with a backslash, and a null tag value is written as `\N`
 (distinct from the literal string `"null"`). `list_timeseries()` returns this
 escaped form — e.g. tag value `Bei.jing` in table `weather` renders as
 `weather.Bei\.jing.humidity` (a literal `\` becomes `\\`). Selecting needs the
-same escaped form, so reuse the `SeriesPath` from `list_timeseries()` (or read
-its `.table` / `.tags` / `.field` parts) rather than hand-building it; if you do
-type one, use a raw string so Python keeps the backslash:
+same escaped form: reuse the `SeriesPath` from `list_timeseries()` (or read its
+`.table` / `.tags` / `.field` parts), or write one as a raw string to keep the
+backslash:
 
 ```python
 df[r"weather.Bei\.jing.humidity"]     # tag "Bei.jing" (the dot is part of the value)

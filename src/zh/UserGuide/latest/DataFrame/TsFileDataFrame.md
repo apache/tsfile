@@ -115,7 +115,7 @@ TsFileDataFrame 以**序列名**（一个字符串）作为序列的唯一标识
 - `weather.Beijing.humidity` — 表 `weather`，标签 `Beijing`，字段 `humidity`
 - `sensor.s1.pressure` — 表 `sensor`，标签 `s1`，字段 `pressure`
 
-**名称中的转义。** `.` 用作分隔符，因此属于表名/标签/字段名本身的 `.` 会用反斜杠转义；空标签值写作 `\N`（与字面字符串 `"null"` 区分）。`list_timeseries()` 返回的就是这种转义形式——例如表 `weather` 中标签值 `Bei.jing`、字段 `humidity` 渲染为 `weather.Bei\.jing.humidity`（字面 `\` 转义为 `\\`）。选取时也要用这种转义形式，因此请直接复用 `list_timeseries()` 返回的 `SeriesPath`（或读取它的 `.table`/`.tags`/`.field`），不要手拼；若确需手写，请用 raw string 让 Python 保留反斜杠：
+**名称中的转义。** `.` 用作分隔符，因此属于表名/标签/字段名本身的 `.` 会用反斜杠转义；空标签值写作 `\N`（与字面字符串 `"null"` 区分）。`list_timeseries()` 返回的就是这种转义形式——例如表 `weather` 中标签值 `Bei.jing`、字段 `humidity` 渲染为 `weather.Bei\.jing.humidity`（字面 `\` 转义为 `\\`）。选取时也要用这种转义形式：可直接复用 `list_timeseries()` 返回的 `SeriesPath`（或读取它的 `.table`/`.tags`/`.field`），或用 raw string 保留反斜杠：
 
 ```python
 df[r"weather.Bei\.jing.humidity"]     # 标签 "Bei.jing"（点号是值的一部分）
