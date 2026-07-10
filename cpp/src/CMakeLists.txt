@@ -56,32 +56,57 @@ endif()
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
 )
+set(TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS "")
 
 if (ENABLE_SNAPPY)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_SNAPPY_INCLUDE_DIRS
             ${THIRD_PARTY_INCLUDE}/google_snappy
             ${CMAKE_SOURCE_DIR}/third_party/google_snappy
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_SNAPPY_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_SNAPPY_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_LZ4)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_LZ4_INCLUDE_DIRS
             ${CMAKE_SOURCE_DIR}/third_party/lz4
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_LZ4_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_LZ4_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_LZOKAY)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_LZOKAY_INCLUDE_DIRS
             ${CMAKE_SOURCE_DIR}/third_party/lzokay
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_LZOKAY_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_LZOKAY_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_ZLIB)
+    set(TSFILE_ZLIB_INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
+            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+    )
     list(APPEND PROJECT_INCLUDE_DIR
             # zlib.h ships in the source tree; zconf.h is generated into the
             # build tree by zlib's own CMake, so both directories are needed.
-            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
-            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+            ${TSFILE_ZLIB_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_ZLIB_INCLUDE_DIRS}
     )
 endif()
 
@@ -154,6 +179,9 @@ add_library(tsfile SHARED)
 target_include_directories(tsfile PUBLIC
         $<BUILD_INTERFACE:${LIBRARY_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/tsfile>)
+foreach(include_dir IN LISTS TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS)
+    target_include_directories(tsfile PUBLIC $<BUILD_INTERFACE:${include_dir}>)
+endforeach()
 
 if (${COV_ENABLED})
     message("Enable code cov...")

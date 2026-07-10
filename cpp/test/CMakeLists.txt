@@ -169,6 +169,7 @@ if (ENABLE_LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1)
     include_directories(${THIRD_PARTY_INCLUDE}/zlib-1.3.1)
 endif()
 
