@@ -1552,7 +1552,6 @@ def test_dataset_tree_model_reads_uppercase_measurement_names(tmp_path):
 
 
 def test_tree_reader_handles_stale_path_columns_after_reused_queries(tmp_path):
-
     """Reusing a reader must not leak prefix path state across queries.
 
     Reading one device series then another reuses the cached device id; stale
