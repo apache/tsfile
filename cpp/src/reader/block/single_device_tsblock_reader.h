@@ -86,6 +86,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int remaining_offset_ = 0;
     int remaining_limit_ = -1;
     int32_t dense_row_count_ = -1;
+    bool row_offset_pushed_to_ssi_ = false;
     // Populated in init() when every field column comes from an aligned chunk.
     // Provides cache-friendly vector iteration for has_next_aligned().
     bool all_aligned_ = false;
@@ -195,7 +196,7 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
              const std::vector<std::string>& measurement_names,
              Filter* time_filter,
              std::vector<std::vector<int32_t>>& pos_in_result,
-             common::PageArena& pa);
+             common::PageArena& pa, int ssi_offset = 0, int ssi_limit = -1);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;

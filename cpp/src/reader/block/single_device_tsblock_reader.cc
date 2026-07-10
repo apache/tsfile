@@ -47,6 +47,7 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
     remaining_offset_ = 0;
     remaining_limit_ = -1;
     dense_row_count_ = -1;
+    row_offset_pushed_to_ssi_ = false;
     return init_internal(device_query_task, block_size, time_filter,
                          field_filter);
 }
@@ -58,6 +59,7 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
     remaining_offset_ = row_offset;
     remaining_limit_ = row_limit;
     dense_row_count_ = -1;
+    row_offset_pushed_to_ssi_ = false;
     return init_internal(device_query_task, block_size, time_filter,
                          field_filter);
 }
@@ -182,6 +184,13 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         return ret;
     }
     dense_row_count_ = compute_dense_row_count(time_series_indexs);
+    if (time_filter == nullptr && field_filter == nullptr &&
+        dense_row_count_ >= 0 && remaining_offset_ >= dense_row_count_) {
+        remaining_offset_ -= dense_row_count_;
+        delete current_block_;
+        current_block_ = nullptr;
+        return common::E_OK;
+    }
     // Early device-level time skip: if time_filter is set and ALL chunks of
     // this device have statistics that fall outside the filter range, skip the
     // entire device.  Chunks without statistics are assumed to satisfy.
@@ -278,8 +287,18 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
 
             auto* ctx = new VectorMeasurementColumnContext(tsfile_io_reader_);
+            const int ssi_offset =
+                (time_filter == nullptr && field_filter == nullptr &&
+                 dense_row_count_ >= 0)
+                    ? remaining_offset_
+                    : 0;
             if (common::E_OK == ctx->init(device_query_task_, meas_names,
-                                          time_filter, pos_list, pa_)) {
+                                          time_filter, pos_list, pa_,
+                                          ssi_offset, -1)) {
+                if (ssi_offset > 0) {
+                    row_offset_pushed_to_ssi_ = true;
+                    remaining_offset_ = ctx->get_ssi_row_offset();
+                }
                 // The shared ctx is referenced from N map entries; close()
                 // and the merge loop dedupe by pointer (already in place).
                 for (const auto& name : meas_names) {
@@ -540,7 +559,11 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
                 int sr = ctx->skip_rows(skip);
                 if (sr != common::E_OK) return sr;
             }
-            remaining_offset_ -= skip;
+            if (row_offset_pushed_to_ssi_ && !aligned_vec_.empty()) {
+                remaining_offset_ = aligned_vec_[0]->get_ssi_row_offset();
+            } else {
+                remaining_offset_ -= skip;
+            }
             continue;
         }
 
@@ -973,6 +996,11 @@ int SingleMeasurementColumnContext::skip_rows(uint32_t count) {
         const uint32_t val_elem_size = common::get_data_type_size(dt);
         value_iter_->advance(to_skip, val_elem_size);
     }
+    int ssi_offset = get_ssi_row_offset();
+    if (ssi_offset > 0) {
+        set_ssi_row_range(std::max(0, ssi_offset - static_cast<int>(to_skip)),
+                          get_ssi_row_limit());
+    }
     if (time_iter_->end()) {
         // Propagate hard errors from the next-tsblock load; E_NO_MORE_DATA
         // is the legitimate end-of-stream signal and gets squashed back to
@@ -1004,7 +1032,8 @@ VectorMeasurementColumnContext::~VectorMeasurementColumnContext() {
 int VectorMeasurementColumnContext::init(
     DeviceQueryTask* device_query_task,
     const std::vector<std::string>& measurement_names, Filter* time_filter,
-    std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa) {
+    std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa,
+    int ssi_offset, int ssi_limit) {
     int ret = common::E_OK;
     pos_in_result_ = pos_in_result;
     column_names_ = measurement_names;
@@ -1013,6 +1042,7 @@ int VectorMeasurementColumnContext::init(
             time_filter))) {
         return ret;
     }
+    ssi_->set_row_range(ssi_offset, ssi_limit);
     if (RET_FAIL(get_next_tsblock(true))) {
         return ret;
     }
@@ -1223,6 +1253,11 @@ int VectorMeasurementColumnContext::skip_rows(uint32_t count) {
                 value_iters_[c]->next();
             }
         }
+    }
+    int ssi_offset = get_ssi_row_offset();
+    if (ssi_offset > 0) {
+        set_ssi_row_range(std::max(0, ssi_offset - static_cast<int>(to_skip)),
+                          get_ssi_row_limit());
     }
     if (time_iter_->end()) {
         int r = get_next_tsblock(false);

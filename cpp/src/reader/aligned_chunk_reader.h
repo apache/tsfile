@@ -238,11 +238,13 @@ class AlignedChunkReader : public IChunkReader {
     bool has_more_data_multi() const;
     bool prev_any_value_page_not_finish_multi() const;
     int get_next_page_multi(common::TsBlock* ret_tsblock,
-                            Filter* oneshoot_filter, common::PageArena& pa);
+                            Filter* oneshoot_filter, common::PageArena& pa,
+                            int& row_offset);
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
-                                   common::PageArena& pa);
+                                   common::PageArena& pa, int& row_offset);
     int skip_cur_page_multi();
     bool cur_page_statisify_filter_multi(Filter* filter);
+    bool should_skip_page_by_offset_multi(int& row_offset, Filter* filter);
     int decode_cur_value_pages_multi();
     int decode_cur_value_page_data_for(ValueColumnState& col);
     int ensure_value_page_loaded(ValueColumnState& col);
@@ -318,6 +320,7 @@ class AlignedChunkReader : public IChunkReader {
     bool page_plan_built_ = false;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;
+    bool multi_serial_decode_current_chunk_ = false;
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned

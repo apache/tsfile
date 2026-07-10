@@ -122,6 +122,31 @@ bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
     return false;
 }
 
+bool TsFileSeriesScanIterator::should_skip_multi_aligned_chunk_by_offset(
+    ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms) {
+    if (row_offset_ <= 0) {
+        return false;
+    }
+    if (time_cm == nullptr || time_cm->statistic_ == nullptr) {
+        return false;
+    }
+    int32_t time_count = time_cm->statistic_->count_;
+    if (time_count <= 0) {
+        return false;
+    }
+    for (const auto* value_cm : value_cms) {
+        if (value_cm == nullptr || value_cm->statistic_ == nullptr ||
+            value_cm->statistic_->count_ != time_count) {
+            return false;
+        }
+    }
+    if (row_offset_ >= time_count) {
+        row_offset_ -= time_count;
+        return true;
+    }
+    return false;
+}
+
 int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                                        Filter* oneshoot_filter,
                                        int64_t min_time_hint) {
@@ -156,6 +181,10 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                         continue;
                     }
                     if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
+                        continue;
+                    }
+                    if (should_skip_multi_aligned_chunk_by_offset(time_cm,
+                                                                  value_cms)) {
                         continue;
                     }
                     chunk_reader_->reset();

@@ -77,6 +77,7 @@ void AlignedChunkReader::reset() {
     page_plan_built_ = false;
     current_page_loaded_ = false;
     current_page_plan_index_ = 0;
+    multi_serial_decode_current_chunk_ = false;
     time_predecoded_ = false;
     page_all_times_.clear();
     page_time_count_ = 0;
@@ -333,7 +334,9 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
 int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       Filter* oneshoot_filter, PageArena& pa) {
     if (multi_value_mode_) {
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        int row_offset = 0;
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -1082,17 +1085,19 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       int64_t min_time_hint, int& row_offset,
                                       int& row_limit) {
     if (multi_value_mode_) {
-        // Multi-value aligned path doesn't yet honour row_offset / row_limit
-        // / min_time_hint — they get dropped on the floor, which silently
-        // returns full chunk data when the caller asked for a sub-range.
-        // Refuse the combination so the caller sees an actual error instead
-        // of garbage results.  set_row_range(0, -1) keeps the all-rows
-        // contract intact for normal queries.
-        if (row_offset > 0 || row_limit >= 0 ||
+        if (row_limit == 0) {
+            return E_NO_MORE_DATA;
+        }
+        // The multi-value path can consume offset through chunk/page count
+        // statistics. Limit and min-time pushdown still need separate state
+        // handling, so keep those combinations explicit instead of silently
+        // returning a wider range.
+        if (row_limit >= 0 ||
             min_time_hint != std::numeric_limits<int64_t>::min()) {
             return common::E_NOT_SUPPORT;
         }
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -1157,6 +1162,7 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     page_plan_built_ = false;
     current_page_loaded_ = false;
     current_page_plan_index_ = 0;
+    multi_serial_decode_current_chunk_ = false;
     time_predecoded_ = false;
     page_all_times_.clear();
     page_time_count_ = 0;
@@ -1833,10 +1839,14 @@ void AlignedChunkReader::release_page_slot(size_t page_idx) {
 
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
-                                            PageArena& pa) {
+                                            PageArena& pa, int& row_offset) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
+
+    if (row_offset > 0) {
+        multi_serial_decode_current_chunk_ = true;
+    }
 
     // Dispatch:
     //   - Multi-column with a thread pool → chunk-level pre-decode: one task
@@ -1850,13 +1860,14 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     //     page's columns inline (multi_DECODE_TV_BATCH), no thread-pool
     //     fan-out.
 #ifdef ENABLE_THREADS
-    const bool use_chunk_level =
-        decode_pool_ != nullptr && value_columns_.size() > 1;
+    const bool use_chunk_level = decode_pool_ != nullptr &&
+                                 value_columns_.size() > 1 &&
+                                 !multi_serial_decode_current_chunk_;
 #else
     const bool use_chunk_level = false;
 #endif
     if (!use_chunk_level) {
-        return get_next_page_multi_serial(ret_tsblock, filter, pa);
+        return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
 
     if (!page_plan_built_) {
@@ -2044,7 +2055,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
 
 int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                                                    Filter* filter,
-                                                   PageArena& pa) {
+                                                   PageArena& pa,
+                                                   int& row_offset) {
     int ret = E_OK;
     bool pt = prev_time_page_not_finish();
     bool pv = prev_any_value_page_not_finish_multi();
@@ -2069,8 +2081,13 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
-            if (cur_page_statisify_filter_multi(filter)) break;
-            if (RET_FAIL(skip_cur_page_multi())) break;
+            if (!cur_page_statisify_filter_multi(filter)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else if (should_skip_page_by_offset_multi(row_offset, filter)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else {
+                break;
+            }
             if (!has_more_data()) {
                 ret = E_NO_MORE_DATA;
                 break;
@@ -2093,6 +2110,27 @@ bool AlignedChunkReader::cur_page_statisify_filter_multi(Filter* filter) {
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy;
+}
+
+bool AlignedChunkReader::should_skip_page_by_offset_multi(int& row_offset,
+                                                          Filter* filter) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr || stat->count_ == 0) {
+        return false;
+    }
+    if (filter != nullptr &&
+        !filter->contain_start_end_time(stat->start_time_, stat->end_time_)) {
+        return false;
+    }
+    int32_t count = stat->count_;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
 }
 
 int AlignedChunkReader::skip_cur_page_multi() {

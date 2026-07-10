@@ -167,6 +167,8 @@ class TsFileSeriesScanIterator {
     bool should_skip_chunk_by_offset(ChunkMeta* cm);
     bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
                                              ChunkMeta* value_cm);
+    bool should_skip_multi_aligned_chunk_by_offset(
+        ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms);
     common::TsBlock* alloc_tsblock();
     common::TsBlock* alloc_tsblock_multi();
 
