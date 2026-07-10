@@ -149,64 +149,6 @@ class TsFileTableWriter {
 };
 ```
 
-### TsFileWriter
-
-`TsFileWriter` 是 `tsfile_writer.h` 中的低层写入接口，支持 tree 模型和 table
-模型写入。
-
-```cpp
-extern int libtsfile_init();
-extern void libtsfile_destroy();
-
-// 写入器配置。非法值返回 common::E_INVALID_ARG，并保持原配置不变。
-extern int set_page_max_point_count(uint32_t page_max_point_count);
-extern int set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
-
-class TsFileWriter {
-   public:
-    TsFileWriter();
-    ~TsFileWriter();
-    void destroy();
-
-    int open(const std::string& file_path, int flags, mode_t mode);
-    int open(const std::string& file_path);
-    int init(storage::WriteFile* write_file);
-    int init(storage::RestorableTsFileIOWriter* rw);
-
-    void set_generate_table_schema(bool generate_table_schema);
-
-    int register_timeseries(const std::string& device_id,
-                            const MeasurementSchema& measurement_schema);
-    int register_timeseries(
-        const std::string& device_path,
-        const std::vector<MeasurementSchema*>& measurement_schema_vec);
-    int register_aligned_timeseries(
-        const std::string& device_id,
-        const MeasurementSchema& measurement_schema);
-    int register_aligned_timeseries(
-        const std::string& device_id,
-        const std::vector<MeasurementSchema*>& measurement_schemas);
-    int register_table(const std::shared_ptr<TableSchema>& table_schema);
-
-    int write_record(const TsRecord& record);
-    int write_tablet(const Tablet& tablet);
-    int write_record_aligned(const TsRecord& record);
-    int write_tablet_aligned(const Tablet& tablet);
-    int write_tree(const Tablet& tablet);
-    int write_tree(const TsRecord& record);
-    int write_table(Tablet& tablet);
-
-    DeviceSchemasMap* get_schema_group_map();
-    std::shared_ptr<TableSchema> get_table_schema(
-        const std::string& table_name) const;
-    int64_t calculate_mem_size_for_all_group();
-    int64_t calculate_meta_mem_size() const;
-    int check_memory_size_and_may_flush_chunks();
-    int flush();
-    int close();
-};
-```
-
 ### TableSchema
 
 描述表模式（schema）的数据结构。

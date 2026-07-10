@@ -181,6 +181,14 @@ class TsFileTableWriter:
     def write_dataframe(self, dataframe: pandas.DataFrame)
 
     """
+    Write a pyarrow RecordBatch or Table into the table. The data must include a
+    time column and columns matching the table schema.
+    :param data: pyarrow.RecordBatch or pyarrow.Table.
+    :return: no return value.
+    """
+    def write_arrow_batch(self, data)
+
+    """
     Flush buffered data to disk.
     :return: no return value.
     """
@@ -198,50 +206,6 @@ class TsFileTableWriter:
     def __enter__(self)
     def __exit__(self, exc_type, exc_val, exc_tb)
 ```
-
-### TsFileWriter
-
-`TsFileWriter` is the lower-level writer exposed from `writer.pyx`. It can write
-tree-model data (`register_timeseries`, `register_device`, `write_tablet`,
-`write_row_record`) and table-model data (`register_table`, `write_table`,
-`write_dataframe`, `write_arrow_batch`).
-
-```python
-class TsFileWriter:
-    """
-    :param pathname: Destination TsFile path.
-    :param memory_threshold: bytes buffered before an automatic flush (default 128MB).
-    """
-    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024)
-
-    def register_timeseries(self, device_name: str,
-                            timeseries_schema: TimeseriesSchema)
-
-    def register_device(self, device_schema: DeviceSchema)
-
-    def register_table(self, table_schema: TableSchema)
-
-    def write_tablet(self, tablet: Tablet)
-
-    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame,
-                        tableschema: TableSchema)
-
-    def write_row_record(self, record: RowRecord)
-
-    def write_table(self, tablet: Tablet)
-
-    def write_arrow_batch(self, table_name: str, data,
-                          time_col_index: int = -1)
-
-    def flush(self)
-
-    def close(self)
-
-    def __enter__(self)
-    def __exit__(self, exc_type, exc_val, exc_tb)
-```
-
-
 
 ### Tablet definition
 

@@ -46,14 +46,9 @@ typedef enum {
     TS_ENCODING_PLAIN = 0,
     TS_ENCODING_DICTIONARY = 1,
     TS_ENCODING_RLE = 2,
-    TS_ENCODING_DIFF = 3,
     TS_ENCODING_TS_2DIFF = 4,
-    TS_ENCODING_BITMAP = 5,
-    TS_ENCODING_GORILLA_V1 = 6,
-    TS_ENCODING_REGULAR = 7,
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
-    TS_ENCODING_FREQ = 10,
     TS_ENCODING_SPRINTZ = 12,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
@@ -64,9 +59,6 @@ typedef enum {
     TS_COMPRESSION_SNAPPY = 1,
     TS_COMPRESSION_GZIP = 2,
     TS_COMPRESSION_LZO = 3,
-    TS_COMPRESSION_SDT = 4,
-    TS_COMPRESSION_PAA = 5,
-    TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
@@ -93,19 +85,6 @@ typedef struct table_schema {
     int column_num;
 } TableSchema;
 
-typedef struct timeseries_schema {
-    char* timeseries_name;
-    TSDataType data_type;
-    TSEncoding encoding;
-    CompressionType compression;
-} TimeseriesSchema;
-
-typedef struct device_schema {
-    char* device_name;
-    TimeseriesSchema* timeseries_schema;
-    int timeseries_num;
-} DeviceSchema;
-
 // ResultSetMetaData：结果集的元数据，包括列名和数据类型。
 typedef struct result_set_meta_data {
     char** column_names;
@@ -115,13 +94,6 @@ typedef struct result_set_meta_data {
 
 typedef struct arrow_schema ArrowSchema;
 typedef struct arrow_array ArrowArray;
-
-typedef struct DeviceID {
-    char* path;
-    char* table_name;
-    uint32_t segment_count;
-    char** segments;
-} DeviceID;
 
 typedef struct TsFileStatisticBase {
     bool has_statistic;
@@ -150,31 +122,13 @@ typedef struct TimeseriesStatistic {
 } TimeseriesStatistic;
 
 #define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
-
-typedef struct TimeseriesMetadata {
-    char* measurement_name;
-    TSDataType data_type;
-    int32_t chunk_meta_count;
-    TimeseriesStatistic statistic;
-    TimeseriesStatistic timeline_statistic;
-} TimeseriesMetadata;
-
-typedef struct DeviceTimeseriesMetadataEntry {
-    DeviceID device;
-    TimeseriesMetadata* timeseries;
-    uint32_t timeseries_count;
-} DeviceTimeseriesMetadataEntry;
-
-typedef struct DeviceTimeseriesMetadataMap {
-    DeviceTimeseriesMetadataEntry* entries;
-    uint32_t device_count;
-} DeviceTimeseriesMetadataMap;
 ```
 
 > `ColumnSchema` 不携带编码/压缩：写入时列遵循全局默认值（见[配置](#配置编码与压缩)），读取时按文件中的实际配置解码。
+> 上面列出的编码和压缩常量是当前 writer/configuration 路径实际接受的值。
 >
 > `TimeseriesStatistic` 是 `tsfile_cwrapper.h` 中的带标签 union。可通过
-> `tsfile_statistic_base(&metadata.statistic)` 读取通用字段，再根据数据类型读取
+> `tsfile_statistic_base(&statistic)` 读取通用字段，再根据数据类型读取
 > `int_s`、`float_s`、`bool_s`、`string_s` 或 `text_s`。
 
 ## 写入接口
@@ -784,57 +738,10 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
 /**
- * @brief 获取 TsFile 中所有 timeseries schema。
- *
- * @param size [输出] 返回的 DeviceSchema 数组中的元素数量。
- * @return DeviceSchema* 设备 schema 数组指针。
- * @note 调用者必须对数组中的每个元素调用 free_device_schema()，
- *       并对整个数组指针调用 free() 进行释放。
- */
-DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
-                                                       uint32_t* size);
-
-/**
  * @brief 释放 TableSchema 占用的内存空间。
  *
  * @param schema [输入] 需要释放的表模式结构。
  */
 
 void free_table_schema(TableSchema schema);
-
-void free_device_schema(DeviceSchema schema);
-```
-
-### 获取设备与 Timeseries Metadata
-
-```C
-/**
- * @brief 列出文件中的所有设备。
- *
- * @param out_devices [输出] 分配出的设备数组；用 tsfile_free_device_id_array() 释放。
- * @param out_length [输出] 返回数组中的设备数量。
- */
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
-                                    uint32_t* out_length);
-
-void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
-void tsfile_device_id_free_contents(DeviceID* d);
-
-/**
- * @brief 获取文件中所有设备的 timeseries metadata。
- */
-ERRNO tsfile_reader_get_timeseries_metadata_all(
-    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
-
-/**
- * @brief 获取指定设备的 timeseries metadata。
- *
- * length == 0 返回空 map。非空输入中每个 DeviceID.path 应包含规范设备路径。
- */
-ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
-    TsFileReader reader, const DeviceID* devices, uint32_t length,
-    DeviceTimeseriesMetadataMap* out_map);
-
-void tsfile_free_device_timeseries_metadata_map(
-    DeviceTimeseriesMetadataMap* map);
 ```

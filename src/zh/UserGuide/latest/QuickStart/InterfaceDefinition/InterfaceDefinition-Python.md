@@ -175,6 +175,14 @@ class TsFileTableWriter:
     def write_dataframe(self, dataframe: pandas.DataFrame)
 
     """
+    将 pyarrow RecordBatch 或 Table 写入表中。数据必须包含时间列，并且列需要与表
+    schema 匹配。
+    :param data: pyarrow.RecordBatch 或 pyarrow.Table。
+    :return: 无返回值。
+    """
+    def write_arrow_batch(self, data)
+
+    """
     将缓冲数据刷新到磁盘。
     :return: 无返回值。
     """
@@ -193,49 +201,6 @@ class TsFileTableWriter:
     def __exit__(self, exc_type, exc_val, exc_tb)
 
 ```
-
-### TsFileWriter
-
-`TsFileWriter` 是 `writer.pyx` 暴露的低层写入接口。它可以写入 tree 模型数据
-（`register_timeseries`、`register_device`、`write_tablet`、`write_row_record`），
-也可以写入 table 模型数据（`register_table`、`write_table`、`write_dataframe`、
-`write_arrow_batch`）。
-
-```python
-class TsFileWriter:
-    """
-    :param pathname: 目标 TsFile 路径。
-    :param memory_threshold: 触发自动刷盘前缓冲的字节数（默认 128MB）。
-    """
-    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024)
-
-    def register_timeseries(self, device_name: str,
-                            timeseries_schema: TimeseriesSchema)
-
-    def register_device(self, device_schema: DeviceSchema)
-
-    def register_table(self, table_schema: TableSchema)
-
-    def write_tablet(self, tablet: Tablet)
-
-    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame,
-                        tableschema: TableSchema)
-
-    def write_row_record(self, record: RowRecord)
-
-    def write_table(self, tablet: Tablet)
-
-    def write_arrow_batch(self, table_name: str, data,
-                          time_col_index: int = -1)
-
-    def flush(self)
-
-    def close(self)
-
-    def __enter__(self)
-    def __exit__(self, exc_type, exc_val, exc_tb)
-```
-
 
 ### Tablet definition
 

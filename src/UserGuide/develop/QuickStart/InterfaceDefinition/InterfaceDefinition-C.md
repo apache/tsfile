@@ -46,14 +46,9 @@ typedef enum {
     TS_ENCODING_PLAIN = 0,
     TS_ENCODING_DICTIONARY = 1,
     TS_ENCODING_RLE = 2,
-    TS_ENCODING_DIFF = 3,
     TS_ENCODING_TS_2DIFF = 4,
-    TS_ENCODING_BITMAP = 5,
-    TS_ENCODING_GORILLA_V1 = 6,
-    TS_ENCODING_REGULAR = 7,
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
-    TS_ENCODING_FREQ = 10,
     TS_ENCODING_SPRINTZ = 12,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
@@ -64,9 +59,6 @@ typedef enum {
     TS_COMPRESSION_SNAPPY = 1,
     TS_COMPRESSION_GZIP = 2,
     TS_COMPRESSION_LZO = 3,
-    TS_COMPRESSION_SDT = 4,
-    TS_COMPRESSION_PAA = 5,
-    TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
@@ -96,19 +88,6 @@ typedef struct table_schema {
     int column_num;
 } TableSchema;
 
-typedef struct timeseries_schema {
-    char* timeseries_name;
-    TSDataType data_type;
-    TSEncoding encoding;
-    CompressionType compression;
-} TimeseriesSchema;
-
-typedef struct device_schema {
-    char* device_name;
-    TimeseriesSchema* timeseries_schema;
-    int timeseries_num;
-} DeviceSchema;
-
 // ResultSetMetaData: Contains metadata for a result set, 
 // such as column names and their data types.
 typedef struct result_set_meta_data {
@@ -119,13 +98,6 @@ typedef struct result_set_meta_data {
 
 typedef struct arrow_schema ArrowSchema;
 typedef struct arrow_array ArrowArray;
-
-typedef struct DeviceID {
-    char* path;
-    char* table_name;
-    uint32_t segment_count;
-    char** segments;
-} DeviceID;
 
 typedef struct TsFileStatisticBase {
     bool has_statistic;
@@ -154,35 +126,18 @@ typedef struct TimeseriesStatistic {
 } TimeseriesStatistic;
 
 #define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
-
-typedef struct TimeseriesMetadata {
-    char* measurement_name;
-    TSDataType data_type;
-    int32_t chunk_meta_count;
-    TimeseriesStatistic statistic;
-    TimeseriesStatistic timeline_statistic;
-} TimeseriesMetadata;
-
-typedef struct DeviceTimeseriesMetadataEntry {
-    DeviceID device;
-    TimeseriesMetadata* timeseries;
-    uint32_t timeseries_count;
-} DeviceTimeseriesMetadataEntry;
-
-typedef struct DeviceTimeseriesMetadataMap {
-    DeviceTimeseriesMetadataEntry* entries;
-    uint32_t device_count;
-} DeviceTimeseriesMetadataMap;
 ```
 
 > `ColumnSchema` does not carry encoding/compression: on write, columns follow the
 > global defaults (see [Configuration](#configuration-encoding--compression)); on
 > read, each column is decoded with the file's actual settings.
+> The encoding and compression constants listed above are the values accepted by
+> the current writer/configuration path.
 >
 > `TimeseriesStatistic` is a tagged union in `tsfile_cwrapper.h`. Read common
-> fields through `tsfile_statistic_base(&metadata.statistic)` and then use the
-> active typed member (`int_s`, `float_s`, `bool_s`, `string_s`, or `text_s`)
-> according to the statistic data type.
+> fields through `tsfile_statistic_base(&statistic)` and then use the active
+> typed member (`int_s`, `float_s`, `bool_s`, `string_s`, or `text_s`) according
+> to the statistic data type.
 
 
 ## Write Interface
@@ -811,57 +766,8 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
 /**
- * @brief Gets all timeseries schema in the tsfile.
- * @param size[out] number of DeviceSchema elements in the returned array.
- * @return DeviceSchema*, an array of device schemas.
- * @note The caller must call free_device_schema() on each element
- * and free() the array pointer.
- */
-DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
-                                                       uint32_t* size);
-
-/**
  * @brief Free the tableschema's space.
  * @param schema [in] the table schema to be freed.
  */
 void free_table_schema(TableSchema schema);
-
-void free_device_schema(DeviceSchema schema);
 ```
-
-### Get Devices and Timeseries Metadata
-
-```C
-/**
- * @brief Lists all devices in the file.
- *
- * @param out_devices[out] allocated array; free with tsfile_free_device_id_array().
- * @param out_length[out] number of devices in the returned array.
- */
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
-                                    uint32_t* out_length);
-
-void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
-void tsfile_device_id_free_contents(DeviceID* d);
-
-/**
- * @brief Timeseries metadata for all devices in the file.
- */
-ERRNO tsfile_reader_get_timeseries_metadata_all(
-    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
-
-/**
- * @brief Timeseries metadata for the specified devices.
- *
- * length == 0 returns an empty map. For non-empty input, each DeviceID.path
- * should contain the canonical device path.
- */
-ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
-    TsFileReader reader, const DeviceID* devices, uint32_t length,
-    DeviceTimeseriesMetadataMap* out_map);
-
-void tsfile_free_device_timeseries_metadata_map(
-    DeviceTimeseriesMetadataMap* map);
-```
-
-
