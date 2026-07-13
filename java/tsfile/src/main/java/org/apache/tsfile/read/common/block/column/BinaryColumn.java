@@ -144,12 +144,12 @@ public class BinaryColumn implements Column {
   }
 
   @Override
-  public boolean arePositionsEqual(int pos1, int pos2) {
-    boolean pos1IsNull = isNull(pos1);
-    if (pos1IsNull) {
-      return isNull(pos2);
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
     }
-    return !isNull(pos2) && getBinary(pos1).equals(getBinary(pos2));
+    return !that.isNull(thatPos) && getBinary(thisPos).equals(that.getBinary(thatPos));
   }
 
   @Override

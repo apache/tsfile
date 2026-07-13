@@ -166,8 +166,8 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
-  public boolean arePositionsEqual(int pos1, int pos2) {
-    return value.arePositionsEqual(0, 0);
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return value.arePositionsEqual(0, that, thatPos);
   }
 
   @Override

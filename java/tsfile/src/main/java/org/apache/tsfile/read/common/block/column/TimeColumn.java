@@ -91,8 +91,8 @@ public class TimeColumn implements Column {
   }
 
   @Override
-  public boolean arePositionsEqual(int pos1, int pos2) {
-    return getLong(pos1) == getLong(pos2);
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return !that.isNull(thatPos) && getLong(thisPos) == that.getLong(thatPos);
   }
 
   public boolean mayHaveNull() {

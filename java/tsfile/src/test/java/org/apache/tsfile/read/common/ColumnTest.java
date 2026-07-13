@@ -64,18 +64,35 @@ public class ColumnTest {
     Assert.assertFalse(column.arePositionsEqual(0, 3));
     Assert.assertTrue(column.arePositionsEqual(3, 4));
 
+    IntColumnBuilder thatBuilder = new IntColumnBuilder(null, 3);
+    thatBuilder.writeInt(1);
+    thatBuilder.writeInt(2);
+    thatBuilder.appendNull();
+    Column that = thatBuilder.build();
+    Assert.assertTrue(column.arePositionsEqual(0, that, 0));
+    Assert.assertFalse(column.arePositionsEqual(0, that, 1));
+    Assert.assertFalse(column.arePositionsEqual(0, that, 2));
+    Assert.assertTrue(column.arePositionsEqual(3, that, 2));
+
     Column dictionaryColumn = column.getPositions(new int[] {0, 2, 1}, 0, 3);
     Assert.assertTrue(dictionaryColumn.arePositionsEqual(0, 2));
     Assert.assertFalse(dictionaryColumn.arePositionsEqual(0, 1));
+    Assert.assertTrue(dictionaryColumn.arePositionsEqual(0, that, 0));
+    Assert.assertTrue(that.arePositionsEqual(0, dictionaryColumn, 2));
 
     Column runLengthEncodedColumn = new RunLengthEncodedColumn(column.getRegion(0, 1), 3);
     Assert.assertTrue(runLengthEncodedColumn.arePositionsEqual(0, 2));
+    Assert.assertTrue(runLengthEncodedColumn.arePositionsEqual(0, that, 0));
+    Assert.assertTrue(that.arePositionsEqual(0, runLengthEncodedColumn, 2));
 
     Column nanColumn = new DoubleColumn(1, Optional.empty(), new double[] {Double.NaN});
     Column nanRunLengthEncodedColumn = new RunLengthEncodedColumn(nanColumn, 2);
     Assert.assertFalse(nanRunLengthEncodedColumn.arePositionsEqual(0, 1));
 
-    Assert.assertTrue(new NullColumn(2).arePositionsEqual(0, 1));
+    Column nullColumn = new NullColumn(2);
+    Assert.assertTrue(nullColumn.arePositionsEqual(0, 1));
+    Assert.assertTrue(nullColumn.arePositionsEqual(0, that, 2));
+    Assert.assertFalse(nullColumn.arePositionsEqual(0, that, 0));
   }
 
   @Test

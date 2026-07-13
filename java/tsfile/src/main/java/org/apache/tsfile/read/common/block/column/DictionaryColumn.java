@@ -428,8 +428,8 @@ public final class DictionaryColumn implements Column {
   }
 
   @Override
-  public boolean arePositionsEqual(int pos1, int pos2) {
-    return dictionary.arePositionsEqual(getId(pos1), getId(pos2));
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return dictionary.arePositionsEqual(getId(thisPos), that, thatPos);
   }
 
   @Override

@@ -72,8 +72,8 @@ public class NullColumn implements Column {
   }
 
   @Override
-  public boolean arePositionsEqual(int pos1, int pos2) {
-    return true;
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return that.isNull(thatPos);
   }
 
   @Override

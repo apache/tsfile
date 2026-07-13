@@ -109,7 +109,16 @@ public interface Column {
   }
 
   /** Returns whether the values at the two positions are equal. */
-  boolean arePositionsEqual(int pos1, int pos2);
+  default boolean arePositionsEqual(int pos1, int pos2) {
+    return arePositionsEqual(pos1, this, pos2);
+  }
+
+  /**
+   * Returns whether this value and the value in another column are equal.
+   *
+   * <p>For non-null values, this column and {@code that} must provide compatible value accessors.
+   */
+  boolean arePositionsEqual(int thisPos, Column that, int thatPos);
 
   /**
    * Is it possible the column may have a null value? If false, the column cannot contain a null,
