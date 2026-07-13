@@ -142,6 +142,15 @@ public class FloatColumn implements Column {
   }
 
   @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    boolean pos1IsNull = isNull(pos1);
+    if (pos1IsNull) {
+      return isNull(pos2);
+    }
+    return !isNull(pos2) && getFloat(pos1) == getFloat(pos2);
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return valueIsNull != null;
   }

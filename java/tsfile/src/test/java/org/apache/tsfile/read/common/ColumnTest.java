@@ -50,6 +50,35 @@ import java.util.Optional;
 public class ColumnTest {
 
   @Test
+  public void testArePositionsEqual() {
+    IntColumnBuilder builder = new IntColumnBuilder(null, 5);
+    builder.writeInt(1);
+    builder.writeInt(1);
+    builder.writeInt(2);
+    builder.appendNull();
+    builder.appendNull();
+    Column column = builder.build();
+
+    Assert.assertTrue(column.arePositionsEqual(0, 1));
+    Assert.assertFalse(column.arePositionsEqual(0, 2));
+    Assert.assertFalse(column.arePositionsEqual(0, 3));
+    Assert.assertTrue(column.arePositionsEqual(3, 4));
+
+    Column dictionaryColumn = column.getPositions(new int[] {0, 2, 1}, 0, 3);
+    Assert.assertTrue(dictionaryColumn.arePositionsEqual(0, 2));
+    Assert.assertFalse(dictionaryColumn.arePositionsEqual(0, 1));
+
+    Column runLengthEncodedColumn = new RunLengthEncodedColumn(column.getRegion(0, 1), 3);
+    Assert.assertTrue(runLengthEncodedColumn.arePositionsEqual(0, 2));
+
+    Column nanColumn = new DoubleColumn(1, Optional.empty(), new double[] {Double.NaN});
+    Column nanRunLengthEncodedColumn = new RunLengthEncodedColumn(nanColumn, 2);
+    Assert.assertFalse(nanRunLengthEncodedColumn.arePositionsEqual(0, 1));
+
+    Assert.assertTrue(new NullColumn(2).arePositionsEqual(0, 1));
+  }
+
+  @Test
   public void timeColumnSubColumnTest() {
     TimeColumnBuilder columnBuilder = new TimeColumnBuilder(null, 10);
     for (int i = 0; i < 10; i++) {

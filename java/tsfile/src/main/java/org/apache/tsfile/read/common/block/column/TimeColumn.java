@@ -90,6 +90,11 @@ public class TimeColumn implements Column {
     return getLong(position);
   }
 
+  @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    return getLong(pos1) == getLong(pos2);
+  }
+
   public boolean mayHaveNull() {
     return false;
   }

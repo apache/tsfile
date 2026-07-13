@@ -428,6 +428,11 @@ public final class DictionaryColumn implements Column {
   }
 
   @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    return dictionary.arePositionsEqual(getId(pos1), getId(pos2));
+  }
+
+  @Override
   public void reset() {
     throw new UnsupportedOperationException(getClass().getSimpleName());
   }

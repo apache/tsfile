@@ -197,6 +197,15 @@ public class IntColumn implements Column {
   }
 
   @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    boolean pos1IsNull = isNull(pos1);
+    if (pos1IsNull) {
+      return isNull(pos2);
+    }
+    return !isNull(pos2) && getInt(pos1) == getInt(pos2);
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return valueIsNull != null;
   }

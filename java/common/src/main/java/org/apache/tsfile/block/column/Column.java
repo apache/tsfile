@@ -108,6 +108,9 @@ public interface Column {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns whether the values at the two positions are equal. */
+  boolean arePositionsEqual(int pos1, int pos2);
+
   /**
    * Is it possible the column may have a null value? If false, the column cannot contain a null,
    * but if true, the column may or may not have a null.

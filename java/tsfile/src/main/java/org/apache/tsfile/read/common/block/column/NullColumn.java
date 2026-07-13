@@ -72,6 +72,11 @@ public class NullColumn implements Column {
   }
 
   @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    return true;
+  }
+
+  @Override
   public boolean[] isNull() {
     throw new UnsupportedOperationException(getClass().getName());
   }

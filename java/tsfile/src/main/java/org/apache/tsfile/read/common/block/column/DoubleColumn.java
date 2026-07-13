@@ -127,6 +127,15 @@ public class DoubleColumn implements Column {
   }
 
   @Override
+  public boolean arePositionsEqual(int pos1, int pos2) {
+    boolean pos1IsNull = isNull(pos1);
+    if (pos1IsNull) {
+      return isNull(pos2);
+    }
+    return !isNull(pos2) && getDouble(pos1) == getDouble(pos2);
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return valueIsNull != null;
   }
