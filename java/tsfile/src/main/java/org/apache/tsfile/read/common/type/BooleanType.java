@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
@@ -48,6 +49,11 @@ public class BooleanType extends AbstractType {
   @Override
   public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
     BytesUtils.boolToBytes(value.getBoolean(), valueBytes, offset);
+  }
+
+  @Override
+  public int calcTypeSize(TSDataType dataType, TsPrimitiveType value) {
+    return Byte.BYTES;
   }
 
   @Override

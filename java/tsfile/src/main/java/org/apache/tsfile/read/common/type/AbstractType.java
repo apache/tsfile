@@ -39,6 +39,10 @@ public abstract class AbstractType implements Type {
     System.arraycopy(binary.getValues(), 0, valueBytes, offset + Integer.BYTES, binary.getLength());
   }
 
+  protected int binaryTypeSize(TsPrimitiveType value) {
+    return Integer.BYTES + value.getBinary().getLength();
+  }
+
   protected void checkValueType(Object value, Class<?> expectedClass, String expectedType) {
     if (value != null && !expectedClass.isInstance(value)) {
       throw new IllegalArgumentException(
