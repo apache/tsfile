@@ -44,6 +44,11 @@ public class ObjectType extends AbstractType {
   private ObjectType() {}
 
   @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    binaryToBytes(value, valueBytes, offset);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }

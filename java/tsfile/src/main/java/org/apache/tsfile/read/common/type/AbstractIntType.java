@@ -26,6 +26,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -39,6 +40,11 @@ import java.util.List;
 import java.util.Optional;
 
 public abstract class AbstractIntType extends AbstractType {
+
+  @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.intToBytes(value.getInt(), valueBytes, offset);
+  }
 
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {

@@ -25,6 +25,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -38,6 +39,11 @@ import java.util.List;
 import java.util.Optional;
 
 public abstract class AbstractLongType extends AbstractType {
+
+  @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.longToBytes(value.getLong(), valueBytes, offset);
+  }
 
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {

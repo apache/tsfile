@@ -83,6 +83,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Serializes {@code value} into {@code valueBytes} starting at {@code offset}. */
+  default void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

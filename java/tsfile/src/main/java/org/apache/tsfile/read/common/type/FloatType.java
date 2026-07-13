@@ -25,6 +25,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -42,6 +43,11 @@ public class FloatType extends AbstractType {
   public static final FloatType FLOAT = new FloatType();
 
   private FloatType() {}
+
+  @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.floatToBytes(value.getFloat(), valueBytes, offset);
+  }
 
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {

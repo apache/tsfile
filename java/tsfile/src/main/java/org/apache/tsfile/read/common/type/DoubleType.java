@@ -25,6 +25,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -42,6 +43,11 @@ public class DoubleType extends AbstractType {
   public static final DoubleType DOUBLE = new DoubleType();
 
   private DoubleType() {}
+
+  @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.doubleToBytes(value.getDouble(), valueBytes, offset);
+  }
 
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {

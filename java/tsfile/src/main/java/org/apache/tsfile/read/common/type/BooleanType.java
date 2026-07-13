@@ -45,6 +45,11 @@ public class BooleanType extends AbstractType {
   private BooleanType() {}
 
   @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.boolToBytes(value.getBoolean(), valueBytes, offset);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getBooleanEncoding());
   }

@@ -23,6 +23,7 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -31,6 +32,12 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 
 public abstract class AbstractType implements Type {
+
+  protected void binaryToBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    Binary binary = value.getBinary();
+    BytesUtils.intToBytes(binary.getLength(), valueBytes, offset);
+    System.arraycopy(binary.getValues(), 0, valueBytes, offset + Integer.BYTES, binary.getLength());
+  }
 
   protected void checkValueType(Object value, Class<?> expectedClass, String expectedType) {
     if (value != null && !expectedClass.isInstance(value)) {
