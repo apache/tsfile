@@ -24,6 +24,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -332,13 +333,16 @@ public class TsFileLastReaderTest {
       alignedChunkWriter.write(
           0,
           new TsPrimitiveType[] {
-            TsPrimitiveType.getByType(TSDataType.INT64, 0L),
-            TsPrimitiveType.getByType(
-                TSDataType.BLOB, new Binary("0".getBytes(StandardCharsets.UTF_8)))
+            Type.fromTsDataType(TSDataType.INT64).getTsPrimitiveType(0L),
+            Type.fromTsDataType(TSDataType.BLOB)
+                .getTsPrimitiveType(new Binary("0".getBytes(StandardCharsets.UTF_8)))
           });
       alignedChunkWriter.sealCurrentPage();
       alignedChunkWriter.write(
-          1, new TsPrimitiveType[] {TsPrimitiveType.getByType(TSDataType.INT64, 1L), null});
+          1,
+          new TsPrimitiveType[] {
+            Type.fromTsDataType(TSDataType.INT64).getTsPrimitiveType(1L), null
+          });
       alignedChunkWriter.writeToFileWriter(ioWriter);
       ioWriter.endChunkGroup();
 

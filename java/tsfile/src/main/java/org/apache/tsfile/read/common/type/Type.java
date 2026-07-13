@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -68,6 +69,16 @@ public interface Type {
   /** Gets a Object at {@code position}. */
   default Object getObject(Column c, int position) {
     return c.getObject(position);
+  }
+
+  /** Creates an empty TsPrimitiveType for this type. */
+  default TsPrimitiveType getTsPrimitiveType() {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Creates a TsPrimitiveType initialized with {@code value}. */
+  default TsPrimitiveType getTsPrimitiveType(Object value) {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /** Write a boolean to the current entry; */

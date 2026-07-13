@@ -25,6 +25,7 @@ import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -35,6 +36,16 @@ import java.util.List;
 import java.util.Optional;
 
 public abstract class AbstractLongType extends AbstractType {
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsLong();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsLong((long) value);
+  }
 
   @Override
   public int getInt(Column c, int position) {

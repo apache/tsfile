@@ -27,6 +27,7 @@ import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -40,6 +41,16 @@ public class ObjectType extends AbstractType {
   public static final ObjectType OBJECT = new ObjectType();
 
   private ObjectType() {}
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsBinary();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsBinary((Binary) value);
+  }
 
   @Override
   public Binary getBinary(Column c, int position) {

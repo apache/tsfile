@@ -25,6 +25,7 @@ import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,6 +40,16 @@ public class DoubleType extends AbstractType {
   public static final DoubleType DOUBLE = new DoubleType();
 
   private DoubleType() {}
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsDouble();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsDouble((double) value);
+  }
 
   @Override
   public int getInt(Column c, int position) {

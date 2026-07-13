@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -71,6 +72,16 @@ public class RowType extends AbstractType {
   // Only RowParametricType.createType should call this method
   public static RowType createWithTypeSignature(List<Field> fields) {
     return new RowType(fields);
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsVector();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsVector((TsPrimitiveType[]) value);
   }
 
   public static Field field(String name, Type type) {

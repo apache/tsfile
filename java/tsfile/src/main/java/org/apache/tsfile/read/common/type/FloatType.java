@@ -25,6 +25,7 @@ import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,6 +40,16 @@ public class FloatType extends AbstractType {
   public static final FloatType FLOAT = new FloatType();
 
   private FloatType() {}
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsFloat();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsFloat((float) value);
+  }
 
   @Override
   public int getInt(Column c, int position) {

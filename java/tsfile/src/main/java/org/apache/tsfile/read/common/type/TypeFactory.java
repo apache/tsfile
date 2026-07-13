@@ -41,8 +41,9 @@ public class TypeFactory {
       case STRING -> StringType.getInstance();
       case BLOB -> BlobType.getInstance();
       case OBJECT -> ObjectType.getInstance();
-      default -> throw new UnsupportedOperationException(
-          Messages.format("error.read.typefactory_invalid_tsdata_type", tsDataType));
+      default ->
+          throw new UnsupportedOperationException(
+              Messages.format("error.read.typefactory_invalid_tsdata_type", tsDataType));
     };
   }
 
@@ -59,8 +60,9 @@ public class TypeFactory {
       case TIMESTAMP -> TimestampType.getInstance();
       case BLOB -> BlobType.getInstance();
       case STRING -> StringType.getInstance();
-      default -> throw new UnsupportedOperationException(
-          Messages.format("error.read.typefactory_invalid_type_enum", typeEnum));
+      default ->
+          throw new UnsupportedOperationException(
+              Messages.format("error.read.typefactory_invalid_type_enum", typeEnum));
     };
   }
 }

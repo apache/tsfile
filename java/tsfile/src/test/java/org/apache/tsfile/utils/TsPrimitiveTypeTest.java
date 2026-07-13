@@ -21,6 +21,8 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.RowType;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.TsPrimitiveType.TsBinary;
 import org.apache.tsfile.utils.TsPrimitiveType.TsBoolean;
 import org.apache.tsfile.utils.TsPrimitiveType.TsDouble;
@@ -35,30 +37,46 @@ public class TsPrimitiveTypeTest {
 
   @Test
   public void testNewAndGet() {
-    TsPrimitiveType intValue = TsPrimitiveType.getByType(TSDataType.INT32, 123);
+    TsPrimitiveType intValue = Type.fromTsDataType(TSDataType.INT32).getTsPrimitiveType(123);
     Assert.assertEquals(new TsInt(123), intValue);
     Assert.assertEquals(123, intValue.getInt());
 
-    TsPrimitiveType longValue = TsPrimitiveType.getByType(TSDataType.INT64, 456L);
+    TsPrimitiveType longValue = Type.fromTsDataType(TSDataType.INT64).getTsPrimitiveType(456L);
     Assert.assertEquals(new TsLong(456), longValue);
     Assert.assertEquals(456L, longValue.getLong());
 
-    TsPrimitiveType floatValue = TsPrimitiveType.getByType(TSDataType.FLOAT, 123f);
+    TsPrimitiveType floatValue = Type.fromTsDataType(TSDataType.FLOAT).getTsPrimitiveType(123f);
     Assert.assertEquals(new TsFloat(123), floatValue);
     Assert.assertEquals(123f, floatValue.getFloat(), 0.01);
 
-    TsPrimitiveType doubleValue = TsPrimitiveType.getByType(TSDataType.DOUBLE, 456d);
+    TsPrimitiveType doubleValue = Type.fromTsDataType(TSDataType.DOUBLE).getTsPrimitiveType(456d);
     Assert.assertEquals(new TsDouble(456), doubleValue);
     Assert.assertEquals(456d, doubleValue.getDouble(), 0.01);
 
     TsPrimitiveType textValue =
-        TsPrimitiveType.getByType(TSDataType.TEXT, new Binary("123", TSFileConfig.STRING_CHARSET));
+        Type.fromTsDataType(TSDataType.TEXT)
+            .getTsPrimitiveType(new Binary("123", TSFileConfig.STRING_CHARSET));
     Assert.assertEquals(new TsBinary(new Binary("123", TSFileConfig.STRING_CHARSET)), textValue);
     Assert.assertEquals(new Binary("123", TSFileConfig.STRING_CHARSET), textValue.getBinary());
 
-    TsPrimitiveType booleanValue = TsPrimitiveType.getByType(TSDataType.BOOLEAN, true);
+    TsPrimitiveType booleanValue = Type.fromTsDataType(TSDataType.BOOLEAN).getTsPrimitiveType(true);
     Assert.assertEquals(new TsBoolean(true), booleanValue);
     Assert.assertTrue(booleanValue.getBoolean());
+  }
+
+  @Test
+  public void testTypeSpecificCreation() {
+    TsPrimitiveType emptyDate = Type.fromTsDataType(TSDataType.DATE).getTsPrimitiveType();
+    Assert.assertEquals(TSDataType.DATE, emptyDate.getDataType());
+
+    TsPrimitiveType date = Type.fromTsDataType(TSDataType.DATE).getTsPrimitiveType(20260713);
+    Assert.assertEquals(20260713, date.getInt());
+    Assert.assertEquals(TSDataType.DATE, date.getDataType());
+
+    TsPrimitiveType[] values = {date, null};
+    TsPrimitiveType vector = RowType.anonymousRow().getTsPrimitiveType(values);
+    Assert.assertSame(values, vector.getVector());
+    Assert.assertNull(RowType.anonymousRow().getTsPrimitiveType().getVector());
   }
 
   @Test

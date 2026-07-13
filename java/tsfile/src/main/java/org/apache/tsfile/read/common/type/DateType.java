@@ -25,6 +25,7 @@ import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,6 +40,16 @@ public class DateType extends AbstractIntType {
   private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   private DateType() {}
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsInt(TSDataType.DATE);
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsInt((int) value, TSDataType.DATE);
+  }
 
   @Override
   public void addValue(int rowIndex, Object value, Object column) {

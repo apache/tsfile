@@ -26,6 +26,7 @@ import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -40,6 +41,16 @@ public class BooleanType extends AbstractType {
   public static final BooleanType BOOLEAN = new BooleanType();
 
   private BooleanType() {}
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsBoolean();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsBoolean((boolean) value);
+  }
 
   @Override
   public boolean getBoolean(Column c, int position) {
