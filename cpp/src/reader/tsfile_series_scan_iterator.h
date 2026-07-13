@@ -105,6 +105,19 @@ class TsFileSeriesScanIterator {
 
     bool is_multi_value() const { return is_multi_value_; }
 
+    /**
+     * Data type of the (value) column from the loaded timeseries index.
+     * Available as soon as the SSI is allocated, i.e. independent of whether
+     * any TsBlock has been materialized.  Callers building result-set metadata
+     * should prefer this over deriving the type from a decoded TsBlock, since
+     * offset/limit (e.g. limit==0) may skip all rows and leave no block.
+     */
+    common::TSDataType get_data_type() const {
+        return itimeseries_index_ == nullptr
+                   ? common::INVALID_DATATYPE
+                   : itimeseries_index_->get_data_type();
+    }
+
     friend class TsFileIOReader;
 
    private:
