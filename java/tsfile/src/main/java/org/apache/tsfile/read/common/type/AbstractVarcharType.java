@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
@@ -37,6 +38,11 @@ import java.util.List;
 import java.util.Optional;
 
 public abstract class AbstractVarcharType extends AbstractType {
+
+  @Override
+  public TSEncoding getDefaultEncoding(TSFileConfig config) {
+    return TSEncoding.valueOf(config.getTextEncoding());
+  }
 
   @Override
   public TsPrimitiveType getTsPrimitiveType() {

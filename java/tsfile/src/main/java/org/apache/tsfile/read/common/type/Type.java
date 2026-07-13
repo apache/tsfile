@@ -21,7 +21,9 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
@@ -159,6 +161,11 @@ public interface Type {
 
   /** Creates a column with {@code positionCount} capacity for this type. */
   default Column createColumn(int positionCount) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns the default encoding configured for this type. */
+  default TSEncoding getDefaultEncoding(TSFileConfig config) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

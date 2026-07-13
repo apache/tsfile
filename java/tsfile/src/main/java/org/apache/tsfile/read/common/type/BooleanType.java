@@ -21,6 +21,8 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.utils.BytesUtils;
@@ -41,6 +43,11 @@ public class BooleanType extends AbstractType {
   public static final BooleanType BOOLEAN = new BooleanType();
 
   private BooleanType() {}
+
+  @Override
+  public TSEncoding getDefaultEncoding(TSFileConfig config) {
+    return TSEncoding.valueOf(config.getBooleanEncoding());
+  }
 
   @Override
   public TsPrimitiveType getTsPrimitiveType() {

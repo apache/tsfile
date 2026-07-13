@@ -19,6 +19,8 @@
 package org.apache.tsfile.common.conf;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -81,5 +83,27 @@ public class TSFileDescriptorTest {
     Assert.assertEquals(100, tsFileConfig2.getBatchSize());
 
     Assert.assertEquals(tsFileConfig1.getMaxStringLength(), tsFileConfig2.getMaxStringLength());
+  }
+
+  @Test
+  public void testGetValueEncoder() {
+    tsFileConfig1.setBooleanEncoding(TSEncoding.PLAIN.name());
+    tsFileConfig1.setInt32Encoding(TSEncoding.RLE.name());
+    tsFileConfig1.setInt64Encoding(TSEncoding.GORILLA.name());
+    tsFileConfig1.setFloatEncoding(TSEncoding.TS_2DIFF.name());
+    tsFileConfig1.setDoubleEncoding(TSEncoding.RLE.name());
+    tsFileConfig1.setTextEncoding(TSEncoding.DICTIONARY.name());
+
+    Assert.assertEquals(TSEncoding.PLAIN, tsFileConfig1.getValueEncoder(TSDataType.BOOLEAN));
+    Assert.assertEquals(TSEncoding.RLE, tsFileConfig1.getValueEncoder(TSDataType.INT32));
+    Assert.assertEquals(TSEncoding.RLE, tsFileConfig1.getValueEncoder(TSDataType.DATE));
+    Assert.assertEquals(TSEncoding.GORILLA, tsFileConfig1.getValueEncoder(TSDataType.INT64));
+    Assert.assertEquals(TSEncoding.GORILLA, tsFileConfig1.getValueEncoder(TSDataType.TIMESTAMP));
+    Assert.assertEquals(TSEncoding.TS_2DIFF, tsFileConfig1.getValueEncoder(TSDataType.FLOAT));
+    Assert.assertEquals(TSEncoding.RLE, tsFileConfig1.getValueEncoder(TSDataType.DOUBLE));
+    Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.TEXT));
+    Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.STRING));
+    Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.BLOB));
+    Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.OBJECT));
   }
 }

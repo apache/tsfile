@@ -24,6 +24,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSType;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.FSUtils;
 
 import java.io.Serializable;
@@ -370,26 +371,7 @@ public class TSFileConfig implements Serializable {
   }
 
   public TSEncoding getValueEncoder(TSDataType dataType) {
-    switch (dataType) {
-      case BOOLEAN:
-        return booleanEncoding;
-      case INT32:
-      case DATE:
-        return int32Encoding;
-      case INT64:
-      case TIMESTAMP:
-        return int64Encoding;
-      case FLOAT:
-        return floatEncoding;
-      case DOUBLE:
-        return doubleEncoding;
-      case STRING:
-      case BLOB:
-      case TEXT:
-      case OBJECT:
-      default:
-        return textEncoding;
-    }
+    return Type.fromTsDataType(dataType).getDefaultEncoding(this);
   }
 
   public CompressionType getCompressor(TSDataType dataType) {
