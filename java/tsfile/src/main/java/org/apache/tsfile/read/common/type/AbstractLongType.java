@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
@@ -48,6 +49,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt64Encoding());
+  }
+
+  @Override
+  public CompressionType getDefaultCompressor(TSFileConfig config) {
+    return config.getInt64Compressor();
   }
 
   @Override

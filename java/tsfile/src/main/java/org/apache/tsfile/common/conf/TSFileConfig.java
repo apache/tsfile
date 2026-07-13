@@ -375,39 +375,7 @@ public class TSFileConfig implements Serializable {
   }
 
   public CompressionType getCompressor(TSDataType dataType) {
-    CompressionType compressionType;
-    switch (dataType) {
-      case BOOLEAN:
-        compressionType = booleanCompression;
-        break;
-      case INT32:
-      case DATE:
-        compressionType = int32Compression;
-        break;
-      case INT64:
-      case TIMESTAMP:
-        compressionType = int64Compression;
-        break;
-      case FLOAT:
-        compressionType = floatCompression;
-        break;
-      case DOUBLE:
-        compressionType = doubleCompression;
-        break;
-      case STRING:
-      case BLOB:
-      case TEXT:
-      case OBJECT:
-        compressionType = textCompression;
-        break;
-      default:
-        compressionType = null;
-    }
-
-    if (compressionType == null) {
-      compressionType = compressor;
-    }
-    return compressionType;
+    return Type.fromTsDataType(dataType).getDefaultCompressor(this);
   }
 
   public void setValueEncoder(String valueEncoder) {
@@ -512,6 +480,34 @@ public class TSFileConfig implements Serializable {
 
   public CompressionType getCompressor() {
     return compressor;
+  }
+
+  public CompressionType getBooleanCompressor() {
+    return getCompressorOrDefault(booleanCompression);
+  }
+
+  public CompressionType getInt32Compressor() {
+    return getCompressorOrDefault(int32Compression);
+  }
+
+  public CompressionType getInt64Compressor() {
+    return getCompressorOrDefault(int64Compression);
+  }
+
+  public CompressionType getFloatCompressor() {
+    return getCompressorOrDefault(floatCompression);
+  }
+
+  public CompressionType getDoubleCompressor() {
+    return getCompressorOrDefault(doubleCompression);
+  }
+
+  public CompressionType getTextCompressor() {
+    return getCompressorOrDefault(textCompression);
+  }
+
+  private CompressionType getCompressorOrDefault(CompressionType compressionType) {
+    return compressionType == null ? compressor : compressionType;
   }
 
   public void setCompressor(String compressor) {

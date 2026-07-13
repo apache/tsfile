@@ -20,6 +20,7 @@ package org.apache.tsfile.common.conf;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import org.junit.Assert;
@@ -105,5 +106,36 @@ public class TSFileDescriptorTest {
     Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.STRING));
     Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.BLOB));
     Assert.assertEquals(TSEncoding.DICTIONARY, tsFileConfig1.getValueEncoder(TSDataType.OBJECT));
+  }
+
+  @Test
+  public void testGetCompressor() {
+    tsFileConfig1.setCompressor(CompressionType.ZSTD.name());
+    Assert.assertEquals(CompressionType.ZSTD, tsFileConfig1.getCompressor(TSDataType.BOOLEAN));
+    Assert.assertEquals(CompressionType.ZSTD, tsFileConfig1.getCompressor(TSDataType.INT32));
+    Assert.assertEquals(CompressionType.ZSTD, tsFileConfig1.getCompressor(TSDataType.TEXT));
+
+    tsFileConfig1.setBooleanCompression(CompressionType.UNCOMPRESSED.name());
+    tsFileConfig1.setInt32Compression(CompressionType.SNAPPY.name());
+    tsFileConfig1.setInt64Compression(CompressionType.GZIP.name());
+    tsFileConfig1.setFloatCompression(CompressionType.LZ4.name());
+    tsFileConfig1.setDoubleCompression(CompressionType.ZSTD.name());
+    tsFileConfig1.setTextCompression(CompressionType.LZMA2.name());
+
+    Assert.assertEquals(
+        CompressionType.UNCOMPRESSED, tsFileConfig1.getCompressor(TSDataType.BOOLEAN));
+    Assert.assertEquals(CompressionType.SNAPPY, tsFileConfig1.getCompressor(TSDataType.INT32));
+    Assert.assertEquals(CompressionType.SNAPPY, tsFileConfig1.getCompressor(TSDataType.DATE));
+    Assert.assertEquals(CompressionType.GZIP, tsFileConfig1.getCompressor(TSDataType.INT64));
+    Assert.assertEquals(CompressionType.GZIP, tsFileConfig1.getCompressor(TSDataType.TIMESTAMP));
+    Assert.assertEquals(CompressionType.LZ4, tsFileConfig1.getCompressor(TSDataType.FLOAT));
+    Assert.assertEquals(CompressionType.ZSTD, tsFileConfig1.getCompressor(TSDataType.DOUBLE));
+    Assert.assertEquals(CompressionType.LZMA2, tsFileConfig1.getCompressor(TSDataType.TEXT));
+    Assert.assertEquals(CompressionType.LZMA2, tsFileConfig1.getCompressor(TSDataType.STRING));
+    Assert.assertEquals(CompressionType.LZMA2, tsFileConfig1.getCompressor(TSDataType.BLOB));
+    Assert.assertEquals(CompressionType.LZMA2, tsFileConfig1.getCompressor(TSDataType.OBJECT));
+
+    tsFileConfig1.setInt32Compression(null);
+    Assert.assertEquals(CompressionType.ZSTD, tsFileConfig1.getCompressor(TSDataType.INT32));
   }
 }

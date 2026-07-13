@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -171,6 +172,11 @@ public interface Type {
 
   /** Returns the default encoding configured for this type. */
   default TSEncoding getDefaultEncoding(TSFileConfig config) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns the default compressor configured for this type. */
+  default CompressionType getDefaultCompressor(TSFileConfig config) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

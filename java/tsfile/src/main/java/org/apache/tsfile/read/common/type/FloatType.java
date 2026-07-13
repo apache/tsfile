@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
@@ -52,6 +53,11 @@ public class FloatType extends AbstractType {
   @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getFloatEncoding());
+  }
+
+  @Override
+  public CompressionType getDefaultCompressor(TSFileConfig config) {
+    return config.getFloatCompressor();
   }
 
   @Override
