@@ -29,62 +29,38 @@ public class TypeFactory {
   }
 
   public static Type getType(TSDataType tsDataType) {
-    switch (tsDataType) {
-      case DATE:
-        return DateType.getInstance();
-      case INT32:
-        return IntType.getInstance();
-      case INT64:
-        return LongType.getInstance();
-      case TIMESTAMP:
-        return TimestampType.getInstance();
-      case FLOAT:
-        return FloatType.getInstance();
-      case DOUBLE:
-        return DoubleType.getInstance();
-      case BOOLEAN:
-        return BooleanType.getInstance();
-      case TEXT:
-        return BinaryType.getInstance();
-      case STRING:
-        return StringType.getInstance();
-      case BLOB:
-        return BlobType.getInstance();
-      case OBJECT:
-        return ObjectType.getInstance();
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.typefactory_invalid_tsdata_type", tsDataType));
-    }
+    return switch (tsDataType) {
+      case DATE -> DateType.getInstance();
+      case INT32 -> IntType.getInstance();
+      case INT64 -> LongType.getInstance();
+      case TIMESTAMP -> TimestampType.getInstance();
+      case FLOAT -> FloatType.getInstance();
+      case DOUBLE -> DoubleType.getInstance();
+      case BOOLEAN -> BooleanType.getInstance();
+      case TEXT -> BinaryType.getInstance();
+      case STRING -> StringType.getInstance();
+      case BLOB -> BlobType.getInstance();
+      case OBJECT -> ObjectType.getInstance();
+      default -> throw new UnsupportedOperationException(
+          Messages.format("error.read.typefactory_invalid_tsdata_type", tsDataType));
+    };
   }
 
   public static Type getType(TypeEnum typeEnum) {
-    switch (typeEnum) {
-      case INT32:
-        return IntType.getInstance();
-      case INT64:
-        return LongType.getInstance();
-      case FLOAT:
-        return FloatType.getInstance();
-      case DOUBLE:
-        return DoubleType.getInstance();
-      case BOOLEAN:
-        return BooleanType.getInstance();
-      case TEXT:
-        return BinaryType.getInstance();
-      case UNKNOWN:
-        return UnknownType.getInstance();
-      case DATE:
-        return DateType.getInstance();
-      case TIMESTAMP:
-        return TimestampType.getInstance();
-      case BLOB:
-        return BlobType.getInstance();
-      case STRING:
-        return StringType.getInstance();
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.typefactory_invalid_type_enum", typeEnum));
-    }
+    return switch (typeEnum) {
+      case INT32 -> IntType.getInstance();
+      case INT64 -> LongType.getInstance();
+      case FLOAT -> FloatType.getInstance();
+      case DOUBLE -> DoubleType.getInstance();
+      case BOOLEAN -> BooleanType.getInstance();
+      case TEXT -> BinaryType.getInstance();
+      case UNKNOWN -> UnknownType.getInstance();
+      case DATE -> DateType.getInstance();
+      case TIMESTAMP -> TimestampType.getInstance();
+      case BLOB -> BlobType.getInstance();
+      case STRING -> StringType.getInstance();
+      default -> throw new UnsupportedOperationException(
+          Messages.format("error.read.typefactory_invalid_type_enum", typeEnum));
+    };
   }
 }
