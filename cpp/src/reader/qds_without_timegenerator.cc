@@ -55,8 +55,14 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     std::vector<Path> valid_paths;
     std::vector<std::string> column_names;
     std::vector<common::TSDataType> data_types;
+    // Data type per valid path, captured from the timeseries index right after
+    // alloc_ssi — while itimeseries_index_ is still live.  get_next_tsblock()
+    // may later destroy() the SSI (e.g. when limit==0 yields no TsBlock), which
+    // clears the index, so this must be recorded up front.
+    std::vector<common::TSDataType> ssi_data_types;
     column_names.reserve(origin_path_count);
     data_types.reserve(origin_path_count);
+    ssi_data_types.reserve(origin_path_count);
     Expression* global_time_expression = qe->expression_;
     Filter* global_time_filter = nullptr;
     if (global_time_expression != nullptr) {
@@ -91,6 +97,7 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         ssi_vec_.push_back(ssi);
         valid_paths.push_back(paths[i]);
         column_names.push_back(paths[i].full_path_);
+        ssi_data_types.push_back(ssi->get_data_type());
     }
 
     size_t path_count = valid_paths.size();
@@ -108,9 +115,15 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
 
     for (size_t i = 0; i < path_count; i++) {
         get_next_tsblock(i, true);
-        data_types.push_back(value_iters_[i] != nullptr
-                                 ? value_iters_[i]->get_data_type()
-                                 : TSDataType::NULL_TYPE);
+        // Prefer the type carried by the value iterator, but fall back to the
+        // timeseries-index type captured before get_next_tsblock() when no
+        // TsBlock was produced (e.g. limit==0 skips every row, or the series is
+        // empty).  Emitting NULL_TYPE here would surface an invalid datatype
+        // (254) to callers that map the metadata onto their own type enums.
+        common::TSDataType col_type = value_iters_[i] != nullptr
+                                          ? value_iters_[i]->get_data_type()
+                                          : ssi_data_types[i];
+        data_types.push_back(col_type);
     }
     // Single-path: SSI may have consumed offset/limit by skipping chunks/pages
     // during first get_next_tsblock(); sync so QDS does not double-apply.
