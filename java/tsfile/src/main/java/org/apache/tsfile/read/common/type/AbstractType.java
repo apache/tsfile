@@ -111,7 +111,8 @@ public abstract class AbstractType implements Type {
     return values;
   }
 
-  protected Binary[] deserializeBinaryValues(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+  protected Binary[] deserializeBinaryValues(
+      ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
     Binary[] values = new Binary[rowSize];
     if (nullIndicators == null) {
       for (int i = 0; i < rowSize; i++) {

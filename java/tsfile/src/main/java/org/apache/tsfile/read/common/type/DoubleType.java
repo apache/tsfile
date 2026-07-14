@@ -259,6 +259,23 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    double[] values = new double[rowSize];
+    if (nullIndicators == null) {
+      for (int i = 0; i < rowSize; i++) {
+        values[i] = Double.longBitsToDouble(buffer.getLong());
+      }
+    } else {
+      for (int i = 0; i < rowSize; i++) {
+        if (!nullIndicators[i]) {
+          values[i] = Double.longBitsToDouble(buffer.getLong());
+        }
+      }
+    }
+    return new DoubleColumn(rowSize, Optional.ofNullable(nullIndicators), values);
+  }
+
+  @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return hasEnoughLength(left, right, rowSize)
         && Arrays.equals((double[]) left, 0, rowSize, (double[]) right, 0, rowSize);

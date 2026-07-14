@@ -257,6 +257,23 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    float[] values = new float[rowSize];
+    if (nullIndicators == null) {
+      for (int i = 0; i < rowSize; i++) {
+        values[i] = Float.intBitsToFloat(buffer.getInt());
+      }
+    } else {
+      for (int i = 0; i < rowSize; i++) {
+        if (!nullIndicators[i]) {
+          values[i] = Float.intBitsToFloat(buffer.getInt());
+        }
+      }
+    }
+    return new FloatColumn(rowSize, Optional.ofNullable(nullIndicators), values);
+  }
+
+  @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return hasEnoughLength(left, right, rowSize)
         && Arrays.equals((float[]) left, 0, rowSize, (float[]) right, 0, rowSize);

@@ -32,6 +32,7 @@ import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
+import org.apache.tsfile.read.common.block.column.ColumnEncoder;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -214,6 +215,31 @@ public class BooleanType extends AbstractType {
       values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
     }
     return values;
+  }
+
+  @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    if (nullIndicators == null) {
+      boolean[] values = ColumnEncoder.deserializeBooleanArray(buffer, rowSize);
+      return new BooleanColumn(rowSize, Optional.empty(), values);
+    }
+
+    int nonNullCount = 0;
+    for (boolean isNull : nullIndicators) {
+      if (!isNull) {
+        nonNullCount++;
+      }
+    }
+
+    boolean[] nonNullValues = ColumnEncoder.deserializeBooleanArray(buffer, nonNullCount);
+    boolean[] values = new boolean[rowSize];
+    int nonNullIndex = 0;
+    for (int i = 0; i < rowSize; i++) {
+      if (!nullIndicators[i]) {
+        values[i] = nonNullValues[nonNullIndex++];
+      }
+    }
+    return new BooleanColumn(rowSize, Optional.of(nullIndicators), values);
   }
 
   @Override

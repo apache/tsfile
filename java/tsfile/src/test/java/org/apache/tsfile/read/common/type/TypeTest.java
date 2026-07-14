@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
@@ -34,6 +35,7 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -304,6 +306,73 @@ public class TypeTest {
   }
 
   @Test
+  public void testDeserializeColumn() {
+    boolean[] nullIndicators = {true, false};
+
+    ByteBuffer booleanBuffer = ByteBuffer.wrap(new byte[] {(byte) 0b1000_0000, 0x01});
+    Column booleanColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.BOOLEAN)
+                .deserializeColumn(booleanBuffer, 2, nullIndicators);
+    Assert.assertTrue(booleanColumn.isNull(0));
+    Assert.assertTrue(booleanColumn.getBoolean(1));
+    Assert.assertEquals(1, booleanBuffer.position());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT32, TSDataType.DATE}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(intBuffer(20260714), 2, nullIndicators);
+      Assert.assertEquals(dataType, column.getDataType());
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(20260714, column.getInt(1));
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT64, TSDataType.TIMESTAMP}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(longBuffer(123456789L), 2, nullIndicators);
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(123456789L, column.getLong(1));
+    }
+
+    Column floatColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.FLOAT)
+                .deserializeColumn(intBuffer(Float.floatToIntBits(1.25F)), 2, nullIndicators);
+    Assert.assertTrue(floatColumn.isNull(0));
+    Assert.assertEquals(1.25F, floatColumn.getFloat(1), 0);
+
+    Column doubleColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.DOUBLE)
+                .deserializeColumn(longBuffer(Double.doubleToLongBits(2.5D)), 2, nullIndicators);
+    Assert.assertTrue(doubleColumn.isNull(0));
+    Assert.assertEquals(2.5D, doubleColumn.getDouble(1), 0);
+
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(binaryBuffer(binary), 2, nullIndicators);
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(binary, column.getBinary(1));
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).deserializeColumn(ByteBuffer.allocate(0), 0, null);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testEstimateArraySize() {
     int size = 10;
     Object[][] testCases = {
@@ -448,5 +517,24 @@ public class TypeTest {
     Assert.assertSame(vector, Type.fromTsDataType(TSDataType.VECTOR).getCurrentValue(batchData));
     Assert.assertSame(vector, batchData.currentValue());
     Assert.assertNull(Type.fromTsDataType(TSDataType.UNKNOWN).getCurrentValue(null));
+  }
+
+  private static ByteBuffer intBuffer(int value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+    buffer.putInt(value);
+    return buffer.flip();
+  }
+
+  private static ByteBuffer longBuffer(long value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+    buffer.putLong(value);
+    return buffer.flip();
+  }
+
+  private static ByteBuffer binaryBuffer(Binary value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES + value.getLength());
+    buffer.putInt(value.getLength());
+    buffer.put(value.getValues());
+    return buffer.flip();
   }
 }

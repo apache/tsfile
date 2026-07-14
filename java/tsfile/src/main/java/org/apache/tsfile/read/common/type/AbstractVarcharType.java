@@ -206,6 +206,12 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    Binary[] values = deserializeBinaryValues(buffer, rowSize, nullIndicators);
+    return new BinaryColumn(0, rowSize, nullIndicators, values);
+  }
+
+  @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return binaryArrayEquals(left, right, rowSize);
   }

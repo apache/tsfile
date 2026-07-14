@@ -27,6 +27,7 @@ import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -34,7 +35,6 @@ import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Optional;
-import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
 
 public class DateType extends AbstractIntType {
 
@@ -105,7 +105,8 @@ public class DateType extends AbstractIntType {
 
   @Override
   public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
-    return ((IntColumn) super.deserializeColumn(buffer, rowSize, nullIndicators)).modifyDataType(TSDataType.DATE);
+    return ((IntColumn) super.deserializeColumn(buffer, rowSize, nullIndicators))
+        .modifyDataType(TSDataType.DATE);
   }
 
   @Override

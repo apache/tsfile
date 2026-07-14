@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,42 +40,16 @@ public class Int32ArrayColumnEncoder implements ColumnEncoder {
     //    | byte          | list[byte]      | list[int32] |
     //    +---------------+-----------------+-------------+
 
-    boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
-
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        int[] intValues = new int[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            intValues[i] = input.getInt();
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              intValues[i] = input.getInt();
-            }
-          }
-        }
-        return new IntColumn(0, positionCount, nullIndicators, intValues);
-      case FLOAT:
-        float[] floatValues = new float[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            floatValues[i] = Float.intBitsToFloat(input.getInt());
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              floatValues[i] = Float.intBitsToFloat(input.getInt());
-            }
-          }
-        }
-        return new FloatColumn(0, positionCount, nullIndicators, floatValues);
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.col_encoder_invalid_type", dataType));
+    if (dataType != TSDataType.INT32
+        && dataType != TSDataType.DATE
+        && dataType != TSDataType.FLOAT) {
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
+
+    boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
+    return (Column)
+        Type.fromTsDataType(dataType).deserializeColumn(input, positionCount, nullIndicators);
   }
 
   @Override

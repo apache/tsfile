@@ -36,6 +36,7 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public class VectorType extends AbstractLongType {
 
@@ -110,6 +111,11 @@ public class VectorType extends AbstractLongType {
   @Override
   public Object getCurrentValue(BatchData batchData) {
     return batchData.getVector();
+  }
+
+  @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    throw new UnsupportedOperationException(getDisplayName());
   }
 
   @Override
