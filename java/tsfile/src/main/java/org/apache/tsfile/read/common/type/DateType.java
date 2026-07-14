@@ -74,6 +74,13 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.DATE);
+    field.setIntV((int) value);
+    return field;
+  }
+
+  @Override
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
     LocalDate[] values = (LocalDate[]) array;

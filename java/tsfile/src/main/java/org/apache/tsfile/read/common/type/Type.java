@@ -214,6 +214,11 @@ public interface Type {
     throw new UnSupportedDataTypeException(getTypeEnum().toString());
   }
 
+  /** Creates a field initialized with {@code value}. */
+  default Field getField(Object value) {
+    throw new UnSupportedDataTypeException(getTypeEnum().toString());
+  }
+
   /** Returns the retained memory size of an array column in Tablet. */
   default long arrayRamBytesUsed(Object array) {
     throw new UnsupportedOperationException(getClass().getName());

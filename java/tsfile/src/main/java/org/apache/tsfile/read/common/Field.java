@@ -188,35 +188,7 @@ public class Field {
     if (value == null) {
       return null;
     }
-    Field field = new Field(dataType);
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        field.setIntV((int) value);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        field.setLongV((long) value);
-        break;
-      case FLOAT:
-        field.setFloatV((float) value);
-        break;
-      case DOUBLE:
-        field.setDoubleV((double) value);
-        break;
-      case BOOLEAN:
-        field.setBoolV((boolean) value);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        field.setBinaryV((Binary) value);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
-    return field;
+    return Type.fromTsDataType(dataType).getField(value);
   }
 
   public static void setTsPrimitiveValue(TsPrimitiveType value, Field field) {

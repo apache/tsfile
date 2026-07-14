@@ -153,6 +153,13 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.DOUBLE);
+    field.setDoubleV((double) value);
+    return field;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsDouble();
   }

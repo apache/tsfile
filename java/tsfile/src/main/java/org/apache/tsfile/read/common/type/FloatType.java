@@ -151,6 +151,13 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.FLOAT);
+    field.setFloatV((float) value);
+    return field;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsFloat();
   }

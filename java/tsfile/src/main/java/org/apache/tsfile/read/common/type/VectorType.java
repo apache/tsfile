@@ -123,6 +123,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public Field getField(Object value) {
+    throw new UnSupportedDataTypeException(getTypeEnum().toString());
+  }
+
+  @Override
   public long estimateValueSize() {
     return RamUsageEstimator.NUM_BYTES_OBJECT_REF;
   }

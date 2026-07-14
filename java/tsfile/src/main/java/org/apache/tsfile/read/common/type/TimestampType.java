@@ -19,11 +19,21 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.Field;
+
 public class TimestampType extends AbstractLongType {
 
   public static final TimestampType TIMESTAMP = new TimestampType();
 
   private TimestampType() {}
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.TIMESTAMP);
+    field.setLongV((long) value);
+    return field;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {

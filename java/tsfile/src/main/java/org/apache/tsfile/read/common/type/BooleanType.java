@@ -24,6 +24,7 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.IntRleDecoder;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -137,6 +138,13 @@ public class BooleanType extends AbstractType {
   @Override
   public Object getValue(Field field) {
     return field.getBoolV();
+  }
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.BOOLEAN);
+    field.setBoolV((boolean) value);
+    return field;
   }
 
   @Override
