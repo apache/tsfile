@@ -72,6 +72,23 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      outputStream.writeLong(batchData.getTimeByIndex(i));
+      Binary binary = batchData.getBinaryByIndex(i);
+      outputStream.writeInt(binary.getLength());
+      outputStream.write(binary.getValues());
+    }
+  }
+
+  @Override
+  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    Binary binary = value.getBinary();
+    stream.writeInt(binary.getLength());
+    stream.write(binary.getValues());
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }

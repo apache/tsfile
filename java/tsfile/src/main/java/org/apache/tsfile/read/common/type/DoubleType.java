@@ -82,6 +82,19 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      outputStream.writeLong(batchData.getTimeByIndex(i));
+      outputStream.writeDouble(batchData.getDoubleByIndex(i));
+    }
+  }
+
+  @Override
+  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    stream.writeDouble(value.getDouble());
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getDoubleEncoding());
   }

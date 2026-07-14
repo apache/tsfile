@@ -75,6 +75,19 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      outputStream.writeLong(batchData.getTimeByIndex(i));
+      outputStream.writeBoolean(batchData.getBooleanByIndex(i));
+    }
+  }
+
+  @Override
+  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    stream.writeBoolean(value.getBoolean());
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getBooleanEncoding());
   }

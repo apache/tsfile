@@ -79,6 +79,19 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      outputStream.writeLong(batchData.getTimeByIndex(i));
+      outputStream.writeInt(batchData.getIntByIndex(i));
+    }
+  }
+
+  @Override
+  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    stream.writeInt(value.getInt());
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

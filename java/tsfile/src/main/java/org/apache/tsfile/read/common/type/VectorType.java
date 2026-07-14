@@ -27,8 +27,12 @@ import org.apache.tsfile.encoding.decoder.LongRleDecoder;
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.TsPrimitiveType;
+
+import java.io.DataOutputStream;
+import java.io.IOException;
 
 public class VectorType extends AbstractLongType {
 
@@ -44,6 +48,30 @@ public class VectorType extends AbstractLongType {
   @Override
   public void put(BatchData batchData, long timestamp, Object value) {
     batchData.putVector(timestamp, (TsPrimitiveType[]) value);
+  }
+
+  @Override
+  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      outputStream.writeLong(batchData.getTimeByIndex(i));
+      TsPrimitiveType[] values = batchData.getVectorByIndex(i);
+      outputStream.writeInt(values.length);
+      for (TsPrimitiveType value : values) {
+        if (value == null) {
+          outputStream.write(0);
+          continue;
+        }
+        outputStream.write(1);
+        outputStream.write(value.getDataType().serialize());
+        Type.fromTsDataType(value.getDataType()).serialize(value, outputStream);
+      }
+    }
+  }
+
+  @Override
+  public void serialize(TsPrimitiveType value, DataOutputStream stream) {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
   }
 
   @Override

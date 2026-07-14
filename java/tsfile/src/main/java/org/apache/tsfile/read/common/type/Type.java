@@ -27,6 +27,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -111,6 +112,18 @@ public interface Type {
   /** Adds a timestamp-value pair to {@code batchData}. */
   default void put(BatchData batchData, long timestamp, Object value) {
     throw new UnSupportedDataTypeException(String.valueOf(batchData.getDataType()));
+  }
+
+  /** Serializes all timestamp-value pairs in {@code batchData}. */
+  default void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.batch_data_unknown_type", batchData.getDataType()));
+  }
+
+  /** Serializes {@code value} to {@code stream}. */
+  default void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
   }
 
   /** Write a boolean to the current entry; */
