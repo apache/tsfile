@@ -35,6 +35,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.utils.BytesUtils;
@@ -78,8 +79,8 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public void serialize(
-      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
+  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+      throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
@@ -136,6 +137,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public Object getCurrentValue(BatchData batchData) {
     return batchData.getLong();
+  }
+
+  @Override
+  public String toString(Field field) {
+    return String.valueOf(field.getLongV());
   }
 
   @Override

@@ -22,15 +22,13 @@ package org.apache.tsfile.read.common;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.time.LocalDate;
-
-import static org.apache.tsfile.utils.BytesUtils.parseObjectByteArrayToString;
 
 /**
  * Field is component of one {@code RowRecord} which stores a value in specific data type. The value
@@ -147,9 +145,6 @@ public class Field {
   public Binary getBinaryV() {
     if (dataType == null) {
       throw new NullFieldException();
-    } else if (dataType == TSDataType.OBJECT) {
-      throw new UnsupportedOperationException(
-          Messages.get("error.read.field_object_type_no_binary"));
     }
     return binaryV;
   }
@@ -174,29 +169,7 @@ public class Field {
     if (dataType == null) {
       return "null";
     }
-    switch (dataType) {
-      case BOOLEAN:
-        return String.valueOf(boolV);
-      case INT32:
-      case DATE:
-        return String.valueOf(intV);
-      case INT64:
-      case TIMESTAMP:
-        return String.valueOf(longV);
-      case FLOAT:
-        return String.valueOf(floatV);
-      case DOUBLE:
-        return String.valueOf(doubleV);
-      case TEXT:
-      case STRING:
-        return binaryV.toString();
-      case OBJECT:
-        return parseObjectByteArrayToString(binaryV.getValues());
-      case BLOB:
-        return BytesUtils.parseBlobByteArrayToString(binaryV.getValues());
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
+    return Type.fromTsDataType(dataType).toString(this);
   }
 
   @Override

@@ -24,9 +24,11 @@ import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -108,6 +110,41 @@ public class TypeTest {
       Assert.assertEquals(
           Integer.BYTES + binary.getLength(),
           Type.fromTsDataType(dataType).calcTypeSize(new TsPrimitiveType.TsBinary(binary)));
+    }
+  }
+
+  @Test
+  public void testToString() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, "true"},
+      {TSDataType.INT32, 1, "1"},
+      {TSDataType.DATE, 20260714, "20260714"},
+      {TSDataType.INT64, 2L, "2"},
+      {TSDataType.TIMESTAMP, 3L, "3"},
+      {TSDataType.FLOAT, 1.25F, "1.25"},
+      {TSDataType.DOUBLE, 2.5D, "2.5"},
+      {TSDataType.TEXT, new Binary("text", StandardCharsets.UTF_8), "text"},
+      {TSDataType.STRING, new Binary("string", StandardCharsets.UTF_8), "string"},
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23, (byte) 0xFF}), "0x0123ff"},
+      {TSDataType.OBJECT, new Binary(BytesUtils.longToBytes(1L)), "(Object) 1 B"}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Field field = Field.getField(testCase[1], dataType);
+      Assert.assertEquals(testCase[2], Type.fromTsDataType(dataType).toString(field));
+      Assert.assertEquals(testCase[2], field.getStringValue());
+    }
+
+    Assert.assertEquals("null", new Field(null).getStringValue());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new Field(dataType).getStringValue();
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
     }
   }
 

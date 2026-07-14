@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
@@ -68,8 +69,8 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
-  public void serialize(
-      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
+  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+      throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
@@ -114,6 +115,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public Object getCurrentValue(BatchData batchData) {
     return batchData.getBinary();
+  }
+
+  @Override
+  public String toString(Field field) {
+    return field.getBinaryV().toString();
   }
 
   @Override

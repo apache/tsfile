@@ -29,7 +29,9 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -51,8 +53,8 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
-  public void serialize(
-      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
+  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+      throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
@@ -107,6 +109,11 @@ public class VectorType extends AbstractLongType {
   @Override
   public Object getCurrentValue(BatchData batchData) {
     return batchData.getVector();
+  }
+
+  @Override
+  public String toString(Field field) {
+    throw new UnSupportedDataTypeException(field.getDataType().toString());
   }
 
   @Override

@@ -29,6 +29,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -115,8 +116,8 @@ public interface Type {
   }
 
   /** Serializes all timestamp-value pairs in {@code batchData}. */
-  default void serialize(
-      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
+  default void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+      throws IOException {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", batchData.getDataType()));
   }
@@ -241,6 +242,11 @@ public interface Type {
   /** Returns the current value in {@code batchData}. */
   default Object getCurrentValue(BatchData batchData) {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns the string representation of the value in {@code field}. */
+  default String toString(Field field) {
+    throw new UnSupportedDataTypeException(field.getDataType().toString());
   }
 
   /**
