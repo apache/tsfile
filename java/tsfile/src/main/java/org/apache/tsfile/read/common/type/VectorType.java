@@ -128,6 +128,12 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", from.getDataType()));
+  }
+
+  @Override
   public long estimateValueSize() {
     return RamUsageEstimator.NUM_BYTES_OBJECT_REF;
   }

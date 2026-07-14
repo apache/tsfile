@@ -150,6 +150,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setLongV(from.getLong());
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsLong();
   }
@@ -255,9 +260,14 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new LongColumn(
         positionCount, Optional.of(new boolean[positionCount]), new long[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new LongColumn(positionCount);
   }
 
   @Override

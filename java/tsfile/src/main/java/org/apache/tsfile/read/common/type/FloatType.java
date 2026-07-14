@@ -151,6 +151,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setFloatV(from.getFloat());
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.FLOAT);
     field.setFloatV((float) value);
@@ -263,9 +268,14 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new FloatColumn(
         positionCount, Optional.of(new boolean[positionCount]), new float[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new FloatColumn(positionCount);
   }
 
   @Override

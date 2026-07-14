@@ -151,6 +151,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setIntV(from.getInt());
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsInt();
   }
@@ -256,12 +261,17 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new IntColumn(
         positionCount,
         Optional.of(new boolean[positionCount]),
         new int[positionCount],
         TSDataType.INT32);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new IntColumn(positionCount);
   }
 
   @Override

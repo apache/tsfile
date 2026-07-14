@@ -21,7 +21,6 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
-import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
@@ -192,33 +191,6 @@ public class Field {
   }
 
   public static void setTsPrimitiveValue(TsPrimitiveType value, Field field) {
-    switch (value.getDataType()) {
-      case BOOLEAN:
-        field.setBoolV(value.getBoolean());
-        break;
-      case INT32:
-      case DATE:
-        field.setIntV(value.getInt());
-        break;
-      case INT64:
-      case TIMESTAMP:
-        field.setLongV(value.getLong());
-        break;
-      case FLOAT:
-        field.setFloatV(value.getFloat());
-        break;
-      case DOUBLE:
-        field.setDoubleV(value.getDouble());
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        field.setBinaryV(value.getBinary());
-        break;
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.common.unsupported_data_type", value.getDataType()));
-    }
+    Type.fromTsDataType(value.getDataType()).setTo(value, field);
   }
 }

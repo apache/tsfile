@@ -219,13 +219,24 @@ public interface Type {
     throw new UnSupportedDataTypeException(getTypeEnum().toString());
   }
 
+  /** Copies the value from {@code from} to {@code to}. */
+  default void setTo(TsPrimitiveType from, Field to) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", from.getDataType()));
+  }
+
   /** Returns the retained memory size of an array column in Tablet. */
   default long arrayRamBytesUsed(Object array) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
   /** Creates a column with {@code positionCount} capacity for this type. */
-  default Column createColumn(int positionCount) {
+  default Column createColumnWithMaxPosition(int positionCount) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Creates a column with {@code positionCount} capacity for this type. */
+  default Column createColumnWithZeroPosition(int positionCount) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

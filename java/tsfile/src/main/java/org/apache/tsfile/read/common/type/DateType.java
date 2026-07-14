@@ -114,12 +114,17 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new IntColumn(
         positionCount,
         Optional.of(new boolean[positionCount]),
         new int[positionCount],
         TSDataType.DATE);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new IntColumn(positionCount, TSDataType.DATE);
   }
 
   @Override

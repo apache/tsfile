@@ -128,6 +128,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setBinaryV(from.getBinary());
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }
@@ -211,9 +216,14 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new BinaryColumn(
         positionCount, Optional.of(new boolean[positionCount]), new Binary[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new BinaryColumn(positionCount);
   }
 
   @Override

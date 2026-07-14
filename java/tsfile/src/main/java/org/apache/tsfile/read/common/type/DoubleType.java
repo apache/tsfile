@@ -153,6 +153,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setDoubleV(from.getDouble());
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.DOUBLE);
     field.setDoubleV((double) value);
@@ -265,9 +270,14 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new DoubleColumn(
         positionCount, Optional.of(new boolean[positionCount]), new double[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new DoubleColumn(positionCount);
   }
 
   @Override

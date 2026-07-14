@@ -209,6 +209,76 @@ public class TypeTest {
   }
 
   @Test
+  public void testSetToField() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true), true},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1), 1},
+      {
+        TSDataType.DATE,
+        new TsPrimitiveType.TsInt(20260714, TSDataType.DATE),
+        LocalDate.of(2026, 7, 14)
+      },
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L), 2L},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L), 3L},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F), 1.25F},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D), 2.5D},
+      {
+        TSDataType.TEXT,
+        new TsPrimitiveType.TsBinary(new Binary("text", StandardCharsets.UTF_8)),
+        new Binary("text", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.STRING,
+        new TsPrimitiveType.TsBinary(new Binary("string", StandardCharsets.UTF_8)),
+        new Binary("string", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.BLOB,
+        new TsPrimitiveType.TsBinary(new Binary(new byte[] {0x01, 0x23})),
+        new Binary(new byte[] {0x01, 0x23})
+      },
+      {
+        TSDataType.OBJECT,
+        new TsPrimitiveType.TsBinary(new Binary(BytesUtils.longToBytes(1L))),
+        "(Object) 1 B"
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      TsPrimitiveType from = (TsPrimitiveType) testCase[1];
+      Type type = Type.fromTsDataType(dataType);
+
+      Field directTarget = new Field(dataType);
+      type.setTo(from, directTarget);
+      Assert.assertEquals(testCase[2], type.getValue(directTarget));
+
+      if (from.getDataType() == dataType) {
+        Field factoryTarget = new Field(dataType);
+        Field.setTsPrimitiveValue(from, factoryTarget);
+        Assert.assertEquals(testCase[2], type.getValue(factoryTarget));
+      }
+    }
+
+    TsPrimitiveType vector = new TsPrimitiveType.TsVector(new TsPrimitiveType[0]);
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).setTo(vector, new Field(dataType));
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+
+    try {
+      Field.setTsPrimitiveValue(vector, new Field(TSDataType.VECTOR));
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testCalcTypeSizeFromObject() {
     Binary binary = new Binary("test", StandardCharsets.UTF_8);
     Object[][] testCases = {

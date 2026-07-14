@@ -141,6 +141,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setBoolV(from.getBoolean());
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.BOOLEAN);
     field.setBoolV((boolean) value);
@@ -223,9 +228,14 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
-  public Column createColumn(int positionCount) {
+  public Column createColumnWithMaxPosition(int positionCount) {
     return new BooleanColumn(
         positionCount, Optional.of(new boolean[positionCount]), new boolean[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new BooleanColumn(positionCount);
   }
 
   @Override
