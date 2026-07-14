@@ -38,6 +38,7 @@ import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
+import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -295,6 +296,11 @@ public class DoubleType extends AbstractType {
   @Override
   public Column createColumnWithZeroPosition(int positionCount) {
     return new DoubleColumn(positionCount);
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    return new RunLengthEncodedColumn(DoubleColumnBuilder.NULL_VALUE_BLOCK, positionCount);
   }
 
   @Override

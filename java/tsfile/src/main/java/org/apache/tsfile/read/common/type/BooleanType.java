@@ -33,6 +33,7 @@ import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.read.common.block.column.ColumnEncoder;
+import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -262,6 +263,11 @@ public class BooleanType extends AbstractType {
   @Override
   public Column createColumnWithZeroPosition(int positionCount) {
     return new BooleanColumn(positionCount);
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    return new RunLengthEncodedColumn(BooleanColumnBuilder.NULL_VALUE_BLOCK, positionCount);
   }
 
   @Override

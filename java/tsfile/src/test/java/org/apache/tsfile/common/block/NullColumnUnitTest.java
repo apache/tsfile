@@ -22,11 +22,45 @@ package org.apache.tsfile.common.block;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.block.column.NullColumn;
+import org.apache.tsfile.read.common.type.Type;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 public class NullColumnUnitTest {
+
+  @Test
+  public void testCreatingNullColumnsByType() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, TSDataType.BOOLEAN},
+      {TSDataType.INT32, TSDataType.INT32},
+      {TSDataType.DATE, TSDataType.INT32},
+      {TSDataType.INT64, TSDataType.INT64},
+      {TSDataType.TIMESTAMP, TSDataType.INT64},
+      {TSDataType.FLOAT, TSDataType.FLOAT},
+      {TSDataType.DOUBLE, TSDataType.DOUBLE},
+      {TSDataType.TEXT, TSDataType.TEXT},
+      {TSDataType.STRING, TSDataType.TEXT},
+      {TSDataType.BLOB, TSDataType.TEXT},
+      {TSDataType.OBJECT, TSDataType.TEXT}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      TSDataType expectedDataType = (TSDataType) testCase[1];
+      assertNullColumn(Type.fromTsDataType(dataType).createNullColumn(10), expectedDataType);
+      assertNullColumn(NullColumn.create(dataType, 10), expectedDataType);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        NullColumn.create(dataType, 10);
+        Assert.fail("Expected IllegalArgumentException");
+      } catch (IllegalArgumentException ignored) {
+        // Expected.
+      }
+    }
+  }
 
   @Test
   public void testCreatingBooleanNullColumn() {
@@ -86,5 +120,13 @@ public class NullColumnUnitTest {
     Assert.assertTrue(nullColumn.mayHaveNull());
     Assert.assertTrue(nullColumn.isNull(0));
     Assert.assertTrue(nullColumn.isNull(9));
+  }
+
+  private static void assertNullColumn(Column column, TSDataType expectedDataType) {
+    Assert.assertEquals(expectedDataType, column.getDataType());
+    Assert.assertEquals(10, column.getPositionCount());
+    Assert.assertTrue(column.mayHaveNull());
+    Assert.assertTrue(column.isNull(0));
+    Assert.assertTrue(column.isNull(9));
   }
 }

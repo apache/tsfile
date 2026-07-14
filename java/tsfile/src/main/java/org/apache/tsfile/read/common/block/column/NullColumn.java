@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.DataOutputStream;
@@ -151,28 +152,7 @@ public class NullColumn implements Column {
 
   public static Column create(TSDataType dataType, int positionCount) {
     requireNonNull(dataType, "dataType is null");
-    switch (dataType) {
-      case BOOLEAN:
-        return new RunLengthEncodedColumn(BooleanColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      case INT32:
-      case DATE:
-        return new RunLengthEncodedColumn(IntColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      case INT64:
-      case TIMESTAMP:
-        return new RunLengthEncodedColumn(LongColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      case FLOAT:
-        return new RunLengthEncodedColumn(FloatColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      case DOUBLE:
-        return new RunLengthEncodedColumn(DoubleColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        return new RunLengthEncodedColumn(BinaryColumnBuilder.NULL_VALUE_BLOCK, positionCount);
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.null_col_unknown_type", dataType));
-    }
+    return Type.fromTsDataType(dataType).createNullColumn(positionCount);
   }
 
   @Override

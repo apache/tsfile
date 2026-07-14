@@ -38,6 +38,7 @@ import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
+import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -285,6 +286,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public Column createColumnWithZeroPosition(int positionCount) {
     return new LongColumn(positionCount);
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    return new RunLengthEncodedColumn(LongColumnBuilder.NULL_VALUE_BLOCK, positionCount);
   }
 
   @Override

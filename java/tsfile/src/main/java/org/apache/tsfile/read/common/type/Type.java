@@ -245,6 +245,12 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Creates an all-null column with {@code positionCount} positions. */
+  default Column createNullColumn(int positionCount) {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.null_col_unknown_type", getTypeEnum()));
+  }
+
   /** Returns the default encoding configured for this type. */
   default TSEncoding getDefaultEncoding(TSFileConfig config) {
     throw new UnsupportedOperationException(getClass().getName());

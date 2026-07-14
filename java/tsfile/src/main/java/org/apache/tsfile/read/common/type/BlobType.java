@@ -31,6 +31,7 @@ import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
+import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -241,6 +242,11 @@ public class BlobType extends AbstractType {
   @Override
   public Column createColumnWithZeroPosition(int positionCount) {
     return new BinaryColumn(positionCount);
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    return new RunLengthEncodedColumn(BinaryColumnBuilder.NULL_VALUE_BLOCK, positionCount);
   }
 
   @Override

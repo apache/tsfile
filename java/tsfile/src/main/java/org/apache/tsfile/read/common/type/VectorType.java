@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
 import org.apache.tsfile.encoding.decoder.LongChimpDecoder;
@@ -116,6 +117,12 @@ public class VectorType extends AbstractLongType {
   @Override
   public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
     throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.null_col_unknown_type", getTypeEnum()));
   }
 
   @Override
