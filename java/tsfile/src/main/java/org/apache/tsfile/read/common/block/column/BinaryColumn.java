@@ -27,6 +27,8 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -141,6 +143,17 @@ public class BinaryColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBinary(getBinary(position));
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        Binary value = values[i + arrayOffset];
+        output.writeInt(value.getLength());
+        output.write(value.getValues());
+      }
+    }
   }
 
   @Override

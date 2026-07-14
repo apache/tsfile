@@ -27,6 +27,8 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -123,6 +125,29 @@ public class BooleanColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBoolean(getBoolean(position));
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    int nonNullCount = 0;
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        nonNullCount++;
+      }
+    }
+
+    byte[] packedValues = new byte[(nonNullCount + 7) / 8];
+    int nonNullIndex = 0;
+    for (int i = 0; i < positionCount; i++) {
+      if (isNull(i)) {
+        continue;
+      }
+      if (values[i + arrayOffset]) {
+        packedValues[nonNullIndex / 8] |= (byte) (0b1000_0000 >>> (nonNullIndex % 8));
+      }
+      nonNullIndex++;
+    }
+    output.write(packedValues);
   }
 
   @Override

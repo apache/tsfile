@@ -58,38 +58,12 @@ public class Int32ArrayColumnEncoder implements ColumnEncoder {
     ColumnEncoder.serializeNullIndicators(output, column);
 
     TSDataType dataType = column.getDataType();
-    int positionCount = column.getPositionCount();
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        if (column.mayHaveNull()) {
-          for (int i = 0; i < positionCount; i++) {
-            if (!column.isNull(i)) {
-              output.writeInt(column.getInt(i));
-            }
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            output.writeInt(column.getInt(i));
-          }
-        }
-        break;
-      case FLOAT:
-        if (column.mayHaveNull()) {
-          for (int i = 0; i < positionCount; i++) {
-            if (!column.isNull(i)) {
-              output.writeInt(Float.floatToIntBits(column.getFloat(i)));
-            }
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            output.writeInt(Float.floatToIntBits(column.getFloat(i)));
-          }
-        }
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.col_encoder_invalid_type", dataType));
+    if (dataType != TSDataType.INT32
+        && dataType != TSDataType.DATE
+        && dataType != TSDataType.FLOAT) {
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
+    column.serializeWithoutNulls(output);
   }
 }

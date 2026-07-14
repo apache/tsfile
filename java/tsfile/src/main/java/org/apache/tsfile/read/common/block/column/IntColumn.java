@@ -27,6 +27,8 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -195,6 +197,15 @@ public class IntColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsInt(getInt(position), dataType);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        output.writeInt(values[i + arrayOffset]);
+      }
+    }
   }
 
   @Override

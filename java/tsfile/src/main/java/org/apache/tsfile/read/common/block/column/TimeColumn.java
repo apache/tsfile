@@ -25,6 +25,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
@@ -88,6 +90,13 @@ public class TimeColumn implements Column {
   @Override
   public Object getObject(int position) {
     return getLong(position);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      output.writeLong(values[i + arrayOffset]);
+    }
   }
 
   @Override

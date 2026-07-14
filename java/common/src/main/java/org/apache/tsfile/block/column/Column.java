@@ -23,6 +23,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 
 public interface Column {
@@ -105,6 +107,11 @@ public interface Column {
 
   /** Gets a TsPrimitiveType at {@code position}. */
   default TsPrimitiveType getTsPrimitiveType(int position) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes all non-null values in this column. */
+  default void serializeWithoutNulls(DataOutputStream output) throws IOException {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

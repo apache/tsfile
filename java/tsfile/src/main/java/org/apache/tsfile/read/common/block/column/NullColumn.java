@@ -25,6 +25,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
+import java.io.DataOutputStream;
+
 import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
@@ -79,6 +81,11 @@ public class NullColumn implements Column {
   @Override
   public boolean[] isNull() {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) {
+    // There are no non-null values to serialize.
   }
 
   @Override
