@@ -64,6 +64,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return Integer.BYTES;
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

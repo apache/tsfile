@@ -63,6 +63,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return Long.BYTES;
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt64Encoding());
   }

@@ -112,6 +112,31 @@ public class TypeTest {
   }
 
   @Test
+  public void testCalcTypeSizeFromObject() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, Byte.BYTES},
+      {TSDataType.INT32, 1, Integer.BYTES},
+      {TSDataType.DATE, 20260713, Integer.BYTES},
+      {TSDataType.INT64, 1L, Long.BYTES},
+      {TSDataType.TIMESTAMP, 1L, Long.BYTES},
+      {TSDataType.FLOAT, 1.0F, Float.BYTES},
+      {TSDataType.DOUBLE, 1.0D, Double.BYTES},
+      {TSDataType.TEXT, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.STRING, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.BLOB, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.OBJECT, binary, Integer.BYTES + binary.getLength()}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Object value = testCase[1];
+      int expectedSize = (int) testCase[2];
+      Assert.assertEquals(expectedSize, Type.fromTsDataType(dataType).calcTypeSize(value));
+    }
+  }
+
+  @Test
   public void testGetOneItemMaxSize() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, Byte.BYTES},

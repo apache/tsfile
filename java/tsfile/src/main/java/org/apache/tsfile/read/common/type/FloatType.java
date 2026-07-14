@@ -66,6 +66,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return Float.BYTES;
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getFloatEncoding());
   }

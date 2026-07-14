@@ -97,6 +97,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the number of bytes required to serialize {@code value}. */
+  default int calcTypeSize(Object value) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

@@ -64,6 +64,10 @@ public abstract class AbstractType implements Type {
     return Integer.BYTES + value.getBinary().getLength();
   }
 
+  protected int binaryTypeSize(Object value) {
+    return Integer.BYTES + ((Binary) value).getLength();
+  }
+
   protected void checkValueType(Object value, Class<?> expectedClass, String expectedType) {
     if (value != null && !expectedClass.isInstance(value)) {
       throw new IllegalArgumentException(

@@ -53,6 +53,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return binaryTypeSize(value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }

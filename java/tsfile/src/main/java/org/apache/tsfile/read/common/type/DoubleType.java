@@ -67,6 +67,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return Double.BYTES;
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getDoubleEncoding());
   }

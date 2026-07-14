@@ -60,6 +60,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public int calcTypeSize(Object value) {
+    return Byte.BYTES;
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getBooleanEncoding());
   }
