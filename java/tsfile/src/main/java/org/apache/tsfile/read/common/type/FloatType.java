@@ -207,6 +207,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfFloatArray(size);
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Float.BYTES, rowSize);
   }

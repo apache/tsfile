@@ -207,6 +207,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfIntArray(size);
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Integer.BYTES, rowSize);
   }

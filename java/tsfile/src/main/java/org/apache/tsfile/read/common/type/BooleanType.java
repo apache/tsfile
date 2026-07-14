@@ -166,6 +166,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfBooleanArray(size);
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return rowSize;
   }

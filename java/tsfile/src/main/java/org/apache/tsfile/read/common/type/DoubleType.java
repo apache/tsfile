@@ -209,6 +209,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfDoubleArray(size);
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Double.BYTES, rowSize);
   }

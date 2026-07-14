@@ -170,6 +170,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfObjectArray(size);
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return serializedSizeOfBinaryValues(column, rowSize);
   }

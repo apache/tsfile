@@ -174,6 +174,37 @@ public class TypeTest {
   }
 
   @Test
+  public void testEstimateArraySize() {
+    int size = 10;
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, RamUsageEstimator.sizeOfBooleanArray(size)},
+      {TSDataType.INT32, RamUsageEstimator.sizeOfIntArray(size)},
+      {TSDataType.DATE, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.INT64, RamUsageEstimator.sizeOfLongArray(size)},
+      {TSDataType.TIMESTAMP, RamUsageEstimator.sizeOfLongArray(size)},
+      {TSDataType.FLOAT, RamUsageEstimator.sizeOfFloatArray(size)},
+      {TSDataType.DOUBLE, RamUsageEstimator.sizeOfDoubleArray(size)},
+      {TSDataType.TEXT, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.STRING, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.BLOB, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.OBJECT, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.VECTOR, RamUsageEstimator.sizeOfLongArray(size)}
+    };
+
+    for (Object[] testCase : testCases) {
+      Assert.assertEquals(
+          testCase[1], Type.fromTsDataType((TSDataType) testCase[0]).estimateArraySize(size));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateArraySize(size);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testGetOneItemMaxSize() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, Byte.BYTES},

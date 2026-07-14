@@ -63,6 +63,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfObjectArray(size);
+  }
+
+  @Override
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
     LocalDate[] values = (LocalDate[]) array;
