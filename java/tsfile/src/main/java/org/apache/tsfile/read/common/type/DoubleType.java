@@ -90,6 +90,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public int getOneItemMaxSize(int valveLength) {
+    return Double.BYTES;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsDouble();
   }

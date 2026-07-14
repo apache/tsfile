@@ -47,6 +47,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public int getOneItemMaxSize(int valveLength) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
   public TypeEnum getTypeEnum() {
     return TypeEnum.VECTOR;
   }

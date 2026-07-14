@@ -88,6 +88,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public int getOneItemMaxSize(int valveLength) {
+    return Integer.BYTES;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsInt();
   }

@@ -78,6 +78,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public int getOneItemMaxSize(int valveLength) {
+    return Byte.BYTES;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBoolean();
   }

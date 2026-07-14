@@ -191,6 +191,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the maximum encoded size of one item. */
+  default int getOneItemMaxSize(int valveLength) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /**
    * Creates the preferred column builder for this type. This is the builder used to store values
    * after an expression projection within the read.

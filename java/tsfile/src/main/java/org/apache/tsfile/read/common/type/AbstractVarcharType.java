@@ -62,6 +62,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public int getOneItemMaxSize(int valveLength) {
+    return Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * valveLength;
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }

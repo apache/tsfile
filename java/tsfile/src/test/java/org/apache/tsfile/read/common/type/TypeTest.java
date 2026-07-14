@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
@@ -33,6 +35,7 @@ import java.util.Arrays;
 public class TypeTest {
 
   private static final int OFFSET = 2;
+  private static final int VALUE_LENGTH = 10;
 
   @Test
   public void testToBytes() {
@@ -110,6 +113,41 @@ public class TypeTest {
           Integer.BYTES + binary.getLength(),
           Type.fromTsDataType(dataType)
               .calcTypeSize(dataType, new TsPrimitiveType.TsBinary(binary)));
+    }
+  }
+
+  @Test
+  public void testGetOneItemMaxSize() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, Byte.BYTES},
+      {TSDataType.INT32, Integer.BYTES},
+      {TSDataType.DATE, Integer.BYTES},
+      {TSDataType.INT64, Long.BYTES},
+      {TSDataType.TIMESTAMP, Long.BYTES},
+      {TSDataType.FLOAT, Float.BYTES},
+      {TSDataType.DOUBLE, Double.BYTES},
+      {TSDataType.TEXT, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.STRING, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.BLOB, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.OBJECT, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      int expectedSize = (int) testCase[1];
+      Assert.assertEquals(
+          expectedSize, Type.fromTsDataType(dataType).getOneItemMaxSize(VALUE_LENGTH));
+      Assert.assertEquals(
+          expectedSize, new PlainEncoder(dataType, VALUE_LENGTH).getOneItemMaxSize());
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new PlainEncoder(dataType, VALUE_LENGTH).getOneItemMaxSize();
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
     }
   }
 }
