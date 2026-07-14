@@ -35,6 +35,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Arrays;
 
 public class TypeTest {
@@ -142,6 +143,50 @@ public class TypeTest {
     for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
       try {
         new Field(dataType).getStringValue();
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testGetValueFromField() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, true},
+      {TSDataType.INT32, 1, 1},
+      {TSDataType.DATE, 20260714, LocalDate.of(2026, 7, 14)},
+      {TSDataType.INT64, 2L, 2L},
+      {TSDataType.TIMESTAMP, 3L, 3L},
+      {TSDataType.FLOAT, 1.25F, 1.25F},
+      {TSDataType.DOUBLE, 2.5D, 2.5D},
+      {
+        TSDataType.TEXT,
+        new Binary("text", StandardCharsets.UTF_8),
+        new Binary("text", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.STRING,
+        new Binary("string", StandardCharsets.UTF_8),
+        new Binary("string", StandardCharsets.UTF_8)
+      },
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23}), new Binary(new byte[] {0x01, 0x23})},
+      {TSDataType.OBJECT, new Binary(BytesUtils.longToBytes(1L)), "(Object) 1 B"}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Field field = Field.getField(testCase[1], dataType);
+      Assert.assertEquals(testCase[2], Type.fromTsDataType(dataType).getValue(field));
+      Assert.assertEquals(testCase[2], field.getObjectValue(dataType));
+    }
+
+    Assert.assertNull(new Field(null).getObjectValue(TSDataType.INT32));
+    Assert.assertEquals("1", Field.getField(1, TSDataType.INT32).getObjectValue(TSDataType.OBJECT));
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new Field(dataType).getObjectValue(dataType);
         Assert.fail("Expected UnSupportedDataTypeException");
       } catch (UnSupportedDataTypeException ignored) {
         // Expected.

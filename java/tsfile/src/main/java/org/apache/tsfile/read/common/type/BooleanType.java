@@ -135,6 +135,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public Object getValue(Field field) {
+    return field.getBoolV();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBoolean();
   }

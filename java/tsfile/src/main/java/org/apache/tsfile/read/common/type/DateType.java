@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -65,6 +66,11 @@ public class DateType extends AbstractIntType {
   @Override
   public long estimateArraySize(int size) {
     return RamUsageEstimator.sizeOfObjectArray(size);
+  }
+
+  @Override
+  public Object getValue(Field field) {
+    return field.getDateV();
   }
 
   @Override

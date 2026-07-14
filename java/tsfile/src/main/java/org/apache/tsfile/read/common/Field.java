@@ -181,29 +181,7 @@ public class Field {
     if (this.dataType == null) {
       return null;
     }
-    switch (dataType) {
-      case DOUBLE:
-        return getDoubleV();
-      case FLOAT:
-        return getFloatV();
-      case INT64:
-      case TIMESTAMP:
-        return getLongV();
-      case INT32:
-        return getIntV();
-      case DATE:
-        return getDateV();
-      case BOOLEAN:
-        return getBoolV();
-      case TEXT:
-      case BLOB:
-      case STRING:
-        return getBinaryV();
-      case OBJECT:
-        return getStringValue();
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
+    return Type.fromTsDataType(dataType).getValue(this);
   }
 
   public static Field getField(Object value, TSDataType dataType) {

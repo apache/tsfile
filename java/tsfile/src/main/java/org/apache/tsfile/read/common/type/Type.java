@@ -209,6 +209,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the value in {@code field}. */
+  default Object getValue(Field field) {
+    throw new UnSupportedDataTypeException(getTypeEnum().toString());
+  }
+
   /** Returns the retained memory size of an array column in Tablet. */
   default long arrayRamBytesUsed(Object array) {
     throw new UnsupportedOperationException(getClass().getName());

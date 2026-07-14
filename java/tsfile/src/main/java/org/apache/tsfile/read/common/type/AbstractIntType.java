@@ -146,6 +146,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public Object getValue(Field field) {
+    return field.getIntV();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsInt();
   }

@@ -145,6 +145,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public Object getValue(Field field) {
+    return field.getLongV();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsLong();
   }

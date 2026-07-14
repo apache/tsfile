@@ -128,6 +128,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public Object getValue(Field field) {
+    return field.getBinaryV();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }

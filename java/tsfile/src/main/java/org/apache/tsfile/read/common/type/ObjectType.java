@@ -129,6 +129,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public Object getValue(Field field) {
+    return field.getStringValue();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }
