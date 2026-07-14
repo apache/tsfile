@@ -134,29 +134,8 @@ public class BatchData {
   }
 
   public TsPrimitiveType currentTsPrimitiveType() {
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        return new TsInt(getInt());
-      case INT64:
-      case TIMESTAMP:
-        return new TsLong(getLong());
-      case FLOAT:
-        return new TsFloat(getFloat());
-      case DOUBLE:
-        return new TsDouble(getDouble());
-      case BOOLEAN:
-        return new TsBoolean(getBoolean());
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        return new TsBinary(getBinary());
-      case VECTOR:
-        return new TsVector(getVector());
-      default:
-        return null;
-    }
+    Type type = Type.fromTsDataType(dataType);
+    return type.getTsPrimitiveType(type.getCurrentValue(this));
   }
 
   public TSDataType getDataType() {
