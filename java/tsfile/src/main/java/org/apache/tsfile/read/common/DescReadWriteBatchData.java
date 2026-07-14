@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -49,43 +50,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
     timeRet.add(new long[capacity]);
     count = 0;
 
-    switch (dataType) {
-      case BOOLEAN:
-        booleanRet = new LinkedList<>();
-        booleanRet.add(new boolean[capacity]);
-        break;
-      case INT32:
-      case DATE:
-        intRet = new LinkedList<>();
-        intRet.add(new int[capacity]);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        longRet = new LinkedList<>();
-        longRet.add(new long[capacity]);
-        break;
-      case FLOAT:
-        floatRet = new LinkedList<>();
-        floatRet.add(new float[capacity]);
-        break;
-      case DOUBLE:
-        doubleRet = new LinkedList<>();
-        doubleRet.add(new double[capacity]);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        binaryRet = new LinkedList<>();
-        binaryRet.add(new Binary[capacity]);
-        break;
-      case VECTOR:
-        vectorRet = new LinkedList<>();
-        vectorRet.add(new TsPrimitiveType[capacity][]);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
+    Type.fromTsDataType(dataType).init(this);
   }
 
   /**
