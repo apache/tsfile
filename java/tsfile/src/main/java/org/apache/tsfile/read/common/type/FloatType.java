@@ -71,6 +71,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initFloatValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getFloatEncoding());
   }

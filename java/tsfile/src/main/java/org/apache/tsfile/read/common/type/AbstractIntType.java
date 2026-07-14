@@ -69,6 +69,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initIntValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

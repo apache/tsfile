@@ -30,6 +30,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -100,6 +101,11 @@ public interface Type {
   /** Returns the number of bytes required to serialize {@code value}. */
   default int calcTypeSize(Object value) {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Initializes the value storage in {@code batchData} for this type. */
+  default void init(BatchData batchData) {
+    throw new UnSupportedDataTypeException(String.valueOf(batchData.getDataType()));
   }
 
   /** Write a boolean to the current entry; */

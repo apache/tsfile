@@ -65,6 +65,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initBooleanValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getBooleanEncoding());
   }

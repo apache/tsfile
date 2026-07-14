@@ -72,6 +72,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initDoubleValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getDoubleEncoding());
   }

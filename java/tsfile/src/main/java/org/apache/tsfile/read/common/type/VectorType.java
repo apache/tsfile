@@ -37,6 +37,11 @@ public class VectorType extends AbstractLongType {
   private VectorType() {}
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initVectorValues();
+  }
+
+  @Override
   public Decoder getDecoder(TSEncoding encoding) {
     return switch (encoding) {
       case PLAIN, DICTIONARY -> super.getDecoder(encoding);

@@ -68,6 +68,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initLongValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt64Encoding());
   }

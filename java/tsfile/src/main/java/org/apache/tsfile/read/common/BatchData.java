@@ -27,13 +27,6 @@ import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.utils.TsPrimitiveType.TsBinary;
-import org.apache.tsfile.utils.TsPrimitiveType.TsBoolean;
-import org.apache.tsfile.utils.TsPrimitiveType.TsDouble;
-import org.apache.tsfile.utils.TsPrimitiveType.TsFloat;
-import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
-import org.apache.tsfile.utils.TsPrimitiveType.TsLong;
-import org.apache.tsfile.utils.TsPrimitiveType.TsVector;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
@@ -166,43 +159,42 @@ public class BatchData {
     timeRet.add(new long[capacity]);
     count = 0;
 
-    switch (dataType) {
-      case BOOLEAN:
-        booleanRet = new ArrayList<>();
-        booleanRet.add(new boolean[capacity]);
-        break;
-      case INT32:
-      case DATE:
-        intRet = new ArrayList<>();
-        intRet.add(new int[capacity]);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        longRet = new ArrayList<>();
-        longRet.add(new long[capacity]);
-        break;
-      case FLOAT:
-        floatRet = new ArrayList<>();
-        floatRet.add(new float[capacity]);
-        break;
-      case DOUBLE:
-        doubleRet = new ArrayList<>();
-        doubleRet.add(new double[capacity]);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        binaryRet = new ArrayList<>();
-        binaryRet.add(new Binary[capacity]);
-        break;
-      case VECTOR:
-        vectorRet = new ArrayList<>();
-        vectorRet.add(new TsPrimitiveType[capacity][]);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
+    Type.fromTsDataType(dataType).init(this);
+  }
+
+  public void initBooleanValues() {
+    booleanRet = new ArrayList<>();
+    booleanRet.add(new boolean[capacity]);
+  }
+
+  public void initIntValues() {
+    intRet = new ArrayList<>();
+    intRet.add(new int[capacity]);
+  }
+
+  public void initLongValues() {
+    longRet = new ArrayList<>();
+    longRet.add(new long[capacity]);
+  }
+
+  public void initFloatValues() {
+    floatRet = new ArrayList<>();
+    floatRet.add(new float[capacity]);
+  }
+
+  public void initDoubleValues() {
+    doubleRet = new ArrayList<>();
+    doubleRet.add(new double[capacity]);
+  }
+
+  public void initBinaryValues() {
+    binaryRet = new ArrayList<>();
+    binaryRet.add(new Binary[capacity]);
+  }
+
+  public void initVectorValues() {
+    vectorRet = new ArrayList<>();
+    vectorRet.add(new TsPrimitiveType[capacity][]);
   }
 
   /**

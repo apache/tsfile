@@ -58,6 +58,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void init(BatchData batchData) {
+    batchData.initBinaryValues();
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }
