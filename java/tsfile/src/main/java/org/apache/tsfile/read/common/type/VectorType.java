@@ -30,6 +30,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
@@ -114,6 +115,11 @@ public class VectorType extends AbstractLongType {
   @Override
   public String toString(Field field) {
     throw new UnSupportedDataTypeException(field.getDataType().toString());
+  }
+
+  @Override
+  public long estimateValueSize() {
+    return RamUsageEstimator.NUM_BYTES_OBJECT_REF;
   }
 
   @Override

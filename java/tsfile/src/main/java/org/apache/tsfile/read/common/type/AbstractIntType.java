@@ -212,6 +212,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public long estimateValueSize() {
+    return Integer.BYTES;
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Integer.BYTES, rowSize);
   }

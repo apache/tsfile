@@ -206,6 +206,36 @@ public class TypeTest {
   }
 
   @Test
+  public void testEstimateValueSize() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, (long) Byte.BYTES},
+      {TSDataType.INT32, (long) Integer.BYTES},
+      {TSDataType.DATE, (long) Integer.BYTES},
+      {TSDataType.INT64, (long) Long.BYTES},
+      {TSDataType.TIMESTAMP, (long) Long.BYTES},
+      {TSDataType.FLOAT, (long) Float.BYTES},
+      {TSDataType.DOUBLE, (long) Double.BYTES},
+      {TSDataType.TEXT, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.STRING, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.BLOB, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.OBJECT, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.VECTOR, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF}
+    };
+
+    for (Object[] testCase : testCases) {
+      Assert.assertEquals(
+          testCase[1], Type.fromTsDataType((TSDataType) testCase[0]).estimateValueSize());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateValueSize();
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testGetOneItemMaxSize() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, Byte.BYTES},

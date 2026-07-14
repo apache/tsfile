@@ -214,6 +214,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public long estimateValueSize() {
+    return Double.BYTES;
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Double.BYTES, rowSize);
   }

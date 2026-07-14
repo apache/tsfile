@@ -178,6 +178,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Estimates the retained memory size of a value of this type. */
+  default long estimateValueSize() {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Returns the serialized byte size of the array column with {@code rowSize} entries. */
   default int serializedSize(Object column, int rowSize) {
     throw new UnsupportedOperationException(getClass().getName());

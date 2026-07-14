@@ -171,6 +171,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public long estimateValueSize() {
+    return Byte.BYTES;
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return rowSize;
   }

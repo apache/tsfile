@@ -179,6 +179,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public long estimateValueSize() {
+    return RamUsageEstimator.NUM_BYTES_OBJECT_REF;
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return serializedSizeOfBinaryValues(column, rowSize);
   }

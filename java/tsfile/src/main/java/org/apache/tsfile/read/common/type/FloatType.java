@@ -212,6 +212,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public long estimateValueSize() {
+    return Float.BYTES;
+  }
+
+  @Override
   public int serializedSize(Object column, int rowSize) {
     return Math.multiplyExact(Float.BYTES, rowSize);
   }
