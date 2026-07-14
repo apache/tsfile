@@ -22,6 +22,14 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.CamelDecoder;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.DoublePrecisionChimpDecoder;
+import org.apache.tsfile.encoding.decoder.DoublePrecisionDecoderV1;
+import org.apache.tsfile.encoding.decoder.DoublePrecisionDecoderV2;
+import org.apache.tsfile.encoding.decoder.DoubleRLBEDecoder;
+import org.apache.tsfile.encoding.decoder.DoubleSprintzDecoder;
+import org.apache.tsfile.encoding.decoder.FloatDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -64,6 +72,21 @@ public class DoubleType extends AbstractType {
   @Override
   public CompressionType getDefaultCompressor(TSFileConfig config) {
     return config.getDoubleCompressor();
+  }
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN, DICTIONARY -> super.getDecoder(encoding);
+      case RLE, TS_2DIFF -> new FloatDecoder(encoding, TSDataType.DOUBLE);
+      case GORILLA_V1 -> new DoublePrecisionDecoderV1();
+      case GORILLA -> new DoublePrecisionDecoderV2();
+      case CHIMP -> new DoublePrecisionChimpDecoder();
+      case SPRINTZ -> new DoubleSprintzDecoder();
+      case RLBE -> new DoubleRLBEDecoder();
+      case CAMEL -> new CamelDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
   }
 
   @Override

@@ -22,6 +22,13 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.FloatDecoder;
+import org.apache.tsfile.encoding.decoder.FloatRLBEDecoder;
+import org.apache.tsfile.encoding.decoder.FloatSprintzDecoder;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionChimpDecoder;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionDecoderV1;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionDecoderV2;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -64,6 +71,20 @@ public class FloatType extends AbstractType {
   @Override
   public CompressionType getDefaultCompressor(TSFileConfig config) {
     return config.getFloatCompressor();
+  }
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN, DICTIONARY -> super.getDecoder(encoding);
+      case RLE, TS_2DIFF -> new FloatDecoder(encoding, TSDataType.FLOAT);
+      case GORILLA_V1 -> new SinglePrecisionDecoderV1();
+      case GORILLA -> new SinglePrecisionDecoderV2();
+      case CHIMP -> new SinglePrecisionChimpDecoder();
+      case SPRINTZ -> new FloatSprintzDecoder();
+      case RLBE -> new FloatRLBEDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
   }
 
   @Override

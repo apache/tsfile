@@ -22,6 +22,15 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
+import org.apache.tsfile.encoding.decoder.LongChimpDecoder;
+import org.apache.tsfile.encoding.decoder.LongGorillaDecoder;
+import org.apache.tsfile.encoding.decoder.LongRLBEDecoder;
+import org.apache.tsfile.encoding.decoder.LongRleDecoder;
+import org.apache.tsfile.encoding.decoder.LongSprintzDecoder;
+import org.apache.tsfile.encoding.decoder.LongZigzagDecoder;
+import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -60,6 +69,22 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public CompressionType getDefaultCompressor(TSFileConfig config) {
     return config.getInt64Compressor();
+  }
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN, DICTIONARY -> super.getDecoder(encoding);
+      case RLE -> new LongRleDecoder();
+      case TS_2DIFF -> new DeltaBinaryDecoder.LongDeltaDecoder();
+      case REGULAR -> new RegularDataDecoder.LongRegularDecoder();
+      case GORILLA -> new LongGorillaDecoder();
+      case ZIGZAG -> new LongZigzagDecoder();
+      case CHIMP -> new LongChimpDecoder();
+      case SPRINTZ -> new LongSprintzDecoder();
+      case RLBE -> new LongRLBEDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
   }
 
   @Override

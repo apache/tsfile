@@ -19,6 +19,11 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.DictionaryDecoder;
+import org.apache.tsfile.encoding.decoder.PlainDecoder;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
@@ -32,6 +37,22 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 
 public abstract class AbstractType implements Type {
+
+  private static final String DECODER_NOT_FOUND_ERROR_KEY = "error.encoding.decoder_not_found";
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN -> new PlainDecoder();
+      case DICTIONARY -> new DictionaryDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
+  }
+
+  protected TsFileDecodingException decoderNotFound(TSEncoding encoding) {
+    return new TsFileDecodingException(
+        Messages.format(DECODER_NOT_FOUND_ERROR_KEY, encoding, getTypeEnum()));
+  }
 
   protected void binaryToBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
     Binary binary = value.getBinary();

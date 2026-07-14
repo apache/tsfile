@@ -22,6 +22,8 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.IntRleDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -64,6 +66,15 @@ public class BooleanType extends AbstractType {
   @Override
   public CompressionType getDefaultCompressor(TSFileConfig config) {
     return config.getBooleanCompressor();
+  }
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN, DICTIONARY -> super.getDecoder(encoding);
+      case RLE -> new IntRleDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
   }
 
   @Override
