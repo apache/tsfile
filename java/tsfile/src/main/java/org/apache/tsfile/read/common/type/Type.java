@@ -93,7 +93,7 @@ public interface Type {
   }
 
   /** Returns the number of bytes required to serialize {@code value}. */
-  default int calcTypeSize(TSDataType dataType, TsPrimitiveType value) {
+  default int calcTypeSize(TsPrimitiveType value) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

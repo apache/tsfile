@@ -31,7 +31,6 @@ import org.apache.tsfile.encoding.decoder.LongRleDecoder;
 import org.apache.tsfile.encoding.decoder.LongSprintzDecoder;
 import org.apache.tsfile.encoding.decoder.LongZigzagDecoder;
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
-import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -59,7 +58,7 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public int calcTypeSize(TSDataType dataType, TsPrimitiveType value) {
+  public int calcTypeSize(TsPrimitiveType value) {
     return Long.BYTES;
   }
 

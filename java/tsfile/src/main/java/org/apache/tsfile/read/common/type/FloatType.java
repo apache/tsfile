@@ -61,7 +61,7 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public int calcTypeSize(TSDataType dataType, TsPrimitiveType value) {
+  public int calcTypeSize(TsPrimitiveType value) {
     return Float.BYTES;
   }
 

@@ -59,7 +59,7 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
-  public int calcTypeSize(TSDataType dataType, TsPrimitiveType value) {
+  public int calcTypeSize(TsPrimitiveType value) {
     return Integer.BYTES;
   }
 
