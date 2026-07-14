@@ -249,6 +249,23 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    long[] intValues = new long[rowSize];
+    if (nullIndicators == null) {
+      for (int i = 0; i < rowSize; i++) {
+        intValues[i] = buffer.getLong();
+      }
+    } else {
+      for (int i = 0; i < rowSize; i++) {
+        if (!nullIndicators[i]) {
+          intValues[i] = buffer.getLong();
+        }
+      }
+    }
+    return new LongColumn(0, rowSize, nullIndicators, intValues);
+  }
+
+  @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return hasEnoughLength(left, right, rowSize)
         && Arrays.equals((long[]) left, 0, rowSize, (long[]) right, 0, rowSize);

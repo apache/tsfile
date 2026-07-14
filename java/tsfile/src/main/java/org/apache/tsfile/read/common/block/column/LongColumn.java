@@ -59,7 +59,7 @@ public class LongColumn implements Column {
     this(0, positionCount, valueIsNull.orElse(null), values);
   }
 
-  LongColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, long[] values) {
+  public LongColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, long[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }

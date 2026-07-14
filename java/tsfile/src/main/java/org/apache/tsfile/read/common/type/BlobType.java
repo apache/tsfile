@@ -217,6 +217,12 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    Binary[] binaries = deserializeBinaryValues(buffer, rowSize, nullIndicators);
+    return new BinaryColumn(0, rowSize, nullIndicators, binaries);
+  }
+
+  @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
     return binaryArrayEquals(left, right, rowSize);
   }

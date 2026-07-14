@@ -199,6 +199,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Deserializes an array with {@code rowSize} entries from {@code buffer}. */
+  default Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Returns whether two array columns are equal in the first {@code rowSize} entries. */
   default boolean arrayEquals(Object left, Object right, int rowSize) {
     throw new UnsupportedOperationException(getClass().getName());

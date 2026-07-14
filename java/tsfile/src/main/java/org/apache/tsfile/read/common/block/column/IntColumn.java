@@ -72,7 +72,7 @@ public class IntColumn implements Column {
     this.dataType = dataType;
   }
 
-  IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
+  public IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
@@ -111,8 +111,9 @@ public class IntColumn implements Column {
     return dataType;
   }
 
-  public void modifyDataType(TSDataType dataType) {
+  public IntColumn modifyDataType(TSDataType dataType) {
     this.dataType = dataType;
+    return this;
   }
 
   @Override

@@ -60,7 +60,7 @@ public class BinaryColumn implements Column {
     this(0, positionCount, valueIsNull.orElse(null), values);
   }
 
-  BinaryColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, Binary[] values) {
+  public BinaryColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, Binary[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }

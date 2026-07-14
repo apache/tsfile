@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Optional;
+import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
 
 public class DateType extends AbstractIntType {
 
@@ -44,12 +45,12 @@ public class DateType extends AbstractIntType {
 
   @Override
   public TsPrimitiveType getTsPrimitiveType() {
-    return new TsPrimitiveType.TsInt(TSDataType.DATE);
+    return new TsInt(TSDataType.DATE);
   }
 
   @Override
   public TsPrimitiveType getTsPrimitiveType(Object value) {
-    return new TsPrimitiveType.TsInt((int) value, TSDataType.DATE);
+    return new TsInt((int) value, TSDataType.DATE);
   }
 
   @Override
@@ -100,6 +101,11 @@ public class DateType extends AbstractIntType {
       values[i] = DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(buffer));
     }
     return values;
+  }
+
+  @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    return ((IntColumn) super.deserializeColumn(buffer, rowSize, nullIndicators)).modifyDataType(TSDataType.DATE);
   }
 
   @Override
