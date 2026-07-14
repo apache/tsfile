@@ -602,7 +602,7 @@ public class BatchData {
    * writing, otherwise after deserializing the sequence will be reversed
    */
   public void serializeData(DataOutputStream outputStream) throws IOException {
-    Type.fromTsDataType(dataType).serialize(this, outputStream);
+    Type.fromTsDataType(dataType).serialize(this, outputStream, false);
   }
 
   /**

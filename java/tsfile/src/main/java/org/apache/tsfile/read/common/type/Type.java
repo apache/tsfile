@@ -115,7 +115,8 @@ public interface Type {
   }
 
   /** Serializes all timestamp-value pairs in {@code batchData}. */
-  default void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+  default void serialize(
+      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", batchData.getDataType()));
   }

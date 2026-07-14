@@ -81,10 +81,12 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+  public void serialize(
+      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
-      outputStream.writeLong(batchData.getTimeByIndex(i));
-      outputStream.writeFloat(batchData.getFloatByIndex(i));
+      int index = isDesc ? batchData.length() - 1 - i : i;
+      outputStream.writeLong(batchData.getTimeByIndex(index));
+      outputStream.writeFloat(batchData.getFloatByIndex(index));
     }
   }
 

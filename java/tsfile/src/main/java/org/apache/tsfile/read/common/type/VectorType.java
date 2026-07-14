@@ -51,10 +51,12 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+  public void serialize(
+      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
-      outputStream.writeLong(batchData.getTimeByIndex(i));
-      TsPrimitiveType[] values = batchData.getVectorByIndex(i);
+      int index = isDesc ? batchData.length() - 1 - i : i;
+      outputStream.writeLong(batchData.getTimeByIndex(index));
+      TsPrimitiveType[] values = batchData.getVectorByIndex(index);
       outputStream.writeInt(values.length);
       for (TsPrimitiveType value : values) {
         if (value == null) {

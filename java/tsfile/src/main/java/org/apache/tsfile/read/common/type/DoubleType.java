@@ -82,10 +82,12 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream) throws IOException {
+  public void serialize(
+      BatchData batchData, DataOutputStream outputStream, boolean isDesc) throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
-      outputStream.writeLong(batchData.getTimeByIndex(i));
-      outputStream.writeDouble(batchData.getDoubleByIndex(i));
+      int index = isDesc ? batchData.length() - 1 - i : i;
+      outputStream.writeLong(batchData.getTimeByIndex(index));
+      outputStream.writeDouble(batchData.getDoubleByIndex(index));
     }
   }
 
