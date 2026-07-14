@@ -67,6 +67,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void put(BatchData batchData, long timestamp, Object value) {
+    batchData.putBinary(timestamp, (Binary) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }

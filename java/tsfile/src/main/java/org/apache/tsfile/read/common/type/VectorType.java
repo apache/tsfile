@@ -42,6 +42,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void put(BatchData batchData, long timestamp, Object value) {
+    batchData.putVector(timestamp, (TsPrimitiveType[]) value);
+  }
+
+  @Override
   public Decoder getDecoder(TSEncoding encoding) {
     return switch (encoding) {
       case PLAIN, DICTIONARY -> super.getDecoder(encoding);

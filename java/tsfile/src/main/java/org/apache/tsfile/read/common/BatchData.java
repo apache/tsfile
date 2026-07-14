@@ -27,7 +27,6 @@ import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -508,36 +507,7 @@ public class BatchData {
    * @param v object
    */
   public void putAnObject(long t, Object v) {
-    switch (dataType) {
-      case BOOLEAN:
-        putBoolean(t, (boolean) v);
-        break;
-      case INT32:
-      case DATE:
-        putInt(t, (int) v);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        putLong(t, (long) v);
-        break;
-      case FLOAT:
-        putFloat(t, (float) v);
-        break;
-      case DOUBLE:
-        putDouble(t, (double) v);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        putBinary(t, (Binary) v);
-        break;
-      case VECTOR:
-        putVector(t, (TsPrimitiveType[]) v);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
+    Type.fromTsDataType(dataType).put(this, t, v);
   }
 
   public int length() {

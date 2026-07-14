@@ -73,6 +73,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void put(BatchData batchData, long timestamp, Object value) {
+    batchData.putLong(timestamp, (long) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt64Encoding());
   }

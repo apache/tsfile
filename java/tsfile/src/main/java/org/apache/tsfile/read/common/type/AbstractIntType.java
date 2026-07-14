@@ -74,6 +74,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void put(BatchData batchData, long timestamp, Object value) {
+    batchData.putInt(timestamp, (int) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

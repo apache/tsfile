@@ -108,6 +108,11 @@ public interface Type {
     throw new UnSupportedDataTypeException(String.valueOf(batchData.getDataType()));
   }
 
+  /** Adds a timestamp-value pair to {@code batchData}. */
+  default void put(BatchData batchData, long timestamp, Object value) {
+    throw new UnSupportedDataTypeException(String.valueOf(batchData.getDataType()));
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

@@ -216,7 +216,7 @@ public class TypeTest {
   public void testGetCurrentValueForVectorAndUnknown() {
     TsPrimitiveType[] vector = {new TsPrimitiveType.TsLong(1L)};
     BatchData batchData = new BatchData(TSDataType.VECTOR);
-    batchData.putVector(1L, vector);
+    batchData.putAnObject(1L, vector);
     Assert.assertSame(vector, Type.fromTsDataType(TSDataType.VECTOR).getCurrentValue(batchData));
     Assert.assertSame(vector, batchData.currentValue());
     Assert.assertNull(Type.fromTsDataType(TSDataType.UNKNOWN).getCurrentValue(null));
