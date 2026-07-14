@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -129,29 +130,7 @@ public class BatchData {
    * @return current value
    */
   public Object currentValue() {
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        return getInt();
-      case INT64:
-      case TIMESTAMP:
-        return getLong();
-      case FLOAT:
-        return getFloat();
-      case DOUBLE:
-        return getDouble();
-      case BOOLEAN:
-        return getBoolean();
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        return getBinary();
-      case VECTOR:
-        return getVector();
-      default:
-        return null;
-    }
+    return Type.fromTsDataType(dataType).getCurrentValue(this);
   }
 
   public TsPrimitiveType currentTsPrimitiveType() {

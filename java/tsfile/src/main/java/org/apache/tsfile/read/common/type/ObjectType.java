@@ -83,6 +83,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getBinary();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }

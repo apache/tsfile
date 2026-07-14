@@ -105,6 +105,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getFloat();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsFloat();
   }

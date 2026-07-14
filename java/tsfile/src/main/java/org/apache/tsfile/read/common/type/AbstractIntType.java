@@ -105,6 +105,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getInt();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsInt();
   }

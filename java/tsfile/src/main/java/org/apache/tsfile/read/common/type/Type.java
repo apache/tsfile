@@ -208,6 +208,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the current value in {@code batchData}. */
+  default Object getCurrentValue(BatchData batchData) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /**
    * Creates the preferred column builder for this type. This is the builder used to store values
    * after an expression projection within the read.

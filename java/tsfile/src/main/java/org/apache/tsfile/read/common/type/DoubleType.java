@@ -107,6 +107,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getDouble();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsDouble();
   }

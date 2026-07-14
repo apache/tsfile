@@ -105,6 +105,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getLong();
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsLong();
   }

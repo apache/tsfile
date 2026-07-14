@@ -65,6 +65,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getVector();
+  }
+
+  @Override
   public TypeEnum getTypeEnum() {
     return TypeEnum.VECTOR;
   }

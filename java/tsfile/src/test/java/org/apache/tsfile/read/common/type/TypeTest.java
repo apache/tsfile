@@ -183,6 +183,8 @@ public class TypeTest {
 
       BatchData batchData = new BatchData(dataType);
       batchData.putAnObject(200L, value.getValue());
+      Assert.assertEquals(value.getValue(), type.getCurrentValue(batchData));
+      Assert.assertEquals(value.getValue(), batchData.currentValue());
       Statistics<?> batchStatistics = Statistics.getStatsByType(dataType);
       type.update(batchStatistics, batchData);
       Assert.assertEquals(1, batchStatistics.getCount());
@@ -190,5 +192,15 @@ public class TypeTest {
       Assert.assertEquals(200L, batchStatistics.getEndTime());
       Assert.assertFalse(batchStatistics.isEmpty());
     }
+  }
+
+  @Test
+  public void testGetCurrentValueForVectorAndUnknown() {
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsLong(1L)};
+    BatchData batchData = new BatchData(TSDataType.VECTOR);
+    batchData.putVector(1L, vector);
+    Assert.assertSame(vector, Type.fromTsDataType(TSDataType.VECTOR).getCurrentValue(batchData));
+    Assert.assertSame(vector, batchData.currentValue());
+    Assert.assertNull(Type.fromTsDataType(TSDataType.UNKNOWN).getCurrentValue(null));
   }
 }

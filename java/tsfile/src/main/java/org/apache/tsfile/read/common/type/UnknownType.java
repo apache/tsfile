@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 
 import java.util.Collections;
@@ -49,6 +50,11 @@ public class UnknownType extends AbstractType {
     // However, some logic relies on having a default value before the null check.
     checkArgument(column.isNull(position));
     return false;
+  }
+
+  @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return null;
   }
 
   @Override
