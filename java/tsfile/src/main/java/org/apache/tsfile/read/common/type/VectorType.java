@@ -26,6 +26,9 @@ import org.apache.tsfile.encoding.decoder.LongGorillaDecoder;
 import org.apache.tsfile.encoding.decoder.LongRleDecoder;
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 public class VectorType extends AbstractLongType {
 
@@ -48,6 +51,16 @@ public class VectorType extends AbstractLongType {
 
   @Override
   public int getOneItemMaxSize(int valveLength) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, BatchData batchData) {
     throw new UnsupportedOperationException(getDisplayName());
   }
 

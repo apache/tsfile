@@ -22,6 +22,8 @@ package org.apache.tsfile.read.common.type;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -148,6 +150,45 @@ public class TypeTest {
       } catch (UnsupportedOperationException ignored) {
         // Expected.
       }
+    }
+  }
+
+  @Test
+  public void testUpdateStatistics() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260714, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.0F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(1.0D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      TsPrimitiveType value = (TsPrimitiveType) testCase[1];
+      Type type = Type.fromTsDataType(dataType);
+      Statistics<?> statistics = Statistics.getStatsByType(dataType);
+      type.update(statistics, 100L, value);
+      Assert.assertEquals(1, statistics.getCount());
+      Assert.assertEquals(100L, statistics.getStartTime());
+      Assert.assertEquals(100L, statistics.getEndTime());
+      Assert.assertFalse(statistics.isEmpty());
+
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(200L, value.getValue());
+      Statistics<?> batchStatistics = Statistics.getStatsByType(dataType);
+      type.update(batchStatistics, batchData);
+      Assert.assertEquals(1, batchStatistics.getCount());
+      Assert.assertEquals(200L, batchStatistics.getStartTime());
+      Assert.assertEquals(200L, batchStatistics.getEndTime());
+      Assert.assertFalse(batchStatistics.isEmpty());
     }
   }
 }

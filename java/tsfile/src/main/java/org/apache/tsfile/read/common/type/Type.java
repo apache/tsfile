@@ -26,6 +26,8 @@ import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
@@ -193,6 +195,16 @@ public interface Type {
 
   /** Returns the maximum encoded size of one item. */
   default int getOneItemMaxSize(int valveLength) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Updates statistics with a timestamp-value pair. */
+  default void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Updates statistics with the current timestamp-value pair in {@code batchData}. */
+  default void update(Statistics<?> stats, BatchData batchData) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

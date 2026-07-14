@@ -34,6 +34,8 @@ import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import org.apache.tsfile.utils.BytesUtils;
@@ -90,6 +92,16 @@ public abstract class AbstractIntType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Integer.BYTES;
+  }
+
+  @Override
+  public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
+    stats.update(timestamp, value.getInt());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, BatchData batchData) {
+    stats.update(batchData.currentTime(), batchData.getInt());
   }
 
   @Override

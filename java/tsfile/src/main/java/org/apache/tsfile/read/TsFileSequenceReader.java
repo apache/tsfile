@@ -66,6 +66,7 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.reader.TsFileInput;
@@ -2457,6 +2458,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                     chunkHeader.getCompressionType());
             measurementSchemaList.add(measurementSchema);
             dataType = chunkHeader.getDataType();
+            Type valueType = Type.fromTsDataType(dataType);
 
             Statistics<? extends Serializable> chunkStatistics =
                 Statistics.getStatsByType(dataType);
@@ -2534,34 +2536,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                         continue;
                       }
                       long timeStamp = timeBatch.get(timeBatchIndex)[i];
-                      switch (dataType) {
-                        case INT32:
-                        case DATE:
-                          chunkStatistics.update(timeStamp, value.getInt());
-                          break;
-                        case INT64:
-                        case TIMESTAMP:
-                          chunkStatistics.update(timeStamp, value.getLong());
-                          break;
-                        case FLOAT:
-                          chunkStatistics.update(timeStamp, value.getFloat());
-                          break;
-                        case DOUBLE:
-                          chunkStatistics.update(timeStamp, value.getDouble());
-                          break;
-                        case BOOLEAN:
-                          chunkStatistics.update(timeStamp, value.getBoolean());
-                          break;
-                        case TEXT:
-                        case BLOB:
-                        case STRING:
-                        case OBJECT:
-                          chunkStatistics.update(timeStamp, value.getBinary());
-                          break;
-                        default:
-                          throw new IOException(
-                              Messages.format("error.read.unexpected_type", dataType));
-                      }
+                      valueType.update(chunkStatistics, timeStamp, value);
                     }
                   }
 
@@ -2575,34 +2550,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                           timeDecoder);
                   BatchData batchData = reader.getAllSatisfiedPageData();
                   while (batchData.hasCurrent()) {
-                    switch (dataType) {
-                      case INT32:
-                      case DATE:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getInt());
-                        break;
-                      case INT64:
-                      case TIMESTAMP:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getLong());
-                        break;
-                      case FLOAT:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getFloat());
-                        break;
-                      case DOUBLE:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getDouble());
-                        break;
-                      case BOOLEAN:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getBoolean());
-                        break;
-                      case TEXT:
-                      case BLOB:
-                      case STRING:
-                      case OBJECT:
-                        chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
-                        break;
-                      default:
-                        throw new IOException(
-                            Messages.format("error.read.unexpected_type", dataType));
-                    }
+                    valueType.update(chunkStatistics, batchData);
                     batchData.next();
                   }
                 }
@@ -2781,6 +2729,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     byte marker = this.readMarker();
     ChunkHeader chunkHeader = this.readChunkHeader(marker);
     TSDataType dataType = chunkHeader.getDataType();
+    Type valueType = Type.fromTsDataType(dataType);
     Statistics<? extends Serializable> chunkStatistics = Statistics.getStatsByType(dataType);
     int dataSize = chunkHeader.getDataSize();
     if (((byte) (chunkHeader.getChunkType() & 0x3F)) == MetaMarker.CHUNK_HEADER) {
@@ -2808,33 +2757,7 @@ public class TsFileSequenceReader implements AutoCloseable {
               pageHeader, pageData, chunkHeader.getDataType(), valueDecoder, timeDecoder);
       BatchData batchData = reader.getAllSatisfiedPageData();
       while (batchData.hasCurrent()) {
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            chunkStatistics.update(batchData.currentTime(), batchData.getInt());
-            break;
-          case INT64:
-          case TIMESTAMP:
-            chunkStatistics.update(batchData.currentTime(), batchData.getLong());
-            break;
-          case FLOAT:
-            chunkStatistics.update(batchData.currentTime(), batchData.getFloat());
-            break;
-          case DOUBLE:
-            chunkStatistics.update(batchData.currentTime(), batchData.getDouble());
-            break;
-          case BOOLEAN:
-            chunkStatistics.update(batchData.currentTime(), batchData.getBoolean());
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-          case OBJECT:
-            chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
-            break;
-          default:
-            throw new IOException(Messages.format("error.read.unexpected_type", dataType));
-        }
+        valueType.update(chunkStatistics, batchData);
         batchData.next();
       }
       chunkHeader.increasePageNums(1);
