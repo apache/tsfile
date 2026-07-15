@@ -43,7 +43,6 @@ import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.List;
 
 public interface Type {
@@ -177,11 +176,6 @@ public interface Type {
 
   /** Copies one element from {@code source} to {@code target}. */
   default void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /** Copies the selected elements from {@code source} to {@code target} in iterator order. */
-  default void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

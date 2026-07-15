@@ -55,7 +55,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -279,15 +278,6 @@ public class DoubleType extends AbstractType {
   @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
     ((double[]) target)[targetIndex] = ((double[]) source)[sourceIndex];
-  }
-
-  @Override
-  public void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
-    double[] sourceArray = (double[]) source;
-    double[] targetArray = (double[]) target;
-    for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
-      targetArray[targetIndex] = sourceArray[sourceIndex.next()];
-    }
   }
 
   @Override

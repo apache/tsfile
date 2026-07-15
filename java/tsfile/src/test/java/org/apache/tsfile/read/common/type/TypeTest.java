@@ -878,12 +878,6 @@ public class TypeTest {
       Assert.assertEquals(Array.get(source, 1), Array.get(target, 0));
       Assert.assertEquals(Array.get(source, 0), Array.get(target, 1));
 
-      Object iteratorTarget = type.createArray(2);
-      type.copyArrayElement(source, Arrays.asList(1, 0).iterator(), iteratorTarget);
-
-      Assert.assertEquals(Array.get(source, 1), Array.get(iteratorTarget, 0));
-      Assert.assertEquals(Array.get(source, 0), Array.get(iteratorTarget, 1));
-
       Object expanded = type.arrayCopyOf(source, 3);
       Assert.assertEquals(3, Array.getLength(expanded));
       Assert.assertEquals(Array.get(source, 0), Array.get(expanded, 0));
@@ -892,14 +886,6 @@ public class TypeTest {
       Object truncated = type.arrayCopyOf(source, 1);
       Assert.assertEquals(1, Array.getLength(truncated));
       Assert.assertEquals(Array.get(source, 0), Array.get(truncated, 0));
-    }
-
-    try {
-      Type.fromTsDataType(TSDataType.UNKNOWN)
-          .copyArrayElement(new Object[0], Arrays.<Integer>asList().iterator(), new Object[0]);
-      Assert.fail("Expected UnsupportedOperationException");
-    } catch (UnsupportedOperationException ignored) {
-      // Expected.
     }
 
     try {

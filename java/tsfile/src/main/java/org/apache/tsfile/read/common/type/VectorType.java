@@ -47,7 +47,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Iterator;
 
 public class VectorType extends AbstractLongType {
 
@@ -77,15 +76,6 @@ public class VectorType extends AbstractLongType {
   public void write(ValueChunkWriter writer, long time, TsPrimitiveType value) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
-  }
-
-  @Override
-  public void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
-    long[] sourceArray = (long[]) source;
-    long[] targetArray = (long[]) target;
-    for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
-      targetArray[targetIndex] = sourceArray[sourceIndex.next()];
-    }
   }
 
   @Override
