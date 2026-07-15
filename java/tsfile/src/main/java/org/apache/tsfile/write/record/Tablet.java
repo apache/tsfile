@@ -1287,7 +1287,7 @@ public class Tablet implements Accountable {
         if (values == null || values.length <= column) {
           continue;
         }
-        totalSizeInBytes += Type.fromTsDataType(tsDataType).arrayRamBytesUsed(values[column]);
+        totalSizeInBytes += Type.fromTsDataType(tsDataType).estimateArraySize(values[column]);
       }
     }
 

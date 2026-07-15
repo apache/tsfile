@@ -154,7 +154,7 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
-  public long arrayRamBytesUsed(Object array) {
+  public long estimateArraySize(Object array) {
     return RamUsageEstimator.sizeOf((LocalDate[]) array);
   }
 

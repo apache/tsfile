@@ -891,6 +891,41 @@ public class TypeTest {
   }
 
   @Test
+  public void testEstimateArraySizeWithArray() {
+    boolean[] booleans = {false, true};
+    int[] ints = {0, 1};
+    LocalDate[] dates = {null, LocalDate.of(2026, 7, 15)};
+    long[] longs = {0L, 1L};
+    float[] floats = {0.0F, 1.0F};
+    double[] doubles = {0.0D, 1.0D};
+    Binary[] binaries = {null, new Binary("test", StandardCharsets.UTF_8)};
+
+    assertEstimateArraySize(TSDataType.BOOLEAN, booleans, RamUsageEstimator.sizeOf(booleans));
+    assertEstimateArraySize(TSDataType.INT32, ints, RamUsageEstimator.sizeOf(ints));
+    assertEstimateArraySize(TSDataType.DATE, dates, RamUsageEstimator.sizeOf(dates));
+    assertEstimateArraySize(TSDataType.INT64, longs, RamUsageEstimator.sizeOf(longs));
+    assertEstimateArraySize(TSDataType.TIMESTAMP, longs, RamUsageEstimator.sizeOf(longs));
+    assertEstimateArraySize(TSDataType.FLOAT, floats, RamUsageEstimator.sizeOf(floats));
+    assertEstimateArraySize(TSDataType.DOUBLE, doubles, RamUsageEstimator.sizeOf(doubles));
+    assertEstimateArraySize(TSDataType.TEXT, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.STRING, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.BLOB, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.OBJECT, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.VECTOR, longs, RamUsageEstimator.sizeOf(longs));
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateArraySize(new Object[0]);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  private void assertEstimateArraySize(TSDataType dataType, Object array, long expected) {
+    Assert.assertEquals(expected, Type.fromTsDataType(dataType).estimateArraySize(array));
+  }
+
+  @Test
   public void testCopyArrayElement() {
     LocalDate date = LocalDate.of(2026, 7, 15);
     Binary binary = new Binary("test", StandardCharsets.UTF_8);

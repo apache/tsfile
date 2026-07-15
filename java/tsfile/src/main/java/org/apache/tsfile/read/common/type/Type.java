@@ -194,6 +194,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Estimates the retained memory size of {@code array}. */
+  default long estimateArraySize(Object array) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Estimates the retained memory size of a value of this type. */
   default long estimateValueSize() {
     throw new UnsupportedOperationException(getClass().getName());
@@ -308,11 +313,6 @@ public interface Type {
   default void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
-  }
-
-  /** Returns the retained memory size of an array column in Tablet. */
-  default long arrayRamBytesUsed(Object array) {
-    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /** Creates a column with {@code positionCount} capacity for this type. */

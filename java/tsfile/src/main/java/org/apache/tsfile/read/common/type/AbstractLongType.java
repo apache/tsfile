@@ -342,7 +342,7 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public long arrayRamBytesUsed(Object array) {
+  public long estimateArraySize(Object array) {
     return RamUsageEstimator.sizeOf((long[]) array);
   }
 
