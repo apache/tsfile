@@ -19,10 +19,12 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
+import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
@@ -329,6 +331,95 @@ public final class TypeServices {
                     };
               };
 
+  public static final TypeService<PageDataColumnBuilderValueReader>
+      READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE =
+          type ->
+              switch (type.getTypeEnum()) {
+                case BOOLEAN ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      boolean value = decoder.readBoolean(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeBoolean(value);
+                        }
+                      }
+                    };
+                case INT32 ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      int value = decoder.readInt(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeInt(value);
+                        }
+                      }
+                    };
+                case DATE ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      int value = decoder.readInt(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else if (builder instanceof BinaryColumnBuilder) {
+                          ((BinaryColumnBuilder) builder).writeDate(value);
+                        } else {
+                          builder.writeInt(value);
+                        }
+                      }
+                    };
+                case INT64, TIMESTAMP ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      long value = decoder.readLong(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeLong(value);
+                        }
+                      }
+                    };
+                case FLOAT ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      float value = decoder.readFloat(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeFloat(value);
+                        }
+                      }
+                    };
+                case DOUBLE ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      double value = decoder.readDouble(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeDouble(value);
+                        }
+                      }
+                    };
+                case TEXT, BLOB, STRING, OBJECT ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      Binary value = decoder.readBinary(buffer);
+                      if (keepCurrentRow) {
+                        if (isDeleted) {
+                          builder.appendNull();
+                        } else {
+                          builder.writeBinary(value);
+                        }
+                      }
+                    };
+                case ROW, UNKNOWN, VECTOR ->
+                    (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
+                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                    };
+              };
+
   private TypeServices() {}
 
   @FunctionalInterface
@@ -363,6 +454,17 @@ public final class TypeServices {
 
     TsPrimitiveType read(
         Decoder decoder, ByteBuffer buffer, long timestamp, LongPredicate isDeleted);
+  }
+
+  @FunctionalInterface
+  public interface PageDataColumnBuilderValueReader {
+
+    void read(
+        Decoder decoder,
+        ByteBuffer buffer,
+        ColumnBuilder builder,
+        boolean keepCurrentRow,
+        boolean isDeleted);
   }
 
   public enum PageDataReadStatus {
