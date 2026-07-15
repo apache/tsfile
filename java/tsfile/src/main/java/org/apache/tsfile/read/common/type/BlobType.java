@@ -37,6 +37,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.StringDataPoint;
@@ -151,6 +152,11 @@ public class BlobType extends AbstractType {
   @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
+  }
+
+  @Override
+  public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
+    writer.write(time, (Binary) value, isNull);
   }
 
   @Override

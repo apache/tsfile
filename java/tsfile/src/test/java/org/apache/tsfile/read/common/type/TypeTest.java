@@ -33,6 +33,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 
@@ -160,7 +161,51 @@ public class TypeTest {
     }
 
     try {
-      DataPoint.getDataPoint(TSDataType.VECTOR, "s", "value");
+      DataPoint.getDataPoint(TSDataType.VECTOR, "s", "1");
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, true, false);
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, 1, false);
+    Mockito.verify(writer).write(2L, 1, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DATE).write(writer, 3L, null, true);
+    Mockito.verify(writer).write(3L, 0, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 4L, 2L, false);
+    Mockito.verify(writer).write(4L, 2L, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 5L, 1.25F, false);
+    Mockito.verify(writer).write(5L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 6L, 2.5D, false);
+    Mockito.verify(writer).write(6L, 2.5D, false);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 7L, binary, false);
+      Mockito.verify(writer).write(7L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, null, true);
       Assert.fail("Expected UnSupportedDataTypeException");
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.

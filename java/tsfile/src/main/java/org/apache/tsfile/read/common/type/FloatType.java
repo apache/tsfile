@@ -43,6 +43,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
@@ -168,6 +169,11 @@ public class FloatType extends AbstractType {
   @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new FloatDataPoint(measurementId, Float.parseFloat(value));
+  }
+
+  @Override
+  public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
+    writer.write(time, (float) value, isNull);
   }
 
   @Override

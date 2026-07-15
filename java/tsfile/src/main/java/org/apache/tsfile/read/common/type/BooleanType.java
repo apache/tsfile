@@ -39,6 +39,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -159,6 +160,11 @@ public class BooleanType extends AbstractType {
   @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new BooleanDataPoint(measurementId, Boolean.parseBoolean(value));
+  }
+
+  @Override
+  public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
+    writer.write(time, (boolean) value, isNull);
   }
 
   @Override

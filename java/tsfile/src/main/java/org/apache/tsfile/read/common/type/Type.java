@@ -34,6 +34,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 
@@ -241,6 +242,12 @@ public interface Type {
 
   /** Creates a data point by parsing a string value. */
   default DataPoint getDataPoint(String measurementId, String value) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  /** Writes a value to an aligned value chunk. */
+  default void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
