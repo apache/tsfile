@@ -21,8 +21,10 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.nio.ByteBuffer;
@@ -87,6 +89,196 @@ public final class TypeServices {
                 };
           };
 
+  public static final TypeService<PageDataBlockValueReader> READ_PAGE_VALUE_TO_TSBLOCK_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  boolean value = decoder.readBoolean(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyBoolean(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeBoolean(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case INT32, DATE ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  int value = decoder.readInt(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyInteger(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeInt(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case INT64, TIMESTAMP ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  long value = decoder.readLong(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyLong(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeLong(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case FLOAT ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  float value = decoder.readFloat(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyFloat(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeFloat(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case DOUBLE ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  double value = decoder.readDouble(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyDouble(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeDouble(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case TEXT, BLOB, STRING, OBJECT ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  Binary value = decoder.readBinary(buffer);
+                  if (isDeleted.test(timestamp)) {
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!allSatisfy && !filter.satisfyBinary(timestamp, value)) {
+                    return PageDataReadStatus.FILTERED;
+                  }
+                  if (paginationController.hasCurOffset()) {
+                    paginationController.consumeOffset();
+                    return PageDataReadStatus.CONTINUE;
+                  }
+                  if (!paginationController.hasCurLimit()) {
+                    return PageDataReadStatus.STOP;
+                  }
+                  builder.getTimeColumnBuilder().writeLong(timestamp);
+                  builder.getColumnBuilder(0).writeBinary(value);
+                  builder.declarePosition();
+                  paginationController.consumeLimit();
+                  return PageDataReadStatus.CONTINUE;
+                };
+            case ROW, UNKNOWN, VECTOR ->
+                (decoder,
+                    buffer,
+                    filter,
+                    builder,
+                    timestamp,
+                    allSatisfy,
+                    isDeleted,
+                    paginationController) -> {
+                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                };
+          };
+
   private TypeServices() {}
 
   @FunctionalInterface
@@ -100,5 +292,25 @@ public final class TypeServices {
         long timestamp,
         boolean allSatisfy,
         LongPredicate isDeleted);
+  }
+
+  @FunctionalInterface
+  public interface PageDataBlockValueReader {
+
+    PageDataReadStatus read(
+        Decoder decoder,
+        ByteBuffer buffer,
+        Filter filter,
+        TsBlockBuilder builder,
+        long timestamp,
+        boolean allSatisfy,
+        LongPredicate isDeleted,
+        PaginationController paginationController);
+  }
+
+  public enum PageDataReadStatus {
+    CONTINUE,
+    FILTERED,
+    STOP
   }
 }
