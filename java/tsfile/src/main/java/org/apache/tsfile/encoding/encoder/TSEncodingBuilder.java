@@ -227,15 +227,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case FLOAT:
-          return new SinglePrecisionEncoderV1();
-        case DOUBLE:
-          return new DoublePrecisionEncoderV1();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.GORILLA_V1, type));
-      }
+      return TypeServices.GORILLA_V1_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
