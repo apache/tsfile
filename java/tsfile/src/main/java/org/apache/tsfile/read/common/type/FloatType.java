@@ -178,6 +178,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(ValueChunkWriter writer, long time, TsPrimitiveType value) {
+    writer.write(time, value != null ? value.getFloat() : Float.MAX_VALUE, value == null);
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     writer.write(time, ((float[]) array)[rowIndex], isNull);

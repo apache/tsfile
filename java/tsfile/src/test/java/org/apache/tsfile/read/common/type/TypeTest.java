@@ -214,6 +214,70 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteTsPrimitiveValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, new TsPrimitiveType.TsBoolean(true));
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, new TsPrimitiveType.TsInt(1));
+    Mockito.verify(writer).write(2L, 1, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 3L, new TsPrimitiveType.TsLong(2L));
+    Mockito.verify(writer).write(3L, 2L, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 4L, new TsPrimitiveType.TsFloat(1.25F));
+    Mockito.verify(writer).write(4L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 5L, new TsPrimitiveType.TsDouble(2.5D));
+    Mockito.verify(writer).write(5L, 2.5D, false);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 6L, new TsPrimitiveType.TsBinary(binary));
+      Mockito.verify(writer).write(6L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 7L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(7L, Integer.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 8L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(8L, Long.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 9L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(9L, Float.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 10L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(10L, Double.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 11L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(11L, false, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TEXT).write(writer, 12L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(12L, Binary.EMPTY_VALUE, true);
+    Mockito.reset(writer);
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 13L, (TsPrimitiveType) null);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testWriteTabletValueChunk() {
     ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
 

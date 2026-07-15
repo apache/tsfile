@@ -155,6 +155,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void write(ValueChunkWriter writer, long time, TsPrimitiveType value) {
+    writer.write(time, value != null ? value.getBinary() : Binary.EMPTY_VALUE, value == null);
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     writer.write(time, ((Binary[]) array)[rowIndex], isNull);

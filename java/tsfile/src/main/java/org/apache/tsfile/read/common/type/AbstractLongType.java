@@ -177,6 +177,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(ValueChunkWriter writer, long time, TsPrimitiveType value) {
+    writer.write(time, value != null ? value.getLong() : Long.MAX_VALUE, value == null);
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     writer.write(time, ((long[]) array)[rowIndex], isNull);
