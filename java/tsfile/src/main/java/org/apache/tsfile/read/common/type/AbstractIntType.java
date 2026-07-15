@@ -267,6 +267,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((int[]) target)[targetIndex] = ((int[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new int[capacity];
   }

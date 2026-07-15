@@ -186,20 +186,9 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-          return new DeltaBinaryEncoder.IntDeltaEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new DeltaBinaryEncoder.LongDeltaEncoder();
-        case FLOAT:
-        case DOUBLE:
-          return new FloatEncoder(TSEncoding.TS_2DIFF, type, maxPointNumber);
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.TS_2DIFF, type));
-      }
+      return TypeServices.TS_2DIFF_ENCODER_SERVICE
+          .call(Type.fromTsDataType(type))
+          .build(maxPointNumber);
     }
 
     /**

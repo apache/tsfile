@@ -266,6 +266,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((long[]) target)[targetIndex] = ((long[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new long[capacity];
   }

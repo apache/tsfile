@@ -174,6 +174,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Copies one element from {@code source} to {@code target}. */
+  default void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Creates an array column with {@code capacity} entries for this type. */
   default Object createArray(int capacity) {
     throw new UnsupportedOperationException(getClass().getName());

@@ -276,6 +276,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((double[]) target)[targetIndex] = ((double[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new double[capacity];
   }

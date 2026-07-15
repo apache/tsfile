@@ -21,6 +21,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.encoder.DeltaBinaryEncoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatEncoder;
 import org.apache.tsfile.encoding.encoder.IntRleEncoder;
@@ -460,6 +461,27 @@ public final class TypeServices {
                       Messages.format(
                           "error.encoding.ts_encoding_builder_unsupported_type",
                           TSEncoding.RLE,
+                          type.getTypeEnum()));
+                };
+          };
+
+  public static final TypeService<EncoderBuilder> TS_2DIFF_ENCODER_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE -> maxPointNumber -> new DeltaBinaryEncoder.IntDeltaEncoder();
+            case INT64, TIMESTAMP -> maxPointNumber -> new DeltaBinaryEncoder.LongDeltaEncoder();
+            case FLOAT ->
+                maxPointNumber ->
+                    new FloatEncoder(TSEncoding.TS_2DIFF, TSDataType.FLOAT, maxPointNumber);
+            case DOUBLE ->
+                maxPointNumber ->
+                    new FloatEncoder(TSEncoding.TS_2DIFF, TSDataType.DOUBLE, maxPointNumber);
+            case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
+                maxPointNumber -> {
+                  throw new UnSupportedDataTypeException(
+                      Messages.format(
+                          "error.encoding.ts_encoding_builder_unsupported_type",
+                          TSEncoding.TS_2DIFF,
                           type.getTypeEnum()));
                 };
           };

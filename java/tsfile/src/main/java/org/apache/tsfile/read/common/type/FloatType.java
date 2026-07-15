@@ -274,6 +274,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((float[]) target)[targetIndex] = ((float[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new float[capacity];
   }

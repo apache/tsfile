@@ -83,6 +83,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((LocalDate[]) target)[targetIndex] = ((LocalDate[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new LocalDate[capacity];
   }

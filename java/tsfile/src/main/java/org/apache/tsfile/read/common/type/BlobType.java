@@ -236,6 +236,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((Binary[]) target)[targetIndex] = ((Binary[]) source)[sourceIndex];
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new Binary[capacity];
   }

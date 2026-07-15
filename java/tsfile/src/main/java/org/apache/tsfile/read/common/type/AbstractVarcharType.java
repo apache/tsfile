@@ -207,6 +207,11 @@ public abstract class AbstractVarcharType extends AbstractType {
     ((Binary[]) column)[rowIndex] = toBinaryValue(value);
   }
 
+  @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((Binary[]) target)[targetIndex] = ((Binary[]) source)[sourceIndex];
+  }
+
   protected Binary toBinaryValue(Object value) {
     if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
       throw new IllegalArgumentException(

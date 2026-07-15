@@ -42,6 +42,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -844,6 +845,37 @@ public class TypeTest {
       Assert.fail("Expected UnsupportedOperationException");
     } catch (UnsupportedOperationException ignored) {
       // Expected.
+    }
+  }
+
+  @Test
+  public void testCopyArrayElement() {
+    LocalDate date = LocalDate.of(2026, 7, 15);
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {false, true}},
+      {TSDataType.INT32, new int[] {0, 1}},
+      {TSDataType.DATE, new LocalDate[] {null, date}},
+      {TSDataType.INT64, new long[] {0L, 1L}},
+      {TSDataType.TIMESTAMP, new long[] {0L, 1L}},
+      {TSDataType.FLOAT, new float[] {0.0F, 1.0F}},
+      {TSDataType.DOUBLE, new double[] {0.0D, 1.0D}},
+      {TSDataType.TEXT, new Binary[] {null, binary}},
+      {TSDataType.STRING, new Binary[] {null, binary}},
+      {TSDataType.BLOB, new Binary[] {null, binary}},
+      {TSDataType.OBJECT, new Binary[] {null, binary}}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object source = testCase[1];
+      Object target = type.createArray(2);
+
+      type.copyArrayElement(source, 1, target, 0);
+      type.copyArrayElement(source, 0, target, 1);
+
+      Assert.assertEquals(Array.get(source, 1), Array.get(target, 0));
+      Assert.assertEquals(Array.get(source, 0), Array.get(target, 1));
     }
   }
 
