@@ -575,23 +575,16 @@ class TsFileSeriesReader:
         # pushdown (query_tree_by_row) isn't reliable in the cwrapper yet
         # (stale col_i path columns leak across queries on a reused reader);
         # see PR #816. Hot path for profilers.
-        # The native tree query normalizes column names and path segments to
-        # lower case (table model is case-insensitive), so match the field name
-        # and device path case-insensitively to preserve the original casing.
-        target_path_lower = [seg.lower() for seg in target_path_segments]
         with self._reader.query_table_on_tree([field_name]) as result_set:
             md = result_set.get_metadata()
             num_cols = md.get_column_num()
             col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
-            lower_col_names = [name.lower() for name in col_names]
             try:
-                field_idx = lower_col_names.index(field_name.lower()) + 1
+                field_idx = col_names.index(field_name) + 1
             except ValueError:
                 return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
             all_col_indices = [
-                idx + 1
-                for idx, name in enumerate(lower_col_names)
-                if name.startswith("col_")
+                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
             ]
             # Only the trailing expected_path_len col_i cells are genuine; the
             # leading duplicates are stale from prior queries on this reader.
@@ -614,11 +607,7 @@ class TsFileSeriesReader:
                 # Trim trailing Nones for the (possibly-shorter) device path.
                 while row_path_segments and row_path_segments[-1] is None:
                     row_path_segments.pop()
-                row_path_lower = [
-                    seg.lower() if isinstance(seg, str) else seg
-                    for seg in row_path_segments
-                ]
-                if row_path_lower != target_path_lower:
+                if row_path_segments != target_path_segments:
                     continue
                 if skipped < offset:
                     skipped += 1
@@ -774,7 +763,6 @@ class TsFileSeriesReader:
             )
 
         target_path_segments = device_path.split(".")
-        target_path_lower = [seg.lower() for seg in target_path_segments]
         expected_path_len = (
             max(len(t.tag_columns) for t in self._catalog.table_entries) + 1
         )
@@ -785,19 +773,16 @@ class TsFileSeriesReader:
         # client-side; aligned reads over N devices are O(N * total_rows).
         # See _read_series_by_row_tree / PR #816 for the cwrapper limitation
         # that blocks per-device pushdown (query_timeseries). Hot path.
-        # The native tree query lower-cases column names and path segments
-        # (table model is case-insensitive), so match both case-insensitively.
         with self._reader.query_table_on_tree(
             field_columns, start_time, end_time
         ) as result_set:
             md = result_set.get_metadata()
             num_cols = md.get_column_num()
             col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
-            lower_col_names = [name.lower() for name in col_names]
             value_indices = {}
             for col in field_columns:
                 try:
-                    value_indices[col] = lower_col_names.index(col.lower()) + 1
+                    value_indices[col] = col_names.index(col) + 1
                 except ValueError:
                     # Column missing (no device in file owns it). Yield empty.
                     return (
@@ -808,9 +793,7 @@ class TsFileSeriesReader:
                         },
                     )
             all_col_indices = [
-                idx + 1
-                for idx, name in enumerate(lower_col_names)
-                if name.startswith("col_")
+                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
             ]
             col_indices = all_col_indices[-expected_path_len:]
             # Fail fast if the cwrapper col_ leak pattern changes: the trailing
@@ -830,11 +813,7 @@ class TsFileSeriesReader:
                 ]
                 while row_path_segments and row_path_segments[-1] is None:
                     row_path_segments.pop()
-                row_path_lower = [
-                    seg.lower() if isinstance(seg, str) else seg
-                    for seg in row_path_segments
-                ]
-                if row_path_lower != target_path_lower:
+                if row_path_segments != target_path_segments:
                     continue
                 ts = int(result_set.get_value_by_index(1))
                 # The on-tree scan already honors start/end_time at the
