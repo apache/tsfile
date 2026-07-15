@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
 import org.apache.tsfile.encoding.decoder.LongChimpDecoder;
@@ -32,6 +33,7 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -39,6 +41,7 @@ import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -54,6 +57,12 @@ public class VectorType extends AbstractLongType {
   public DataPoint getDataPoint(String measurementId, String value) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new StringDataPoint(
+        measurementId, new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET));
   }
 
   @Override

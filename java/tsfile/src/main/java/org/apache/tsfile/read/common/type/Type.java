@@ -38,6 +38,7 @@ import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -245,6 +246,12 @@ public interface Type {
   default DataPoint getDataPoint(String measurementId, String value) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  /** Creates a data point from a long value for test file generation. */
+  default DataPoint getDataPoint(String measurementId, long value) {
+    return new StringDataPoint(
+        measurementId, new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET));
   }
 
   /** Writes a value to an aligned value chunk. */

@@ -173,6 +173,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new IntDataPoint(measurementId, (int) value);
+  }
+
+  @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
     writer.write(time, isNull ? 0 : (int) value, isNull);
   }

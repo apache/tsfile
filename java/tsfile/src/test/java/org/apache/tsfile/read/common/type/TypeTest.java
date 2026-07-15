@@ -170,6 +170,31 @@ public class TypeTest {
   }
 
   @Test
+  public void testGetDataPointFromLong() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 1},
+      {TSDataType.INT64, 1L},
+      {TSDataType.TIMESTAMP, 1L},
+      {TSDataType.FLOAT, 1.0F},
+      {TSDataType.DOUBLE, 1.0D},
+      {TSDataType.TEXT, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.STRING, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.BLOB, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.OBJECT, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.VECTOR, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.UNKNOWN, new Binary("1", TSFileConfig.STRING_CHARSET)}
+    };
+
+    for (Object[] testCase : testCases) {
+      DataPoint dataPoint = Type.fromTsDataType((TSDataType) testCase[0]).getDataPoint("s", 1L);
+      Assert.assertEquals("s", dataPoint.getMeasurementId());
+      Assert.assertEquals(testCase[1], dataPoint.getValue());
+    }
+  }
+
+  @Test
   public void testWriteValueChunk() {
     ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
 

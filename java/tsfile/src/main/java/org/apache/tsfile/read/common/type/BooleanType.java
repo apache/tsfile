@@ -164,6 +164,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new BooleanDataPoint(measurementId, true);
+  }
+
+  @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
     writer.write(time, (boolean) value, isNull);
   }

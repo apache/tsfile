@@ -173,6 +173,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new FloatDataPoint(measurementId, (float) value);
+  }
+
+  @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
     writer.write(time, (float) value, isNull);
   }

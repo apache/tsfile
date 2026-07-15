@@ -172,6 +172,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new LongDataPoint(measurementId, value);
+  }
+
+  @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
     writer.write(time, (long) value, isNull);
   }
