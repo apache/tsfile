@@ -203,15 +203,13 @@ class TableSchema {
         : table_name_(table_name),
           is_virtual_table_(virtual_table),
           updatable_(false) {
-        // Virtual tables are synthesized from tree-model paths, where device
-        // path segments and measurement names are case-sensitive. Only real
-        // (table-model) schemas are normalized to lower case; lower-casing a
-        // tree schema would collapse case-distinct measurements (e.g.
-        // "temperature" and "Temperature") into a single column.
+        // Virtual (tree-derived) schemas are case-sensitive; only real tables
+        // are normalized to lower case.
         if (!is_virtual_table_) {
             to_lowercase_inplace(table_name_);
         }
         for (const common::ColumnSchema& column_schema : column_schemas) {
+
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
                 column_schema.get_column_name(),
                 column_schema.get_data_type()));
@@ -337,9 +335,9 @@ class TableSchema {
     int32_t get_columns_num() const { return column_schemas_.size(); }
 
     int find_column_index(const std::string& column_name) {
-        // Real tables are case-insensitive; virtual (tree-derived) tables keep
-        // the original casing so case-distinct measurements stay separate.
+        // Virtual tables match case-sensitively; real tables are lower-cased.
         std::string lookup_name =
+
             is_virtual_table_ ? column_name : to_lower(column_name);
         auto it = column_pos_index_.find(lookup_name);
         if (it != column_pos_index_.end()) {
