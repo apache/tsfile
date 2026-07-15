@@ -28,10 +28,13 @@ import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
@@ -39,6 +42,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.LongPredicate;
 
 public class ValuePageReader {
 
@@ -115,60 +119,17 @@ public class ValuePageReader {
       throws IOException {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
+    PageDataValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
+    boolean allSatisfy = filter == null;
+    LongPredicate isDeleted = this::isDeleted;
     for (int i = 0; i < timeBatch.length; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         continue;
       }
       long timestamp = timeBatch[i];
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyBoolean(timestamp, aBoolean))) {
-            pageData.putBoolean(timestamp, aBoolean);
-          }
-          break;
-        case INT32:
-        case DATE:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyInteger(timestamp, anInt))) {
-            pageData.putInt(timestamp, anInt);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfyLong(timestamp, aLong))) {
-            pageData.putLong(timestamp, aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfyFloat(timestamp, aFloat))) {
-            pageData.putFloat(timestamp, aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyDouble(timestamp, aDouble))) {
-            pageData.putDouble(timestamp, aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyBinary(timestamp, aBinary))) {
-            pageData.putBinary(timestamp, aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
+      valueReader.read(
+          valueDecoder, valueBuffer, filter, pageData, timestamp, allSatisfy, isDeleted);
     }
     return pageData.flip();
   }
