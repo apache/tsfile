@@ -27,17 +27,14 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.TypeServices;
 import org.apache.tsfile.utils.TypeServices.PageDataColumnBuilderValueReader;
 import org.apache.tsfile.utils.TypeServices.PageDataTsPrimitiveValueReader;
 import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -224,131 +221,20 @@ public class ValuePageReader {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
       return;
     }
-
-    switch (dataType) {
-      case BOOLEAN:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readBoolean(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          columnBuilder.writeBoolean(aBoolean);
-        }
-        break;
-      case INT32:
-      case DATE:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readInt(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          int aInt = valueDecoder.readInt(valueBuffer);
-          if (dataType == TSDataType.INT32) {
-            columnBuilder.writeInt(aInt);
-          } else {
-            if (columnBuilder instanceof BinaryColumnBuilder) {
-              ((BinaryColumnBuilder) columnBuilder).writeDate(aInt);
-            } else {
-              columnBuilder.writeInt(aInt);
-            }
-          }
-        }
-        break;
-      case INT64:
-      case TIMESTAMP:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readLong(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          long aLong = valueDecoder.readLong(valueBuffer);
-          columnBuilder.writeLong(aLong);
-        }
-        break;
-      case FLOAT:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readFloat(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          columnBuilder.writeFloat(aFloat);
-        }
-        break;
-      case DOUBLE:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readDouble(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          columnBuilder.writeDouble(aDouble);
-        }
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readBinary(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          columnBuilder.writeBinary(aBinary);
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
+    PageDataColumnBuilderValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    // skip useless data
+    for (int i = 0; i < readStartIndex; i++) {
+      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) != 0) {
+        valueReader.read(valueDecoder, valueBuffer, columnBuilder, false, false);
+      }
+    }
+    for (int i = readStartIndex; i < readEndIndex; i++) {
+      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
+        columnBuilder.appendNull();
+        continue;
+      }
+      valueReader.read(valueDecoder, valueBuffer, columnBuilder, true, false);
     }
   }
 
