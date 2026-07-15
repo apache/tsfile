@@ -22,6 +22,7 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
@@ -29,6 +30,7 @@ import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 
 import java.nio.ByteBuffer;
 import java.util.function.LongPredicate;
@@ -420,6 +422,22 @@ public final class TypeServices {
                     };
               };
 
+  public static final TypeService<EmptyValueChunkWriter> WRITE_EMPTY_VALUE_TO_CHUNK_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> writer -> writer.write(-1, false, true);
+            case INT32, DATE -> writer -> writer.write(-1, 0, true);
+            case INT64, TIMESTAMP -> writer -> writer.write(-1, 0L, true);
+            case FLOAT -> writer -> writer.write(-1, 0.0F, true);
+            case DOUBLE -> writer -> writer.write(-1, 0.0D, true);
+            case TEXT, BLOB, STRING, OBJECT -> writer -> writer.write(-1, null, true);
+            case ROW, UNKNOWN, VECTOR ->
+                writer -> {
+                  throw new UnSupportedDataTypeException(
+                      Messages.format("error.write.type_not_supported", type.getTypeEnum()));
+                };
+          };
+
   private TypeServices() {}
 
   @FunctionalInterface
@@ -465,6 +483,12 @@ public final class TypeServices {
         ColumnBuilder builder,
         boolean keepCurrentRow,
         boolean isDeleted);
+  }
+
+  @FunctionalInterface
+  public interface EmptyValueChunkWriter {
+
+    void write(ValueChunkWriter writer);
   }
 
   public enum PageDataReadStatus {

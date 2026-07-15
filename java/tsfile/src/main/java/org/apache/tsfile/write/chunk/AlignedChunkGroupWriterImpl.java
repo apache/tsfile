@@ -31,8 +31,11 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.EmptyValueChunkWriter;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -357,35 +360,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private void writeEmptyDataInOneRow(List<ValueChunkWriter> valueChunkWriterList) {
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
-      TSDataType dataType = valueChunkWriter.getDataType();
-      switch (dataType) {
-        case BOOLEAN:
-          valueChunkWriter.write(-1, false, true);
-          break;
-        case INT32:
-        case DATE:
-          valueChunkWriter.write(-1, 0, true);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueChunkWriter.write(-1, 0L, true);
-          break;
-        case FLOAT:
-          valueChunkWriter.write(-1, 0.0f, true);
-          break;
-        case DOUBLE:
-          valueChunkWriter.write(-1, 0.0d, true);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueChunkWriter.write(-1, null, true);
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", dataType));
-      }
+      EmptyValueChunkWriter emptyValueWriter =
+          TypeServices.WRITE_EMPTY_VALUE_TO_CHUNK_SERVICE.call(
+              Type.fromTsDataType(valueChunkWriter.getDataType()));
+      emptyValueWriter.write(valueChunkWriter);
     }
   }
 
