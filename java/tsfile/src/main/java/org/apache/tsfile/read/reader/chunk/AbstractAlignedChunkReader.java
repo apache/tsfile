@@ -90,12 +90,15 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
       List<Statistics<? extends Serializable>> valueChunkStatisticsList)
       throws IOException {
     // construct next satisfied page header
+    int pageIndex = 0;
     while (timeChunkDataBuffer.remaining() > 0) {
       // deserialize PageHeader from chunkDataBuffer
       AbstractAlignedPageReader alignedPageReader =
           isSinglePageChunk()
-              ? deserializeFromSinglePageChunk(timeChunkStatistics, valueChunkStatisticsList)
-              : deserializeFromMultiPageChunk();
+              ? deserializeFromSinglePageChunk(
+                  timeChunkStatistics, valueChunkStatisticsList, pageIndex)
+              : deserializeFromMultiPageChunk(pageIndex);
+      pageIndex++;
       if (alignedPageReader != null) {
         pageReaderList.add(alignedPageReader);
       }
@@ -108,7 +111,8 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
 
   private AbstractAlignedPageReader deserializeFromSinglePageChunk(
       Statistics<? extends Serializable> timeChunkStatistics,
-      List<Statistics<? extends Serializable>> valueChunkStatisticsList)
+      List<Statistics<? extends Serializable>> valueChunkStatisticsList,
+      int pageIndex)
       throws IOException {
     PageHeader timePageHeader =
         PageHeader.deserializeFrom(timeChunkDataBuffer, timeChunkStatistics);
@@ -132,12 +136,13 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
       skipCurrentPage(timePageHeader, valuePageHeaderList);
       return null;
     }
-    return constructAlignedPageReader(timePageHeader, valuePageHeaderList);
+    return constructAlignedPageReader(timePageHeader, valuePageHeaderList, pageIndex);
   }
 
   abstract boolean needSkipForSinglePageChunk(boolean isAllNull, PageHeader timePageHeader);
 
-  private AbstractAlignedPageReader deserializeFromMultiPageChunk() throws IOException {
+  private AbstractAlignedPageReader deserializeFromMultiPageChunk(int pageIndex)
+      throws IOException {
     PageHeader timePageHeader =
         PageHeader.deserializeFrom(timeChunkDataBuffer, timeChunkHeader.getDataType());
     List<PageHeader> valuePageHeaderList = new ArrayList<>();
@@ -158,7 +163,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
       skipCurrentPage(timePageHeader, valuePageHeaderList);
       return null;
     }
-    return constructAlignedPageReader(timePageHeader, valuePageHeaderList);
+    return constructAlignedPageReader(timePageHeader, valuePageHeaderList, pageIndex);
   }
 
   abstract boolean needSkipForMultiPageChunk(boolean isAllNull, PageHeader timePageHeader);
@@ -193,11 +198,17 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
   }
 
   private AbstractAlignedPageReader constructAlignedPageReader(
-      PageHeader timePageHeader, List<PageHeader> rawValuePageHeaderList) throws IOException {
+      PageHeader timePageHeader, List<PageHeader> rawValuePageHeaderList, int pageIndex)
+      throws IOException {
     IDecryptor decrytor = IDecryptor.getDecryptor(encryptParam);
     ByteBuffer timePageData =
         ChunkReader.deserializePageData(
-            timePageHeader, timeChunkDataBuffer, timeChunkHeader, decrytor);
+            timePageHeader,
+            timeChunkDataBuffer,
+            timeChunkHeader,
+            decrytor,
+            encryptParam,
+            pageIndex);
 
     List<PageHeader> valuePageHeaderList = new ArrayList<>();
     LazyLoadPageData[] lazyLoadPageDataArray = new LazyLoadPageData[rawValuePageHeaderList.size()];
@@ -238,7 +249,8 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
                 valueChunkDataBufferList.get(i).array(),
                 currentPagePosition,
                 IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()),
-                encryptParam);
+                encryptParam,
+                pageIndex);
         valueDataTypeList.add(valueChunkHeader.getDataType());
         valueDecoderList.add(valueChunkHeader.calculateDecoderForNonTimeChunk());
         isAllNull = false;

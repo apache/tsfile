@@ -126,21 +126,35 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     }
     this.file = file;
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
-    this.param = param;
-    setEncryptParam(param);
+    this.param = param != null && param.isTdePageAead() ? param.copy() : param;
+    setEncryptParam(this.param);
 
     // file doesn't exist
     if (file.length() == 0) {
-      startFile();
-      crashed = true;
-      canWrite = true;
-      return;
+      try {
+        startFile();
+        crashed = true;
+        canWrite = true;
+        return;
+      } catch (IOException | RuntimeException e) {
+        closeAfterFailedInitialization(e);
+        throw e;
+      }
     }
 
     try {
       if (file.exists()) {
         try (TsFileSequenceReader reader =
             new TsFileSequenceReader(file.getAbsolutePath(), param, false)) {
+          EncryptParameter recoveredParameter = reader.getEncryptParam();
+          if (recoveredParameter != null && recoveredParameter.isTdePageAead()) {
+            if (this.param != null && this.param.isTdePageAead()) {
+              this.param.close();
+            }
+            this.param = recoveredParameter.copy();
+            setEncryptParam(this.param);
+          }
+          markExistingFileStarted(recoveredParameter != null && recoveredParameter.isTdePageAead());
           schema.setEnabledUpdateSchema(false);
           truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
           minPlanIndex = reader.getMinPlanIndex();
@@ -165,7 +179,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
         }
       }
     } catch (Exception e) {
-      out.close();
+      closeAfterFailedInitialization(e);
       throw e;
     }
   }
@@ -207,6 +221,45 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
 
   public Schema getKnownSchema() {
     return schema;
+  }
+
+  @Override
+  public EncryptParameter getEncryptParameter() {
+    return param;
+  }
+
+  @Override
+  public void endFile() throws IOException {
+    try {
+      super.endFile();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  @Override
+  public void close() throws IOException {
+    try {
+      super.close();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  private void closeOwnedEncryptParameter() {
+    if (param != null && param.isTdePageAead()) {
+      param.close();
+    }
+  }
+
+  private void closeAfterFailedInitialization(Exception exception) {
+    try {
+      out.close();
+    } catch (IOException e) {
+      exception.addSuppressed(e);
+    } finally {
+      closeOwnedEncryptParameter();
+    }
   }
 
   /**

@@ -20,6 +20,9 @@
 package org.apache.tsfile.read;
 
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
+import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
@@ -30,6 +33,8 @@ import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
@@ -40,6 +45,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class UnClosedTsFileReaderTest {
+
+  @BeforeClass
+  public static void setUpEncryptionProvider() {
+    EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+  }
+
+  @AfterClass
+  public static void tearDownEncryptionProvider() {
+    EncryptionProviderRegistry.unregisterProvider(TestAeadEncryptionProvider.PROVIDER_ID);
+  }
 
   @Test
   public void testRead() throws IOException {
@@ -70,5 +85,48 @@ public class UnClosedTsFileReaderTest {
     assertFalse(batchData.hasCurrent());
 
     file.delete();
+  }
+
+  @Test
+  public void testReadEncryptedPagesUsingFileHeader() throws IOException {
+    File file = new File(TestConstant.BASE_OUTPUT_PATH + File.separator + "test-encrypted.tsfile");
+    byte[] fileCryptoId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    fileCryptoId[0] = 1;
+    EncryptParameter encryptParameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
+
+    try {
+      TsFileIOWriter writer = new TsFileIOWriter(file, encryptParameter);
+      writer.startChunkGroup(Factory.DEFAULT_FACTORY.create("root.sg1.d1"));
+      ChunkWriterImpl chunkWriter =
+          new ChunkWriterImpl(new MeasurementSchema("s1", TSDataType.INT64), encryptParameter);
+      chunkWriter.write(1, 1L);
+      chunkWriter.sealCurrentPage();
+      chunkWriter.write(2, 2L);
+      chunkWriter.sealCurrentPage();
+      chunkWriter.writeToFileWriter(writer);
+      writer.endChunkGroup();
+      writer.close();
+      ChunkMetadata chunkMetadata =
+          writer.getChunkGroupMetadataList().get(0).getChunkMetadataList().get(0);
+
+      try (UnClosedTsFileReader reader = new UnClosedTsFileReader(file.getAbsolutePath(), null)) {
+        assertEquals("test-key", reader.getEncryptParam().getKeyId());
+        ChunkReader chunkReader = new ChunkReader(reader.readMemChunk(chunkMetadata));
+
+        BatchData firstPage = chunkReader.nextPageData();
+        assertTrue(firstPage.hasCurrent());
+        assertEquals(1, firstPage.currentTime());
+        assertEquals(1L, firstPage.currentValue());
+
+        BatchData secondPage = chunkReader.nextPageData();
+        assertTrue(secondPage.hasCurrent());
+        assertEquals(2, secondPage.currentTime());
+        assertEquals(2L, secondPage.currentValue());
+      }
+    } finally {
+      encryptParameter.close();
+      file.delete();
+    }
   }
 }

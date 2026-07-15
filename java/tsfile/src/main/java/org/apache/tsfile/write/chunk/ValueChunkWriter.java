@@ -209,7 +209,8 @@ public class ValueChunkWriter {
           // record the firstPageStatistics if it is not empty page
           this.firstPageStatistics = pageWriter.getStatistics();
         }
-        this.sizeWithoutStatistic = pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true);
+        this.sizeWithoutStatistic =
+            pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true, numOfPages);
       } else if (numOfPages == 1) { // put the firstPageStatistics into pageBuffer
         if (firstPageStatistics != null) { // Consider previous page is an empty page
           byte[] b = pageBuffer.toByteArray();
@@ -218,10 +219,10 @@ public class ValueChunkWriter {
           firstPageStatistics.serialize(pageBuffer);
           pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
         }
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
         firstPageStatistics = null;
       } else {
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
       }
 
       // update statistics of this chunk
