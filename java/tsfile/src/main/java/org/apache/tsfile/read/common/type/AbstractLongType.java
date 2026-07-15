@@ -178,8 +178,14 @@ public abstract class AbstractLongType extends AbstractType {
 
   @Override
   public void write(
-      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
-    writer.write(time, ((long[]) column)[rowIndex], isNull);
+      ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
+    writer.write(time, ((long[]) array)[rowIndex], isNull);
+  }
+
+  @Override
+  public void write(
+      ValueChunkWriter writer, long time, Column column, int rowIndex, boolean isNull) {
+    writer.write(time, isNull ? 0 : column.getLong(rowIndex), isNull);
   }
 
   @Override

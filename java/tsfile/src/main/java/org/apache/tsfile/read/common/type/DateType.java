@@ -64,10 +64,10 @@ public class DateType extends AbstractIntType {
 
   @Override
   public void write(
-      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+      ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     writer.write(
         time,
-        isNull ? 0 : DateUtils.parseDateExpressionToInt(((LocalDate[]) column)[rowIndex]),
+        isNull ? 0 : DateUtils.parseDateExpressionToInt(((LocalDate[]) array)[rowIndex]),
         isNull);
   }
 
