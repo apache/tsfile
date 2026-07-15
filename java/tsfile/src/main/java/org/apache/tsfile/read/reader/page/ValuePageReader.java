@@ -155,58 +155,14 @@ public class ValuePageReader {
     if (valueBuffer == null) {
       return valueBatch;
     }
+    PageDataTsPrimitiveValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(Type.fromTsDataType(dataType));
+    LongPredicate isDeleted = this::isDeleted;
     for (int i = 0; i < size; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         continue;
       }
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsBoolean(aBoolean);
-          }
-          break;
-        case INT32:
-        case DATE:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] =
-                dataType.equals(TSDataType.INT32)
-                    ? new TsPrimitiveType.TsInt(anInt)
-                    : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsLong(aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsFloat(aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsDouble(aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsBinary(aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
+      valueBatch[i] = valueReader.read(valueDecoder, valueBuffer, timeBatch[i], isDeleted);
     }
     return valueBatch;
   }
