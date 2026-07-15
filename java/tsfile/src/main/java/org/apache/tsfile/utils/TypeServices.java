@@ -27,6 +27,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatEncoder;
 import org.apache.tsfile.encoding.encoder.IntRleEncoder;
 import org.apache.tsfile.encoding.encoder.LongRleEncoder;
+import org.apache.tsfile.encoding.encoder.RegularDataEncoder;
 import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV1;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -509,6 +510,19 @@ public final class TypeServices {
                     Messages.format(
                         "error.encoding.ts_encoding_builder_unsupported_type",
                         TSEncoding.GORILLA_V1,
+                        type.getTypeEnum()));
+          };
+
+  public static final TypeService<Encoder> REGULAR_ENCODER_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE -> new RegularDataEncoder.IntRegularEncoder();
+            case INT64, TIMESTAMP -> new RegularDataEncoder.LongRegularEncoder();
+            case BOOLEAN, FLOAT, DOUBLE, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
+                throw new UnSupportedDataTypeException(
+                    Messages.format(
+                        "error.encoding.ts_encoding_builder_unsupported_type",
+                        TSEncoding.REGULAR,
                         type.getTypeEnum()));
           };
 

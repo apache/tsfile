@@ -259,17 +259,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-          return new RegularDataEncoder.IntRegularEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new RegularDataEncoder.LongRegularEncoder();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.REGULAR, type));
-      }
+      return TypeServices.REGULAR_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
