@@ -250,6 +250,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((boolean[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new boolean[capacity];
   }

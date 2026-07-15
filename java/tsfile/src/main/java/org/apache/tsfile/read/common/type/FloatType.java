@@ -289,6 +289,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((float[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new float[capacity];
   }

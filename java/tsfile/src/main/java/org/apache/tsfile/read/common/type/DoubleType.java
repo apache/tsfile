@@ -291,6 +291,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((double[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new double[capacity];
   }

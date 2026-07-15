@@ -44,6 +44,7 @@ import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -220,6 +221,11 @@ public abstract class AbstractVarcharType extends AbstractType {
     for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
       targetArray[targetIndex] = sourceArray[sourceIndex.next()];
     }
+  }
+
+  @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((Binary[]) array, newLength);
   }
 
   protected Binary toBinaryValue(Object value) {

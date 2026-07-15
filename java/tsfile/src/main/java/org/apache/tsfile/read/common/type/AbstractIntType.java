@@ -282,6 +282,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((int[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new int[capacity];
   }

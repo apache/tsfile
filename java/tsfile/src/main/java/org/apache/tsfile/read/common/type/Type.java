@@ -185,6 +185,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Copies {@code array}, truncating or padding it to {@code newLength}. */
+  default Object arrayCopyOf(Object array, int newLength) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Creates an array column with {@code capacity} entries for this type. */
   default Object createArray(int capacity) {
     throw new UnsupportedOperationException(getClass().getName());

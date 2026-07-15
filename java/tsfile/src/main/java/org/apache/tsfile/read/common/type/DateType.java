@@ -98,6 +98,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((LocalDate[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new LocalDate[capacity];
   }

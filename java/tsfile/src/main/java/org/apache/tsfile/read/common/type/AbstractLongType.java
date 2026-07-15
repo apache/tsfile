@@ -281,6 +281,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((long[]) array, newLength);
+  }
+
+  @Override
   public Object createArray(int capacity) {
     return new long[capacity];
   }
