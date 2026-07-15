@@ -28,6 +28,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
@@ -68,6 +69,11 @@ public class DateType extends AbstractIntType {
         time,
         isNull ? 0 : DateUtils.parseDateExpressionToInt(((LocalDate[]) column)[rowIndex]),
         isNull);
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
+    writer.write(time, DateUtils.parseDateExpressionToInt(((LocalDate[]) column)[rowIndex]));
   }
 
   @Override

@@ -44,6 +44,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -182,6 +183,11 @@ public class DoubleType extends AbstractType {
   public void write(
       ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
     writer.write(time, ((double[]) column)[rowIndex], isNull);
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
+    writer.write(time, ((double[]) column)[rowIndex]);
   }
 
   @Override

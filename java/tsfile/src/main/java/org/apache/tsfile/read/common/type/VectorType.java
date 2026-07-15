@@ -35,6 +35,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -64,6 +65,12 @@ public class VectorType extends AbstractLongType {
   @Override
   public void write(
       ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }

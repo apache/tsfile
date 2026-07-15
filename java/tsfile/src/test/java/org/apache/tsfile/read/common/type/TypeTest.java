@@ -33,6 +33,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -258,6 +259,53 @@ public class TypeTest {
 
     try {
       Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, new long[] {1L}, 0, false);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteNonAlignedTabletValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, new boolean[] {false, true}, 1);
+    Mockito.verify(writer).write(1L, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, new int[] {0, 1}, 1);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DATE)
+        .write(
+            writer, 3L, new LocalDate[] {LocalDate.of(2026, 7, 14), LocalDate.of(2026, 7, 15)}, 1);
+    Mockito.verify(writer).write(3L, 20260715);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 4L, new long[] {0L, 2L}, 1);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 5L, new float[] {0F, 1.25F}, 1);
+    Mockito.verify(writer).write(5L, 1.25F);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 6L, new double[] {0D, 2.5D}, 1);
+    Mockito.verify(writer).write(6L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Binary[] binaries = {Binary.EMPTY_VALUE, binary};
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 7L, binaries, 1);
+      Mockito.verify(writer).write(7L, binary);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, new long[] {1L}, 0);
       Assert.fail("Expected UnSupportedDataTypeException");
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.

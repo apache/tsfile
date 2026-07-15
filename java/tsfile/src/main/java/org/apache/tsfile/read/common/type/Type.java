@@ -34,6 +34,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -255,6 +256,12 @@ public interface Type {
   /** Writes a value at {@code rowIndex} in a Tablet column to an aligned value chunk. */
   default void write(
       ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  /** Writes a value at {@code rowIndex} in a Tablet column to a non-aligned chunk. */
+  default void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
