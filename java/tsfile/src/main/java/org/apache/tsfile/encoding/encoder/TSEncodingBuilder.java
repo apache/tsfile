@@ -273,21 +273,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case FLOAT:
-          return new SinglePrecisionEncoderV2();
-        case DOUBLE:
-          return new DoublePrecisionEncoderV2();
-        case INT32:
-        case DATE:
-          return new IntGorillaEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new LongGorillaEncoder();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.GORILLA, type));
-      }
+      return TypeServices.GORILLA_V2_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override

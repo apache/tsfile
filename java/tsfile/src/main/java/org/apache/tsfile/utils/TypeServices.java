@@ -23,12 +23,16 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.encoder.DeltaBinaryEncoder;
 import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
+import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV2;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatEncoder;
+import org.apache.tsfile.encoding.encoder.IntGorillaEncoder;
 import org.apache.tsfile.encoding.encoder.IntRleEncoder;
+import org.apache.tsfile.encoding.encoder.LongGorillaEncoder;
 import org.apache.tsfile.encoding.encoder.LongRleEncoder;
 import org.apache.tsfile.encoding.encoder.RegularDataEncoder;
 import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV1;
+import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV2;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
@@ -523,6 +527,21 @@ public final class TypeServices {
                     Messages.format(
                         "error.encoding.ts_encoding_builder_unsupported_type",
                         TSEncoding.REGULAR,
+                        type.getTypeEnum()));
+          };
+
+  public static final TypeService<Encoder> GORILLA_V2_ENCODER_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case FLOAT -> new SinglePrecisionEncoderV2();
+            case DOUBLE -> new DoublePrecisionEncoderV2();
+            case INT32, DATE -> new IntGorillaEncoder();
+            case INT64, TIMESTAMP -> new LongGorillaEncoder();
+            case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
+                throw new UnSupportedDataTypeException(
+                    Messages.format(
+                        "error.encoding.ts_encoding_builder_unsupported_type",
+                        TSEncoding.GORILLA,
                         type.getTypeEnum()));
           };
 
