@@ -32,11 +32,8 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
-import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TypeServices;
 import org.apache.tsfile.utils.TypeServices.EmptyValueChunkWriter;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -46,7 +43,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -231,45 +227,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         // check isNull by bitMap in tablet
         ValueChunkWriter valueChunkWriter =
             tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
-        switch (measurementSchemas.get(columnIndex).getType()) {
-          case BOOLEAN:
-            valueChunkWriter.write(
-                time, ((boolean[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case INT32:
-            valueChunkWriter.write(time, ((int[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case DATE:
-            valueChunkWriter.write(
-                time,
-                isNull
-                    ? 0
-                    : DateUtils.parseDateExpressionToInt(
-                        ((LocalDate[]) tablet.getValues()[columnIndex])[row]),
-                isNull);
-            break;
-          case INT64:
-          case TIMESTAMP:
-            valueChunkWriter.write(time, ((long[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case FLOAT:
-            valueChunkWriter.write(time, ((float[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case DOUBLE:
-            valueChunkWriter.write(time, ((double[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-          case OBJECT:
-            valueChunkWriter.write(time, ((Binary[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          default:
-            throw new UnSupportedDataTypeException(
-                Messages.format(
-                    "error.write.type_not_supported",
-                    measurementSchemas.get(columnIndex).getType()));
-        }
+        Type.fromTsDataType(measurementSchemas.get(columnIndex).getType())
+            .write(valueChunkWriter, time, tablet.getValues()[columnIndex], row, isNull);
       }
       // TODO: we can write the null columns after whole insertion, according to the point number
       //  in the time chunk before and after, no need to do it in a row-by-row manner

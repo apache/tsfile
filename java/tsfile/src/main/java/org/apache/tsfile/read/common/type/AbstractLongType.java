@@ -176,6 +176,12 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    writer.write(time, ((long[]) column)[rowIndex], isNull);
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsLong();
   }

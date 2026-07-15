@@ -154,6 +154,12 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    writer.write(time, ((Binary[]) column)[rowIndex], isNull);
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }

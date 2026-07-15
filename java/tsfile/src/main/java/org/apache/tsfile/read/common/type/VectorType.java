@@ -62,6 +62,13 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  @Override
   public void init(BatchData batchData) {
     batchData.initVectorValues();
   }

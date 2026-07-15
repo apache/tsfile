@@ -160,6 +160,12 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    writer.write(time, ((Binary[]) column)[rowIndex], isNull);
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.BLOB);
     field.setBinaryV((Binary) value);

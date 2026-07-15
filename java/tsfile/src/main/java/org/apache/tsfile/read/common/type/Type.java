@@ -252,6 +252,13 @@ public interface Type {
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
 
+  /** Writes a value at {@code rowIndex} in a Tablet column to an aligned value chunk. */
+  default void write(
+      ValueChunkWriter writer, long time, Object column, int rowIndex, boolean isNull) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
   /** Returns the retained memory size of an array column in Tablet. */
   default long arrayRamBytesUsed(Object array) {
     throw new UnsupportedOperationException(getClass().getName());
