@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Optional;
 
 public class DateType extends AbstractIntType {
@@ -85,6 +86,15 @@ public class DateType extends AbstractIntType {
   @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
     ((LocalDate[]) target)[targetIndex] = ((LocalDate[]) source)[sourceIndex];
+  }
+
+  @Override
+  public void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
+    LocalDate[] sourceArray = (LocalDate[]) source;
+    LocalDate[] targetArray = (LocalDate[]) target;
+    for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
+      targetArray[targetIndex] = sourceArray[sourceIndex.next()];
+    }
   }
 
   @Override

@@ -47,6 +47,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -238,6 +239,15 @@ public class BlobType extends AbstractType {
   @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
     ((Binary[]) target)[targetIndex] = ((Binary[]) source)[sourceIndex];
+  }
+
+  @Override
+  public void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
+    Binary[] sourceArray = (Binary[]) source;
+    Binary[] targetArray = (Binary[]) target;
+    for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
+      targetArray[targetIndex] = sourceArray[sourceIndex.next()];
+    }
   }
 
   @Override

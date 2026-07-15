@@ -56,6 +56,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -269,6 +270,15 @@ public abstract class AbstractIntType extends AbstractType {
   @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
     ((int[]) target)[targetIndex] = ((int[]) source)[sourceIndex];
+  }
+
+  @Override
+  public void copyArrayElement(Object source, Iterator<Integer> sourceIndex, Object target) {
+    int[] sourceArray = (int[]) source;
+    int[] targetArray = (int[]) target;
+    for (int targetIndex = 0; sourceIndex.hasNext(); targetIndex++) {
+      targetArray[targetIndex] = sourceArray[sourceIndex.next()];
+    }
   }
 
   @Override

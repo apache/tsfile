@@ -863,7 +863,8 @@ public class TypeTest {
       {TSDataType.TEXT, new Binary[] {null, binary}},
       {TSDataType.STRING, new Binary[] {null, binary}},
       {TSDataType.BLOB, new Binary[] {null, binary}},
-      {TSDataType.OBJECT, new Binary[] {null, binary}}
+      {TSDataType.OBJECT, new Binary[] {null, binary}},
+      {TSDataType.VECTOR, new long[] {0L, 1L}}
     };
 
     for (Object[] testCase : testCases) {
@@ -876,6 +877,20 @@ public class TypeTest {
 
       Assert.assertEquals(Array.get(source, 1), Array.get(target, 0));
       Assert.assertEquals(Array.get(source, 0), Array.get(target, 1));
+
+      Object iteratorTarget = type.createArray(2);
+      type.copyArrayElement(source, Arrays.asList(1, 0).iterator(), iteratorTarget);
+
+      Assert.assertEquals(Array.get(source, 1), Array.get(iteratorTarget, 0));
+      Assert.assertEquals(Array.get(source, 0), Array.get(iteratorTarget, 1));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN)
+          .copyArrayElement(new Object[0], Arrays.<Integer>asList().iterator(), new Object[0]);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
     }
   }
 
