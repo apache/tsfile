@@ -198,9 +198,19 @@ class TableSchema {
      * in the table.
      */
     TableSchema(const std::string& table_name,
-                const std::vector<common::ColumnSchema>& column_schemas)
-        : table_name_(table_name), updatable_(false) {
-        to_lowercase_inplace(table_name_);
+                const std::vector<common::ColumnSchema>& column_schemas,
+                bool virtual_table = false)
+        : table_name_(table_name),
+          is_virtual_table_(virtual_table),
+          updatable_(false) {
+        // Virtual tables are synthesized from tree-model paths, where device
+        // path segments and measurement names are case-sensitive. Only real
+        // (table-model) schemas are normalized to lower case; lower-casing a
+        // tree schema would collapse case-distinct measurements (e.g.
+        // "temperature" and "Temperature") into a single column.
+        if (!is_virtual_table_) {
+            to_lowercase_inplace(table_name_);
+        }
         for (const common::ColumnSchema& column_schema : column_schemas) {
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
                 column_schema.get_column_name(),
@@ -210,7 +220,9 @@ class TableSchema {
         }
         int idx = 0;
         for (const auto& measurement_schema : column_schemas_) {
-            to_lowercase_inplace(measurement_schema->measurement_name_);
+            if (!is_virtual_table_) {
+                to_lowercase_inplace(measurement_schema->measurement_name_);
+            }
             column_pos_index_.insert(
                 std::make_pair(measurement_schema->measurement_name_, idx++));
         }
@@ -325,21 +337,23 @@ class TableSchema {
     int32_t get_columns_num() const { return column_schemas_.size(); }
 
     int find_column_index(const std::string& column_name) {
-        std::string lower_case_column_name = to_lower(column_name);
-        auto it = column_pos_index_.find(lower_case_column_name);
+        // Real tables are case-insensitive; virtual (tree-derived) tables keep
+        // the original casing so case-distinct measurements stay separate.
+        std::string lookup_name =
+            is_virtual_table_ ? column_name : to_lower(column_name);
+        auto it = column_pos_index_.find(lookup_name);
         if (it != column_pos_index_.end()) {
             return it->second;
         } else {
             int index = -1;
             for (size_t i = 0; i < column_schemas_.size(); ++i) {
-                if (column_schemas_[i]->measurement_name_ ==
-                    lower_case_column_name) {
+                if (column_schemas_[i]->measurement_name_ == lookup_name) {
                     index = static_cast<int>(i);
                     break;
                 }
             }
             if (index != -1) {
-                column_pos_index_[lower_case_column_name] = index;
+                column_pos_index_[lookup_name] = index;
             }
             return index;
         }
@@ -440,13 +454,14 @@ class TableSchema {
     }
 
     int32_t find_id_column_order(const std::string& column_name) {
-        std::string lower_case_column_name = to_lower(column_name);
+        std::string lookup_name =
+            is_virtual_table_ ? column_name : to_lower(column_name);
 
         int column_order = 0;
         for (size_t i = 0; i < column_schemas_.size(); ++i) {
-            if (column_schemas_[i]->measurement_name_ ==
-                    lower_case_column_name &&
+            if (column_schemas_[i]->measurement_name_ == lookup_name &&
                 column_categories_[i] == common::ColumnCategory::TAG) {
+
                 return column_order;
             } else if (column_categories_[i] == common::ColumnCategory::TAG) {
                 column_order++;
