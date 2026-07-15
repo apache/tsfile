@@ -22,6 +22,9 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.block.TsBlockBuilder;
+import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -31,11 +34,36 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class AlignedChunkWriterImplTest {
+
+  @Test
+  public void testBatchWrite() {
+    AlignedChunkWriterImpl chunkWriter =
+        new AlignedChunkWriterImpl(new VectorMeasurementSchemaStub());
+    TsBlockBuilder builder =
+        new TsBlockBuilder(Arrays.asList(TSDataType.FLOAT, TSDataType.INT32, TSDataType.DOUBLE));
+    for (int time = 1; time <= 20; time++) {
+      builder.getTimeColumnBuilder().writeLong(time);
+      builder.getValueColumnBuilders()[0].writeFloat(time);
+      builder.getValueColumnBuilders()[1].writeInt(time);
+      builder.getValueColumnBuilders()[2].writeDouble(time);
+      builder.declarePosition();
+    }
+    TsBlock tsBlock = builder.build();
+
+    chunkWriter.write(
+        (TimeColumn) tsBlock.getTimeColumn(),
+        tsBlock.getValueColumns(),
+        tsBlock.getPositionCount());
+    chunkWriter.sealCurrentPage();
+
+    assertEquals(485, chunkWriter.getSerializedChunkSize());
+  }
 
   @Test
   public void testWrite1() {

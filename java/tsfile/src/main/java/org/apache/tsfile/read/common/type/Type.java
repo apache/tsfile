@@ -273,6 +273,13 @@ public interface Type {
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
 
+  /** Writes a batch of values in a TsBlock column to an aligned value chunk. */
+  default void write(
+      ValueChunkWriter writer, long[] times, Column column, int batchSize, int arrayOffset) {
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.chunk_unknown_type", getTypeEnum()));
+  }
+
   /** Writes a value at {@code rowIndex} in a Tablet column to a non-aligned chunk. */
   default void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     throw new UnSupportedDataTypeException(

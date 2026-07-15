@@ -197,6 +197,12 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long[] times, Column column, int batchSize, int arrayOffset) {
+    writer.write(times, column.getDoubles(), column.isNull(), batchSize, arrayOffset);
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     writer.write(time, ((double[]) column)[rowIndex]);
   }

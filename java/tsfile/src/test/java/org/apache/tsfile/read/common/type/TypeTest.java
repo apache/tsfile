@@ -387,6 +387,65 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteTsBlockValueChunkBatch() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+    Column column = Mockito.mock(Column.class);
+    long[] times = {1L, 2L};
+    boolean[] isNull = {false, true};
+    boolean[] booleans = {true, false};
+    int[] ints = {1, 0};
+    long[] longs = {2L, 0L};
+    float[] floats = {1.25F, 0F};
+    double[] doubles = {2.5D, 0D};
+    Binary[] binaries = {new Binary("value", TSFileConfig.STRING_CHARSET), Binary.EMPTY_VALUE};
+    Mockito.when(column.isNull()).thenReturn(isNull);
+    Mockito.when(column.getBooleans()).thenReturn(booleans);
+    Mockito.when(column.getInts()).thenReturn(ints);
+    Mockito.when(column.getLongs()).thenReturn(longs);
+    Mockito.when(column.getFloats()).thenReturn(floats);
+    Mockito.when(column.getDoubles()).thenReturn(doubles);
+    Mockito.when(column.getBinaries()).thenReturn(binaries);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, booleans, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT32, TSDataType.DATE}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, ints, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT64, TSDataType.TIMESTAMP}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, longs, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, floats, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, doubles, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, binaries, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, times, column, 1, 1);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testWriteNonAlignedTabletValueChunk() {
     ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
 

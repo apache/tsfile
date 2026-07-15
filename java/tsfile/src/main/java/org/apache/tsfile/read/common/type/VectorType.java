@@ -83,6 +83,13 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void write(
+      ValueChunkWriter writer, long[] times, Column column, int batchSize, int arrayOffset) {
+    throw new UnsupportedOperationException(
+        Messages.format("error.write.chunk_unknown_type", getTypeEnum()));
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
