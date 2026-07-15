@@ -34,10 +34,12 @@ import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.read.common.block.column.ColumnEncoder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
+import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -145,6 +147,11 @@ public class BooleanType extends AbstractType {
   @Override
   public void setTo(TsPrimitiveType from, Field to) {
     to.setBoolV(from.getBoolean());
+  }
+
+  @Override
+  public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
+    record.addPoint(columnName, resultSet.getBoolean(columnName));
   }
 
   @Override

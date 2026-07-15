@@ -30,9 +30,11 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -228,6 +230,12 @@ public interface Type {
   default void setTo(TsPrimitiveType from, Field to) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.common.unsupported_data_type", from.getDataType()));
+  }
+
+  /** Adds the value of {@code columnName} in {@code resultSet} to {@code record}. */
+  default void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", this.getTypeEnum()));
   }
 
   /** Returns the retained memory size of an array column in Tablet. */

@@ -32,10 +32,12 @@ import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
+import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -137,6 +139,11 @@ public class BlobType extends AbstractType {
   @Override
   public void setTo(TsPrimitiveType from, Field to) {
     to.setBinaryV(from.getBinary());
+  }
+
+  @Override
+  public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
+    record.addPoint(columnName, resultSet.getBinary(columnName));
   }
 
   @Override

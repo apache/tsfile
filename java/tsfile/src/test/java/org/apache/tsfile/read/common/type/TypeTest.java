@@ -23,17 +23,21 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.record.TSRecord;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -277,6 +281,50 @@ public class TypeTest {
       Assert.fail("Expected UnSupportedDataTypeException");
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.
+    }
+  }
+
+  @Test
+  public void testAddPoint() {
+    ResultSet resultSet = Mockito.mock(ResultSet.class);
+    IDeviceID deviceID = Mockito.mock(IDeviceID.class);
+    Mockito.when(resultSet.getBoolean("value")).thenReturn(true);
+    Mockito.when(resultSet.getInt("value")).thenReturn(1);
+    Mockito.when(resultSet.getLong("value")).thenReturn(2L);
+    Mockito.when(resultSet.getFloat("value")).thenReturn(1.25F);
+    Mockito.when(resultSet.getDouble("value")).thenReturn(2.5D);
+    Mockito.when(resultSet.getString("value")).thenReturn("text");
+    Mockito.when(resultSet.getBinary("value")).thenReturn(new byte[] {0x01, 0x23});
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 1},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 2L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, new Binary("text", StandardCharsets.UTF_8)},
+      {TSDataType.STRING, new Binary("text", StandardCharsets.UTF_8)},
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23})},
+      {TSDataType.OBJECT, new Binary(new byte[] {0x01, 0x23})}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSRecord record = new TSRecord(deviceID, 1L);
+      Type.fromTsDataType((TSDataType) testCase[0]).addPoint(record, "value", resultSet);
+      Assert.assertEquals(1, record.dataPointList.size());
+      Assert.assertEquals(testCase[1], record.dataPointList.get(0).getValue());
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      TSRecord record = new TSRecord(deviceID, 1L);
+      try {
+        Type.fromTsDataType(dataType).addPoint(record, "value", resultSet);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
     }
   }
 

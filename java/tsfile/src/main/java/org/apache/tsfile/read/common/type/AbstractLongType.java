@@ -39,10 +39,12 @@ import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
+import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -153,6 +155,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public void setTo(TsPrimitiveType from, Field to) {
     to.setLongV(from.getLong());
+  }
+
+  @Override
+  public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
+    record.addPoint(columnName, resultSet.getLong(columnName));
   }
 
   @Override
