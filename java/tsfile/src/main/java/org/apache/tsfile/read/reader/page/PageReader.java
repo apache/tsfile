@@ -30,12 +30,15 @@ import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
+import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
@@ -45,6 +48,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.LongConsumer;
+import java.util.function.LongPredicate;
 
 import static org.apache.tsfile.read.reader.series.PaginationController.UNLIMITED_PAGINATION_CONTROLLER;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
@@ -149,64 +153,18 @@ public class PageReader implements IPageReader {
   /**
    * @return the returned BatchData may be empty, but never be null
    */
-  @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   @Override
   public BatchData getAllSatisfiedPageData(boolean ascending) throws IOException {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
+    PageDataValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
+    LongPredicate isDeleted = this::isDeleted;
     while (timeDecoder.hasNext(timeBuffer)) {
       long timestamp = timeDecoder.readLong(timeBuffer);
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (allSatisfy || recordFilter.satisfyBoolean(timestamp, aBoolean))) {
-            pageData.putBoolean(timestamp, aBoolean);
-          }
-          break;
-        case INT32:
-        case DATE:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (allSatisfy || recordFilter.satisfyInteger(timestamp, anInt))) {
-            pageData.putInt(timestamp, anInt);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfyLong(timestamp, aLong))) {
-            pageData.putLong(timestamp, aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (allSatisfy || recordFilter.satisfyFloat(timestamp, aFloat))) {
-            pageData.putFloat(timestamp, aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (allSatisfy || recordFilter.satisfyDouble(timestamp, aDouble))) {
-            pageData.putDouble(timestamp, aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (allSatisfy || recordFilter.satisfyBinary(timestamp, aBinary))) {
-            pageData.putBinary(timestamp, aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
+      valueReader.read(
+          valueDecoder, valueBuffer, recordFilter, pageData, timestamp, allSatisfy, isDeleted);
     }
     return pageData.flip();
   }
