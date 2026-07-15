@@ -83,6 +83,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    ((LocalDate[]) toArray)[toIndex] = DateUtils.parseIntToLocalDate(from.getInt(fromIndex));
+  }
+
+  @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
     ((LocalDate[]) target)[targetIndex] = ((LocalDate[]) source)[sourceIndex];
   }

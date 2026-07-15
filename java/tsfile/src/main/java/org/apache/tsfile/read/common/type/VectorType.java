@@ -84,6 +84,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    ((long[]) toArray)[toIndex] = from.getLong(fromIndex);
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     throw new UnSupportedDataTypeException(

@@ -246,6 +246,13 @@ public interface Type {
         Messages.format("error.common.unsupported_data_type", from.getDataType()));
   }
 
+  /**
+   * Copies a value from {@code from} at {@code fromIndex} to {@code toArray} at {@code toIndex}.
+   */
+  default void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Adds the value of {@code columnName} in {@code resultSet} to {@code record}. */
   default void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     throw new UnSupportedDataTypeException(

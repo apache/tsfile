@@ -148,6 +148,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    ((Binary[]) toArray)[toIndex] = from.getBinary(fromIndex);
+  }
+
+  @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getBinary(columnName));
   }

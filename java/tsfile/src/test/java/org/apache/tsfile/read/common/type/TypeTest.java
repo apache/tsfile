@@ -682,6 +682,48 @@ public class TypeTest {
   }
 
   @Test
+  public void testSetToArray() {
+    Column column = Mockito.mock(Column.class);
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Mockito.when(column.getBoolean(1)).thenReturn(true);
+    Mockito.when(column.getInt(1)).thenReturn(1);
+    Mockito.when(column.getInt(2)).thenReturn(20260715);
+    Mockito.when(column.getLong(1)).thenReturn(2L);
+    Mockito.when(column.getFloat(1)).thenReturn(1.25F);
+    Mockito.when(column.getDouble(1)).thenReturn(2.5D);
+    Mockito.when(column.getBinary(1)).thenReturn(binary);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1, true},
+      {TSDataType.INT32, 1, 1},
+      {TSDataType.DATE, 2, LocalDate.of(2026, 7, 15)},
+      {TSDataType.INT64, 1, 2L},
+      {TSDataType.TIMESTAMP, 1, 2L},
+      {TSDataType.FLOAT, 1, 1.25F},
+      {TSDataType.DOUBLE, 1, 2.5D},
+      {TSDataType.TEXT, 1, binary},
+      {TSDataType.STRING, 1, binary},
+      {TSDataType.BLOB, 1, binary},
+      {TSDataType.OBJECT, 1, binary},
+      {TSDataType.VECTOR, 1, 2L}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object target = type.createArray(1);
+      type.setTo(column, (int) testCase[1], target, 0);
+      Assert.assertEquals(testCase[2], Array.get(target, 0));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).setTo(column, 1, new Object[1], 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testAddPoint() {
     ResultSet resultSet = Mockito.mock(ResultSet.class);
     IDeviceID deviceID = Mockito.mock(IDeviceID.class);

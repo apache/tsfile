@@ -163,6 +163,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    ((int[]) toArray)[toIndex] = from.getInt(fromIndex);
+  }
+
+  @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getInt(columnName));
   }
