@@ -21,7 +21,12 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encoding.encoder.FloatEncoder;
+import org.apache.tsfile.encoding.encoder.IntRleEncoder;
+import org.apache.tsfile.encoding.encoder.LongRleEncoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
@@ -438,6 +443,27 @@ public final class TypeServices {
                 };
           };
 
+  public static final TypeService<EncoderBuilder> RLE_ENCODER_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE, BOOLEAN -> maxPointNumber -> new IntRleEncoder();
+            case INT64, TIMESTAMP -> maxPointNumber -> new LongRleEncoder();
+            case FLOAT ->
+                maxPointNumber ->
+                    new FloatEncoder(TSEncoding.RLE, TSDataType.FLOAT, maxPointNumber);
+            case DOUBLE ->
+                maxPointNumber ->
+                    new FloatEncoder(TSEncoding.RLE, TSDataType.DOUBLE, maxPointNumber);
+            case TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
+                maxPointNumber -> {
+                  throw new UnSupportedDataTypeException(
+                      Messages.format(
+                          "error.encoding.ts_encoding_builder_unsupported_type",
+                          TSEncoding.RLE,
+                          type.getTypeEnum()));
+                };
+          };
+
   private TypeServices() {}
 
   @FunctionalInterface
@@ -489,6 +515,12 @@ public final class TypeServices {
   public interface EmptyValueChunkWriter {
 
     void write(ValueChunkWriter writer);
+  }
+
+  @FunctionalInterface
+  public interface EncoderBuilder {
+
+    Encoder build(int maxPointNumber);
   }
 
   public enum PageDataReadStatus {

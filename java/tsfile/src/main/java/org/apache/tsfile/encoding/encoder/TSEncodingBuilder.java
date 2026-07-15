@@ -25,6 +25,8 @@ import org.apache.tsfile.common.constant.JsonFormatConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.TypeServices;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import org.slf4j.Logger;
@@ -143,21 +145,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-        case BOOLEAN:
-          return new IntRleEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new LongRleEncoder();
-        case FLOAT:
-        case DOUBLE:
-          return new FloatEncoder(TSEncoding.RLE, type, maxPointNumber);
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.RLE, type));
-      }
+      return TypeServices.RLE_ENCODER_SERVICE.call(Type.fromTsDataType(type)).build(maxPointNumber);
     }
 
     /**
