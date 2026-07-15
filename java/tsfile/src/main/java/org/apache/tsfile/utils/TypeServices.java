@@ -20,6 +20,7 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.type.service.TypeService;
@@ -279,6 +280,55 @@ public final class TypeServices {
                 };
           };
 
+  public static final TypeService<PageDataTsPrimitiveValueReader>
+      READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE =
+          type ->
+              switch (type.getTypeEnum()) {
+                case BOOLEAN ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      boolean value = decoder.readBoolean(buffer);
+                      return isDeleted.test(timestamp)
+                          ? null
+                          : new TsPrimitiveType.TsBoolean(value);
+                    };
+                case INT32 ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      int value = decoder.readInt(buffer);
+                      return isDeleted.test(timestamp) ? null : new TsPrimitiveType.TsInt(value);
+                    };
+                case DATE ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      int value = decoder.readInt(buffer);
+                      return isDeleted.test(timestamp)
+                          ? null
+                          : new TsPrimitiveType.TsInt(value, TSDataType.DATE);
+                    };
+                case INT64, TIMESTAMP ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      long value = decoder.readLong(buffer);
+                      return isDeleted.test(timestamp) ? null : new TsPrimitiveType.TsLong(value);
+                    };
+                case FLOAT ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      float value = decoder.readFloat(buffer);
+                      return isDeleted.test(timestamp) ? null : new TsPrimitiveType.TsFloat(value);
+                    };
+                case DOUBLE ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      double value = decoder.readDouble(buffer);
+                      return isDeleted.test(timestamp) ? null : new TsPrimitiveType.TsDouble(value);
+                    };
+                case TEXT, BLOB, STRING, OBJECT ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      Binary value = decoder.readBinary(buffer);
+                      return isDeleted.test(timestamp) ? null : new TsPrimitiveType.TsBinary(value);
+                    };
+                case ROW, UNKNOWN, VECTOR ->
+                    (decoder, buffer, timestamp, isDeleted) -> {
+                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                    };
+              };
+
   private TypeServices() {}
 
   @FunctionalInterface
@@ -306,6 +356,13 @@ public final class TypeServices {
         boolean allSatisfy,
         LongPredicate isDeleted,
         PaginationController paginationController);
+  }
+
+  @FunctionalInterface
+  public interface PageDataTsPrimitiveValueReader {
+
+    TsPrimitiveType read(
+        Decoder decoder, ByteBuffer buffer, long timestamp, LongPredicate isDeleted);
   }
 
   public enum PageDataReadStatus {

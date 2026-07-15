@@ -34,6 +34,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.PageDataTsPrimitiveValueReader;
 import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
@@ -136,60 +137,12 @@ public class ValuePageReader {
 
   public TsPrimitiveType nextValue(long timestamp, int timeIndex) throws IOException {
     uncompressDataIfNecessary();
-    TsPrimitiveType resultValue = null;
     if (valueBuffer == null || ((bitmap[timeIndex / 8] & 0xFF) & (MASK >>> (timeIndex % 8))) == 0) {
       return null;
     }
-    switch (dataType) {
-      case BOOLEAN:
-        boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsBoolean(aBoolean);
-        }
-        break;
-      case INT32:
-      case DATE:
-        int anInt = valueDecoder.readInt(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue =
-              dataType.equals(TSDataType.INT32)
-                  ? new TsPrimitiveType.TsInt(anInt)
-                  : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
-        }
-        break;
-      case INT64:
-      case TIMESTAMP:
-        long aLong = valueDecoder.readLong(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsLong(aLong);
-        }
-        break;
-      case FLOAT:
-        float aFloat = valueDecoder.readFloat(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsFloat(aFloat);
-        }
-        break;
-      case DOUBLE:
-        double aDouble = valueDecoder.readDouble(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsDouble(aDouble);
-        }
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        Binary aBinary = valueDecoder.readBinary(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsBinary(aBinary);
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
-
-    return resultValue;
+    PageDataTsPrimitiveValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(Type.fromTsDataType(dataType));
+    return valueReader.read(valueDecoder, valueBuffer, timestamp, this::isDeleted);
   }
 
   /**
