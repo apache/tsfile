@@ -45,6 +45,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -160,6 +162,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getLong(columnName));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, String value) {
+    return new LongDataPoint(measurementId, Long.parseLong(value));
   }
 
   @Override

@@ -46,6 +46,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -161,6 +163,11 @@ public abstract class AbstractIntType extends AbstractType {
   @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getInt(columnName));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, String value) {
+    return new IntDataPoint(measurementId, Integer.parseInt(value));
   }
 
   @Override

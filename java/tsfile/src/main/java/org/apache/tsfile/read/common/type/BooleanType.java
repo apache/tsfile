@@ -40,6 +40,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -152,6 +154,11 @@ public class BooleanType extends AbstractType {
   @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getBoolean(columnName));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, String value) {
+    return new BooleanDataPoint(measurementId, Boolean.parseBoolean(value));
   }
 
   @Override

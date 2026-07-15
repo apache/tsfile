@@ -28,6 +28,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -51,6 +53,11 @@ public class DateType extends AbstractIntType {
   @Override
   public TsPrimitiveType getTsPrimitiveType(Object value) {
     return new TsInt((int) value, TSDataType.DATE);
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, String value) {
+    return new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
   }
 
   @Override

@@ -34,6 +34,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -118,6 +119,51 @@ public class TypeTest {
       Assert.assertEquals(
           Integer.BYTES + binary.getLength(),
           Type.fromTsDataType(dataType).calcTypeSize(new TsPrimitiveType.TsBinary(binary)));
+    }
+  }
+
+  @Test
+  public void testGetDataPoint() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, "true", true},
+      {TSDataType.INT32, "1", 1},
+      {TSDataType.DATE, "2026-07-15", 20260715},
+      {TSDataType.INT64, "2", 2L},
+      {TSDataType.TIMESTAMP, "3", 3L},
+      {TSDataType.FLOAT, "1.25", 1.25F},
+      {TSDataType.DOUBLE, "2.5", 2.5D},
+      {TSDataType.TEXT, "text", new Binary("text", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.STRING, "string", new Binary("string", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.BLOB, "blob", new Binary("blob", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.OBJECT, "object", new Binary("object", TSFileConfig.STRING_CHARSET)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      String value = (String) testCase[1];
+      Object expectedValue = testCase[2];
+
+      DataPoint typeDataPoint = Type.fromTsDataType(dataType).getDataPoint("s", value);
+      Assert.assertEquals("s", typeDataPoint.getMeasurementId());
+      Assert.assertEquals(expectedValue, typeDataPoint.getValue());
+
+      DataPoint factoryDataPoint = DataPoint.getDataPoint(dataType, "s", value);
+      Assert.assertEquals(typeDataPoint.getClass(), factoryDataPoint.getClass());
+      Assert.assertEquals(expectedValue, factoryDataPoint.getValue());
+    }
+
+    try {
+      DataPoint.getDataPoint(TSDataType.INT32, "s", "invalid");
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+
+    try {
+      DataPoint.getDataPoint(TSDataType.VECTOR, "s", "value");
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
     }
   }
 

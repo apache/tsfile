@@ -35,6 +35,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -236,6 +237,12 @@ public interface Type {
   default void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.common.unsupported_data_type", this.getTypeEnum()));
+  }
+
+  /** Creates a data point by parsing a string value. */
+  default DataPoint getDataPoint(String measurementId, String value) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
 
   /** Returns the retained memory size of an array column in Tablet. */
