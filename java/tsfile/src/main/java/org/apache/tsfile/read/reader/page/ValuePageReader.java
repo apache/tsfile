@@ -204,6 +204,8 @@ public class ValuePageReader {
       }
       return;
     }
+    PageDataColumnBuilderValueReader valueReader =
+        TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
     for (int i = 0; i < readEndIndex; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         if (keepCurrentRow[i]) {
@@ -211,60 +213,7 @@ public class ValuePageReader {
         }
         continue;
       }
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeBoolean(aBoolean);
-          }
-          break;
-        case INT32:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeInt(anInt);
-          }
-          break;
-        case DATE:
-          int anDate = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (columnBuilder instanceof BinaryColumnBuilder) {
-              ((BinaryColumnBuilder) columnBuilder).writeDate(anDate);
-            } else {
-              columnBuilder.writeInt(anDate);
-            }
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeLong(aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeFloat(aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeDouble(aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeBinary(aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
+      valueReader.read(valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], false);
     }
   }
 
