@@ -102,6 +102,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, ByteBuffer buffer) {
+    buffer.putInt((int) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

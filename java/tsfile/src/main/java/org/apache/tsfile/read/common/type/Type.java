@@ -134,6 +134,11 @@ public interface Type {
         Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
   }
 
+  /** Serializes {@code value} to {@code buffer}. */
+  default void serializeValue(Object value, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

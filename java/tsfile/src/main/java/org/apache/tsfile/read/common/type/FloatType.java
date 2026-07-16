@@ -104,6 +104,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, ByteBuffer buffer) {
+    buffer.putFloat((float) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getFloatEncoding());
   }

@@ -100,6 +100,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, ByteBuffer buffer) {
+    buffer.put((boolean) value ? (byte) 1 : (byte) 0);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getBooleanEncoding());
   }

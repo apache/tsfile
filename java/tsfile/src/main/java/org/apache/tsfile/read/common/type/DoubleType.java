@@ -105,6 +105,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, ByteBuffer buffer) {
+    buffer.putDouble((double) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getDoubleEncoding());
   }

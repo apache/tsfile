@@ -130,6 +130,45 @@ public class TypeTest {
   }
 
   @Test
+  public void testSerializeValue() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260716},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object value = testCase[1];
+      ByteBuffer buffer = ByteBuffer.allocate(64);
+      type.serializeValue(value, buffer);
+
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serialize(type.getTsPrimitiveType(value), new DataOutputStream(output));
+      Assert.assertArrayEquals(
+          output.toByteArray(), Arrays.copyOf(buffer.array(), buffer.position()));
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).serializeValue(null, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testGetDataPoint() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, "true", true},

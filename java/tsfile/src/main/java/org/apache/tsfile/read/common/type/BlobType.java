@@ -36,6 +36,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
@@ -99,6 +100,11 @@ public class BlobType extends AbstractType {
     Binary binary = value.getBinary();
     stream.writeInt(binary.getLength());
     stream.write(binary.getValues());
+  }
+
+  @Override
+  public void serializeValue(Object value, ByteBuffer buffer) {
+    ReadWriteIOUtils.write((Binary) value, buffer);
   }
 
   @Override
