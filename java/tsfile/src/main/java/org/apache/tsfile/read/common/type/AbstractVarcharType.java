@@ -141,6 +141,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Field to) {
+    to.setBinaryV(from.getBinary());
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((Binary[]) toArray)[toIndex] = from.getBinary(fromIndex);
   }

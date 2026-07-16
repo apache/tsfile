@@ -163,6 +163,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Field to) {
+    to.setFloatV(from.getFloat());
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((float[]) toArray)[toIndex] = from.getFloat(fromIndex);
   }

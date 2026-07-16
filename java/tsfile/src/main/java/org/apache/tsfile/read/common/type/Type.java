@@ -251,6 +251,12 @@ public interface Type {
         Messages.format("error.common.unsupported_data_type", from.getDataType()));
   }
 
+  /** Copies the current value from {@code from} to {@code to}. */
+  default void setTo(BatchData from, Field to) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", from.getDataType()));
+  }
+
   /**
    * Copies a value from {@code from} at {@code fromIndex} to {@code toArray} at {@code toIndex}.
    */

@@ -660,6 +660,12 @@ public class TypeTest {
       type.setTo(from, directTarget);
       Assert.assertEquals(testCase[2], type.getValue(directTarget));
 
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(1L, from.getValue());
+      Field batchTarget = new Field(dataType);
+      type.setTo(batchData, batchTarget);
+      Assert.assertEquals(testCase[2], type.getValue(batchTarget));
+
       if (from.getDataType() == dataType) {
         Field factoryTarget = new Field(dataType);
         Field.setTsPrimitiveValue(from, factoryTarget);
@@ -683,6 +689,12 @@ public class TypeTest {
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.
     }
+
+    BatchData vectorBatchData = new BatchData(TSDataType.VECTOR);
+    vectorBatchData.putVector(1L, new TsPrimitiveType[] {new TsPrimitiveType.TsInt(1)});
+    Field vectorTarget = new Field(TSDataType.INT32);
+    Type.fromTsDataType(TSDataType.VECTOR).setTo(vectorBatchData, vectorTarget);
+    Assert.assertEquals(1, vectorTarget.getIntV());
   }
 
   @Test

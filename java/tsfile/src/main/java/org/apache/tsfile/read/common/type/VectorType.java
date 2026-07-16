@@ -223,6 +223,12 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void setTo(BatchData from, Field to) {
+    TsPrimitiveType value = from.getVector()[0];
+    Type.fromTsDataType(value.getDataType()).setTo(value, to);
+  }
+
+  @Override
   public long estimateValueSize() {
     return RamUsageEstimator.NUM_BYTES_OBJECT_REF;
   }
