@@ -183,6 +183,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Column to, int index) {
+    to.getLongs()[index] = from.getLong();
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((long[]) toArray)[toIndex] = from.getLong(fromIndex);
   }

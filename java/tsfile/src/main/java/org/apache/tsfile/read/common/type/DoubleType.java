@@ -186,6 +186,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Column to, int index) {
+    to.getDoubles()[index] = from.getDouble();
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((double[]) toArray)[toIndex] = from.getDouble(fromIndex);
   }

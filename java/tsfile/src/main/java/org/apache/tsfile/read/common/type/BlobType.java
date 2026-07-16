@@ -169,6 +169,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Column to, int index) {
+    to.getBinaries()[index] = from.getBinary();
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((Binary[]) toArray)[toIndex] = from.getBinary(fromIndex);
   }

@@ -184,6 +184,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(BatchData from, Column to, int index) {
+    to.getInts()[index] = from.getInt();
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((int[]) toArray)[toIndex] = from.getInt(fromIndex);
   }

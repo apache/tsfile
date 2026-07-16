@@ -25,6 +25,7 @@ import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
 import org.apache.tsfile.read.expression.ExpressionTree;
@@ -267,34 +268,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   }
 
   private static void fillSingleMeasurementColumn(Column column, BatchData batchData, int pos) {
-    switch (batchData.getDataType()) {
-      case BOOLEAN:
-        column.getBooleans()[pos] = batchData.getBoolean();
-        break;
-      case DOUBLE:
-        column.getDoubles()[pos] = batchData.getDouble();
-        break;
-      case FLOAT:
-        column.getFloats()[pos] = batchData.getFloat();
-        break;
-      case INT32:
-      case DATE:
-        column.getInts()[pos] = batchData.getInt();
-        break;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        column.getBinaries()[pos] = batchData.getBinary();
-        break;
-      case INT64:
-      case TIMESTAMP:
-        column.getLongs()[pos] = batchData.getLong();
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.block_reader_unsupported_type", batchData.getDataType()));
-    }
+    Type.fromTsDataType(batchData.getDataType()).setTo(batchData, column, pos);
     column.setPositionCount(pos + 1);
   }
 
