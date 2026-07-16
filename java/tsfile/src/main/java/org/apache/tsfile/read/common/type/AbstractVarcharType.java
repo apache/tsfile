@@ -209,8 +209,8 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
-    ((Binary[]) column)[rowIndex] = toBinaryValue(value);
+  public void addValue(int rowIndex, Object value, Object array) {
+    ((Binary[]) array)[rowIndex] = toBinaryValue(value);
   }
 
   @Override

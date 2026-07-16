@@ -222,7 +222,7 @@ public class BlobType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
       throw new IllegalArgumentException(
           Messages.format(
@@ -232,9 +232,9 @@ public class BlobType extends AbstractType {
               value.getClass().getName()));
     }
     if (value instanceof Binary) {
-      ((Binary[]) column)[rowIndex] = (Binary) value;
+      ((Binary[]) array)[rowIndex] = (Binary) value;
     } else {
-      ((Binary[]) column)[rowIndex] =
+      ((Binary[]) array)[rowIndex] =
           value != null
               ? new Binary(((String) value).getBytes(TSFileConfig.STRING_CHARSET))
               : Binary.EMPTY_VALUE;

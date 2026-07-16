@@ -273,9 +273,9 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, Float.class, "Float");
-    ((float[]) column)[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
+    ((float[]) array)[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
   }
 
   @Override

@@ -77,9 +77,9 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, LocalDate.class, "LocalDate");
-    ((LocalDate[]) column)[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
+    ((LocalDate[]) array)[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
   }
 
   @Override

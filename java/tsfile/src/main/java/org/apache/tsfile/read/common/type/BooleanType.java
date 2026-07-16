@@ -234,9 +234,9 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, Boolean.class, "Boolean");
-    ((boolean[]) column)[rowIndex] = value != null && (boolean) value;
+    ((boolean[]) array)[rowIndex] = value != null && (boolean) value;
   }
 
   @Override

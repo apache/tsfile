@@ -266,9 +266,9 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, Integer.class, "Integer");
-    ((int[]) column)[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
+    ((int[]) array)[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
   }
 
   @Override

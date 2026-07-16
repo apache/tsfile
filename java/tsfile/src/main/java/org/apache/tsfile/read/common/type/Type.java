@@ -169,8 +169,8 @@ public interface Type {
     builder.writeObject(value);
   }
 
-  /** Adds a value to the array column at {@code rowIndex}. */
-  default void addValue(int rowIndex, Object value, Object column) {
+  /** Adds a value to the array at {@code rowIndex}. */
+  default void addValue(int rowIndex, Object value, Object array) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

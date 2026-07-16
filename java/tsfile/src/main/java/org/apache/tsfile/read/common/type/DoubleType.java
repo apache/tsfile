@@ -275,9 +275,9 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, Double.class, "Double");
-    ((double[]) column)[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
+    ((double[]) array)[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
   }
 
   @Override

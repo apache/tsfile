@@ -265,9 +265,9 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public void addValue(int rowIndex, Object value, Object column) {
+  public void addValue(int rowIndex, Object value, Object array) {
     checkValueType(value, Long.class, "Long");
-    ((long[]) column)[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
+    ((long[]) array)[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
   }
 
   @Override
