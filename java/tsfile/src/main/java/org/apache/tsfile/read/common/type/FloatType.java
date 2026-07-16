@@ -174,6 +174,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getFloats()[index] = from.getFloat();
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setFloatV(from.getFloatV());
   }

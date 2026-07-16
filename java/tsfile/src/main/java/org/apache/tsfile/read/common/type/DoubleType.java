@@ -176,6 +176,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getDoubles()[index] = from.getDouble();
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setDoubleV(from.getDoubleV());
   }

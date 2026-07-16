@@ -173,6 +173,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getLongs()[index] = from.getLong();
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setLongV(from.getLongV());
   }

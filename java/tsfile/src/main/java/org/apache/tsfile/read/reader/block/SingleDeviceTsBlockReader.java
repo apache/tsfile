@@ -357,35 +357,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         final List<Integer> columnPositions = posInResult.get(i);
         for (Integer pos : columnPositions) {
           if (value != null) {
-            switch (value.getDataType()) {
-              case TEXT:
-              case STRING:
-              case BLOB:
-              case OBJECT:
-                block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
-                break;
-              case INT32:
-              case DATE:
-                block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
-                break;
-              case INT64:
-              case TIMESTAMP:
-                block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
-                break;
-              case BOOLEAN:
-                block.getColumn(pos).getBooleans()[blockRowNum] = value.getBoolean();
-                break;
-              case FLOAT:
-                block.getColumn(pos).getFloats()[blockRowNum] = value.getFloat();
-                break;
-              case DOUBLE:
-                block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
-                break;
-              default:
-                throw new IllegalArgumentException(
-                    Messages.format(
-                        "error.read.block_reader_unsupported_type", value.getDataType()));
-            }
+            Type.fromTsDataType(value.getDataType())
+                .setTo(value, block.getColumn(pos), blockRowNum);
           } else {
             block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);
           }

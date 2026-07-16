@@ -159,6 +159,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getBinaries()[index] = from.getBinary();
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setBinaryV(from.getBinaryV());
   }

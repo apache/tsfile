@@ -272,6 +272,12 @@ public interface Type {
         Messages.format("error.common.unsupported_data_type", from.getDataType()));
   }
 
+  /** Copies the value from {@code from} to {@code to} at {@code index}. */
+  default void setTo(TsPrimitiveType from, Column to, int index) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", from.getDataType()));
+  }
+
   /** Copies the value from {@code from} to {@code to}. */
   default void setTo(Field from, Field to) {
     throw new UnSupportedDataTypeException(

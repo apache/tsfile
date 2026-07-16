@@ -174,6 +174,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getInts()[index] = from.getInt();
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setIntV(from.getIntV());
   }
