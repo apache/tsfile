@@ -196,6 +196,12 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void addPoint(TSRecord record, String columnName, Field field) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", getTypeEnum()));
+  }
+
+  @Override
   public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
     throw new UnsupportedOperationException(getDisplayName());
   }

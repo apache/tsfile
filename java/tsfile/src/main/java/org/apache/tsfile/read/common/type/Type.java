@@ -275,6 +275,12 @@ public interface Type {
         Messages.format("error.common.unsupported_data_type", this.getTypeEnum()));
   }
 
+  /** Adds the value in {@code field} to {@code record}. */
+  default void addPoint(TSRecord record, String columnName, Field field) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.common.unsupported_data_type", this.getTypeEnum()));
+  }
+
   /** Creates a data point by parsing a string value. */
   default DataPoint getDataPoint(String measurementId, String value) {
     throw new UnSupportedDataTypeException(

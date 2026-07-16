@@ -178,6 +178,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void addPoint(TSRecord record, String columnName, Field field) {
+    record.addPoint(columnName, field.getIntV());
+  }
+
+  @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     record.addPoint(columnName, resultSet.getInt(columnName));
   }

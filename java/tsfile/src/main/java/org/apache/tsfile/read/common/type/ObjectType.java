@@ -169,6 +169,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void addPoint(TSRecord record, String columnName, Field field) {
+    record.addPoint(columnName, field.getBinaryV().getValues());
+  }
+
+  @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
   }

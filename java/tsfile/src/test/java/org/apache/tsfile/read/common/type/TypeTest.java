@@ -845,15 +845,28 @@ public class TypeTest {
 
     for (Object[] testCase : testCases) {
       TSRecord record = new TSRecord(deviceID, 1L);
-      Type.fromTsDataType((TSDataType) testCase[0]).addPoint(record, "value", resultSet);
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      type.addPoint(record, "value", resultSet);
       Assert.assertEquals(1, record.dataPointList.size());
       Assert.assertEquals(testCase[1], record.dataPointList.get(0).getValue());
+
+      TSRecord fieldRecord = new TSRecord(deviceID, 1L);
+      type.addPoint(fieldRecord, "value", type.getField(testCase[1]));
+      Assert.assertEquals(1, fieldRecord.dataPointList.size());
+      Assert.assertEquals(testCase[1], fieldRecord.dataPointList.get(0).getValue());
     }
 
     for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
       TSRecord record = new TSRecord(deviceID, 1L);
       try {
         Type.fromTsDataType(dataType).addPoint(record, "value", resultSet);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType).addPoint(record, "value", new Field(dataType));
         Assert.fail("Expected UnSupportedDataTypeException");
       } catch (UnSupportedDataTypeException ignored) {
         // Expected.
