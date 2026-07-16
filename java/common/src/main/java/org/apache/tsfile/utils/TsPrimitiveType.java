@@ -237,12 +237,12 @@ public abstract class TsPrimitiveType implements Serializable {
 
     @Override
     public double getDouble() {
-      return (double) value;
+      return value;
     }
 
     @Override
     public long getLong() {
-      return (long) value;
+      return value;
     }
 
     @Override
@@ -252,6 +252,9 @@ public abstract class TsPrimitiveType implements Serializable {
 
     @Override
     public Binary getBinary() {
+      if (dataType == TSDataType.DATE) {
+        return new Binary(TSDataType.getDateStringValue(value), StandardCharsets.UTF_8);
+      }
       return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
     }
 
