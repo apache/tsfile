@@ -164,6 +164,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void setTo(Field from, Field to) {
+    to.setBoolV(from.getBoolV());
+  }
+
+  @Override
   public void setTo(BatchData from, Field to) {
     to.setBoolV(from.getBoolean());
   }

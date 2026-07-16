@@ -173,6 +173,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(Field from, Field to) {
+    to.setIntV(from.getIntV());
+  }
+
+  @Override
   public void setTo(BatchData from, Field to) {
     to.setIntV(from.getInt());
   }

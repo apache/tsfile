@@ -25,7 +25,6 @@ import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.time.LocalDate;
 
@@ -50,33 +49,7 @@ public class Field {
   public static Field copy(Field field) {
     Field out = new Field(field.dataType);
     if (out.dataType != null) {
-      switch (out.dataType) {
-        case DOUBLE:
-          out.setDoubleV(field.getDoubleV());
-          break;
-        case FLOAT:
-          out.setFloatV(field.getFloatV());
-          break;
-        case INT64:
-        case TIMESTAMP:
-          out.setLongV(field.getLongV());
-          break;
-        case INT32:
-        case DATE:
-          out.setIntV(field.getIntV());
-          break;
-        case BOOLEAN:
-          out.setBoolV(field.getBoolV());
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          out.setBinaryV(field.getBinaryV());
-          break;
-        default:
-          throw new UnSupportedDataTypeException(out.dataType.toString());
-      }
+      Type.fromTsDataType(out.dataType).setTo(field, out);
     }
 
     return out;

@@ -158,6 +158,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void setTo(Field from, Field to) {
+    to.setBinaryV(from.getBinaryV());
+  }
+
+  @Override
   public void setTo(BatchData from, Field to) {
     to.setBinaryV(from.getBinary());
   }

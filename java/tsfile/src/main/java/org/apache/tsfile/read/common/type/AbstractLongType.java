@@ -172,6 +172,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void setTo(Field from, Field to) {
+    to.setLongV(from.getLongV());
+  }
+
+  @Override
   public void setTo(BatchData from, Field to) {
     to.setLongV(from.getLong());
   }
