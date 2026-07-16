@@ -256,7 +256,7 @@ if (ENABLE_THREADS)
     link_libraries(Threads::Threads)
 endif()
 
-option(ENABLE_SIMD "Enable SIMDe (SIMD Everywhere)" OFF)
+option(ENABLE_SIMD "Enable SIMD acceleration" ON)
 message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
 if (ENABLE_SIMD)
