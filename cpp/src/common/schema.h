@@ -209,7 +209,6 @@ class TableSchema {
             to_lowercase_inplace(table_name_);
         }
         for (const common::ColumnSchema& column_schema : column_schemas) {
-
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
                 column_schema.get_column_name(),
                 column_schema.get_data_type()));
@@ -459,7 +458,6 @@ class TableSchema {
         for (size_t i = 0; i < column_schemas_.size(); ++i) {
             if (column_schemas_[i]->measurement_name_ == lookup_name &&
                 column_categories_[i] == common::ColumnCategory::TAG) {
-
                 return column_order;
             } else if (column_categories_[i] == common::ColumnCategory::TAG) {
                 column_order++;
