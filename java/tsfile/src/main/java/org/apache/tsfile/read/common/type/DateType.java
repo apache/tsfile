@@ -65,6 +65,10 @@ public class DateType extends AbstractIntType {
   @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
+    if (array instanceof int[]) {
+      super.write(writer, time, array, rowIndex, isNull);
+      return;
+    }
     writer.write(
         time,
         isNull ? 0 : DateUtils.parseDateExpressionToInt(((LocalDate[]) array)[rowIndex]),
@@ -73,28 +77,57 @@ public class DateType extends AbstractIntType {
 
   @Override
   public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
+    if (column instanceof int[]) {
+      super.write(writer, time, column, rowIndex);
+      return;
+    }
     writer.write(time, DateUtils.parseDateExpressionToInt(((LocalDate[]) column)[rowIndex]));
   }
 
   @Override
   public void addValue(int rowIndex, Object value, Object array) {
+    if (array instanceof int[]) {
+      if (value instanceof Integer) {
+        ((int[]) array)[rowIndex] = (int) value;
+      } else {
+        checkValueType(value, LocalDate.class, "LocalDate");
+        ((int[]) array)[rowIndex] =
+            value != null
+                ? DateUtils.parseDateExpressionToInt((LocalDate) value)
+                : DateUtils.EMPTY_DATE_INT;
+      }
+      return;
+    }
     checkValueType(value, LocalDate.class, "LocalDate");
     ((LocalDate[]) array)[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
   }
 
   @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    if (toArray instanceof int[]) {
+      super.setTo(from, fromIndex, toArray, toIndex);
+      return;
+    }
     ((LocalDate[]) toArray)[toIndex] = DateUtils.parseIntToLocalDate(from.getInt(fromIndex));
   }
 
   @Override
   public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
-    ((LocalDate[]) target)[targetIndex] = ((LocalDate[]) source)[sourceIndex];
+    if (target instanceof int[]) {
+      ((int[]) target)[targetIndex] = getDateInt(source, sourceIndex);
+      return;
+    }
+    ((LocalDate[]) target)[targetIndex] =
+        source instanceof int[]
+            ? DateUtils.parseIntToLocalDate(((int[]) source)[sourceIndex])
+            : ((LocalDate[]) source)[sourceIndex];
   }
 
   @Override
   public Object arrayCopyOf(Object array, int newLength) {
-    return Arrays.copyOf((LocalDate[]) array, newLength);
+    return array instanceof int[]
+        ? Arrays.copyOf((int[]) array, newLength)
+        : Arrays.copyOf((LocalDate[]) array, newLength);
   }
 
   @Override
@@ -122,6 +155,12 @@ public class DateType extends AbstractIntType {
   @Override
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
+    if (array instanceof int[]) {
+      for (int i = 0; i < rowSize; i++) {
+        ReadWriteIOUtils.write(((int[]) array)[i], stream);
+      }
+      return;
+    }
     LocalDate[] values = (LocalDate[]) array;
     for (int i = 0; i < rowSize; i++) {
       ReadWriteIOUtils.write(
@@ -149,13 +188,28 @@ public class DateType extends AbstractIntType {
 
   @Override
   public boolean arrayEquals(Object left, Object right, int rowSize) {
-    return hasEnoughLength(left, right, rowSize)
-        && Arrays.equals((LocalDate[]) left, 0, rowSize, (LocalDate[]) right, 0, rowSize);
+    if (!hasEnoughLength(left, right, rowSize)) {
+      return false;
+    }
+    if (left instanceof int[] && right instanceof int[]) {
+      return Arrays.equals((int[]) left, 0, rowSize, (int[]) right, 0, rowSize);
+    }
+    if (left instanceof LocalDate[] && right instanceof LocalDate[]) {
+      return Arrays.equals((LocalDate[]) left, 0, rowSize, (LocalDate[]) right, 0, rowSize);
+    }
+    for (int i = 0; i < rowSize; i++) {
+      if (getDateInt(left, i) != getDateInt(right, i)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override
   public long estimateArraySize(Object array) {
-    return RamUsageEstimator.sizeOf((LocalDate[]) array);
+    return array instanceof int[]
+        ? RamUsageEstimator.sizeOf((int[]) array)
+        : RamUsageEstimator.sizeOf((LocalDate[]) array);
   }
 
   @Override
@@ -180,6 +234,14 @@ public class DateType extends AbstractIntType {
   @Override
   public String getDisplayName() {
     return "DATE";
+  }
+
+  private int getDateInt(Object array, int index) {
+    if (array instanceof int[]) {
+      return ((int[]) array)[index];
+    }
+    LocalDate value = ((LocalDate[]) array)[index];
+    return value != null ? DateUtils.parseDateExpressionToInt(value) : DateUtils.EMPTY_DATE_INT;
   }
 
   public static DateType getInstance() {

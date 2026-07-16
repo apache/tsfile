@@ -30,6 +30,7 @@ import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -42,6 +43,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -721,6 +725,45 @@ public class TypeTest {
     } catch (UnsupportedOperationException ignored) {
       // Expected.
     }
+  }
+
+  @Test
+  public void testDateAddValueWithIntArray() throws IOException {
+    Type dateType = Type.fromTsDataType(TSDataType.DATE);
+    int[] values = new int[2];
+
+    dateType.addValue(0, LocalDate.of(2026, 7, 14), values);
+    dateType.addValue(1, null, values);
+
+    Assert.assertArrayEquals(new int[] {20260714, DateUtils.EMPTY_DATE_INT}, values);
+
+    dateType.addValue(0, 20260715, values);
+    Assert.assertEquals(20260715, values[0]);
+
+    Column column = Mockito.mock(Column.class);
+    Mockito.when(column.getInt(0)).thenReturn(20260715);
+    dateType.setTo(column, 0, values, 0);
+    Assert.assertEquals(20260715, values[0]);
+
+    LocalDate[] localDates = new LocalDate[2];
+    dateType.copyArrayElement(values, 0, localDates, 0);
+    dateType.copyArrayElement(localDates, 0, values, 0);
+    Assert.assertEquals(LocalDate.of(2026, 7, 15), localDates[0]);
+    Assert.assertEquals(20260715, values[0]);
+    Assert.assertTrue(
+        dateType.arrayEquals(
+            values, new LocalDate[] {LocalDate.of(2026, 7, 15), LocalDate.of(1000, 1, 1)}, 2));
+
+    Object copied = dateType.arrayCopyOf(values, 3);
+    Assert.assertTrue(copied instanceof int[]);
+    Assert.assertArrayEquals(new int[] {20260715, DateUtils.EMPTY_DATE_INT, 0}, (int[]) copied);
+    Assert.assertEquals(RamUsageEstimator.sizeOf(values), dateType.estimateArraySize(values));
+
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    dateType.serializeArray(values, values.length, new DataOutputStream(output));
+    ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+    Assert.assertEquals(20260715, buffer.getInt());
+    Assert.assertEquals(DateUtils.EMPTY_DATE_INT, buffer.getInt());
   }
 
   @Test
