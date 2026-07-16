@@ -278,6 +278,11 @@ public interface Type {
         Messages.format("error.common.unsupported_data_type", from.getDataType()));
   }
 
+  /** Copies {@code value} to {@code to} from {@code startIndex} to {@code endIndex}. */
+  default void setTo(Object value, Column to, int startIndex, int endIndex) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Copies the value from {@code from} to {@code to}. */
   default void setTo(Field from, Field to) {
     throw new UnSupportedDataTypeException(

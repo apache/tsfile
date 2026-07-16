@@ -158,6 +158,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getBinaries(), startIndex, endIndex, toBinaryValue(value));
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setBinaryV(from.getBinaryV());
   }

@@ -37,6 +37,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.utils.TsPrimitiveType.TsBinary;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
@@ -165,6 +166,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getBinaries(), startIndex, endIndex, value);
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setBinaryV(from.getBinaryV());
   }
@@ -235,12 +241,12 @@ public class ObjectType extends AbstractType {
 
   @Override
   public TsPrimitiveType getTsPrimitiveType() {
-    return new TsPrimitiveType.TsBinary();
+    return new TsBinary();
   }
 
   @Override
   public TsPrimitiveType getTsPrimitiveType(Object value) {
-    return new TsPrimitiveType.TsBinary((Binary) value);
+    return new TsBinary((Binary) value);
   }
 
   @Override

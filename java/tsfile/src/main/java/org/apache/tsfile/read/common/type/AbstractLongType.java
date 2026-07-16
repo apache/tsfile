@@ -178,6 +178,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getLongs(), startIndex, endIndex, (long) value);
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setLongV(from.getLongV());
   }

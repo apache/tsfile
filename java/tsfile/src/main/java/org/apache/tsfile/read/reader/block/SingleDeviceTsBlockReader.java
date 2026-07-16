@@ -33,16 +33,13 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.executor.task.DeviceQueryTask;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -233,37 +230,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   }
 
   private void fillIdColumn(Column column, Object val, int startPos, int endPos) {
-    switch (column.getDataType()) {
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        if (val instanceof String) {
-          val = new Binary(((String) val), StandardCharsets.UTF_8);
-        }
-        Arrays.fill(column.getBinaries(), startPos, endPos, val);
-        break;
-      case BOOLEAN:
-        Arrays.fill(column.getBooleans(), startPos, endPos, ((boolean) val));
-        break;
-      case INT32:
-      case DATE:
-        Arrays.fill(column.getInts(), startPos, endPos, ((int) val));
-        break;
-      case INT64:
-      case TIMESTAMP:
-        Arrays.fill(column.getLongs(), startPos, endPos, ((long) val));
-        break;
-      case FLOAT:
-        Arrays.fill(column.getFloats(), startPos, endPos, ((float) val));
-        break;
-      case DOUBLE:
-        Arrays.fill(column.getDoubles(), startPos, endPos, ((double) val));
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.block_reader_unsupported_type", column.getDataType()));
-    }
+    Type.fromTsDataType(column.getDataType()).setTo(val, column, startPos, endPos);
     column.setPositionCount(endPos);
   }
 

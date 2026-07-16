@@ -181,6 +181,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getDoubles(), startIndex, endIndex, (double) value);
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setDoubleV(from.getDoubleV());
   }

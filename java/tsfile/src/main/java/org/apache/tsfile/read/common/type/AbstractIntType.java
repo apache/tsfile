@@ -179,6 +179,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getInts(), startIndex, endIndex, (int) value);
+  }
+
+  @Override
   public void setTo(Field from, Field to) {
     to.setIntV(from.getIntV());
   }
