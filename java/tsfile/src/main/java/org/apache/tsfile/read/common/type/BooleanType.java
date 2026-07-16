@@ -47,6 +47,7 @@ import org.apache.tsfile.write.record.datapoint.DataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -310,6 +311,16 @@ public class BooleanType extends AbstractType {
       values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
     }
     return values;
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readBoolean(stream);
   }
 
   @Override

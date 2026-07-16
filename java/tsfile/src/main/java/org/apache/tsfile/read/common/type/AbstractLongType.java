@@ -52,6 +52,7 @@ import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -341,6 +342,16 @@ public abstract class AbstractLongType extends AbstractType {
       values[i] = ReadWriteIOUtils.readLong(buffer);
     }
     return values;
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = ReadWriteIOUtils.readLong(buffer);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readLong(stream);
   }
 
   @Override

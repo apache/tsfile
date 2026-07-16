@@ -51,6 +51,7 @@ import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -349,6 +350,16 @@ public class FloatType extends AbstractType {
       values[i] = ReadWriteIOUtils.readFloat(buffer);
     }
     return values;
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = ReadWriteIOUtils.readFloat(buffer);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readFloat(stream);
   }
 
   @Override

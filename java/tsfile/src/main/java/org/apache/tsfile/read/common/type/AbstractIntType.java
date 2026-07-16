@@ -53,6 +53,7 @@ import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -342,6 +343,16 @@ public abstract class AbstractIntType extends AbstractType {
       values[i] = ReadWriteIOUtils.readInt(buffer);
     }
     return values;
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = ReadWriteIOUtils.readInt(buffer);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readInt(stream);
   }
 
   @Override

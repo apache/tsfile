@@ -45,6 +45,7 @@ import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -208,6 +209,16 @@ public class VectorType extends AbstractLongType {
 
   @Override
   public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) {
     throw new UnsupportedOperationException(getDisplayName());
   }
 

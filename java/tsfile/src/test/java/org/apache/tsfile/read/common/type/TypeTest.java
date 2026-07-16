@@ -43,6 +43,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -173,6 +174,54 @@ public class TypeTest {
       try {
         Type.fromTsDataType(dataType)
             .serializeValue(null, new DataOutputStream(new ByteArrayOutputStream()));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testDeserializeValue() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260716},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serializeValue(testCase[1], new DataOutputStream(output));
+      Object[] values = new Object[2];
+      type.deserialize(values, 1, ByteBuffer.wrap(output.toByteArray()));
+      Assert.assertEquals(testCase[1], values[1]);
+
+      values[1] = null;
+      type.deserialize(values, 1, new ByteArrayInputStream(output.toByteArray()));
+      Assert.assertEquals(testCase[1], values[1]);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).deserialize(new Object[1], 0, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType)
+            .deserialize(new Object[1], 0, new ByteArrayInputStream(new byte[0]));
         Assert.fail("Expected UnsupportedOperationException");
       } catch (UnsupportedOperationException ignored) {
         // Expected.

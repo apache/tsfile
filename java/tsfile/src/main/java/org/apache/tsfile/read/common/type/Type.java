@@ -42,6 +42,7 @@ import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -227,6 +228,16 @@ public interface Type {
 
   /** Deserializes an array with {@code rowSize} entries from {@code buffer}. */
   default Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Deserializes one value from {@code buffer} into {@code array} at {@code index}. */
+  default void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Deserializes one value from {@code stream} into {@code array} at {@code index}. */
+  default void deserialize(Object[] array, int index, InputStream stream) throws IOException {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

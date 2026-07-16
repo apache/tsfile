@@ -44,6 +44,7 @@ import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -295,6 +296,16 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     return deserializeBinaryValues(buffer, rowSize);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = ReadWriteIOUtils.readBinary(buffer);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readBinary(stream);
   }
 
   @Override
