@@ -157,6 +157,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
   public Decoder getDecoder(TSEncoding encoding) {
     return switch (encoding) {
       case PLAIN, DICTIONARY -> super.getDecoder(encoding);

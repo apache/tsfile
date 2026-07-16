@@ -109,6 +109,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    stream.writeFloat((float) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getFloatEncoding());
   }

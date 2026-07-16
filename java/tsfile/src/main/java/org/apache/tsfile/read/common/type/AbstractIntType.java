@@ -107,6 +107,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    stream.writeInt((int) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt32Encoding());
   }

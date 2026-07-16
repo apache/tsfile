@@ -154,13 +154,25 @@ public class TypeTest {
 
       ByteArrayOutputStream output = new ByteArrayOutputStream();
       type.serialize(type.getTsPrimitiveType(value), new DataOutputStream(output));
-      Assert.assertArrayEquals(
-          output.toByteArray(), Arrays.copyOf(buffer.array(), buffer.position()));
+      byte[] expected = output.toByteArray();
+      Assert.assertArrayEquals(expected, Arrays.copyOf(buffer.array(), buffer.position()));
+
+      output.reset();
+      type.serializeValue(value, new DataOutputStream(output));
+      Assert.assertArrayEquals(expected, output.toByteArray());
     }
 
     for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
       try {
         Type.fromTsDataType(dataType).serializeValue(null, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType)
+            .serializeValue(null, new DataOutputStream(new ByteArrayOutputStream()));
         Assert.fail("Expected UnsupportedOperationException");
       } catch (UnsupportedOperationException ignored) {
         // Expected.

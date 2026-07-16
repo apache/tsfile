@@ -139,6 +139,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Serializes {@code value} to {@code stream}. */
+  default void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

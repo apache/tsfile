@@ -102,6 +102,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    ReadWriteIOUtils.write((Binary) value, stream);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getTextEncoding());
   }

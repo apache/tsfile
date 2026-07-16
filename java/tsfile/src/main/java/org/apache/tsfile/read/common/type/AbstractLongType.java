@@ -106,6 +106,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    stream.writeLong((long) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getInt64Encoding());
   }

@@ -110,6 +110,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+    stream.writeDouble((double) value);
+  }
+
+  @Override
   public TSEncoding getDefaultEncoding(TSFileConfig config) {
     return TSEncoding.valueOf(config.getDoubleEncoding());
   }
