@@ -233,8 +233,12 @@ int TableQueryExecutor::query_on_tree(
         }
     }
 
-    auto schema = std::make_shared<TableSchema>("default", col_schema);
-    schema->set_virtual_table();
+    // Tree-derived (virtual) tables are case-sensitive: keep the original
+    // casing of device path segments and measurement names so that
+    // case-distinct series (e.g. "temperature" vs "Temperature") map to
+    // separate columns instead of colliding.
+    auto schema = std::make_shared<TableSchema>("default", col_schema,
+                                                /*virtual_table=*/true);
     std::shared_ptr<ColumnMapping> column_mapping =
         std::make_shared<ColumnMapping>();
     for (size_t i = 0; i < col_schema.size(); ++i) {
