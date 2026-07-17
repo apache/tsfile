@@ -31,6 +31,7 @@ import org.apache.tsfile.encoding.decoder.LongRleDecoder;
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
@@ -203,6 +204,11 @@ public class VectorType extends AbstractLongType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new TimeStatistics();
   }
 
   @Override

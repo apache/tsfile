@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.UnknownColumnTypeException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
@@ -1374,6 +1375,35 @@ public class TypeTest {
       } catch (UnsupportedOperationException ignored) {
         // Expected.
       }
+    }
+  }
+
+  @Test
+  public void testCreateStatistics() {
+    for (TSDataType dataType :
+        new TSDataType[] {
+          TSDataType.BOOLEAN,
+          TSDataType.INT32,
+          TSDataType.DATE,
+          TSDataType.INT64,
+          TSDataType.TIMESTAMP,
+          TSDataType.FLOAT,
+          TSDataType.DOUBLE,
+          TSDataType.TEXT,
+          TSDataType.STRING,
+          TSDataType.BLOB,
+          TSDataType.OBJECT,
+          TSDataType.VECTOR
+        }) {
+      Assert.assertEquals(dataType, Type.fromTsDataType(dataType).createStatistics().getType());
+      Assert.assertEquals(dataType, Statistics.getStatsByType(dataType).getType());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).createStatistics();
+      Assert.fail("Expected UnknownColumnTypeException");
+    } catch (UnknownColumnTypeException ignored) {
+      // Expected.
     }
   }
 

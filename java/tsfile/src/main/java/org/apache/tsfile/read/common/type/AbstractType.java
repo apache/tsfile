@@ -161,8 +161,8 @@ public abstract class AbstractType implements Type {
   }
 
   @Override
-  public Object getValue(Object column, int rowIndex) {
-    return Array.get(column, rowIndex);
+  public Object getValue(Object array, int rowIndex) {
+    return Array.get(array, rowIndex);
   }
 
   @Override

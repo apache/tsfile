@@ -23,6 +23,8 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.statistics.DateStatistics;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
@@ -63,6 +65,11 @@ public class DateType extends AbstractIntType {
   @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new DateStatistics();
   }
 
   @Override

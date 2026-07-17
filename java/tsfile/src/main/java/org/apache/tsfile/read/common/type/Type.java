@@ -25,6 +25,7 @@ import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.UnknownColumnTypeException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -269,8 +270,13 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  /** Returns the value at {@code rowIndex} from an array column in Tablet. */
-  default Object getValue(Object column, int rowIndex) {
+  /** Returns the value at {@code rowIndex} from an array. */
+  default Object getValue(Object array, int rowIndex) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns the value at {@code rowIndex} from an array. */
+  default TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
@@ -434,6 +440,11 @@ public interface Type {
   /** Returns the maximum encoded size of one item. */
   default int getOneItemMaxSize(int valveLength) {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Creates empty statistics for this type. */
+  default Statistics<?> createStatistics() {
+    throw new UnknownColumnTypeException(getTypeEnum().toString());
   }
 
   /** Updates statistics with a timestamp-value pair. */

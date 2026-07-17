@@ -34,6 +34,7 @@ import org.apache.tsfile.encoding.decoder.LongZigzagDecoder;
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.LongStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
@@ -141,6 +142,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Long.BYTES;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new LongStatistics();
   }
 
   @Override

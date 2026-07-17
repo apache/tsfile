@@ -26,6 +26,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.BlobStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
@@ -127,6 +128,11 @@ public class BlobType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * valveLength;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new BlobStatistics();
   }
 
   @Override

@@ -28,6 +28,7 @@ import org.apache.tsfile.encoding.decoder.IntRleDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.BooleanStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
@@ -133,6 +134,11 @@ public class BooleanType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Byte.BYTES;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new BooleanStatistics();
   }
 
   @Override

@@ -20,6 +20,8 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.file.metadata.statistics.TimestampStatistics;
 import org.apache.tsfile.read.common.Field;
 
 public class TimestampType extends AbstractLongType {
@@ -27,6 +29,11 @@ public class TimestampType extends AbstractLongType {
   public static final TimestampType TIMESTAMP = new TimestampType();
 
   private TimestampType() {}
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new TimestampStatistics();
+  }
 
   @Override
   public Field getField(Object value) {

@@ -34,6 +34,7 @@ import org.apache.tsfile.encoding.decoder.FloatDecoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.DoubleStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
@@ -144,6 +145,11 @@ public class DoubleType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Double.BYTES;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new DoubleStatistics();
   }
 
   @Override

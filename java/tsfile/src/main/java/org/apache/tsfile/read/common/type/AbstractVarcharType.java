@@ -25,6 +25,7 @@ import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.BinaryStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
@@ -121,6 +122,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public int getOneItemMaxSize(int valveLength) {
     return Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * valveLength;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new BinaryStatistics();
   }
 
   @Override
