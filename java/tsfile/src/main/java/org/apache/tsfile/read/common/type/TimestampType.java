@@ -36,6 +36,11 @@ public class TimestampType extends AbstractLongType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return TimestampStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.TIMESTAMP);
     field.setLongV((long) value);

@@ -138,6 +138,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return ObjectStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     stats.update(timestamp, value.getBinary());
   }

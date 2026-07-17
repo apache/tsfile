@@ -1444,12 +1444,22 @@ public class TypeTest {
           TSDataType.OBJECT,
           TSDataType.VECTOR
         }) {
-      Assert.assertEquals(dataType, Type.fromTsDataType(dataType).createStatistics().getType());
+      Type type = Type.fromTsDataType(dataType);
+      Assert.assertEquals(dataType, type.createStatistics().getType());
       Assert.assertEquals(dataType, Statistics.getStatsByType(dataType).getType());
+      Assert.assertTrue(type.getStatisticsInstanceSize() > 0);
+      Assert.assertEquals(type.getStatisticsInstanceSize(), Statistics.getSizeByType(dataType));
     }
 
     try {
       Type.fromTsDataType(TSDataType.UNKNOWN).createStatistics();
+      Assert.fail("Expected UnknownColumnTypeException");
+    } catch (UnknownColumnTypeException ignored) {
+      // Expected.
+    }
+
+    try {
+      Statistics.getSizeByType(TSDataType.UNKNOWN);
       Assert.fail("Expected UnknownColumnTypeException");
     } catch (UnknownColumnTypeException ignored) {
       // Expected.

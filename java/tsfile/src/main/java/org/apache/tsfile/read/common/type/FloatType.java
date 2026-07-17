@@ -151,6 +151,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return FloatStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     stats.update(timestamp, value.getFloat());
   }

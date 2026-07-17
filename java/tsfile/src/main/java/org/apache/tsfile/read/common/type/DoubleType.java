@@ -153,6 +153,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return DoubleStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     stats.update(timestamp, value.getDouble());
   }

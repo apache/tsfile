@@ -150,6 +150,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return LongStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     stats.update(timestamp, value.getLong());
   }

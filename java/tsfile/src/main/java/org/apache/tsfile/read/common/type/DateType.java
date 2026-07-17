@@ -78,6 +78,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return DateStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     if (array instanceof int[]) {

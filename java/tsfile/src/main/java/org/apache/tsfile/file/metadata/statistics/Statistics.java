@@ -109,34 +109,7 @@ public abstract class Statistics<T extends Serializable> {
   }
 
   public static long getSizeByType(TSDataType type) {
-    switch (type) {
-      case INT32:
-        return IntegerStatistics.INSTANCE_SIZE;
-      case INT64:
-        return LongStatistics.INSTANCE_SIZE;
-      case TEXT:
-        return BinaryStatistics.INSTANCE_SIZE;
-      case BOOLEAN:
-        return BooleanStatistics.INSTANCE_SIZE;
-      case DOUBLE:
-        return DoubleStatistics.INSTANCE_SIZE;
-      case FLOAT:
-        return FloatStatistics.INSTANCE_SIZE;
-      case VECTOR:
-        return TimeStatistics.INSTANCE_SIZE;
-      case DATE:
-        return DateStatistics.INSTANCE_SIZE;
-      case TIMESTAMP:
-        return TimestampStatistics.INSTANCE_SIZE;
-      case STRING:
-        return StringStatistics.INSTANCE_SIZE;
-      case BLOB:
-        return BlobStatistics.INSTANCE_SIZE;
-      case OBJECT:
-        return ObjectStatistics.INSTANCE_SIZE;
-      default:
-        throw new UnknownColumnTypeException(type.toString());
-    }
+    return Type.fromTsDataType(type).getStatisticsInstanceSize();
   }
 
   public abstract TSDataType getType();

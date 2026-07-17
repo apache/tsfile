@@ -212,6 +212,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return TimeStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     throw new UnsupportedOperationException(getDisplayName());
   }

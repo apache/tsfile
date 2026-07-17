@@ -37,6 +37,11 @@ public class StringType extends AbstractVarcharType {
   }
 
   @Override
+  public long getStatisticsInstanceSize() {
+    return StringStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.STRING);
     field.setBinaryV((Binary) value);

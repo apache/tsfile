@@ -27,6 +27,9 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
  * should cover all Types that can be instanced from TsDataTypes, and throw
  * UnsupportedDataTypeException when an unrecognized type is encountered.
  *
+ * <p>Use enhanced-switch and list all branches in the implementation to expose uncovered datatypes
+ * during compilation.
+ *
  * @param <T> the return type of the service.
  */
 public interface TypeService<T> {

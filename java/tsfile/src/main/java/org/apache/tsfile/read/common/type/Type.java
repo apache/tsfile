@@ -447,6 +447,11 @@ public interface Type {
     throw new UnknownColumnTypeException(getTypeEnum().toString());
   }
 
+  /** Returns the estimated instance size of statistics for this type. */
+  default long getStatisticsInstanceSize() {
+    throw new UnknownColumnTypeException(getTypeEnum().toString());
+  }
+
   /** Updates statistics with a timestamp-value pair. */
   default void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
     throw new UnsupportedOperationException(getClass().getName());
