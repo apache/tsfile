@@ -226,6 +226,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Serializes the first {@code length} entries in {@code array} to {@code buffer}. */
+  default void serializeArray(Object array, int length, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Deserializes an array with {@code rowSize} entries from {@code buffer}. */
   default Object deserializeArray(ByteBuffer buffer, int rowSize) {
     throw new UnsupportedOperationException(getClass().getName());

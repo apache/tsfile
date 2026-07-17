@@ -359,6 +359,14 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    float[] values = (float[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putFloat(values[i]);
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     float[] values = new float[rowSize];
     for (int i = 0; i < rowSize; i++) {

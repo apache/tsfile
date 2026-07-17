@@ -351,6 +351,14 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    long[] values = (long[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putLong(values[i]);
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     long[] values = new long[rowSize];
     for (int i = 0; i < rowSize; i++) {

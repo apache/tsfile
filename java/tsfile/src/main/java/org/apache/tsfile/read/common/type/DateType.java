@@ -172,6 +172,21 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    if (array instanceof int[]) {
+      super.serializeArray(array, length, buffer);
+      return;
+    }
+    LocalDate[] values = (LocalDate[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putInt(
+          values[i] == null
+              ? DateUtils.EMPTY_DATE_INT
+              : DateUtils.parseDateExpressionToInt(values[i]));
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     LocalDate[] values = new LocalDate[rowSize];
     for (int i = 0; i < rowSize; i++) {

@@ -352,6 +352,14 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    int[] values = (int[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putInt(values[i]);
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     int[] values = new int[rowSize];
     for (int i = 0; i < rowSize; i++) {

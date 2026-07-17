@@ -320,6 +320,14 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    boolean[] values = (boolean[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.put(BytesUtils.boolToByte(values[i]));
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     boolean[] values = new boolean[rowSize];
     for (int i = 0; i < rowSize; i++) {

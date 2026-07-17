@@ -102,6 +102,16 @@ public abstract class AbstractType implements Type {
     }
   }
 
+  protected void serializeBinaryValues(Object array, int length, ByteBuffer buffer) {
+    Binary[] binaryValues = (Binary[]) array;
+    for (int i = 0; i < length; i++) {
+      ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[i] != null), buffer);
+      if (binaryValues[i] != null) {
+        ReadWriteIOUtils.write(binaryValues[i], buffer);
+      }
+    }
+  }
+
   protected Binary[] deserializeBinaryValues(ByteBuffer buffer, int rowSize) {
     Binary[] values = new Binary[rowSize];
     for (int i = 0; i < rowSize; i++) {

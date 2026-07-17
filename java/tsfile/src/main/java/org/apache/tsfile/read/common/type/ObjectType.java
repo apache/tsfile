@@ -316,6 +316,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    serializeBinaryValues(array, length, buffer);
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     return deserializeBinaryValues(buffer, rowSize);
   }

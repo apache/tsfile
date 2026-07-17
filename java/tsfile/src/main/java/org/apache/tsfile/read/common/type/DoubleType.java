@@ -361,6 +361,14 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    double[] values = (double[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putDouble(values[i]);
+    }
+  }
+
+  @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     double[] values = new double[rowSize];
     for (int i = 0; i < rowSize; i++) {

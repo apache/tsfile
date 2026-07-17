@@ -230,6 +230,53 @@ public class TypeTest {
   }
 
   @Test
+  public void testSerializeArrayToByteBuffer() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {true, false}},
+      {TSDataType.INT32, new int[] {1, 2}},
+      {TSDataType.DATE, new int[] {20260716, 20260717}},
+      {TSDataType.INT64, new long[] {3L, 4L}},
+      {TSDataType.TIMESTAMP, new long[] {5L, 6L}},
+      {TSDataType.FLOAT, new float[] {1.25F, 2.5F}},
+      {TSDataType.DOUBLE, new double[] {2.5D, 5.0D}},
+      {TSDataType.TEXT, new Binary[] {binary, null}},
+      {TSDataType.STRING, new Binary[] {binary, null}},
+      {TSDataType.BLOB, new Binary[] {binary, null}},
+      {TSDataType.OBJECT, new Binary[] {binary, null}}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object array = testCase[1];
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serializeArray(array, 2, new DataOutputStream(output));
+
+      ByteBuffer buffer = ByteBuffer.allocate(type.serializedSize(array, 2));
+      type.serializeArray(array, 2, buffer);
+      Assert.assertArrayEquals(
+          output.toByteArray(), Arrays.copyOf(buffer.array(), buffer.position()));
+    }
+
+    LocalDate[] dates = {LocalDate.of(2026, 7, 16), null};
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    Type dateType = Type.fromTsDataType(TSDataType.DATE);
+    dateType.serializeArray(dates, dates.length, new DataOutputStream(output));
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES * dates.length);
+    dateType.serializeArray(dates, dates.length, buffer);
+    Assert.assertArrayEquals(output.toByteArray(), buffer.array());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).serializeArray(new Object[0], 0, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testGetDataPoint() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, "true", true},
