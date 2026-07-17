@@ -41,6 +41,36 @@ import static org.junit.Assert.fail;
 
 public class BatchDataTest {
 
+  private static final TypeService<SerializedValueAsserter> ASSERT_SERIALIZED_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN ->
+                (inputStream, expectedValue) ->
+                    assertEquals(expectedValue, inputStream.readBoolean());
+            case INT32, DATE ->
+                (inputStream, expectedValue) -> assertEquals(expectedValue, inputStream.readInt());
+            case INT64, TIMESTAMP ->
+                (inputStream, expectedValue) -> assertEquals(expectedValue, inputStream.readLong());
+            case FLOAT ->
+                (inputStream, expectedValue) ->
+                    assertEquals((float) expectedValue, inputStream.readFloat(), 0);
+            case DOUBLE ->
+                (inputStream, expectedValue) ->
+                    assertEquals((double) expectedValue, inputStream.readDouble(), 0);
+            case TEXT, STRING, BLOB, OBJECT ->
+                (inputStream, expectedValue) -> {
+                  Binary binary = (Binary) expectedValue;
+                  assertArrayEquals(
+                      binary.getValues(), inputStream.readNBytes(inputStream.readInt()));
+                };
+            case ROW, UNKNOWN, VECTOR ->
+                (inputStream, expectedValue) -> fail("Unexpected data type: " + type.getTypeEnum());
+          };
+
+  static {
+    ASSERT_SERIALIZED_VALUE_SERVICE.check();
+  }
+
   @Test
   public void testInt() {
     BatchData batchData = new BatchData(TSDataType.INT32);
@@ -163,33 +193,14 @@ public class BatchDataTest {
 
   private void assertSerializedValue(
       DataInputStream inputStream, TSDataType dataType, Object expectedValue) throws IOException {
-    switch (dataType) {
-      case BOOLEAN:
-        assertEquals(expectedValue, inputStream.readBoolean());
-        break;
-      case INT32:
-      case DATE:
-        assertEquals(expectedValue, inputStream.readInt());
-        break;
-      case INT64:
-      case TIMESTAMP:
-        assertEquals(expectedValue, inputStream.readLong());
-        break;
-      case FLOAT:
-        assertEquals((float) expectedValue, inputStream.readFloat(), 0);
-        break;
-      case DOUBLE:
-        assertEquals((double) expectedValue, inputStream.readDouble(), 0);
-        break;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        Binary binary = (Binary) expectedValue;
-        assertArrayEquals(binary.getValues(), inputStream.readNBytes(inputStream.readInt()));
-        break;
-      default:
-        fail("Unexpected data type: " + dataType);
-    }
+    ASSERT_SERIALIZED_VALUE_SERVICE
+        .call(Type.fromTsDataType(dataType))
+        .assertValue(inputStream, expectedValue);
+  }
+
+  @FunctionalInterface
+  private interface SerializedValueAsserter {
+
+    void assertValue(DataInputStream inputStream, Object expectedValue) throws IOException;
   }
 }
