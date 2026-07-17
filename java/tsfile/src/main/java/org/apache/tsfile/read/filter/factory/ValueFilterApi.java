@@ -21,26 +21,33 @@ package org.apache.tsfile.read.filter.factory;
 
 import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
-import org.apache.tsfile.read.filter.operator.BooleanFilterOperators;
-import org.apache.tsfile.read.filter.operator.DoubleFilterOperators;
 import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators;
 import org.apache.tsfile.read.filter.operator.ExtractValueFilterOperators;
-import org.apache.tsfile.read.filter.operator.FloatFilterOperators;
-import org.apache.tsfile.read.filter.operator.IntegerFilterOperators;
-import org.apache.tsfile.read.filter.operator.LongFilterOperators;
-import org.apache.tsfile.read.filter.operator.StringFilterOperators;
 import org.apache.tsfile.read.filter.operator.ValueIsNotNullOperator;
 import org.apache.tsfile.read.filter.operator.ValueIsNullOperator;
-import org.apache.tsfile.utils.Binary;
 
 import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_BETWEEN_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_EQ_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_GT_EQ_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_GT_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_IN_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_LIKE_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_LT_EQ_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_LT_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_NOT_BETWEEN_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_NOT_EQ_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_NOT_IN_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_NOT_LIKE_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_NOT_REGEXP_FILTER_SERVICE;
+import static org.apache.tsfile.utils.ValueFilterTypeServices.VALUE_REGEXP_FILTER_SERVICE;
 
 public class ValueFilterApi {
 
@@ -56,166 +63,43 @@ public class ValueFilterApi {
   public static Filter gt(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueGt(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueGt(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueGt(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueGt(measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueGt(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueGt(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueGt(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_GT_FILTER_SERVICE.call(Type.fromTsDataType(type)).create(measurementIndex, value);
   }
 
   public static Filter gtEq(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueGtEq(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueGtEq(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueGtEq(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueGtEq(
-            measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueGtEq(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_GT_EQ_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, value);
   }
 
   public static Filter lt(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueLt(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueLt(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueLt(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueLt(measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueLt(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueLt(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueLt(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_LT_FILTER_SERVICE.call(Type.fromTsDataType(type)).create(measurementIndex, value);
   }
 
   public static Filter ltEq(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueLtEq(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueLtEq(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueLtEq(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueLtEq(
-            measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueLtEq(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_LT_EQ_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, value);
   }
 
   public static Filter eq(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueEq(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueEq(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueEq(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueEq(measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueEq(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueEq(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueEq(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_EQ_FILTER_SERVICE.call(Type.fromTsDataType(type)).create(measurementIndex, value);
   }
 
   public static Filter notEq(int measurementIndex, Object value, TSDataType type) {
     // constant cannot be null
     Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueNotEq(measurementIndex, (boolean) value);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueNotEq(measurementIndex, ((Number) value).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueNotEq(measurementIndex, ((Number) value).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueNotEq(
-            measurementIndex, ((Number) value).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueNotEq(measurementIndex, ((Number) value).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
-      case STRING:
-        return new StringFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_NOT_EQ_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, value);
   }
 
   public static Filter isNull(int measurementIndex) {
@@ -231,35 +115,9 @@ public class ValueFilterApi {
     // constant cannot be null
     Objects.requireNonNull(value1, CONSTANT_CANNOT_BE_NULL_MSG);
     Objects.requireNonNull(value2, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueBetweenAnd(
-            measurementIndex, (boolean) value1, (boolean) value2);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueBetweenAnd(
-            measurementIndex, ((Number) value1).intValue(), ((Number) value2).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueBetweenAnd(
-            measurementIndex, ((Number) value1).longValue(), ((Number) value2).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueBetweenAnd(
-            measurementIndex, ((Number) value1).doubleValue(), ((Number) value2).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueBetweenAnd(
-            measurementIndex, ((Number) value1).floatValue(), ((Number) value2).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueBetweenAnd(
-            measurementIndex, (Binary) value1, (Binary) value2);
-      case STRING:
-        return new StringFilterOperators.ValueBetweenAnd(
-            measurementIndex, (Binary) value1, (Binary) value2);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_BETWEEN_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, value1, value2);
   }
 
   public static Filter notBetween(
@@ -267,195 +125,53 @@ public class ValueFilterApi {
     // constant cannot be null
     Objects.requireNonNull(value1, CONSTANT_CANNOT_BE_NULL_MSG);
     Objects.requireNonNull(value2, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (boolean) value1, (boolean) value2);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, ((Number) value1).intValue(), ((Number) value2).intValue());
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, ((Number) value1).longValue(), ((Number) value2).longValue());
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, ((Number) value1).doubleValue(), ((Number) value2).doubleValue());
-      case FLOAT:
-        return new FloatFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, ((Number) value1).floatValue(), ((Number) value2).floatValue());
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (Binary) value1, (Binary) value2);
-      case STRING:
-        return new StringFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (Binary) value1, (Binary) value2);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_NOT_BETWEEN_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, value1, value2);
   }
 
   public static Filter like(int measurementIndex, LikePattern pattern, TSDataType type) {
     Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueLike(measurementIndex, pattern);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueLike(measurementIndex, pattern);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueLike(measurementIndex, pattern);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueLike(measurementIndex, pattern);
-      case FLOAT:
-        return new FloatFilterOperators.ValueLike(measurementIndex, pattern);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueLike(measurementIndex, pattern);
-      case STRING:
-        return new StringFilterOperators.ValueLike(measurementIndex, pattern);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_LIKE_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, pattern);
   }
 
   public static Filter notLike(int measurementIndex, LikePattern pattern, TSDataType type) {
     Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case FLOAT:
-        return new FloatFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueNotLike(measurementIndex, pattern);
-      case STRING:
-        return new StringFilterOperators.ValueNotLike(measurementIndex, pattern);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_NOT_LIKE_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, pattern);
   }
 
   public static Filter regexp(int measurementIndex, Pattern pattern, TSDataType type) {
     Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case FLOAT:
-        return new FloatFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueRegexp(measurementIndex, pattern);
-      case STRING:
-        return new StringFilterOperators.ValueRegexp(measurementIndex, pattern);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_REGEXP_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, pattern);
   }
 
   public static Filter notRegexp(int measurementIndex, Pattern pattern, TSDataType type) {
     Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case FLOAT:
-        return new FloatFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      case STRING:
-        return new StringFilterOperators.ValueNotRegexp(measurementIndex, pattern);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_NOT_REGEXP_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, pattern);
   }
 
   public static <T extends Comparable<T>> Filter in(
       int measurementIndex, Set<T> values, TSDataType type) {
     // constants cannot be null
     Objects.requireNonNull(values, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueIn(measurementIndex, (Set<Boolean>) values);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueIn(measurementIndex, (Set<Integer>) values);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueIn(measurementIndex, (Set<Long>) values);
-      case FLOAT:
-        return new FloatFilterOperators.ValueIn(measurementIndex, (Set<Float>) values);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueIn(measurementIndex, (Set<Double>) values);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueIn(measurementIndex, (Set<Binary>) values);
-      case STRING:
-        return new StringFilterOperators.ValueIn(measurementIndex, (Set<Binary>) values);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_IN_FILTER_SERVICE.call(Type.fromTsDataType(type)).create(measurementIndex, values);
   }
 
   public static <T extends Comparable<T>> Filter notIn(
       int measurementIndex, Set<T> values, TSDataType type) {
     // constants cannot be null
     Objects.requireNonNull(values, CONSTANT_CANNOT_BE_NULL_MSG);
-    switch (type) {
-      case BOOLEAN:
-        return new BooleanFilterOperators.ValueNotIn(measurementIndex, (Set<Boolean>) values);
-      case INT32:
-      case DATE:
-        return new IntegerFilterOperators.ValueNotIn(measurementIndex, (Set<Integer>) values);
-      case INT64:
-      case TIMESTAMP:
-        return new LongFilterOperators.ValueNotIn(measurementIndex, (Set<Long>) values);
-      case FLOAT:
-        return new FloatFilterOperators.ValueNotIn(measurementIndex, (Set<Float>) values);
-      case DOUBLE:
-        return new DoubleFilterOperators.ValueNotIn(measurementIndex, (Set<Double>) values);
-      case TEXT:
-      case BLOB:
-        return new BinaryFilterOperators.ValueNotIn(measurementIndex, (Set<Binary>) values);
-      case STRING:
-        return new StringFilterOperators.ValueNotIn(measurementIndex, (Set<Binary>) values);
-      default:
-        throw new UnsupportedOperationException(
-            Messages.format("error.read.filter_api_unsupported_type", type));
-    }
+    return VALUE_NOT_IN_FILTER_SERVICE
+        .call(Type.fromTsDataType(type))
+        .create(measurementIndex, values);
   }
 
   public static Filter extractValueGt(
