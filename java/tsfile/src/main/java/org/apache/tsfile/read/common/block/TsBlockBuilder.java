@@ -139,24 +139,6 @@ public class TsBlockBuilder {
           Type.fromTsDataType(types.get(i))
               .createColumnBuilder(
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case DOUBLE:
-          valueColumnBuilders[i] =
-              new DoubleColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueColumnBuilders[i] =
-              new BinaryColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        default:
-          throw new IllegalArgumentException(
-              Messages.format("error.read.tsblock_builder_unknown_type", types.get(i)));
-      }
     }
   }
 
