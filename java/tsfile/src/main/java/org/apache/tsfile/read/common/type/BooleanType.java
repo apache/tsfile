@@ -265,6 +265,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    writer.write(time, value.getBoolean());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (boolean) value);
   }

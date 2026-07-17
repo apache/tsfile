@@ -250,6 +250,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    writer.write(time, value.getBinary());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (Binary) value);
   }

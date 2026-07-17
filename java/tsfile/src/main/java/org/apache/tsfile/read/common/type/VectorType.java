@@ -125,6 +125,12 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));

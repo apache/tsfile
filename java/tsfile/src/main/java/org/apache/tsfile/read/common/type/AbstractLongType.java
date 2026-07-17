@@ -273,6 +273,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    writer.write(time, value.getLong());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (long) value);
   }

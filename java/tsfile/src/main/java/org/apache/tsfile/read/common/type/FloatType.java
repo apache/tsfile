@@ -274,6 +274,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    writer.write(time, value.getFloat());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (float) value);
   }
