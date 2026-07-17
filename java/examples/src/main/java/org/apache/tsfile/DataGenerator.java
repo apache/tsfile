@@ -43,6 +43,10 @@ public class DataGenerator {
             case OBJECT, ROW, UNKNOWN, VECTOR -> index -> null;
           };
 
+  static {
+    GENERATE_VALUE_SERVICE.check();
+  }
+
   public static Object generate(TSDataType type, int index) {
     return GENERATE_VALUE_SERVICE.call(Type.fromTsDataType(type)).generate(index);
   }

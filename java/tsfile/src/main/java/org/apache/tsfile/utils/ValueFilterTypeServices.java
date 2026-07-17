@@ -347,6 +347,23 @@ public final class ValueFilterTypeServices {
             case OBJECT, ROW, UNKNOWN, VECTOR -> (index, values) -> unsupportedType(type);
           };
 
+  static {
+    VALUE_GT_FILTER_SERVICE.check();
+    VALUE_GT_EQ_FILTER_SERVICE.check();
+    VALUE_LT_FILTER_SERVICE.check();
+    VALUE_LT_EQ_FILTER_SERVICE.check();
+    VALUE_EQ_FILTER_SERVICE.check();
+    VALUE_NOT_EQ_FILTER_SERVICE.check();
+    VALUE_BETWEEN_FILTER_SERVICE.check();
+    VALUE_NOT_BETWEEN_FILTER_SERVICE.check();
+    VALUE_LIKE_FILTER_SERVICE.check();
+    VALUE_NOT_LIKE_FILTER_SERVICE.check();
+    VALUE_REGEXP_FILTER_SERVICE.check();
+    VALUE_NOT_REGEXP_FILTER_SERVICE.check();
+    VALUE_IN_FILTER_SERVICE.check();
+    VALUE_NOT_IN_FILTER_SERVICE.check();
+  }
+
   private ValueFilterTypeServices() {}
 
   private static Filter unsupportedType(Type type) {
