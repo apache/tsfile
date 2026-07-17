@@ -230,7 +230,7 @@ public class FloatType extends AbstractType {
 
   @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
-    writer.write(time, (float) value, isNull);
+    writer.write(time, isNull ? 0.0F : (float) value, isNull);
   }
 
   @Override
@@ -350,7 +350,7 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
+  public int serializedSize(Object array, int rowSize) {
     return Math.multiplyExact(Float.BYTES, rowSize);
   }
 

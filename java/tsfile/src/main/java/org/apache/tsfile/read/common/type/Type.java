@@ -46,6 +46,13 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+/**
+ * Type provides common interfaces associated with a specific TsDataType to remove uses of
+ * "switch(dataType)", which make the extension of datatypes very difficult.
+ *
+ * <p>Interfaces that are less generic should be defined using TypeService and checked in a proper
+ * context.
+ */
 public interface Type {
 
   static Type fromTsDataType(TSDataType tsDataType) {
@@ -215,8 +222,8 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  /** Returns the serialized byte size of the array column with {@code rowSize} entries. */
-  default int serializedSize(Object column, int rowSize) {
+  /** Returns the serialized byte size of the array with {@code rowSize} entries. */
+  default int serializedSize(Object array, int rowSize) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

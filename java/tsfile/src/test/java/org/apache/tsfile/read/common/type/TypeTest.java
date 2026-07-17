@@ -382,8 +382,28 @@ public class TypeTest {
       Mockito.reset(writer);
     }
 
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 8L, null, true);
+    Mockito.verify(writer).write(8L, false, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT64).write(writer, 9L, null, true);
+    Mockito.verify(writer).write(9L, 0L, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 10L, null, true);
+    Mockito.verify(writer).write(10L, 0.0F, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 11L, null, true);
+    Mockito.verify(writer).write(11L, 0.0D, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TEXT).write(writer, 12L, null, true);
+    Mockito.verify(writer).write(12L, Binary.EMPTY_VALUE, true);
+    Mockito.reset(writer);
+
     try {
-      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, null, true);
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 13L, null, true);
       Assert.fail("Expected UnSupportedDataTypeException");
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.

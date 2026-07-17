@@ -229,7 +229,7 @@ public abstract class AbstractLongType extends AbstractType {
 
   @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
-    writer.write(time, (long) value, isNull);
+    writer.write(time, isNull ? 0L : (long) value, isNull);
   }
 
   @Override
@@ -342,7 +342,7 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
+  public int serializedSize(Object array, int rowSize) {
     return Math.multiplyExact(Long.BYTES, rowSize);
   }
 

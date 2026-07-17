@@ -232,7 +232,7 @@ public class DoubleType extends AbstractType {
 
   @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
-    writer.write(time, (double) value, isNull);
+    writer.write(time, isNull ? 0.0D : (double) value, isNull);
   }
 
   @Override
@@ -352,7 +352,7 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
+  public int serializedSize(Object array, int rowSize) {
     return Math.multiplyExact(Double.BYTES, rowSize);
   }
 

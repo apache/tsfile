@@ -21,11 +21,22 @@ package org.apache.tsfile.write;
 
 public class UnSupportedDataTypeException extends RuntimeException {
 
+  private boolean isChecked = false;
+
   public UnSupportedDataTypeException(String message) {
     super("Unsupported dataType: " + message);
   }
 
   public UnSupportedDataTypeException(String message, Throwable e) {
     super(message + e.getMessage());
+  }
+
+  public UnSupportedDataTypeException setChecked(boolean checked) {
+    isChecked = checked;
+    return this;
+  }
+
+  public boolean isChecked() {
+    return isChecked;
   }
 }

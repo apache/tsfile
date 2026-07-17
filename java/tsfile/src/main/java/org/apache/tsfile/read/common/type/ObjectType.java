@@ -212,7 +212,7 @@ public class ObjectType extends AbstractType {
 
   @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
-    writer.write(time, (Binary) value, isNull);
+    writer.write(time, isNull ? Binary.EMPTY_VALUE : (Binary) value, isNull);
   }
 
   @Override
@@ -310,8 +310,8 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
-    return serializedSizeOfBinaryValues(column, rowSize);
+  public int serializedSize(Object array, int rowSize) {
+    return serializedSizeOfBinaryValues(array, rowSize);
   }
 
   @Override

@@ -343,7 +343,7 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
+  public int serializedSize(Object array, int rowSize) {
     return Math.multiplyExact(Integer.BYTES, rowSize);
   }
 

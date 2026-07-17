@@ -221,7 +221,7 @@ public class BooleanType extends AbstractType {
 
   @Override
   public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
-    writer.write(time, (boolean) value, isNull);
+    writer.write(time, !isNull && (boolean) value, isNull);
   }
 
   @Override
@@ -311,7 +311,7 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
-  public int serializedSize(Object column, int rowSize) {
+  public int serializedSize(Object array, int rowSize) {
     return rowSize;
   }
 
