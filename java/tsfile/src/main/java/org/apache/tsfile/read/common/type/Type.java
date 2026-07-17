@@ -393,6 +393,12 @@ public interface Type {
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
 
+  /** Writes a value to a non-aligned chunk. */
+  default void write(ChunkWriterImpl writer, long time, Object value) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
   /** Creates a column with {@code positionCount} capacity for this type. */
   default Column createColumnWithMaxPosition(int positionCount) {
     throw new UnsupportedOperationException(getClass().getName());

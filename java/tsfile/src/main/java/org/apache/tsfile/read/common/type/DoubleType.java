@@ -264,6 +264,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, Object value) {
+    writer.write(time, (double) value);
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.DOUBLE);
     field.setDoubleV((double) value);

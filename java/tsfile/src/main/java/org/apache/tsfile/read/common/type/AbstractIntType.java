@@ -262,6 +262,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, Object value) {
+    writer.write(time, (int) value);
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsInt();
   }

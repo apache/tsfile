@@ -277,6 +277,24 @@ public class TypeTest {
   }
 
   @Test
+  public void testSerializedSizeRange() {
+    Assert.assertEquals(
+        Integer.BYTES * 2,
+        Type.fromTsDataType(TSDataType.INT32).serializedSize(new int[] {1, 2, 3}, 1, 3));
+
+    Binary[] binaries = {
+      new Binary("excluded", StandardCharsets.UTF_8), null, new Binary("x", StandardCharsets.UTF_8)
+    };
+    int expectedSize = Byte.BYTES + Byte.BYTES + Integer.BYTES + 1;
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type type = Type.fromTsDataType(dataType);
+      Assert.assertEquals(expectedSize, type.serializedSize(binaries, 1, 3));
+      Assert.assertEquals(0, type.serializedSize(binaries, 2, 2));
+    }
+  }
+
+  @Test
   public void testGetDataPoint() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, "true", true},
@@ -686,6 +704,50 @@ public class TypeTest {
       Assert.fail("Expected UnSupportedDataTypeException");
     } catch (UnSupportedDataTypeException ignored) {
       // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteNonAlignedValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1L, true},
+      {TSDataType.INT32, 2L, 1},
+      {TSDataType.DATE, 3L, 20260717},
+      {TSDataType.INT64, 4L, 2L},
+      {TSDataType.TIMESTAMP, 5L, 3L},
+      {TSDataType.FLOAT, 6L, 1.25F},
+      {TSDataType.DOUBLE, 7L, 2.5D}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(writer, (long) testCase[1], testCase[2]);
+    }
+
+    Mockito.verify(writer).write(1L, true);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.verify(writer).write(3L, 20260717);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.verify(writer).write(5L, 3L);
+    Mockito.verify(writer).write(6L, 1.25F);
+    Mockito.verify(writer).write(7L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 8L, binary);
+      Mockito.verify(writer).write(8L, binary);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 9L, 1L);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
     }
   }
 

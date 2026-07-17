@@ -236,6 +236,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, Object value) {
+    writer.write(time, (Binary) value);
+  }
+
+  @Override
   public TsPrimitiveType getTsPrimitiveType() {
     return new TsPrimitiveType.TsBinary();
   }

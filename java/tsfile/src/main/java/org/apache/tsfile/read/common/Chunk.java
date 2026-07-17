@@ -34,7 +34,6 @@ import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.read.reader.chunk.TableChunkReader;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -304,33 +303,7 @@ public class Chunk {
         if (convertedValue == null) {
           throw new IOException(Messages.format("error.read.chunk_non_aligned_null", timestamp));
         }
-        switch (newType) {
-          case BOOLEAN:
-            chunkWriter.write(timestamp, (boolean) convertedValue);
-            break;
-          case DATE:
-          case INT32:
-            chunkWriter.write(timestamp, (int) convertedValue);
-            break;
-          case TIMESTAMP:
-          case INT64:
-            chunkWriter.write(timestamp, (long) convertedValue);
-            break;
-          case FLOAT:
-            chunkWriter.write(timestamp, (float) convertedValue);
-            break;
-          case DOUBLE:
-            chunkWriter.write(timestamp, (double) convertedValue);
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-          case OBJECT:
-            chunkWriter.write(timestamp, (Binary) convertedValue);
-            break;
-          default:
-            throw new IOException(Messages.format("error.read.chunk_unsupported_type", newType));
-        }
+        Type.fromTsDataType(newType).write(chunkWriter, timestamp, convertedValue);
       }
       chunkWriter.sealCurrentPage();
     }

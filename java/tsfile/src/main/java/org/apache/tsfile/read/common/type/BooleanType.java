@@ -253,6 +253,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, Object value) {
+    writer.write(time, (boolean) value);
+  }
+
+  @Override
   public Field getField(Object value) {
     Field field = new Field(TSDataType.BOOLEAN);
     field.setBoolV((boolean) value);
