@@ -20,6 +20,8 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.utils.Binary;
 
 import org.junit.Test;
@@ -33,6 +35,58 @@ import static org.junit.Assert.fail;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class StatisticsTest {
+
+  private static final TypeService<StatisticsChecker> CHECK_STATISTICS_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, INT64, FLOAT, DOUBLE, TIMESTAMP, DATE ->
+                (statistics, min, max, sum) -> {
+                  assertEquals(min, ((Number) statistics.getMinValue()).intValue());
+                  assertEquals(max, ((Number) statistics.getMaxValue()).intValue());
+                  assertEquals(min, ((Number) statistics.getFirstValue()).intValue());
+                  assertEquals(max, ((Number) statistics.getLastValue()).intValue());
+                  assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
+                };
+            case BOOLEAN ->
+                (statistics, min, max, sum) -> {
+                  assertEquals(min % 2 == 1, statistics.getFirstValue());
+                  assertEquals(max % 2 == 1, statistics.getLastValue());
+                  assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
+                };
+            case TEXT ->
+                (statistics, min, max, sum) -> {
+                  assertEquals(
+                      new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
+                      statistics.getFirstValue());
+                  assertEquals(
+                      new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
+                      statistics.getLastValue());
+                };
+            case STRING ->
+                (statistics, min, max, sum) -> {
+                  assertEquals(
+                      new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
+                      statistics.getMinValue());
+                  assertEquals(
+                      new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
+                      statistics.getMaxValue());
+                  assertEquals(
+                      new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
+                      statistics.getFirstValue());
+                  assertEquals(
+                      new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
+                      statistics.getLastValue());
+                };
+            case BLOB, OBJECT -> (statistics, min, max, sum) -> {};
+            case ROW, UNKNOWN, VECTOR ->
+                (statistics, min, max, sum) -> {
+                  throw new IllegalArgumentException(type.getTypeEnum().toString());
+                };
+          };
+
+  static {
+    CHECK_STATISTICS_SERVICE.check();
+  }
 
   @Test
   public void testCrossTypeMerge() {
@@ -69,50 +123,9 @@ public class StatisticsTest {
   private static void checkStatistics(Statistics statistics, int min, int max, double sum) {
     assertEquals(min, statistics.getStartTime());
     assertEquals(max, statistics.getEndTime());
-    switch (statistics.getType()) {
-      case INT32:
-      case INT64:
-      case FLOAT:
-      case DOUBLE:
-      case TIMESTAMP:
-      case DATE:
-        assertEquals(min, ((Number) statistics.getMinValue()).intValue());
-        assertEquals(max, ((Number) statistics.getMaxValue()).intValue());
-        assertEquals(min, ((Number) statistics.getFirstValue()).intValue());
-        assertEquals(max, ((Number) statistics.getLastValue()).intValue());
-        assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
-        break;
-      case BOOLEAN:
-        assertEquals(min % 2 == 1, statistics.getFirstValue());
-        assertEquals(max % 2 == 1, statistics.getLastValue());
-        assertEquals(sum, statistics.getSumDoubleValue(), 0.001);
-        break;
-      case TEXT:
-        assertEquals(
-            new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
-            statistics.getFirstValue());
-        assertEquals(
-            new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
-            statistics.getLastValue());
-        break;
-      case STRING:
-        assertEquals(
-            new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET), statistics.getMinValue());
-        assertEquals(
-            new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET), statistics.getMaxValue());
-        assertEquals(
-            new Binary(String.valueOf(min), TSFileConfig.STRING_CHARSET),
-            statistics.getFirstValue());
-        assertEquals(
-            new Binary(String.valueOf(max), TSFileConfig.STRING_CHARSET),
-            statistics.getLastValue());
-        break;
-      case BLOB:
-      case OBJECT:
-        break;
-      default:
-        throw new IllegalArgumentException(statistics.getType().toString());
-    }
+    CHECK_STATISTICS_SERVICE
+        .call(Type.fromTsDataType(statistics.getType()))
+        .check(statistics, min, max, sum);
   }
 
   private static Statistics genStatistics(TSDataType dataType, int val) {
@@ -184,5 +197,11 @@ public class StatisticsTest {
     result.setEndTime(val);
     result.setEmpty(false);
     return result;
+  }
+
+  @FunctionalInterface
+  private interface StatisticsChecker {
+
+    void check(Statistics statistics, int min, int max, double sum);
   }
 }
