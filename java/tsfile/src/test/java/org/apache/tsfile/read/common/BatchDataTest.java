@@ -21,6 +21,8 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
