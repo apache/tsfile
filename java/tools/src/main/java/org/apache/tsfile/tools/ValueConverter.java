@@ -52,8 +52,80 @@ public class ValueConverter {
             case OBJECT, ROW, UNKNOWN, VECTOR -> (value, isMeasurement, timePrecision) -> value;
           };
 
+  private static final TypeService<ObjectConverter> FROM_OBJECT_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN ->
+                (value, isMeasurement, timePrecision) ->
+                    value instanceof Boolean ? value : Boolean.valueOf(value.toString());
+            case INT32 ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (value instanceof Integer) {
+                    return value;
+                  }
+                  if (value instanceof Number) {
+                    return ((Number) value).intValue();
+                  }
+                  return Integer.valueOf(value.toString());
+                };
+            case INT64 ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (value instanceof Long) {
+                    return value;
+                  }
+                  if (value instanceof Number) {
+                    return ((Number) value).longValue();
+                  }
+                  return Long.valueOf(value.toString());
+                };
+            case FLOAT ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (value instanceof Float) {
+                    return value;
+                  }
+                  if (value instanceof Number) {
+                    return ((Number) value).floatValue();
+                  }
+                  return Float.valueOf(value.toString());
+                };
+            case DOUBLE ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (value instanceof Double) {
+                    return value;
+                  }
+                  if (value instanceof Number) {
+                    return ((Number) value).doubleValue();
+                  }
+                  return Double.valueOf(value.toString());
+                };
+            case TEXT, STRING ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (isMeasurement) {
+                    return value instanceof Binary
+                        ? value
+                        : new Binary(value.toString(), StandardCharsets.UTF_8);
+                  }
+                  return value instanceof String ? value : value.toString();
+                };
+            case BLOB ->
+                (value, isMeasurement, timePrecision) -> {
+                  if (value instanceof Binary) {
+                    return value;
+                  }
+                  if (value instanceof byte[]) {
+                    return new Binary((byte[]) value);
+                  }
+                  return new Binary(value.toString().getBytes(StandardCharsets.UTF_8));
+                };
+            case DATE -> (value, isMeasurement, timePrecision) -> toLocalDate(value);
+            case TIMESTAMP ->
+                (value, isMeasurement, timePrecision) -> toEpochLong(value, timePrecision);
+            case OBJECT, ROW, UNKNOWN, VECTOR -> (value, isMeasurement, timePrecision) -> value;
+          };
+
   static {
     FROM_STRING_SERVICE.check();
+    FROM_OBJECT_SERVICE.check();
   }
 
   public static Object convert(Object value, TSDataType targetType, boolean isMeasurement) {
@@ -80,71 +152,9 @@ public class ValueConverter {
 
   private static Object fromObject(
       Object value, TSDataType targetType, boolean isMeasurement, String timePrecision) {
-    switch (targetType) {
-      case BOOLEAN:
-        if (value instanceof Boolean) {
-          return value;
-        }
-        return Boolean.valueOf(value.toString());
-      case INT32:
-        if (value instanceof Integer) {
-          return value;
-        }
-        if (value instanceof Number) {
-          return ((Number) value).intValue();
-        }
-        return Integer.valueOf(value.toString());
-      case INT64:
-        if (value instanceof Long) {
-          return value;
-        }
-        if (value instanceof Number) {
-          return ((Number) value).longValue();
-        }
-        return Long.valueOf(value.toString());
-      case FLOAT:
-        if (value instanceof Float) {
-          return value;
-        }
-        if (value instanceof Number) {
-          return ((Number) value).floatValue();
-        }
-        return Float.valueOf(value.toString());
-      case DOUBLE:
-        if (value instanceof Double) {
-          return value;
-        }
-        if (value instanceof Number) {
-          return ((Number) value).doubleValue();
-        }
-        return Double.valueOf(value.toString());
-      case TEXT:
-      case STRING:
-        if (isMeasurement) {
-          if (value instanceof Binary) {
-            return value;
-          }
-          return new Binary(value.toString(), StandardCharsets.UTF_8);
-        }
-        if (value instanceof String) {
-          return value;
-        }
-        return value.toString();
-      case BLOB:
-        if (value instanceof Binary) {
-          return value;
-        }
-        if (value instanceof byte[]) {
-          return new Binary((byte[]) value);
-        }
-        return new Binary(value.toString().getBytes(StandardCharsets.UTF_8));
-      case DATE:
-        return toLocalDate(value);
-      case TIMESTAMP:
-        return toEpochLong(value, timePrecision);
-      default:
-        return value;
-    }
+    return FROM_OBJECT_SERVICE
+        .call(Type.fromTsDataType(targetType))
+        .convert(value, isMeasurement, timePrecision);
   }
 
   private static LocalDate parseDate(String value) {
@@ -227,5 +237,10 @@ public class ValueConverter {
   @FunctionalInterface
   private interface StringConverter {
     Object convert(String value, boolean isMeasurement, String timePrecision);
+  }
+
+  @FunctionalInterface
+  private interface ObjectConverter {
+    Object convert(Object value, boolean isMeasurement, String timePrecision);
   }
 }
