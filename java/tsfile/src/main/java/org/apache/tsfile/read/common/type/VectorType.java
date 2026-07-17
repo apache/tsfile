@@ -90,6 +90,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Column to, int toIndex) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
   public void write(
       ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
     throw new UnSupportedDataTypeException(

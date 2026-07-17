@@ -199,6 +199,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void setTo(Column from, int fromIndex, Column to, int toIndex) {
+    to.getFloats()[toIndex] = from.getFloat(fromIndex);
+  }
+
+  @Override
   public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
     ((float[]) toArray)[toIndex] = from.getFloat(fromIndex);
   }

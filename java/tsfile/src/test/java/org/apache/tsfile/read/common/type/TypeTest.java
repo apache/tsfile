@@ -878,6 +878,48 @@ public class TypeTest {
       Assert.assertEquals(testCase[2], Array.get(target, 0));
     }
 
+    Object[][] columnTestCases = {
+      {TSDataType.BOOLEAN, 1, true, new boolean[1]},
+      {TSDataType.INT32, 1, 1, new int[1]},
+      {TSDataType.DATE, 2, 20260715, new int[1]},
+      {TSDataType.INT64, 1, 2L, new long[1]},
+      {TSDataType.TIMESTAMP, 1, 2L, new long[1]},
+      {TSDataType.FLOAT, 1, 1.25F, new float[1]},
+      {TSDataType.DOUBLE, 1, 2.5D, new double[1]},
+      {TSDataType.TEXT, 1, binary, new Binary[1]},
+      {TSDataType.STRING, 1, binary, new Binary[1]},
+      {TSDataType.BLOB, 1, binary, new Binary[1]},
+      {TSDataType.OBJECT, 1, binary, new Binary[1]}
+    };
+
+    for (Object[] testCase : columnTestCases) {
+      Column targetColumn = Mockito.mock(Column.class);
+      Object target = testCase[3];
+      if (target instanceof boolean[]) {
+        Mockito.when(targetColumn.getBooleans()).thenReturn((boolean[]) target);
+      } else if (target instanceof int[]) {
+        Mockito.when(targetColumn.getInts()).thenReturn((int[]) target);
+      } else if (target instanceof long[]) {
+        Mockito.when(targetColumn.getLongs()).thenReturn((long[]) target);
+      } else if (target instanceof float[]) {
+        Mockito.when(targetColumn.getFloats()).thenReturn((float[]) target);
+      } else if (target instanceof double[]) {
+        Mockito.when(targetColumn.getDoubles()).thenReturn((double[]) target);
+      } else {
+        Mockito.when(targetColumn.getBinaries()).thenReturn((Binary[]) target);
+      }
+      Type.fromTsDataType((TSDataType) testCase[0])
+          .setTo(column, (int) testCase[1], targetColumn, 0);
+      Assert.assertEquals(testCase[2], Array.get(target, 0));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).setTo(column, 1, column, 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+
     try {
       Type.fromTsDataType(TSDataType.UNKNOWN).setTo(column, 1, new Object[1], 0);
       Assert.fail("Expected UnsupportedOperationException");
