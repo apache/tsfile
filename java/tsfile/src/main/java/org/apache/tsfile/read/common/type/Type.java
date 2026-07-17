@@ -275,7 +275,7 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  /** Returns the value at {@code rowIndex} from an array. */
+  /** Returns the value at {@code rowIndex} from an array as a TsPrimitiveType. */
   default TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
     throw new UnsupportedOperationException(getClass().getName());
   }

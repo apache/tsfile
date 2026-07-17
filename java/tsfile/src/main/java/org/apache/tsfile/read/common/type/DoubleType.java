@@ -293,6 +293,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsDouble(((double[]) array)[rowIndex]);
+  }
+
+  @Override
   public int getInt(Column c, int position) {
     return (int) c.getDouble(position);
   }

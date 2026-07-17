@@ -63,6 +63,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsInt(getDateInt(array, rowIndex), TSDataType.DATE);
+  }
+
+  @Override
   public DataPoint getDataPoint(String measurementId, String value) {
     return new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
   }

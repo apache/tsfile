@@ -237,6 +237,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsVector(((TsPrimitiveType[][]) array)[rowIndex]);
+  }
+
+  @Override
   public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.common.unsupported_data_type", getTypeEnum()));

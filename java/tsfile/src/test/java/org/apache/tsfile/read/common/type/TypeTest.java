@@ -60,6 +60,55 @@ public class TypeTest {
   private static final int VALUE_LENGTH = 10;
 
   @Test
+  public void testGetValueAsTsPrimitiveType() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), null};
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {false, true}, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new int[] {0, 1}, new TsPrimitiveType.TsInt(1)},
+      {
+        TSDataType.DATE,
+        new int[] {0, 20260717},
+        new TsPrimitiveType.TsInt(20260717, TSDataType.DATE)
+      },
+      {
+        TSDataType.DATE,
+        new LocalDate[] {null, LocalDate.of(2026, 7, 17)},
+        new TsPrimitiveType.TsInt(20260717, TSDataType.DATE)
+      },
+      {TSDataType.INT64, new long[] {0L, 1L}, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.TIMESTAMP, new long[] {0L, 1L}, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.FLOAT, new float[] {0.0F, 1.25F}, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new double[] {0.0D, 2.5D}, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {
+        TSDataType.VECTOR,
+        new TsPrimitiveType[][] {null, vector},
+        new TsPrimitiveType.TsVector(vector)
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      TsPrimitiveType expected = (TsPrimitiveType) testCase[2];
+      TsPrimitiveType actual =
+          Type.fromTsDataType((TSDataType) testCase[0]).getValueAsTsPrimitiveType(testCase[1], 1);
+      Assert.assertEquals(expected, actual);
+      Assert.assertEquals(expected.getDataType(), actual.getDataType());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN)
+          .getValueAsTsPrimitiveType(new Object[] {new Object()}, 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testToBytes() {
     byte[] valueBytes = new byte[16];
 

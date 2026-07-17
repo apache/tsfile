@@ -273,6 +273,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsBinary(((Binary[]) array)[rowIndex]);
+  }
+
+  @Override
   public Binary getBinary(Column c, int position) {
     return c.getBinary(position);
   }

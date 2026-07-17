@@ -291,6 +291,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsFloat(((float[]) array)[rowIndex]);
+  }
+
+  @Override
   public int getInt(Column c, int position) {
     return (int) c.getFloat(position);
   }
