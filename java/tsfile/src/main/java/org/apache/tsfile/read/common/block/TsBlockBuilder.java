@@ -26,12 +26,6 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
-import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
-import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
-import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
-import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
-import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
-import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
 import org.apache.tsfile.read.common.type.Type;
@@ -141,35 +135,9 @@ public class TsBlockBuilder {
     valueColumnBuilders = new ColumnBuilder[types.size()];
     int initialExpectedEntries = timeColumnBuilder.getPositionCount();
     for (int i = 0; i < valueColumnBuilders.length; i++) {
-      switch (types.get(i)) {
-        case BOOLEAN:
-          valueColumnBuilders[i] =
-              new BooleanColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case INT32:
-          valueColumnBuilders[i] =
-              new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(),
-                  initialExpectedEntries,
-                  TSDataType.INT32);
-          break;
-        case DATE:
-          valueColumnBuilders[i] =
-              new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(),
-                  initialExpectedEntries,
-                  TSDataType.DATE);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueColumnBuilders[i] =
-              new LongColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case FLOAT:
-          valueColumnBuilders[i] =
-              new FloatColumnBuilder(
+      valueColumnBuilders[i] =
+          Type.fromTsDataType(types.get(i))
+              .createColumnBuilder(
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
           break;
         case DOUBLE:
