@@ -19,6 +19,8 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.utils.Binary;
 
 import java.nio.charset.StandardCharsets;
@@ -29,6 +31,30 @@ import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 
 public class ValueConverter {
+
+  private static final TypeService<StringConverter> FROM_STRING_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> (value, isMeasurement, timePrecision) -> Boolean.valueOf(value);
+            case INT32 -> (value, isMeasurement, timePrecision) -> Integer.valueOf(value);
+            case INT64 -> (value, isMeasurement, timePrecision) -> Long.valueOf(value);
+            case FLOAT -> (value, isMeasurement, timePrecision) -> Float.valueOf(value);
+            case DOUBLE -> (value, isMeasurement, timePrecision) -> Double.valueOf(value);
+            case TEXT, STRING ->
+                (value, isMeasurement, timePrecision) ->
+                    isMeasurement ? new Binary(value, StandardCharsets.UTF_8) : value;
+            case BLOB ->
+                (value, isMeasurement, timePrecision) ->
+                    new Binary(value.getBytes(StandardCharsets.UTF_8));
+            case DATE -> (value, isMeasurement, timePrecision) -> parseDate(value);
+            case TIMESTAMP ->
+                (value, isMeasurement, timePrecision) -> parseTimestamp(value, timePrecision);
+            case OBJECT, ROW, UNKNOWN, VECTOR -> (value, isMeasurement, timePrecision) -> value;
+          };
+
+  static {
+    FROM_STRING_SERVICE.check();
+  }
 
   public static Object convert(Object value, TSDataType targetType, boolean isMeasurement) {
     return convert(value, targetType, isMeasurement, "ms");
@@ -47,32 +73,9 @@ public class ValueConverter {
 
   private static Object fromString(
       String value, TSDataType targetType, boolean isMeasurement, String timePrecision) {
-    switch (targetType) {
-      case BOOLEAN:
-        return Boolean.valueOf(value);
-      case INT32:
-        return Integer.valueOf(value);
-      case INT64:
-        return Long.valueOf(value);
-      case FLOAT:
-        return Float.valueOf(value);
-      case DOUBLE:
-        return Double.valueOf(value);
-      case TEXT:
-      case STRING:
-        if (isMeasurement) {
-          return new Binary(value, StandardCharsets.UTF_8);
-        }
-        return value;
-      case BLOB:
-        return new Binary(value.getBytes(StandardCharsets.UTF_8));
-      case DATE:
-        return parseDate(value);
-      case TIMESTAMP:
-        return parseTimestamp(value, timePrecision);
-      default:
-        return value;
-    }
+    return FROM_STRING_SERVICE
+        .call(Type.fromTsDataType(targetType))
+        .convert(value, isMeasurement, timePrecision);
   }
 
   private static Object fromObject(
@@ -219,5 +222,10 @@ public class ValueConverter {
       }
     }
     return parseTimestamp(value.toString(), timePrecision);
+  }
+
+  @FunctionalInterface
+  private interface StringConverter {
+    Object convert(String value, boolean isMeasurement, String timePrecision);
   }
 }
