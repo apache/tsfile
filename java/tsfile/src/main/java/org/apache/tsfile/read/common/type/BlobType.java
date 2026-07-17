@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -391,6 +392,12 @@ public class BlobType extends AbstractType {
   @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BinaryColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    return new BinaryColumnBuilder(columnBuilderStatus, expectedEntries);
   }
 
   @Override

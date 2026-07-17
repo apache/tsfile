@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
@@ -434,6 +435,12 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new LongColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    return new LongColumnBuilder(columnBuilderStatus, expectedEntries);
   }
 
   @Override

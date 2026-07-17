@@ -34,6 +34,7 @@ import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 
 import java.util.List;
@@ -104,54 +105,10 @@ public class TsBlockBuilder {
     valueColumnBuilders = new ColumnBuilder[types.size()];
 
     for (int i = 0; i < valueColumnBuilders.length; i++) {
-      switch (types.get(i)) {
-        case BOOLEAN:
-          valueColumnBuilders[i] =
-              new BooleanColumnBuilder(
+      valueColumnBuilders[i] =
+          Type.fromTsDataType(types.get(i))
+              .createColumnBuilder(
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case INT32:
-          valueColumnBuilders[i] =
-              new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(),
-                  initialExpectedEntries,
-                  TSDataType.INT32);
-          break;
-        case DATE:
-          valueColumnBuilders[i] =
-              new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(),
-                  initialExpectedEntries,
-                  TSDataType.DATE);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueColumnBuilders[i] =
-              new LongColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case FLOAT:
-          valueColumnBuilders[i] =
-              new FloatColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case DOUBLE:
-          valueColumnBuilders[i] =
-              new DoubleColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueColumnBuilders[i] =
-              new BinaryColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
-          break;
-        default:
-          throw new IllegalArgumentException(
-              Messages.format("error.read.tsblock_builder_unknown_type", types.get(i)));
-      }
     }
   }
 

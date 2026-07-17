@@ -20,6 +20,8 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
@@ -125,6 +127,13 @@ public class VectorType extends AbstractLongType {
   public void write(ChunkWriterImpl writer, long time, Object value) {
     throw new UnSupportedDataTypeException(
         Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.tsblock_builder_unknown_type", getTypeEnum()));
   }
 
   @Override

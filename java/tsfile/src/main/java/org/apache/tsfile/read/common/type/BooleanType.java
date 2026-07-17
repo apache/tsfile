@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.IntRleDecoder;
@@ -411,6 +412,12 @@ public class BooleanType extends AbstractType {
   @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BooleanColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    return new BooleanColumnBuilder(columnBuilderStatus, expectedEntries);
   }
 
   @Override

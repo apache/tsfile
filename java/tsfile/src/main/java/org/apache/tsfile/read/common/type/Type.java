@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
@@ -460,6 +461,12 @@ public interface Type {
    * after an expression projection within the read.
    */
   ColumnBuilder createColumnBuilder(int expectedEntries);
+
+  /** Creates the preferred column builder for this type with memory tracking. */
+  default ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
 
   TypeEnum getTypeEnum();
 

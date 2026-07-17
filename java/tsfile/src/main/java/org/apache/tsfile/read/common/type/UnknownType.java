@@ -21,6 +21,8 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 
@@ -60,6 +62,13 @@ public class UnknownType extends AbstractType {
   @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new BooleanColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    throw new IllegalArgumentException(
+        Messages.format("error.read.tsblock_builder_unknown_type", getTypeEnum()));
   }
 
   @Override

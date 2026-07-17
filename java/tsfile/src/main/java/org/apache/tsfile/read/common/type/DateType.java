@@ -20,9 +20,12 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.IntColumn;
+import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -239,6 +242,12 @@ public class DateType extends AbstractIntType {
   @Override
   public Column createColumnWithZeroPosition(int positionCount) {
     return new IntColumn(positionCount, TSDataType.DATE);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    return new IntColumnBuilder(columnBuilderStatus, expectedEntries, TSDataType.DATE);
   }
 
   @Override
