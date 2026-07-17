@@ -26,7 +26,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
-import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.EncodingTypeServices;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import org.slf4j.Logger;
@@ -145,7 +145,9 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      return TypeServices.RLE_ENCODER_SERVICE.call(Type.fromTsDataType(type)).build(maxPointNumber);
+      return EncodingTypeServices.RLE_ENCODER_SERVICE
+          .call(Type.fromTsDataType(type))
+          .build(maxPointNumber);
     }
 
     /**
@@ -186,7 +188,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      return TypeServices.TS_2DIFF_ENCODER_SERVICE
+      return EncodingTypeServices.TS_2DIFF_ENCODER_SERVICE
           .call(Type.fromTsDataType(type))
           .build(maxPointNumber);
     }
@@ -227,7 +229,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      return TypeServices.GORILLA_V1_ENCODER_SERVICE.call(Type.fromTsDataType(type));
+      return EncodingTypeServices.GORILLA_V1_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -259,7 +261,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      return TypeServices.REGULAR_ENCODER_SERVICE.call(Type.fromTsDataType(type));
+      return EncodingTypeServices.REGULAR_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -273,7 +275,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      return TypeServices.GORILLA_V2_ENCODER_SERVICE.call(Type.fromTsDataType(type));
+      return EncodingTypeServices.GORILLA_V2_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -285,21 +287,7 @@ public abstract class TSEncodingBuilder {
   public static class Sprintz extends TSEncodingBuilder {
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-          return new IntSprintzEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new LongSprintzEncoder();
-        case FLOAT:
-          return new FloatSprintzEncoder();
-        case DOUBLE:
-          return new DoubleSprintzEncoder();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.SPRINTZ, type));
-      }
+      return EncodingTypeServices.SPRINTZ_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -312,21 +300,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-          return new IntRLBE();
-        case INT64:
-        case TIMESTAMP:
-          return new LongRLBE();
-        case FLOAT:
-          return new FloatRLBE();
-        case DOUBLE:
-          return new DoubleRLBE();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.RLBE, type));
-      }
+      return EncodingTypeServices.RLBE_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -356,17 +330,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case INT32:
-        case DATE:
-          return new IntZigzagEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new LongZigzagEncoder();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.ZIGZAG, type));
-      }
+      return EncodingTypeServices.ZIGZAG_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override
@@ -380,21 +344,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      switch (type) {
-        case FLOAT:
-          return new SinglePrecisionChimpEncoder();
-        case DOUBLE:
-          return new DoublePrecisionChimpEncoder();
-        case INT32:
-        case DATE:
-          return new IntChimpEncoder();
-        case INT64:
-        case TIMESTAMP:
-          return new LongChimpEncoder();
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(ERROR_MSG_KEY, TSEncoding.CHIMP, type));
-      }
+      return EncodingTypeServices.CHIMP_ENCODER_SERVICE.call(Type.fromTsDataType(type));
     }
 
     @Override

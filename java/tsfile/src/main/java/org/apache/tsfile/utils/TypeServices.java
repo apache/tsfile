@@ -21,20 +21,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
-import org.apache.tsfile.encoding.encoder.DeltaBinaryEncoder;
-import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
-import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV2;
-import org.apache.tsfile.encoding.encoder.Encoder;
-import org.apache.tsfile.encoding.encoder.FloatEncoder;
-import org.apache.tsfile.encoding.encoder.IntGorillaEncoder;
-import org.apache.tsfile.encoding.encoder.IntRleEncoder;
-import org.apache.tsfile.encoding.encoder.LongGorillaEncoder;
-import org.apache.tsfile.encoding.encoder.LongRleEncoder;
-import org.apache.tsfile.encoding.encoder.RegularDataEncoder;
-import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV1;
-import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV2;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
@@ -456,105 +443,6 @@ public final class TypeServices {
                 };
           };
 
-  public static final TypeService<EncoderBuilder> RLE_ENCODER_SERVICE =
-      type ->
-          switch (type.getTypeEnum()) {
-            case INT32, DATE, BOOLEAN -> maxPointNumber -> new IntRleEncoder();
-            case INT64, TIMESTAMP -> maxPointNumber -> new LongRleEncoder();
-            case FLOAT ->
-                maxPointNumber ->
-                    new FloatEncoder(TSEncoding.RLE, TSDataType.FLOAT, maxPointNumber);
-            case DOUBLE ->
-                maxPointNumber ->
-                    new FloatEncoder(TSEncoding.RLE, TSDataType.DOUBLE, maxPointNumber);
-            case TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
-                maxPointNumber -> {
-                  throw new UnSupportedDataTypeException(
-                          Messages.format(
-                              "error.encoding.ts_encoding_builder_unsupported_type",
-                              TSEncoding.RLE,
-                              type.getTypeEnum()))
-                      .setChecked(true);
-                };
-          };
-
-  public static final TypeService<EncoderBuilder> TS_2DIFF_ENCODER_SERVICE =
-      type ->
-          switch (type.getTypeEnum()) {
-            case INT32, DATE -> maxPointNumber -> new DeltaBinaryEncoder.IntDeltaEncoder();
-            case INT64, TIMESTAMP -> maxPointNumber -> new DeltaBinaryEncoder.LongDeltaEncoder();
-            case FLOAT ->
-                maxPointNumber ->
-                    new FloatEncoder(TSEncoding.TS_2DIFF, TSDataType.FLOAT, maxPointNumber);
-            case DOUBLE ->
-                maxPointNumber ->
-                    new FloatEncoder(TSEncoding.TS_2DIFF, TSDataType.DOUBLE, maxPointNumber);
-            case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
-                maxPointNumber -> {
-                  throw new UnSupportedDataTypeException(
-                          Messages.format(
-                              "error.encoding.ts_encoding_builder_unsupported_type",
-                              TSEncoding.TS_2DIFF,
-                              type.getTypeEnum()))
-                      .setChecked(true);
-                };
-          };
-
-  public static final TypeService<Encoder> GORILLA_V1_ENCODER_SERVICE =
-      type ->
-          switch (type.getTypeEnum()) {
-            case FLOAT -> new SinglePrecisionEncoderV1();
-            case DOUBLE -> new DoublePrecisionEncoderV1();
-            case BOOLEAN,
-                INT32,
-                DATE,
-                INT64,
-                TIMESTAMP,
-                TEXT,
-                BLOB,
-                STRING,
-                OBJECT,
-                ROW,
-                UNKNOWN,
-                VECTOR ->
-                throw new UnSupportedDataTypeException(
-                        Messages.format(
-                            "error.encoding.ts_encoding_builder_unsupported_type",
-                            TSEncoding.GORILLA_V1,
-                            type.getTypeEnum()))
-                    .setChecked(true);
-          };
-
-  public static final TypeService<Encoder> REGULAR_ENCODER_SERVICE =
-      type ->
-          switch (type.getTypeEnum()) {
-            case INT32, DATE -> new RegularDataEncoder.IntRegularEncoder();
-            case INT64, TIMESTAMP -> new RegularDataEncoder.LongRegularEncoder();
-            case BOOLEAN, FLOAT, DOUBLE, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
-                throw new UnSupportedDataTypeException(
-                        Messages.format(
-                            "error.encoding.ts_encoding_builder_unsupported_type",
-                            TSEncoding.REGULAR,
-                            type.getTypeEnum()))
-                    .setChecked(true);
-          };
-
-  public static final TypeService<Encoder> GORILLA_V2_ENCODER_SERVICE =
-      type ->
-          switch (type.getTypeEnum()) {
-            case FLOAT -> new SinglePrecisionEncoderV2();
-            case DOUBLE -> new DoublePrecisionEncoderV2();
-            case INT32, DATE -> new IntGorillaEncoder();
-            case INT64, TIMESTAMP -> new LongGorillaEncoder();
-            case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
-                throw new UnSupportedDataTypeException(
-                        Messages.format(
-                            "error.encoding.ts_encoding_builder_unsupported_type",
-                            TSEncoding.GORILLA,
-                            type.getTypeEnum()))
-                    .setChecked(true);
-          };
-
   private TypeServices() {}
 
   @FunctionalInterface
@@ -606,12 +494,6 @@ public final class TypeServices {
   public interface EmptyValueChunkWriter {
 
     void write(ValueChunkWriter writer);
-  }
-
-  @FunctionalInterface
-  public interface EncoderBuilder {
-
-    Encoder build(int maxPointNumber);
   }
 
   public enum PageDataReadStatus {
