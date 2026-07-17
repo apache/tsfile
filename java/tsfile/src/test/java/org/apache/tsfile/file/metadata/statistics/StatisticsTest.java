@@ -84,8 +84,81 @@ public class StatisticsTest {
                 };
           };
 
+  private static final TypeService<StatisticsGenerator> GENERATE_STATISTICS_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32 ->
+                value -> {
+                  IntegerStatistics statistics = new IntegerStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case INT64 ->
+                value -> {
+                  LongStatistics statistics = new LongStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case FLOAT ->
+                value -> {
+                  FloatStatistics statistics = new FloatStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case DOUBLE ->
+                value -> {
+                  DoubleStatistics statistics = new DoubleStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case TEXT ->
+                value -> {
+                  BinaryStatistics statistics = new BinaryStatistics();
+                  statistics.initializeStats(
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET),
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET));
+                  return statistics;
+                };
+            case STRING ->
+                value -> {
+                  StringStatistics statistics = new StringStatistics();
+                  statistics.initializeStats(
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET),
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET),
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET),
+                      new Binary(String.valueOf(value), TSFileConfig.STRING_CHARSET));
+                  return statistics;
+                };
+            case BOOLEAN ->
+                value -> {
+                  BooleanStatistics statistics = new BooleanStatistics();
+                  boolean booleanValue = value % 2 == 1;
+                  statistics.initializeStats(booleanValue, booleanValue, booleanValue ? 1 : 0);
+                  return statistics;
+                };
+            case BLOB -> value -> new BlobStatistics();
+            case OBJECT -> value -> new ObjectStatistics();
+            case DATE ->
+                value -> {
+                  DateStatistics statistics = new DateStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case TIMESTAMP ->
+                value -> {
+                  TimestampStatistics statistics = new TimestampStatistics();
+                  statistics.initializeStats(value, value, value, value, value);
+                  return statistics;
+                };
+            case ROW, UNKNOWN, VECTOR ->
+                value -> {
+                  throw new IllegalArgumentException(type.getTypeEnum().toString());
+                };
+          };
+
   static {
     CHECK_STATISTICS_SERVICE.check();
+    GENERATE_STATISTICS_SERVICE.check();
   }
 
   @Test
@@ -129,70 +202,8 @@ public class StatisticsTest {
   }
 
   private static Statistics genStatistics(TSDataType dataType, int val) {
-    Statistics result;
-    switch (dataType) {
-      case INT32:
-        IntegerStatistics intStat = new IntegerStatistics();
-        intStat.initializeStats(val, val, val, val, val);
-        result = intStat;
-        break;
-      case INT64:
-        LongStatistics longStat = new LongStatistics();
-        longStat.initializeStats(val, val, val, val, val);
-        result = longStat;
-        break;
-      case FLOAT:
-        FloatStatistics floatStat = new FloatStatistics();
-        floatStat.initializeStats(val, val, val, val, val);
-        result = floatStat;
-        break;
-      case DOUBLE:
-        DoubleStatistics doubleStat = new DoubleStatistics();
-        doubleStat.initializeStats(val, val, val, val, val);
-        result = doubleStat;
-        break;
-      case TEXT:
-        BinaryStatistics binaryStat = new BinaryStatistics();
-        binaryStat.initializeStats(
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET),
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET));
-        result = binaryStat;
-        break;
-      case STRING:
-        StringStatistics stringStat = new StringStatistics();
-        stringStat.initializeStats(
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET),
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET),
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET),
-            new Binary(String.valueOf(val), TSFileConfig.STRING_CHARSET));
-        result = stringStat;
-        break;
-      case BOOLEAN:
-        BooleanStatistics boolStat = new BooleanStatistics();
-        boolStat.initializeStats(val % 2 == 1, val % 2 == 1, val % 2 == 1 ? 1 : 0);
-        result = boolStat;
-        break;
-      case BLOB:
-        BlobStatistics blobStat = new BlobStatistics();
-        result = blobStat;
-        break;
-      case OBJECT:
-        ObjectStatistics objectStat = new ObjectStatistics();
-        result = objectStat;
-        break;
-      case DATE:
-        DateStatistics dateStat = new DateStatistics();
-        dateStat.initializeStats(val, val, val, val, val);
-        result = dateStat;
-        break;
-      case TIMESTAMP:
-        TimestampStatistics timestampStat = new TimestampStatistics();
-        timestampStat.initializeStats(val, val, val, val, val);
-        result = timestampStat;
-        break;
-      default:
-        throw new IllegalArgumentException(dataType.toString());
-    }
+    Statistics result =
+        GENERATE_STATISTICS_SERVICE.call(Type.fromTsDataType(dataType)).generate(val);
     result.setStartTime(val);
     result.setEndTime(val);
     result.setEmpty(false);
@@ -203,5 +214,11 @@ public class StatisticsTest {
   private interface StatisticsChecker {
 
     void check(Statistics statistics, int min, int max, double sum);
+  }
+
+  @FunctionalInterface
+  private interface StatisticsGenerator {
+
+    Statistics generate(int value);
   }
 }
