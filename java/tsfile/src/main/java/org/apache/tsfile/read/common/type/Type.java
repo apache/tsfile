@@ -229,7 +229,7 @@ public interface Type {
 
   /** Returns the serialized byte size of the array within the given range. */
   default int serializedSize(Object array, int startRow, int endRow) {
-    throw new UnsupportedOperationException(getClass().getName());
+    return serializedSize(array, endRow - startRow);
   }
 
   /** Serializes the array column with {@code rowSize} entries. */

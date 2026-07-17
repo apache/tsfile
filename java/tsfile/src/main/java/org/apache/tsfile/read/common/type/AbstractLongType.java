@@ -345,7 +345,7 @@ public abstract class AbstractLongType extends AbstractType {
   public int serializedSize(Object array, int rowSize) {
     return Math.multiplyExact(Long.BYTES, rowSize);
   }
-
+  
   @Override
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {

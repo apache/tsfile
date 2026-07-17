@@ -315,6 +315,11 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public int serializedSize(Object array, int startRow, int endRow) {
+    return serializedSizeOfBinaryValues(array, startRow, endRow);
+  }
+
+  @Override
   public void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {
     serializeBinaryValues(array, rowSize, stream);

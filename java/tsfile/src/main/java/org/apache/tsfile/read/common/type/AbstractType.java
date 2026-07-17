@@ -79,10 +79,14 @@ public abstract class AbstractType implements Type {
     }
   }
 
-  protected int serializedSizeOfBinaryValues(Object column, int rowSize) {
-    Binary[] binaryValues = (Binary[]) column;
+  protected int serializedSizeOfBinaryValues(Object array, int rowSize) {
+    return serializedSizeOfBinaryValues(array, 0, rowSize);
+  }
+
+  protected int serializedSizeOfBinaryValues(Object array, int startRow, int endRow) {
+    Binary[] binaryValues = (Binary[]) array;
     int size = 0;
-    for (int i = 0; i < rowSize; i++) {
+    for (int i = startRow; i < endRow; i++) {
       size = Math.addExact(size, Byte.BYTES);
       if (binaryValues[i] != null) {
         size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[i]));
