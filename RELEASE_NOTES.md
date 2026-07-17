@@ -18,6 +18,29 @@
     under the License.
 
 -->
+
+# Apache TsFile 2.4.0
+
+## New Features
+
+- [Python] Extended `TsFileDataFrame` to support tree-moel TsFile files. (#816)
+- [Java] Added `Tablet.serializedSize()` for exact serialized-size calculation and pre-allocation of serialization buffers. (#824)
+
+## Improvements
+
+- [C++] Improved read and write throughput with batch codec APIs, single-pass TsBlock decoding, AVX2/NEON SIMD paths, chunk-level parallel reads, and column-parallel writes. (#823)
+- [C++] Optimized timeseries metadata loading by eliminating repeated index traversal and I/O, and accelerated exact TAG lookups for single-TAG tables with direct B-tree lookup. (#815)
+- [Java] Optimized timeseries metadata reads by reusing device metadata offsets and reduced redundant metadata-index work. (#840)
+
+## Bug Fixes
+
+- [Java/C++] Fixed cross-language compatibility for FLOAT and DOUBLE data encoded with TS_2DIFF, including overflow-page handling and time-decoder selection. (#796)
+- [C++] Fixed writer flush-offset handling for multi-gigabyte TsFile files, with tree-model and table-model regression coverage beyond 4 GB. (#839)
+- [C++/Python] Fixed crashes and ambiguous device paths involving null TAG values. Python now exposes structured `SeriesPath` values and uses `\N` as the unambiguous null-TAG path marker. (#848)
+- [C++] Fixed aligned table null handling, null-TAG metadata-cache collisions, and memory leaks in reader teardown paths. (#823)
+- [Java] Fixed table-size accounting when writing metadata for the first table. (#840)
+
+
 # Apache TsFile 2.3.1
 
 ## New Features
