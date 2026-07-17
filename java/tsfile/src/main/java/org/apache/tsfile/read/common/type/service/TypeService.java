@@ -20,6 +20,7 @@ package org.apache.tsfile.read.common.type.service;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 /**
  * A TypeService wraps a switch(dataType) clause into a checked service class. Implementations
@@ -42,7 +43,15 @@ public interface TypeService<T> {
       }
 
       if (type != null) {
-        call(type);
+        try {
+          call(type);
+        } catch (UnSupportedDataTypeException e) {
+          if (!e.isChecked()) {
+            // the exception is caused by an uncovered datatype, throw it to fail any tests
+            // involving this service
+            throw e;
+          }
+        }
       }
     }
   }

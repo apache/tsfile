@@ -21,6 +21,8 @@ package org.apache.tsfile.write;
 
 public class UnSupportedDataTypeException extends RuntimeException {
 
+  // true if the exception is raised by a datatype that is known to be unsupported,
+  // otherwise, it is caused by an unknown/uncovered datatype
   private boolean isChecked = false;
 
   public UnSupportedDataTypeException(String message) {

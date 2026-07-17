@@ -227,6 +227,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Returns the serialized byte size of the array within the given range. */
+  default int serializedSize(Object array, int startRow, int endRow) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Serializes the array column with {@code rowSize} entries. */
   default void serializeArray(Object array, int rowSize, DataOutputStream stream)
       throws IOException {

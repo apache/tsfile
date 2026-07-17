@@ -103,7 +103,8 @@ public final class TypeServices {
                 };
             case ROW, UNKNOWN, VECTOR ->
                 (decoder, buffer, filter, pageData, timestamp, allSatisfy, isDeleted) -> {
-                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                      .setChecked(true);
                 };
           };
 
@@ -293,7 +294,8 @@ public final class TypeServices {
                     allSatisfy,
                     isDeleted,
                     paginationController) -> {
-                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                      .setChecked(true);
                 };
           };
 
@@ -342,7 +344,8 @@ public final class TypeServices {
                     };
                 case ROW, UNKNOWN, VECTOR ->
                     (decoder, buffer, timestamp, isDeleted) -> {
-                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                          .setChecked(true);
                     };
               };
 
@@ -431,7 +434,8 @@ public final class TypeServices {
                     };
                 case ROW, UNKNOWN, VECTOR ->
                     (decoder, buffer, builder, keepCurrentRow, isDeleted) -> {
-                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                      throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                          .setChecked(true);
                     };
               };
 
@@ -447,7 +451,8 @@ public final class TypeServices {
             case ROW, UNKNOWN, VECTOR ->
                 writer -> {
                   throw new UnSupportedDataTypeException(
-                      Messages.format("error.write.type_not_supported", type.getTypeEnum()));
+                          Messages.format("error.write.type_not_supported", type.getTypeEnum()))
+                      .setChecked(true);
                 };
           };
 
@@ -465,10 +470,11 @@ public final class TypeServices {
             case TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
                 maxPointNumber -> {
                   throw new UnSupportedDataTypeException(
-                      Messages.format(
-                          "error.encoding.ts_encoding_builder_unsupported_type",
-                          TSEncoding.RLE,
-                          type.getTypeEnum()));
+                          Messages.format(
+                              "error.encoding.ts_encoding_builder_unsupported_type",
+                              TSEncoding.RLE,
+                              type.getTypeEnum()))
+                      .setChecked(true);
                 };
           };
 
@@ -486,10 +492,11 @@ public final class TypeServices {
             case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
                 maxPointNumber -> {
                   throw new UnSupportedDataTypeException(
-                      Messages.format(
-                          "error.encoding.ts_encoding_builder_unsupported_type",
-                          TSEncoding.TS_2DIFF,
-                          type.getTypeEnum()));
+                          Messages.format(
+                              "error.encoding.ts_encoding_builder_unsupported_type",
+                              TSEncoding.TS_2DIFF,
+                              type.getTypeEnum()))
+                      .setChecked(true);
                 };
           };
 
@@ -511,10 +518,11 @@ public final class TypeServices {
                 UNKNOWN,
                 VECTOR ->
                 throw new UnSupportedDataTypeException(
-                    Messages.format(
-                        "error.encoding.ts_encoding_builder_unsupported_type",
-                        TSEncoding.GORILLA_V1,
-                        type.getTypeEnum()));
+                        Messages.format(
+                            "error.encoding.ts_encoding_builder_unsupported_type",
+                            TSEncoding.GORILLA_V1,
+                            type.getTypeEnum()))
+                    .setChecked(true);
           };
 
   public static final TypeService<Encoder> REGULAR_ENCODER_SERVICE =
@@ -524,10 +532,11 @@ public final class TypeServices {
             case INT64, TIMESTAMP -> new RegularDataEncoder.LongRegularEncoder();
             case BOOLEAN, FLOAT, DOUBLE, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
                 throw new UnSupportedDataTypeException(
-                    Messages.format(
-                        "error.encoding.ts_encoding_builder_unsupported_type",
-                        TSEncoding.REGULAR,
-                        type.getTypeEnum()));
+                        Messages.format(
+                            "error.encoding.ts_encoding_builder_unsupported_type",
+                            TSEncoding.REGULAR,
+                            type.getTypeEnum()))
+                    .setChecked(true);
           };
 
   public static final TypeService<Encoder> GORILLA_V2_ENCODER_SERVICE =
@@ -539,10 +548,11 @@ public final class TypeServices {
             case INT64, TIMESTAMP -> new LongGorillaEncoder();
             case BOOLEAN, TEXT, BLOB, STRING, OBJECT, ROW, UNKNOWN, VECTOR ->
                 throw new UnSupportedDataTypeException(
-                    Messages.format(
-                        "error.encoding.ts_encoding_builder_unsupported_type",
-                        TSEncoding.GORILLA,
-                        type.getTypeEnum()));
+                        Messages.format(
+                            "error.encoding.ts_encoding_builder_unsupported_type",
+                            TSEncoding.GORILLA,
+                            type.getTypeEnum()))
+                    .setChecked(true);
           };
 
   private TypeServices() {}
