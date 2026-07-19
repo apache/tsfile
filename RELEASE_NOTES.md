@@ -23,7 +23,7 @@
 
 ## New Features
 
-- [Python] Extended `TsFileDataFrame` to support tree-moel TsFile files. (#816)
+- [Python] Extended `TsFileDataFrame` to support tree-model TsFile files. (#816)
 - [Java] Added `Tablet.serializedSize()` for exact serialized-size calculation and pre-allocation of serialization buffers. (#824)
 
 ## Improvements
