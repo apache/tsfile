@@ -41,6 +41,24 @@ def test_get_exception_preserves_known_and_unknown_codes():
     assert unknown.code == 999
     assert unknown.message == "opening reader: Unknown library error"
 
+    retired_codes = {
+        *range(9, 20),
+        23,
+        25,
+        37,
+        39,
+        41,
+        42,
+        46,
+        47,
+    }
+    assert retired_codes.isdisjoint(error.value for error in ErrorCode)
+    for code in retired_codes:
+        retired = get_exception(code)
+        assert type(retired) is LibraryError
+        assert retired.code == code
+        assert retired.message == "Unknown library error"
+
 
 def test_writer_constructor_propagates_native_error(tmp_path, capsys):
     path = tmp_path / "already-exists.tsfile"

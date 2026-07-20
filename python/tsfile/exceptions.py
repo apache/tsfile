@@ -29,23 +29,10 @@ class ErrorCode(IntEnum):
     OUT_OF_RANGE = 5
     PARTIAL_READ = 6
     INVALID_SCHEMA = 8
-    NET_EPOLL_ERROR = 9
-    NET_EPOLL_WAIT_ERROR = 10
-    NET_RECEIVE_ERROR = 11
-    NET_ACCEPT_ERROR = 12
-    NET_FCNTL_ERROR = 13
-    NET_LISTEN_ERROR = 14
-    NET_SEND_ERROR = 15
-    PIPE_ERROR = 16
-    THREAD_CREATE_ERROR = 17
-    MUTEX_ERROR = 18
-    CONDITION_ERROR = 19
     OVERFLOW = 20
     NO_MORE_DATA = 21
     OUT_OF_ORDER = 22
-    TSBLOCK_TYPE_NOT_SUPPORTED = 23
     DATA_INCONSISTENCY = 24
-    DDL_UNKNOWN_TYPE = 25
     TYPE_NOT_SUPPORTED = 26
     TYPE_MISMATCH = 27
     FILE_OPEN_ERROR = 28
@@ -57,17 +44,11 @@ class ErrorCode(IntEnum):
     FILE_STAT_ERROR = 34
     TSFILE_CORRUPTED = 35
     BUFFER_NOT_ENOUGH = 36
-    INVALID_PATH = 37
     NOT_MATCH = 38
-    JSON_INVALID = 39
     NOT_SUPPORTED = 40
-    PARSER_ERROR = 41
-    ANALYZE_ERROR = 42
     INVALID_DATA_POINT = 43
     DEVICE_NOT_EXIST = 44
     MEASUREMENT_NOT_EXIST = 45
-    INVALID_QUERY = 46
-    QUERY_OPTIMIZE_ERROR = 47
     COMPRESSION_ERROR = 48
     TABLE_NOT_EXIST = 49
     COLUMN_NOT_EXIST = 50
@@ -190,11 +171,6 @@ class BufferNotEnoughError(LibraryError):
     _default_code = 36
 
 
-class InvalidPathError(LibraryError):
-    _default_message = "Invalid path"
-    _default_code = 37
-
-
 class NotSupportedError(LibraryError):
     _default_message = "Not support yet"
     _default_code = 40
@@ -208,16 +184,6 @@ class DeviceNotExistError(LibraryError):
 class MeasurementNotExistError(LibraryError):
     _default_message = "Specified measurement does not exist"
     _default_code = 45
-
-
-class InvalidQueryError(LibraryError):
-    _default_message = "Malformed query syntax"
-    _default_code = 46
-
-
-class QueryOptimizeError(LibraryError):
-    _default_message = "Failed to optimize query"
-    _default_code = 47
 
 
 class CompressionError(LibraryError):
@@ -288,12 +254,9 @@ ERROR_MAPPING = {
     34: FileStatError,
     35: TsFileCorruptedError,
     36: BufferNotEnoughError,
-    37: InvalidPathError,
     40: NotSupportedError,
     44: DeviceNotExistError,
     45: MeasurementNotExistError,
-    46: InvalidQueryError,
-    47: QueryOptimizeError,
     48: CompressionError,
     49: TableNotExistError,
     50: ColumnNotExistError,

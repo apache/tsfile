@@ -48,8 +48,6 @@ const char* error_code_message(int code) {
             return "file read error";
         case common::E_TSFILE_CORRUPTED:
             return "file is corrupted";
-        case common::E_INVALID_PATH:
-            return "invalid path";
         case common::E_DEVICE_NOT_EXIST:
             return "device does not exist";
         case common::E_MEASUREMENT_NOT_EXIST:
@@ -58,8 +56,6 @@ const char* error_code_message(int code) {
             return "table does not exist";
         case common::E_COLUMN_NOT_EXIST:
             return "column does not exist";
-        case common::E_INVALID_QUERY:
-            return "invalid query";
         case common::E_TYPE_NOT_SUPPORTED:
             return "data type not supported";
         case common::E_TYPE_NOT_MATCH:
