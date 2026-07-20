@@ -43,6 +43,10 @@ public class PublicBAOS extends ByteArrayOutputStream {
     super(size);
   }
 
+  public PublicBAOS(byte[] buf) {
+    this.buf = buf;
+  }
+
   private void ensureCapacity(int minCapacity) {
     // overflow-conscious code
     if (minCapacity - buf.length > 0) {
