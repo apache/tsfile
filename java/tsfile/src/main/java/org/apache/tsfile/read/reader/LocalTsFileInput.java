@@ -45,6 +45,10 @@ public class LocalTsFileInput implements TsFileInput {
     filePath = file.toString();
   }
 
+  protected boolean isOpen() {
+    return channel.isOpen();
+  }
+
   @Override
   public long size() throws IOException {
     try {
