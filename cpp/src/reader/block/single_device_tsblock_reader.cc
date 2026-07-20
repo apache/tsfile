@@ -164,15 +164,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
     }
     time_column_index_ = 0;
-    if (RET_FAIL(common::TsBlock::create_tsblock(&tuple_desc_, current_block_,
-                                                 block_size))) {
-        return ret;
-    }
-    col_appenders_.resize(tuple_desc_.get_column_count());
-    for (uint32_t i = 0; i < tuple_desc_.get_column_count(); i++) {
-        col_appenders_[i] = new common::ColAppender(i, current_block_);
-    }
-    row_appender_ = new common::RowAppender(current_block_);
     std::vector<ITimeseriesIndex*> time_series_indexs(
         device_query_task_->get_column_mapping()
             ->get_measurement_columns()
@@ -187,8 +178,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     if (time_filter == nullptr && field_filter == nullptr &&
         dense_row_count_ >= 0 && remaining_offset_ >= dense_row_count_) {
         remaining_offset_ -= dense_row_count_;
-        delete current_block_;
-        current_block_ = nullptr;
         return common::E_OK;
     }
     // Early device-level time skip: if time_filter is set and ALL chunks of
@@ -226,8 +215,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
         if (examined_any && all_outside) {
             // No data in this device matches the time filter.
-            delete current_block_;
-            current_block_ = nullptr;
             return common::E_OK;
         }
     }
@@ -347,8 +334,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
         }
         if (any_value_column_requested) {
-            delete current_block_;
-            current_block_ = nullptr;
             return common::E_OK;
         }
 
@@ -369,8 +354,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             // propagate so the caller sees the actual failure instead of
             // an empty resultset wearing E_OK.
             if (time_only_ret != common::E_NO_MORE_DATA) {
-                delete current_block_;
-                current_block_ = nullptr;
                 return time_only_ret;
             }
         }
@@ -394,10 +377,22 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     if (field_column_contexts_.empty()) {
-        delete current_block_;
-        current_block_ = nullptr;
         return common::E_OK;
     }
+
+    // Metadata and context initialization above can prove that a device has no
+    // rows to return. Delay result-buffer allocation until those early exits
+    // have been ruled out, so skipped devices never create appenders that
+    // briefly point at a deleted TsBlock.
+    if (RET_FAIL(common::TsBlock::create_tsblock(&tuple_desc_, current_block_,
+                                                 block_size))) {
+        return ret;
+    }
+    col_appenders_.resize(tuple_desc_.get_column_count());
+    for (uint32_t i = 0; i < tuple_desc_.get_column_count(); i++) {
+        col_appenders_[i] = new common::ColAppender(i, current_block_);
+    }
+    row_appender_ = new common::RowAppender(current_block_);
 
     for (const auto& id_column :
          device_query_task->get_column_mapping()->get_id_columns()) {

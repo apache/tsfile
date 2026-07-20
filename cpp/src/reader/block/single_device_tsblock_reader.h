@@ -74,7 +74,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     uint32_t block_size_;
     common::TsBlock* current_block_ = nullptr;
     std::vector<common::ColAppender*> col_appenders_;
-    common::RowAppender* row_appender_;
+    common::RowAppender* row_appender_ = nullptr;
     common::TupleDesc tuple_desc_;
     bool last_block_returned_ = true;
     std::map<std::string, MeasurementColumnContext*> field_column_contexts_;

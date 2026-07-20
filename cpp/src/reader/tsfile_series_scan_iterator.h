@@ -20,7 +20,6 @@
 #ifndef READER_TSFILE_SERIES_SCAN_ITERATOR_H
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
-#include <algorithm>
 #include <limits>
 #include <string>
 
@@ -83,7 +82,10 @@ class TsFileSeriesScanIterator {
     int get_row_offset() const { return row_offset_; }
     int get_row_limit() const { return row_limit_; }
     void consume_row_offset(int count) {
-        row_offset_ = std::max(0, row_offset_ - count);
+        if (count <= 0 || row_offset_ <= 0) {
+            return;
+        }
+        row_offset_ = count >= row_offset_ ? 0 : row_offset_ - count;
     }
 
     /*

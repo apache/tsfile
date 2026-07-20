@@ -42,6 +42,23 @@
 using namespace storage;
 using namespace common;
 
+TEST(TsFileSeriesScanIteratorTest, ConsumeRowOffsetSaturates) {
+    storage::TsFileSeriesScanIterator ssi;
+    ssi.set_row_range(/*offset=*/10, /*limit=*/-1);
+
+    ssi.consume_row_offset(-1);
+    EXPECT_EQ(ssi.get_row_offset(), 10);
+    ssi.consume_row_offset(std::numeric_limits<int>::min());
+    EXPECT_EQ(ssi.get_row_offset(), 10);
+
+    ssi.consume_row_offset(4);
+    EXPECT_EQ(ssi.get_row_offset(), 6);
+    ssi.consume_row_offset(6);
+    EXPECT_EQ(ssi.get_row_offset(), 0);
+    ssi.consume_row_offset(1);
+    EXPECT_EQ(ssi.get_row_offset(), 0);
+}
+
 class TsFileReaderTest : public ::testing::Test {
    protected:
     void SetUp() override {
