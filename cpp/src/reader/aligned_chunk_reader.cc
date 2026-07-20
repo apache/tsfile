@@ -356,7 +356,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (cur_page_statisify_filter(filter)) {
+            } else if (cur_page_may_satisfy_filter(filter)) {
                 break;
             } else if (RET_FAIL(skip_cur_page())) {
             }
@@ -470,7 +470,7 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
+bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     bool value_satisfy = filter == nullptr ||
                          cur_value_page_header_.statistic_ == nullptr ||
                          filter->satisfy(cur_value_page_header_.statistic_);
@@ -478,6 +478,16 @@ bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy && value_satisfy;
+}
+
+bool AlignedChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr) {
+        stat = cur_value_page_header_.statistic_;
+    }
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
 }
 
 int AlignedChunkReader::skip_cur_page() {
@@ -1060,8 +1070,7 @@ bool AlignedChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
     return false;
 }
 
-bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset,
-                                                    Filter* filter) {
+bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset) {
     if (row_offset <= 0) {
         return false;
     }
@@ -1071,10 +1080,6 @@ bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset,
         stat = cur_value_page_header_.statistic_;
     }
     if (stat == nullptr || stat->count_ == 0) {
-        return false;
-    }
-    if (filter != nullptr &&
-        !filter->contain_start_end_time(stat->start_time_, stat->end_time_)) {
         return false;
     }
     int32_t count = stat->count_;
@@ -1128,13 +1133,14 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (!cur_page_statisify_filter(filter)) {
+            } else if (!cur_page_may_satisfy_filter(filter)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else if (should_skip_page_by_time(min_time_hint)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
-            } else if (should_skip_page_by_offset(row_offset, filter)) {
+            } else if (cur_page_fully_satisfies_filter(filter) &&
+                       should_skip_page_by_offset(row_offset)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else {
@@ -2086,9 +2092,10 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
-            if (!cur_page_statisify_filter_multi(filter)) {
+            if (!cur_page_may_satisfy_filter_multi(filter)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
-            } else if (should_skip_page_by_offset_multi(row_offset, filter)) {
+            } else if (cur_page_fully_satisfies_filter_multi(filter) &&
+                       should_skip_page_by_offset_multi(row_offset)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else {
                 break;
@@ -2110,24 +2117,26 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter_multi(Filter* filter) {
+bool AlignedChunkReader::cur_page_may_satisfy_filter_multi(Filter* filter) {
     bool time_satisfy = filter == nullptr ||
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy;
 }
 
-bool AlignedChunkReader::should_skip_page_by_offset_multi(int& row_offset,
-                                                          Filter* filter) {
+bool AlignedChunkReader::cur_page_fully_satisfies_filter_multi(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
+}
+
+bool AlignedChunkReader::should_skip_page_by_offset_multi(int& row_offset) {
     if (row_offset <= 0) {
         return false;
     }
     Statistic* stat = cur_time_page_header_.statistic_;
     if (stat == nullptr || stat->count_ == 0) {
-        return false;
-    }
-    if (filter != nullptr &&
-        !filter->contain_start_end_time(stat->start_time_, stat->end_time_)) {
         return false;
     }
     int32_t count = stat->count_;

@@ -76,7 +76,7 @@ class ChunkReader : public IChunkReader {
 
    private:
     bool should_skip_page_by_time(int64_t min_time_hint);
-    bool should_skip_page_by_offset(int& row_offset, Filter* filter);
+    bool should_skip_page_by_offset(int& row_offset);
     FORCE_INLINE bool chunk_has_only_one_page() const {
         return (chunk_header_.chunk_type_ &
                 ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
@@ -87,7 +87,8 @@ class ChunkReader : public IChunkReader {
         common::CompressionType compression_type);
     int get_cur_page_header();
     int read_from_file_and_rewrap(int want_size = 0);
-    bool cur_page_statisify_filter(Filter* filter);
+    bool cur_page_may_satisfy_filter(Filter* filter);
+    bool cur_page_fully_satisfies_filter(Filter* filter);
     int skip_cur_page();
     int decode_cur_page_data(common::TsBlock*& ret_tsblock, Filter* filter,
                              common::PageArena& pa);

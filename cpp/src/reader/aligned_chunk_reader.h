@@ -172,7 +172,7 @@ class AlignedChunkReader : public IChunkReader {
 
    private:
     bool should_skip_page_by_time(int64_t min_time_hint);
-    bool should_skip_page_by_offset(int& row_offset, Filter* filter);
+    bool should_skip_page_by_offset(int& row_offset);
     FORCE_INLINE bool chunk_has_only_one_page(
         const ChunkHeader& chunk_header) const {
         return (chunk_header.chunk_type_ & ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
@@ -194,7 +194,8 @@ class AlignedChunkReader : public IChunkReader {
                                   uint32_t& chunk_visit_offset,
                                   int32_t& file_data_buf_size,
                                   int want_size = 0, bool may_shrink = true);
-    bool cur_page_statisify_filter(Filter* filter);
+    bool cur_page_may_satisfy_filter(Filter* filter);
+    bool cur_page_fully_satisfies_filter(Filter* filter);
     int skip_cur_page();
     int decode_cur_time_page_data();
     int decode_cur_value_page_data();
@@ -243,8 +244,9 @@ class AlignedChunkReader : public IChunkReader {
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
                                    common::PageArena& pa, int& row_offset);
     int skip_cur_page_multi();
-    bool cur_page_statisify_filter_multi(Filter* filter);
-    bool should_skip_page_by_offset_multi(int& row_offset, Filter* filter);
+    bool cur_page_may_satisfy_filter_multi(Filter* filter);
+    bool cur_page_fully_satisfies_filter_multi(Filter* filter);
+    bool should_skip_page_by_offset_multi(int& row_offset);
     int decode_cur_value_pages_multi();
     int decode_cur_value_page_data_for(ValueColumnState& col);
     int ensure_value_page_loaded(ValueColumnState& col);
