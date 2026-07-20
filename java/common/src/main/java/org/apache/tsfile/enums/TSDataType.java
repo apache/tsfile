@@ -39,45 +39,47 @@ import java.util.Set;
 
 public enum TSDataType {
   /** BOOLEAN. */
-  BOOLEAN((byte) 0),
+  BOOLEAN((byte) 0, TSDataType::castIdenticalSingleValue),
 
   /** INT32. */
-  INT32((byte) 1),
+  INT32((byte) 1, TSDataType::castIdenticalSingleValue),
 
   /** INT64. */
-  INT64((byte) 2),
+  INT64((byte) 2, TSDataType::castToLongSingleValue),
 
   /** FLOAT. */
-  FLOAT((byte) 3),
+  FLOAT((byte) 3, TSDataType::castToFloatSingleValue),
 
   /** DOUBLE. */
-  DOUBLE((byte) 4),
+  DOUBLE((byte) 4, TSDataType::castToDoubleSingleValue),
 
   /** TEXT. */
-  TEXT((byte) 5),
+  TEXT((byte) 5, TSDataType::castToTextSingleValue),
 
   /** VECTOR. */
-  VECTOR((byte) 6),
+  VECTOR((byte) 6, TSDataType::unsupportedSingleValueCast),
 
   /** UNKNOWN. */
-  UNKNOWN((byte) 7),
+  UNKNOWN((byte) 7, TSDataType::unsupportedSingleValueCast),
 
   /** TIMESTAMP. */
-  TIMESTAMP((byte) 8),
+  TIMESTAMP((byte) 8, TSDataType::castToTimestampSingleValue),
 
   /** DATE. */
-  DATE((byte) 9),
+  DATE((byte) 9, TSDataType::castIdenticalSingleValue),
 
   /** BLOB. */
-  BLOB((byte) 10),
+  BLOB((byte) 10, TSDataType::castToBlobSingleValue),
 
   /** STRING */
-  STRING((byte) 11),
+  STRING((byte) 11, TSDataType::castToTextSingleValue),
 
   /** OBJECT */
-  OBJECT((byte) 12);
+  OBJECT((byte) 12, TSDataType::castIdenticalSingleValue);
 
+  private static final Object UNSUPPORTED_CAST = new Object();
   private final byte type;
+  private final SingleValueCaster singleValueCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
 
   static {
@@ -147,8 +149,9 @@ public enum TSDataType {
     compatibleTypes.put(OBJECT, Collections.emptySet());
   }
 
-  TSDataType(byte type) {
+  TSDataType(byte type, SingleValueCaster singleValueCaster) {
     this.type = type;
+    this.singleValueCaster = singleValueCaster;
   }
 
   /**
@@ -211,122 +214,88 @@ public enum TSDataType {
     if (Objects.isNull(value)) {
       return null;
     }
-    switch (this) {
-      case BOOLEAN:
-        if (sourceType == TSDataType.BOOLEAN) {
-          return value;
-        } else {
-          break;
-        }
-      case INT32:
-        if (sourceType == TSDataType.INT32) {
-          return value;
-        } else {
-          break;
-        }
-      case INT64:
-        if (sourceType == TSDataType.INT64) {
-          return value;
-        } else if (sourceType == INT32) {
-          return (long) ((int) value);
-        } else if (sourceType == TIMESTAMP) {
-          return value;
-        } else {
-          break;
-        }
-      case FLOAT:
-        if (sourceType == TSDataType.FLOAT) {
-          return value;
-        } else if (sourceType == INT32) {
-          return (float) ((int) value);
-        } else {
-          break;
-        }
-      case DOUBLE:
-        if (sourceType == TSDataType.DOUBLE) {
-          return value;
-        } else if (sourceType == INT32) {
-          return (double) ((int) value);
-        } else if (sourceType == INT64) {
-          return (double) ((long) value);
-        } else if (sourceType == FLOAT) {
-          return (double) ((float) value);
-        } else if (sourceType == TIMESTAMP) {
-          return (double) ((long) value);
-        } else {
-          break;
-        }
-      case TEXT:
-        if (sourceType == TSDataType.TEXT || sourceType == TSDataType.STRING) {
-          return value;
-        } else if (sourceType == TSDataType.INT32
-            || sourceType == TSDataType.INT64
-            || sourceType == TSDataType.FLOAT
-            || sourceType == TSDataType.DOUBLE
-            || sourceType == TSDataType.BOOLEAN
-            || sourceType == TSDataType.TIMESTAMP) {
-          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
-        } else if (sourceType == TSDataType.DATE) {
-          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
-        } else if (sourceType == TSDataType.BLOB) {
-          return new Binary(value.toString(), StandardCharsets.UTF_8);
-        } else {
-          break;
-        }
-      case TIMESTAMP:
-        if (sourceType == TSDataType.TIMESTAMP) {
-          return value;
-        } else if (sourceType == INT32) {
-          return (long) ((int) value);
-        } else if (sourceType == INT64) {
-          return value;
-        } else {
-          break;
-        }
-      case DATE:
-        if (sourceType == TSDataType.DATE) {
-          return value;
-        } else {
-          break;
-        }
-      case BLOB:
-        if (sourceType == TSDataType.BLOB
-            || sourceType == TSDataType.STRING
-            || sourceType == TSDataType.TEXT) {
-          return value;
-        } else {
-          break;
-        }
-      case STRING:
-        if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
-          return value;
-        } else if (sourceType == TSDataType.INT32
-            || sourceType == TSDataType.INT64
-            || sourceType == TSDataType.FLOAT
-            || sourceType == TSDataType.DOUBLE
-            || sourceType == TSDataType.BOOLEAN
-            || sourceType == TSDataType.TIMESTAMP) {
-          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
-        } else if (sourceType == TSDataType.DATE) {
-          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
-        } else if (sourceType == TSDataType.BLOB) {
-          return new Binary(value.toString(), StandardCharsets.UTF_8);
-        } else {
-          break;
-        }
-      case OBJECT:
-        if (sourceType == TSDataType.OBJECT) {
-          return value;
-        } else {
-          break;
-        }
-      case VECTOR:
-      case UNKNOWN:
-      default:
-        break;
+    Object result = singleValueCaster.cast(this, sourceType, value);
+    if (result != UNSUPPORTED_CAST) {
+      return result;
     }
     throw new ClassCastException(
         Messages.format("error.common.unsupported_cast", sourceType, this));
+  }
+
+  private static Object castIdenticalSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    return sourceType == targetType ? value : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToLongSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    if (sourceType == INT64 || sourceType == TIMESTAMP) {
+      return value;
+    }
+    return sourceType == INT32 ? (long) ((int) value) : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToFloatSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    if (sourceType == FLOAT) {
+      return value;
+    }
+    return sourceType == INT32 ? (float) ((int) value) : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToDoubleSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    if (sourceType == DOUBLE) {
+      return value;
+    }
+    if (sourceType == INT32) {
+      return (double) ((int) value);
+    }
+    if (sourceType == INT64 || sourceType == TIMESTAMP) {
+      return (double) ((long) value);
+    }
+    return sourceType == FLOAT ? (double) ((float) value) : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToTextSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    if (sourceType == TEXT || sourceType == STRING) {
+      return value;
+    }
+    if (sourceType == INT32
+        || sourceType == INT64
+        || sourceType == FLOAT
+        || sourceType == DOUBLE
+        || sourceType == BOOLEAN
+        || sourceType == TIMESTAMP) {
+      return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
+    }
+    if (sourceType == DATE) {
+      return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
+    }
+    return sourceType == BLOB
+        ? new Binary(value.toString(), StandardCharsets.UTF_8)
+        : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToTimestampSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    if (sourceType == TIMESTAMP || sourceType == INT64) {
+      return value;
+    }
+    return sourceType == INT32 ? (long) ((int) value) : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToBlobSingleValue(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    return sourceType == BLOB || sourceType == STRING || sourceType == TEXT
+        ? value
+        : UNSUPPORTED_CAST;
+  }
+
+  private static Object unsupportedSingleValueCast(
+      TSDataType targetType, TSDataType sourceType, Object value) {
+    return UNSUPPORTED_CAST;
   }
 
   @SuppressWarnings({"java:S3012", "java:S3776", "java:S6541"})
@@ -602,5 +571,11 @@ public enum TSDataType {
 
   public static String getDateStringValue(int value) {
     return String.format("%04d-%02d-%02d", value / 10000, (value % 10000) / 100, value % 100);
+  }
+
+  @FunctionalInterface
+  private interface SingleValueCaster {
+
+    Object cast(TSDataType targetType, TSDataType sourceType, Object value);
   }
 }
