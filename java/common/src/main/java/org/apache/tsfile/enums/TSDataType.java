@@ -39,56 +39,93 @@ import java.util.Set;
 
 public enum TSDataType {
   /** BOOLEAN. */
-  BOOLEAN((byte) 0, 1, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  BOOLEAN(
+      (byte) 0,
+      1,
+      false,
+      true,
+      TSDataType::castIdenticalSingleValue,
+      TSDataType::castIdenticalArray),
 
   /** INT32. */
-  INT32((byte) 1, 4, true, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  INT32(
+      (byte) 1,
+      4,
+      true,
+      true,
+      TSDataType::castIdenticalSingleValue,
+      TSDataType::castIdenticalArray),
 
   /** INT64. */
-  INT64((byte) 2, 8, true, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
+  INT64((byte) 2, 8, true, true, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
 
   /** FLOAT. */
-  FLOAT((byte) 3, 4, true, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
+  FLOAT((byte) 3, 4, true, true, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
 
   /** DOUBLE. */
-  DOUBLE((byte) 4, 8, true, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
+  DOUBLE(
+      (byte) 4, 8, true, true, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
 
   /** TEXT. */
-  TEXT((byte) 5, 8, false, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  TEXT((byte) 5, 8, false, true, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** VECTOR. */
   VECTOR(
-      (byte) 6, 8, false, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
+      (byte) 6,
+      8,
+      false,
+      false,
+      TSDataType::unsupportedSingleValueCast,
+      TSDataType::unsupportedArrayCast),
 
   /** UNKNOWN. */
   UNKNOWN(
       (byte) 7,
       TSDataType.UNSUPPORTED_DATA_TYPE_SIZE,
       false,
+      false,
       TSDataType::unsupportedSingleValueCast,
       TSDataType::unsupportedArrayCast),
 
   /** TIMESTAMP. */
   TIMESTAMP(
-      (byte) 8, 8, false, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
+      (byte) 8,
+      8,
+      false,
+      true,
+      TSDataType::castToTimestampSingleValue,
+      TSDataType::castToTimestampArray),
 
   /** DATE. */
-  DATE((byte) 9, 4, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  DATE(
+      (byte) 9,
+      4,
+      false,
+      true,
+      TSDataType::castIdenticalSingleValue,
+      TSDataType::castIdenticalArray),
 
   /** BLOB. */
-  BLOB((byte) 10, 8, false, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
+  BLOB((byte) 10, 8, false, false, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
 
   /** STRING */
-  STRING((byte) 11, 8, false, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  STRING((byte) 11, 8, false, true, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** OBJECT */
-  OBJECT((byte) 12, 8, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
+  OBJECT(
+      (byte) 12,
+      8,
+      false,
+      false,
+      TSDataType::castIdenticalSingleValue,
+      TSDataType::castIdenticalArray);
 
   private static final int UNSUPPORTED_DATA_TYPE_SIZE = -1;
   private static final Object UNSUPPORTED_CAST = new Object();
   private final byte type;
   private final int dataTypeSize;
   private final boolean numeric;
+  private final boolean comparable;
   private final SingleValueCaster singleValueCaster;
   private final ArrayCaster arrayCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
@@ -164,11 +201,13 @@ public enum TSDataType {
       byte type,
       int dataTypeSize,
       boolean numeric,
+      boolean comparable,
       SingleValueCaster singleValueCaster,
       ArrayCaster arrayCaster) {
     this.type = type;
     this.dataTypeSize = dataTypeSize;
     this.numeric = numeric;
+    this.comparable = comparable;
     this.singleValueCaster = singleValueCaster;
     this.arrayCaster = arrayCaster;
   }
@@ -517,24 +556,10 @@ public enum TSDataType {
    * @throws UnSupportedDataTypeException when meets unSupported DataType
    */
   public boolean isComparable() {
-    switch (this) {
-      case INT32:
-      case INT64:
-      case FLOAT:
-      case DOUBLE:
-      case TEXT:
-      case BOOLEAN:
-      case TIMESTAMP:
-      case DATE:
-      case STRING:
-        return true;
-      case VECTOR:
-      case BLOB:
-      case OBJECT:
-        return false;
-      default:
-        throw new UnSupportedDataTypeException(this.toString());
+    if (this == UNKNOWN) {
+      throw new UnSupportedDataTypeException(this.toString());
     }
+    return comparable;
   }
 
   public boolean isBinary() {
