@@ -388,6 +388,30 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public TsFileSequenceReader(
+      TsFileInput input,
+      boolean loadMetadataSize,
+      boolean cacheDeviceMetadata,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    this.tsFileInput = input;
+    this.file = input.getFilePath();
+    this.cacheDeviceMetadata = cacheDeviceMetadata;
+    if (resourceLogger.isDebugEnabled()) {
+      resourceLogger.debug("{} reader is opened. {}", file, getClass().getName());
+    }
+
+    try {
+      loadFileVersion(ioSizeRecorder);
+      if (loadMetadataSize) {
+        loadMetadataSize(ioSizeRecorder);
+      }
+    } catch (Throwable e) {
+      tsFileInput.close();
+      throw e;
+    }
+  }
+
+  public TsFileSequenceReader(
       TsFileInput input, boolean loadMetadataSize, EncryptParameter firstEncryptParam)
       throws IOException {
     this(input, loadMetadataSize);
