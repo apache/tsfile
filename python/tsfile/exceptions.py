@@ -44,6 +44,7 @@ class ErrorCode(IntEnum):
     FILE_STAT_ERROR = 34
     TSFILE_CORRUPTED = 35
     BUFFER_NOT_ENOUGH = 36
+    INVALID_PATH = 37
     NOT_MATCH = 38
     NOT_SUPPORTED = 40
     INVALID_DATA_POINT = 43
@@ -171,6 +172,11 @@ class BufferNotEnoughError(LibraryError):
     _default_code = 36
 
 
+class InvalidPathError(LibraryError):
+    _default_message = "Invalid path"
+    _default_code = 37
+
+
 class NotSupportedError(LibraryError):
     _default_message = "Not support yet"
     _default_code = 40
@@ -184,6 +190,13 @@ class DeviceNotExistError(LibraryError):
 class MeasurementNotExistError(LibraryError):
     _default_message = "Specified measurement does not exist"
     _default_code = 45
+
+
+class InvalidQueryError(LibraryError):
+    """Compatibility exception for the legacy query error code."""
+
+    _default_message = "Malformed query syntax"
+    _default_code = 46
 
 
 class CompressionError(LibraryError):
@@ -254,9 +267,11 @@ ERROR_MAPPING = {
     34: FileStatError,
     35: TsFileCorruptedError,
     36: BufferNotEnoughError,
+    37: InvalidPathError,
     40: NotSupportedError,
     44: DeviceNotExistError,
     45: MeasurementNotExistError,
+    46: InvalidQueryError,
     48: CompressionError,
     49: TableNotExistError,
     50: ColumnNotExistError,

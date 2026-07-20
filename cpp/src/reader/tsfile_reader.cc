@@ -18,6 +18,8 @@
  */
 #include "tsfile_reader.h"
 
+#include <stdexcept>
+
 #include "common/schema.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
@@ -32,6 +34,19 @@ struct DeviceMetaEntry {
     int64_t start_offset;
     int64_t end_offset;
 };
+
+int parse_paths(const std::vector<std::string>& path_list,
+                std::vector<Path>& parsed_paths) {
+    try {
+        parsed_paths.reserve(path_list.size());
+        for (const auto& path : path_list) {
+            parsed_paths.emplace_back(path, true);
+        }
+    } catch (const std::runtime_error&) {
+        return E_INVALID_PATH;
+    }
+    return E_OK;
+}
 
 int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
                            std::shared_ptr<MetaIndexNode> index_node,
@@ -152,14 +167,15 @@ int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
 
 int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
                         int64_t end_time, ResultSet*& result_set) {
-    int ret = E_OK;
+    std::vector<Path> path_list_vec;
+    int ret = parse_paths(path_list, path_list_vec);
+    if (ret != E_OK) {
+        return ret;
+    }
+
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
     Expression* exp =
         new storage::Expression(storage::GLOBALTIME_EXPR, time_filter);
-    std::vector<Path> path_list_vec;
-    for (const auto& path : path_list) {
-        path_list_vec.emplace_back(Path(path, true));
-    }
     QueryExpression* query_expression =
         QueryExpression::create(path_list_vec, exp);
     ret = tsfile_executor_->execute(query_expression, result_set);
@@ -200,10 +216,10 @@ int TsFileReader::query(const std::string& table_name,
 
 int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
                              int limit, ResultSet*& result_set) {
-    int ret = E_OK;
     std::vector<Path> path_list_vec;
-    for (const auto& path : path_list) {
-        path_list_vec.emplace_back(Path(path, true));
+    int ret = parse_paths(path_list, path_list_vec);
+    if (ret != E_OK) {
+        return ret;
     }
     QueryExpression* query_expression =
         QueryExpression::create(path_list_vec, nullptr);

@@ -24,6 +24,8 @@ from tsfile.exceptions import (
     ErrorCode,
     FileOpenError,
     InvalidArgumentError,
+    InvalidPathError,
+    InvalidQueryError,
     LibraryError,
     TsFileCorruptedError,
     get_exception,
@@ -45,11 +47,9 @@ def test_get_exception_preserves_known_and_unknown_codes():
         *range(9, 20),
         23,
         25,
-        37,
         39,
         41,
         42,
-        46,
         47,
     }
     assert retired_codes.isdisjoint(error.value for error in ErrorCode)
@@ -58,6 +58,30 @@ def test_get_exception_preserves_known_and_unknown_codes():
         assert type(retired) is LibraryError
         assert retired.code == code
         assert retired.message == "Unknown library error"
+
+    invalid_path = get_exception(37)
+    assert isinstance(invalid_path, InvalidPathError)
+    assert invalid_path.code == ErrorCode.INVALID_PATH
+
+    # InvalidQueryError was public before ErrorCode was introduced. Keep the
+    # mapping for compatibility without advertising 46 as an active code.
+    invalid_query = get_exception(46)
+    assert isinstance(invalid_query, InvalidQueryError)
+    assert invalid_query.code == 46
+
+
+def test_invalid_tree_path_propagates_native_error(tmp_path):
+    path = tmp_path / "invalid-path.tsfile"
+    with TsFileWriter(str(path)) as writer:
+        writer.register_timeseries(
+            "root.device", TimeseriesSchema("value", TSDataType.INT64)
+        )
+
+    with TsFileReader(str(path)) as reader:
+        with pytest.raises(InvalidPathError) as exc_info:
+            reader.query_timeseries("root.device", ["a*%"], 0, 2)
+
+    assert exc_info.value.code == ErrorCode.INVALID_PATH
 
 
 def test_writer_constructor_propagates_native_error(tmp_path, capsys):

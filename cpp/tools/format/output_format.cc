@@ -48,6 +48,8 @@ const char* error_code_message(int code) {
             return "file read error";
         case common::E_TSFILE_CORRUPTED:
             return "file is corrupted";
+        case common::E_INVALID_PATH:
+            return "invalid path";
         case common::E_DEVICE_NOT_EXIST:
             return "device does not exist";
         case common::E_MEASUREMENT_NOT_EXIST:

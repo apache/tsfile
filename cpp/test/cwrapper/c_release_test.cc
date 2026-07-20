@@ -38,6 +38,36 @@ extern "C" {
 namespace CReleaseTest {
 class CReleaseTest : public testing::Test {};
 
+TEST_F(CReleaseTest, PublishedErrorCodesRemainSourceCompatible) {
+    const int published_codes[] = {
+        RET_NET_EPOLL_ERR,
+        RET_NET_EPOLL_WAIT_ERR,
+        RET_NET_RECV_ERR,
+        RET_NET_ACCEPT_ERR,
+        RET_NET_FCNTL_ERR,
+        RET_NET_LISTEN_ERR,
+        RET_NET_SEND_ERR,
+        RET_PIPRET_ERR,
+        RET_THREAD_CREATRET_ERR,
+        RET_MUTEX_ERR,
+        RET_COND_ERR,
+        RET_TSBLOCK_TYPRET_NOT_SUPPORTED,
+        RET_DDL_UNKNOWN_TYPE,
+        RET_INVALID_PATH,
+        RET_JSON_INVALID,
+        RET_PARSER_ERR,
+        RET_ANALYZRET_ERR,
+        RET_INVALID_QUERY,
+        RET_SDK_QUERY_OPTIMIZRET_ERR,
+    };
+    const int expected_codes[] = {9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                                  19, 23, 25, 37, 39, 41, 42, 46, 47};
+
+    for (int i = 0; i < 19; ++i) {
+        EXPECT_EQ(published_codes[i], expected_codes[i]);
+    }
+}
+
 TEST_F(CReleaseTest, TestCreateFile) {
     ERRNO error_no = RET_OK;
     remove("create_file1.tsfile");
