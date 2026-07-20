@@ -39,52 +39,56 @@ import java.util.Set;
 
 public enum TSDataType {
   /** BOOLEAN. */
-  BOOLEAN((byte) 0, 1, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  BOOLEAN((byte) 0, 1, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT32. */
-  INT32((byte) 1, 4, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  INT32((byte) 1, 4, true, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT64. */
-  INT64((byte) 2, 8, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
+  INT64((byte) 2, 8, true, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
 
   /** FLOAT. */
-  FLOAT((byte) 3, 4, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
+  FLOAT((byte) 3, 4, true, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
 
   /** DOUBLE. */
-  DOUBLE((byte) 4, 8, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
+  DOUBLE((byte) 4, 8, true, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
 
   /** TEXT. */
-  TEXT((byte) 5, 8, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  TEXT((byte) 5, 8, false, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** VECTOR. */
-  VECTOR((byte) 6, 8, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
+  VECTOR(
+      (byte) 6, 8, false, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
 
   /** UNKNOWN. */
   UNKNOWN(
       (byte) 7,
       TSDataType.UNSUPPORTED_DATA_TYPE_SIZE,
+      false,
       TSDataType::unsupportedSingleValueCast,
       TSDataType::unsupportedArrayCast),
 
   /** TIMESTAMP. */
-  TIMESTAMP((byte) 8, 8, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
+  TIMESTAMP(
+      (byte) 8, 8, false, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
 
   /** DATE. */
-  DATE((byte) 9, 4, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  DATE((byte) 9, 4, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** BLOB. */
-  BLOB((byte) 10, 8, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
+  BLOB((byte) 10, 8, false, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
 
   /** STRING */
-  STRING((byte) 11, 8, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  STRING((byte) 11, 8, false, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** OBJECT */
-  OBJECT((byte) 12, 8, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
+  OBJECT((byte) 12, 8, false, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
 
   private static final int UNSUPPORTED_DATA_TYPE_SIZE = -1;
   private static final Object UNSUPPORTED_CAST = new Object();
   private final byte type;
   private final int dataTypeSize;
+  private final boolean numeric;
   private final SingleValueCaster singleValueCaster;
   private final ArrayCaster arrayCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
@@ -157,9 +161,14 @@ public enum TSDataType {
   }
 
   TSDataType(
-      byte type, int dataTypeSize, SingleValueCaster singleValueCaster, ArrayCaster arrayCaster) {
+      byte type,
+      int dataTypeSize,
+      boolean numeric,
+      SingleValueCaster singleValueCaster,
+      ArrayCaster arrayCaster) {
     this.type = type;
     this.dataTypeSize = dataTypeSize;
+    this.numeric = numeric;
     this.singleValueCaster = singleValueCaster;
     this.arrayCaster = arrayCaster;
   }
@@ -495,25 +504,10 @@ public enum TSDataType {
    * @throws UnSupportedDataTypeException when meets unSupported DataType
    */
   public boolean isNumeric() {
-    switch (this) {
-      case INT32:
-      case INT64:
-      case FLOAT:
-      case DOUBLE:
-        return true;
-      // For text: return the size of reference here
-      case BLOB:
-      case TIMESTAMP:
-      case DATE:
-      case STRING:
-      case BOOLEAN:
-      case TEXT:
-      case VECTOR:
-      case OBJECT:
-        return false;
-      default:
-        throw new UnSupportedDataTypeException(this.toString());
+    if (this == UNKNOWN) {
+      throw new UnSupportedDataTypeException(this.toString());
     }
+    return numeric;
   }
 
   /**
