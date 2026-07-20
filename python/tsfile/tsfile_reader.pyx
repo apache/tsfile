@@ -164,9 +164,9 @@ cdef class ResultSetPy:
 
         code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
 
-        if code == 21:  # E_NO_MORE_DATA
+        if code == RET_NO_MORE_DATA:
             return None
-        if code != 0:
+        if code != RET_OK:
             check_error(code)
 
         if arrow_schema.release == NULL or arrow_array.release == NULL:

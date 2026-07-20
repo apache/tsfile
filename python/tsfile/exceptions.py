@@ -17,6 +17,66 @@
 #
 
 
+from enum import IntEnum
+
+
+class ErrorCode(IntEnum):
+    OK = 0
+    OOM = 1
+    NOT_EXIST = 2
+    ALREADY_EXIST = 3
+    INVALID_ARGUMENT = 4
+    OUT_OF_RANGE = 5
+    PARTIAL_READ = 6
+    INVALID_SCHEMA = 8
+    NET_EPOLL_ERROR = 9
+    NET_EPOLL_WAIT_ERROR = 10
+    NET_RECEIVE_ERROR = 11
+    NET_ACCEPT_ERROR = 12
+    NET_FCNTL_ERROR = 13
+    NET_LISTEN_ERROR = 14
+    NET_SEND_ERROR = 15
+    PIPE_ERROR = 16
+    THREAD_CREATE_ERROR = 17
+    MUTEX_ERROR = 18
+    CONDITION_ERROR = 19
+    OVERFLOW = 20
+    NO_MORE_DATA = 21
+    OUT_OF_ORDER = 22
+    TSBLOCK_TYPE_NOT_SUPPORTED = 23
+    DATA_INCONSISTENCY = 24
+    DDL_UNKNOWN_TYPE = 25
+    TYPE_NOT_SUPPORTED = 26
+    TYPE_MISMATCH = 27
+    FILE_OPEN_ERROR = 28
+    FILE_CLOSE_ERROR = 29
+    FILE_WRITE_ERROR = 30
+    FILE_READ_ERROR = 31
+    FILE_SYNC_ERROR = 32
+    WRITER_METADATA_ERROR = 33
+    FILE_STAT_ERROR = 34
+    TSFILE_CORRUPTED = 35
+    BUFFER_NOT_ENOUGH = 36
+    INVALID_PATH = 37
+    NOT_MATCH = 38
+    JSON_INVALID = 39
+    NOT_SUPPORTED = 40
+    PARSER_ERROR = 41
+    ANALYZE_ERROR = 42
+    INVALID_DATA_POINT = 43
+    DEVICE_NOT_EXIST = 44
+    MEASUREMENT_NOT_EXIST = 45
+    INVALID_QUERY = 46
+    QUERY_OPTIMIZE_ERROR = 47
+    COMPRESSION_ERROR = 48
+    TABLE_NOT_EXIST = 49
+    COLUMN_NOT_EXIST = 50
+    UNSUPPORTED_ORDER = 51
+    INVALID_NODE_TYPE = 52
+    ENCODE_ERROR = 53
+    DECODE_ERROR = 54
+
+
 class LibraryError(Exception):
     _default_message = "Unknown error occurred"
     _default_code = -1
@@ -60,6 +120,31 @@ class PartialReadError(LibraryError):
     _default_code = 6
 
 
+class InvalidSchemaError(LibraryError):
+    _default_message = "Invalid schema"
+    _default_code = 8
+
+
+class TsFileOverflowError(LibraryError):
+    _default_message = "Buffer or value overflow"
+    _default_code = 20
+
+
+class NoMoreDataError(LibraryError):
+    _default_message = "No more data"
+    _default_code = 21
+
+
+class OutOfOrderError(LibraryError):
+    _default_message = "Data is out of order"
+    _default_code = 22
+
+
+class DataInconsistencyError(LibraryError):
+    _default_message = "Data is inconsistent"
+    _default_code = 24
+
+
 class FileOpenError(LibraryError):
     _default_message = "Failed to open file"
     _default_code = 28
@@ -90,9 +175,24 @@ class MetadataError(LibraryError):
     _default_code = 33
 
 
+class FileStatError(LibraryError):
+    _default_message = "Failed to inspect file metadata"
+    _default_code = 34
+
+
+class TsFileCorruptedError(LibraryError):
+    _default_message = "TsFile is corrupted"
+    _default_code = 35
+
+
 class BufferNotEnoughError(LibraryError):
     _default_message = "Insufficient buffer space"
     _default_code = 36
+
+
+class InvalidPathError(LibraryError):
+    _default_message = "Invalid path"
+    _default_code = 37
 
 
 class NotSupportedError(LibraryError):
@@ -113,6 +213,11 @@ class MeasurementNotExistError(LibraryError):
 class InvalidQueryError(LibraryError):
     _default_message = "Malformed query syntax"
     _default_code = 46
+
+
+class QueryOptimizeError(LibraryError):
+    _default_message = "Failed to optimize query"
+    _default_code = 47
 
 
 class CompressionError(LibraryError):
@@ -140,6 +245,26 @@ class ColumnNotExistError(LibraryError):
     _default_code = 50
 
 
+class UnsupportedOrderError(LibraryError):
+    _default_message = "Unsupported ordering"
+    _default_code = 51
+
+
+class InvalidNodeTypeError(LibraryError):
+    _default_message = "Invalid node type"
+    _default_code = 52
+
+
+class EncodeError(LibraryError):
+    _default_message = "Failed to encode data"
+    _default_code = 53
+
+
+class DecodeError(LibraryError):
+    _default_message = "Failed to decode data"
+    _default_code = 54
+
+
 ERROR_MAPPING = {
     1: OOMError,
     2: NotExistsError,
@@ -147,6 +272,11 @@ ERROR_MAPPING = {
     4: InvalidArgumentError,
     5: OutOfRangeError,
     6: PartialReadError,
+    8: InvalidSchemaError,
+    20: TsFileOverflowError,
+    21: NoMoreDataError,
+    22: OutOfOrderError,
+    24: DataInconsistencyError,
     26: TypeNotSupportedError,
     27: TypeMismatchError,
     28: FileOpenError,
@@ -155,24 +285,43 @@ ERROR_MAPPING = {
     31: FileReadError,
     32: FileSyncError,
     33: MetadataError,
+    34: FileStatError,
+    35: TsFileCorruptedError,
     36: BufferNotEnoughError,
+    37: InvalidPathError,
     40: NotSupportedError,
     44: DeviceNotExistError,
     45: MeasurementNotExistError,
     46: InvalidQueryError,
+    47: QueryOptimizeError,
     48: CompressionError,
     49: TableNotExistError,
     50: ColumnNotExistError,
+    51: UnsupportedOrderError,
+    52: InvalidNodeTypeError,
+    53: EncodeError,
+    54: DecodeError,
 }
 
 
+ERROR_MESSAGES = {
+    error.value: error.name.replace("_", " ").lower() for error in ErrorCode
+}
+ERROR_MESSAGES.update(
+    {
+        code: exception_type._default_message
+        for code, exception_type in ERROR_MAPPING.items()
+    }
+)
+
+
 def get_exception(code: int, context: str = None):
-    if code == 0:
+    code = int(code)
+    if code == ErrorCode.OK:
         return None
 
-    exc_type = ERROR_MAPPING.get(code)
-    if not exc_type:
-        return LibraryError(
-            code=code, context=f"Unmapped error code: {code}, message: {context}"
-        )
-    return exc_type(code=code, context=context)
+    exc_type = ERROR_MAPPING.get(code, LibraryError)
+    message = ERROR_MESSAGES.get(code, "Unknown library error")
+    if context:
+        message = f"{context}: {message}"
+    return exc_type(code=code, context=message)

@@ -54,8 +54,7 @@ TEST_F(CReleaseTest, TestCreateFile) {
     // Folder: rejected either as an open error (POSIX) or as already-existing
     // (Windows / filesystems where the directory already exists).
     file = write_file_new("test/", &error_no);
-    ASSERT_TRUE(error_no == RET_FILRET_OPEN_ERR ||
-                error_no == RET_ALREADY_EXIST);
+    ASSERT_TRUE(error_no == RET_FILE_OPEN_ERR || error_no == RET_ALREADY_EXIST);
 
     remove("create_file1.tsfile");
     free_write_file(&file);
