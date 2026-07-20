@@ -707,11 +707,7 @@ public final class RamUsageEstimator {
     if (bitMap == null) {
       return 0L;
     }
-    long size = BIT_MAP_SIZE;
-
-    size +=
-        RamUsageEstimator.alignObjectSize(NUM_BYTES_ARRAY_HEADER + bitMap.getByteArray().length);
-    return size;
+    return shallowSizeOfInstance(BitMap.class) + bitMap.getRetainedSizeInBytes();
   }
 
   public static long sizeOf(final LocalDate[] input) {

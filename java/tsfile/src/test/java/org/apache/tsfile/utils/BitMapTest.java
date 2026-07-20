@@ -70,6 +70,75 @@ public class BitMapTest {
   }
 
   @Test
+  public void testImplementationSelectionAndExtension() {
+    assertTrue(new BitMap(0).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(new BitMap(64).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(new BitMap(65).getImplementation() instanceof BitMapArrayImpl);
+
+    BitMap bitMap = new BitMap(64);
+    bitMap.mark(0);
+    bitMap.mark(63);
+    bitMap.extend(65);
+
+    assertTrue(bitMap.getImplementation() instanceof BitMapArrayImpl);
+    assertEquals(65, bitMap.getSize());
+    assertTrue(bitMap.isMarked(0));
+    assertTrue(bitMap.isMarked(63));
+    assertFalse(bitMap.isMarked(64));
+  }
+
+  @Test
+  public void testLongImplementationByteArrayCompatibility() {
+    byte[] bytes = {
+      (byte) 0b10101010,
+      (byte) 0b01010101,
+      (byte) 0b11110000,
+      (byte) 0b00001111,
+      (byte) 0b11001100,
+      (byte) 0b00110011,
+      (byte) 0b10000001,
+      (byte) 0b01111110,
+      0
+    };
+    BitMap bitMap = new BitMap(64, bytes);
+
+    assertArrayEquals(bytes, bitMap.getByteArray());
+    assertEquals(bitMap, bitMap.clone());
+    assertEquals(bitMap.hashCode(), bitMap.clone().hashCode());
+  }
+
+  @Test
+  public void testLongImplementationFullRange() {
+    BitMap rangeBitMap = new BitMap(64);
+    BitMap singleBitMap = new BitMap(64);
+
+    rangeBitMap.markRange(0, 64);
+    for (int i = 0; i < 64; i++) {
+      singleBitMap.mark(i);
+    }
+    assertTrue(rangeBitMap.isAllMarked());
+    assertArrayEquals(singleBitMap.getByteArray(), rangeBitMap.getByteArray());
+
+    rangeBitMap.unmarkRange(0, 64);
+    assertTrue(rangeBitMap.isAllUnmarked());
+  }
+
+  @Test
+  public void testLongImplementationMarkAllByteCompatibility() {
+    BitMap bitMap = new BitMap(32);
+    bitMap.markAll();
+
+    assertArrayEquals(
+        new byte[] {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF},
+        bitMap.getByteArray());
+
+    bitMap.extend(64);
+    for (int i = 0; i < 64; i++) {
+      assertTrue(bitMap.isMarked(i));
+    }
+  }
+
+  @Test
   public void testIsAllUnmarkedInRange() {
     BitMap bitMap = new BitMap(16);
     assertTrue(bitMap.isAllUnmarked(6));
@@ -141,7 +210,7 @@ public class BitMapTest {
     }
 
     BitMap copy =
-        new BitMap(src.getSize(), Arrays.copyOf(dst.getByteArray(), dst.getByteArray().length));
+        new BitMap(destSize, Arrays.copyOf(dst.getByteArray(), dst.getByteArray().length));
 
     for (int i = 0; i < len; i++) {
       if (src.isMarked(srcStart + i)) {
