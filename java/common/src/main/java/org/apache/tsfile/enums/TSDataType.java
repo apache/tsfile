@@ -39,47 +39,48 @@ import java.util.Set;
 
 public enum TSDataType {
   /** BOOLEAN. */
-  BOOLEAN((byte) 0, TSDataType::castIdenticalSingleValue),
+  BOOLEAN((byte) 0, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT32. */
-  INT32((byte) 1, TSDataType::castIdenticalSingleValue),
+  INT32((byte) 1, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT64. */
-  INT64((byte) 2, TSDataType::castToLongSingleValue),
+  INT64((byte) 2, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
 
   /** FLOAT. */
-  FLOAT((byte) 3, TSDataType::castToFloatSingleValue),
+  FLOAT((byte) 3, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
 
   /** DOUBLE. */
-  DOUBLE((byte) 4, TSDataType::castToDoubleSingleValue),
+  DOUBLE((byte) 4, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
 
   /** TEXT. */
-  TEXT((byte) 5, TSDataType::castToTextSingleValue),
+  TEXT((byte) 5, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** VECTOR. */
-  VECTOR((byte) 6, TSDataType::unsupportedSingleValueCast),
+  VECTOR((byte) 6, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
 
   /** UNKNOWN. */
-  UNKNOWN((byte) 7, TSDataType::unsupportedSingleValueCast),
+  UNKNOWN((byte) 7, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
 
   /** TIMESTAMP. */
-  TIMESTAMP((byte) 8, TSDataType::castToTimestampSingleValue),
+  TIMESTAMP((byte) 8, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
 
   /** DATE. */
-  DATE((byte) 9, TSDataType::castIdenticalSingleValue),
+  DATE((byte) 9, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** BLOB. */
-  BLOB((byte) 10, TSDataType::castToBlobSingleValue),
+  BLOB((byte) 10, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
 
   /** STRING */
-  STRING((byte) 11, TSDataType::castToTextSingleValue),
+  STRING((byte) 11, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** OBJECT */
-  OBJECT((byte) 12, TSDataType::castIdenticalSingleValue);
+  OBJECT((byte) 12, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
 
   private static final Object UNSUPPORTED_CAST = new Object();
   private final byte type;
   private final SingleValueCaster singleValueCaster;
+  private final ArrayCaster arrayCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
 
   static {
@@ -149,9 +150,10 @@ public enum TSDataType {
     compatibleTypes.put(OBJECT, Collections.emptySet());
   }
 
-  TSDataType(byte type, SingleValueCaster singleValueCaster) {
+  TSDataType(byte type, SingleValueCaster singleValueCaster, ArrayCaster arrayCaster) {
     this.type = type;
     this.singleValueCaster = singleValueCaster;
+    this.arrayCaster = arrayCaster;
   }
 
   /**
@@ -298,151 +300,144 @@ public enum TSDataType {
     return UNSUPPORTED_CAST;
   }
 
-  @SuppressWarnings({"java:S3012", "java:S3776", "java:S6541"})
   public Object castFromArray(TSDataType sourceType, Object array) {
-    switch (this) {
-      case BOOLEAN:
-        if (sourceType == TSDataType.BOOLEAN) {
-          return array;
-        } else {
-          break;
-        }
-      case INT32:
-        if (sourceType == TSDataType.INT32) {
-          return array;
-        } else {
-          break;
-        }
-      case INT64:
-        if (sourceType == TSDataType.INT64) {
-          return array;
-        } else if (sourceType == INT32) {
-          return Arrays.stream((int[]) array).mapToLong(Long::valueOf).toArray();
-        } else if (sourceType == TIMESTAMP) {
-          return array;
-        } else {
-          break;
-        }
-      case FLOAT:
-        if (sourceType == TSDataType.FLOAT) {
-          return array;
-        } else if (sourceType == INT32) {
-          int[] tmp = (int[]) array;
-          float[] result = new float[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = tmp[i];
-          }
-          return result;
-        } else {
-          break;
-        }
-      case DOUBLE:
-        if (sourceType == TSDataType.DOUBLE) {
-          return array;
-        } else if (sourceType == INT32) {
-          return Arrays.stream((int[]) array).mapToDouble(Double::valueOf).toArray();
-        } else if (sourceType == INT64) {
-          return Arrays.stream((long[]) array).mapToDouble(Double::valueOf).toArray();
-        } else if (sourceType == FLOAT) {
-          float[] tmp = (float[]) array;
-          double[] result = new double[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = tmp[i];
-          }
-          return result;
-        } else if (sourceType == TIMESTAMP) {
-          return Arrays.stream((long[]) array).mapToDouble(Double::valueOf).toArray();
-        } else {
-          break;
-        }
-      case TIMESTAMP:
-        if (sourceType == TSDataType.TIMESTAMP) {
-          return array;
-        } else if (sourceType == INT32) {
-          return Arrays.stream((int[]) array).mapToLong(Long::valueOf).toArray();
-        } else if (sourceType == INT64) {
-          return array;
-        } else {
-          break;
-        }
-      case DATE:
-        if (sourceType == TSDataType.DATE) {
-          return array;
-        } else {
-          break;
-        }
-      case BLOB:
-        if (sourceType == TSDataType.BLOB
-            || sourceType == TSDataType.STRING
-            || sourceType == TSDataType.TEXT) {
-          return array;
-        } else {
-          break;
-        }
-      case TEXT:
-      case STRING:
-        if (sourceType == TSDataType.STRING
-            || sourceType == TSDataType.TEXT
-            || sourceType == TSDataType.BLOB) {
-          return array;
-        } else if (sourceType == TSDataType.INT32) {
-          int[] tmp = (int[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else if (sourceType == TSDataType.DATE) {
-          int[] tmp = (int[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(TSDataType.getDateStringValue(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
-          long[] tmp = (long[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else if (sourceType == TSDataType.FLOAT) {
-          float[] tmp = (float[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else if (sourceType == TSDataType.DOUBLE) {
-          double[] tmp = (double[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else if (sourceType == TSDataType.BOOLEAN) {
-          boolean[] tmp = (boolean[]) array;
-          Binary[] result = new Binary[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
-          }
-          return result;
-        } else {
-          break;
-        }
-      case OBJECT:
-        if (sourceType == TSDataType.OBJECT) {
-          return array;
-        } else {
-          break;
-        }
-      case VECTOR:
-      case UNKNOWN:
-      default:
-        break;
+    Object result = arrayCaster.cast(this, sourceType, array);
+    if (result != UNSUPPORTED_CAST) {
+      return result;
     }
     throw new ClassCastException(
         Messages.format("error.common.unsupported_cast", sourceType, this));
+  }
+
+  private static Object castIdenticalArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    return sourceType == targetType ? array : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToLongArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    if (sourceType == INT64 || sourceType == TIMESTAMP) {
+      return array;
+    }
+    return sourceType == INT32
+        ? Arrays.stream((int[]) array).mapToLong(Long::valueOf).toArray()
+        : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToFloatArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    if (sourceType == FLOAT) {
+      return array;
+    }
+    if (sourceType != INT32) {
+      return UNSUPPORTED_CAST;
+    }
+    int[] values = (int[]) array;
+    float[] result = new float[values.length];
+    for (int i = 0; i < values.length; i++) {
+      result[i] = values[i];
+    }
+    return result;
+  }
+
+  private static Object castToDoubleArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    if (sourceType == DOUBLE) {
+      return array;
+    }
+    if (sourceType == INT32) {
+      return Arrays.stream((int[]) array).mapToDouble(Double::valueOf).toArray();
+    }
+    if (sourceType == INT64 || sourceType == TIMESTAMP) {
+      return Arrays.stream((long[]) array).mapToDouble(Double::valueOf).toArray();
+    }
+    if (sourceType != FLOAT) {
+      return UNSUPPORTED_CAST;
+    }
+    float[] values = (float[]) array;
+    double[] result = new double[values.length];
+    for (int i = 0; i < values.length; i++) {
+      result[i] = values[i];
+    }
+    return result;
+  }
+
+  private static Object castToTimestampArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    if (sourceType == TIMESTAMP || sourceType == INT64) {
+      return array;
+    }
+    return sourceType == INT32
+        ? Arrays.stream((int[]) array).mapToLong(Long::valueOf).toArray()
+        : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToBlobArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    return sourceType == BLOB || sourceType == STRING || sourceType == TEXT
+        ? array
+        : UNSUPPORTED_CAST;
+  }
+
+  private static Object castToTextArray(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    if (sourceType == STRING || sourceType == TEXT || sourceType == BLOB) {
+      return array;
+    }
+    if (sourceType == INT32) {
+      int[] values = (int[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    if (sourceType == DATE) {
+      int[] values = (int[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(getDateStringValue(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    if (sourceType == INT64 || sourceType == TIMESTAMP) {
+      long[] values = (long[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    if (sourceType == FLOAT) {
+      float[] values = (float[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    if (sourceType == DOUBLE) {
+      double[] values = (double[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    if (sourceType == BOOLEAN) {
+      boolean[] values = (boolean[]) array;
+      Binary[] result = new Binary[values.length];
+      for (int i = 0; i < values.length; i++) {
+        result[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+      }
+      return result;
+    }
+    return UNSUPPORTED_CAST;
+  }
+
+  private static Object unsupportedArrayCast(
+      TSDataType targetType, TSDataType sourceType, Object array) {
+    return UNSUPPORTED_CAST;
   }
 
   public static TSDataType deserializeFrom(ByteBuffer buffer) {
@@ -577,5 +572,11 @@ public enum TSDataType {
   private interface SingleValueCaster {
 
     Object cast(TSDataType targetType, TSDataType sourceType, Object value);
+  }
+
+  @FunctionalInterface
+  private interface ArrayCaster {
+
+    Object cast(TSDataType targetType, TSDataType sourceType, Object array);
   }
 }
