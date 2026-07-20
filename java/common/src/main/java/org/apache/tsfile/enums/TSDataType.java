@@ -39,46 +39,52 @@ import java.util.Set;
 
 public enum TSDataType {
   /** BOOLEAN. */
-  BOOLEAN((byte) 0, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  BOOLEAN((byte) 0, 1, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT32. */
-  INT32((byte) 1, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  INT32((byte) 1, 4, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** INT64. */
-  INT64((byte) 2, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
+  INT64((byte) 2, 8, TSDataType::castToLongSingleValue, TSDataType::castToLongArray),
 
   /** FLOAT. */
-  FLOAT((byte) 3, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
+  FLOAT((byte) 3, 4, TSDataType::castToFloatSingleValue, TSDataType::castToFloatArray),
 
   /** DOUBLE. */
-  DOUBLE((byte) 4, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
+  DOUBLE((byte) 4, 8, TSDataType::castToDoubleSingleValue, TSDataType::castToDoubleArray),
 
   /** TEXT. */
-  TEXT((byte) 5, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  TEXT((byte) 5, 8, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** VECTOR. */
-  VECTOR((byte) 6, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
+  VECTOR((byte) 6, 8, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
 
   /** UNKNOWN. */
-  UNKNOWN((byte) 7, TSDataType::unsupportedSingleValueCast, TSDataType::unsupportedArrayCast),
+  UNKNOWN(
+      (byte) 7,
+      TSDataType.UNSUPPORTED_DATA_TYPE_SIZE,
+      TSDataType::unsupportedSingleValueCast,
+      TSDataType::unsupportedArrayCast),
 
   /** TIMESTAMP. */
-  TIMESTAMP((byte) 8, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
+  TIMESTAMP((byte) 8, 8, TSDataType::castToTimestampSingleValue, TSDataType::castToTimestampArray),
 
   /** DATE. */
-  DATE((byte) 9, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
+  DATE((byte) 9, 4, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray),
 
   /** BLOB. */
-  BLOB((byte) 10, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
+  BLOB((byte) 10, 8, TSDataType::castToBlobSingleValue, TSDataType::castToBlobArray),
 
   /** STRING */
-  STRING((byte) 11, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
+  STRING((byte) 11, 8, TSDataType::castToTextSingleValue, TSDataType::castToTextArray),
 
   /** OBJECT */
-  OBJECT((byte) 12, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
+  OBJECT((byte) 12, 8, TSDataType::castIdenticalSingleValue, TSDataType::castIdenticalArray);
 
+  private static final int UNSUPPORTED_DATA_TYPE_SIZE = -1;
   private static final Object UNSUPPORTED_CAST = new Object();
   private final byte type;
+  private final int dataTypeSize;
   private final SingleValueCaster singleValueCaster;
   private final ArrayCaster arrayCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
@@ -150,8 +156,10 @@ public enum TSDataType {
     compatibleTypes.put(OBJECT, Collections.emptySet());
   }
 
-  TSDataType(byte type, SingleValueCaster singleValueCaster, ArrayCaster arrayCaster) {
+  TSDataType(
+      byte type, int dataTypeSize, SingleValueCaster singleValueCaster, ArrayCaster arrayCaster) {
     this.type = type;
+    this.dataTypeSize = dataTypeSize;
     this.singleValueCaster = singleValueCaster;
     this.arrayCaster = arrayCaster;
   }
@@ -465,26 +473,10 @@ public enum TSDataType {
   }
 
   public int getDataTypeSize() {
-    switch (this) {
-      case BOOLEAN:
-        return 1;
-      case INT32:
-      case FLOAT:
-      case DATE:
-        return 4;
-      // For text: return the size of reference here
-      case TEXT:
-      case INT64:
-      case DOUBLE:
-      case VECTOR:
-      case BLOB:
-      case OBJECT:
-      case STRING:
-      case TIMESTAMP:
-        return 8;
-      default:
-        throw new UnSupportedDataTypeException(this.toString());
+    if (dataTypeSize == UNSUPPORTED_DATA_TYPE_SIZE) {
+      throw new UnSupportedDataTypeException(this.toString());
     }
+    return dataTypeSize;
   }
 
   /**
