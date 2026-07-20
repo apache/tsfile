@@ -20,6 +20,7 @@
 #ifndef READER_TSFILE_SERIES_SCAN_ITERATOR_H
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
+#include <algorithm>
 #include <limits>
 #include <string>
 
@@ -81,6 +82,9 @@ class TsFileSeriesScanIterator {
      * for single-path. */
     int get_row_offset() const { return row_offset_; }
     int get_row_limit() const { return row_limit_; }
+    void consume_row_offset(int count) {
+        row_offset_ = std::max(0, row_offset_ - count);
+    }
 
     /*
      * If oneshoot filter specified, use it instead of this->time_filter_.

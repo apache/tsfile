@@ -463,10 +463,10 @@ TEST_F(TsFileReaderTest,
     reader.close();
 }
 
-// Multi-value aligned chunk reader consumes row_offset at chunk/page
-// granularity. If the remaining offset lands inside the current page, the SSI
-// leaves that residual for the row reader to consume from the returned TsBlock.
-TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetKeepsPartialPageResidual) {
+// The multi-value page plan consumes row_offset before value decoding. When
+// the offset lands inside a page, the returned TsBlock starts at the first row
+// after the offset instead of exposing a residual to the row reader.
+TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetTrimsPartialPage) {
     const std::string device = "root.dev_multi_offset";
     std::vector<MeasurementSchema> schema_vec;
     schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
@@ -507,8 +507,17 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetKeepsPartialPageResidual) {
     common::TsBlock* block = nullptr;
     EXPECT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
     ASSERT_NE(block, nullptr);
-    EXPECT_EQ(block->get_row_count(), static_cast<uint32_t>(N));
-    EXPECT_EQ(ssi->get_row_offset(), 5);
+    EXPECT_EQ(block->get_row_count(), static_cast<uint32_t>(N - 5));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 1005);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 5);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 10);
+    }
 
     if (block != nullptr) {
         ssi->revert_tsblock();
@@ -569,24 +578,23 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetSkipsWholePage) {
               E_OK);
     ASSERT_NE(ssi, nullptr);
 
-    // The first chunk is preloaded before set_row_range(). This offset must be
-    // consumed at page granularity: skip page 0 and leave 4 rows for the row
-    // reader to skip inside page 1.
+    // The first chunk is preloaded before set_row_range(). The page plan skips
+    // page 0 and trims the first four rows from page 1 before value decoding.
     ssi->set_row_range(/*offset=*/20, /*limit=*/-1);
     common::TsBlock* block = nullptr;
     ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
     ASSERT_NE(block, nullptr);
-    ASSERT_EQ(block->get_row_count(), static_cast<uint32_t>(rows_per_page));
-    EXPECT_EQ(ssi->get_row_offset(), 4);
+    ASSERT_EQ(block->get_row_count(), static_cast<uint32_t>(N - 20));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
 
     {
         common::ColIterator time_iter(0, block);
         common::ColIterator v0_iter(1, block);
         common::ColIterator v1_iter(2, block);
         uint32_t len = 0;
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 16);
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 16);
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 32);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 20);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 20);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 40);
     }
 
     ssi->revert_tsblock();
@@ -640,7 +648,7 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetSkipsWholeChunk) {
 
     // alloc_multi_ssi() preloads chunk 0 before row range is set. Read it
     // normally first, then set an offset that skips the next whole chunk by
-    // chunk metadata count and leaves a 32-row residual inside chunk 2.
+    // chunk metadata count and trims the first 32 rows from chunk 2's plan.
     common::TsBlock* block = nullptr;
     ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
     ASSERT_NE(block, nullptr);
@@ -660,17 +668,18 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetSkipsWholeChunk) {
     block = nullptr;
     ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
     ASSERT_NE(block, nullptr);
-    ASSERT_EQ(block->get_row_count(), static_cast<uint32_t>(rows_per_chunk));
-    EXPECT_EQ(ssi->get_row_offset(), 32);
+    ASSERT_EQ(block->get_row_count(),
+              static_cast<uint32_t>(rows_per_chunk / 2));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
 
     {
         common::ColIterator time_iter(0, block);
         common::ColIterator v0_iter(1, block);
         common::ColIterator v1_iter(2, block);
         uint32_t len = 0;
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 128);
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 128);
-        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 256);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 160);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 160);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 320);
     }
 
     ssi->revert_tsblock();
@@ -766,6 +775,79 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetCountsOnlyFilteredRows) {
     EXPECT_EQ(actual_times[0], 254);
     EXPECT_EQ(actual_times[1], 255);
 
+    io_reader.revert_ssi(ssi);
+}
+
+// A boundary page may contain holes between matching timestamps. Offset must
+// consume only matching rows and keep every value column aligned with the
+// first retained match.
+TEST_F(TsFileReaderTest, MultiValueAlignedPagePlanOffsetSkipsBoundaryMatches) {
+    const std::string device = "root.dev_multi_boundary_offset";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg),
+                  E_OK);
+    }
+
+    constexpr int kRowCount = 16;
+    Tablet tablet(device,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  kRowCount);
+    for (int i = 0; i < kRowCount; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 10)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    std::vector<std::string> measurements = {"v0", "v1"};
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    const std::vector<int64_t> selected_times = {1, 3, 5, 7, 9};
+    storage::TimeIn time_filter(selected_times, /*not_in=*/false);
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, measurements, ssi, pa,
+                                        &time_filter),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    ssi->set_row_range(/*offset=*/2, /*limit=*/-1);
+    common::TsBlock* block = nullptr;
+    ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true, &time_filter), E_OK);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+    ASSERT_EQ(block->get_row_count(), 3u);
+
+    const std::vector<int64_t> expected_times = {5, 7, 9};
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        for (int64_t expected : expected_times) {
+            uint32_t len = 0;
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)),
+                      expected);
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)),
+                      expected);
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)),
+                      expected * 10);
+            time_iter.next();
+            v0_iter.next();
+            v1_iter.next();
+        }
+    }
+
+    ssi->revert_tsblock();
     io_reader.revert_ssi(ssi);
 }
 

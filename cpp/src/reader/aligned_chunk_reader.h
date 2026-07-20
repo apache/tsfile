@@ -36,7 +36,7 @@ class ThreadPool;
 
 namespace storage {
 
-// Page classification for chunk-level parallel decode.
+// Page classification for chunk-level planned decode.
 enum class PagePassType { SKIP, FULL_PASS, BOUNDARY };
 
 // Metadata collected per page during the chunk scan phase.
@@ -53,8 +53,9 @@ struct ChunkPageInfo {
     std::vector<uint32_t> value_uncompressed_sizes;
 };
 
-// Decoded state for one (column, page) slot.  Populated by chunk-level
-// parallel decode; consumed by the scatter loop.
+// Decoded state for one (column, page) slot. Populated eagerly by parallel
+// decode or lazily by the single-thread page-plan path, then consumed by the
+// scatter loop.
 struct PageDecodedState {
     std::vector<uint8_t> notnull_bitmap;
     std::vector<char> predecoded_values;
@@ -259,7 +260,7 @@ class AlignedChunkReader : public IChunkReader {
     int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
-    int build_page_plan(Filter* filter);
+    int build_page_plan(Filter* filter, int& row_offset);
     int decode_time_page_direct(const ChunkPageInfo& page_info,
                                 std::vector<int64_t>& out_times);
     int decode_time_page_with(const ChunkPageInfo& page_info,
@@ -322,7 +323,6 @@ class AlignedChunkReader : public IChunkReader {
     bool page_plan_built_ = false;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;
-    bool multi_serial_decode_current_chunk_ = false;
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned

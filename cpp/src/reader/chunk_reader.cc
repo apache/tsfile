@@ -265,6 +265,9 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
     return ret;
 }
 
+// Page statistics provide two levels of certainty: "may satisfy" means the
+// page cannot be ruled out, while "fully satisfies" means every row is known
+// to match and the page count can safely be used for offset pushdown.
 bool ChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     return filter == nullptr || cur_page_header_.statistic_ == nullptr ||
            filter->satisfy(cur_page_header_.statistic_);

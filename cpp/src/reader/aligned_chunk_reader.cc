@@ -77,7 +77,6 @@ void AlignedChunkReader::reset() {
     page_plan_built_ = false;
     current_page_loaded_ = false;
     current_page_plan_index_ = 0;
-    multi_serial_decode_current_chunk_ = false;
     time_predecoded_ = false;
     page_all_times_.clear();
     page_time_count_ = 0;
@@ -470,6 +469,9 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     return ret;
 }
 
+// Page statistics provide two levels of certainty: "may satisfy" means the
+// page cannot be ruled out, while "fully satisfies" means every row is known
+// to match and the page count can safely be used for offset pushdown.
 bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     bool value_satisfy = filter == nullptr ||
                          cur_value_page_header_.statistic_ == nullptr ||
@@ -1173,7 +1175,6 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     page_plan_built_ = false;
     current_page_loaded_ = false;
     current_page_plan_index_ = 0;
-    multi_serial_decode_current_chunk_ = false;
     time_predecoded_ = false;
     page_all_times_.clear();
     page_time_count_ = 0;
@@ -1400,7 +1401,7 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     return ret;
 }
 
-int AlignedChunkReader::build_page_plan(Filter* filter) {
+int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     int ret = E_OK;
     chunk_pages_.clear();
     current_page_plan_index_ = 0;
@@ -1476,6 +1477,13 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
             int32_t last = -1;
             for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
                 if (filter->satisfy_start_end_time(times[i], times[i])) {
+                    // Offset is defined on the filtered row stream. Consume
+                    // matching rows only; holes inside a boundary page do not
+                    // count toward it.
+                    if (row_offset > 0) {
+                        row_offset--;
+                        continue;
+                    }
                     if (first < 0) first = i;
                     last = i;
                 }
@@ -1495,6 +1503,18 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
                     break;
                 }
                 page_info.row_end = static_cast<int32_t>(times.size());
+            }
+            if (page_info.pass_type == PagePassType::FULL_PASS &&
+                row_offset > 0) {
+                const int32_t page_row_count =
+                    page_info.row_end - page_info.row_begin;
+                const int32_t rows_to_skip =
+                    std::min(page_row_count, row_offset);
+                page_info.row_begin += rows_to_skip;
+                row_offset -= rows_to_skip;
+                if (page_info.row_begin == page_info.row_end) {
+                    page_info.pass_type = PagePassType::SKIP;
+                }
             }
             if (page_info.row_begin < page_info.row_end) {
                 chunk_pages_.push_back(std::move(page_info));
@@ -1855,34 +1875,31 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
-    if (row_offset > 0) {
-        multi_serial_decode_current_chunk_ = true;
-    }
-
     // Dispatch:
-    //   - Multi-column with a thread pool → chunk-level pre-decode: one task
-    //     per value column decodes that column's whole chunk up front, then the
-    //     scatter loop bulk-memcpys.  decode_all_planned_pages() works for any
-    //     column count.  (An earlier cutoff sent >6 columns down the serial
-    //     path because per_page_state — the upfront predecode buffer — grows
-    //     with column count and was feared to thrash cache; it still grows, so
-    //     very wide aligned chunks are the case to watch if reads regress.)
-    //   - Single column, or no thread pool → serial path: decode the current
-    //     page's columns inline (multi_DECODE_TV_BATCH), no thread-pool
-    //     fan-out.
+    //   - Offset pushdown always uses the page plan so fully covered pages and
+    //     the prefix of the first retained page can be removed before value
+    //     decoding, even when no worker pool is available.
+    //   - Multi-column with a thread pool also uses the page plan for
+    //     chunk-level parallel pre-decode.
+    //   - Otherwise decode the current page's columns inline.
 #ifdef ENABLE_THREADS
-    const bool use_chunk_level = decode_pool_ != nullptr &&
-                                 value_columns_.size() > 1 &&
-                                 !multi_serial_decode_current_chunk_;
+    const bool use_parallel_page_plan =
+        decode_pool_ != nullptr && value_columns_.size() > 1;
 #else
-    const bool use_chunk_level = false;
+    const bool use_parallel_page_plan = false;
 #endif
-    if (!use_chunk_level) {
+    const bool serial_page_in_progress =
+        !page_plan_built_ &&
+        (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi());
+    const bool use_page_plan =
+        page_plan_built_ || (!serial_page_in_progress &&
+                             (row_offset > 0 || use_parallel_page_plan));
+    if (!use_page_plan) {
         return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
 
     if (!page_plan_built_) {
-        if (RET_FAIL(build_page_plan(filter))) {
+        if (RET_FAIL(build_page_plan(filter, row_offset))) {
             return ret;
         }
         if (RET_FAIL(decode_all_planned_pages())) {
@@ -2117,6 +2134,9 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
     return ret;
 }
 
+// Keep the same conservative distinction as the single-value path: a page
+// that may satisfy the filter still needs row-level filtering unless its full
+// time range is covered by the filter.
 bool AlignedChunkReader::cur_page_may_satisfy_filter_multi(Filter* filter) {
     bool time_satisfy = filter == nullptr ||
                         cur_time_page_header_.statistic_ == nullptr ||

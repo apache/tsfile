@@ -297,6 +297,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                                           ssi_offset, -1)) {
                 if (ssi_offset > 0) {
                     row_offset_pushed_to_ssi_ = true;
+                    // init() prefetches the first TsBlock and may consume part
+                    // of the offset by skipping whole chunks/pages.
                     remaining_offset_ = ctx->get_ssi_row_offset();
                 }
                 // The shared ctx is referenced from N map entries; close()
@@ -996,11 +998,7 @@ int SingleMeasurementColumnContext::skip_rows(uint32_t count) {
         const uint32_t val_elem_size = common::get_data_type_size(dt);
         value_iter_->advance(to_skip, val_elem_size);
     }
-    int ssi_offset = get_ssi_row_offset();
-    if (ssi_offset > 0) {
-        set_ssi_row_range(std::max(0, ssi_offset - static_cast<int>(to_skip)),
-                          get_ssi_row_limit());
-    }
+    consume_ssi_row_offset(static_cast<int>(to_skip));
     if (time_iter_->end()) {
         // Propagate hard errors from the next-tsblock load; E_NO_MORE_DATA
         // is the legitimate end-of-stream signal and gets squashed back to
@@ -1254,11 +1252,7 @@ int VectorMeasurementColumnContext::skip_rows(uint32_t count) {
             }
         }
     }
-    int ssi_offset = get_ssi_row_offset();
-    if (ssi_offset > 0) {
-        set_ssi_row_range(std::max(0, ssi_offset - static_cast<int>(to_skip)),
-                          get_ssi_row_limit());
-    }
+    consume_ssi_row_offset(static_cast<int>(to_skip));
     if (time_iter_->end()) {
         int r = get_next_tsblock(false);
         if (r != common::E_OK && r != common::E_NO_MORE_DATA) return r;

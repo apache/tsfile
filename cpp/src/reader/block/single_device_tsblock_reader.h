@@ -115,14 +115,11 @@ class MeasurementColumnContext {
 
     virtual int move_iter() = 0;
 
-    virtual void set_ssi_row_range(int offset, int limit) {
-        if (ssi_) ssi_->set_row_range(offset, limit);
-    }
     virtual int get_ssi_row_offset() const {
         return ssi_ ? ssi_->get_row_offset() : 0;
     }
-    virtual int get_ssi_row_limit() const {
-        return ssi_ ? ssi_->get_row_limit() : -1;
+    virtual void consume_ssi_row_offset(int count) {
+        if (ssi_) ssi_->consume_row_offset(count);
     }
 
     virtual uint32_t available_rows() const = 0;
