@@ -76,7 +76,7 @@ class ChunkReader : public IChunkReader {
 
    private:
     bool should_skip_page_by_time(int64_t min_time_hint);
-    bool should_skip_page_by_offset(int& row_offset);
+    bool should_skip_page_by_offset(int& row_offset, Filter* filter);
     FORCE_INLINE bool chunk_has_only_one_page() const {
         return (chunk_header_.chunk_type_ &
                 ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==

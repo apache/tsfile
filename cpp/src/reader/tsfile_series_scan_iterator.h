@@ -164,11 +164,13 @@ class TsFileSeriesScanIterator {
         return chunk_meta_cursor_.get();
     }
     bool should_skip_chunk_by_time(ChunkMeta* cm, int64_t min_time_hint);
-    bool should_skip_chunk_by_offset(ChunkMeta* cm);
+    bool should_skip_chunk_by_offset(ChunkMeta* cm, Filter* filter);
     bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
-                                             ChunkMeta* value_cm);
+                                             ChunkMeta* value_cm,
+                                             Filter* filter);
     bool should_skip_multi_aligned_chunk_by_offset(
-        ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms);
+        ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms,
+        Filter* filter);
     common::TsBlock* alloc_tsblock();
     common::TsBlock* alloc_tsblock_multi();
 

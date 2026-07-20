@@ -856,12 +856,17 @@ bool ChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
     return cur_page_header_.statistic_->end_time_ < min_time_hint;
 }
 
-bool ChunkReader::should_skip_page_by_offset(int& row_offset) {
+bool ChunkReader::should_skip_page_by_offset(int& row_offset, Filter* filter) {
     if (row_offset <= 0) {
         return false;
     }
     if (cur_page_header_.statistic_ == nullptr ||
         cur_page_header_.statistic_->count_ == 0) {
+        return false;
+    }
+    if (filter != nullptr && !filter->contain_start_end_time(
+                                 cur_page_header_.statistic_->start_time_,
+                                 cur_page_header_.statistic_->end_time_)) {
         return false;
     }
     int32_t count = cur_page_header_.statistic_->count_;
@@ -910,7 +915,7 @@ int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
         } else if (should_skip_page_by_time(min_time_hint)) {
             if (RET_FAIL(skip_cur_page())) {
             }
-        } else if (should_skip_page_by_offset(row_offset)) {
+        } else if (should_skip_page_by_offset(row_offset, filter)) {
             if (RET_FAIL(skip_cur_page())) {
             }
         } else {

@@ -79,11 +79,17 @@ bool TsFileSeriesScanIterator::should_skip_chunk_by_time(
     return cm->statistic_->end_time_ < min_time_hint;
 }
 
-bool TsFileSeriesScanIterator::should_skip_chunk_by_offset(ChunkMeta* cm) {
+bool TsFileSeriesScanIterator::should_skip_chunk_by_offset(ChunkMeta* cm,
+                                                           Filter* filter) {
     if (row_offset_ <= 0) {
         return false;
     }
     if (cm->statistic_ == nullptr || cm->statistic_->count_ == 0) {
+        return false;
+    }
+    if (filter != nullptr &&
+        !filter->contain_start_end_time(cm->statistic_->start_time_,
+                                        cm->statistic_->end_time_)) {
         return false;
     }
     int32_t count = cm->statistic_->count_;
@@ -95,7 +101,7 @@ bool TsFileSeriesScanIterator::should_skip_chunk_by_offset(ChunkMeta* cm) {
 }
 
 bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
-    ChunkMeta* time_cm, ChunkMeta* value_cm) {
+    ChunkMeta* time_cm, ChunkMeta* value_cm, Filter* filter) {
     if (row_offset_ <= 0) {
         return false;
     }
@@ -108,6 +114,11 @@ bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
     // applied against the real row stream.
     if (time_cm == nullptr || value_cm == nullptr ||
         time_cm->statistic_ == nullptr || value_cm->statistic_ == nullptr) {
+        return false;
+    }
+    if (filter != nullptr &&
+        !filter->contain_start_end_time(time_cm->statistic_->start_time_,
+                                        time_cm->statistic_->end_time_)) {
         return false;
     }
     int32_t tc = time_cm->statistic_->count_;
@@ -123,7 +134,8 @@ bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
 }
 
 bool TsFileSeriesScanIterator::should_skip_multi_aligned_chunk_by_offset(
-    ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms) {
+    ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms,
+    Filter* filter) {
     if (row_offset_ <= 0) {
         return false;
     }
@@ -132,6 +144,11 @@ bool TsFileSeriesScanIterator::should_skip_multi_aligned_chunk_by_offset(
     }
     int32_t time_count = time_cm->statistic_->count_;
     if (time_count <= 0) {
+        return false;
+    }
+    if (filter != nullptr &&
+        !filter->contain_start_end_time(time_cm->statistic_->start_time_,
+                                        time_cm->statistic_->end_time_)) {
         return false;
     }
     for (const auto* value_cm : value_cms) {
@@ -183,8 +200,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
                         continue;
                     }
-                    if (should_skip_multi_aligned_chunk_by_offset(time_cm,
-                                                                  value_cms)) {
+                    if (should_skip_multi_aligned_chunk_by_offset(
+                            time_cm, value_cms, filter)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -205,7 +222,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                         continue;
                     }
                     // Single-path: skip entire chunk by offset using count.
-                    if (should_skip_chunk_by_offset(cm)) {
+                    if (should_skip_chunk_by_offset(cm, filter)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -226,8 +243,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     if (should_skip_chunk_by_time(filter_cm, min_time_hint)) {
                         continue;
                     }
-                    if (should_skip_aligned_chunk_by_offset(time_cm,
-                                                            value_cm)) {
+                    if (should_skip_aligned_chunk_by_offset(time_cm, value_cm,
+                                                            filter)) {
                         continue;
                     }
                     chunk_reader_->reset();

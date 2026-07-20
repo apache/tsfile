@@ -1060,7 +1060,8 @@ bool AlignedChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
     return false;
 }
 
-bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset) {
+bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset,
+                                                    Filter* filter) {
     if (row_offset <= 0) {
         return false;
     }
@@ -1070,6 +1071,10 @@ bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset) {
         stat = cur_value_page_header_.statistic_;
     }
     if (stat == nullptr || stat->count_ == 0) {
+        return false;
+    }
+    if (filter != nullptr &&
+        !filter->contain_start_end_time(stat->start_time_, stat->end_time_)) {
         return false;
     }
     int32_t count = stat->count_;
@@ -1129,7 +1134,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
             } else if (should_skip_page_by_time(min_time_hint)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
-            } else if (should_skip_page_by_offset(row_offset)) {
+            } else if (should_skip_page_by_offset(row_offset, filter)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else {
