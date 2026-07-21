@@ -38,6 +38,7 @@ import org.apache.tsfile.file.metadata.statistics.LongStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
@@ -162,6 +163,11 @@ public abstract class AbstractLongType extends AbstractType {
   @Override
   public void update(Statistics<?> stats, BatchData batchData) {
     stats.update(batchData.currentTime(), batchData.getLong());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
+    stats.update(block.getTimeByIndex(rowIndex), block.getColumn(columnIndex).getLong(rowIndex));
   }
 
   @Override

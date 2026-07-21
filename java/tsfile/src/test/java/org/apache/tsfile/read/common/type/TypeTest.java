@@ -28,6 +28,8 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
@@ -1550,6 +1552,23 @@ public class TypeTest {
       Assert.assertEquals(200L, batchStatistics.getStartTime());
       Assert.assertEquals(200L, batchStatistics.getEndTime());
       Assert.assertFalse(batchStatistics.isEmpty());
+
+      TsBlockBuilder blockBuilder = new TsBlockBuilder(Arrays.asList(dataType, dataType));
+      blockBuilder.getTimeColumnBuilder().writeLong(250L);
+      blockBuilder.getColumnBuilder(0).writeObject(value.getValue());
+      blockBuilder.getColumnBuilder(1).writeObject(value.getValue());
+      blockBuilder.declarePosition();
+      blockBuilder.getTimeColumnBuilder().writeLong(300L);
+      blockBuilder.getColumnBuilder(0).writeObject(value.getValue());
+      blockBuilder.getColumnBuilder(1).writeObject(value.getValue());
+      blockBuilder.declarePosition();
+      TsBlock block = blockBuilder.build();
+      Statistics<?> blockStatistics = Statistics.getStatsByType(dataType);
+      type.update(blockStatistics, block, 1, 1);
+      Assert.assertEquals(1, blockStatistics.getCount());
+      Assert.assertEquals(300L, blockStatistics.getStartTime());
+      Assert.assertEquals(300L, blockStatistics.getEndTime());
+      Assert.assertFalse(blockStatistics.isEmpty());
     }
   }
 

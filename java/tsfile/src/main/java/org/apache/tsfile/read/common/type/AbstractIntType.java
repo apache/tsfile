@@ -39,6 +39,7 @@ import org.apache.tsfile.file.metadata.statistics.IntegerStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
@@ -163,6 +164,11 @@ public abstract class AbstractIntType extends AbstractType {
   @Override
   public void update(Statistics<?> stats, BatchData batchData) {
     stats.update(batchData.currentTime(), batchData.getInt());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
+    stats.update(block.getTimeByIndex(rowIndex), block.getColumn(columnIndex).getInt(rowIndex));
   }
 
   @Override

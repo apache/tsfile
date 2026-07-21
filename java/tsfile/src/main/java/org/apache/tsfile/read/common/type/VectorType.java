@@ -35,6 +35,7 @@ import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -229,6 +230,11 @@ public class VectorType extends AbstractLongType {
 
   @Override
   public void update(Statistics<?> stats, BatchData batchData) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
     throw new UnsupportedOperationException(getDisplayName());
   }
 

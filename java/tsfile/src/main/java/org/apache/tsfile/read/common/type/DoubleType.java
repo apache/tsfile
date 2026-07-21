@@ -38,6 +38,7 @@ import org.apache.tsfile.file.metadata.statistics.DoubleStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
@@ -165,6 +166,11 @@ public class DoubleType extends AbstractType {
   @Override
   public void update(Statistics<?> stats, BatchData batchData) {
     stats.update(batchData.currentTime(), batchData.getDouble());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
+    stats.update(block.getTimeByIndex(rowIndex), block.getColumn(columnIndex).getDouble(rowIndex));
   }
 
   @Override

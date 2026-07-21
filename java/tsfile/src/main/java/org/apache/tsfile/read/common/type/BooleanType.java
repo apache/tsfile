@@ -32,6 +32,7 @@ import org.apache.tsfile.file.metadata.statistics.BooleanStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.read.common.block.column.ColumnEncoder;
@@ -154,6 +155,11 @@ public class BooleanType extends AbstractType {
   @Override
   public void update(Statistics<?> stats, BatchData batchData) {
     stats.update(batchData.currentTime(), batchData.getBoolean());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
+    stats.update(block.getTimeByIndex(rowIndex), block.getColumn(columnIndex).getBoolean(rowIndex));
   }
 
   @Override

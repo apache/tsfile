@@ -32,6 +32,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -465,6 +466,11 @@ public interface Type {
 
   /** Updates statistics with the current timestamp-value pair in {@code batchData}. */
   default void update(Statistics<?> stats, BatchData batchData) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Updates statistics with the value at {@code rowIndex} in a TsBlock column. */
+  default void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
