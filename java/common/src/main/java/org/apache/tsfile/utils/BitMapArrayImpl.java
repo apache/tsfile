@@ -56,6 +56,16 @@ class BitMapArrayImpl extends BitMapImpl {
   }
 
   @Override
+  int getByteArrayLength() {
+    return bits.length;
+  }
+
+  @Override
+  byte getByte(int index) {
+    return bits[index];
+  }
+
+  @Override
   boolean isMarked(int position) {
     return (bits[position / Byte.SIZE] & BIT_UTIL[position % Byte.SIZE]) != 0;
   }
@@ -218,6 +228,38 @@ class BitMapArrayImpl extends BitMapImpl {
       }
     }
     return true;
+  }
+
+  @Override
+  boolean contentEquals(BitMapImpl other) {
+    return other instanceof BitMapArrayImpl
+        ? Arrays.equals(bits, ((BitMapArrayImpl) other).bits)
+        : super.contentEquals(other);
+  }
+
+  @Override
+  boolean contentEqualsInRange(BitMapImpl other, int rangeSize) {
+    if (!(other instanceof BitMapArrayImpl)) {
+      return super.contentEqualsInRange(other, rangeSize);
+    }
+    byte[] otherBits = ((BitMapArrayImpl) other).bits;
+    int byteSize = rangeSize / Byte.SIZE;
+    for (int i = 0; i < byteSize; i++) {
+      if (bits[i] != otherBits[i]) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      return (bits[byteSize] & mask) == (otherBits[byteSize] & mask);
+    }
+    return true;
+  }
+
+  @Override
+  int contentHashCode() {
+    return Arrays.hashCode(bits);
   }
 
   @Override

@@ -50,6 +50,16 @@ class BitMapLongImpl extends BitMapImpl {
   }
 
   @Override
+  int getByteArrayLength() {
+    return BitMap.getSizeOfBytes(size);
+  }
+
+  @Override
+  byte getByte(int index) {
+    return index < Long.BYTES ? (byte) (bits >>> (index * Byte.SIZE)) : 0;
+  }
+
+  @Override
   boolean isMarked(int position) {
     return (bits & (1L << position)) != 0;
   }
@@ -122,6 +132,41 @@ class BitMapLongImpl extends BitMapImpl {
   boolean isAllMarked() {
     long mask = lowerBitsMask(size);
     return (bits & mask) == mask;
+  }
+
+  @Override
+  boolean contentEquals(BitMapImpl other) {
+    if (!(other instanceof BitMapLongImpl)) {
+      return super.contentEquals(other);
+    }
+    int serializedBitSize = Math.min(getByteArrayLength() * Byte.SIZE, Long.SIZE);
+    long mask = lowerBitsMask(serializedBitSize);
+    return (bits & mask) == (((BitMapLongImpl) other).bits & mask);
+  }
+
+  @Override
+  boolean contentEqualsInRange(BitMapImpl other, int rangeSize) {
+    if (!(other instanceof BitMapLongImpl)) {
+      return super.contentEqualsInRange(other, rangeSize);
+    }
+    long mask = lowerBitsMask(rangeSize);
+    return (bits & mask) == (((BitMapLongImpl) other).bits & mask);
+  }
+
+  @Override
+  int contentHashCode() {
+    int result = 1;
+    long value = bits;
+    int byteArrayLength = getByteArrayLength();
+    int longByteCount = Math.min(byteArrayLength, Long.BYTES);
+    for (int i = 0; i < longByteCount; i++) {
+      result = 31 * result + (byte) value;
+      value >>>= Byte.SIZE;
+    }
+    for (int i = Long.BYTES; i < byteArrayLength; i++) {
+      result *= 31;
+    }
+    return result;
   }
 
   @Override

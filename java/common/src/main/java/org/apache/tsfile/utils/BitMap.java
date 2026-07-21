@@ -22,20 +22,19 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.i18n.Messages;
 
 import java.util.Arrays;
-import java.util.Objects;
 
 public class BitMap {
 
   private BitMapImpl implementation;
 
-  /** Initialize a BitMap with given size. */
+  /** Initialize an array-backed BitMap with the given size. */
   public BitMap(int size) {
-    implementation = createImplementation(size);
+    implementation = new BitMapArrayImpl(size);
   }
 
-  /** Initialize a BitMap with given size and bytes. */
+  /** Initialize an array-backed BitMap with the given size and bytes. */
   public BitMap(int size, byte[] bits) {
-    implementation = createImplementation(size, bits);
+    implementation = new BitMapArrayImpl(size, bits);
   }
 
   BitMap(BitMapImpl implementation) {
@@ -112,8 +111,8 @@ public class BitMap {
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(getSize());
-    result = 31 * result + Arrays.hashCode(getByteArray());
+    int result = 31 + getSize();
+    result = 31 * result + implementation.contentHashCode();
     return result;
   }
 
@@ -126,7 +125,7 @@ public class BitMap {
       return false;
     }
     BitMap other = (BitMap) obj;
-    return getSize() == other.getSize() && Arrays.equals(getByteArray(), other.getByteArray());
+    return getSize() == other.getSize() && implementation.contentEquals(other.implementation);
   }
 
   public boolean equalsInRange(Object obj, int rangeSize) {
@@ -145,22 +144,7 @@ public class BitMap {
               Math.min(getSize(), other.getSize())));
     }
 
-    int byteSize = rangeSize / Byte.SIZE;
-    byte[] thisBits = getByteArray();
-    byte[] otherBits = other.getByteArray();
-    for (int i = 0; i < byteSize; i++) {
-      if (thisBits[i] != otherBits[i]) {
-        return false;
-      }
-    }
-    int remainingBits = rangeSize % Byte.SIZE;
-    if (remainingBits > 0) {
-      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
-      if ((thisBits[byteSize] & mask) != (otherBits[byteSize] & mask)) {
-        return false;
-      }
-    }
-    return true;
+    return implementation.contentEqualsInRange(other.implementation, rangeSize);
   }
 
   @Override
@@ -248,13 +232,8 @@ public class BitMap {
     return size >= 0 && size <= Long.SIZE ? new BitMapLongImpl(size) : new BitMapArrayImpl(size);
   }
 
-  private static BitMapImpl createImplementation(int size, byte[] bits) {
-    return size >= 0 && size <= Long.SIZE
-        ? new BitMapLongImpl(size, bits)
-        : new BitMapArrayImpl(size, bits);
-  }
-
-  public static BitMap createArrayBackedBitMap(int size) {
-    return new BitMap(new BitMapArrayImpl(size));
+  /** Initialize a BitMap whose implementation is selected according to the given size. */
+  public static BitMap createBitMapDynamically(int size) {
+    return new BitMap(createImplementation(size));
   }
 }

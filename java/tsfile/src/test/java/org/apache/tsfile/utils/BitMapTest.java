@@ -26,6 +26,7 @@ import java.util.Random;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public class BitMapTest {
@@ -71,11 +72,17 @@ public class BitMapTest {
 
   @Test
   public void testImplementationSelectionAndExtension() {
-    assertTrue(new BitMap(0).getImplementation() instanceof BitMapLongImpl);
-    assertTrue(new BitMap(64).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(new BitMap(0).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(new BitMap(64).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(
+        new BitMap(64, new byte[BitMap.getSizeOfBytes(64)]).getImplementation()
+            instanceof BitMapArrayImpl);
     assertTrue(new BitMap(65).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(BitMap.createBitMapDynamically(0).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(BitMap.createBitMapDynamically(64).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(BitMap.createBitMapDynamically(65).getImplementation() instanceof BitMapArrayImpl);
 
-    BitMap bitMap = new BitMap(64);
+    BitMap bitMap = BitMap.createBitMapDynamically(64);
     bitMap.mark(0);
     bitMap.mark(63);
     bitMap.extend(65);
@@ -100,7 +107,7 @@ public class BitMapTest {
       (byte) 0b01111110,
       0
     };
-    BitMap bitMap = new BitMap(64, bytes);
+    BitMap bitMap = new BitMap(new BitMapLongImpl(64, bytes));
 
     assertArrayEquals(bytes, bitMap.getByteArray());
     assertEquals(bitMap, bitMap.clone());
@@ -108,9 +115,31 @@ public class BitMapTest {
   }
 
   @Test
+  public void testEqualsAcrossImplementations() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+    for (int i = 0; i < 64; i += 2) {
+      arrayBitMap.mark(i);
+      longBitMap.mark(i);
+    }
+
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(longBitMap, arrayBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+
+    longBitMap.mark(63);
+    assertNotEquals(arrayBitMap, longBitMap);
+    assertTrue(arrayBitMap.equalsInRange(longBitMap, 63));
+
+    arrayBitMap.mark(63);
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+  }
+
+  @Test
   public void testLongImplementationFullRange() {
-    BitMap rangeBitMap = new BitMap(64);
-    BitMap singleBitMap = new BitMap(64);
+    BitMap rangeBitMap = BitMap.createBitMapDynamically(64);
+    BitMap singleBitMap = BitMap.createBitMapDynamically(64);
 
     rangeBitMap.markRange(0, 64);
     for (int i = 0; i < 64; i++) {
@@ -125,7 +154,7 @@ public class BitMapTest {
 
   @Test
   public void testLongImplementationMarkAllByteCompatibility() {
-    BitMap bitMap = new BitMap(32);
+    BitMap bitMap = BitMap.createBitMapDynamically(32);
     bitMap.markAll();
 
     assertArrayEquals(

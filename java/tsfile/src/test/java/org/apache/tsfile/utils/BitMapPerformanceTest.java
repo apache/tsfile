@@ -124,10 +124,16 @@ public class BitMapPerformanceTest {
             regionWorkload(longBitMap())));
     results.add(
         benchmark(
-            "equals/equalsInRange/hashCode",
+            "equals/equalsInRange",
             ALLOCATION_OPERATION_COUNT,
-            equalityWorkload(arrayBitMap(), arrayBitMap()),
-            equalityWorkload(longBitMap(), longBitMap())));
+            equalityWorkload(BitMapPerformanceTest::arrayBitMap),
+            equalityWorkload(BitMapPerformanceTest::longBitMap)));
+    results.add(
+        benchmark(
+            "hashCode",
+            CHEAP_OPERATION_COUNT,
+            hashCodeWorkload(BitMapPerformanceTest::arrayBitMap),
+            hashCodeWorkload(BitMapPerformanceTest::longBitMap)));
     results.add(
         benchmark(
             "toString",
@@ -380,15 +386,36 @@ public class BitMapPerformanceTest {
     };
   }
 
-  private static Workload equalityWorkload(BitMap left, BitMap right) {
-    markAlternatingBits(left);
-    markAlternatingBits(right);
+  private static Workload equalityWorkload(BitMapFactory factory) {
+    BitMap[] left = new BitMap[BIT_MAP_SIZE];
+    BitMap[] right = new BitMap[BIT_MAP_SIZE];
+    for (int i = 0; i < BIT_MAP_SIZE; i++) {
+      left[i] = factory.create();
+      right[i] = factory.create();
+      left[i].mark(i);
+      right[i].mark(i);
+    }
     return operationCount -> {
       long checksum = 0;
       for (int i = 0; i < operationCount; i++) {
-        checksum += left.equals(right) ? 1 : 0;
-        checksum += left.equalsInRange(right, BIT_MAP_SIZE) ? 2 : 0;
-        checksum += left.hashCode();
+        int index = i & 63;
+        checksum += left[index].equals(right[index]) ? 1 : 0;
+        checksum += left[index].equalsInRange(right[index], BIT_MAP_SIZE) ? 2 : 0;
+      }
+      return checksum;
+    };
+  }
+
+  private static Workload hashCodeWorkload(BitMapFactory factory) {
+    BitMap[] bitMaps = new BitMap[BIT_MAP_SIZE];
+    for (int i = 0; i < bitMaps.length; i++) {
+      bitMaps[i] = factory.create();
+      bitMaps[i].mark(i);
+    }
+    return operationCount -> {
+      long checksum = 0;
+      for (int i = 0; i < operationCount; i++) {
+        checksum += bitMaps[i & 63].hashCode();
       }
       return checksum;
     };

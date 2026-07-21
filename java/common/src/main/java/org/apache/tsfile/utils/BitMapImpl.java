@@ -33,6 +33,10 @@ abstract class BitMapImpl {
 
   abstract byte[] getByteArray();
 
+  abstract int getByteArrayLength();
+
+  abstract byte getByte(int index);
+
   abstract boolean isMarked(int position);
 
   abstract void markAll();
@@ -56,6 +60,42 @@ abstract class BitMapImpl {
   abstract boolean isAllUnmarked(int rangeSize);
 
   abstract boolean isAllMarked();
+
+  boolean contentEquals(BitMapImpl other) {
+    int byteArrayLength = getByteArrayLength();
+    if (byteArrayLength != other.getByteArrayLength()) {
+      return false;
+    }
+    for (int i = 0; i < byteArrayLength; i++) {
+      if (getByte(i) != other.getByte(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  boolean contentEqualsInRange(BitMapImpl other, int rangeSize) {
+    int byteSize = rangeSize / Byte.SIZE;
+    for (int i = 0; i < byteSize; i++) {
+      if (getByte(i) != other.getByte(i)) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      return (getByte(byteSize) & mask) == (other.getByte(byteSize) & mask);
+    }
+    return true;
+  }
+
+  int contentHashCode() {
+    int result = 1;
+    for (int i = 0; i < getByteArrayLength(); i++) {
+      result = 31 * result + getByte(i);
+    }
+    return result;
+  }
 
   abstract BitMapImpl copy();
 
