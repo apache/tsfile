@@ -183,6 +183,10 @@ public class BlobType extends AbstractType {
 
   @Override
   public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    if (value == null) {
+      Arrays.fill(to.getBinaries(), startIndex, endIndex, null);
+      return;
+    }
     Binary[] values = new Binary[1];
     addValue(0, value, values);
     Arrays.fill(to.getBinaries(), startIndex, endIndex, values[0]);

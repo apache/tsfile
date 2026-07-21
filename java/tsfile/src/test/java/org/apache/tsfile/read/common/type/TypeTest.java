@@ -1109,6 +1109,20 @@ public class TypeTest {
   }
 
   @Test
+  public void testSetNullToBinaryColumnRange() {
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Binary[] values = {Binary.EMPTY_VALUE, Binary.EMPTY_VALUE};
+      Column column = Mockito.mock(Column.class);
+      Mockito.when(column.getBinaries()).thenReturn(values);
+
+      Type.fromTsDataType(dataType).setTo(null, column, 0, values.length);
+
+      Assert.assertArrayEquals(new Binary[] {null, null}, values);
+    }
+  }
+
+  @Test
   public void testDateAddValueWithIntArray() throws IOException {
     Type dateType = Type.fromTsDataType(TSDataType.DATE);
     int[] values = new int[2];
