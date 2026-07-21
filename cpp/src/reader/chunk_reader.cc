@@ -192,7 +192,7 @@ int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
             return E_NO_MORE_DATA;
         }
         if (RET_FAIL(get_cur_page_header())) {
-        } else if (cur_page_statisify_filter(filter)) {
+        } else if (cur_page_may_satisfy_filter(filter)) {
             break;
         } else if (RET_FAIL(skip_cur_page())) {
         }
@@ -265,9 +265,19 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
     return ret;
 }
 
-bool ChunkReader::cur_page_statisify_filter(Filter* filter) {
+// Page statistics provide two levels of certainty: "may satisfy" means the
+// page cannot be ruled out, while "fully satisfies" means every row is known
+// to match and the page count can safely be used for offset pushdown.
+bool ChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     return filter == nullptr || cur_page_header_.statistic_ == nullptr ||
            filter->satisfy(cur_page_header_.statistic_);
+}
+
+bool ChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
+    return filter == nullptr || (cur_page_header_.statistic_ != nullptr &&
+                                 filter->contain_start_end_time(
+                                     cur_page_header_.statistic_->start_time_,
+                                     cur_page_header_.statistic_->end_time_));
 }
 
 int ChunkReader::skip_cur_page() {
@@ -904,13 +914,14 @@ int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
             return E_NO_MORE_DATA;
         }
         if (RET_FAIL(get_cur_page_header())) {
-        } else if (!cur_page_statisify_filter(filter)) {
+        } else if (!cur_page_may_satisfy_filter(filter)) {
             if (RET_FAIL(skip_cur_page())) {
             }
         } else if (should_skip_page_by_time(min_time_hint)) {
             if (RET_FAIL(skip_cur_page())) {
             }
-        } else if (should_skip_page_by_offset(row_offset)) {
+        } else if (cur_page_fully_satisfies_filter(filter) &&
+                   should_skip_page_by_offset(row_offset)) {
             if (RET_FAIL(skip_cur_page())) {
             }
         } else {

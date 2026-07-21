@@ -333,7 +333,9 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
 int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       Filter* oneshoot_filter, PageArena& pa) {
     if (multi_value_mode_) {
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        int row_offset = 0;
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -353,7 +355,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (cur_page_statisify_filter(filter)) {
+            } else if (cur_page_may_satisfy_filter(filter)) {
                 break;
             } else if (RET_FAIL(skip_cur_page())) {
             }
@@ -467,7 +469,10 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
+// Page statistics provide two levels of certainty: "may satisfy" means the
+// page cannot be ruled out, while "fully satisfies" means every row is known
+// to match and the page count can safely be used for offset pushdown.
+bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     bool value_satisfy = filter == nullptr ||
                          cur_value_page_header_.statistic_ == nullptr ||
                          filter->satisfy(cur_value_page_header_.statistic_);
@@ -475,6 +480,16 @@ bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy && value_satisfy;
+}
+
+bool AlignedChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr) {
+        stat = cur_value_page_header_.statistic_;
+    }
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
 }
 
 int AlignedChunkReader::skip_cur_page() {
@@ -1082,17 +1097,19 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       int64_t min_time_hint, int& row_offset,
                                       int& row_limit) {
     if (multi_value_mode_) {
-        // Multi-value aligned path doesn't yet honour row_offset / row_limit
-        // / min_time_hint — they get dropped on the floor, which silently
-        // returns full chunk data when the caller asked for a sub-range.
-        // Refuse the combination so the caller sees an actual error instead
-        // of garbage results.  set_row_range(0, -1) keeps the all-rows
-        // contract intact for normal queries.
-        if (row_offset > 0 || row_limit >= 0 ||
+        if (row_limit == 0) {
+            return E_NO_MORE_DATA;
+        }
+        // The multi-value path can consume offset through chunk/page count
+        // statistics. Limit and min-time pushdown still need separate state
+        // handling, so keep those combinations explicit instead of silently
+        // returning a wider range.
+        if (row_limit >= 0 ||
             min_time_hint != std::numeric_limits<int64_t>::min()) {
             return common::E_NOT_SUPPORT;
         }
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -1118,13 +1135,14 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (!cur_page_statisify_filter(filter)) {
+            } else if (!cur_page_may_satisfy_filter(filter)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else if (should_skip_page_by_time(min_time_hint)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
-            } else if (should_skip_page_by_offset(row_offset)) {
+            } else if (cur_page_fully_satisfies_filter(filter) &&
+                       should_skip_page_by_offset(row_offset)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else {
@@ -1383,7 +1401,7 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     return ret;
 }
 
-int AlignedChunkReader::build_page_plan(Filter* filter) {
+int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     int ret = E_OK;
     chunk_pages_.clear();
     current_page_plan_index_ = 0;
@@ -1459,6 +1477,13 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
             int32_t last = -1;
             for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
                 if (filter->satisfy_start_end_time(times[i], times[i])) {
+                    // Offset is defined on the filtered row stream. Consume
+                    // matching rows only; holes inside a boundary page do not
+                    // count toward it.
+                    if (row_offset > 0) {
+                        row_offset--;
+                        continue;
+                    }
                     if (first < 0) first = i;
                     last = i;
                 }
@@ -1478,6 +1503,18 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
                     break;
                 }
                 page_info.row_end = static_cast<int32_t>(times.size());
+            }
+            if (page_info.pass_type == PagePassType::FULL_PASS &&
+                row_offset > 0) {
+                const int32_t page_row_count =
+                    page_info.row_end - page_info.row_begin;
+                const int32_t rows_to_skip =
+                    std::min(page_row_count, row_offset);
+                page_info.row_begin += rows_to_skip;
+                row_offset -= rows_to_skip;
+                if (page_info.row_begin == page_info.row_end) {
+                    page_info.pass_type = PagePassType::SKIP;
+                }
             }
             if (page_info.row_begin < page_info.row_end) {
                 chunk_pages_.push_back(std::move(page_info));
@@ -1833,34 +1870,36 @@ void AlignedChunkReader::release_page_slot(size_t page_idx) {
 
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
-                                            PageArena& pa) {
+                                            PageArena& pa, int& row_offset) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
     // Dispatch:
-    //   - Multi-column with a thread pool → chunk-level pre-decode: one task
-    //     per value column decodes that column's whole chunk up front, then the
-    //     scatter loop bulk-memcpys.  decode_all_planned_pages() works for any
-    //     column count.  (An earlier cutoff sent >6 columns down the serial
-    //     path because per_page_state — the upfront predecode buffer — grows
-    //     with column count and was feared to thrash cache; it still grows, so
-    //     very wide aligned chunks are the case to watch if reads regress.)
-    //   - Single column, or no thread pool → serial path: decode the current
-    //     page's columns inline (multi_DECODE_TV_BATCH), no thread-pool
-    //     fan-out.
+    //   - Offset pushdown always uses the page plan so fully covered pages and
+    //     the prefix of the first retained page can be removed before value
+    //     decoding, even when no worker pool is available.
+    //   - Multi-column with a thread pool also uses the page plan for
+    //     chunk-level parallel pre-decode.
+    //   - Otherwise decode the current page's columns inline.
 #ifdef ENABLE_THREADS
-    const bool use_chunk_level =
+    const bool use_parallel_page_plan =
         decode_pool_ != nullptr && value_columns_.size() > 1;
 #else
-    const bool use_chunk_level = false;
+    const bool use_parallel_page_plan = false;
 #endif
-    if (!use_chunk_level) {
-        return get_next_page_multi_serial(ret_tsblock, filter, pa);
+    const bool serial_page_in_progress =
+        !page_plan_built_ &&
+        (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi());
+    const bool use_page_plan =
+        page_plan_built_ || (!serial_page_in_progress &&
+                             (row_offset > 0 || use_parallel_page_plan));
+    if (!use_page_plan) {
+        return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
 
     if (!page_plan_built_) {
-        if (RET_FAIL(build_page_plan(filter))) {
+        if (RET_FAIL(build_page_plan(filter, row_offset))) {
             return ret;
         }
         if (RET_FAIL(decode_all_planned_pages())) {
@@ -2044,7 +2083,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
 
 int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                                                    Filter* filter,
-                                                   PageArena& pa) {
+                                                   PageArena& pa,
+                                                   int& row_offset) {
     int ret = E_OK;
     bool pt = prev_time_page_not_finish();
     bool pv = prev_any_value_page_not_finish_multi();
@@ -2069,8 +2109,14 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
-            if (cur_page_statisify_filter_multi(filter)) break;
-            if (RET_FAIL(skip_cur_page_multi())) break;
+            if (!cur_page_may_satisfy_filter_multi(filter)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else if (cur_page_fully_satisfies_filter_multi(filter) &&
+                       should_skip_page_by_offset_multi(row_offset)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else {
+                break;
+            }
             if (!has_more_data()) {
                 ret = E_NO_MORE_DATA;
                 break;
@@ -2088,11 +2134,37 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter_multi(Filter* filter) {
+// Keep the same conservative distinction as the single-value path: a page
+// that may satisfy the filter still needs row-level filtering unless its full
+// time range is covered by the filter.
+bool AlignedChunkReader::cur_page_may_satisfy_filter_multi(Filter* filter) {
     bool time_satisfy = filter == nullptr ||
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy;
+}
+
+bool AlignedChunkReader::cur_page_fully_satisfies_filter_multi(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
+}
+
+bool AlignedChunkReader::should_skip_page_by_offset_multi(int& row_offset) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr || stat->count_ == 0) {
+        return false;
+    }
+    int32_t count = stat->count_;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
 }
 
 int AlignedChunkReader::skip_cur_page_multi() {

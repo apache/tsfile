@@ -30,6 +30,21 @@ using namespace common;
 
 namespace storage {
 
+namespace {
+bool chunk_may_satisfy_filter(ChunkMeta* chunk_meta, Filter* filter) {
+    return filter == nullptr || chunk_meta == nullptr ||
+           chunk_meta->statistic_ == nullptr ||
+           filter->satisfy(chunk_meta->statistic_);
+}
+
+bool chunk_fully_satisfies_filter(ChunkMeta* chunk_meta, Filter* filter) {
+    return filter == nullptr ||
+           (chunk_meta != nullptr && chunk_meta->statistic_ != nullptr &&
+            filter->contain_start_end_time(chunk_meta->statistic_->start_time_,
+                                           chunk_meta->statistic_->end_time_));
+}
+}  // namespace
+
 void TsFileSeriesScanIterator::destroy() {
     // MultiAlignedTimeseriesIndex is placement-new'd inside
     // timeseries_index_pa_ (see TsFileIOReader::alloc_multi_ssi).  The arena's
@@ -122,6 +137,31 @@ bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
     return false;
 }
 
+bool TsFileSeriesScanIterator::should_skip_multi_aligned_chunk_by_offset(
+    ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms) {
+    if (row_offset_ <= 0) {
+        return false;
+    }
+    if (time_cm == nullptr || time_cm->statistic_ == nullptr) {
+        return false;
+    }
+    int32_t time_count = time_cm->statistic_->count_;
+    if (time_count <= 0) {
+        return false;
+    }
+    for (const auto* value_cm : value_cms) {
+        if (value_cm == nullptr || value_cm->statistic_ == nullptr ||
+            value_cm->statistic_->count_ != time_count) {
+            return false;
+        }
+    }
+    if (row_offset_ >= time_count) {
+        row_offset_ -= time_count;
+        return true;
+    }
+    return false;
+}
+
 int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                                        Filter* oneshoot_filter,
                                        int64_t min_time_hint) {
@@ -151,11 +191,15 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     }
                     advance_to_next_chunk();
                     // Skip chunk by time filter using time chunk statistics.
-                    if (filter != nullptr && time_cm->statistic_ != nullptr &&
-                        !filter->satisfy(time_cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(time_cm, filter)) {
                         continue;
                     }
                     if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
+                        continue;
+                    }
+                    if (chunk_fully_satisfies_filter(time_cm, filter) &&
+                        should_skip_multi_aligned_chunk_by_offset(time_cm,
+                                                                  value_cms)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -167,8 +211,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                 } else if (!is_aligned_) {
                     ChunkMeta* cm = get_current_chunk_meta();
                     advance_to_next_chunk();
-                    if (filter != nullptr && cm->statistic_ != nullptr &&
-                        !filter->satisfy(cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(cm, filter)) {
                         continue;
                     }
                     // Skip by min_time_hint (merge cursor).
@@ -176,7 +219,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                         continue;
                     }
                     // Single-path: skip entire chunk by offset using count.
-                    if (should_skip_chunk_by_offset(cm)) {
+                    if (chunk_fully_satisfies_filter(cm, filter) &&
+                        should_skip_chunk_by_offset(cm)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -190,14 +234,14 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     // Use time chunk statistics for time-based filtering.
                     ChunkMeta* filter_cm =
                         (time_cm->statistic_ != nullptr) ? time_cm : value_cm;
-                    if (filter != nullptr && filter_cm->statistic_ != nullptr &&
-                        !filter->satisfy(filter_cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(filter_cm, filter)) {
                         continue;
                     }
                     if (should_skip_chunk_by_time(filter_cm, min_time_hint)) {
                         continue;
                     }
-                    if (should_skip_aligned_chunk_by_offset(time_cm,
+                    if (chunk_fully_satisfies_filter(time_cm, filter) &&
+                        should_skip_aligned_chunk_by_offset(time_cm,
                                                             value_cm)) {
                         continue;
                     }

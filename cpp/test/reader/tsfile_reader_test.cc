@@ -42,6 +42,23 @@
 using namespace storage;
 using namespace common;
 
+TEST(TsFileSeriesScanIteratorTest, ConsumeRowOffsetSaturates) {
+    storage::TsFileSeriesScanIterator ssi;
+    ssi.set_row_range(/*offset=*/10, /*limit=*/-1);
+
+    ssi.consume_row_offset(-1);
+    EXPECT_EQ(ssi.get_row_offset(), 10);
+    ssi.consume_row_offset(std::numeric_limits<int>::min());
+    EXPECT_EQ(ssi.get_row_offset(), 10);
+
+    ssi.consume_row_offset(4);
+    EXPECT_EQ(ssi.get_row_offset(), 6);
+    ssi.consume_row_offset(6);
+    EXPECT_EQ(ssi.get_row_offset(), 0);
+    ssi.consume_row_offset(1);
+    EXPECT_EQ(ssi.get_row_offset(), 0);
+}
+
 class TsFileReaderTest : public ::testing::Test {
    protected:
     void SetUp() override {
@@ -463,12 +480,10 @@ TEST_F(TsFileReaderTest,
     reader.close();
 }
 
-// Multi-value aligned chunk reader doesn't honour row_offset / row_limit /
-// min_time_hint pushdown — silently dropping those args would hand the caller
-// full-chunk data when it asked for a sub-range.  The guard at the top of
-// AlignedChunkReader::get_next_page must turn the unsupported combination
-// into an explicit E_NOT_SUPPORT.
-TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetReturnsNotSupport) {
+// The multi-value page plan consumes row_offset before value decoding. When
+// the offset lands inside a page, the returned TsBlock starts at the first row
+// after the offset instead of exposing a residual to the row reader.
+TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetTrimsPartialPage) {
     const std::string device = "root.dev_multi_offset";
     std::vector<MeasurementSchema> schema_vec;
     schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
@@ -505,12 +520,21 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetReturnsNotSupport) {
               E_OK);
     ASSERT_NE(ssi, nullptr);
 
-    // row_offset > 0 hits the multi-value guard at the top of
-    // AlignedChunkReader::get_next_page; the SSI propagates the error code.
     ssi->set_row_range(/*offset=*/5, /*limit=*/-1);
     common::TsBlock* block = nullptr;
-    EXPECT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true),
-              common::E_NOT_SUPPORT);
+    EXPECT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(block->get_row_count(), static_cast<uint32_t>(N - 5));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 1005);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 5);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 10);
+    }
 
     if (block != nullptr) {
         ssi->revert_tsblock();
@@ -519,6 +543,423 @@ TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetReturnsNotSupport) {
     // RAII handles io_reader teardown — explicit reset() would destroy the
     // tsfile_meta page arena while tsfile_meta_ still holds shared_ptrs into
     // it, then ~TsFileMeta would call self_deleter on freed memory.
+}
+
+TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetSkipsWholePage) {
+    struct PagePointGuard {
+        explicit PagePointGuard(uint32_t page_points)
+            : saved_(common::g_config_value_.page_writer_max_point_num_) {
+            common::g_config_value_.page_writer_max_point_num_ = page_points;
+        }
+        ~PagePointGuard() {
+            common::g_config_value_.page_writer_max_point_num_ = saved_;
+        }
+        uint32_t saved_;
+    } page_point_guard(16);
+
+    const std::string device = "root.dev_multi_page_offset";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg),
+                  E_OK);
+    }
+
+    const int rows_per_page = 16;
+    const int N = rows_per_page * 4;
+    Tablet tablet(device,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  N);
+    for (int i = 0; i < N; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 2)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    std::vector<std::string> measurements = {"v0", "v1"};
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, measurements, ssi, pa,
+                                        /*time_filter=*/nullptr),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    // The first chunk is preloaded before set_row_range(). The page plan skips
+    // page 0 and trims the first four rows from page 1 before value decoding.
+    ssi->set_row_range(/*offset=*/20, /*limit=*/-1);
+    common::TsBlock* block = nullptr;
+    ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
+    ASSERT_NE(block, nullptr);
+    ASSERT_EQ(block->get_row_count(), static_cast<uint32_t>(N - 20));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 20);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 20);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 40);
+    }
+
+    ssi->revert_tsblock();
+    io_reader.revert_ssi(ssi);
+}
+
+TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetSkipsWholeChunk) {
+    const std::string device = "root.dev_multi_chunk_offset";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg),
+                  E_OK);
+    }
+
+    const int rows_per_chunk = 64;
+    const int chunk_count = 4;
+    for (int chunk = 0; chunk < chunk_count; ++chunk) {
+        Tablet tablet(
+            device,
+            std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+            rows_per_chunk);
+        const int base = chunk * rows_per_chunk;
+        for (int i = 0; i < rows_per_chunk; ++i) {
+            const int row = base + i;
+            ASSERT_EQ(tablet.add_timestamp(i, static_cast<int64_t>(row)), E_OK);
+            ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(row)), E_OK);
+            ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(row * 2)),
+                      E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    std::vector<std::string> measurements = {"v0", "v1"};
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, measurements, ssi, pa,
+                                        /*time_filter=*/nullptr),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    // alloc_multi_ssi() preloads chunk 0 before row range is set. Read it
+    // normally first, then set an offset that skips the next whole chunk by
+    // chunk metadata count and trims the first 32 rows from chunk 2's plan.
+    common::TsBlock* block = nullptr;
+    ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
+    ASSERT_NE(block, nullptr);
+    ASSERT_EQ(block->get_row_count(), static_cast<uint32_t>(rows_per_chunk));
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 0);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 0);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 0);
+    }
+    ssi->revert_tsblock();
+
+    ssi->set_row_range(/*offset=*/96, /*limit=*/-1);
+    block = nullptr;
+    ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), common::E_OK);
+    ASSERT_NE(block, nullptr);
+    ASSERT_EQ(block->get_row_count(),
+              static_cast<uint32_t>(rows_per_chunk / 2));
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), 160);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)), 160);
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)), 320);
+    }
+
+    ssi->revert_tsblock();
+    io_reader.revert_ssi(ssi);
+}
+
+// Offset is defined over the rows left after filtering. A partially matching
+// chunk therefore cannot consume its full time-row count from the offset.
+TEST_F(TsFileReaderTest, MultiValueAlignedRowOffsetCountsOnlyFilteredRows) {
+    const std::string device = "root.dev_multi_filtered_offset";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg),
+                  E_OK);
+    }
+
+    const int rows_per_chunk = 64;
+    const int chunk_count = 4;
+    for (int chunk = 0; chunk < chunk_count; ++chunk) {
+        Tablet tablet(
+            device,
+            std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+            rows_per_chunk);
+        const int base = chunk * rows_per_chunk;
+        for (int i = 0; i < rows_per_chunk; ++i) {
+            const int row = base + i;
+            ASSERT_EQ(tablet.add_timestamp(i, static_cast<int64_t>(row)), E_OK);
+            ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(row)), E_OK);
+            ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(row * 2)),
+                      E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    std::vector<std::string> measurements = {"v0", "v1"};
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+
+    // Keep all 64 rows from chunk 0, only 10 rows from chunk 1, and all 128
+    // rows from chunks 2 and 3. The filtered stream has 202 rows, so offset
+    // 200 must leave only timestamps 254 and 255.
+    std::vector<int64_t> selected_times;
+    for (int64_t t = 0; t < 64; ++t) selected_times.push_back(t);
+    for (int64_t t = 64; t < 74; ++t) selected_times.push_back(t);
+    for (int64_t t = 128; t < 256; ++t) selected_times.push_back(t);
+    storage::TimeIn time_filter(selected_times, /*not_in=*/false);
+
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, measurements, ssi, pa,
+                                        &time_filter),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+    ssi->set_row_range(/*offset=*/200, /*limit=*/-1);
+
+    std::vector<int64_t> actual_times;
+    while (true) {
+        common::TsBlock* block = nullptr;
+        int ret = ssi->get_next(block, /*alloc_tsblock=*/true, &time_filter);
+        if (ret == common::E_NO_MORE_DATA) break;
+        ASSERT_EQ(ret, common::E_OK);
+        ASSERT_NE(block, nullptr);
+
+        const uint32_t rows = block->get_row_count();
+        const int remaining_offset = ssi->get_row_offset();
+        const uint32_t rows_to_skip = std::min(
+            rows, static_cast<uint32_t>(std::max(remaining_offset, 0)));
+        {
+            common::ColIterator time_iter(0, block);
+            for (uint32_t row = 0; row < rows; ++row) {
+                uint32_t len = 0;
+                int64_t time =
+                    *reinterpret_cast<int64_t*>(time_iter.read(&len));
+                if (row >= rows_to_skip) actual_times.push_back(time);
+                time_iter.next();
+            }
+        }
+        ssi->set_row_range(remaining_offset - static_cast<int>(rows_to_skip),
+                           /*limit=*/-1);
+        ssi->revert_tsblock();
+    }
+
+    ASSERT_EQ(actual_times.size(), 2u);
+    EXPECT_EQ(actual_times[0], 254);
+    EXPECT_EQ(actual_times[1], 255);
+
+    io_reader.revert_ssi(ssi);
+}
+
+// A boundary page may contain holes between matching timestamps. Offset must
+// consume only matching rows and keep every value column aligned with the
+// first retained match.
+TEST_F(TsFileReaderTest, MultiValueAlignedPagePlanOffsetSkipsBoundaryMatches) {
+    const std::string device = "root.dev_multi_boundary_offset";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, reg),
+                  E_OK);
+    }
+
+    constexpr int kRowCount = 16;
+    Tablet tablet(device,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  kRowCount);
+    for (int i = 0; i < kRowCount; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 10)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    std::vector<std::string> measurements = {"v0", "v1"};
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    const std::vector<int64_t> selected_times = {1, 3, 5, 7, 9};
+    storage::TimeIn time_filter(selected_times, /*not_in=*/false);
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, measurements, ssi, pa,
+                                        &time_filter),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    ssi->set_row_range(/*offset=*/2, /*limit=*/-1);
+    common::TsBlock* block = nullptr;
+    ASSERT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true, &time_filter), E_OK);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(ssi->get_row_offset(), 0);
+    ASSERT_EQ(block->get_row_count(), 3u);
+
+    const std::vector<int64_t> expected_times = {5, 7, 9};
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        for (int64_t expected : expected_times) {
+            uint32_t len = 0;
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)),
+                      expected);
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(v0_iter.read(&len)),
+                      expected);
+            EXPECT_EQ(*reinterpret_cast<int64_t*>(v1_iter.read(&len)),
+                      expected * 10);
+            time_iter.next();
+            v0_iter.next();
+            v1_iter.next();
+        }
+    }
+
+    ssi->revert_tsblock();
+    io_reader.revert_ssi(ssi);
+}
+
+// The single-value SSI paths must apply offset to the filtered stream too.
+// Cover both a non-aligned series (ChunkReader) and a single-value aligned
+// series (AlignedChunkReader), including their chunk- and page-level skips.
+TEST_F(TsFileReaderTest, SingleValueRowOffsetCountsOnlyFilteredRows) {
+    const std::string non_aligned_device = "root.dev_filtered_offset";
+    const std::string aligned_device = "root.dev_aligned_filtered_offset";
+    MeasurementSchema schema("v0", INT64, PLAIN, UNCOMPRESSED);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(non_aligned_device, schema),
+              E_OK);
+    ASSERT_EQ(
+        tsfile_writer_->register_aligned_timeseries(aligned_device, schema),
+        E_OK);
+
+    const int rows_per_chunk = 64;
+    const int chunk_count = 4;
+    auto schemas = std::make_shared<std::vector<MeasurementSchema>>(1, schema);
+    for (int chunk = 0; chunk < chunk_count; ++chunk) {
+        const int base = chunk * rows_per_chunk;
+        Tablet non_aligned_tablet(non_aligned_device, schemas, rows_per_chunk);
+        Tablet aligned_tablet(aligned_device, schemas, rows_per_chunk);
+        for (int i = 0; i < rows_per_chunk; ++i) {
+            const int row = base + i;
+            ASSERT_EQ(non_aligned_tablet.add_timestamp(i, row), E_OK);
+            ASSERT_EQ(
+                non_aligned_tablet.add_value(i, 0u, static_cast<int64_t>(row)),
+                E_OK);
+            ASSERT_EQ(aligned_tablet.add_timestamp(i, row), E_OK);
+            ASSERT_EQ(
+                aligned_tablet.add_value(i, 0u, static_cast<int64_t>(row)),
+                E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet(non_aligned_tablet), E_OK);
+        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(aligned_tablet), E_OK);
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<int64_t> selected_times;
+    for (int64_t t = 0; t < 64; ++t) selected_times.push_back(t);
+    for (int64_t t = 64; t < 74; ++t) selected_times.push_back(t);
+    for (int64_t t = 128; t < 256; ++t) selected_times.push_back(t);
+    storage::TimeIn time_filter(selected_times, /*not_in=*/false);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    for (const std::string& device : {non_aligned_device, aligned_device}) {
+        SCOPED_TRACE(device);
+        auto device_id = std::make_shared<StringArrayDeviceID>(device);
+        storage::TsFileSeriesScanIterator* ssi = nullptr;
+        common::PageArena pa;
+        pa.init(512, common::MOD_TSFILE_READER);
+        ASSERT_EQ(io_reader.alloc_ssi(device_id, "v0", ssi, pa, &time_filter),
+                  E_OK);
+        ASSERT_NE(ssi, nullptr);
+        ssi->set_row_range(/*offset=*/200, /*limit=*/-1);
+
+        std::vector<int64_t> actual_times;
+        while (true) {
+            common::TsBlock* block = nullptr;
+            int ret =
+                ssi->get_next(block, /*alloc_tsblock=*/true, &time_filter);
+            if (ret == common::E_NO_MORE_DATA) break;
+            ASSERT_EQ(ret, common::E_OK);
+            ASSERT_NE(block, nullptr);
+
+            const uint32_t rows = block->get_row_count();
+            const int remaining_offset = ssi->get_row_offset();
+            const uint32_t rows_to_skip = std::min(
+                rows, static_cast<uint32_t>(std::max(remaining_offset, 0)));
+            {
+                common::ColIterator time_iter(0, block);
+                for (uint32_t row = 0; row < rows; ++row) {
+                    uint32_t len = 0;
+                    int64_t time =
+                        *reinterpret_cast<int64_t*>(time_iter.read(&len));
+                    if (row >= rows_to_skip) actual_times.push_back(time);
+                    time_iter.next();
+                }
+            }
+            ssi->set_row_range(
+                remaining_offset - static_cast<int>(rows_to_skip),
+                /*limit=*/-1);
+            ssi->revert_tsblock();
+        }
+
+        EXPECT_EQ(actual_times.size(), 2u);
+        if (actual_times.size() == 2u) {
+            EXPECT_EQ(actual_times[0], 254);
+            EXPECT_EQ(actual_times[1], 255);
+        }
+        io_reader.revert_ssi(ssi);
+    }
 }
 
 namespace storage {
