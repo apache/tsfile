@@ -332,6 +332,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    builder.writeFloat(value.getFloat());
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeFloat(value);
   }

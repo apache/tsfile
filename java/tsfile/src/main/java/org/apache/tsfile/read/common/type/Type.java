@@ -155,6 +155,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Writes a TsPrimitiveType value to the current entry. */
+  default void write(ColumnBuilder builder, TsPrimitiveType value) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Write a boolean to the current entry; */
   default void writeBoolean(ColumnBuilder builder, boolean value) {
     throw new UnsupportedOperationException(getClass().getName());

@@ -303,6 +303,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    builder.writeBinary(value.getBinary());
+  }
+
+  @Override
   public void writeBinary(ColumnBuilder builder, Binary value) {
     builder.writeBinary(value);
   }

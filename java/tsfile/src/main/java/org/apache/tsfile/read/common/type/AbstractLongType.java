@@ -324,6 +324,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    builder.writeLong(value.getLong());
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeLong(value);
   }

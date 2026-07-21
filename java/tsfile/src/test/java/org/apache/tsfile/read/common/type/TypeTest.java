@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
@@ -60,6 +61,51 @@ public class TypeTest {
 
   private static final int OFFSET = 2;
   private static final int VALUE_LENGTH = 10;
+
+  @Test
+  public void testWriteTsPrimitiveTypeToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260721, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(builder, (TsPrimitiveType) testCase[1]);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260721);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.reset(builder);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType binaryValue = new TsPrimitiveType.TsBinary(binary);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(builder, binaryValue);
+      Mockito.verify(builder).writeBinary(binary);
+      Mockito.reset(builder);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, new TsPrimitiveType.TsLong(1L));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
 
   @Test
   public void testGetValueAsTsPrimitiveType() {

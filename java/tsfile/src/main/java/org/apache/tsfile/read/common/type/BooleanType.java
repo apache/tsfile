@@ -308,6 +308,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    builder.writeBoolean(value.getBoolean());
+  }
+
+  @Override
   public void writeBoolean(ColumnBuilder builder, boolean value) {
     builder.writeBoolean(value);
   }

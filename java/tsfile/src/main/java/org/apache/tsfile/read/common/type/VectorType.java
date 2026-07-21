@@ -84,6 +84,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  @Override
   public Object arrayCopyOf(Object array, int newLength) {
     return Arrays.copyOf((long[]) array, newLength);
   }
