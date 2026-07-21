@@ -26,6 +26,8 @@ class BitMapLongImpl extends BitMapImpl {
   private static final long ALL_BITS_MARKED = -1L;
 
   private long bits;
+  // BitMap serialization always has one extra byte, which does not fit in bits at size 64.
+  private byte paddingByte;
 
   BitMapLongImpl(int size) {
     super(size);
@@ -37,6 +39,9 @@ class BitMapLongImpl extends BitMapImpl {
     for (int i = 0; i < byteCount; i++) {
       bits |= (bytes[i] & 0xFFL) << (i * Byte.SIZE);
     }
+    if (getByteArrayLength() > Long.BYTES && bytes.length > Long.BYTES) {
+      paddingByte = bytes[Long.BYTES];
+    }
   }
 
   @Override
@@ -45,6 +50,9 @@ class BitMapLongImpl extends BitMapImpl {
     int byteCount = Math.min(bytes.length, Long.BYTES);
     for (int i = 0; i < byteCount; i++) {
       bytes[i] = (byte) (bits >>> (i * Byte.SIZE));
+    }
+    if (bytes.length > Long.BYTES) {
+      bytes[Long.BYTES] = paddingByte;
     }
     return bytes;
   }
@@ -56,7 +64,7 @@ class BitMapLongImpl extends BitMapImpl {
 
   @Override
   byte getByte(int index) {
-    return index < Long.BYTES ? (byte) (bits >>> (index * Byte.SIZE)) : 0;
+    return index < Long.BYTES ? (byte) (bits >>> (index * Byte.SIZE)) : paddingByte;
   }
 
   @Override
@@ -67,6 +75,9 @@ class BitMapLongImpl extends BitMapImpl {
   @Override
   void markAll() {
     bits = ALL_BITS_MARKED;
+    if (getByteArrayLength() > Long.BYTES) {
+      paddingByte = (byte) 0xFF;
+    }
   }
 
   @Override
@@ -86,6 +97,7 @@ class BitMapLongImpl extends BitMapImpl {
   @Override
   void reset() {
     bits = 0L;
+    paddingByte = 0;
   }
 
   @Override
@@ -141,7 +153,9 @@ class BitMapLongImpl extends BitMapImpl {
     }
     int serializedBitSize = Math.min(getByteArrayLength() * Byte.SIZE, Long.SIZE);
     long mask = lowerBitsMask(serializedBitSize);
-    return (bits & mask) == (((BitMapLongImpl) other).bits & mask);
+    BitMapLongImpl otherLongImpl = (BitMapLongImpl) other;
+    return (bits & mask) == (otherLongImpl.bits & mask)
+        && (getByteArrayLength() <= Long.BYTES || paddingByte == otherLongImpl.paddingByte);
   }
 
   @Override
@@ -164,7 +178,7 @@ class BitMapLongImpl extends BitMapImpl {
       value >>>= Byte.SIZE;
     }
     for (int i = Long.BYTES; i < byteArrayLength; i++) {
-      result *= 31;
+      result = 31 * result + paddingByte;
     }
     return result;
   }
@@ -173,6 +187,7 @@ class BitMapLongImpl extends BitMapImpl {
   BitMapImpl copy() {
     BitMapLongImpl copy = new BitMapLongImpl(size);
     copy.bits = bits;
+    copy.paddingByte = paddingByte;
     return copy;
   }
 
@@ -202,6 +217,7 @@ class BitMapLongImpl extends BitMapImpl {
     for (int i = 0; i < Long.BYTES; i++) {
       bytes[i] = (byte) (bits >>> (i * Byte.SIZE));
     }
+    bytes[Long.BYTES] = paddingByte;
     return bytes;
   }
 

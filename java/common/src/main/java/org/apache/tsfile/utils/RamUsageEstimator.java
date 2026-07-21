@@ -707,7 +707,7 @@ public final class RamUsageEstimator {
     if (bitMap == null) {
       return 0L;
     }
-    return shallowSizeOfInstance(BitMap.class) + bitMap.getRetainedSizeInBytes();
+    return bitMap.ramBytesUsed();
   }
 
   public static long sizeOf(final LocalDate[] input) {

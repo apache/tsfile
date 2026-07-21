@@ -23,7 +23,7 @@ import org.apache.tsfile.i18n.Messages;
 
 import java.util.Arrays;
 
-public class BitMap {
+public class BitMap implements Accountable {
 
   private BitMapImpl implementation;
 
@@ -220,8 +220,9 @@ public class BitMap {
     implementation = implementation.extend(newSize);
   }
 
-  long getRetainedSizeInBytes() {
-    return implementation.getRetainedSizeInBytes();
+  @Override
+  public long ramBytesUsed() {
+    return RamUsageEstimator.BIT_MAP_SIZE + implementation.getRetainedSizeInBytes();
   }
 
   BitMapImpl getImplementation() {

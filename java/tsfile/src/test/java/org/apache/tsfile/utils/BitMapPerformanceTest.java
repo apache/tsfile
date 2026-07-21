@@ -473,9 +473,8 @@ public class BitMapPerformanceTest {
   private static void printMemoryUsage() {
     BitMap arrayBitMap = arrayBitMap();
     BitMap longBitMap = longBitMap();
-    long wrapperBytes = RamUsageEstimator.shallowSizeOfInstance(BitMap.class);
-    long arrayBytes = wrapperBytes + arrayBitMap.getRetainedSizeInBytes();
-    long longBytes = wrapperBytes + longBitMap.getRetainedSizeInBytes();
+    long arrayBytes = arrayBitMap.ramBytesUsed();
+    long longBytes = longBitMap.ramBytesUsed();
     assertTrue(longBytes < arrayBytes);
 
     long arrayContainerBytes =

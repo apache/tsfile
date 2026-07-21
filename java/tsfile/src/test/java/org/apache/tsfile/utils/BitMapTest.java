@@ -168,6 +168,36 @@ public class BitMapTest {
   }
 
   @Test
+  public void testLongImplementationMarkAllAt64Bits() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+
+    arrayBitMap.markAll();
+    longBitMap.markAll();
+
+    assertArrayEquals(arrayBitMap.getByteArray(), longBitMap.getByteArray());
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+    assertEquals(arrayBitMap, longBitMap.clone());
+  }
+
+  @Test
+  public void testRamBytesUsed() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+
+    assertEquals(
+        RamUsageEstimator.BIT_MAP_SIZE + arrayBitMap.getImplementation().getRetainedSizeInBytes(),
+        arrayBitMap.ramBytesUsed());
+    assertEquals(
+        RamUsageEstimator.BIT_MAP_SIZE + longBitMap.getImplementation().getRetainedSizeInBytes(),
+        longBitMap.ramBytesUsed());
+    assertEquals(arrayBitMap.ramBytesUsed(), RamUsageEstimator.sizeOfObject(arrayBitMap));
+    assertEquals(longBitMap.ramBytesUsed(), RamUsageEstimator.sizeOfObject(longBitMap));
+    assertTrue(longBitMap.ramBytesUsed() < arrayBitMap.ramBytesUsed());
+  }
+
+  @Test
   public void testIsAllUnmarkedInRange() {
     BitMap bitMap = new BitMap(16);
     assertTrue(bitMap.isAllUnmarked(6));
