@@ -24,6 +24,13 @@ import org.apache.tsfile.i18n.Messages;
 class BitMapLongImpl extends BitMapImpl {
 
   private static final long ALL_BITS_MARKED = -1L;
+  // Object header + BitMapImpl.size (int) + bits (long) + paddingByte (byte).
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.alignObjectSize(
+          (long) RamUsageEstimator.NUM_BYTES_OBJECT_HEADER
+              + Integer.BYTES
+              + Long.BYTES
+              + Byte.BYTES);
 
   private long bits;
   // BitMap serialization always has one extra byte, which does not fit in bits at size 64.
@@ -205,7 +212,7 @@ class BitMapLongImpl extends BitMapImpl {
 
   @Override
   long getRetainedSizeInBytes() {
-    return RamUsageEstimator.shallowSizeOfInstance(BitMapLongImpl.class);
+    return INSTANCE_SIZE;
   }
 
   static long lowerBitsMask(int length) {

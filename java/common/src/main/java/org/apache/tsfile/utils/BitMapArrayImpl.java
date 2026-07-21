@@ -25,6 +25,12 @@ import java.util.Arrays;
 
 class BitMapArrayImpl extends BitMapImpl {
 
+  // Object header + BitMapImpl.size (int) + BitMapArrayImpl.bits (reference).
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.alignObjectSize(
+          (long) RamUsageEstimator.NUM_BYTES_OBJECT_HEADER
+              + Integer.BYTES
+              + RamUsageEstimator.NUM_BYTES_OBJECT_REF);
   private static final byte[] BIT_UTIL = new byte[] {1, 2, 4, 8, 16, 32, 64, -128};
   private static final byte[] UNMARK_BIT_UTIL =
       new byte[] {
@@ -278,8 +284,8 @@ class BitMapArrayImpl extends BitMapImpl {
 
   @Override
   long getRetainedSizeInBytes() {
-    return RamUsageEstimator.shallowSizeOfInstance(BitMapArrayImpl.class)
-        + RamUsageEstimator.alignObjectSize(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + bits.length);
+    // The byte array size includes its header, content, and object alignment.
+    return INSTANCE_SIZE + RamUsageEstimator.sizeOfByteArray(bits.length);
   }
 
   private void checkRange(int startPosition, int length) {

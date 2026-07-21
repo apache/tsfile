@@ -123,7 +123,6 @@ public final class RamUsageEstimator {
 
     LOCAL_DATE_ARRAY_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate[].class);
     LOCAL_DATE_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate.class);
-    BIT_MAP_SIZE = RamUsageEstimator.shallowSizeOfInstance(BitMap.class);
     SIZE_OF_ARRAYLIST = RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
   }
 
@@ -197,6 +196,8 @@ public final class RamUsageEstimator {
     }
 
     ALIGN_MASK = NUM_BYTES_OBJECT_ALIGNMENT - 1;
+    // Object header + BitMap.implementation (reference).
+    BIT_MAP_SIZE = alignObjectSize((long) NUM_BYTES_OBJECT_HEADER + NUM_BYTES_OBJECT_REF);
 
     // get min/max value of cached Long class instances:
     long longCacheMinValue = 0;
