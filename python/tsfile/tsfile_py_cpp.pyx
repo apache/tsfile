@@ -767,7 +767,7 @@ cdef void free_c_row_record(TsRecord record):
 # Reader and writer new.
 cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except NULL:
     cdef ErrorCode errno = 0
-    cdef TsFileWriter writer
+    cdef TsFileWriter writer = NULL
     cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
     cdef const char * c_path = encoded_path
     writer = _tsfile_writer_new(c_path, memory_threshold, &errno)
@@ -776,7 +776,7 @@ cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold
 
 cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     cdef ErrorCode errno = 0
-    cdef TsFileReader reader
+    cdef TsFileReader reader = NULL
     cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
     cdef const char * c_path = encoded_path
     reader = tsfile_reader_new(c_path, &errno)
