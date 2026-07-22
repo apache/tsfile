@@ -94,28 +94,32 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       outputStream.writeDouble(batchData.getDoubleByIndex(index));
     }
+    return Math.multiplyExact(Long.BYTES + Double.BYTES, batchData.length());
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeDouble(value.getDouble());
+    return Double.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
+  public int serializeValue(Object value, ByteBuffer buffer) {
     buffer.putDouble((double) value);
+    return Double.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
     stream.writeDouble((double) value);
+    return Double.BYTES;
   }
 
   @Override

@@ -160,38 +160,45 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
+    int size = 0;
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       TsPrimitiveType[] values = batchData.getVectorByIndex(index);
       outputStream.writeInt(values.length);
+      size = Math.addExact(size, Long.BYTES + Integer.BYTES);
       for (TsPrimitiveType value : values) {
+        size = Math.addExact(size, Byte.BYTES);
         if (value == null) {
           outputStream.write(0);
           continue;
         }
         outputStream.write(1);
         outputStream.write(value.getDataType().serialize());
-        Type.fromTsDataType(value.getDataType()).serialize(value, outputStream);
+        size = Math.addExact(size, Byte.BYTES);
+        size =
+            Math.addExact(
+                size, Type.fromTsDataType(value.getDataType()).serialize(value, outputStream));
       }
     }
+    return size;
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
+  public int serializeValue(Object value, ByteBuffer buffer) {
     throw new UnsupportedOperationException(getDisplayName());
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) {
+  public int serializeValue(Object value, DataOutputStream stream) {
     throw new UnsupportedOperationException(getDisplayName());
   }
 

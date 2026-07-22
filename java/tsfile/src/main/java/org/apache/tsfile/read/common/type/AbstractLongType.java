@@ -90,28 +90,32 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       outputStream.writeLong(batchData.getLongByIndex(index));
     }
+    return Math.multiplyExact(Long.BYTES + Long.BYTES, batchData.length());
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeLong(value.getLong());
+    return Long.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
+  public int serializeValue(Object value, ByteBuffer buffer) {
     buffer.putLong((long) value);
+    return Long.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
     stream.writeLong((long) value);
+    return Long.BYTES;
   }
 
   @Override

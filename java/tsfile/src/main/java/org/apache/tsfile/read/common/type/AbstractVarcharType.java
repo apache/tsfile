@@ -82,32 +82,37 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
+    int size = 0;
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       Binary binary = batchData.getBinaryByIndex(index);
       outputStream.writeInt(binary.getLength());
       outputStream.write(binary.getValues());
+      size = Math.addExact(size, Long.BYTES + Integer.BYTES);
+      size = Math.addExact(size, binary.getLength());
     }
+    return size;
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     Binary binary = value.getBinary();
     stream.writeInt(binary.getLength());
     stream.write(binary.getValues());
+    return Math.addExact(Integer.BYTES, binary.getLength());
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
-    ReadWriteIOUtils.write((Binary) value, buffer);
+  public int serializeValue(Object value, ByteBuffer buffer) {
+    return ReadWriteIOUtils.write((Binary) value, buffer);
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
-    ReadWriteIOUtils.write((Binary) value, stream);
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
+    return ReadWriteIOUtils.write((Binary) value, stream);
   }
 
   @Override

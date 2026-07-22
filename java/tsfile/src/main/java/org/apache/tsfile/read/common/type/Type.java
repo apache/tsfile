@@ -132,26 +132,26 @@ public interface Type {
     throw new UnSupportedDataTypeException(String.valueOf(batchData.getDataType()));
   }
 
-  /** Serializes all timestamp-value pairs in {@code batchData}. */
-  default void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  /** Serializes all timestamp-value pairs in {@code batchData} and returns the serialized size. */
+  default int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", batchData.getDataType()));
   }
 
-  /** Serializes {@code value} to {@code stream}. */
-  default void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  /** Serializes {@code value} to {@code stream} and returns the serialized size. */
+  default int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
   }
 
-  /** Serializes {@code value} to {@code buffer}. */
-  default void serializeValue(Object value, ByteBuffer buffer) {
+  /** Serializes {@code value} to {@code buffer} and returns the serialized size. */
+  default int serializeValue(Object value, ByteBuffer buffer) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  /** Serializes {@code value} to {@code stream}. */
-  default void serializeValue(Object value, DataOutputStream stream) throws IOException {
+  /** Serializes {@code value} to {@code stream} and returns the serialized size. */
+  default int serializeValue(Object value, DataOutputStream stream) throws IOException {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

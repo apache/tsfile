@@ -89,28 +89,32 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       outputStream.writeBoolean(batchData.getBooleanByIndex(index));
     }
+    return Math.multiplyExact(Long.BYTES + Byte.BYTES, batchData.length());
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeBoolean(value.getBoolean());
+    return Byte.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
+  public int serializeValue(Object value, ByteBuffer buffer) {
     buffer.put((boolean) value ? (byte) 1 : (byte) 0);
+    return Byte.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
     stream.writeBoolean((boolean) value);
+    return Byte.BYTES;
   }
 
   @Override

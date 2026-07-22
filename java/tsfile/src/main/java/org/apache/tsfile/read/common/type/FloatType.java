@@ -93,28 +93,32 @@ public class FloatType extends AbstractType {
   }
 
   @Override
-  public void serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
       throws IOException {
     for (int i = 0; i < batchData.length(); i++) {
       int index = isDesc ? batchData.length() - 1 - i : i;
       outputStream.writeLong(batchData.getTimeByIndex(index));
       outputStream.writeFloat(batchData.getFloatByIndex(index));
     }
+    return Math.multiplyExact(Long.BYTES + Float.BYTES, batchData.length());
   }
 
   @Override
-  public void serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeFloat(value.getFloat());
+    return Float.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, ByteBuffer buffer) {
+  public int serializeValue(Object value, ByteBuffer buffer) {
     buffer.putFloat((float) value);
+    return Float.BYTES;
   }
 
   @Override
-  public void serializeValue(Object value, DataOutputStream stream) throws IOException {
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
     stream.writeFloat((float) value);
+    return Float.BYTES;
   }
 
   @Override

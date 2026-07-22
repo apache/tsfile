@@ -249,15 +249,19 @@ public class TypeTest {
       Type type = Type.fromTsDataType((TSDataType) testCase[0]);
       Object value = testCase[1];
       ByteBuffer buffer = ByteBuffer.allocate(64);
-      type.serializeValue(value, buffer);
+      int bufferSerializedSize = type.serializeValue(value, buffer);
+      Assert.assertEquals(buffer.position(), bufferSerializedSize);
 
       ByteArrayOutputStream output = new ByteArrayOutputStream();
-      type.serialize(type.getTsPrimitiveType(value), new DataOutputStream(output));
+      int serializedSize =
+          type.serialize(type.getTsPrimitiveType(value), new DataOutputStream(output));
       byte[] expected = output.toByteArray();
+      Assert.assertEquals(expected.length, serializedSize);
       Assert.assertArrayEquals(expected, Arrays.copyOf(buffer.array(), buffer.position()));
 
       output.reset();
-      type.serializeValue(value, new DataOutputStream(output));
+      int streamSerializedSize = type.serializeValue(value, new DataOutputStream(output));
+      Assert.assertEquals(output.size(), streamSerializedSize);
       Assert.assertArrayEquals(expected, output.toByteArray());
     }
 
@@ -275,6 +279,43 @@ public class TypeTest {
         Assert.fail("Expected UnsupportedOperationException");
       } catch (UnsupportedOperationException ignored) {
         // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testSerializeBatchDataReturnsSerializedSize() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260722},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary},
+      {
+        TSDataType.VECTOR,
+        new TsPrimitiveType[] {
+          null, new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsBinary(binary)
+        }
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      BatchData batchData = new BatchData((TSDataType) testCase[0]);
+      batchData.putAnObject(1L, testCase[1]);
+      batchData.putAnObject(2L, testCase[1]);
+
+      for (boolean isDesc : new boolean[] {false, true}) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        int serializedSize = type.serialize(batchData, new DataOutputStream(output), isDesc);
+        Assert.assertEquals(output.size(), serializedSize);
       }
     }
   }
