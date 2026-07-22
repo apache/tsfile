@@ -33,6 +33,7 @@ cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
     def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024):
+        self.writer = NULL
         self.writer = tsfile_writer_new_c(pathname, memory_threshold)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
@@ -185,7 +186,10 @@ cdef class TsFileWriterPy:
         check_error(errno)
 
     def __dealloc__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self

@@ -25,7 +25,6 @@ from tsfile.exceptions import (
     FileOpenError,
     InvalidArgumentError,
     InvalidPathError,
-    InvalidQueryError,
     LibraryError,
     TsFileCorruptedError,
     get_exception,
@@ -50,6 +49,7 @@ def test_get_exception_preserves_known_and_unknown_codes():
         39,
         41,
         42,
+        46,
         47,
     }
     assert retired_codes.isdisjoint(error.value for error in ErrorCode)
@@ -62,12 +62,6 @@ def test_get_exception_preserves_known_and_unknown_codes():
     invalid_path = get_exception(37)
     assert isinstance(invalid_path, InvalidPathError)
     assert invalid_path.code == ErrorCode.INVALID_PATH
-
-    # InvalidQueryError was public before ErrorCode was introduced. Keep the
-    # mapping for compatibility without advertising 46 as an active code.
-    invalid_query = get_exception(46)
-    assert isinstance(invalid_query, InvalidQueryError)
-    assert invalid_query.code == 46
 
 
 def test_invalid_tree_path_propagates_native_error(tmp_path):

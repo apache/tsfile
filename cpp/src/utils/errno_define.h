@@ -74,7 +74,6 @@ const int E_COND_ERR = 19;
 const int E_JSON_INVALID = 39;
 const int E_PARSER_ERR = 41;
 const int E_ANALYZE_ERR = 42;
-const int E_INVALID_QUERY = 46;
 const int E_SDK_QUERY_OPTIMIZE_ERR = 47;
 
 }  // end namespace common

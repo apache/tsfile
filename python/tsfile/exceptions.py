@@ -192,13 +192,6 @@ class MeasurementNotExistError(LibraryError):
     _default_code = 45
 
 
-class InvalidQueryError(LibraryError):
-    """Compatibility exception for the legacy query error code."""
-
-    _default_message = "Malformed query syntax"
-    _default_code = 46
-
-
 class CompressionError(LibraryError):
     _default_message = "Data compression/decompression failed"
     _default_code = 48
@@ -271,7 +264,6 @@ ERROR_MAPPING = {
     40: NotSupportedError,
     44: DeviceNotExistError,
     45: MeasurementNotExistError,
-    46: InvalidQueryError,
     48: CompressionError,
     49: TableNotExistError,
     50: ColumnNotExistError,

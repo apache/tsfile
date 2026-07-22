@@ -77,7 +77,6 @@
 #define RET_JSON_INVALID 39
 #define RET_PARSER_ERR 41
 #define RET_ANALYZE_ERR 42
-#define RET_INVALID_QUERY 46
 #define RET_SDK_QUERY_OPTIMIZE_ERR 47
 
 /* Backward-compatible aliases for identifiers published with misspellings. */

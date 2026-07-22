@@ -57,13 +57,12 @@ TEST_F(CReleaseTest, PublishedErrorCodesRemainSourceCompatible) {
         RET_JSON_INVALID,
         RET_PARSER_ERR,
         RET_ANALYZRET_ERR,
-        RET_INVALID_QUERY,
         RET_SDK_QUERY_OPTIMIZRET_ERR,
     };
-    const int expected_codes[] = {9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
-                                  19, 23, 25, 37, 39, 41, 42, 46, 47};
+    const int expected_codes[] = {9,  10, 11, 12, 13, 14, 15, 16, 17,
+                                  18, 19, 23, 25, 37, 39, 41, 42, 47};
 
-    for (int i = 0; i < 19; ++i) {
+    for (int i = 0; i < 18; ++i) {
         EXPECT_EQ(published_codes[i], expected_codes[i]);
     }
 }
