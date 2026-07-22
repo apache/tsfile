@@ -29,6 +29,7 @@ import org.apache.tsfile.utils.TsPrimitiveType.TsDouble;
 import org.apache.tsfile.utils.TsPrimitiveType.TsFloat;
 import org.apache.tsfile.utils.TsPrimitiveType.TsInt;
 import org.apache.tsfile.utils.TsPrimitiveType.TsLong;
+import org.apache.tsfile.utils.TsPrimitiveType.TsVector;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -92,5 +93,67 @@ public class TsPrimitiveTypeTest {
             new TsPrimitiveType.TsVector(
                 new TsPrimitiveType[] {new TsBoolean(true), null, new TsInt(1), null}));
     Assert.assertFalse(timeValuePair1.equals(timeValuePair2));
+  }
+
+  @Test
+  public void testCopy() {
+    TsBoolean booleanValue = new TsBoolean(true);
+    TsBoolean booleanCopy = new TsBoolean();
+    booleanCopy.copy(booleanValue);
+    booleanValue.setBoolean(false);
+    Assert.assertTrue(booleanCopy.getBoolean());
+
+    TsInt dateValue = new TsInt(20260722, TSDataType.DATE);
+    TsInt dateCopy = new TsInt();
+    dateCopy.copy(dateValue);
+    dateValue.setInt(20260723);
+    Assert.assertEquals(20260722, dateCopy.getInt());
+    Assert.assertEquals(TSDataType.DATE, dateCopy.getDataType());
+
+    TsLong longValue = new TsLong(1L);
+    TsLong longCopy = new TsLong();
+    longCopy.copy(longValue);
+    longValue.setLong(2L);
+    Assert.assertEquals(1L, longCopy.getLong());
+
+    TsFloat floatValue = new TsFloat(1.0F);
+    TsFloat floatCopy = new TsFloat();
+    floatCopy.copy(floatValue);
+    floatValue.setFloat(2.0F);
+    Assert.assertEquals(1.0F, floatCopy.getFloat(), 0.0F);
+
+    TsDouble doubleValue = new TsDouble(1.0D);
+    TsDouble doubleCopy = new TsDouble();
+    doubleCopy.copy(doubleValue);
+    doubleValue.setDouble(2.0D);
+    Assert.assertEquals(1.0D, doubleCopy.getDouble(), 0.0D);
+
+    Binary binary = new Binary("original", TSFileConfig.STRING_CHARSET);
+    TsBinary binaryValue = new TsBinary(binary);
+    TsBinary binaryCopy = new TsBinary();
+    binaryCopy.copy(binaryValue);
+    binary.getValues()[0] = 'O';
+    Assert.assertEquals(
+        "original", binaryCopy.getBinary().getStringValue(TSFileConfig.STRING_CHARSET));
+
+    TsVector vectorValue =
+        new TsVector(new TsPrimitiveType[] {dateCopy, binaryCopy, null, new TsBoolean(true)});
+    TsVector vectorCopy = new TsVector();
+    vectorCopy.copy(vectorValue);
+    vectorValue.getVector()[0].setInt(0);
+    vectorValue.getVector()[1].getBinary().getValues()[0] = 'O';
+    vectorValue.getVector()[3].setBoolean(false);
+
+    Assert.assertNotSame(vectorValue.getVector(), vectorCopy.getVector());
+    Assert.assertEquals(20260722, vectorCopy.getVector()[0].getInt());
+    Assert.assertEquals(TSDataType.DATE, vectorCopy.getVector()[0].getDataType());
+    Assert.assertEquals(
+        "original",
+        vectorCopy.getVector()[1].getBinary().getStringValue(TSFileConfig.STRING_CHARSET));
+    Assert.assertNull(vectorCopy.getVector()[2]);
+    Assert.assertTrue(vectorCopy.getVector()[3].getBoolean());
+
+    booleanCopy.copy(null);
+    Assert.assertFalse(booleanCopy.getBoolean());
   }
 }
