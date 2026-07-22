@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -410,6 +411,15 @@ public abstract class AbstractLongType extends AbstractType {
     long[] values = new long[rowSize];
     for (int i = 0; i < rowSize; i++) {
       values[i] = ReadWriteIOUtils.readLong(buffer);
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    long[] values = new long[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readLong(stream);
     }
     return values;
   }

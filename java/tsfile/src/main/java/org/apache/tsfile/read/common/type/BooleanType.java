@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -379,6 +380,15 @@ public class BooleanType extends AbstractType {
     boolean[] values = new boolean[rowSize];
     for (int i = 0; i < rowSize; i++) {
       values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    boolean[] values = new boolean[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(stream));
     }
     return values;
   }

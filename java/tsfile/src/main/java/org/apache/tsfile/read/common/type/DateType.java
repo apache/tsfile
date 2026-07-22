@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -211,6 +212,15 @@ public class DateType extends AbstractIntType {
     LocalDate[] values = new LocalDate[rowSize];
     for (int i = 0; i < rowSize; i++) {
       values[i] = DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(buffer));
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    LocalDate[] values = new LocalDate[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(stream));
     }
     return values;
   }

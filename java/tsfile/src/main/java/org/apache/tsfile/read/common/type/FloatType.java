@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -418,6 +419,15 @@ public class FloatType extends AbstractType {
     float[] values = new float[rowSize];
     for (int i = 0; i < rowSize; i++) {
       values[i] = ReadWriteIOUtils.readFloat(buffer);
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    float[] values = new float[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readFloat(stream);
     }
     return values;
   }

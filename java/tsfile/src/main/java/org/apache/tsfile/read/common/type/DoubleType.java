@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -420,6 +421,15 @@ public class DoubleType extends AbstractType {
     double[] values = new double[rowSize];
     for (int i = 0; i < rowSize; i++) {
       values[i] = ReadWriteIOUtils.readDouble(buffer);
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    double[] values = new double[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readDouble(stream);
     }
     return values;
   }

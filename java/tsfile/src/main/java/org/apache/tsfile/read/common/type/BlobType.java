@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.type;
 
+import java.io.DataInputStream;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
@@ -386,6 +387,11 @@ public class BlobType extends AbstractType {
   @Override
   public Object deserializeArray(ByteBuffer buffer, int rowSize) {
     return deserializeBinaryValues(buffer, rowSize);
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    return deserializeBinaryValues(stream, rowSize);
   }
 
   @Override

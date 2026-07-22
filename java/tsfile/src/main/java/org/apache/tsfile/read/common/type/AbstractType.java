@@ -30,6 +30,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -121,6 +122,15 @@ public abstract class AbstractType implements Type {
     for (int i = 0; i < rowSize; i++) {
       boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
       values[i] = isNotNull ? ReadWriteIOUtils.readBinary(buffer) : Binary.EMPTY_VALUE;
+    }
+    return values;
+  }
+
+  protected Binary[] deserializeBinaryValues(DataInputStream stream, int rowSize)
+      throws IOException {
+    Binary[] values = new Binary[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = stream.readBoolean() ? ReadWriteIOUtils.readBinary(stream) : Binary.EMPTY_VALUE;
     }
     return values;
   }
