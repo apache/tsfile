@@ -162,7 +162,7 @@ public interface Type {
   }
 
   /** Writes a TsPrimitiveType value to {@code array} at {@code index}. */
-  default void write(TsPrimitiveType value, Object array, int index) {
+  default void write(TsPrimitiveType from, Object toArray, int index) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

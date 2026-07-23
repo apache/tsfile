@@ -335,8 +335,8 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    ((int[]) array)[index] = value.getInt();
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((int[]) toArray)[index] = from.getInt();
   }
 
   @Override

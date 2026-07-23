@@ -344,8 +344,8 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    ((double[]) array)[index] = value.getDouble();
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((double[]) toArray)[index] = from.getDouble();
   }
 
   @Override

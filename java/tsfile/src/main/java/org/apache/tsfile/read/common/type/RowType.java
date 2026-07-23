@@ -90,8 +90,8 @@ public class RowType extends AbstractType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    ((TsPrimitiveType[][]) array)[index] = value.getVector();
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((TsPrimitiveType[][]) toArray)[index] = from.getVector();
   }
 
   public static Field field(String name, Type type) {

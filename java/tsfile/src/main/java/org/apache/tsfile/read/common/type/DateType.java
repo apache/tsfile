@@ -69,12 +69,12 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    if (array instanceof int[]) {
-      super.write(value, array, index);
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    if (toArray instanceof int[]) {
+      super.write(from, toArray, index);
       return;
     }
-    ((LocalDate[]) array)[index] = DateUtils.parseIntToLocalDate(value.getInt());
+    ((LocalDate[]) toArray)[index] = DateUtils.parseIntToLocalDate(from.getInt());
   }
 
   @Override

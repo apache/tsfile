@@ -318,8 +318,8 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    ((boolean[]) array)[index] = value.getBoolean();
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((boolean[]) toArray)[index] = from.getBoolean();
   }
 
   @Override

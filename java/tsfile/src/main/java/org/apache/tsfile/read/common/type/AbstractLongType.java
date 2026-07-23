@@ -334,8 +334,8 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
-  public void write(TsPrimitiveType value, Object array, int index) {
-    ((long[]) array)[index] = value.getLong();
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((long[]) toArray)[index] = from.getLong();
   }
 
   @Override
