@@ -428,6 +428,12 @@ public interface Type {
         Messages.format("error.write.type_not_supported", getTypeEnum()));
   }
 
+  /** Writes the current value in {@code data} to a non-aligned chunk. */
+  default void write(ChunkWriterImpl writer, long time, BatchData data) {
+    throw new UnSupportedDataTypeException(
+        Messages.format("error.write.type_not_supported", getTypeEnum()));
+  }
+
   /** Writes a value to a non-aligned chunk. */
   default void write(ChunkWriterImpl writer, long time, Object value) {
     throw new UnSupportedDataTypeException(

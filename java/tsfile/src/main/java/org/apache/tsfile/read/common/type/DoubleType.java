@@ -292,6 +292,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, BatchData data) {
+    writer.write(time, data.getDouble());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (double) value);
   }

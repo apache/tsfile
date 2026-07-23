@@ -289,6 +289,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, BatchData data) {
+    writer.write(time, data.getLong());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (long) value);
   }

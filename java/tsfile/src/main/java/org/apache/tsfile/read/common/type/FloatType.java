@@ -290,6 +290,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(ChunkWriterImpl writer, long time, BatchData data) {
+    writer.write(time, data.getFloat());
+  }
+
+  @Override
   public void write(ChunkWriterImpl writer, long time, Object value) {
     writer.write(time, (float) value);
   }

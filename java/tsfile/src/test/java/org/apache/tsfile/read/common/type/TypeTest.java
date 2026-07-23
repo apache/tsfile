@@ -1029,6 +1029,57 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteBatchDataToNonAlignedValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1L, true},
+      {TSDataType.INT32, 2L, 1},
+      {TSDataType.DATE, 3L, 20260717},
+      {TSDataType.INT64, 4L, 2L},
+      {TSDataType.TIMESTAMP, 5L, 3L},
+      {TSDataType.FLOAT, 6L, 1.25F},
+      {TSDataType.DOUBLE, 7L, 2.5D}
+    };
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      BatchData data = new BatchData(dataType);
+      data.putAnObject(0L, testCase[2]);
+      Type.fromTsDataType(dataType).write(writer, (long) testCase[1], data);
+    }
+
+    Mockito.verify(writer).write(1L, true);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.verify(writer).write(3L, 20260717);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.verify(writer).write(5L, 3L);
+    Mockito.verify(writer).write(6L, 1.25F);
+    Mockito.verify(writer).write(7L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      BatchData data = new BatchData(dataType);
+      data.putAnObject(0L, binary);
+      Type.fromTsDataType(dataType).write(writer, 8L, data);
+      Mockito.verify(writer).write(8L, binary);
+      Mockito.reset(writer);
+    }
+
+    BatchData vectorData = new BatchData(TSDataType.VECTOR);
+    vectorData.putAnObject(0L, new TsPrimitiveType[] {new TsPrimitiveType.TsLong(1L)});
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 9L, vectorData);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testToString() {
     Object[][] testCases = {
       {TSDataType.BOOLEAN, true, "true"},
