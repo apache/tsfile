@@ -402,7 +402,7 @@ TEST_F(GorillaCodecTest, DoubleBatchDecodeOneValueAtATime) {
     stream.read_buf(buf.data(), total, got);
     ASSERT_EQ(got, total);
     common::ByteStream wrapped(common::MOD_DEFAULT);
-    wrapped.wrap_from((const char*)buf.data(), total);
+    wrapped.wrap_from(reinterpret_cast<const char*>(buf.data()), total);
 
     storage::DoubleGorillaDecoder decoder;
     for (int i = 0; i < N; i++) {
@@ -435,7 +435,7 @@ TEST_F(GorillaCodecTest, DoubleBatchScalarAndSkipInterleave) {
     stream.read_buf(buf.data(), total, got);
     ASSERT_EQ(got, total);
     common::ByteStream wrapped(common::MOD_DEFAULT);
-    wrapped.wrap_from((const char*)buf.data(), total);
+    wrapped.wrap_from(reinterpret_cast<const char*>(buf.data()), total);
 
     storage::DoubleGorillaDecoder decoder;
     int cursor = 0;
@@ -447,8 +447,7 @@ TEST_F(GorillaCodecTest, DoubleBatchScalarAndSkipInterleave) {
     }
     ASSERT_TRUE(decoder.has_remaining(wrapped))
         << "remaining=" << wrapped.remaining_size()
-        << " bits_left=" << decoder.bits_left_
-        << " has_next=" << decoder.has_next_;
+        << " has_next=" << decoder.has_next();
 
     std::vector<double> batch(113);
     int actual = 0;
@@ -509,7 +508,7 @@ TEST_F(GorillaCodecTest, DoubleBatchDecodeFullWidthXor) {
     stream.read_buf(buf.data(), total, got);
     ASSERT_EQ(got, total);
     common::ByteStream wrapped(common::MOD_DEFAULT);
-    wrapped.wrap_from((const char*)buf.data(), total);
+    wrapped.wrap_from(reinterpret_cast<const char*>(buf.data()), total);
 
     storage::DoubleGorillaDecoder decoder;
     std::vector<double> decoded(N);

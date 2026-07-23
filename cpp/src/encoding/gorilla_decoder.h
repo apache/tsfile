@@ -326,20 +326,26 @@ class GorillaDecoder : public Decoder {
      * return: long value that was reader from the stream
      */
     uint64_t read_long(int bits, common::ByteStream& in) {
+        if (UNLIKELY(bits < 0 || bits > 64)) {
+            read_status_ = common::E_TSFILE_CORRUPTED;
+            return 0;
+        }
+
         uint64_t value = 0;
         while (bits > 0) {
             if (UNLIKELY(!flush_byte_if_empty(in))) return value;
 
             int take = bits < bits_left_ ? bits : bits_left_;
-            uint64_t chunk;
             if (take == 64) {
-                chunk = buffer_;
-            } else {
-                chunk = (buffer_ >> (bits_left_ - take)) &
-                        ((uint64_t{1} << take) - 1);
-                value <<= take;
+                // A read is at most 64 bits, so this is necessarily the only
+                // iteration. Return directly to avoid an undefined shift by 64.
+                bits_left_ = 0;
+                return buffer_;
             }
-            value |= chunk;
+
+            uint64_t chunk =
+                (buffer_ >> (bits_left_ - take)) & ((uint64_t{1} << take) - 1);
+            value = (value << take) | chunk;
             bits_left_ -= take;
             bits -= take;
         }
