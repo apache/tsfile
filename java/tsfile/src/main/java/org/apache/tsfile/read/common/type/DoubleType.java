@@ -349,6 +349,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((double[]) toArray)[index] = from.getDouble();
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeDouble(value);
   }

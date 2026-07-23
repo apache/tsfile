@@ -347,6 +347,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((float[]) toArray)[index] = from.getFloat();
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeFloat(value);
   }

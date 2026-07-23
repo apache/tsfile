@@ -340,6 +340,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((int[]) toArray)[index] = from.getInt();
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeInt(value);
   }

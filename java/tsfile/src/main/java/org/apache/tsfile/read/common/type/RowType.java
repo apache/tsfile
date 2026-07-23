@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.util.ArrayList;
@@ -91,6 +92,11 @@ public class RowType extends AbstractType {
 
   @Override
   public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((TsPrimitiveType[][]) toArray)[index] = from.getVector();
+  }
+
+  @Override
+  public void write(BatchData from, Object toArray, int index) {
     ((TsPrimitiveType[][]) toArray)[index] = from.getVector();
   }
 

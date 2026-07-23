@@ -319,6 +319,11 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((Binary[]) toArray)[index] = from.getBinary();
+  }
+
+  @Override
   public void writeBinary(ColumnBuilder builder, Binary value) {
     builder.writeBinary(value);
   }

@@ -25,6 +25,7 @@ import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.DateStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
@@ -70,6 +71,15 @@ public class DateType extends AbstractIntType {
 
   @Override
   public void write(TsPrimitiveType from, Object toArray, int index) {
+    if (toArray instanceof int[]) {
+      super.write(from, toArray, index);
+      return;
+    }
+    ((LocalDate[]) toArray)[index] = DateUtils.parseIntToLocalDate(from.getInt());
+  }
+
+  @Override
+  public void write(BatchData from, Object toArray, int index) {
     if (toArray instanceof int[]) {
       super.write(from, toArray, index);
       return;

@@ -339,6 +339,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((long[]) toArray)[index] = from.getLong();
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeLong(value);
   }

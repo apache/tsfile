@@ -152,6 +152,54 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteBatchDataToArray() {
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsLong(2L)};
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, new boolean[2]},
+      {TSDataType.INT32, 1, new int[2]},
+      {TSDataType.DATE, 20260723, new int[2]},
+      {TSDataType.DATE, 20260723, new LocalDate[2]},
+      {TSDataType.INT64, 2L, new long[2]},
+      {TSDataType.TIMESTAMP, 3L, new long[2]},
+      {TSDataType.FLOAT, 1.25F, new float[2]},
+      {TSDataType.DOUBLE, 2.5D, new double[2]},
+      {TSDataType.TEXT, binary, new Binary[2]},
+      {TSDataType.STRING, binary, new Binary[2]},
+      {TSDataType.BLOB, binary, new Binary[2]},
+      {TSDataType.OBJECT, binary, new Binary[2]},
+      {TSDataType.VECTOR, vector, new TsPrimitiveType[2][]}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(1L, testCase[1]);
+      Object array = testCase[2];
+      type.write(batchData, array, 1);
+      TsPrimitiveType actual = type.getValueAsTsPrimitiveType(array, 1);
+      Assert.assertEquals(batchData.currentTsPrimitiveType(), actual);
+      Assert.assertEquals(batchData.currentTsPrimitiveType().getDataType(), actual.getDataType());
+    }
+
+    Type rowType = RowType.anonymousRow(IntType.getInstance(), LongType.getInstance());
+    BatchData vectorBatchData = new BatchData(TSDataType.VECTOR);
+    vectorBatchData.putAnObject(1L, vector);
+    TsPrimitiveType[][] rowArray = new TsPrimitiveType[2][];
+    rowType.write(vectorBatchData, rowArray, 1);
+    Assert.assertEquals(
+        vectorBatchData.currentTsPrimitiveType(), rowType.getValueAsTsPrimitiveType(rowArray, 1));
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).write((BatchData) null, new Object[1], 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
   public void testGetValueAsTsPrimitiveType() {
     Binary binary = new Binary("test", StandardCharsets.UTF_8);
     TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), null};
