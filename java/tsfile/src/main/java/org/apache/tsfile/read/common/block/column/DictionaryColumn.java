@@ -27,6 +27,9 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -425,6 +428,16 @@ public final class DictionaryColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return dictionary.getTsPrimitiveType(position);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    dictionary.writeTo(getId(index), buffer);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    dictionary.writeTo(getId(index), stream);
   }
 
   @Override

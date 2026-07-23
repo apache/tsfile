@@ -29,6 +29,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -125,6 +126,16 @@ public class BooleanColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBoolean(getBoolean(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.put(values[index + arrayOffset] ? (byte) 1 : (byte) 0);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeBoolean(values[index + arrayOffset]);
   }
 
   @Override

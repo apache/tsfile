@@ -29,6 +29,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -143,6 +144,20 @@ public class BinaryColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBinary(getBinary(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    Binary value = values[index + arrayOffset];
+    buffer.putInt(value.getLength());
+    buffer.put(value.getValues());
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    Binary value = values[index + arrayOffset];
+    stream.writeInt(value.getLength());
+    stream.write(value.getValues());
   }
 
   @Override

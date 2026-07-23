@@ -25,6 +25,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public interface Column {
@@ -107,6 +108,16 @@ public interface Column {
 
   /** Gets a TsPrimitiveType at {@code position}. */
   default TsPrimitiveType getTsPrimitiveType(int position) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes the value at {@code index} to {@code buffer}. */
+  default void writeTo(int index, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes the value at {@code index} to {@code stream}. */
+  default void writeTo(int index, DataOutputStream stream) throws IOException {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

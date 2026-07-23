@@ -27,6 +27,7 @@ import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.DataOutputStream;
+import java.nio.ByteBuffer;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
@@ -87,6 +88,16 @@ public class NullColumn implements Column {
   @Override
   public void serializeWithoutNulls(DataOutputStream output) {
     // There are no non-null values to serialize.
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    // There is no value to serialize.
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) {
+    // There is no value to serialize.
   }
 
   @Override

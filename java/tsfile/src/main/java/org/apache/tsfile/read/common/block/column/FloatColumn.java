@@ -29,6 +29,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -141,6 +142,16 @@ public class FloatColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsFloat(getFloat(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putFloat(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeFloat(values[index + arrayOffset]);
   }
 
   @Override

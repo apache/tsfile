@@ -27,6 +27,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
@@ -90,6 +91,16 @@ public class TimeColumn implements Column {
   @Override
   public Object getObject(int position) {
     return getLong(position);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putLong(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeLong(values[index + arrayOffset]);
   }
 
   @Override

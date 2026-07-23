@@ -38,16 +38,74 @@ import org.apache.tsfile.read.common.block.column.NullColumn;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
 
 public class ColumnTest {
+
+  @Test
+  public void testWriteTo() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Column intDictionary =
+        DictionaryColumn.create(
+            2, new IntColumn(3, Optional.empty(), new int[] {7, 8, 9}), new int[] {2, 0});
+    Column binaryRle =
+        new RunLengthEncodedColumn(new BinaryColumn(1, Optional.empty(), new Binary[] {binary}), 3);
+
+    Object[][] testCases = {
+      {new BooleanColumn(2, Optional.empty(), new boolean[] {false, true}).getRegion(1, 1), 0},
+      {new IntColumn(2, Optional.empty(), new int[] {0, 42}).getRegion(1, 1), 0},
+      {new LongColumn(2, Optional.empty(), new long[] {0L, 42L}).getRegion(1, 1), 0},
+      {new FloatColumn(2, Optional.empty(), new float[] {0.0F, 1.25F}).getRegion(1, 1), 0},
+      {new DoubleColumn(2, Optional.empty(), new double[] {0.0D, 2.5D}).getRegion(1, 1), 0},
+      {
+        new BinaryColumn(2, Optional.empty(), new Binary[] {Binary.EMPTY_VALUE, binary})
+            .getRegion(1, 1),
+        0
+      },
+      {new TimeColumn(2, new long[] {0L, 42L}).getRegion(1, 1), 0},
+      {intDictionary, 0},
+      {binaryRle, 2}
+    };
+
+    for (Object[] testCase : testCases) {
+      Column column = (Column) testCase[0];
+      int index = (int) testCase[1];
+      ByteArrayOutputStream expectedOutput = new ByteArrayOutputStream();
+      Type.fromTsDataType(column.getDataType())
+          .serializeValue(column.getObject(index), new DataOutputStream(expectedOutput));
+      byte[] expected = expectedOutput.toByteArray();
+
+      ByteBuffer buffer = ByteBuffer.allocate(expected.length);
+      column.writeTo(index, buffer);
+      Assert.assertEquals(expected.length, buffer.position());
+      Assert.assertArrayEquals(expected, Arrays.copyOf(buffer.array(), buffer.position()));
+
+      ByteArrayOutputStream actualOutput = new ByteArrayOutputStream();
+      column.writeTo(index, new DataOutputStream(actualOutput));
+      Assert.assertArrayEquals(expected, actualOutput.toByteArray());
+    }
+
+    Column nullColumn = new NullColumn(1);
+    ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
+    nullColumn.writeTo(0, emptyBuffer);
+    ByteArrayOutputStream emptyOutput = new ByteArrayOutputStream();
+    nullColumn.writeTo(0, new DataOutputStream(emptyOutput));
+    Assert.assertEquals(0, emptyBuffer.position());
+    Assert.assertEquals(0, emptyOutput.size());
+  }
 
   @Test
   public void testArePositionsEqual() {

@@ -27,6 +27,9 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
@@ -163,6 +166,16 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return value.getTsPrimitiveType(0);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    value.writeTo(0, buffer);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    value.writeTo(0, stream);
   }
 
   @Override
