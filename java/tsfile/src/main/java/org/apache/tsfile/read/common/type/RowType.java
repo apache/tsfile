@@ -89,6 +89,11 @@ public class RowType extends AbstractType {
     return new TsPrimitiveType.TsVector(((TsPrimitiveType[][]) array)[rowIndex]);
   }
 
+  @Override
+  public void write(TsPrimitiveType value, Object array, int index) {
+    ((TsPrimitiveType[][]) array)[index] = value.getVector();
+  }
+
   public static Field field(String name, Type type) {
     return new Field(Optional.of(name), type);
   }

@@ -89,6 +89,11 @@ public class VectorType extends AbstractLongType {
   }
 
   @Override
+  public void write(TsPrimitiveType value, Object array, int index) {
+    ((TsPrimitiveType[][]) array)[index] = value.getVector();
+  }
+
+  @Override
   public Object arrayCopyOf(Object array, int newLength) {
     return Arrays.copyOf((long[]) array, newLength);
   }

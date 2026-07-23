@@ -37,6 +37,8 @@ import java.util.function.LongPredicate;
 
 public final class TypeServices {
 
+  // Page value decoding services for BatchData and TsBlock outputs.
+
   public static final TypeService<PageDataValueReader> READ_PAGE_VALUE_TO_BATCHDATA_SERVICE =
       type ->
           switch (type.getTypeEnum()) {
@@ -286,6 +288,8 @@ public final class TypeServices {
                 };
           };
 
+  // Value page decoding services for TsPrimitiveType and ColumnBuilder outputs.
+
   public static final TypeService<PageDataTsPrimitiveValueReader>
       READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE =
           type ->
@@ -425,6 +429,8 @@ public final class TypeServices {
                           .setChecked(true);
                     };
               };
+
+  // Chunk writing services.
 
   public static final TypeService<EmptyValueChunkWriter> WRITE_EMPTY_VALUE_TO_CHUNK_SERVICE =
       type ->

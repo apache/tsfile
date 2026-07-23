@@ -335,6 +335,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void write(TsPrimitiveType value, Object array, int index) {
+    ((int[]) array)[index] = value.getInt();
+  }
+
+  @Override
   public void writeInt(ColumnBuilder builder, int value) {
     builder.writeInt(value);
   }
