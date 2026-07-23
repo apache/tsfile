@@ -142,7 +142,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <skip>${skipTests:-false}</skip>
+                            <skip>${skipTests}</skip>
                             <executable>${python.venv.bin}${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
@@ -159,7 +159,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <skip>${skipTests:-false}</skip>
+                            <skip>${skipTests}</skip>
                             <executable>${python.venv.bin}pytest</executable>
                             <arguments>
                                 <argument>${project.basedir}/tests</argument>
