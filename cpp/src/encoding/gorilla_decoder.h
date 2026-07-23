@@ -283,6 +283,7 @@ class GorillaDecoder : public Decoder {
         first_value_was_read_ = false;
         has_next_ = false;
         buffer_ = 0;
+        read_status_ = common::E_OK;
     }
 
     FORCE_INLINE bool has_next() { return has_next_; }
@@ -292,20 +293,27 @@ class GorillaDecoder : public Decoder {
 
     // If empty, cache 8 bits from in_stream to 'buffer_'. The batch path may
     // leave more than 8 prefetched bits here; scalar reads consume those first.
-    void flush_byte_if_empty(common::ByteStream& in) {
+    bool flush_byte_if_empty(common::ByteStream& in) {
+        if (UNLIKELY(read_status_ != common::E_OK)) {
+            return false;
+        }
         if (bits_left_ == 0) {
             uint8_t next_byte = 0;
             uint32_t read_len = 0;
             in.read_buf(&next_byte, 1, read_len);
+            if (UNLIKELY(read_len == 0)) {
+                read_status_ = common::E_BUF_NOT_ENOUGH;
+                return false;
+            }
             buffer_ = next_byte;
-            bits_left_ = static_cast<int>(read_len) * 8;
+            bits_left_ = 8;
         }
+        return true;
     }
 
     // Reads the next bit and returns true if the next bit is 1, otherwise 0.
     bool read_bit(common::ByteStream& in) {
-        flush_byte_if_empty(in);
-        if (UNLIKELY(bits_left_ == 0)) return false;
+        if (UNLIKELY(!flush_byte_if_empty(in))) return false;
         bool bit = ((buffer_ >> (bits_left_ - 1)) & 1) == 1;
         bits_left_--;
         return bit;
@@ -320,8 +328,7 @@ class GorillaDecoder : public Decoder {
     uint64_t read_long(int bits, common::ByteStream& in) {
         uint64_t value = 0;
         while (bits > 0) {
-            flush_byte_if_empty(in);
-            if (UNLIKELY(bits_left_ == 0)) return value;
+            if (UNLIKELY(!flush_byte_if_empty(in))) return value;
 
             int take = bits < bits_left_ ? bits : bits_left_;
             uint64_t chunk;
@@ -388,6 +395,9 @@ class GorillaDecoder : public Decoder {
                          common::ByteStream& in) {
         int ret = common::E_OK;
         actual = 0;
+        if (UNLIKELY(read_status_ != common::E_OK)) {
+            return read_status_;
+        }
         // Bootstrap below would unconditionally write out[0]; guard the
         // zero-capacity edge case so callers can probe without writing.
         if (capacity <= 0) {
@@ -468,6 +478,9 @@ class GorillaDecoder : public Decoder {
                        common::ByteStream& in) {
         int ret = common::E_OK;
         skipped = 0;
+        if (UNLIKELY(read_status_ != common::E_OK)) {
+            return read_status_;
+        }
         // Bootstrap below would consume first_value_ even when count == 0,
         // advancing the stream past data the caller didn't ask to skip.
         if (count <= 0) {
@@ -544,7 +557,11 @@ class GorillaDecoder : public Decoder {
                               common::ByteStream& in) {
         actual = 0;
         while (actual < capacity && has_remaining(in)) {
-            out[actual++] = GorillaDecodeOutput<T, Output>::convert(decode(in));
+            T value = decode(in);
+            if (UNLIKELY(read_status_ != common::E_OK)) {
+                return read_status_;
+            }
+            out[actual++] = GorillaDecodeOutput<T, Output>::convert(value);
         }
         return common::E_OK;
     }
@@ -554,6 +571,9 @@ class GorillaDecoder : public Decoder {
         skipped = 0;
         while (skipped < count && has_remaining(in)) {
             decode(in);
+            if (UNLIKELY(read_status_ != common::E_OK)) {
+                return read_status_;
+            }
             skipped++;
         }
         return common::E_OK;
@@ -568,33 +588,50 @@ class GorillaDecoder : public Decoder {
     bool first_value_was_read_;
     bool has_next_;
     uint64_t buffer_;
+    int read_status_;
 };
 
 template <>
 FORCE_INLINE int32_t
 GorillaDecoder<int32_t>::read_next(common::ByteStream& in) {
     uint8_t control_bits = read_next_control_bit(2, in);
+    if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
     uint8_t significant_bits = 0;
-    int32_t xor_value = 0;
     switch (control_bits) {
         case 3:  // case '11': use new leading and trailing zeros
             stored_leading_zeros_ =
                 (int)read_long(LEADING_ZERO_BITS_LENGTH_32BIT,
                                in);  // todo: int or int32_t?
+            if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
             significant_bits =
                 (uint8_t)read_long(MEANINGFUL_XOR_BITS_LENGTH_32BIT, in);
+            if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
             significant_bits++;
+            if (UNLIKELY(stored_leading_zeros_ + significant_bits >
+                         VALUE_BITS_LENGTH_32BIT)) {
+                read_status_ = common::E_TSFILE_CORRUPTED;
+                return stored_value_;
+            }
             stored_trailing_zeros_ = VALUE_BITS_LENGTH_32BIT -
                                      significant_bits - stored_leading_zeros_;
             // missing break is intentional, we want to overflow to next one
         case 2:  // case '10': use stored leading and trailing zeros
-            xor_value = (int32_t)read_long(VALUE_BITS_LENGTH_32BIT -
-                                               stored_leading_zeros_ -
-                                               stored_trailing_zeros_,
-                                           in);
-            xor_value = static_cast<uint32_t>(xor_value)
-                        << stored_trailing_zeros_;
-            stored_value_ ^= xor_value;
+        {
+            int meaningful = VALUE_BITS_LENGTH_32BIT - stored_leading_zeros_ -
+                             stored_trailing_zeros_;
+            if (UNLIKELY(meaningful <= 0 ||
+                         meaningful > VALUE_BITS_LENGTH_32BIT)) {
+                read_status_ = common::E_TSFILE_CORRUPTED;
+                return stored_value_;
+            }
+            uint32_t xor_value =
+                static_cast<uint32_t>(read_long(meaningful, in));
+            if (UNLIKELY(read_status_ != common::E_OK)) {
+                return stored_value_;
+            }
+            xor_value <<= stored_trailing_zeros_;
+            stored_value_ ^= static_cast<int32_t>(xor_value);
+        }
             // missing break is intentional, we want to overflow to next one
         default:  // case '0': use stored value
             return stored_value_;
@@ -606,29 +643,40 @@ template <>
 FORCE_INLINE int64_t
 GorillaDecoder<int64_t>::read_next(common::ByteStream& in) {
     uint8_t control_bits = read_next_control_bit(2, in);
+    if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
 
     uint8_t significant_bits = 0;
-    int64_t xor_value = 0;
     switch (control_bits) {
         case 3: {  // case '11': use new leading and trailing zeros
             stored_leading_zeros_ =
                 (int)read_long(LEADING_ZERO_BITS_LENGTH_64BIT,
                                in);  // todo: int or int32_t?
+            if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
             significant_bits =
                 (uint8_t)read_long(MEANINGFUL_XOR_BITS_LENGTH_64BIT, in);
+            if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
             significant_bits++;
+            if (UNLIKELY(stored_leading_zeros_ + significant_bits >
+                         VALUE_BITS_LENGTH_64BIT)) {
+                read_status_ = common::E_TSFILE_CORRUPTED;
+                return stored_value_;
+            }
             stored_trailing_zeros_ = VALUE_BITS_LENGTH_64BIT -
                                      significant_bits - stored_leading_zeros_;
             // missing break is intentional, we want to overflow to next one
         }
         case 2: {  // case '10': use stored leading and trailing zeros
-            xor_value =
-                read_long(VALUE_BITS_LENGTH_64BIT - stored_leading_zeros_ -
-                              stored_trailing_zeros_,
-                          in);
-            xor_value = static_cast<uint64_t>(xor_value)
-                        << stored_trailing_zeros_;
-            stored_value_ ^= xor_value;
+            int meaningful = VALUE_BITS_LENGTH_64BIT - stored_leading_zeros_ -
+                             stored_trailing_zeros_;
+            if (UNLIKELY(meaningful <= 0 ||
+                         meaningful > VALUE_BITS_LENGTH_64BIT)) {
+                read_status_ = common::E_TSFILE_CORRUPTED;
+                return stored_value_;
+            }
+            uint64_t xor_value = read_long(meaningful, in);
+            if (UNLIKELY(read_status_ != common::E_OK)) return stored_value_;
+            xor_value <<= stored_trailing_zeros_;
+            stored_value_ ^= static_cast<int64_t>(xor_value);
             // missing break is intentional, we want to overflow to next one
         }
         default: {  // case '0': use stored value
@@ -642,7 +690,9 @@ template <>
 FORCE_INLINE int32_t
 GorillaDecoder<int32_t>::cache_next(common::ByteStream& in) {
     read_next(in);
-    has_next_ = stored_value_ != GORILLA_ENCODING_ENDING_INTEGER;
+    if (LIKELY(read_status_ == common::E_OK)) {
+        has_next_ = stored_value_ != GORILLA_ENCODING_ENDING_INTEGER;
+    }
     return stored_value_;
 }
 
@@ -650,7 +700,9 @@ template <>
 FORCE_INLINE int64_t
 GorillaDecoder<int64_t>::cache_next(common::ByteStream& in) {
     read_next(in);
-    has_next_ = stored_value_ != GORILLA_ENCODING_ENDING_LONG;
+    if (LIKELY(read_status_ == common::E_OK)) {
+        has_next_ = stored_value_ != GORILLA_ENCODING_ENDING_LONG;
+    }
     return stored_value_;
 }
 
@@ -658,8 +710,8 @@ template <>
 FORCE_INLINE int32_t GorillaDecoder<int32_t>::decode(common::ByteStream& in) {
     int32_t ret_value = stored_value_;
     if (UNLIKELY(!first_value_was_read_)) {
-        flush_byte_if_empty(in);
         stored_value_ = (int32_t)read_long(VALUE_BITS_LENGTH_32BIT, in);
+        if (UNLIKELY(read_status_ != common::E_OK)) return ret_value;
         first_value_was_read_ = true;
         ret_value = stored_value_;
     }
@@ -671,8 +723,8 @@ template <>
 FORCE_INLINE int64_t GorillaDecoder<int64_t>::decode(common::ByteStream& in) {
     int64_t ret_value = stored_value_;
     if (UNLIKELY(!first_value_was_read_)) {
-        flush_byte_if_empty(in);
         stored_value_ = read_long(VALUE_BITS_LENGTH_64BIT, in);
+        if (UNLIKELY(read_status_ != common::E_OK)) return ret_value;
         first_value_was_read_ = true;
         ret_value = stored_value_;
     }
@@ -695,8 +747,10 @@ class FloatGorillaDecoder : public GorillaDecoder<int32_t> {
 
     int32_t cache_next(common::ByteStream& in) override {
         read_next(in);
-        has_next_ = stored_value_ !=
-                    common::float_to_int(GORILLA_ENCODING_ENDING_FLOAT);
+        if (LIKELY(read_status_ == common::E_OK)) {
+            has_next_ = stored_value_ !=
+                        common::float_to_int(GORILLA_ENCODING_ENDING_FLOAT);
+        }
         return stored_value_;
     }
 
@@ -727,8 +781,10 @@ class DoubleGorillaDecoder : public GorillaDecoder<int64_t> {
 
     int64_t cache_next(common::ByteStream& in) override {
         read_next(in);
-        has_next_ = stored_value_ !=
-                    common::double_to_long(GORILLA_ENCODING_ENDING_DOUBLE);
+        if (LIKELY(read_status_ == common::E_OK)) {
+            has_next_ = stored_value_ !=
+                        common::double_to_long(GORILLA_ENCODING_ENDING_DOUBLE);
+        }
         return stored_value_;
     }
 
@@ -810,7 +866,7 @@ template <>
 FORCE_INLINE int IntGorillaDecoder::read_int32(int32_t& ret_value,
                                                common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_status_;
 }
 template <>
 FORCE_INLINE int IntGorillaDecoder::read_int64(int64_t& ret_value,
@@ -853,7 +909,7 @@ template <>
 FORCE_INLINE int LongGorillaDecoder::read_int64(int64_t& ret_value,
                                                 common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_status_;
 }
 template <>
 FORCE_INLINE int LongGorillaDecoder::read_float(float& ret_value,
@@ -892,7 +948,7 @@ FORCE_INLINE int FloatGorillaDecoder::read_int64(int64_t& ret_value,
 FORCE_INLINE int FloatGorillaDecoder::read_float(float& ret_value,
                                                  common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_status_;
 }
 FORCE_INLINE int FloatGorillaDecoder::read_double(double& ret_value,
                                                   common::ByteStream& in) {
@@ -922,7 +978,7 @@ FORCE_INLINE int DoubleGorillaDecoder::read_float(float& ret_value,
 FORCE_INLINE int DoubleGorillaDecoder::read_double(double& ret_value,
                                                    common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_status_;
 }
 
 }  // end namespace storage

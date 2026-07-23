@@ -18,6 +18,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <cstring>
 #include <limits>
 
 #include "encoding/gorilla_decoder.h"
@@ -336,8 +338,7 @@ TEST_F(GorillaCodecTest, FloatBatchDecodeUnwrappedInput) {
     storage::FloatGorillaDecoder decoder;
     std::vector<float> actual(N);
     int actual_count = 0;
-    ASSERT_EQ(decoder.read_batch_float(actual.data(), actual.size(),
-                                       actual_count, stream),
+    ASSERT_EQ(decoder.read_batch_float(actual.data(), N, actual_count, stream),
               common::E_OK);
     ASSERT_EQ(actual_count, N);
     for (int i = 0; i < N; i++) {
@@ -452,7 +453,8 @@ TEST_F(GorillaCodecTest, DoubleBatchScalarAndSkipInterleave) {
     std::vector<double> batch(113);
     int actual = 0;
     ASSERT_EQ(
-        decoder.read_batch_double(batch.data(), batch.size(), actual, wrapped),
+        decoder.read_batch_double(batch.data(), static_cast<int>(batch.size()),
+                                  actual, wrapped),
         common::E_OK);
     ASSERT_EQ(actual, static_cast<int>(batch.size()));
     for (int i = 0; i < actual; i++, cursor++) {
@@ -474,9 +476,9 @@ TEST_F(GorillaCodecTest, DoubleBatchScalarAndSkipInterleave) {
 
     std::vector<double> tail(N - cursor);
     actual = 0;
-    ASSERT_EQ(
-        decoder.read_batch_double(tail.data(), tail.size(), actual, wrapped),
-        common::E_OK);
+    ASSERT_EQ(decoder.read_batch_double(
+                  tail.data(), static_cast<int>(tail.size()), actual, wrapped),
+              common::E_OK);
     ASSERT_EQ(actual, static_cast<int>(tail.size()));
     for (int i = 0; i < actual; i++, cursor++) {
         EXPECT_EQ(common::double_to_long(tail[i]),
@@ -496,7 +498,7 @@ TEST_F(GorillaCodecTest, DoubleBatchDecodeFullWidthXor) {
     storage::DoubleGorillaEncoder encoder;
     common::ByteStream stream(1024, common::MOD_DEFAULT);
     for (int i = 0; i < N; i++) {
-        memcpy(&expected[i], &patterns[i], sizeof(double));
+        std::memcpy(&expected[i], &patterns[i], sizeof(double));
         ASSERT_EQ(encoder.encode(expected[i], stream), common::E_OK);
     }
     encoder.flush(stream);
@@ -517,9 +519,45 @@ TEST_F(GorillaCodecTest, DoubleBatchDecodeFullWidthXor) {
     ASSERT_EQ(actual, N);
     for (int i = 0; i < N; i++) {
         uint64_t decoded_bits = 0;
-        memcpy(&decoded_bits, &decoded[i], sizeof(double));
+        std::memcpy(&decoded_bits, &decoded[i], sizeof(double));
         EXPECT_EQ(decoded_bits, patterns[i]) << "i=" << i;
     }
+}
+
+TEST_F(GorillaCodecTest, DoubleBatchTruncatedUnwrappedInputReturnsError) {
+    storage::DoubleGorillaEncoder encoder;
+    common::ByteStream encoded_stream(1024, common::MOD_DEFAULT);
+    const int N = 128;
+    for (int i = 0; i < N; i++) {
+        double value = std::sin(i * 0.03125) * 1000.0 + i * 0.125;
+        ASSERT_EQ(encoder.encode(value, encoded_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder.flush(encoded_stream), common::E_OK);
+
+    uint32_t total = encoded_stream.total_size();
+    ASSERT_GT(total, 1u);
+    std::vector<uint8_t> encoded(total);
+    uint32_t got = 0;
+    encoded_stream.read_buf(encoded.data(), total, got);
+    ASSERT_EQ(got, total);
+
+    common::ByteStream decode_input(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(decode_input.write_buf(encoded.data(), total - 1), common::E_OK);
+    storage::DoubleGorillaDecoder decoder;
+    std::vector<double> decoded(N);
+    int actual = -1;
+    EXPECT_EQ(
+        decoder.read_batch_double(decoded.data(), N, actual, decode_input),
+        common::E_BUF_NOT_ENOUGH);
+    EXPECT_LT(actual, N);
+
+    common::ByteStream skip_input(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(skip_input.write_buf(encoded.data(), total - 1), common::E_OK);
+    storage::DoubleGorillaDecoder skip_decoder;
+    int skipped = -1;
+    EXPECT_EQ(skip_decoder.skip_double(N, skipped, skip_input),
+              common::E_BUF_NOT_ENOUGH);
+    EXPECT_LT(skipped, N);
 }
 
 TEST_F(GorillaCodecTest, Int32BatchSkip) {
