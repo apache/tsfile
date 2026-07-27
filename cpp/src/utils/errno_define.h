@@ -58,24 +58,6 @@ const int E_INVALID_NODE_TYPE = 52;
 const int E_ENCODE_ERR = 53;
 const int E_DECODE_ERR = 54;
 
-// Deprecated legacy values retained for source compatibility. The current
-// TsFile implementation does not return these codes.
-const int E_NET_EPOLL_ERR = 9;
-const int E_NET_EPOLL_WAIT_ERR = 10;
-const int E_NET_RECV_ERR = 11;
-const int E_NET_ACCEPT_ERR = 12;
-const int E_NET_FCNTL_ERR = 13;
-const int E_NET_LISTEN_ERR = 14;
-const int E_NET_SEND_ERR = 15;
-const int E_PIPE_ERR = 16;
-const int E_THREAD_CREATE_ERR = 17;
-const int E_MUTEX_ERR = 18;
-const int E_COND_ERR = 19;
-const int E_JSON_INVALID = 39;
-const int E_PARSER_ERR = 41;
-const int E_ANALYZE_ERR = 42;
-const int E_SDK_QUERY_OPTIMIZE_ERR = 47;
-
 }  // end namespace common
 
 #endif  // UTILS_ERRNO_DEFINE_H
