@@ -25,6 +25,7 @@
 #endif
 #include <utils/db_utils.h>
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -87,6 +88,21 @@ TEST_F(CReleaseTest, TestCreateFile) {
 
     remove("create_file1.tsfile");
     free_write_file(&file);
+}
+
+TEST_F(CReleaseTest, RejectCorruptedFileWithoutDoubleClosingDescriptor) {
+    const char* file_name = "corrupted_empty_file.tsfile";
+    remove(file_name);
+    FILE* empty_file = fopen(file_name, "wb");
+    ASSERT_NE(nullptr, empty_file);
+    ASSERT_EQ(0, fclose(empty_file));
+
+    ERRNO error_no = RET_OK;
+    TsFileReader reader = tsfile_reader_new(file_name, &error_no);
+    EXPECT_EQ(nullptr, reader);
+    EXPECT_EQ(RET_TSFILE_CORRUPTED, error_no);
+
+    remove(file_name);
 }
 
 TEST_F(CReleaseTest, TsFileWriterNew) {
