@@ -40,7 +40,7 @@ using namespace common;
 namespace storage {
 
 void ReadFile::close() {
-    if (fd_ > 0) {
+    if (fd_ >= 0) {
         ::close(fd_);
         fd_ = -1;
     }
@@ -65,7 +65,7 @@ int ReadFile::open(const std::string& file_path) {
     } else if (RET_FAIL(check_file_magic())) {
     }
     if (IS_FAIL(ret)) {
-        ::close(fd_);
+        close();
     }
     return ret;
 }

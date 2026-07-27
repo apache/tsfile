@@ -21,6 +21,11 @@ from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
 
 ctypedef int32_t ErrorCode
 
+cdef extern from "cwrapper/errno_define_c.h":
+    enum:
+        RET_OK
+        RET_NO_MORE_DATA
+
 # import symbols from tsfile_cwrapper.h
 cdef extern from "cwrapper/tsfile_cwrapper.h":
     # common

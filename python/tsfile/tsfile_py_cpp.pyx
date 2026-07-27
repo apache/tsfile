@@ -27,11 +27,10 @@ from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.string cimport strdup
 from libc.string cimport memset
-from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
 from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
 
-from tsfile.exceptions import ERROR_MAPPING, TypeMismatchError
+from tsfile.exceptions import get_exception, InvalidArgumentError, TypeMismatchError
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
 from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
@@ -49,17 +48,11 @@ from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char * context=NULL) except*:
-    cdef:
-        object exc_type
-        object exc_instance
-
-    if errcode == 0:
+    if errcode == RET_OK:
         return
 
-    exc_type = ERROR_MAPPING.get(errcode)
-    print(exc_type)
-    exc_instance = exc_type(errcode, "")
-    PyErr_SetObject(exc_type, exc_instance)
+    py_context = context.decode('utf-8') if context != NULL else None
+    raise get_exception(errcode, py_context)
 
 # convert from c to python
 cdef object from_c_result_set_meta_data(ResultSetMetaData schema):
@@ -226,18 +219,35 @@ cdef TableSchema * to_c_table_schema(object py_schema):
     return c_schema
 
 cdef Tablet to_c_tablet(object tablet):
-    cdef Tablet ctablet
+    cdef Tablet ctablet = NULL
     cdef int max_row_num
+    cdef int column_num
+    cdef int i, row, col
     cdef TSDataType data_type
     cdef int64_t timestamp
     cdef bytes device_id_bytes
     cdef const char * device_id_c
-    cdef char** columns_names
-    cdef TSDataType * column_types
-    cdef bytes row_bytes
-    cdef char *raw_str
+    cdef char** columns_names = NULL
+    cdef TSDataType * columns_types = NULL
+    cdef char *raw_str = NULL
     cdef const char * str_ptr
     cdef Py_ssize_t raw_len
+    cdef object column_name_list = tablet.get_column_name_list()
+    cdef object data_type_list = tablet.get_data_type_list()
+    cdef object value_list = tablet.get_value_list()
+
+    column_num = len(column_name_list)
+    max_row_num = tablet.get_max_row_num()
+    if column_num != len(data_type_list) or column_num != len(value_list):
+        raise InvalidArgumentError(
+            context="Tablet column names, data types, and values must have equal lengths"
+        )
+    if len({(<str> name).lower() for name in column_name_list}) != column_num:
+        raise InvalidArgumentError(
+            context="Tablet column names must be unique (case-insensitive)"
+        )
+    if max_row_num <= 0:
+        raise InvalidArgumentError(context="Tablet max_row_num must be positive")
 
     if tablet.get_target_name() is not None:
         device_id_bytes = PyUnicode_AsUTF8String(tablet.get_target_name())
@@ -245,90 +255,153 @@ cdef Tablet to_c_tablet(object tablet):
     else:
         device_id_c = NULL
 
-    column_num = len(tablet.get_column_name_list())
     columns_names = <char**> malloc(sizeof(char *) * column_num)
     columns_types = <TSDataType *> malloc(sizeof(TSDataType) * column_num)
-    for i in range(column_num):
-        columns_names[i] = strdup(tablet.get_column_name_list()[i].encode('utf-8'))
-        columns_types[i] = to_c_data_type(tablet.get_data_type_list()[i])
+    if columns_names == NULL or columns_types == NULL:
+        free(columns_names)
+        free(columns_types)
+        raise MemoryError("Failed to allocate tablet schema arrays")
+    memset(columns_names, 0, sizeof(char *) * column_num)
+    try:
+        for i in range(column_num):
+            columns_names[i] = strdup((<str> column_name_list[i]).encode('utf-8'))
+            if columns_names[i] == NULL:
+                raise MemoryError("Failed to allocate tablet column name")
+            columns_types[i] = to_c_data_type(data_type_list[i])
+        ctablet = _tablet_new_with_target_name(
+            device_id_c, columns_names, columns_types, column_num, max_row_num
+        )
+    finally:
+        free(columns_types)
+        for i in range(column_num):
+            free(columns_names[i])
+        free(columns_names)
 
-    max_row_num = tablet.get_max_row_num()
+    if ctablet == NULL:
+        raise MemoryError("Failed to allocate native tablet")
 
-    ctablet = _tablet_new_with_target_name(device_id_c, columns_names, columns_types, column_num,
-                                           max_row_num)
-    free(columns_types)
-    for i in range(column_num):
-        free(columns_names[i])
-    free(columns_names)
+    try:
+        for row in range(max_row_num):
+            timestamp_py = tablet.get_timestamp_list()[row]
+            if timestamp_py is None:
+                continue
+            timestamp = timestamp_py
+            check_error(
+                tablet_add_timestamp(ctablet, row, timestamp),
+                b"Failed to add tablet timestamp",
+            )
 
-    for row in range(max_row_num):
-        timestamp_py = tablet.get_timestamp_list()[row]
-        if timestamp_py is None:
-            continue
-        timestamp = timestamp_py
-        tablet_add_timestamp(ctablet, row, timestamp)
-
-    for col in range(column_num):
-        data_type = to_c_data_type(tablet.get_data_type_list()[col])
-        value = tablet.get_value_list()[col]
-        # BOOLEAN
-        if data_type == TS_DATATYPE_BOOLEAN:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_bool(ctablet, row, col, value[row])
-        # INT32
-        elif data_type == TS_DATATYPE_INT32:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_int32_t(ctablet, row, col, value[row])
-
-        # INT64
-        elif data_type == TS_DATATYPE_INT64 or data_type == TS_DATATYPE_TIMESTAMP:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_int64_t(ctablet, row, col, value[row])
-        # FLOAT
-        elif data_type == TS_DATATYPE_FLOAT:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_float(ctablet, row, col, value[row])
-
-        # DOUBLE
-        elif data_type == TS_DATATYPE_DOUBLE:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_double(ctablet, row, col, value[row])
-
-        elif data_type == TS_DATATYPE_DATE:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    tablet_add_value_by_index_int32_t(ctablet, row, col, parse_date_to_int(value[row]))
-
-        # STRING or TEXT
-        elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    py_value = value[row]
-                    str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
-                    tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
-
-        elif data_type == TS_DATATYPE_BLOB:
-            for row in range(max_row_num):
-                if value[row] is not None:
-                    PyBytes_AsStringAndSize(value[row], &raw_str, &raw_len)
-                    tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
+        for col in range(column_num):
+            data_type = to_c_data_type(data_type_list[col])
+            value = value_list[col]
+            # BOOLEAN
+            if data_type == TS_DATATYPE_BOOLEAN:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_bool(
+                                ctablet, row, col, value[row]
+                            ),
+                            b"Failed to add BOOLEAN tablet value",
+                        )
+            # INT32
+            elif data_type == TS_DATATYPE_INT32:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_int32_t(
+                                ctablet, row, col, value[row]
+                            ),
+                            b"Failed to add INT32 tablet value",
+                        )
+            # INT64
+            elif data_type == TS_DATATYPE_INT64 or data_type == TS_DATATYPE_TIMESTAMP:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_int64_t(
+                                ctablet, row, col, value[row]
+                            ),
+                            b"Failed to add INT64 tablet value",
+                        )
+            # FLOAT
+            elif data_type == TS_DATATYPE_FLOAT:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_float(
+                                ctablet, row, col, value[row]
+                            ),
+                            b"Failed to add FLOAT tablet value",
+                        )
+            # DOUBLE
+            elif data_type == TS_DATATYPE_DOUBLE:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_double(
+                                ctablet, row, col, value[row]
+                            ),
+                            b"Failed to add DOUBLE tablet value",
+                        )
+            elif data_type == TS_DATATYPE_DATE:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        check_error(
+                            tablet_add_value_by_index_int32_t(
+                                ctablet, row, col, parse_date_to_int(value[row])
+                            ),
+                            b"Failed to add DATE tablet value",
+                        )
+            # STRING or TEXT
+            elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        py_value = value[row]
+                        str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
+                        check_error(
+                            tablet_add_value_by_index_string_with_len(
+                                ctablet, row, col, str_ptr, raw_len
+                            ),
+                            b"Failed to add STRING tablet value",
+                        )
+            elif data_type == TS_DATATYPE_BLOB:
+                for row in range(max_row_num):
+                    if value[row] is not None:
+                        if PyBytes_AsStringAndSize(
+                            value[row], &raw_str, &raw_len
+                        ) < 0:
+                            raise TypeError("BLOB tablet values must be bytes")
+                        check_error(
+                            tablet_add_value_by_index_string_with_len(
+                                ctablet, row, col, raw_str, raw_len
+                            ),
+                            b"Failed to add BLOB tablet value",
+                        )
+    except:
+        free_tablet(&ctablet)
+        raise
 
     return ctablet
 
+cdef inline void check_dataframe_tablet_error(
+    Tablet tablet, int errcode, const char * context
+) except *:
+    if errcode == RET_OK:
+        return
+    free_tablet(&tablet)
+    check_error(errcode, context)
+
+
 cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object table_schema):
-    cdef Tablet ctablet
+    cdef Tablet ctablet = NULL
     cdef int max_row_num
     cdef TSDataType data_type
     cdef int64_t timestamp
     cdef const char * device_id_c = NULL
-    cdef char** columns_names
-    cdef TSDataType * columns_types
-    cdef char *raw_str
+    cdef char** columns_names = NULL
+    cdef TSDataType * columns_types = NULL
+    cdef char *raw_str = NULL
     cdef const char * str_ptr
     cdef Py_ssize_t raw_len
     cdef int column_num
@@ -359,20 +432,68 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object t
         data_type = table_schema.get_column(column).get_data_type()
         column_types_list.append(data_type)
 
+    # Validate object-backed columns before allocating the native Tablet so a
+    # validation exception cannot leak the native allocation.
+    for col in range(column_num):
+        col_name = data_columns[col]
+        data_type = column_types_list[col]
+        if data_type in (
+            TS_DATATYPE_DATE,
+            TS_DATATYPE_STRING,
+            TS_DATATYPE_TEXT,
+            TS_DATATYPE_BLOB,
+        ):
+            col_series = dataframe[col_name]
+            first_valid_idx = col_series.first_valid_index()
+            if first_valid_idx is not None:
+                value = col_series[first_valid_idx]
+                if data_type == TS_DATATYPE_DATE and not isinstance(value, date_type):
+                    raise TypeMismatchError(
+                        context=(
+                            f"Column '{col_name}': expected DATE (datetime.date), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                    )
+                if data_type in (TS_DATATYPE_STRING, TS_DATATYPE_TEXT) and not isinstance(value, str):
+                    raise TypeMismatchError(
+                        context=(
+                            f"Column '{col_name}': expected STRING/TEXT, "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                    )
+                if data_type == TS_DATATYPE_BLOB and not isinstance(value, bytes):
+                    raise TypeMismatchError(
+                        context=(
+                            f"Column '{col_name}': expected BLOB (bytes), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                    )
+
     columns_names = <char**> malloc(sizeof(char *) * column_num)
     columns_types = <TSDataType *> malloc(sizeof(TSDataType) * column_num)
+    if columns_names == NULL or columns_types == NULL:
+        free(columns_names)
+        free(columns_types)
+        raise MemoryError("Failed to allocate DataFrame tablet schema arrays")
+    memset(columns_names, 0, sizeof(char *) * column_num)
+    try:
+        for i in range(column_num):
+            columns_names[i] = strdup(data_columns[i].lower().encode('utf-8'))
+            if columns_names[i] == NULL:
+                raise MemoryError("Failed to allocate DataFrame tablet column name")
+            columns_types[i] = to_c_data_type(column_types_list[i])
 
-    for i in range(column_num):
-        columns_names[i] = strdup(data_columns[i].lower().encode('utf-8'))
-        columns_types[i] = column_types_list[i]
+        ctablet = _tablet_new_with_target_name(
+            device_id_c, columns_names, columns_types, column_num, max_row_num
+        )
+    finally:
+        free(columns_types)
+        for i in range(column_num):
+            free(columns_names[i])
+        free(columns_names)
 
-    ctablet = _tablet_new_with_target_name(device_id_c, columns_names, columns_types, column_num,
-                         max_row_num)
-
-    free(columns_types)
-    for i in range(column_num):
-        free(columns_names[i])
-    free(columns_names)
+    if ctablet == NULL:
+        raise MemoryError("Failed to allocate native DataFrame tablet")
 
     if use_id_as_time:
         for row in range(max_row_num):
@@ -380,7 +501,11 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object t
             if pd.isna(timestamp_py):
                 continue
             timestamp = <int64_t> timestamp_py
-            tablet_add_timestamp(ctablet, row, timestamp)
+            check_dataframe_tablet_error(
+                ctablet,
+                tablet_add_timestamp(ctablet, row, timestamp),
+                b"Failed to add DataFrame index timestamp",
+            )
     else:
         time_values = dataframe[time_column.get_column_name()].values
         for row in range(max_row_num):
@@ -388,74 +513,89 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object t
             if pd.isna(timestamp_py):
                 continue
             timestamp = <int64_t> timestamp_py
-            tablet_add_timestamp(ctablet, row, timestamp)
+            check_dataframe_tablet_error(
+                ctablet,
+                tablet_add_timestamp(ctablet, row, timestamp),
+                b"Failed to add DataFrame timestamp",
+            )
 
     for col in range(column_num):
         col_name = data_columns[col]
         data_type = column_types_list[col]
         column_values = dataframe[col_name].values
 
-        # Per-column validation for object types (check first non-null value only)
-        if data_type in (TS_DATATYPE_DATE, TS_DATATYPE_STRING, TS_DATATYPE_TEXT, TS_DATATYPE_BLOB):
-            col_series = dataframe[col_name]
-            first_valid_idx = col_series.first_valid_index()
-            if first_valid_idx is not None:
-                value = col_series[first_valid_idx]
-                if data_type == TS_DATATYPE_DATE:
-                    if not isinstance(value, date_type):
-                        raise TypeMismatchError(context=
-                            f"Column '{col_name}': expected DATE (datetime.date), "
-                            f"got {type(value).__name__}: {value!r}"
-                        )
-                elif data_type in (TS_DATATYPE_STRING, TS_DATATYPE_TEXT):
-                    if not isinstance(value, str):
-                        raise TypeMismatchError(context=
-                            f"Column '{col_name}': expected STRING/TEXT, "
-                            f"got {type(value).__name__}: {value!r}"
-                        )
-                elif data_type == TS_DATATYPE_BLOB:
-                    if not isinstance(value, bytes):
-                        raise TypeMismatchError(context=
-                            f"Column '{col_name}': expected BLOB (bytes or bytearray), "
-                            f"got {type(value).__name__}: {value!r}"
-                        )
-
         # BOOLEAN
         if data_type == TS_DATATYPE_BOOLEAN:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_bool(ctablet, row, col, <bint> value)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_bool(
+                            ctablet, row, col, <bint> value
+                        ),
+                        b"Failed to add BOOLEAN DataFrame value",
+                    )
         # INT32
         elif data_type == TS_DATATYPE_INT32:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_int32_t(ctablet, row, col, <int32_t> value)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_int32_t(
+                            ctablet, row, col, <int32_t> value
+                        ),
+                        b"Failed to add INT32 DataFrame value",
+                    )
         # INT64
         elif data_type == TS_DATATYPE_INT64 or data_type == TS_DATATYPE_TIMESTAMP:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_int64_t(ctablet, row, col, <int64_t> value)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_int64_t(
+                            ctablet, row, col, <int64_t> value
+                        ),
+                        b"Failed to add INT64 DataFrame value",
+                    )
         # FLOAT
         elif data_type == TS_DATATYPE_FLOAT:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_float(ctablet, row, col, <float> value)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_float(
+                            ctablet, row, col, <float> value
+                        ),
+                        b"Failed to add FLOAT DataFrame value",
+                    )
         # DOUBLE
         elif data_type == TS_DATATYPE_DOUBLE:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_double(ctablet, row, col, <double> value)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_double(
+                            ctablet, row, col, <double> value
+                        ),
+                        b"Failed to add DOUBLE DataFrame value",
+                    )
         # DATE (validated per-column above)
         elif data_type == TS_DATATYPE_DATE:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
-                    tablet_add_value_by_index_int32_t(ctablet, row, col, parse_date_to_int(value))
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_int32_t(
+                            ctablet, row, col, parse_date_to_int(value)
+                        ),
+                        b"Failed to add DATE DataFrame value",
+                    )
         # STRING or TEXT (validated per-column above)
         elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
             for row in range(max_row_num):
@@ -463,7 +603,13 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object t
                 if not pd.isna(value):
                     py_value = str(value)
                     str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
-                    tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
+                    check_dataframe_tablet_error(
+                        ctablet,
+                        tablet_add_value_by_index_string_with_len(
+                            ctablet, row, col, str_ptr, raw_len
+                        ),
+                        b"Failed to add STRING DataFrame value",
+                    )
         # BLOB (validated per-column above)
         elif data_type == TS_DATATYPE_BLOB:
             for row in range(max_row_num):
@@ -471,11 +617,23 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object t
                 if not pd.isna(value):
                     if isinstance(value, bytes):
                         PyBytes_AsStringAndSize(value, &raw_str, &raw_len)
-                        tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
+                        check_dataframe_tablet_error(
+                            ctablet,
+                            tablet_add_value_by_index_string_with_len(
+                                ctablet, row, col, raw_str, raw_len
+                            ),
+                            b"Failed to add BLOB DataFrame value",
+                        )
                     else:
                         value_bytes = bytes(value)
                         PyBytes_AsStringAndSize(value_bytes, &raw_str, &raw_len)
-                        tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
+                        check_dataframe_tablet_error(
+                            ctablet,
+                            tablet_add_value_by_index_string_with_len(
+                                ctablet, row, col, raw_str, raw_len
+                            ),
+                            b"Failed to add BLOB DataFrame value",
+                        )
 
     return ctablet
 
@@ -485,42 +643,100 @@ cdef TsRecord to_c_record(object row_record):
     cdef bytes device_id_bytes = PyUnicode_AsUTF8String(row_record.get_device_id())
     cdef const char * device_id = device_id_bytes
     cdef const char * str_ptr
-    cdef char * blob_ptr
+    cdef char * blob_ptr = NULL
     cdef Py_ssize_t str_len
-    cdef TsRecord record
+    cdef TsRecord record = NULL
     cdef int i
     cdef TSDataType data_type
     record = _ts_record_new(device_id, timestamp, field_num)
-    for i in range(field_num):
-        field = row_record.get_fields()[i]
-        data_type = to_c_data_type(field.get_data_type())
-        if data_type == TS_DATATYPE_BOOLEAN:
-            _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                     field.get_bool_value())
-        elif data_type == TS_DATATYPE_INT32 or data_type == TS_DATATYPE_DATE:
-            _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                        field.get_int_value())
-        elif data_type == TS_DATATYPE_INT64:
-            _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                        field.get_long_value())
-        elif data_type == TS_DATATYPE_TIMESTAMP:
-            _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                        field.get_timestamp_value())
-        elif data_type == TS_DATATYPE_DOUBLE:
-            _insert_data_into_ts_record_by_name_double(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                       field.get_double_value())
-        elif data_type == TS_DATATYPE_FLOAT:
-            _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                      field.get_float_value())
-        elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
-            str_ptr = PyUnicode_AsUTF8AndSize(field.get_string_value(), &str_len)
-            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                                str_ptr, str_len)
-        elif data_type == TS_DATATYPE_BLOB:
-            if PyBytes_AsStringAndSize(field.get_string_value(), &blob_ptr, &str_len) < 0:
-                raise ValueError("blob not legal")
-            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                                <const char *> blob_ptr, <uint32_t> str_len)
+    if record == NULL:
+        raise MemoryError("Failed to allocate native row record")
+    try:
+        for i in range(field_num):
+            field = row_record.get_fields()[i]
+            data_type = to_c_data_type(field.get_data_type())
+            if data_type == TS_DATATYPE_BOOLEAN:
+                check_error(
+                    _insert_data_into_ts_record_by_name_bool(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_bool_value(),
+                    ),
+                    b"Failed to add BOOLEAN row-record field",
+                )
+            elif data_type == TS_DATATYPE_INT32 or data_type == TS_DATATYPE_DATE:
+                check_error(
+                    _insert_data_into_ts_record_by_name_int32_t(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_int_value(),
+                    ),
+                    b"Failed to add INT32 row-record field",
+                )
+            elif data_type == TS_DATATYPE_INT64:
+                check_error(
+                    _insert_data_into_ts_record_by_name_int64_t(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_long_value(),
+                    ),
+                    b"Failed to add INT64 row-record field",
+                )
+            elif data_type == TS_DATATYPE_TIMESTAMP:
+                check_error(
+                    _insert_data_into_ts_record_by_name_int64_t(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_timestamp_value(),
+                    ),
+                    b"Failed to add TIMESTAMP row-record field",
+                )
+            elif data_type == TS_DATATYPE_DOUBLE:
+                check_error(
+                    _insert_data_into_ts_record_by_name_double(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_double_value(),
+                    ),
+                    b"Failed to add DOUBLE row-record field",
+                )
+            elif data_type == TS_DATATYPE_FLOAT:
+                check_error(
+                    _insert_data_into_ts_record_by_name_float(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        field.get_float_value(),
+                    ),
+                    b"Failed to add FLOAT row-record field",
+                )
+            elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
+                str_ptr = PyUnicode_AsUTF8AndSize(field.get_string_value(), &str_len)
+                check_error(
+                    _insert_data_into_ts_record_by_name_string_with_len(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        str_ptr,
+                        str_len,
+                    ),
+                    b"Failed to add STRING row-record field",
+                )
+            elif data_type == TS_DATATYPE_BLOB:
+                if PyBytes_AsStringAndSize(
+                    field.get_string_value(), &blob_ptr, &str_len
+                ) < 0:
+                    raise TypeError("BLOB row-record values must be bytes")
+                check_error(
+                    _insert_data_into_ts_record_by_name_string_with_len(
+                        record,
+                        PyUnicode_AsUTF8(field.get_field_name()),
+                        <const char *> blob_ptr,
+                        <uint32_t> str_len,
+                    ),
+                    b"Failed to add BLOB row-record field",
+                )
+    except:
+        _free_tsfile_ts_record(&record)
+        raise
     return record
 
 # Free c structs' space
@@ -549,18 +765,18 @@ cdef void free_c_row_record(TsRecord record):
     _free_tsfile_ts_record(&record)
 
 # Reader and writer new.
-cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except +:
+cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except NULL:
     cdef ErrorCode errno = 0
-    cdef TsFileWriter writer
+    cdef TsFileWriter writer = NULL
     cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
     cdef const char * c_path = encoded_path
     writer = _tsfile_writer_new(c_path, memory_threshold, &errno)
     check_error(errno)
     return writer
 
-cdef TsFileReader tsfile_reader_new_c(object pathname) except +:
+cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     cdef ErrorCode errno = 0
-    cdef TsFileReader reader
+    cdef TsFileReader reader = NULL
     cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
     cdef const char * c_path = encoded_path
     reader = tsfile_reader_new(c_path, &errno)
