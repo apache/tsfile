@@ -555,6 +555,9 @@ char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
     auto* r = static_cast<storage::ResultSet*>(result_set);
     std::string column_name_(column_name);
     common::String* ret = r->get_value<common::String*>(column_name_);
+    if (ret == nullptr) {
+        return nullptr;
+    }
     // Caller should free return's char* 's space.
     char* dup = (char*)malloc(ret->len_ + 1);
     if (dup) {
@@ -581,6 +584,9 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index) {
     auto* r = static_cast<storage::ResultSet*>(result_set);
     common::String* ret = r->get_value<common::String*>(column_index);
+    if (ret == nullptr) {
+        return nullptr;
+    }
     // Caller should free return's char* 's space.
     char* dup = (char*)malloc(ret->len_ + 1);
     if (dup) {

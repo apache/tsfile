@@ -57,6 +57,7 @@ void ChunkReader::reset() {
     char* file_data_buf = in_stream_.get_wrapped_buf();
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
+        in_stream_.clear_wrapped_buf();
     }
     in_stream_.reset();
     file_data_buf_size_ = 0;
@@ -113,7 +114,11 @@ int ChunkReader::load_by_meta(ChunkMeta* meta) {
     }
     ret = read_file_->read(chunk_meta_->offset_of_chunk_header_, file_data_buf,
                            file_data_buf_size_, ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         LOGE("file corrupted, ret=" << ret << ", offset="
                                     << chunk_meta_->offset_of_chunk_header_
