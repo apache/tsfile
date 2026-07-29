@@ -36,4 +36,7 @@ public interface ITsFileWriter extends AutoCloseable {
 
   @TsFileApi
   void write(TSRecord record) throws IOException, WriteProcessException;
+
+  @TsFileApi
+  void addTsFileProperty(String key, String value);
 }

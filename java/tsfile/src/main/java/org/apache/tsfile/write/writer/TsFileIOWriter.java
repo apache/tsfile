@@ -143,6 +143,8 @@ public class TsFileIOWriter implements AutoCloseable {
 
   protected Map<String, Long> tableSizeMap = new HashMap<>();
 
+  private final Map<String, String> tsFileProperties = new HashMap<>();
+
   /** empty construct function. */
   protected TsFileIOWriter() {
     setEncryptParam(
@@ -244,6 +246,11 @@ public class TsFileIOWriter implements AutoCloseable {
         setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
       }
     }
+  }
+
+  /** Add a custom property to the TsFile metadata. */
+  public void addTsFileProperty(String key, String value) {
+    tsFileProperties.put(key, value);
   }
 
   public void addFlushListener(FlushChunkMetadataListener listener) {
@@ -590,6 +597,7 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
+    tsFileProperties.forEach(tsFileMetadata::addProperty);
     tsFileMetadata.addProperty("encryptLevel", encryptLevel);
     tsFileMetadata.addProperty("encryptType", encryptType);
     tsFileMetadata.addProperty("encryptKey", encryptKey);
