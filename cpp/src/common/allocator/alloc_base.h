@@ -65,6 +65,9 @@ extern TSFILE_API const char* g_mod_names[__LAST_MOD_ID];
 void* mem_alloc(uint32_t size, AllocModID mid);
 void mem_free(void* ptr);
 void* mem_realloc(void* ptr, uint32_t size);
+#ifdef ENABLE_TEST
+TSFILE_API void TEST_fail_next_mem_realloc();
+#endif
 
 class ModStat {
    public:

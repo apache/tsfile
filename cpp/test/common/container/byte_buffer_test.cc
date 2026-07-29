@@ -66,4 +66,21 @@ TEST_F(ByteBufferTest, ExtendMemory) {
     EXPECT_STREQ(read_value, value);
 }
 
+TEST_F(ByteBufferTest, ReallocFailurePreservesAllocation) {
+    common::ByteBuffer byte_buffer;
+    byte_buffer.init(4);
+    const char first[] = {'a', 'b', 'c', 'd'};
+    const char second[] = {'e', 'f', 'g', 'h'};
+    ASSERT_EQ(byte_buffer.append_fixed_value(first, sizeof(first)),
+              common::E_OK);
+    char* original_data = byte_buffer.get_data();
+
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(byte_buffer.append_fixed_value(second, sizeof(second)),
+              common::E_OOM);
+    EXPECT_EQ(byte_buffer.get_data(), original_data);
+    EXPECT_EQ(byte_buffer.get_data_size(), sizeof(first));
+    EXPECT_EQ(memcmp(byte_buffer.get_data(), first, sizeof(first)), 0);
+}
+
 }  // namespace

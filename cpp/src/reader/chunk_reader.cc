@@ -254,11 +254,16 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size_ < read_size ||
         read_size < file_data_buf_size_ / 10) {
-        file_data_buf = (char*)mem_realloc(file_data_buf, read_size);
-        if (IS_NULL(file_data_buf)) {
+        char* resized_buf = (char*)mem_realloc(file_data_buf, read_size);
+        if (IS_NULL(resized_buf)) {
             return E_OOM;
         }
+        file_data_buf = resized_buf;
         file_data_buf_size_ = read_size;
+        // mem_realloc() may move the allocation. Keep the stream's external
+        // pointer synchronized even if the subsequent file read fails, so
+        // reset()/destroy() can still release the live buffer.
+        in_stream_.wrap_from(file_data_buf, read_size);
     }
     int ret_read_len = 0;
     if (RET_FAIL(

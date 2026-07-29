@@ -423,15 +423,19 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
 }
 
 template <>
-void Tablet::process_val(uint32_t row_index, uint32_t schema_index,
-                         common::String str) {
-    value_matrix_[schema_index].string_col->append(row_index, str.buf_,
-                                                   str.len_);
+int Tablet::process_val(uint32_t row_index, uint32_t schema_index,
+                        common::String str) {
+    int ret = value_matrix_[schema_index].string_col->append(
+        row_index, str.buf_, str.len_);
+    if (ret != E_OK) {
+        return ret;
+    }
     bitmaps_[schema_index].clear(row_index); /* mark as non-null */
+    return E_OK;
 }
 
 template <typename T>
-void Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
+int Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
     switch (schema_vec_->at(schema_index).data_type_) {
         case common::BOOLEAN:
             (value_matrix_[schema_index].bool_data)[row_index] =
@@ -459,6 +463,7 @@ void Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
             ASSERT(false);
     }
     bitmaps_[schema_index].clear(row_index); /* mark as non-null */
+    return E_OK;
 }
 
 template <typename T>
@@ -475,7 +480,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
         if (UNLIKELY(!TypeMatch<T>(schema.data_type_))) {
             return E_TYPE_NOT_MATCH;
         }
-        process_val(row_index, schema_index, val);
+        ret = process_val(row_index, schema_index, val);
     }
     return ret;
 }
@@ -492,7 +497,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, std::tm val) {
     }
     int32_t date_int;
     if (RET_SUCC(common::DateConverter::date_to_int(val, date_int))) {
-        process_val(row_index, schema_index, date_int);
+        ret = process_val(row_index, schema_index, date_int);
     }
     return ret;
 }

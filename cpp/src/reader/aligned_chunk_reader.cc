@@ -87,6 +87,12 @@ void AlignedChunkReader::reset() {
         time_compressor_->after_uncompress(time_uncompressed_buf_);
         time_uncompressed_buf_ = nullptr;
     }
+    if (value_uncompressed_buf_ != nullptr && value_compressor_ != nullptr) {
+        value_compressor_->after_uncompress(value_uncompressed_buf_);
+        value_uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
 
     // Multi-value reset
     for (auto* col : value_columns_) {
@@ -250,20 +256,23 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(time_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         LOGE("file corrupted, ret=" << ret << ", offset="
                                     << time_chunk_meta_->offset_of_chunk_header_
                                     << "read_len=" << ret_read_len);
         mem_free(time_file_data_buf);
+        return ret;
     }
-    if (IS_SUCC(ret)) {
-        time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
-        if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
-        } else {
-            time_chunk_visit_offset_ = time_in_stream_.read_pos();
-        }
+    time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
+    if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
+        return ret;
     }
+    time_chunk_visit_offset_ = time_in_stream_.read_pos();
     /* ================ deserialize value_chunk_header ================*/
     ret_read_len = 0;
     char* value_file_data_buf =
@@ -274,35 +283,38 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(value_chunk_meta_->offset_of_chunk_header_,
                            value_file_data_buf, file_data_value_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(value_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         LOGE("file corrupted, ret="
              << ret << ", offset=" << value_chunk_meta_->offset_of_chunk_header_
              << "read_len=" << ret_read_len);
         mem_free(value_file_data_buf);
+        return ret;
     }
-    if (IS_SUCC(ret)) {
-        value_in_stream_.wrap_from(value_file_data_buf, ret_read_len);
-        if (RET_FAIL(value_chunk_header_.deserialize_from(value_in_stream_))) {
-        } else if (RET_FAIL(alloc_compressor_and_decoder(
-                       time_decoder_, time_compressor_,
-                       time_chunk_header_.encoding_type_,
-                       time_chunk_header_.data_type_,
-                       time_chunk_header_.compression_type_))) {
-        } else if (RET_FAIL(alloc_compressor_and_decoder(
-                       value_decoder_, value_compressor_,
-                       value_chunk_header_.encoding_type_,
-                       value_chunk_header_.data_type_,
-                       value_chunk_header_.compression_type_))) {
-        } else {
-            value_chunk_visit_offset_ = value_in_stream_.read_pos();
+    value_in_stream_.wrap_from(value_file_data_buf, ret_read_len);
+    if (RET_FAIL(value_chunk_header_.deserialize_from(value_in_stream_))) {
+    } else if (RET_FAIL(alloc_compressor_and_decoder(
+                   time_decoder_, time_compressor_,
+                   time_chunk_header_.encoding_type_,
+                   time_chunk_header_.data_type_,
+                   time_chunk_header_.compression_type_))) {
+    } else if (RET_FAIL(alloc_compressor_and_decoder(
+                   value_decoder_, value_compressor_,
+                   value_chunk_header_.encoding_type_,
+                   value_chunk_header_.data_type_,
+                   value_chunk_header_.compression_type_))) {
+    } else {
+        value_chunk_visit_offset_ = value_in_stream_.read_pos();
 #if DEBUG_SE
-            std::cout << "AlignedChunkReader::load_by_meta, time_chunk_header="
-                      << time_chunk_header_
-                      << ", value_chunk_header=" << value_chunk_header_
-                      << std::endl;
+        std::cout << "AlignedChunkReader::load_by_meta, time_chunk_header="
+                  << time_chunk_header_
+                  << ", value_chunk_header=" << value_chunk_header_
+                  << std::endl;
 #endif
-        }
     }
     return ret;
 }
@@ -445,11 +457,11 @@ int AlignedChunkReader::read_from_file_and_rewrap(
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size < read_size ||
         (may_shrink && read_size < file_data_buf_size / 10)) {
-        file_data_buf = (char*)mem_realloc(file_data_buf, read_size);
-        if (IS_NULL(file_data_buf)) {
-            in_stream_.clear_wrapped_buf();
+        char* resized_buf = (char*)mem_realloc(file_data_buf, read_size);
+        if (IS_NULL(resized_buf)) {
             return E_OOM;
         }
+        file_data_buf = resized_buf;
         file_data_buf_size = read_size;
         // Update stream pointer immediately so it stays valid even if
         // the subsequent read fails and the caller frees via destroy().
@@ -1190,18 +1202,20 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(time_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         mem_free(time_file_data_buf);
         return ret;
     }
-    if (IS_SUCC(ret)) {
-        time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
-        if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
-            return ret;
-        }
-        time_chunk_visit_offset_ = time_in_stream_.read_pos();
+    time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
+    if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
+        return ret;
     }
+    time_chunk_visit_offset_ = time_in_stream_.read_pos();
 
     // Alloc time decoder/compressor
     if (IS_SUCC(ret)) {
@@ -1236,24 +1250,25 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
 
         ret = read_file_->read(col->chunk_meta->offset_of_chunk_header_, vbuf,
                                col->file_data_buf_size, ret_read_len);
-        if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+        if (!IS_SUCC(ret)) {
+            mem_free(vbuf);
+            return ret;
+        }
+        if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
             ret = E_TSFILE_CORRUPTED;
             mem_free(vbuf);
+            return ret;
+        }
+        col->in_stream.wrap_from(vbuf, ret_read_len);
+        if (RET_FAIL(col->chunk_header.deserialize_from(col->in_stream))) {
             break;
         }
-        if (IS_SUCC(ret)) {
-            col->in_stream.wrap_from(vbuf, ret_read_len);
-            if (RET_FAIL(col->chunk_header.deserialize_from(col->in_stream))) {
-                break;
-            }
-            col->chunk_visit_offset = col->in_stream.read_pos();
-            if (RET_FAIL(alloc_compressor_and_decoder(
-                    col->decoder, col->compressor,
-                    col->chunk_header.encoding_type_,
-                    col->chunk_header.data_type_,
-                    col->chunk_header.compression_type_))) {
-                break;
-            }
+        col->chunk_visit_offset = col->in_stream.read_pos();
+        if (RET_FAIL(alloc_compressor_and_decoder(
+                col->decoder, col->compressor, col->chunk_header.encoding_type_,
+                col->chunk_header.data_type_,
+                col->chunk_header.compression_type_))) {
+            break;
         }
     }
 

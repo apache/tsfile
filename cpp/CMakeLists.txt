@@ -211,6 +211,9 @@ endif ()
 
 option(BUILD_TEST "Build tests" ON)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
+if (BUILD_TEST)
+    add_definitions(-DENABLE_TEST)
+endif ()
 
 option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
 message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")

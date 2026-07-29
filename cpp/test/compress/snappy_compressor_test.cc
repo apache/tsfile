@@ -162,4 +162,24 @@ TEST_F(SnappyTest, AfterUncompressFreesParamNotMember) {
     compressor.after_compress(compressed_a);
     compressor.after_compress(compressed_b);
 }
+
+TEST_F(SnappyTest, ReallocFailureReleasesTemporaryBuffer) {
+    storage::SnappyCompressor compressor;
+    std::string input(1024, 'S');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    int64_t memory_before =
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ);
+
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(compressor.compress(&input[0], input.size(), compressed,
+                                  compressed_len),
+              common::E_OOM);
+    EXPECT_EQ(compressed, nullptr);
+    EXPECT_EQ(compressed_len, 0u);
+    EXPECT_EQ(
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ),
+        memory_before);
+    compressor.destroy();
+}
 }  // namespace

@@ -126,4 +126,72 @@ TEST_F(LZOTest, TestBytes2) {
     compressor.after_compress(compressed_buf);
     compressor.after_uncompress(decompressed_buf);
 }
+
+TEST_F(LZOTest, DestroyAfterReleasedBuffersIsSafe) {
+    storage::LZOCompressor compressor;
+    std::string input(4096, 'L');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    ASSERT_EQ(compressor.compress(&input[0], input.size(), compressed,
+                                  compressed_len),
+              common::E_OK);
+
+    char* uncompressed = nullptr;
+    uint32_t uncompressed_len = 0;
+    ASSERT_EQ(compressor.uncompress(compressed, compressed_len, uncompressed,
+                                    uncompressed_len),
+              common::E_OK);
+    compressor.after_compress(compressed);
+    compressor.after_uncompress(uncompressed);
+
+    compressor.destroy();
+    compressor.destroy();
+}
+
+TEST_F(LZOTest, CompressReallocFailureReleasesTemporaryBuffer) {
+    storage::LZOCompressor compressor;
+    std::string input(1024, 'L');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    int64_t memory_before =
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ);
+
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(compressor.compress(&input[0], input.size(), compressed,
+                                  compressed_len),
+              common::E_OOM);
+    EXPECT_EQ(compressed, nullptr);
+    EXPECT_EQ(compressed_len, 0u);
+    EXPECT_EQ(
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ),
+        memory_before);
+    compressor.destroy();
+}
+
+TEST_F(LZOTest, UncompressReallocFailureReleasesTemporaryBuffer) {
+    storage::LZOCompressor compressor;
+    std::string input(1024, 'L');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    ASSERT_EQ(compressor.compress(&input[0], input.size(), compressed,
+                                  compressed_len),
+              common::E_OK);
+
+    char* uncompressed = nullptr;
+    uint32_t uncompressed_len = 0;
+    int64_t memory_before =
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ);
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(compressor.uncompress(compressed, compressed_len, uncompressed,
+                                    uncompressed_len),
+              common::E_OOM);
+    EXPECT_EQ(uncompressed, nullptr);
+    EXPECT_EQ(uncompressed_len, 0u);
+    EXPECT_EQ(
+        common::ModStat::get_instance().get_stat(common::MOD_COMPRESSOR_OBJ),
+        memory_before);
+
+    compressor.after_compress(compressed);
+    compressor.destroy();
+}
 }  // namespace
