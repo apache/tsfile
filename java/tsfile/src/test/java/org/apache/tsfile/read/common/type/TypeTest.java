@@ -108,6 +108,60 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteColumnValueToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+    Column column = Mockito.mock(Column.class);
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+
+    Mockito.when(column.getBoolean(0)).thenReturn(true);
+    Mockito.when(column.getInt(1)).thenReturn(1);
+    Mockito.when(column.getInt(2)).thenReturn(20260729);
+    Mockito.when(column.getLong(3)).thenReturn(2L);
+    Mockito.when(column.getLong(4)).thenReturn(3L);
+    Mockito.when(column.getFloat(5)).thenReturn(1.25F);
+    Mockito.when(column.getDouble(6)).thenReturn(2.5D);
+    Mockito.when(column.getBinary(7)).thenReturn(binary);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 0},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 2},
+      {TSDataType.INT64, 3},
+      {TSDataType.TIMESTAMP, 4},
+      {TSDataType.FLOAT, 5},
+      {TSDataType.DOUBLE, 6}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(builder, column, (int) testCase[1]);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260729);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.reset(builder);
+
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(builder, column, 7);
+      Mockito.verify(builder).writeBinary(binary);
+      Mockito.reset(builder);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, column, 0);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testWriteTsPrimitiveTypeToArray() {
     Binary binary = new Binary("value", StandardCharsets.UTF_8);
     TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsLong(2L)};

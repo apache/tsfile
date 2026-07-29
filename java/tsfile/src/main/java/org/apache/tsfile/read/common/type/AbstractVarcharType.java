@@ -301,6 +301,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, Column column, int index) {
+    builder.writeBinary(column.getBinary(index));
+  }
+
+  @Override
   public void write(TsPrimitiveType from, Object toArray, int index) {
     ((Binary[]) toArray)[index] = from.getBinary();
   }

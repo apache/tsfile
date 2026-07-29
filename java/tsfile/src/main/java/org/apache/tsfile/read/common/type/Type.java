@@ -161,6 +161,11 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Writes the value at {@code index} in {@code column} to the current entry. */
+  default void write(ColumnBuilder builder, Column column, int index) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Writes a TsPrimitiveType value to {@code array} at {@code index}. */
   default void write(TsPrimitiveType from, Object toArray, int index) {
     throw new UnsupportedOperationException(getClass().getName());
