@@ -1237,6 +1237,67 @@ public class TsFileWriteApiTest {
     }
   }
 
+  /**
+   * Verifies that table point counting records only non-null FIELD values in TsFile properties.
+   * Table1 contains three s1 values and two non-null s2 values, while table2 contains two s1
+   * values. Timestamps, TAG values, and the null s2 value are excluded, so the expected counts are
+   * five and two respectively.
+   */
+  @Test
+  public void recordTablePointCountInProperties() throws IOException, WriteProcessException {
+    TableSchema tableSchema1 =
+        new TableSchema(
+            "table1",
+            Arrays.asList(
+                new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.INT32, ColumnCategory.FIELD),
+                new ColumnSchema("s2", TSDataType.INT32, ColumnCategory.FIELD)));
+    TableSchema tableSchema2 =
+        new TableSchema(
+            "table2",
+            Arrays.asList(
+                new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.INT32, ColumnCategory.FIELD)));
+    Tablet tablet1 =
+        new Tablet(
+            "table1",
+            IMeasurementSchema.getMeasurementNameList(tableSchema1.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema1.getColumnSchemas()),
+            tableSchema1.getColumnTypes());
+    for (int row = 0; row < 3; row++) {
+      tablet1.addTimestamp(row, row);
+      tablet1.addValue("device", row, "d1");
+      tablet1.addValue("s1", row, row);
+      tablet1.addValue("s2", row, row == 2 ? null : row);
+    }
+    Tablet tablet2 =
+        new Tablet(
+            "table2",
+            IMeasurementSchema.getMeasurementNameList(tableSchema2.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema2.getColumnSchemas()),
+            tableSchema2.getColumnTypes());
+    for (int row = 0; row < 2; row++) {
+      tablet2.addTimestamp(row, row);
+      tablet2.addValue("device", row, "d1");
+      tablet2.addValue("s1", row, row);
+    }
+
+    try (TsFileWriter writer = new TsFileWriter(new TsFileIOWriter(f, true))) {
+      writer.registerTableSchema(tableSchema1);
+      writer.registerTableSchema(tableSchema2);
+      writer.writeTable(tablet1);
+      writer.writeTable(tablet2);
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath())) {
+      Map<String, String> properties = reader.getTsFileProperties();
+      Assert.assertEquals(
+          "5", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
+      Assert.assertEquals(
+          "2", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
+    }
+  }
+
   @Test
   public void calculateTableSize() throws IOException, WriteProcessException {
     TableSchema tableSchema1 =
