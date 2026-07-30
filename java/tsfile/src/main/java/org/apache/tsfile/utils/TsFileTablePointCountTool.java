@@ -20,9 +20,9 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.ColumnCategory;
-import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -42,9 +42,12 @@ import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /** Detects and backfills table-level point-count properties in a complete TsFile. */
 public final class TsFileTablePointCountTool {
@@ -130,19 +133,20 @@ public final class TsFileTablePointCountTool {
       tablePointCounts.put(tableEntry.getKey(), 0L);
     }
 
-    for (IDeviceID device : reader.getAllDevices()) {
+    Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> metadataIterator =
+        reader.iterAllTimeseriesMetadata(false, false);
+    while (metadataIterator.hasNext()) {
+      Pair<IDeviceID, List<TimeseriesMetadata>> deviceMetadata = metadataIterator.next();
+      IDeviceID device = deviceMetadata.left;
       String tableName = device.getTableName();
       Set<String> fieldNames = fieldNamesByTable.getOrDefault(tableName, Collections.emptySet());
       if (fieldNames.isEmpty()) {
         continue;
       }
-      Map<String, List<ChunkMetadata>> chunkMetadataByMeasurement =
-          reader.readChunkMetadataInDevice(device);
-      for (String fieldName : fieldNames) {
-        for (ChunkMetadata chunkMetadata :
-            chunkMetadataByMeasurement.getOrDefault(fieldName, Collections.emptyList())) {
+      for (TimeseriesMetadata timeseriesMetadata : deviceMetadata.right) {
+        if (fieldNames.contains(timeseriesMetadata.getMeasurementId())) {
           tablePointCounts.merge(
-              tableName, (long) chunkMetadata.getStatistics().getCount(), Long::sum);
+              tableName, (long) timeseriesMetadata.getStatistics().getCount(), Long::sum);
         }
       }
     }
@@ -192,24 +196,34 @@ public final class TsFileTablePointCountTool {
   private static void rewriteFileMetadata(
       Path sourceFile, long fileMetadataPosition, TsFileMetadata metadata) throws IOException {
     Path absoluteSource = sourceFile.toAbsolutePath();
+    // Keep the temporary file beside the source so reflink and atomic move can stay on the same
+    // file system. The source is not replaced until the rewritten temporary file has been forced.
     Path temporaryFile =
         Files.createTempFile(
             absoluteSource.getParent(),
             absoluteSource.getFileName().toString(),
             ".point-count.tmp");
     try {
-      try (FileChannel sourceChannel = FileChannel.open(absoluteSource, StandardOpenOption.READ);
-          FileChannel targetChannel =
-              FileChannel.open(
-                  temporaryFile, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-        copyPrefix(sourceChannel, targetChannel, fileMetadataPosition);
-        targetChannel.position(fileMetadataPosition);
-        OutputStream output = Channels.newOutputStream(targetChannel);
-        int metadataSize = metadata.serializeTo(output);
-        ReadWriteIOUtils.write(metadataSize, output);
-        output.write(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET));
-        output.flush();
-        targetChannel.force(true);
+      if (tryCreateReflink(absoluteSource, temporaryFile)) {
+        // A reflink shares unchanged data blocks with the source. Truncating and rewriting only the
+        // TsFileMetadata tail therefore triggers copy-on-write for the affected tail blocks.
+        try (FileChannel targetChannel =
+            FileChannel.open(temporaryFile, StandardOpenOption.WRITE)) {
+          targetChannel.truncate(fileMetadataPosition);
+          writeFileMetadata(targetChannel, fileMetadataPosition, metadata);
+        }
+      } else {
+        // Reflink is an optional optimization. Copy the immutable data/index prefix when the
+        // command or file system does not support copy-on-write cloning.
+        try (FileChannel sourceChannel = FileChannel.open(absoluteSource, StandardOpenOption.READ);
+            FileChannel targetChannel =
+                FileChannel.open(
+                    temporaryFile,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING)) {
+          copyPrefix(sourceChannel, targetChannel, fileMetadataPosition);
+          writeFileMetadata(targetChannel, fileMetadataPosition, metadata);
+        }
       }
       replaceSourceFile(temporaryFile, absoluteSource);
     } finally {
@@ -217,6 +231,65 @@ public final class TsFileTablePointCountTool {
     }
   }
 
+  /**
+   * Attempts a same-file-system copy-on-write clone using the native platform command. GNU/Linux
+   * uses {@code cp --reflink=always}, while macOS uses {@code cp -c}. Unsupported platforms,
+   * missing commands, unsupported file systems, invalid clone results, and command failures return
+   * {@code false} so the caller can safely fall back to a full prefix copy.
+   */
+  private static boolean tryCreateReflink(Path sourceFile, Path targetFile) throws IOException {
+    String operatingSystem = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+    List<String> command;
+    if (operatingSystem.contains("linux")) {
+      command =
+          List.of("cp", "--reflink=always", "--", sourceFile.toString(), targetFile.toString());
+    } else if (operatingSystem.contains("mac")) {
+      command = List.of("cp", "-c", sourceFile.toString(), targetFile.toString());
+    } else {
+      return false;
+    }
+
+    try {
+      Process process =
+          new ProcessBuilder(command)
+              .redirectErrorStream(true)
+              .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+              .start();
+      // A reflink should complete quickly regardless of file size. Bound the external command so
+      // an unavailable or unhealthy file system cannot block the repair indefinitely.
+      if (!process.waitFor(30, TimeUnit.SECONDS)) {
+        process.destroyForcibly();
+        // Wait for termination before the fallback path opens and rewrites the same temporary file.
+        process.waitFor();
+        return false;
+      }
+      // Do not trust the exit code alone: verify that the clone produced a complete file before
+      // truncating its metadata tail.
+      return process.exitValue() == 0
+          && Files.isRegularFile(targetFile)
+          && Files.size(targetFile) == Files.size(sourceFile);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IOException(e);
+    } catch (IOException | SecurityException e) {
+      return false;
+    }
+  }
+
+  /** Writes the replacement TsFileMetadata, its serialized size, and the trailing TsFile magic. */
+  private static void writeFileMetadata(
+      FileChannel targetChannel, long fileMetadataPosition, TsFileMetadata metadata)
+      throws IOException {
+    targetChannel.position(fileMetadataPosition);
+    OutputStream output = Channels.newOutputStream(targetChannel);
+    int metadataSize = metadata.serializeTo(output);
+    ReadWriteIOUtils.write(metadataSize, output);
+    output.write(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET));
+    output.flush();
+    targetChannel.force(true);
+  }
+
+  /** Copies the immutable data and metadata-index prefix used by the non-reflink fallback. */
   private static void copyPrefix(
       FileChannel sourceChannel, FileChannel targetChannel, long prefixLength) throws IOException {
     long copied = 0;
@@ -231,12 +304,14 @@ public final class TsFileTablePointCountTool {
 
   private static void replaceSourceFile(Path temporaryFile, Path sourceFile) throws IOException {
     try {
+      // Prefer an atomic replacement so readers never observe a partially rewritten TsFile.
       Files.move(
           temporaryFile,
           sourceFile,
           StandardCopyOption.ATOMIC_MOVE,
           StandardCopyOption.REPLACE_EXISTING);
     } catch (AtomicMoveNotSupportedException e) {
+      // Some file systems do not provide atomic move even within one directory.
       Files.move(temporaryFile, sourceFile, StandardCopyOption.REPLACE_EXISTING);
     }
   }
