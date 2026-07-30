@@ -19,8 +19,6 @@
 
 package org.apache.tsfile.utils;
 
-import org.apache.tsfile.i18n.Messages;
-
 import java.util.Arrays;
 
 class BitMapArrayImpl extends BitMapImpl {
@@ -74,6 +72,47 @@ class BitMapArrayImpl extends BitMapImpl {
   @Override
   boolean isMarked(int position) {
     return (bits[position / Byte.SIZE] & BIT_UTIL[position % Byte.SIZE]) != 0;
+  }
+
+  @Override
+  boolean isRangeAnyMarked(int start, int length) {
+    checkRange(start, length);
+    return isRangeAnyMarkedUnchecked(start, length);
+  }
+
+  @Override
+  boolean isRangeAllMarked(int start, int length) {
+    checkRange(start, length);
+    if (length == 0) {
+      return true;
+    }
+
+    int end = start + length;
+    int firstByte = start >>> 3;
+    int lastByte = (end - 1) >>> 3;
+    if (firstByte == lastByte) {
+      int mask = ((1 << length) - 1) << (start & 7);
+      return (bits[firstByte] & mask) == mask;
+    }
+
+    int firstMask = (0xFF << (start & 7)) & 0xFF;
+    if ((bits[firstByte] & firstMask) != firstMask) {
+      return false;
+    }
+    for (int index = firstByte + 1; index < lastByte; index++) {
+      if (bits[index] != (byte) 0xFF) {
+        return false;
+      }
+    }
+    int lastBitCount = end & 7;
+    int lastMask = lastBitCount == 0 ? 0xFF : (1 << lastBitCount) - 1;
+    return (bits[lastByte] & lastMask) == lastMask;
+  }
+
+  @Override
+  boolean isRangeNoneMarked(int start, int length) {
+    checkRange(start, length);
+    return !isRangeAnyMarkedUnchecked(start, length);
   }
 
   @Override
@@ -288,11 +327,30 @@ class BitMapArrayImpl extends BitMapImpl {
     return INSTANCE_SIZE + RamUsageEstimator.sizeOfByteArray(bits.length);
   }
 
-  private void checkRange(int startPosition, int length) {
-    if (startPosition < 0 || startPosition + length > size) {
-      throw new IndexOutOfBoundsException(
-          Messages.format(
-              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
+  private boolean isRangeAnyMarkedUnchecked(int start, int length) {
+    if (length == 0) {
+      return false;
     }
+
+    int end = start + length;
+    int firstByte = start >>> 3;
+    int lastByte = (end - 1) >>> 3;
+    if (firstByte == lastByte) {
+      int mask = ((1 << length) - 1) << (start & 7);
+      return (bits[firstByte] & mask) != 0;
+    }
+
+    int firstMask = (0xFF << (start & 7)) & 0xFF;
+    if ((bits[firstByte] & firstMask) != 0) {
+      return true;
+    }
+    for (int index = firstByte + 1; index < lastByte; index++) {
+      if (bits[index] != 0) {
+        return true;
+      }
+    }
+    int lastBitCount = end & 7;
+    int lastMask = lastBitCount == 0 ? 0xFF : (1 << lastBitCount) - 1;
+    return (bits[lastByte] & lastMask) != 0;
   }
 }

@@ -41,31 +41,11 @@ abstract class BitMapImpl {
 
   abstract boolean isMarked(int position);
 
-  boolean isRangeAnyMarked(int start, int length) {
-    checkRange(start, length);
-    for (int offset = 0; offset < length; offset += Long.SIZE) {
-      int batchSize = Math.min(length - offset, Long.SIZE);
-      if (extractBits(start + offset, batchSize) != 0L) {
-        return true;
-      }
-    }
-    return false;
-  }
+  abstract boolean isRangeAnyMarked(int start, int length);
 
-  boolean isRangeAllMarked(int start, int length) {
-    checkRange(start, length);
-    for (int offset = 0; offset < length; offset += Long.SIZE) {
-      int batchSize = Math.min(length - offset, Long.SIZE);
-      if (extractBits(start + offset, batchSize) != BitMapLongImpl.lowerBitsMask(batchSize)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  abstract boolean isRangeAllMarked(int start, int length);
 
-  boolean isRangeNoneMarked(int start, int length) {
-    return !isRangeAnyMarked(start, length);
-  }
+  abstract boolean isRangeNoneMarked(int start, int length);
 
   abstract void markAll();
 
@@ -131,7 +111,7 @@ abstract class BitMapImpl {
 
   abstract long getRetainedSizeInBytes();
 
-  private void checkRange(int start, int length) {
+  final void checkRange(int start, int length) {
     if (start < 0 || length < 0 || start > size - length) {
       throw new IndexOutOfBoundsException(
           Messages.format("error.common.bitmap_start_length_out_of_range", start, length, size));

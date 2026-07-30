@@ -224,6 +224,15 @@ public class BitMapTest {
     assertRangeMarkedQueries(new BitMap(64));
     assertRangeMarkedQueries(BitMap.createBitMapDynamically(64));
     assertRangeMarkedQueries(new BitMap(100));
+
+    BitMap fullLongRange = BitMap.createBitMapDynamically(Long.SIZE);
+    fullLongRange.markAll();
+    assertTrue(fullLongRange.isRangeAllMarked(0, Long.SIZE));
+
+    BitMap crossingArrayRange = new BitMap(128);
+    crossingArrayRange.markRange(32, Long.SIZE);
+    assertTrue(crossingArrayRange.isRangeAllMarked(32, Long.SIZE));
+    assertFalse(crossingArrayRange.isRangeAllMarked(31, Long.SIZE));
   }
 
   private void assertRangeMarkedQueries(BitMap bitMap) {
