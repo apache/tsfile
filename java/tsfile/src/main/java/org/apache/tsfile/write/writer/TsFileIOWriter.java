@@ -144,7 +144,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
   protected Map<String, Long> tableSizeMap = new HashMap<>();
 
-  private final Map<String, String> tsFileProperties = new HashMap<>();
+  private final Map<String, byte[]> tsFileProperties = new HashMap<>();
   private final Map<String, Long> tablePointCountMap = new HashMap<>();
   private boolean recordTablePointCount;
 
@@ -261,7 +261,7 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   /** Add a custom property to the TsFile metadata. */
-  public void addTsFileProperty(String key, String value) {
+  public void addTsFileProperty(String key, byte[] value) {
     tsFileProperties.put(key, value);
   }
 
@@ -628,11 +628,13 @@ public class TsFileIOWriter implements AutoCloseable {
       tablePointCountMap.forEach(
           (tableName, pointCount) ->
               tsFileMetadata.addProperty(
-                  TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName, Long.toString(pointCount)));
+                  TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName,
+                  Long.toString(pointCount).getBytes(TSFileConfig.STRING_CHARSET)));
     }
-    tsFileMetadata.addProperty("encryptLevel", encryptLevel);
-    tsFileMetadata.addProperty("encryptType", encryptType);
-    tsFileMetadata.addProperty("encryptKey", encryptKey);
+    tsFileMetadata.addProperty("encryptLevel", encryptLevel.getBytes(TSFileConfig.STRING_CHARSET));
+    tsFileMetadata.addProperty("encryptType", encryptType.getBytes(TSFileConfig.STRING_CHARSET));
+    tsFileMetadata.addProperty(
+        "encryptKey", encryptKey == null ? null : encryptKey.getBytes(TSFileConfig.STRING_CHARSET));
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 

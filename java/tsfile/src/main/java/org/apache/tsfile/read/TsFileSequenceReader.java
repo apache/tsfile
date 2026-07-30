@@ -608,7 +608,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   /** Get the properties stored in the TsFile metadata. */
-  public Map<String, String> getTsFileProperties() throws IOException {
+  public Map<String, byte[]> getTsFileProperties() throws IOException {
     return readFileMetadata().getTsFileProperties();
   }
 

@@ -50,7 +50,7 @@ public interface ITsFileReader extends AutoCloseable {
   List<TableSchema> getAllTableSchema() throws IOException;
 
   @TsFileApi
-  Map<String, String> getTsFileProperties() throws IOException;
+  Map<String, byte[]> getTsFileProperties() throws IOException;
 
   @TsFileApi
   void close();

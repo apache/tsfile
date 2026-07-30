@@ -111,7 +111,7 @@ public final class TsFileTablePointCountTool {
         (tableName, pointCount) ->
             metadata.addProperty(
                 TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName,
-                Long.toString(pointCount)));
+                Long.toString(pointCount).getBytes(TSFileConfig.STRING_CHARSET)));
     rewriteFileMetadata(file.toPath(), fileMetadataPosition, metadata);
     return UpdateStatus.UPDATED;
   }
@@ -176,14 +176,14 @@ public final class TsFileTablePointCountTool {
   }
 
   private static boolean hasAllTablePointCountProperties(
-      Map<String, String> properties, Set<String> tableNames) {
+      Map<String, byte[]> properties, Set<String> tableNames) {
     if (properties == null) {
       return false;
     }
     for (String tableName : tableNames) {
-      String value = properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName);
+      byte[] value = properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName);
       try {
-        if (value == null || Long.parseLong(value) < 0) {
+        if (value == null || Long.parseLong(new String(value, TSFileConfig.STRING_CHARSET)) < 0) {
           return false;
         }
       } catch (NumberFormatException e) {

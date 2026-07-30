@@ -42,6 +42,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -63,19 +64,24 @@ public class TsFileV4ReadWriteInterfacesTest {
     try {
       try (ITsFileWriter writer =
           new TsFileWriterBuilder().file(file).tableSchema(tableSchema).build()) {
-        writer.addTsFileProperty("creator", "TsFileV4ReadWriteInterfacesTest");
-        writer.addTsFileProperty("version", "1");
+        writer.addTsFileProperty(
+            "creator", "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8));
+        writer.addTsFileProperty("version", "1".getBytes(StandardCharsets.UTF_8));
       }
 
       try (TsFileSequenceReader reader = new TsFileSequenceReader(filePath)) {
-        Assert.assertEquals(
-            "TsFileV4ReadWriteInterfacesTest", reader.getTsFileProperties().get("creator"));
-        Assert.assertEquals("1", reader.getTsFileProperties().get("version"));
+        Assert.assertArrayEquals(
+            "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8),
+            reader.getTsFileProperties().get("creator"));
+        Assert.assertArrayEquals(
+            "1".getBytes(StandardCharsets.UTF_8), reader.getTsFileProperties().get("version"));
       }
       try (ITsFileReader reader = new DeviceTableModelReader(file)) {
-        Assert.assertEquals(
-            "TsFileV4ReadWriteInterfacesTest", reader.getTsFileProperties().get("creator"));
-        Assert.assertEquals("1", reader.getTsFileProperties().get("version"));
+        Assert.assertArrayEquals(
+            "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8),
+            reader.getTsFileProperties().get("creator"));
+        Assert.assertArrayEquals(
+            "1".getBytes(StandardCharsets.UTF_8), reader.getTsFileProperties().get("version"));
       }
     } finally {
       Files.deleteIfExists(file.toPath());

@@ -161,12 +161,16 @@ public class TablePointCountPerformanceTest {
 
   private void verifyProperties(File file, boolean enabled) throws IOException {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath())) {
-      Map<String, String> properties = reader.getTsFileProperties();
+      Map<String, byte[]> properties = reader.getTsFileProperties();
       String table1Key = TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1";
       String table2Key = TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2";
       if (enabled) {
-        Assert.assertEquals(Long.toString(TABLE1_POINT_COUNT), properties.get(table1Key));
-        Assert.assertEquals(Long.toString(TABLE2_POINT_COUNT), properties.get(table2Key));
+        Assert.assertArrayEquals(
+            Long.toString(TABLE1_POINT_COUNT).getBytes(StandardCharsets.UTF_8),
+            properties.get(table1Key));
+        Assert.assertArrayEquals(
+            Long.toString(TABLE2_POINT_COUNT).getBytes(StandardCharsets.UTF_8),
+            properties.get(table2Key));
       } else {
         Assert.assertFalse(properties.containsKey(table1Key));
         Assert.assertFalse(properties.containsKey(table2Key));

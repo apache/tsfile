@@ -34,6 +34,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
@@ -65,7 +66,7 @@ public class TsFileTablePointCountToolTest {
                   new ColumnSchema("s1", TSDataType.INT32, ColumnCategory.FIELD)));
       try (TsFileIOWriter ioWriter = new TsFileIOWriter(file);
           TsFileWriter writer = new TsFileWriter(ioWriter)) {
-        ioWriter.addTsFileProperty("custom.property", "preserved");
+        ioWriter.addTsFileProperty("custom.property", "preserved".getBytes(StandardCharsets.UTF_8));
         writer.registerTableSchema(tableSchema1);
         writer.registerTableSchema(tableSchema2);
         writer.writeTable(createTablet(tableSchema1, 3, true));
@@ -98,12 +99,15 @@ public class TsFileTablePointCountToolTest {
 
       try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath())) {
         Assert.assertTrue(reader.isComplete());
-        Map<String, String> properties = reader.getTsFileProperties();
-        Assert.assertEquals("preserved", properties.get("custom.property"));
-        Assert.assertEquals(
-            "5", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
-        Assert.assertEquals(
-            "2", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
+        Map<String, byte[]> properties = reader.getTsFileProperties();
+        Assert.assertArrayEquals(
+            "preserved".getBytes(StandardCharsets.UTF_8), properties.get("custom.property"));
+        Assert.assertArrayEquals(
+            "5".getBytes(StandardCharsets.UTF_8),
+            properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
+        Assert.assertArrayEquals(
+            "2".getBytes(StandardCharsets.UTF_8),
+            properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
         Assert.assertEquals(2, reader.getAllDevices().size());
       }
 

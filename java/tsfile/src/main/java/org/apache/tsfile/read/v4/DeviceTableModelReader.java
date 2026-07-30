@@ -80,7 +80,7 @@ public class DeviceTableModelReader implements ITsFileReader {
 
   @Override
   @TsFileApi
-  public Map<String, String> getTsFileProperties() throws IOException {
+  public Map<String, byte[]> getTsFileProperties() throws IOException {
     return fileReader.getTsFileProperties();
   }
 

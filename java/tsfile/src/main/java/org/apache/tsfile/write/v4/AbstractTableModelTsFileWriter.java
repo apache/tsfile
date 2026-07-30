@@ -261,7 +261,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
 
   @Override
   @TsFileApi
-  public void addTsFileProperty(String key, String value) {
+  public void addTsFileProperty(String key, byte[] value) {
     fileWriter.addTsFileProperty(key, value);
   }
 

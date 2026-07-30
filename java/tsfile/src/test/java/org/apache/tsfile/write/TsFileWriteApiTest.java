@@ -1290,11 +1290,13 @@ public class TsFileWriteApiTest {
     }
 
     try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath())) {
-      Map<String, String> properties = reader.getTsFileProperties();
-      Assert.assertEquals(
-          "5", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
-      Assert.assertEquals(
-          "2", properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
+      Map<String, byte[]> properties = reader.getTsFileProperties();
+      Assert.assertArrayEquals(
+          "5".getBytes(StandardCharsets.UTF_8),
+          properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
+      Assert.assertArrayEquals(
+          "2".getBytes(StandardCharsets.UTF_8),
+          properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
     }
   }
 
