@@ -54,6 +54,35 @@ public class BitMap implements Accountable {
     return implementation.isMarked(position);
   }
 
+  /**
+   * Returns whether at least one bit in the specified range is marked. An empty range returns
+   * {@code false}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeAnyMarked(int start, int length) {
+    return implementation.isRangeAnyMarked(start, length);
+  }
+
+  /**
+   * Returns whether every bit in the specified range is marked. An empty range returns {@code
+   * true}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeAllMarked(int start, int length) {
+    return implementation.isRangeAllMarked(start, length);
+  }
+
+  /**
+   * Returns whether no bit in the specified range is marked. An empty range returns {@code true}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeNoneMarked(int start, int length) {
+    return implementation.isRangeNoneMarked(start, length);
+  }
+
   /** mark as 1 at all positions. */
   public void markAll() {
     implementation.markAll();

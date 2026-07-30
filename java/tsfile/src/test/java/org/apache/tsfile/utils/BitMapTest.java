@@ -27,6 +27,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class BitMapTest {
@@ -215,6 +216,45 @@ public class BitMapTest {
     bitMap.mark(9);
     assertTrue(bitMap.isAllUnmarked(9));
     assertFalse(bitMap.isAllUnmarked(10));
+  }
+
+  @Test
+  public void testRangeMarkedQueries() {
+    assertRangeMarkedQueries(new BitMap(0));
+    assertRangeMarkedQueries(new BitMap(64));
+    assertRangeMarkedQueries(BitMap.createBitMapDynamically(64));
+    assertRangeMarkedQueries(new BitMap(100));
+  }
+
+  private void assertRangeMarkedQueries(BitMap bitMap) {
+    for (int i = 0; i < bitMap.getSize(); i++) {
+      if (i % 4 != 2) {
+        bitMap.mark(i);
+      }
+    }
+
+    for (int start = 0; start <= bitMap.getSize(); start++) {
+      for (int length = 0; length <= bitMap.getSize() - start; length++) {
+        boolean anyMarked = false;
+        boolean allMarked = true;
+        for (int i = start; i < start + length; i++) {
+          anyMarked |= bitMap.isMarked(i);
+          allMarked &= bitMap.isMarked(i);
+        }
+        assertEquals(anyMarked, bitMap.isRangeAnyMarked(start, length));
+        assertEquals(allMarked, bitMap.isRangeAllMarked(start, length));
+        assertEquals(!anyMarked, bitMap.isRangeNoneMarked(start, length));
+      }
+    }
+
+    assertThrows(IndexOutOfBoundsException.class, () -> bitMap.isRangeAnyMarked(-1, 0));
+    assertThrows(IndexOutOfBoundsException.class, () -> bitMap.isRangeAllMarked(0, -1));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeNoneMarked(bitMap.getSize() + 1, 0));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeAnyMarked(bitMap.getSize(), 1));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeAllMarked(1, Integer.MAX_VALUE));
   }
 
   @Test
