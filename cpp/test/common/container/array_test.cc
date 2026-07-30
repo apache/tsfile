@@ -165,4 +165,16 @@ TEST_F(ArrayTest, CapacityShrink) {
     EXPECT_EQ(arr.size(), 0);
 }
 
+TEST_F(ArrayTest, ReallocFailurePreservesAllocation) {
+    common::Array<int> arr(1);
+    ASSERT_EQ(arr.init(), E_OK);
+    ASSERT_EQ(arr.append(7), E_OK);
+
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(arr.append(8), E_OOM);
+    EXPECT_EQ(arr.size(), 1);
+    EXPECT_EQ(arr.capacity(), 1);
+    EXPECT_EQ(arr[0], 7);
+}
+
 }  // namespace common

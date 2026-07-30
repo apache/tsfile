@@ -22,6 +22,7 @@
 #endif
 #include <string.h>
 
+#include <atomic>
 #include <iomanip>
 #include <iostream>
 
@@ -32,6 +33,16 @@
 #include "utils/util_define.h"
 
 namespace common {
+
+#ifdef ENABLE_TEST
+namespace {
+std::atomic<bool> g_fail_next_mem_realloc(false);
+}
+
+void TEST_fail_next_mem_realloc() {
+    g_fail_next_mem_realloc.store(true, std::memory_order_release);
+}
+#endif
 
 const char* g_mod_names[__LAST_MOD_ID] = {
     /*  0 */ "DEFAULT",
@@ -139,6 +150,11 @@ void mem_free(void* ptr) {
 }
 
 void* mem_realloc(void* ptr, uint32_t size) {
+#ifdef ENABLE_TEST
+    if (g_fail_next_mem_realloc.exchange(false, std::memory_order_acq_rel)) {
+        return nullptr;
+    }
+#endif
     char* p = static_cast<char*>(ptr);
     char* raw_ptr = p - ALIGNMENT;
     const uint64_t header =
