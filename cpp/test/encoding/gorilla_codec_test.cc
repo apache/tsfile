@@ -486,6 +486,48 @@ TEST_F(GorillaCodecTest, DoubleBatchScalarAndSkipInterleave) {
     EXPECT_EQ(cursor, N);
 }
 
+TEST_F(GorillaCodecTest, DoubleExactReadAndSkipPreserveEmbeddedNaN) {
+    const double expected[] = {1.25, std::nan(""), 2.5, std::nan(""), 5.0};
+    const int count = sizeof(expected) / sizeof(expected[0]);
+
+    storage::DoubleGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    for (double value : expected) {
+        ASSERT_EQ(encoder.encode(value, stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    const uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+    ASSERT_EQ(got, total);
+
+    common::ByteStream read_stream(common::MOD_DEFAULT);
+    read_stream.wrap_from(reinterpret_cast<const char*>(buf.data()), total);
+    storage::DoubleGorillaDecoder read_decoder;
+    double actual[count];
+    ASSERT_EQ(read_decoder.read_exact_double(actual, count, read_stream),
+              common::E_OK);
+    for (int i = 0; i < count; i++) {
+        if (std::isnan(expected[i])) {
+            EXPECT_TRUE(std::isnan(actual[i])) << "i=" << i;
+        } else {
+            EXPECT_DOUBLE_EQ(actual[i], expected[i]) << "i=" << i;
+        }
+    }
+
+    common::ByteStream skip_stream(common::MOD_DEFAULT);
+    skip_stream.wrap_from(reinterpret_cast<const char*>(buf.data()), total);
+    storage::DoubleGorillaDecoder skip_decoder;
+    ASSERT_EQ(skip_decoder.skip_exact_double(3, skip_stream), common::E_OK);
+    double tail[2];
+    ASSERT_EQ(skip_decoder.read_exact_double(tail, 2, skip_stream),
+              common::E_OK);
+    EXPECT_TRUE(std::isnan(tail[0]));
+    EXPECT_DOUBLE_EQ(tail[1], 5.0);
+}
+
 TEST_F(GorillaCodecTest, DoubleBatchDecodeFullWidthXor) {
     const uint64_t patterns[] = {
         0x0000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL, 0x0123456789ABCDEFULL,
