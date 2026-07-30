@@ -231,13 +231,15 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
 
 ## 表点数统计工具
 
-`tools\tsfile-table-point-count.bat` 用于检查完整 TsFile 是否包含表级点数统计属性，并在属性缺失时补写。每张表的点数是其所有 FIELD 列中非空值的总数，不统计 TAG 列和时间列。
+`tools/tsfile-table-point-count.sh`（Linux/macOS）和 `tools\tsfile-table-point-count.bat`（Windows）用于检查完整 TsFile 是否包含表级点数统计属性，并在属性缺失时补写。每张表的点数是其所有 FIELD 列中非空值的总数，不统计 TAG 列和时间列。
 
 设置 `JAVA_HOME` 后，传入且仅传入一个 TsFile 路径：
 
-```bat
-tools\tsfile-table-point-count.bat C:\data\example.tsfile
-```
+    # Linux/macOS
+    tools/tsfile-table-point-count.sh /data/example.tsfile
+
+    :: Windows
+    tools\tsfile-table-point-count.bat C:\data\example.tsfile
 
 工具会输出以下状态之一：
 
