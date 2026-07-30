@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 
+#include <cmath>
 #include <map>
 #include <random>
 #include <unordered_map>
@@ -1341,6 +1342,99 @@ TEST_F(TsFileReaderTest, MultiValueAlignedWideChunkParallelDecode) {
     EXPECT_EQ(collected, N);
 
     io_reader.revert_ssi(ssi);
+}
+
+// Regression: Gorilla also uses the canonical NaN bit pattern as its stream
+// terminator, so its regular batch API stops when the same bit pattern appears
+// as a value.  An aligned page's bitmap supplies the exact non-null count; the
+// parallel reader must use it to preserve the NaN and every following value.
+TEST_F(TsFileReaderTest, MultiValueAlignedParallelPreservesDoubleGorillaNaN) {
+#ifdef ENABLE_THREADS
+    struct ParallelReadGuard {
+        explicit ParallelReadGuard(bool saved) : saved_(saved) {}
+        ~ParallelReadGuard() {
+            common::g_config_value_.parallel_read_enabled_ = saved_;
+        }
+        bool saved_;
+    } guard(common::g_config_value_.parallel_read_enabled_);
+    common::g_config_value_.parallel_read_enabled_ = true;
+    ASSERT_NE(common::g_thread_pool_, nullptr);
+
+    const std::string device = "root.dev_parallel_double_gorilla_nan";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", DOUBLE, GORILLA, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", DOUBLE, GORILLA, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> registered;
+        for (const auto& schema : schema_vec) {
+            registered.push_back(new MeasurementSchema(schema));
+        }
+        ASSERT_EQ(
+            tsfile_writer_->register_aligned_timeseries(device, registered),
+            E_OK);
+    }
+
+    constexpr int kRowCount = 32;
+    constexpr int kNaNRow = 7;
+    Tablet tablet(device,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  kRowCount);
+    for (int row = 0; row < kRowCount; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), E_OK);
+        const double v0 = row == kNaNRow ? std::nan("") : 1000.0 + row;
+        ASSERT_EQ(tablet.add_value(row, 0u, v0), E_OK);
+        ASSERT_EQ(tablet.add_value(row, 1u, 2000.0 + row), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    ASSERT_EQ(io_reader.alloc_multi_ssi(device_id, {"v0", "v1"}, ssi, pa,
+                                        /*time_filter=*/nullptr),
+              E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    common::TsBlock* block = nullptr;
+    const int read_ret = ssi->get_next(block, /*alloc_tsblock=*/true);
+    ASSERT_EQ(read_ret, E_OK);
+    ASSERT_NE(block, nullptr);
+    ASSERT_EQ(block->get_row_count(), kRowCount);
+    {
+        common::ColIterator time_iter(0, block);
+        common::ColIterator v0_iter(1, block);
+        common::ColIterator v1_iter(2, block);
+        for (int row = 0; row < kRowCount; row++) {
+            uint32_t len = 0;
+            const int64_t time =
+                *reinterpret_cast<int64_t*>(time_iter.read(&len));
+            const double v0 = *reinterpret_cast<double*>(v0_iter.read(&len));
+            const double v1 = *reinterpret_cast<double*>(v1_iter.read(&len));
+            EXPECT_EQ(time, row);
+            if (row == kNaNRow) {
+                EXPECT_TRUE(std::isnan(v0));
+            } else {
+                EXPECT_DOUBLE_EQ(v0, 1000.0 + row);
+            }
+            EXPECT_DOUBLE_EQ(v1, 2000.0 + row);
+            time_iter.next();
+            v0_iter.next();
+            v1_iter.next();
+        }
+    }
+    ssi->revert_tsblock();
+
+    block = nullptr;
+    EXPECT_EQ(ssi->get_next(block, /*alloc_tsblock=*/true), E_NO_MORE_DATA);
+    io_reader.revert_ssi(ssi);
+#else
+    GTEST_SKIP() << "parallel reader support is disabled in this build";
+#endif
 }
 
 // Regression: AlignedTimeseriesIndex::get_data_type() returns the time column
