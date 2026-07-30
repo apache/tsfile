@@ -33,6 +33,7 @@
     <modules>
         <module>common</module>
         <module>tsfile</module>
+        <module>spark-tsfile</module>
         <module>examples</module>
         <module>tools</module>
     </modules>
