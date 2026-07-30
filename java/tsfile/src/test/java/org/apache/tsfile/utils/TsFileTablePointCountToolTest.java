@@ -103,10 +103,10 @@ public class TsFileTablePointCountToolTest {
         Assert.assertArrayEquals(
             "preserved".getBytes(StandardCharsets.UTF_8), properties.get("custom.property"));
         Assert.assertArrayEquals(
-            "5".getBytes(StandardCharsets.UTF_8),
+            BytesUtils.longToBytes(5),
             properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
         Assert.assertArrayEquals(
-            "2".getBytes(StandardCharsets.UTF_8),
+            BytesUtils.longToBytes(2),
             properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
         Assert.assertEquals(2, reader.getAllDevices().size());
       }

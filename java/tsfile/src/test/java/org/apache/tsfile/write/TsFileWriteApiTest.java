@@ -44,6 +44,7 @@ import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.read.v4.TsFileReaderBuilder;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
@@ -1292,10 +1293,10 @@ public class TsFileWriteApiTest {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath())) {
       Map<String, byte[]> properties = reader.getTsFileProperties();
       Assert.assertArrayEquals(
-          "5".getBytes(StandardCharsets.UTF_8),
+          BytesUtils.longToBytes(5),
           properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table1"));
       Assert.assertArrayEquals(
-          "2".getBytes(StandardCharsets.UTF_8),
+          BytesUtils.longToBytes(2),
           properties.get(TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2"));
     }
   }

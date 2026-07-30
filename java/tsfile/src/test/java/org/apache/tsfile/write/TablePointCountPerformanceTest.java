@@ -24,6 +24,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -166,11 +167,9 @@ public class TablePointCountPerformanceTest {
       String table2Key = TsFileIOWriter.TABLE_POINT_COUNT_PROPERTY_PREFIX + "table2";
       if (enabled) {
         Assert.assertArrayEquals(
-            Long.toString(TABLE1_POINT_COUNT).getBytes(StandardCharsets.UTF_8),
-            properties.get(table1Key));
+            BytesUtils.longToBytes(TABLE1_POINT_COUNT), properties.get(table1Key));
         Assert.assertArrayEquals(
-            Long.toString(TABLE2_POINT_COUNT).getBytes(StandardCharsets.UTF_8),
-            properties.get(table2Key));
+            BytesUtils.longToBytes(TABLE2_POINT_COUNT), properties.get(table2Key));
       } else {
         Assert.assertFalse(properties.containsKey(table1Key));
         Assert.assertFalse(properties.containsKey(table2Key));

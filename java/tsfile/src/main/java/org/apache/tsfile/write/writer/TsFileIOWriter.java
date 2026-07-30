@@ -629,7 +629,7 @@ public class TsFileIOWriter implements AutoCloseable {
           (tableName, pointCount) ->
               tsFileMetadata.addProperty(
                   TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName,
-                  Long.toString(pointCount).getBytes(TSFileConfig.STRING_CHARSET)));
+                  BytesUtils.longToBytes(pointCount)));
     }
     tsFileMetadata.addProperty("encryptLevel", encryptLevel.getBytes(TSFileConfig.STRING_CHARSET));
     tsFileMetadata.addProperty("encryptType", encryptType.getBytes(TSFileConfig.STRING_CHARSET));
