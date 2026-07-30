@@ -19,7 +19,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <fstream>
 #include <new>
+#include <string>
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
@@ -27,6 +30,24 @@
 
 namespace storage {
 namespace {
+
+class TempTsFile {
+   public:
+    explicit TempTsFile(const char* path) : path_(path) {
+        std::remove(path_.c_str());
+        std::ofstream out(path_, std::ios::binary | std::ios::trunc);
+        out.write(MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN);
+        out.put(VERSION_NUM_BYTE);
+        out.write(MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN);
+    }
+
+    ~TempTsFile() { std::remove(path_.c_str()); }
+
+    const std::string& path() const { return path_; }
+
+   private:
+    std::string path_;
+};
 
 AlignedChunkReader* allocate_reader(ReadFile* read_file) {
     void* memory =
@@ -49,17 +70,20 @@ void free_reader(AlignedChunkReader* reader) {
     common::mem_free(reader);
 }
 
-TEST(ChunkReaderResourceTest, AlignedInitialReadFailureReleasesBuffer) {
-    ReadFile unopened_file;
-    AlignedChunkReader* reader = allocate_reader(&unopened_file);
+TEST(ChunkReaderResourceTest, AlignedInitialShortReadReleasesBuffer) {
+    TempTsFile temp_file("aligned_initial_short_read.tsfile");
+    ReadFile read_file;
+    ASSERT_EQ(read_file.open(temp_file.path()), common::E_OK);
+    AlignedChunkReader* reader = allocate_reader(&read_file);
     ASSERT_NE(reader, nullptr);
     ChunkMeta time_meta;
+    time_meta.offset_of_chunk_header_ = read_file.file_size();
     ChunkMeta value_meta;
     int64_t memory_before =
         common::ModStat::get_instance().get_stat(common::MOD_CHUNK_READER);
 
     EXPECT_EQ(reader->load_by_aligned_meta(&time_meta, &value_meta),
-              common::E_FILE_READ_ERR);
+              common::E_TSFILE_CORRUPTED);
     EXPECT_EQ(
         common::ModStat::get_instance().get_stat(common::MOD_CHUNK_READER),
         memory_before);
@@ -67,18 +91,21 @@ TEST(ChunkReaderResourceTest, AlignedInitialReadFailureReleasesBuffer) {
     free_reader(reader);
 }
 
-TEST(ChunkReaderResourceTest, MultiAlignedInitialReadFailureReleasesBuffer) {
-    ReadFile unopened_file;
-    AlignedChunkReader* reader = allocate_reader(&unopened_file);
+TEST(ChunkReaderResourceTest, MultiAlignedInitialShortReadReleasesBuffer) {
+    TempTsFile temp_file("multi_aligned_initial_short_read.tsfile");
+    ReadFile read_file;
+    ASSERT_EQ(read_file.open(temp_file.path()), common::E_OK);
+    AlignedChunkReader* reader = allocate_reader(&read_file);
     ASSERT_NE(reader, nullptr);
     ChunkMeta time_meta;
+    time_meta.offset_of_chunk_header_ = read_file.file_size();
     ChunkMeta value_meta;
     std::vector<ChunkMeta*> value_metas{&value_meta};
     int64_t memory_before =
         common::ModStat::get_instance().get_stat(common::MOD_CHUNK_READER);
 
     EXPECT_EQ(reader->load_by_aligned_meta_multi(&time_meta, value_metas),
-              common::E_FILE_READ_ERR);
+              common::E_TSFILE_CORRUPTED);
     EXPECT_EQ(
         common::ModStat::get_instance().get_stat(common::MOD_CHUNK_READER),
         memory_before);
