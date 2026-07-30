@@ -108,6 +108,51 @@ public class TypeTest {
   }
 
   @Test
+  public void testWriteBytesToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260721, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      TsPrimitiveType value = (TsPrimitiveType) testCase[1];
+      byte[] bytes = new byte[OFFSET + type.calcTypeSize(value)];
+      type.toBytes(value, bytes, OFFSET);
+      type.write(builder, bytes, OFFSET);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260721);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.verify(builder, Mockito.times(4)).writeBinary(binary);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, new byte[Long.BYTES], 0);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
   public void testWriteColumnValueToColumnBuilder() {
     ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
     Column column = Mockito.mock(Column.class);

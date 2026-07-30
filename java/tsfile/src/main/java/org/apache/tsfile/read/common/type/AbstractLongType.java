@@ -339,6 +339,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeLong(BytesUtils.bytesToLongFromOffset(bytes, Long.BYTES, offset));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeLong(column.getLong(index));
   }

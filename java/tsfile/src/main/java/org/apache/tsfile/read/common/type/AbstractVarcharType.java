@@ -36,6 +36,7 @@ import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -298,6 +299,14 @@ public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public void write(ColumnBuilder builder, TsPrimitiveType value) {
     builder.writeBinary(value.getBinary());
+  }
+
+  @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    int length = BytesUtils.bytesToInt(bytes, offset);
+    builder.writeBinary(
+        new Binary(
+            Arrays.copyOfRange(bytes, offset + Integer.BYTES, offset + Integer.BYTES + length)));
   }
 
   @Override

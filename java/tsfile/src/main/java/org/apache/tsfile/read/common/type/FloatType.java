@@ -347,6 +347,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeFloat(BytesUtils.bytesToFloat(bytes, offset));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeFloat(column.getFloat(index));
   }

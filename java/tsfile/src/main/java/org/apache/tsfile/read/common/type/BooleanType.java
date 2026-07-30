@@ -323,6 +323,11 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeBoolean(BytesUtils.bytesToBool(bytes, offset));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeBoolean(column.getBoolean(index));
   }

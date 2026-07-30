@@ -319,6 +319,14 @@ public class BlobType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    int length = BytesUtils.bytesToInt(bytes, offset);
+    builder.writeBinary(
+        new Binary(
+            Arrays.copyOfRange(bytes, offset + Integer.BYTES, offset + Integer.BYTES + length)));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeBinary(column.getBinary(index));
   }

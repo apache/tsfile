@@ -349,6 +349,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeDouble(BytesUtils.bytesToDouble(bytes, offset));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeDouble(column.getDouble(index));
   }

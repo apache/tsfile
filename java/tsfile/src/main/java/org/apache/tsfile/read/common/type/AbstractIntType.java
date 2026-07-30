@@ -340,6 +340,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeInt(BytesUtils.bytesToInt(bytes, offset));
+  }
+
+  @Override
   public void write(ColumnBuilder builder, Column column, int index) {
     builder.writeInt(column.getInt(index));
   }
