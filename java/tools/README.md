@@ -230,15 +230,17 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
 
 ## Table Point Count Tool
 
-`tools\tsfile-table-point-count.bat` checks whether a complete TsFile contains table-level
+`tools/tsfile-table-point-count.sh` (Linux/macOS) and `tools\tsfile-table-point-count.bat` (Windows) check whether a complete TsFile contains table-level
 point-count properties and backfills them when they are missing. For each table, the point count is
 the total number of non-null values in its FIELD columns; TAG and time columns are not counted.
 
 Set `JAVA_HOME`, then run the tool with exactly one TsFile path:
 
-```bat
-tools\tsfile-table-point-count.bat C:\data\example.tsfile
-```
+    # Linux/macOS
+    tools/tsfile-table-point-count.sh /data/example.tsfile
+
+    :: Windows
+    tools\tsfile-table-point-count.bat C:\data\example.tsfile
 
 The tool prints one of the following statuses:
 
