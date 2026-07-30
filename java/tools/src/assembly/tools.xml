@@ -69,5 +69,14 @@
             <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/arrow2tsfile.bat</source>
             <destName>tools/arrow2tsfile.bat</destName>
         </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/tsfile-table-point-count.sh</source>
+            <destName>tools/tsfile-table-point-count.sh</destName>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/tsfile-table-point-count.bat</source>
+            <destName>tools/tsfile-table-point-count.bat</destName>
+        </file>
     </files>
 </assembly>
