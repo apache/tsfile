@@ -127,3 +127,9 @@ more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding
 [C++](./cpp/README.md)
 
 [Python](./python/README.md)
+
+## Website Contributions
+
+For changes to the [Apache TsFile website](https://tsfile.apache.org/), open a pull request
+with the [`docs/dev`](https://github.com/apache/tsfile/tree/docs/dev) branch as the base
+branch.
