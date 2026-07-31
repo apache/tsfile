@@ -19,8 +19,6 @@
 
 package org.apache.tsfile.utils;
 
-import org.apache.tsfile.i18n.Messages;
-
 class BitMapLongImpl extends BitMapImpl {
 
   private static final long ALL_BITS_MARKED = -1L;
@@ -77,6 +75,25 @@ class BitMapLongImpl extends BitMapImpl {
   @Override
   boolean isMarked(int position) {
     return (bits & (1L << position)) != 0;
+  }
+
+  @Override
+  boolean isRangeAnyMarked(int start, int length) {
+    checkRange(start, length);
+    return (bits & rangeMask(start, length)) != 0L;
+  }
+
+  @Override
+  boolean isRangeAllMarked(int start, int length) {
+    checkRange(start, length);
+    long mask = rangeMask(start, length);
+    return (bits & mask) == mask;
+  }
+
+  @Override
+  boolean isRangeNoneMarked(int start, int length) {
+    checkRange(start, length);
+    return (bits & rangeMask(start, length)) == 0L;
   }
 
   @Override
@@ -219,6 +236,10 @@ class BitMapLongImpl extends BitMapImpl {
     return length == Long.SIZE ? -1L : (1L << length) - 1;
   }
 
+  private static long rangeMask(int start, int length) {
+    return lowerBitsMask(length) << start;
+  }
+
   private byte[] getExtendedByteArray(int newSize) {
     byte[] bytes = new byte[BitMap.getSizeOfBytes(newSize)];
     for (int i = 0; i < Long.BYTES; i++) {
@@ -226,13 +247,5 @@ class BitMapLongImpl extends BitMapImpl {
     }
     bytes[Long.BYTES] = paddingByte;
     return bytes;
-  }
-
-  private void checkRange(int startPosition, int length) {
-    if (startPosition < 0 || startPosition + length > size) {
-      throw new IndexOutOfBoundsException(
-          Messages.format(
-              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
-    }
   }
 }

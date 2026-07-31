@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 abstract class BitMapImpl {
 
   protected int size;
@@ -38,6 +40,12 @@ abstract class BitMapImpl {
   abstract byte getByte(int index);
 
   abstract boolean isMarked(int position);
+
+  abstract boolean isRangeAnyMarked(int start, int length);
+
+  abstract boolean isRangeAllMarked(int start, int length);
+
+  abstract boolean isRangeNoneMarked(int start, int length);
 
   abstract void markAll();
 
@@ -102,4 +110,11 @@ abstract class BitMapImpl {
   abstract BitMapImpl extend(int newSize);
 
   abstract long getRetainedSizeInBytes();
+
+  final void checkRange(int start, int length) {
+    if (start < 0 || length < 0 || start > size - length) {
+      throw new IndexOutOfBoundsException(
+          Messages.format("error.common.bitmap_start_length_out_of_range", start, length, size));
+    }
+  }
 }

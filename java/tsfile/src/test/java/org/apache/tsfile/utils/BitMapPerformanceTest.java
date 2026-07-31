@@ -22,6 +22,7 @@ package org.apache.tsfile.utils;
 import org.junit.Assume;
 import org.junit.Test;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +36,8 @@ public class BitMapPerformanceTest {
   private static final int WARMUP_ROUNDS = 3;
   private static final int MEASUREMENT_ROUNDS = 7;
   private static final int CHEAP_OPERATION_COUNT = 2_000_000;
+  private static final int RANGE_OPERATION_COUNT = 10_000_000;
+  private static final int RANGE_BITMAP_COUNT = 64;
   private static final int ALLOCATION_OPERATION_COUNT = 200_000;
   private static final int COMPOSITE_OPERATION_COUNT = 50_000;
   private static final int BULK_INSTANCE_COUNT = 1_000_000;
@@ -143,6 +146,103 @@ public class BitMapPerformanceTest {
 
     printResults(results);
     printMemoryUsage();
+  }
+
+  @Test
+  public void testRangeMarkedQueryImplementations() {
+    Assume.assumeTrue(
+        "Set -Dtsfile.runPerformanceTests=true to run the performance test",
+        Boolean.getBoolean(RUN_PERFORMANCE_TEST_PROPERTY));
+
+    java.lang.management.ThreadMXBean baseThreadBean = ManagementFactory.getThreadMXBean();
+    if (!(baseThreadBean instanceof com.sun.management.ThreadMXBean threadBean)) {
+      Assume.assumeTrue("Current-thread allocation metrics are unavailable", false);
+      return;
+    }
+    Assume.assumeTrue(
+        "Current-thread CPU time is unavailable", threadBean.isCurrentThreadCpuTimeSupported());
+    Assume.assumeTrue(
+        "Current-thread allocation metrics are unavailable",
+        threadBean.isThreadAllocatedMemorySupported());
+    if (!threadBean.isThreadCpuTimeEnabled()) {
+      threadBean.setThreadCpuTimeEnabled(true);
+    }
+    if (!threadBean.isThreadAllocatedMemoryEnabled()) {
+      threadBean.setThreadAllocatedMemoryEnabled(true);
+    }
+
+    List<RangeBenchmarkResult> results = new ArrayList<>();
+    results.add(
+        benchmarkRangeAnyMarked(
+            "array-backed prefix", createRangeBitMaps(false, 128, 0, 64), 0, 64, threadBean));
+    results.add(
+        benchmarkRangeAnyMarked(
+            "array-backed partial", createRangeBitMaps(false, 128, 1, 63), 1, 63, threadBean));
+    results.add(
+        benchmarkRangeAnyMarked(
+            "array-backed next block", createRangeBitMaps(false, 128, 64, 64), 64, 64, threadBean));
+    results.add(
+        benchmarkRangeAnyMarked(
+            "long-backed prefix", createRangeBitMaps(true, 64, 0, 64), 0, 64, threadBean));
+    results.add(
+        benchmarkRangeAnyMarked(
+            "long-backed partial", createRangeBitMaps(true, 64, 1, 63), 1, 63, threadBean));
+
+    printRangeResults(results);
+  }
+
+  private static RangeBenchmarkResult benchmarkRangeAnyMarked(
+      String name,
+      BitMap[] bitMaps,
+      int start,
+      int length,
+      com.sun.management.ThreadMXBean threadBean) {
+    Workload currentHelper = currentIoTDBRangeAnyMarkedWorkload(bitMaps, start, length);
+    Workload newApi = rangeAnyMarkedWorkload(bitMaps, start, length);
+    for (int round = 0; round < WARMUP_ROUNDS; round++) {
+      runMeasured(currentHelper, RANGE_OPERATION_COUNT, threadBean);
+      runMeasured(newApi, RANGE_OPERATION_COUNT, threadBean);
+    }
+
+    long[] currentCpuNanos = new long[MEASUREMENT_ROUNDS];
+    long[] currentAllocatedBytes = new long[MEASUREMENT_ROUNDS];
+    long[] apiCpuNanos = new long[MEASUREMENT_ROUNDS];
+    long[] apiAllocatedBytes = new long[MEASUREMENT_ROUNDS];
+    for (int round = 0; round < MEASUREMENT_ROUNDS; round++) {
+      MeasuredRun currentRun;
+      MeasuredRun apiRun;
+      if ((round & 1) == 0) {
+        currentRun = runMeasured(currentHelper, RANGE_OPERATION_COUNT, threadBean);
+        apiRun = runMeasured(newApi, RANGE_OPERATION_COUNT, threadBean);
+      } else {
+        apiRun = runMeasured(newApi, RANGE_OPERATION_COUNT, threadBean);
+        currentRun = runMeasured(currentHelper, RANGE_OPERATION_COUNT, threadBean);
+      }
+      assertEquals(currentRun.checksum, apiRun.checksum);
+      currentCpuNanos[round] = currentRun.cpuNanos;
+      currentAllocatedBytes[round] = currentRun.allocatedBytes;
+      apiCpuNanos[round] = apiRun.cpuNanos;
+      apiAllocatedBytes[round] = apiRun.allocatedBytes;
+    }
+
+    return new RangeBenchmarkResult(
+        name,
+        median(currentCpuNanos) / (double) RANGE_OPERATION_COUNT,
+        median(currentAllocatedBytes) / (double) RANGE_OPERATION_COUNT,
+        median(apiCpuNanos) / (double) RANGE_OPERATION_COUNT,
+        median(apiAllocatedBytes) / (double) RANGE_OPERATION_COUNT);
+  }
+
+  private static MeasuredRun runMeasured(
+      Workload workload, int operationCount, com.sun.management.ThreadMXBean threadBean) {
+    long threadId = Thread.currentThread().getId();
+    long allocatedBytesBefore = threadBean.getThreadAllocatedBytes(threadId);
+    long cpuNanosBefore = threadBean.getCurrentThreadCpuTime();
+    long checksum = workload.run(operationCount);
+    long cpuNanos = threadBean.getCurrentThreadCpuTime() - cpuNanosBefore;
+    long allocatedBytes = threadBean.getThreadAllocatedBytes(threadId) - allocatedBytesBefore;
+    blackHole = checksum;
+    return new MeasuredRun(cpuNanos, allocatedBytes, checksum);
   }
 
   private static BenchmarkResult benchmark(
@@ -437,6 +537,72 @@ public class BitMapPerformanceTest {
     };
   }
 
+  private static Workload currentIoTDBRangeAnyMarkedWorkload(
+      BitMap[] bitMaps, int start, int length) {
+    return operationCount -> {
+      long checksum = 0;
+      for (int i = 0; i < operationCount; i++) {
+        checksum += currentIoTDBRangeAnyMarked(bitMaps[i & 63], start, length) ? 1 : 0;
+      }
+      return checksum;
+    };
+  }
+
+  private static Workload rangeAnyMarkedWorkload(BitMap[] bitMaps, int start, int length) {
+    return operationCount -> {
+      long checksum = 0;
+      for (int i = 0; i < operationCount; i++) {
+        checksum += bitMaps[i & 63].isRangeAnyMarked(start, length) ? 1 : 0;
+      }
+      return checksum;
+    };
+  }
+
+  private static boolean currentIoTDBRangeAnyMarked(BitMap bitMap, int start, int length) {
+    // Mirror IoTDB's prefix shortcut and its byte scan for ranges with a non-zero offset.
+    if (start == 0) {
+      return !bitMap.isAllUnmarked(length);
+    }
+
+    byte[] bytes = bitMap.getByteArray();
+    int end = start + length;
+    int firstByte = start >>> 3;
+    int lastByte = (end - 1) >>> 3;
+    if (firstByte == lastByte) {
+      int mask = ((1 << length) - 1) << (start & 7);
+      return (bytes[firstByte] & mask) != 0;
+    }
+
+    int firstMask = (0xFF << (start & 7)) & 0xFF;
+    if ((bytes[firstByte] & firstMask) != 0) {
+      return true;
+    }
+    for (int index = firstByte + 1; index < lastByte; index++) {
+      if (bytes[index] != 0) {
+        return true;
+      }
+    }
+    int lastBitCount = end & 7;
+    int lastMask = lastBitCount == 0 ? 0xFF : (1 << lastBitCount) - 1;
+    return (bytes[lastByte] & lastMask) != 0;
+  }
+
+  private static BitMap[] createRangeBitMaps(boolean longBacked, int size, int start, int length) {
+    BitMap[] bitMaps = new BitMap[RANGE_BITMAP_COUNT];
+    for (int index = 0; index < bitMaps.length; index++) {
+      bitMaps[index] =
+          new BitMap(longBacked ? new BitMapLongImpl(size) : new BitMapArrayImpl(size));
+      if ((index & 1) == 0) {
+        bitMaps[index].mark(start + index % length);
+      } else if (start > 0) {
+        bitMaps[index].mark(start - 1);
+      } else if (start + length < size) {
+        bitMaps[index].mark(start + length);
+      }
+    }
+    return bitMaps;
+  }
+
   private static BitMap arrayBitMap() {
     return new BitMap(new BitMapArrayImpl(BIT_MAP_SIZE));
   }
@@ -495,6 +661,22 @@ public class BitMapPerformanceTest {
         "Reduction: %.2f%% per object%n", (arrayBytes - longBytes) * 100.0 / arrayBytes);
   }
 
+  private static void printRangeResults(List<RangeBenchmarkResult> results) {
+    System.out.println("isRangeAnyMarked performance (current-thread median CPU/allocation)");
+    System.out.printf(
+        "%-28s %14s %12s %14s %12s%n",
+        "representation / range", "current ns/op", "current B/op", "new API ns/op", "new API B/op");
+    for (RangeBenchmarkResult result : results) {
+      System.out.printf(
+          "%-28s %14.3f %12.3f %14.3f %12.3f%n",
+          result.name,
+          result.currentCpuNanosPerOperation,
+          result.currentAllocatedBytesPerOperation,
+          result.apiCpuNanosPerOperation,
+          result.apiAllocatedBytesPerOperation);
+    }
+  }
+
   @FunctionalInterface
   private interface Workload {
     long run(int operationCount);
@@ -521,6 +703,19 @@ public class BitMapPerformanceTest {
     }
   }
 
+  private static class MeasuredRun {
+
+    private final long cpuNanos;
+    private final long allocatedBytes;
+    private final long checksum;
+
+    private MeasuredRun(long cpuNanos, long allocatedBytes, long checksum) {
+      this.cpuNanos = cpuNanos;
+      this.allocatedBytes = allocatedBytes;
+      this.checksum = checksum;
+    }
+  }
+
   private static class BenchmarkResult {
 
     private final String name;
@@ -532,6 +727,28 @@ public class BitMapPerformanceTest {
       this.name = name;
       this.arrayNanosPerOperation = arrayNanosPerOperation;
       this.longNanosPerOperation = longNanosPerOperation;
+    }
+  }
+
+  private static class RangeBenchmarkResult {
+
+    private final String name;
+    private final double currentCpuNanosPerOperation;
+    private final double currentAllocatedBytesPerOperation;
+    private final double apiCpuNanosPerOperation;
+    private final double apiAllocatedBytesPerOperation;
+
+    private RangeBenchmarkResult(
+        String name,
+        double currentCpuNanosPerOperation,
+        double currentAllocatedBytesPerOperation,
+        double apiCpuNanosPerOperation,
+        double apiAllocatedBytesPerOperation) {
+      this.name = name;
+      this.currentCpuNanosPerOperation = currentCpuNanosPerOperation;
+      this.currentAllocatedBytesPerOperation = currentAllocatedBytesPerOperation;
+      this.apiCpuNanosPerOperation = apiCpuNanosPerOperation;
+      this.apiAllocatedBytesPerOperation = apiAllocatedBytesPerOperation;
     }
   }
 }
