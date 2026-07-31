@@ -19,4 +19,22 @@
 
 -->
 
-Coming Soon
+# Communication and Feedback
+
+## Apache Mailing List
+
+The dev mailing list is the primary public communication channel for the Apache TsFile
+community. Project-wide plans, roadmaps, announcements, and development discussions take
+place there.
+
+### Subscribe to the dev mailing list
+
+1. From the email address you want to subscribe, send a plain-text email to
+   [`dev-subscribe@tsfile.apache.org`](mailto:dev-subscribe@tsfile.apache.org?subject=subscribe).
+   Use `subscribe` as the subject; the message body can be empty.
+2. You will receive a confirmation request from the `tsfile.apache.org` domain. Reply to
+   that message as instructed to confirm your subscription.
+
+After confirming, you will receive every message sent to
+[`dev@tsfile.apache.org`](mailto:dev@tsfile.apache.org) and can participate in discussions
+by emailing that address.
