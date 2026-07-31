@@ -56,32 +56,57 @@ endif()
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
 )
+set(TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS "")
 
 if (ENABLE_SNAPPY)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_SNAPPY_INCLUDE_DIRS
             ${THIRD_PARTY_INCLUDE}/google_snappy
             ${CMAKE_SOURCE_DIR}/third_party/google_snappy
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_SNAPPY_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_SNAPPY_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_LZ4)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_LZ4_INCLUDE_DIRS
             ${CMAKE_SOURCE_DIR}/third_party/lz4
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_LZ4_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_LZ4_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_LZOKAY)
-    list(APPEND PROJECT_INCLUDE_DIR
+    set(TSFILE_LZOKAY_INCLUDE_DIRS
             ${CMAKE_SOURCE_DIR}/third_party/lzokay
+    )
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${TSFILE_LZOKAY_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_LZOKAY_INCLUDE_DIRS}
     )
 endif()
 
 if (ENABLE_ZLIB)
+    set(TSFILE_ZLIB_INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
+            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+    )
     list(APPEND PROJECT_INCLUDE_DIR
             # zlib.h ships in the source tree; zconf.h is generated into the
             # build tree by zlib's own CMake, so both directories are needed.
-            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
-            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
+            ${TSFILE_ZLIB_INCLUDE_DIRS}
+    )
+    list(APPEND TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS
+            ${TSFILE_ZLIB_INCLUDE_DIRS}
     )
 endif()
 
@@ -151,6 +176,12 @@ target_link_libraries(read_obj ${COMPRESSION_LIBS})
 target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
 add_library(tsfile SHARED)
+target_include_directories(tsfile PUBLIC
+        $<BUILD_INTERFACE:${LIBRARY_INCLUDE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/tsfile>)
+foreach(include_dir IN LISTS TSFILE_PUBLIC_THIRD_PARTY_INCLUDE_DIRS)
+    target_include_directories(tsfile PUBLIC $<BUILD_INTERFACE:${include_dir}>)
+endforeach()
 
 if (${COV_ENABLED})
     message("Enable code cov...")
@@ -162,16 +193,16 @@ if (${COV_ENABLED})
         set(COV_LINK_LIB -lgcov)
     endif()
     if (ENABLE_ANTLR4)
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj ${COV_LINK_LIB})
+        target_link_libraries(tsfile PRIVATE common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj ${COV_LINK_LIB})
     else()
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj ${COV_LINK_LIB})
+        target_link_libraries(tsfile PRIVATE common_obj compress_obj cwrapper_obj file_obj read_obj write_obj ${COV_LINK_LIB})
     endif()
 else()
     message("Disable code cov...")
     if (ENABLE_ANTLR4)
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
+        target_link_libraries(tsfile PRIVATE common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
     else()
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
+        target_link_libraries(tsfile PRIVATE common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
     endif()
 endif()
 
@@ -184,8 +215,37 @@ set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 
 # On Windows a SHARED library produces a .dll (RUNTIME) plus an import .lib
 # (ARCHIVE); on Unix it produces a .so (LIBRARY). Cover all three so the
-# install step works for every platform.
+# install step works for every platform and for CPack-based system packages.
 install(TARGETS tsfile
-        RUNTIME DESTINATION ${LIBRARY_OUTPUT_PATH}
-        LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH}
-        ARCHIVE DESTINATION ${LIBRARY_OUTPUT_PATH})
+        EXPORT TsFileTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT runtime
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT development)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tsfile
+        COMPONENT development
+        FILES_MATCHING PATTERN "*.h")
+
+include(CMakePackageConfigHelpers)
+set(TSFILE_CMAKE_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/tsfile)
+configure_package_config_file(
+        ${CMAKE_SOURCE_DIR}/cmake/TsFileConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake
+        INSTALL_DESTINATION ${TSFILE_CMAKE_INSTALL_DIR})
+write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/TsFileConfigVersion.cmake
+        VERSION ${TsFile_CPP_VERSION}
+        COMPATIBILITY SameMajorVersion)
+install(EXPORT TsFileTargets
+        NAMESPACE TsFile::
+        DESTINATION ${TSFILE_CMAKE_INSTALL_DIR}
+        COMPONENT development)
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/TsFileConfigVersion.cmake
+        DESTINATION ${TSFILE_CMAKE_INSTALL_DIR}
+        COMPONENT development)

@@ -90,7 +90,15 @@ https://github.com/apache/tsfile/issues/94
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake make g++ clang-format libuuid-dev
+sudo apt-get install -y cmake make g++ clang-format libuuid-dev dpkg-dev
+```
+
+在 RHEL/CentOS/Fedora 系统上，可使用 `yum` 或 `dnf` 安装对应依赖：
+
+```bash
+sudo yum install -y cmake make gcc-c++ clang-tools-extra libuuid-devel rpm-build
+# 或
+sudo dnf install -y cmake make gcc-c++ clang-tools-extra libuuid-devel rpm-build
 ```
 
 构建 tsfile：
@@ -114,6 +122,58 @@ mvn package -P with-cpp clean verify
 构建完成后，可在 `./build` 目录下找到生成的共享库文件。
 
 在向 GitHub 提交代码之前，请确保 `mvn` 编译通过。
+
+### 构建 Linux 安装包
+
+C++ CMake 构建可以生成 Linux 发行版可安装包：
+
+- Debian/Ubuntu：`libtsfile`、`libtsfile-dev`、`tsfile-cli` DEB 包
+- RHEL/CentOS/Fedora：`libtsfile`、`libtsfile-devel`、`tsfile-cli` RPM 包
+
+在仓库根目录下，Maven 会先构建 C++ 模块，然后调用 CPack：
+
+```bash
+./mvnw package -P with-cpp
+```
+
+如果只需要快速生成安装包、不运行 C++ 测试：
+
+```bash
+./mvnw package -P with-cpp -Dbuild.test=OFF -DskipTests
+```
+
+也可以在 `cpp/` 目录下直接调用 CMake：
+
+```bash
+cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release
+cmake --build build/package --target package
+```
+
+如果只需要生成其中一种包格式，可以在构建目录下直接运行 `cpack`：
+
+```bash
+cd build/package
+cpack -G DEB
+cpack -G RPM
+```
+
+使用 `apt` 安装生成的 DEB 包：
+
+```bash
+sudo apt install ./libtsfile_*.deb ./libtsfile-dev_*.deb ./tsfile-cli_*.deb
+```
+
+使用 `yum` 或 `dnf` 安装生成的 RPM 包：
+
+```bash
+sudo yum install ./libtsfile-*.rpm ./libtsfile-devel-*.rpm ./tsfile-cli-*.rpm
+# 或
+sudo dnf install ./libtsfile-*.rpm ./libtsfile-devel-*.rpm ./tsfile-cli-*.rpm
+```
+
+安装包会把共享库安装到系统库目录，头文件安装到 `/usr/include/tsfile`，
+CMake 包配置安装到 `/usr/lib/cmake/tsfile` 或 `/usr/lib64/cmake/tsfile`，
+命令行工具安装为 `/usr/bin/tsfile-cli`。
 
 ---
 

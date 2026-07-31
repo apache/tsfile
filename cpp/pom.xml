@@ -119,6 +119,23 @@
                             <config>${build.type}</config>
                         </configuration>
                     </execution>
+                    <!-- Build the CPack package target during the Maven package phase. -->
+                    <execution>
+                        <id>cmake-package</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <!--
+                                Build configuration for multi-config generators
+                                (Visual Studio). Ignored by single-config
+                                generators such as the Makefile generators.
+                            -->
+                            <config>${build.type}</config>
+                            <target>package</target>
+                        </configuration>
+                    </execution>
                     <!-- Execute the tests -->
                     <execution>
                         <id>cmake-run-tests</id>
