@@ -155,6 +155,52 @@ class Decoder {
         return common::E_OK;
     }
 
+    // Some encodings use an otherwise valid value as an end marker. Gorilla,
+    // for example, uses canonical NaN for FLOAT/DOUBLE and the minimum value
+    // for INT32/INT64. The regular batch API must honor that marker because it
+    // only receives a capacity. Callers that know the exact value count from
+    // page metadata can use these methods to disambiguate an embedded marker
+    // from the physical end marker.
+    int read_exact_int32(int32_t* out, int count, common::ByteStream& in) {
+        return read_exact_impl(out, count, in, &Decoder::read_batch_int32,
+                               &Decoder::read_int32);
+    }
+
+    int read_exact_int64(int64_t* out, int count, common::ByteStream& in) {
+        return read_exact_impl(out, count, in, &Decoder::read_batch_int64,
+                               &Decoder::read_int64);
+    }
+
+    int read_exact_float(float* out, int count, common::ByteStream& in) {
+        return read_exact_impl(out, count, in, &Decoder::read_batch_float,
+                               &Decoder::read_float);
+    }
+
+    int read_exact_double(double* out, int count, common::ByteStream& in) {
+        return read_exact_impl(out, count, in, &Decoder::read_batch_double,
+                               &Decoder::read_double);
+    }
+
+    int skip_exact_int32(int count, common::ByteStream& in) {
+        return skip_exact_impl<int32_t>(count, in, &Decoder::skip_int32,
+                                        &Decoder::read_int32);
+    }
+
+    int skip_exact_int64(int count, common::ByteStream& in) {
+        return skip_exact_impl<int64_t>(count, in, &Decoder::skip_int64,
+                                        &Decoder::read_int64);
+    }
+
+    int skip_exact_float(int count, common::ByteStream& in) {
+        return skip_exact_impl<float>(count, in, &Decoder::skip_float,
+                                      &Decoder::read_float);
+    }
+
+    int skip_exact_double(int count, common::ByteStream& in) {
+        return skip_exact_impl<double>(count, in, &Decoder::skip_double,
+                                       &Decoder::read_double);
+    }
+
     // Block-level filter pushdown for TS_2DIFF-encoded INT64 columns.
     //
     // TS_2DIFF stores values in self-contained "blocks": a header (value
@@ -187,6 +233,63 @@ class Decoder {
     // Skip the block whose header was already consumed by peek.
     virtual int skip_peeked_block_int64(common::ByteStream& in, int& skipped) {
         return common::E_NOT_SUPPORT;
+    }
+
+   private:
+    template <typename T>
+    int read_exact_impl(T* out, int count, common::ByteStream& in,
+                        int (Decoder::*read_batch)(T*, int, int&,
+                                                   common::ByteStream&),
+                        int (Decoder::*read_one)(T&, common::ByteStream&)) {
+        if (count < 0 || (count > 0 && out == nullptr)) {
+            return common::E_INVALID_ARG;
+        }
+
+        int actual = 0;
+        while (actual < count) {
+            int batch_actual = 0;
+            int ret = (this->*read_batch)(out + actual, count - actual,
+                                          batch_actual, in);
+            if (ret != common::E_OK) return ret;
+            if (batch_actual < 0 || batch_actual > count - actual) {
+                return common::E_TSFILE_CORRUPTED;
+            }
+            actual += batch_actual;
+            if (actual == count) return common::E_OK;
+
+            if ((ret = (this->*read_one)(out[actual], in)) != common::E_OK) {
+                return ret;
+            }
+            ++actual;
+        }
+        return common::E_OK;
+    }
+
+    template <typename T>
+    int skip_exact_impl(int count, common::ByteStream& in,
+                        int (Decoder::*skip_batch)(int, int&,
+                                                   common::ByteStream&),
+                        int (Decoder::*read_one)(T&, common::ByteStream&)) {
+        if (count < 0) return common::E_INVALID_ARG;
+
+        int skipped = 0;
+        while (skipped < count) {
+            int batch_skipped = 0;
+            int ret = (this->*skip_batch)(count - skipped, batch_skipped, in);
+            if (ret != common::E_OK) return ret;
+            if (batch_skipped < 0 || batch_skipped > count - skipped) {
+                return common::E_TSFILE_CORRUPTED;
+            }
+            skipped += batch_skipped;
+            if (skipped == count) return common::E_OK;
+
+            T ignored;
+            if ((ret = (this->*read_one)(ignored, in)) != common::E_OK) {
+                return ret;
+            }
+            ++skipped;
+        }
+        return common::E_OK;
     }
 };
 

@@ -784,40 +784,39 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
 }
 
 namespace {
-// Type-dispatched value batch read / skip for decode_tv_batch<T>.  Overload
-// resolution on the value pointer type selects the matching Decoder method, so
-// the four fixed-width value types share one decode loop.
-FORCE_INLINE int read_value_batch_typed(Decoder* d, int32_t* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_int32(out, cap, actual, in);
+// Type-dispatched exact read / skip for decode_tv_batch<T>. Overload
+// resolution on the value pointer selects the matching Decoder method.
+FORCE_INLINE int read_value_exact_typed(Decoder* d, int32_t* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_int32(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, int64_t* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_int64(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, int64_t* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_int64(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, float* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_float(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, float* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_float(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, double* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_double(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, double* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_double(out, count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, int32_t*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_int32(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, int32_t*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_int32(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, int64_t*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_int64(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, int64_t*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_int64(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, float*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_float(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, float*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_float(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, double*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_double(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, double*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_double(count, in);
 }
 }  // namespace
 
@@ -864,17 +863,8 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
                     }
                     cur_value_index += block_count;
                     if (nonnull > 0) {
-                        // skip_* may legitimately fail (truncated page) or
-                        // short-read (corrupt bitmap vs. data); both must abort
-                        // the loop rather than silently desync the value
-                        // decoder.
-                        int sk = 0;
-                        if (RET_FAIL(skip_value_typed(value_decoder_, values,
-                                                      nonnull, sk, value_in))) {
-                            break;
-                        }
-                        if (sk != nonnull) {
-                            ret = E_TSFILE_CORRUPTED;
+                        if (RET_FAIL(skip_value_exact_typed(
+                                value_decoder_, values, nonnull, value_in))) {
                             break;
                         }
                     }
@@ -916,14 +906,8 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
 
         if (pass_count == 0) {
             if (nonnull_count > 0) {
-                int skipped = 0;
-                if (RET_FAIL(skip_value_typed(value_decoder_, values,
-                                              nonnull_count, skipped,
-                                              value_in))) {
-                    break;
-                }
-                if (skipped != nonnull_count) {
-                    ret = E_TSFILE_CORRUPTED;
+                if (RET_FAIL(skip_value_exact_typed(value_decoder_, values,
+                                                    nonnull_count, value_in))) {
                     break;
                 }
             }
@@ -931,11 +915,9 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
             continue;
         }
 
-        int value_count = 0;
         if (nonnull_count > 0) {
-            if (RET_FAIL(read_value_batch_typed(value_decoder_, values,
-                                                nonnull_count, value_count,
-                                                value_in))) {
+            if (RET_FAIL(read_value_exact_typed(value_decoder_, values,
+                                                nonnull_count, value_in))) {
                 break;
             }
         }
@@ -1704,7 +1686,6 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     uint32_t elem_size = common::get_data_type_size(dt);
     pps.predecoded_values.resize(static_cast<size_t>(nonnull_total) *
                                  elem_size);
-    int actual = 0;
     switch (dt) {
         case common::BOOLEAN: {
             bool* out = reinterpret_cast<bool*>(pps.predecoded_values.data());
@@ -1714,39 +1695,38 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
                     return ret;
                 }
             }
-            actual = nonnull_total;
             break;
         }
         case common::INT32:
         case common::DATE:
-            if (RET_FAIL(col->decoder->read_batch_int32(
+            if (RET_FAIL(col->decoder->read_exact_int32(
                     reinterpret_cast<int32_t*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::INT64:
         case common::TIMESTAMP:
-            if (RET_FAIL(col->decoder->read_batch_int64(
+            if (RET_FAIL(col->decoder->read_exact_int64(
                     reinterpret_cast<int64_t*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::FLOAT:
-            if (RET_FAIL(col->decoder->read_batch_float(
+            if (RET_FAIL(col->decoder->read_exact_float(
                     reinterpret_cast<float*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::DOUBLE:
-            if (RET_FAIL(col->decoder->read_batch_double(
+            if (RET_FAIL(col->decoder->read_exact_double(
                     reinterpret_cast<double*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
@@ -1755,7 +1735,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
             cleanup();
             return E_NOT_SUPPORT;
     }
-    pps.predecoded_count = actual;
+    pps.predecoded_count = nonnull_total;
     cleanup();
     return E_OK;
 }
@@ -2372,35 +2352,39 @@ int AlignedChunkReader::decompress_and_parse_value_page(ValueColumnState& col,
                             break;
                         }
                         out[i] = v;
+                        actual++;
                     }
-                    actual = nonnull_total;
                     break;
                 }
                 case common::INT32:
                 case common::DATE:
-                    rret = col.decoder->read_batch_int32(
+                    rret = col.decoder->read_exact_int32(
                         reinterpret_cast<int32_t*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::INT64:
                 case common::TIMESTAMP:
-                    rret = col.decoder->read_batch_int64(
+                    rret = col.decoder->read_exact_int64(
                         reinterpret_cast<int64_t*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::FLOAT:
-                    rret = col.decoder->read_batch_float(
+                    rret = col.decoder->read_exact_float(
                         reinterpret_cast<float*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::DOUBLE:
-                    rret = col.decoder->read_batch_double(
+                    rret = col.decoder->read_exact_double(
                         reinterpret_cast<double*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 default:
                     rret = common::E_OUT_OF_RANGE;
@@ -2524,11 +2508,9 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                 }
             }
 
-            // Skip values if no rows pass time filter.  Skip/read errors and
-            // short reads (decoder returned fewer values than the bitmap
-            // promised) must abort; otherwise the input stream is left
-            // mid-value and later batches would decode garbage from
-            // misaligned bytes.
+            // Skip values if no rows pass time filter.  The aligned bitmap
+            // supplies the exact count, including values equal to a codec's
+            // in-band terminator.
             if (pass_count == 0 && cb.nonnull_count > 0) {
                 int dret = common::E_OK;
                 int sk = 0;
@@ -2543,21 +2525,29 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                     }
                     case common::INT32:
                     case common::DATE:
-                        dret = col->decoder->skip_int32(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<int32_t*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::INT64:
                     case common::TIMESTAMP:
-                        dret = col->decoder->skip_int64(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<int64_t*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::FLOAT:
-                        dret = col->decoder->skip_float(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<float*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::DOUBLE:
-                        dret = col->decoder->skip_double(cb.nonnull_count, sk,
-                                                         col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<double*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::STRING:
                     case common::TEXT:
@@ -2621,25 +2611,33 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                         }
                         case common::INT32:
                         case common::DATE:
-                            dret = col->decoder->read_batch_int32(
+                            dret = col->decoder->read_exact_int32(
                                 reinterpret_cast<int32_t*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::INT64:
                         case common::TIMESTAMP:
-                            dret = col->decoder->read_batch_int64(
+                            dret = col->decoder->read_exact_int64(
                                 reinterpret_cast<int64_t*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::FLOAT:
-                            dret = col->decoder->read_batch_float(
+                            dret = col->decoder->read_exact_float(
                                 reinterpret_cast<float*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::DOUBLE:
-                            dret = col->decoder->read_batch_double(
+                            dret = col->decoder->read_exact_double(
                                 reinterpret_cast<double*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::STRING:
                         case common::TEXT:

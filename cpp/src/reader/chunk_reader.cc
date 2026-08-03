@@ -479,7 +479,10 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
                 if (!filter->satisfy_start_end_time(block_min, block_max)) {
                     int skipped = 0;
                     time_decoder_->skip_peeked_block_int64(time_in, skipped);
-                    value_decoder_->skip_int32(block_count, skipped, value_in);
+                    if (RET_FAIL(value_decoder_->skip_exact_int32(block_count,
+                                                                  value_in))) {
+                        break;
+                    }
                     continue;
                 }
                 if (filter->contain_start_end_time(block_min, block_max)) {
@@ -489,7 +492,6 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
         }
 
         int time_count = 0;
-        int value_count = 0;
 
         if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
                                                      time_count, time_in))) {
@@ -505,20 +507,15 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
         }
 
         if (pass_count == 0) {
-            int skipped = 0;
-            value_decoder_->skip_int32(time_count, skipped, value_in);
+            if (RET_FAIL(
+                    value_decoder_->skip_exact_int32(time_count, value_in))) {
+                break;
+            }
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_int32(values, time_count,
-                                                      value_count, value_in))) {
-            break;
-        }
-        // Time and value chunks are written in lock-step; any discrepancy
-        // means the file is truncated or corrupted.  Reading uninitialised
-        // values[i] would silently surface garbage as decoded rows.
-        if (value_count != time_count) {
-            ret = E_TSFILE_CORRUPTED;
+        if (RET_FAIL(value_decoder_->read_exact_int32(values, time_count,
+                                                      value_in))) {
             break;
         }
 
@@ -568,7 +565,10 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
                 if (!filter->satisfy_start_end_time(block_min, block_max)) {
                     int skipped = 0;
                     time_decoder_->skip_peeked_block_int64(time_in, skipped);
-                    value_decoder_->skip_int64(block_count, skipped, value_in);
+                    if (RET_FAIL(value_decoder_->skip_exact_int64(block_count,
+                                                                  value_in))) {
+                        break;
+                    }
                     continue;
                 }
                 if (filter->contain_start_end_time(block_min, block_max)) {
@@ -578,7 +578,6 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
         }
 
         int time_count = 0;
-        int value_count = 0;
 
         if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
                                                      time_count, time_in))) {
@@ -594,17 +593,15 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
         }
 
         if (pass_count == 0) {
-            int skipped = 0;
-            value_decoder_->skip_int64(time_count, skipped, value_in);
+            if (RET_FAIL(
+                    value_decoder_->skip_exact_int64(time_count, value_in))) {
+                break;
+            }
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_int64(values, time_count,
-                                                      value_count, value_in))) {
-            break;
-        }
-        if (value_count != time_count) {
-            ret = E_TSFILE_CORRUPTED;
+        if (RET_FAIL(value_decoder_->read_exact_int64(values, time_count,
+                                                      value_in))) {
             break;
         }
 
@@ -655,7 +652,10 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
                 if (!filter->satisfy_start_end_time(block_min, block_max)) {
                     int skipped = 0;
                     time_decoder_->skip_peeked_block_int64(time_in, skipped);
-                    value_decoder_->skip_float(block_count, skipped, value_in);
+                    if (RET_FAIL(value_decoder_->skip_exact_float(block_count,
+                                                                  value_in))) {
+                        break;
+                    }
                     continue;
                 }
                 if (filter->contain_start_end_time(block_min, block_max)) {
@@ -665,7 +665,6 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        int value_count = 0;
 
         if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
                                                      time_count, time_in))) {
@@ -681,17 +680,15 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         if (pass_count == 0) {
-            int skipped = 0;
-            value_decoder_->skip_float(time_count, skipped, value_in);
+            if (RET_FAIL(
+                    value_decoder_->skip_exact_float(time_count, value_in))) {
+                break;
+            }
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_float(values, time_count,
-                                                      value_count, value_in))) {
-            break;
-        }
-        if (value_count != time_count) {
-            ret = E_TSFILE_CORRUPTED;
+        if (RET_FAIL(value_decoder_->read_exact_float(values, time_count,
+                                                      value_in))) {
             break;
         }
 
@@ -738,7 +735,10 @@ int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
                 if (!filter->satisfy_start_end_time(block_min, block_max)) {
                     int skipped = 0;
                     time_decoder_->skip_peeked_block_int64(time_in, skipped);
-                    value_decoder_->skip_double(block_count, skipped, value_in);
+                    if (RET_FAIL(value_decoder_->skip_exact_double(block_count,
+                                                                   value_in))) {
+                        break;
+                    }
                     continue;
                 }
                 if (filter->contain_start_end_time(block_min, block_max)) {
@@ -748,7 +748,6 @@ int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        int value_count = 0;
 
         if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
                                                      time_count, time_in))) {
@@ -764,17 +763,15 @@ int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         if (pass_count == 0) {
-            int skipped = 0;
-            value_decoder_->skip_double(time_count, skipped, value_in);
+            if (RET_FAIL(
+                    value_decoder_->skip_exact_double(time_count, value_in))) {
+                break;
+            }
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_double(
-                values, time_count, value_count, value_in))) {
-            break;
-        }
-        if (value_count != time_count) {
-            ret = E_TSFILE_CORRUPTED;
+        if (RET_FAIL(value_decoder_->read_exact_double(values, time_count,
+                                                       value_in))) {
             break;
         }
 
