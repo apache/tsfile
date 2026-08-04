@@ -292,6 +292,32 @@
                 </plugins>
             </build>
         </profile>
+        <!--
+            Generate compile_commands.json for the standalone Cppcheck CI job.
+            This profile only changes the CMake configure step; it does not run
+            Cppcheck or add static analysis to normal C++ builds.
+        -->
+        <profile>
+            <id>with-cppcheck</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</option>
+                                    </options>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>.java-9-and-above</id>
             <activation>

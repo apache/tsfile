@@ -1,0 +1,168 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Cppcheck
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/cppcheck.yml'
+      - '.mvn/**'
+      - 'cpp/**'
+      - 'mvnw'
+      - 'pom.xml'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/cppcheck.yml'
+      - '.mvn/**'
+      - 'cpp/**'
+      - 'mvnw'
+      - 'pom.xml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CPPCHECK_VERSION: 2.17.1
+  CPPCHECK_SOURCE_SHA256: bfd681868248ec03855ca7c2aea7bcb1f39b8b18860d76aec805a92a967b966c
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  cppcheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5.6.0
+        with:
+          distribution: corretto
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-cppcheck-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Cache Cppcheck
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/cppcheck/${{ env.CPPCHECK_VERSION }}
+          key: cppcheck-${{ runner.os }}-${{ runner.arch }}-${{ env.CPPCHECK_VERSION }}-${{ env.CPPCHECK_SOURCE_SHA256 }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-dev
+
+      - name: Install Cppcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cppcheck_home="${HOME}/.cache/cppcheck/${CPPCHECK_VERSION}"
+          if [[ ! -x "${cppcheck_home}/bin/cppcheck" ]]; then
+            build_root="$(mktemp -d)"
+            archive="${build_root}/cppcheck.tar.gz"
+            source_dir="${build_root}/source"
+            build_dir="${build_root}/build"
+
+            mkdir -p "${source_dir}" "${build_dir}" "${cppcheck_home}"
+            curl --fail --location --retry 3 \
+              "https://github.com/cppcheck-opensource/cppcheck/archive/refs/tags/${CPPCHECK_VERSION}.tar.gz" \
+              --output "${archive}"
+            echo "${CPPCHECK_SOURCE_SHA256}  ${archive}" | sha256sum --check -
+            tar -xzf "${archive}" --strip-components=1 -C "${source_dir}"
+
+            cmake -S "${source_dir}" -B "${build_dir}" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DUSE_MATCHCOMPILER=ON \
+              -DBUILD_GUI=OFF \
+              -DBUILD_TESTS=OFF \
+              -DCMAKE_INSTALL_PREFIX="${cppcheck_home}"
+            cmake --build "${build_dir}" --parallel "$(nproc)"
+            cmake --install "${build_dir}"
+          fi
+
+          echo "${cppcheck_home}/bin" >> "${GITHUB_PATH}"
+          "${cppcheck_home}/bin/cppcheck" --version
+
+      - name: Generate compilation database with Maven
+        run: |
+          ./mvnw -P with-cpp,with-cppcheck -pl cpp \
+            -Dbuild.test=OFF \
+            cmake:generate@cmake-generate-test-compile
+          test -s cpp/target/build/compile_commands.json
+
+      - name: Run Cppcheck
+        shell: bash
+        run: |
+          mkdir -p cpp/target/cppcheck
+
+          set +e
+          cppcheck \
+            --project=cpp/target/build/compile_commands.json \
+            --file-filter='*cpp/src/*' \
+            --file-filter='*cpp/tools/*' \
+            --file-filter='*cpp/examples/*' \
+            --enable=warning,performance,portability \
+            --check-level=exhaustive \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress='*:*/third_party/*' \
+            --suppress='*:*/target/*' \
+            --suppress='*:*/parser/generated/*' \
+            --exitcode-suppressions=cpp/cppcheck-baseline.txt \
+            --error-exitcode=2 \
+            --template=gcc \
+            --output-file=cpp/target/cppcheck/cppcheck.txt \
+            --quiet \
+            -j "$(nproc)"
+          cppcheck_status=$?
+          set -e
+
+          cat cpp/target/cppcheck/cppcheck.txt
+          exit "${cppcheck_status}"
+
+      - name: Upload Cppcheck report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cppcheck-report
+          path: cpp/target/cppcheck/cppcheck.txt
+          if-no-files-found: ignore

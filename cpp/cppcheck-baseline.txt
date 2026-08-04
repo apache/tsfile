@@ -1,0 +1,37 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Existing diagnostics remain visible in CI but do not fail the job. Keep each
+# entry scoped to an exact file and line so newly introduced diagnostics fail.
+ignoredReturnValue:cpp/src/parser/path_visitor.cpp:106
+returnByReference:cpp/src/common/tsblock/tuple_desc.h:100
+passedByValue:cpp/src/common/tsblock/tuple_desc.h:65
+invalidPointerCast:cpp/src/common/tsblock/tsblock.h:165
+invalidPointerCast:cpp/src/common/tsblock/tsblock.cc:86
+invalidPointerCast:cpp/src/common/tsblock/tsblock.cc:92
+uninitMemberVar:cpp/src/compress/gzip_compressor.cc:26
+uninitMemberVar:cpp/src/compress/gzip_compressor.cc:143
+returnByReference:cpp/src/file/write_file.h:49
+uninitMemberVar:cpp/src/reader/filter/binary_filter.h:28
+useInitializationList:cpp/src/common/path.h:44
+containerOutOfBounds:cpp/src/reader/expression.cc:115
+uninitMemberVar:cpp/src/common/row_record.h:191
+noCopyConstructor:cpp/src/common/row_record.h:201
+noOperatorEq:cpp/src/common/row_record.h:201
+invalidPointerCast:cpp/src/reader/table_result_set.cc:152
+invalidPointerCast:cpp/src/reader/table_result_set.cc:156
+memleak:cpp/examples/c_examples/demo_write.c:71
