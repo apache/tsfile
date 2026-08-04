@@ -4,7 +4,7 @@
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
- * License); you may not use this file except in compliance
+ * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -16,30 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#ifndef READER_FILTER_BASIC_BINARY_FILTER_H
-#define READER_FILTER_BASIC_BINARY_FILTER_H
 
-#include "filter.h"
-#include "filter_type.h"
+#include "reader/expression.h"
+
+#include <gtest/gtest.h>
+
+#include <vector>
 
 namespace storage {
-class BinaryFilter : public Filter {
-   public:
-    BinaryFilter() : Filter(), left_(nullptr), right_(nullptr) {}
-    BinaryFilter(Filter* left, Filter* right)
-        : Filter(), left_(left), right_(right) {}
-    virtual ~BinaryFilter() {}
 
-    void set_left(Filter* left) { left_ = left; }
-    void set_right(Filter* right) { right_ = right; }
-    Filter get_left() { return *left_; }
-    Filter get_right() { return *right_; }
+TEST(QueryExpressionTest, EmptySelectedSeriesReturnsNull) {
+    QueryExpression query_expression;
+    std::vector<Path> selected_series;
+    Expression* expression = new Expression(
+        OR_EXPR, new Expression(GLOBALTIME_EXPR, static_cast<Filter*>(nullptr)),
+        new Expression(SERIES_EXPR, Path(), static_cast<Filter*>(nullptr)));
 
-   protected:
-    Filter* left_;
-    Filter* right_;
-};
+    EXPECT_EQ(query_expression.optimize(expression, selected_series), nullptr);
+
+    delete expression;
+}
 
 }  // namespace storage
-
-#endif  // READER_FILTER_BASIC_BINARY_FILTER_H
