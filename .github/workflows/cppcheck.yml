@@ -147,7 +147,6 @@ jobs:
             --suppress='*:*/third_party/*' \
             --suppress='*:*/target/*' \
             --suppress='*:*/parser/generated/*' \
-            --exitcode-suppressions=cpp/cppcheck-baseline.txt \
             --error-exitcode=2 \
             --template=gcc \
             --output-file=cpp/target/cppcheck/cppcheck.txt \

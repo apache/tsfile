@@ -62,7 +62,7 @@ class TupleDesc {
         time_column_index_ = -1;
     }
 
-    FORCE_INLINE void push_back(ColumnSchema schema) {
+    FORCE_INLINE void push_back(const ColumnSchema& schema) {
         if (schema.column_category_ == ColumnCategory::TIME) {
             ASSERT(time_column_index_ == -1);
             time_column_index_ = static_cast<int>(column_list_.size());
@@ -97,7 +97,7 @@ class TupleDesc {
         return time_column_index_;
     }
 
-    FORCE_INLINE std::string get_column_name(uint32_t index) {
+    FORCE_INLINE const std::string& get_column_name(uint32_t index) const {
         return column_list_[index].column_name_;
     }
 

@@ -103,7 +103,8 @@ bool PathVisitor::ends_with(const std::string& str, const std::string& suffix) {
 
 bool PathVisitor::is_creatable(const std::string& str) {
     try {
-        std::stod(str);
+        const double parsed_value = std::stod(str);
+        (void)parsed_value;
         return true;
     } catch (const std::invalid_argument& e) {
         return false;
