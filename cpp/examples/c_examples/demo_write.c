@@ -33,6 +33,36 @@ static char* duplicate_string(const char* src) {
     return dst;
 }
 
+static ERRNO cleanup_write_tsfile_resources(WriteFile* file,
+                                            TsFileWriter writer, Tablet* tablet,
+                                            TableSchema* table_schema,
+                                            ERRNO code) {
+    if (*tablet != NULL) {
+        free_tablet(tablet);
+    }
+
+    if (writer != NULL) {
+        ERRNO close_code = tsfile_writer_close(writer);
+        if (code == RET_OK) {
+            code = close_code;
+        }
+    }
+
+    if (table_schema->table_name != NULL ||
+        table_schema->column_schemas != NULL) {
+        free_table_schema(*table_schema);
+    }
+
+    if (*file != NULL) {
+        free_write_file(file);
+    }
+
+    if (code != RET_OK) {
+        printf("get err no: %d", code);
+    }
+    return code;
+}
+
 // This example shows you how to write tsfile.
 ERRNO write_tsfile() {
     ERRNO code = 0;
@@ -43,22 +73,27 @@ ERRNO write_tsfile() {
 
     code = set_global_compression(TS_COMPRESSION_LZ4);
     if (code != RET_OK) {
-        goto cleanup;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
     code = set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_TS_2DIFF);
     if (code != RET_OK) {
-        goto cleanup;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
     char* table_name = "table1";
 
     // Create table schema to describe a table in a tsfile.
     table_schema.table_name = duplicate_string(table_name);
+    if (table_schema.table_name == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
     table_schema.column_schemas =
         (ColumnSchema*)calloc(3, sizeof(ColumnSchema));
-    if (table_schema.table_name == NULL ||
-        table_schema.column_schemas == NULL) {
-        code = RET_OOM;
-        goto cleanup;
+    if (table_schema.column_schemas == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
     }
     table_schema.column_num = 3;
     table_schema.column_schemas[0] =
@@ -76,21 +111,23 @@ ERRNO write_tsfile() {
     if (table_schema.column_schemas[0].column_name == NULL ||
         table_schema.column_schemas[1].column_name == NULL ||
         table_schema.column_schemas[2].column_name == NULL) {
-        code = RET_OOM;
-        goto cleanup;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
     }
 
     remove("test_c.tsfile");
     // Create a file with specify path to write tsfile.
     file = write_file_new("test_c.tsfile", &code);
     if (code != RET_OK) {
-        goto cleanup;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
 
     // Create tsfile writer with specify table schema.
     writer = tsfile_writer_new(file, &table_schema, &code);
     if (code != RET_OK) {
-        goto cleanup;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
 
     // Create tablet to insert data.
@@ -98,6 +135,10 @@ ERRNO write_tsfile() {
                         (TSDataType[]){TS_DATATYPE_STRING, TS_DATATYPE_STRING,
                                        TS_DATATYPE_INT32},
                         3, 5);
+    if (tablet == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
 
     for (int row = 0; row < 5; row++) {
         Timestamp timestamp = row;
@@ -111,30 +152,6 @@ ERRNO write_tsfile() {
 
     // Write tablet data.
     code = tsfile_writer_write(writer, tablet);
-
-cleanup:
-    if (tablet != NULL) {
-        free_tablet(&tablet);
-    }
-
-    if (table_schema.table_name != NULL ||
-        table_schema.column_schemas != NULL) {
-        free_table_schema(table_schema);
-    }
-
-    if (writer != NULL) {
-        ERRNO close_code = tsfile_writer_close(writer);
-        if (code == RET_OK) {
-            code = close_code;
-        }
-    }
-
-    if (file != NULL) {
-        free_write_file(&file);
-    }
-
-    if (code != RET_OK) {
-        printf("get err no: %d", code);
-    }
-    return code;
+    return cleanup_write_tsfile_resources(&file, writer, &tablet, &table_schema,
+                                          code);
 }
