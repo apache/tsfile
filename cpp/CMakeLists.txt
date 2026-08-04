@@ -31,6 +31,9 @@ if (POLICY CMP0079)
 endif ()
 set(TsFile_CPP_VERSION 2.3.2.dev)
 
+option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
+message("cmake using: TSFILE_BUILD_SHARED=${TSFILE_BUILD_SHARED}")
+
 if (MSVC)
     # MSVC does not provide a /std:c++11 flag; C++11 is its implicit baseline.
     # The lowest explicitly settable standard is /std:c++14. Without this flag,
@@ -39,9 +42,11 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
     add_definitions(-DNOMINMAX -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
                     -D_SCL_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
-    # Export all symbols of the tsfile shared library automatically so that
-    # consumers do not need __declspec(dllexport) annotations.
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    if (TSFILE_BUILD_SHARED)
+        # Export all symbols of the tsfile shared library automatically so that
+        # consumers do not need __declspec(dllexport) annotations.
+        set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif ()
 else ()
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
 endif ()

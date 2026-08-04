@@ -101,10 +101,14 @@ endif()
 
 include_directories(${PROJECT_INCLUDE_DIR})
 
-# Mark every translation unit that is compiled into the tsfile library so that
-# TSFILE_API (see utils/util_define.h) resolves to an export-side (empty)
-# decoration here, and to __declspec(dllimport) for external consumers.
-add_definitions(-DTSFILE_BUILDING)
+# Configure TSFILE_API (see utils/util_define.h) for every translation unit
+# compiled into the tsfile library. Shared builds export data symbols, while
+# static builds do not use DLL import/export decorations.
+if (TSFILE_BUILD_SHARED)
+    add_definitions(-DTSFILE_BUILDING)
+else()
+    add_definitions(-DTSFILE_STATIC)
+endif()
 
 if (ENABLE_ANTLR4)
     add_subdirectory(parser)
@@ -150,7 +154,14 @@ target_link_libraries(common_obj ${COMPRESSION_LIBS})
 target_link_libraries(read_obj ${COMPRESSION_LIBS})
 target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
-add_library(tsfile SHARED)
+if (TSFILE_BUILD_SHARED)
+    add_library(tsfile SHARED)
+else()
+    add_library(tsfile STATIC)
+    # Consumers of the CMake target must see TSFILE_API without DLL import
+    # decoration when linking the static library on MSVC.
+    target_compile_definitions(tsfile INTERFACE TSFILE_STATIC)
+endif()
 
 if (${COV_ENABLED})
     message("Enable code cov...")
@@ -177,14 +188,16 @@ endif()
 
 add_dependencies(tsfile utils_obj encoding_obj)
 
-set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
-set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
-set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
-set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
+if (TSFILE_BUILD_SHARED)
+    set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
+    set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
+    set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
+    set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
+endif()
 
-# On Windows a SHARED library produces a .dll (RUNTIME) plus an import .lib
-# (ARCHIVE); on Unix it produces a .so (LIBRARY). Cover all three so the
-# install step works for every platform.
+# A shared library is a RUNTIME plus an import ARCHIVE on Windows and a LIBRARY
+# on Unix. A static library is an ARCHIVE on every platform. Cover all three so
+# the install step works for either library type.
 install(TARGETS tsfile
         RUNTIME DESTINATION ${LIBRARY_OUTPUT_PATH}
         LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH}

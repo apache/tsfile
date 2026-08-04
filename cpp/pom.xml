@@ -35,6 +35,7 @@
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
         <build.test>ON</build.test>
+        <tsfile.build.shared>ON</tsfile.build.shared>
         <enable.snappy>ON</enable.snappy>
         <enable.lz4>ON</enable.lz4>
         <enable.lzokay>ON</enable.lzokay>
@@ -82,6 +83,7 @@
                                 <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
                                 <option>-DENABLE_ASAN=${enable.asan}</option>
                                 <option>-DBUILD_TEST=${build.test}</option>
+                                <option>-DTSFILE_BUILD_SHARED=${tsfile.build.shared}</option>
                                 <option>-DENABLE_ANTLR4=${enable.antlr4}</option>
                                 <option>-DENABLE_SNAPPY=${enable.snappy}</option>
                                 <option>-DENABLE_LZ4=${enable.lz4}</option>

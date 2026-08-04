@@ -132,7 +132,29 @@ mvn clean verify -P with-cpp -Dcpp.toolchain=mingw
 mvn clean verify -P with-cpp -Dcpp.toolchain=msvc
 ```
 
-Then you can find the shared library at `./cpp/target/build/lib`.
+By default, the shared library is written to `./cpp/target/build/lib`.
+
+To build `libtsfile` as a static library instead, disable
+`TSFILE_BUILD_SHARED` through Maven:
+
+```bash
+mvn clean verify -P with-cpp -Dtsfile.build.shared=OFF
+```
+
+The static library is written to the same directory (`libtsfile.a` on
+Linux/macOS and `tsfile.lib` on Windows). When consuming the installed archive
+directly on MSVC rather than linking the CMake `tsfile` target, define
+`TSFILE_STATIC` for the consumer so public headers do not use DLL import
+decorations.
+
+For a direct CMake build, use:
+
+```bash
+cmake -S cpp -B cpp/build/static \
+  -DTSFILE_BUILD_SHARED=OFF \
+  -DBUILD_TEST=OFF
+cmake --build cpp/build/static --target tsfile
+```
 
 Before you submit your code to GitHub, please ensure that the compilation is correct.
 
