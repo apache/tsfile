@@ -20,11 +20,13 @@ import { defineDocSearchConfig } from '@vuepress/plugin-docsearch/client';
 import { computed } from 'vue';
 import { defineClientConfig, usePageData, useRouter, withBase } from 'vuepress/client';
 import DocSearch from './components/DocSearch.vue';
+import TsFileStructureTree from './components/TsFileStructureTree.vue';
 import { getDocVersion } from './utils/index.js';
 
 export default defineClientConfig({
   enhance: ({ app }) => {
     app.component('DocSearch', DocSearch);
+    app.component('TsFileStructureTree', TsFileStructureTree);
   },
   setup() {
     const pageData = usePageData();
