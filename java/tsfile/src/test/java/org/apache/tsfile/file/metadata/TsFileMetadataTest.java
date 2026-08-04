@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
@@ -53,10 +54,12 @@ public class TsFileMetadataTest {
   @Test
   public void testWriteFileMetaData() {
     TsFileMetadata tsfMetaData = TestHelper.createSimpleFileMetaData();
-    tsfMetaData.addProperty("encryptLevel", "0");
-    tsfMetaData.addProperty("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
-    tsfMetaData.addProperty("encryptKey", "");
-    tsfMetaData.addProperty("d", "1");
+    tsfMetaData.addProperty("encryptLevel", "0".getBytes(TSFileConfig.STRING_CHARSET));
+    tsfMetaData.addProperty(
+        "encryptType",
+        "org.apache.tsfile.encrypt.UNENCRYPTED".getBytes(TSFileConfig.STRING_CHARSET));
+    tsfMetaData.addProperty("encryptKey", "".getBytes(TSFileConfig.STRING_CHARSET));
+    tsfMetaData.addProperty("d", new byte[] {0, 1, -1});
     serialized(tsfMetaData);
     TsFileMetadata readMetaData = deSerialized();
     Assert.assertTrue(Utils.isFileMetaDataEqual(tsfMetaData, readMetaData));

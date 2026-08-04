@@ -259,6 +259,12 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     return fileWriter.getSchema();
   }
 
+  @Override
+  @TsFileApi
+  public void addTsFileProperty(String key, byte[] value) {
+    fileWriter.addTsFileProperty(key, value);
+  }
+
   /**
    * calling this method to write the last data remaining in memory and close the normal and error
    * OutputStream.

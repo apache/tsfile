@@ -607,6 +607,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     return getTableSchemaMap(null);
   }
 
+  /** Get the properties stored in the TsFile metadata. */
+  public Map<String, byte[]> getTsFileProperties() throws IOException {
+    return readFileMetadata().getTsFileProperties();
+  }
+
   public Map<String, TableSchema> getTableSchemaMap(LongConsumer ioSizeRecorder)
       throws IOException {
     if (tsFileMetaData != null && tsFileMetaData.hasTableSchemaMapCache()) {

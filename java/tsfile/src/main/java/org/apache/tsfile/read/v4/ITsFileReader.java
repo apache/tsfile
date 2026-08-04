@@ -29,6 +29,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface ITsFileReader extends AutoCloseable {
@@ -47,6 +48,9 @@ public interface ITsFileReader extends AutoCloseable {
 
   @TsFileApi
   List<TableSchema> getAllTableSchema() throws IOException;
+
+  @TsFileApi
+  Map<String, byte[]> getTsFileProperties() throws IOException;
 
   @TsFileApi
   void close();

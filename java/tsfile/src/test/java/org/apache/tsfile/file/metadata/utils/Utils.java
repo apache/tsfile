@@ -25,7 +25,8 @@ import org.apache.tsfile.file.metadata.statistics.BooleanStatistics;
 import org.apache.tsfile.file.metadata.statistics.IntegerStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 
-import java.util.Objects;
+import java.util.Arrays;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -61,11 +62,27 @@ public class Utils {
         MetadataIndexNode metaDataIndex2 =
             metadata2.getTableMetadataIndexNode(TestHelper.TEST_TABLE_NAME);
 
-        return Objects.equals(metadata1.getTsFileProperties(), metadata2.getTsFileProperties())
+        return arePropertiesEqual(metadata1.getTsFileProperties(), metadata2.getTsFileProperties())
             && metaDataIndex1.getChildren().size() == metaDataIndex2.getChildren().size();
       }
     }
     return false;
+  }
+
+  private static boolean arePropertiesEqual(
+      Map<String, byte[]> properties1, Map<String, byte[]> properties2) {
+    if (properties1 == null || properties2 == null) {
+      return properties1 == properties2;
+    }
+    if (!properties1.keySet().equals(properties2.keySet())) {
+      return false;
+    }
+    for (String key : properties1.keySet()) {
+      if (!Arrays.equals(properties1.get(key), properties2.get(key))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   public static void isPageHeaderEqual(PageHeader header1, PageHeader header2) {
