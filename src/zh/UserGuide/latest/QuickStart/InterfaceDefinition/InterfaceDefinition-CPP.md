@@ -269,6 +269,45 @@ public:
 };
 ```
 
+### RestorableTsFileIOWriter
+
+```cpp
+namespace storage {
+/**
+ * RestorableTsFileIOWriter 用于打开 TsFile 并对其进行可选的恢复操作
+ * 继承自 TsFileIOWriter，支持在文件恢复后继续写入
+ *
+ * (1) 若 TsFile 正常关闭：has_crashed()=false，can_write()=false
+ *
+ * (2) 若 TsFile 不完整/程序崩溃：has_crashed()=true，
+ * can_write()=true，写入器会截断损坏数据并允许继续写入
+ *
+ * 基于标准 C++11 实现，通过 RAII 和智能指针避免内存泄漏
+ */
+class RestorableTsFileIOWriter : public TsFileIOWriter {
+   public:
+    RestorableTsFileIOWriter();
+
+    /**
+     * 打开 TsFile 用于恢复/追加写入
+     * 使用 O_RDWR|O_CREAT 模式，不使用 O_TRUNC，因此会保留文件原有内容
+     *
+     * @param file_path TsFile 文件路径
+     * @param truncate_corrupted 若为 true，则截断损坏的数据；
+     *        若为 false，则不截断（不完整文件保持原样）
+     * @return 成功返回 E_OK，失败返回错误码
+     */
+    int open(const std::string& file_path, bool truncate_corrupted = true);
+
+    /**
+     * 关闭文件
+     */
+    void close();
+};
+
+}  // namespace storage
+```
+
 ### 配置编码与压缩
 
 编码与压缩 **按数据类型** 选取：每种类型都有默认值（见上表）。你可以修改这些默认值，
