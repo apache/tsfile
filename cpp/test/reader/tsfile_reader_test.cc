@@ -1553,29 +1553,31 @@ TEST_F(TsFileReaderTest,
             ASSERT_EQ(ret, E_OK);
             ASSERT_NE(block, nullptr);
 
-            common::ColIterator time_iter(0, block);
-            common::ColIterator value_iter(1, block);
-            while (!time_iter.end()) {
-                ASSERT_LT(expected_index, expected_rows.size());
-                const int expected_row = expected_rows[expected_index++];
-                uint32_t len = 0;
-                bool is_null = false;
-                EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)),
-                          10000 + expected_row * 3);
-                EXPECT_EQ(len, sizeof(int64_t));
-                char* value = value_iter.read(&len, &is_null);
-                if (expected_row == null_row) {
-                    EXPECT_TRUE(is_null);
-                    EXPECT_EQ(value, nullptr);
-                } else {
-                    ASSERT_FALSE(is_null);
-                    ASSERT_NE(value, nullptr);
-                    EXPECT_EQ(len, sizeof(float));
-                    EXPECT_FLOAT_EQ(*reinterpret_cast<float*>(value),
-                                    expected_row + 0.25f);
+            {
+                common::ColIterator time_iter(0, block);
+                common::ColIterator value_iter(1, block);
+                while (!time_iter.end()) {
+                    ASSERT_LT(expected_index, expected_rows.size());
+                    const int expected_row = expected_rows[expected_index++];
+                    uint32_t len = 0;
+                    bool is_null = false;
+                    EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)),
+                              10000 + expected_row * 3);
+                    EXPECT_EQ(len, sizeof(int64_t));
+                    char* value = value_iter.read(&len, &is_null);
+                    if (expected_row == null_row) {
+                        EXPECT_TRUE(is_null);
+                        EXPECT_EQ(value, nullptr);
+                    } else {
+                        ASSERT_FALSE(is_null);
+                        ASSERT_NE(value, nullptr);
+                        EXPECT_EQ(len, sizeof(float));
+                        EXPECT_FLOAT_EQ(*reinterpret_cast<float*>(value),
+                                        expected_row + 0.25f);
+                    }
+                    time_iter.next();
+                    value_iter.next();
                 }
-                time_iter.next();
-                value_iter.next();
             }
             ssi->revert_tsblock();
         }
