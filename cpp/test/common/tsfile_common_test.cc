@@ -460,10 +460,12 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     meta_.bloom_filter_ = new (buf) BloomFilter();
     meta_.bloom_filter_->init(0.1, 100);
 
-    meta_.serialize_to(*out_);
+    int32_t serialized_size = 0;
+    ASSERT_EQ(common::E_OK, meta_.serialize_to(*out_, serialized_size));
+    ASSERT_EQ(serialized_size, out_->total_size());
 
     TsFileMeta new_meta(&pa_);
-    new_meta.deserialize_from(*out_);
+    ASSERT_EQ(common::E_OK, new_meta.deserialize_from(*out_));
 
     ASSERT_EQ(new_meta.meta_offset_, 456);
     ASSERT_EQ(new_meta.table_metadata_index_node_map_.size(), 1);
@@ -478,6 +480,38 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
               (std::vector<uint8_t>{'v', 'a', 'l', 'u', 'e'}));
     ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].is_null);
     ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].value.empty());
+}
+
+TEST_F(TsFileMetaTest, RejectsPropertyKeyLengthBeyondRemainingInput) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_ui8(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_int(1024, *out_));
+
+    TsFileMeta meta(&pa_);
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, meta.deserialize_from(*out_));
+}
+
+TEST_F(TsFileMetaTest, RejectsPropertyValueLengthBeyondRemainingInput) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_ui8(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK, out_->write_buf("k", 1));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_int(1024, *out_));
+
+    TsFileMeta meta(&pa_);
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, meta.deserialize_from(*out_));
 }
 
 // Regression: the default-compression configuration must name a compressor

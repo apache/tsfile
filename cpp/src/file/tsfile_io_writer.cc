@@ -125,13 +125,13 @@ int TsFileIOWriter::add_tsfile_property(const std::string& key,
 
 int TsFileIOWriter::add_tsfile_property(const std::string& key,
                                         const std::vector<uint8_t>& value) {
+    if (file_ == nullptr || file_->get_fd() < 0) {
+        return common::E_FILE_WRITE_ERR;
+    }
     if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
         value.size() >
             static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
         return common::E_OUT_OF_RANGE;
-    }
-    if (file_ == nullptr || file_->get_fd() < 0) {
-        return common::E_FILE_WRITE_ERR;
     }
     tsfile_properties_[key] = TsFilePropertyValue(value);
     return common::E_OK;
@@ -517,9 +517,12 @@ int TsFileIOWriter::write_file_index() {
 #if DEBUG_SE
         auto tsfile_meta_offset = write_stream_.total_size();
 #endif
-        auto total_write_size = tsfile_meta.serialize_to(write_stream_);
-        if (RET_FAIL(common::SerializationUtil::write_i32(total_write_size,
-                                                          write_stream_))) {
+        int32_t total_write_size = 0;
+        if (RET_FAIL(
+                tsfile_meta.serialize_to(write_stream_, total_write_size))) {
+            return ret;
+        } else if (RET_FAIL(common::SerializationUtil::write_i32(
+                       total_write_size, write_stream_))) {
             return ret;
         }
         tsfile_meta.bloom_filter_ = nullptr;

@@ -267,7 +267,9 @@ ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
         (value == nullptr && value_len > 0)) {
         return common::E_INVALID_ARG;
     }
-    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
         return common::E_OUT_OF_RANGE;
     }
     try {
@@ -1772,7 +1774,9 @@ ERRNO _tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
         (value == nullptr && value_len > 0)) {
         return common::E_INVALID_ARG;
     }
-    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
         return common::E_OUT_OF_RANGE;
     }
     try {

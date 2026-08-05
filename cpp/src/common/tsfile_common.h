@@ -1197,7 +1197,7 @@ struct TsFileMeta {
         table_schemas_.clear();
     }
 
-    int serialize_to(common::ByteStream& out);
+    int serialize_to(common::ByteStream& out, int32_t& serialized_size);
 
     int deserialize_from(common::ByteStream& in);
 

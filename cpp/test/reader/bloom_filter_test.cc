@@ -64,3 +64,40 @@ TEST(BloomfilterTest, BloomFilter) {
     common::mem_free(filter_data_bytes);
     common::mem_free(filter_data_bytes2);
 }
+
+TEST(BloomfilterTest, EmptyFilterUsesJavaCompatibleEncoding) {
+    BloomFilter filter;
+    ASSERT_EQ(common::E_OK, filter.init(0.1, 0));
+
+    common::ByteStream out(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, filter.serialize_to(out));
+    ASSERT_EQ(1U, out.total_size());
+
+    BloomFilter deserialized;
+    ASSERT_EQ(common::E_OK, deserialized.deserialize_from(out));
+    EXPECT_TRUE(deserialized.is_empty());
+    EXPECT_EQ(0U, out.remaining_size());
+}
+
+TEST(BloomfilterTest, RejectsInvalidHashFunctionCount) {
+    common::ByteStream out(1024, common::MOD_DEFAULT);
+    const uint8_t filter_byte = 1;
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(1, out));
+    ASSERT_EQ(common::E_OK, out.write_buf(&filter_byte, 1));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(256, out));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(
+                                BloomFilter::MAX_HASH_FUNC_COUNT + 1, out));
+
+    BloomFilter filter;
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, filter.deserialize_from(out));
+}
+
+TEST(BloomfilterTest, RejectsFilterLengthBeyondRemainingInput) {
+    common::ByteStream out(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(1024, out));
+
+    BloomFilter filter;
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, filter.deserialize_from(out));
+}

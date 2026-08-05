@@ -25,6 +25,7 @@ from tsfile import (
     FileWriteError,
     TableSchema,
     TSDataType,
+    TsFileCorruptedError,
     TsFileReader,
     TsFileTableWriter,
     TsFileWriter,
@@ -77,3 +78,21 @@ def test_tsfile_table_writer_property_delegation(tmp_path):
 
     with TsFileReader(path) as reader:
         assert reader.get_tsfile_properties()["table-property"] == b"after\x00\xff"
+
+
+def test_reader_reports_invalid_utf8_property_key(tmp_path):
+    path = tmp_path / "invalid-property-key.tsfile"
+    writer = TsFileWriter(os.fspath(path))
+    writer.add_tsfile_property("invalid-key", b"value")
+    writer.close()
+
+    file_bytes = path.read_bytes()
+    assert file_bytes.count(b"invalid-key") == 1
+    path.write_bytes(file_bytes.replace(b"invalid-key", b"invalid-\xffey", 1))
+
+    with TsFileReader(os.fspath(path)) as reader:
+        with pytest.raises(
+            TsFileCorruptedError,
+            match="TsFile property key is not valid UTF-8",
+        ):
+            reader.get_tsfile_properties()

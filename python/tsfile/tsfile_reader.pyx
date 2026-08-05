@@ -30,6 +30,7 @@ from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
+from tsfile.exceptions import TsFileCorruptedError
 from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
@@ -538,9 +539,14 @@ cdef class TsFileReaderPy:
         check_error(err_code)
         try:
             for i in range(property_count):
-                key = PyBytes_FromStringAndSize(
-                    properties[i].key, properties[i].key_len
-                ).decode('utf-8')
+                try:
+                    key = PyBytes_FromStringAndSize(
+                        properties[i].key, properties[i].key_len
+                    ).decode('utf-8')
+                except UnicodeDecodeError:
+                    raise TsFileCorruptedError(
+                        context="TsFile property key is not valid UTF-8"
+                    ) from None
                 if properties[i].is_null:
                     result[key] = None
                 else:

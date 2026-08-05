@@ -21,6 +21,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 
 #include "cwrapper/tsfile_cwrapper.h"
@@ -62,6 +63,11 @@ TEST(CWrapperPropertiesTest, GenericWriterRoundTripsLengthAwareValues) {
                                                  sizeof(binary)));
     EXPECT_EQ(common::E_INVALID_ARG,
               _tsfile_writer_add_tsfile_property(writer, "key", 3, nullptr, 1));
+    const uint32_t oversized_len =
+        static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) + 1U;
+    EXPECT_EQ(common::E_OUT_OF_RANGE,
+              _tsfile_writer_add_tsfile_property(writer, "key", 3, binary,
+                                                 oversized_len));
     ASSERT_EQ(common::E_OK,
               _tsfile_writer_add_tsfile_property(writer, "overwritten", 11,
                                                  first, sizeof(first)));
@@ -142,6 +148,11 @@ TEST(CWrapperPropertiesTest, TableWriterSetterUsesExplicitLengths) {
     TsFileWriter writer = tsfile_writer_new(file, &schema, &error_code);
     ASSERT_NE(nullptr, writer);
     const uint8_t binary[] = {0xAA, 0x00, 0xBB};
+    const uint32_t oversized_len =
+        static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) + 1U;
+    EXPECT_EQ(common::E_OUT_OF_RANGE,
+              tsfile_writer_add_tsfile_property(writer, "binary", 6, binary,
+                                                oversized_len));
     ASSERT_EQ(common::E_OK, tsfile_writer_add_tsfile_property(
                                 writer, "binary", 6, binary, sizeof(binary)));
     ASSERT_EQ(common::E_OK, tsfile_writer_close(writer));
