@@ -92,6 +92,23 @@ int storage::TsFileTableWriter::flush() {
     return tsfile_writer_->flush();
 }
 
+int storage::TsFileTableWriter::add_tsfile_property(const std::string& key,
+                                                    const uint8_t* value,
+                                                    uint32_t value_len) {
+    if (closed_ || !tsfile_writer_) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    return tsfile_writer_->add_tsfile_property(key, value, value_len);
+}
+
+int storage::TsFileTableWriter::add_tsfile_property(
+    const std::string& key, const std::vector<uint8_t>& value) {
+    if (closed_ || !tsfile_writer_) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    return tsfile_writer_->add_tsfile_property(key, value);
+}
+
 int storage::TsFileTableWriter::close() {
     if (closed_) {
         return common::E_OK;

@@ -89,6 +89,10 @@ class TsFileIOWriter {
     void destroy();
 
     void set_generate_table_schema(bool generate_table_schema);
+    int add_tsfile_property(const std::string& key, const uint8_t* value,
+                            uint32_t value_len);
+    int add_tsfile_property(const std::string& key,
+                            const std::vector<uint8_t>& value);
     int start_file();
     int start_flush_chunk_group(std::shared_ptr<IDeviceID> device_id,
                                 bool is_aligned = false);
@@ -242,6 +246,7 @@ class TsFileIOWriter {
     std::string encrypt_level_;
     std::string encrypt_type_;
     std::string encrypt_key_;
+    TsFileProperties tsfile_properties_;
     bool is_aligned_;
     /** Recovery only: absolute file offset at which write_stream_ logically
      * begins.  Normal (non-recovery) path keeps this at 0. */

@@ -206,8 +206,16 @@ int TsFileMeta::serialize_to(common::ByteStream& out) {
     common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
     for (const auto& tsfile_property : tsfile_properties_) {
         common::SerializationUtil::write_var_str(tsfile_property.first, out);
-        common::SerializationUtil::write_var_char_ptr(tsfile_property.second,
-                                                      out);
+        const TsFilePropertyValue& value = tsfile_property.second;
+        if (value.is_null) {
+            common::SerializationUtil::write_var_int(NO_STR_TO_READ, out);
+        } else {
+            common::SerializationUtil::write_var_int(
+                static_cast<int32_t>(value.value.size()), out);
+            if (!value.value.empty()) {
+                out.write_buf(value.value.data(), value.value.size());
+            }
+        }
     }
 
     return out.total_size() - start_idx;
@@ -254,12 +262,56 @@ int TsFileMeta::deserialize_from(common::ByteStream& in) {
     bloom_filter_->deserialize_from(in);
 
     int32_t tsfile_properties_size = 0;
-    common::SerializationUtil::read_var_int(tsfile_properties_size, in);
+    if (RET_FAIL(common::SerializationUtil::read_var_int(tsfile_properties_size,
+                                                         in))) {
+        return ret;
+    }
+    if (tsfile_properties_size < 0) {
+        return common::E_TSFILE_CORRUPTED;
+    }
     for (int i = 0; i < tsfile_properties_size; i++) {
-        std::string key, *value;
-        common::SerializationUtil::read_var_str(key, in);
-        common::SerializationUtil::read_var_char_ptr(value, in);
-        tsfile_properties_.emplace(key, value);
+        std::string key;
+        int32_t key_len = 0;
+        int32_t value_len = 0;
+        if (RET_FAIL(common::SerializationUtil::read_var_int(key_len, in))) {
+            return ret;
+        } else if (key_len < 0) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        key.resize(static_cast<size_t>(key_len));
+        if (key_len > 0) {
+            uint32_t read_len = 0;
+            if (RET_FAIL(in.read_buf(reinterpret_cast<uint8_t*>(&key[0]),
+                                     static_cast<uint32_t>(key_len),
+                                     read_len))) {
+                return ret;
+            } else if (read_len != static_cast<uint32_t>(key_len)) {
+                return common::E_BUF_NOT_ENOUGH;
+            }
+        }
+        if (RET_FAIL(common::SerializationUtil::read_var_int(value_len, in))) {
+            return ret;
+        }
+
+        TsFilePropertyValue value;
+        if (value_len == NO_STR_TO_READ) {
+            value.is_null = true;
+        } else if (value_len < 0) {
+            return common::E_TSFILE_CORRUPTED;
+        } else {
+            value.is_null = false;
+            value.value.resize(static_cast<size_t>(value_len));
+            if (value_len > 0) {
+                uint32_t read_len = 0;
+                if (RET_FAIL(
+                        in.read_buf(value.value.data(), value_len, read_len))) {
+                    return ret;
+                } else if (read_len != static_cast<uint32_t>(value_len)) {
+                    return common::E_BUF_NOT_ENOUGH;
+                }
+            }
+        }
+        tsfile_properties_.emplace(key, std::move(value));
     }
     return ret;
 }

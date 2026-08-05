@@ -203,3 +203,23 @@ By default, parallel write is enabled when the machine has more than one CPU cor
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples` on how to use a C-style API to read and write data in a C environment. The examples will be built automatically when you run the main build command.
+
+### File-level properties
+
+`TsFileWriter` and `TsFileTableWriter` can add or replace binary properties
+while the writer is open. Values are copied immediately and may still be
+changed after `flush()`; a closed file cannot be modified.
+
+```cpp
+std::vector<uint8_t> value = {0x01, 0x00, 0xFF};
+writer.add_tsfile_property("binary-property", value);
+
+// nullptr with length 0 is null; an empty vector is a non-null empty value.
+writer.add_tsfile_property("null-property", nullptr, 0);
+writer.add_tsfile_property("empty-property", std::vector<uint8_t>());
+
+storage::TsFileProperties properties = reader.get_tsfile_properties();
+```
+
+Property values do not store a data type. Applications should define their own
+portable byte encoding for integers, floating-point values, or structures.

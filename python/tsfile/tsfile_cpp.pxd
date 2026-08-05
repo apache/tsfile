@@ -25,6 +25,7 @@ cdef extern from "cwrapper/errno_define_c.h":
     enum:
         RET_OK
         RET_NO_MORE_DATA
+        RET_FILE_WRITE_ERR
 
 # import symbols from tsfile_cwrapper.h
 cdef extern from "cwrapper/tsfile_cwrapper.h":
@@ -181,6 +182,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         DeviceTimeseriesMetadataEntry * entries
         uint32_t device_count
 
+    ctypedef struct TsFileProperty:
+        char * key
+        uint32_t key_len
+        uint8_t * value
+        uint32_t value_len
+        bint is_null
+
     ctypedef struct ResultSetMetaData:
         char** column_names
         TSDataType * data_types
@@ -201,6 +209,9 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     # writer : flush
     ErrorCode _tsfile_writer_flush(TsFileWriter writer);
+    ErrorCode _tsfile_writer_add_tsfile_property(
+        TsFileWriter writer, const char * key, uint32_t key_len,
+        const uint8_t * value, uint32_t value_len);
 
     # writer : register table, device and timeseries
     ErrorCode _tsfile_writer_register_table(TsFileWriter writer, TableSchema * schema);
@@ -316,6 +327,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         DeviceTimeseriesMetadataMap * out_map);
     void tsfile_free_device_timeseries_metadata_map(
         DeviceTimeseriesMetadataMap * map);
+    ErrorCode tsfile_reader_get_tsfile_properties(
+        TsFileReader reader, TsFileProperty ** out_properties,
+        uint32_t * out_length);
+    void tsfile_free_tsfile_properties(TsFileProperty * properties,
+                                       uint32_t length);
 
     # Tag filter types and functions
 

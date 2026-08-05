@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <iomanip>
+#include <limits>
 #include <memory>
 
 #include "common/device_id.h"
@@ -93,6 +94,7 @@ void TsFileIOWriter::destroy() {
     use_prev_alloc_cgm_ = false;
     is_aligned_ = false;
     file_base_offset_ = 0;
+    tsfile_properties_.clear();
     destroyed_ = true;
 
     meta_allocator_.destroy();
@@ -101,6 +103,38 @@ void TsFileIOWriter::destroy() {
         delete file_;
         file_ = nullptr;
     }
+}
+
+int TsFileIOWriter::add_tsfile_property(const std::string& key,
+                                        const uint8_t* value,
+                                        uint32_t value_len) {
+    if (file_ == nullptr || file_->get_fd() < 0) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    if (value_len > 0 && value == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    tsfile_properties_[key] = TsFilePropertyValue(value, value_len);
+    return common::E_OK;
+}
+
+int TsFileIOWriter::add_tsfile_property(const std::string& key,
+                                        const std::vector<uint8_t>& value) {
+    if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+        value.size() >
+            static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    if (file_ == nullptr || file_->get_fd() < 0) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    tsfile_properties_[key] = TsFilePropertyValue(value);
+    return common::E_OK;
 }
 
 int TsFileIOWriter::start_file() {
@@ -472,12 +506,14 @@ int TsFileIOWriter::write_file_index() {
         }
         tsfile_meta.table_metadata_index_node_map_ = table_nodes_map;
         tsfile_meta.table_schemas_ = schema_->table_schema_map_;
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptLevel", new std::string(encrypt_level_)));
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptType", new std::string(encrypt_type_)));
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptKey", nullptr));
+        tsfile_meta.tsfile_properties_ = tsfile_properties_;
+        tsfile_meta.tsfile_properties_["encryptLevel"] = TsFilePropertyValue(
+            reinterpret_cast<const uint8_t*>(encrypt_level_.data()),
+            static_cast<uint32_t>(encrypt_level_.size()));
+        tsfile_meta.tsfile_properties_["encryptType"] = TsFilePropertyValue(
+            reinterpret_cast<const uint8_t*>(encrypt_type_.data()),
+            static_cast<uint32_t>(encrypt_type_.size()));
+        tsfile_meta.tsfile_properties_["encryptKey"] = TsFilePropertyValue();
 #if DEBUG_SE
         auto tsfile_meta_offset = write_stream_.total_size();
 #endif

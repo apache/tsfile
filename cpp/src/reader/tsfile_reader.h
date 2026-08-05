@@ -216,6 +216,9 @@ class TsFileReader {
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata();
 
+    /** Return a copy of all file-level properties, preserving null values. */
+    TsFileProperties get_tsfile_properties();
+
     /**
      * @brief get the table schema by the table name
      *

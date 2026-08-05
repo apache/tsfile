@@ -67,3 +67,19 @@ mvn -P with-cpp,with-python clean verify
 ```sh
 python setup.py build_ext --inplace
 ```
+
+## 文件级 Properties
+
+`TsFileWriter` 和 `TsFileTableWriter` 可以在打开期间写入二进制 property。
+setter 仅接受 `bytes`。reader 返回 `dict[str, bytes | None]`，并区分 null 与
+零长度 bytes。
+
+```python
+with TsFileWriter("example.tsfile") as writer:
+    writer.add_tsfile_property("binary-property", b"\x01\x00\xff")
+
+with TsFileReader("example.tsfile") as reader:
+    properties = reader.get_tsfile_properties()
+```
+
+Property value 不携带数据类型；保存数字或结构体时应使用明确、可跨语言的字节编码。

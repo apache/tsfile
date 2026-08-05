@@ -449,9 +449,11 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
         table_name, column_schemas, column_categories);
 
     meta_.table_schemas_.insert(std::make_pair(table_name, table_schema));
+    meta_.tsfile_properties_.insert(std::make_pair(
+        "key",
+        TsFilePropertyValue(std::vector<uint8_t>{'v', 'a', 'l', 'u', 'e'})));
     meta_.tsfile_properties_.insert(
-        std::make_pair("key", new std::string("value")));
-    meta_.tsfile_properties_.insert(std::make_pair("null_key", nullptr));
+        std::make_pair("null_key", TsFilePropertyValue()));
 
     meta_.meta_offset_ = 456;
     void* buf = pa_.alloc(sizeof(BloomFilter));
@@ -471,8 +473,11 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     ASSERT_EQ(new_meta.table_schemas_.size(), 1);
     ASSERT_EQ(
         new_meta.table_schemas_[table_name]->get_column_categories().size(), 1);
-    ASSERT_EQ(*new_meta.tsfile_properties_["key"], std::string("value"));
-    ASSERT_EQ(new_meta.tsfile_properties_["null_key"], nullptr);
+    ASSERT_FALSE(new_meta.tsfile_properties_["key"].is_null);
+    ASSERT_EQ(new_meta.tsfile_properties_["key"].value,
+              (std::vector<uint8_t>{'v', 'a', 'l', 'u', 'e'}));
+    ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].is_null);
+    ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].value.empty());
 }
 
 // Regression: the default-compression configuration must name a compressor
