@@ -23,6 +23,7 @@
 
 #include <cmath>
 #include <map>
+#include <numeric>
 #include <random>
 #include <unordered_map>
 #include <vector>
@@ -1509,6 +1510,95 @@ TEST_F(TsFileReaderTest, AlignedSchemaReportsValueDataType) {
     EXPECT_EQ(i32_type, INT32);
     EXPECT_EQ(dbl_type, DOUBLE);
     reader.close();
+}
+
+TEST_F(TsFileReaderTest,
+       AlignedFloatBatchCopyPreservesDenseNullAndFilteredAlignment) {
+    const std::string device = "root.dev_aligned_float_batch";
+    MeasurementSchema schema("v0", FLOAT, GORILLA, UNCOMPRESSED);
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, schema),
+              E_OK);
+
+    const int row_count = 300;
+    const int null_row = 150;
+    auto schemas = std::make_shared<std::vector<MeasurementSchema>>(1, schema);
+    Tablet tablet(device, schemas, row_count);
+    for (int row = 0; row < row_count; ++row) {
+        ASSERT_EQ(tablet.add_timestamp(row, 10000 + row * 3), E_OK);
+        if (row != null_row) {
+            ASSERT_EQ(tablet.add_value(row, 0u, row + 0.25f), E_OK);
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+
+    auto scan_and_check = [&](storage::Filter* filter,
+                              const std::vector<int>& expected_rows) {
+        storage::TsFileSeriesScanIterator* ssi = nullptr;
+        common::PageArena pa;
+        pa.init(512, common::MOD_TSFILE_READER);
+        ASSERT_EQ(io_reader.alloc_ssi(device_id, "v0", ssi, pa, filter), E_OK);
+        ASSERT_NE(ssi, nullptr);
+
+        size_t expected_index = 0;
+        while (true) {
+            common::TsBlock* block = nullptr;
+            int ret = ssi->get_next(block, /*alloc_tsblock=*/true, filter);
+            if (ret == E_NO_MORE_DATA) break;
+            ASSERT_EQ(ret, E_OK);
+            ASSERT_NE(block, nullptr);
+
+            common::ColIterator time_iter(0, block);
+            common::ColIterator value_iter(1, block);
+            while (!time_iter.end()) {
+                ASSERT_LT(expected_index, expected_rows.size());
+                const int expected_row = expected_rows[expected_index++];
+                uint32_t len = 0;
+                bool is_null = false;
+                EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)),
+                          10000 + expected_row * 3);
+                EXPECT_EQ(len, sizeof(int64_t));
+                char* value = value_iter.read(&len, &is_null);
+                if (expected_row == null_row) {
+                    EXPECT_TRUE(is_null);
+                    EXPECT_EQ(value, nullptr);
+                } else {
+                    ASSERT_FALSE(is_null);
+                    ASSERT_NE(value, nullptr);
+                    EXPECT_EQ(len, sizeof(float));
+                    EXPECT_FLOAT_EQ(*reinterpret_cast<float*>(value),
+                                    expected_row + 0.25f);
+                }
+                time_iter.next();
+                value_iter.next();
+            }
+            ssi->revert_tsblock();
+        }
+        EXPECT_EQ(expected_index, expected_rows.size());
+        io_reader.revert_ssi(ssi);
+    };
+
+    std::vector<int> all_rows(row_count);
+    std::iota(all_rows.begin(), all_rows.end(), 0);
+    scan_and_check(/*filter=*/nullptr, all_rows);
+
+    std::vector<int64_t> selected_times;
+    std::vector<int> selected_rows;
+    for (int row = 0; row < row_count; row += 11) {
+        selected_rows.push_back(row);
+        selected_times.push_back(10000 + row * 3);
+    }
+    selected_rows.push_back(null_row);
+    selected_times.push_back(10000 + null_row * 3);
+    std::sort(selected_rows.begin(), selected_rows.end());
+    std::sort(selected_times.begin(), selected_times.end());
+    storage::TimeIn time_filter(selected_times, /*not_in=*/false);
+    scan_and_check(&time_filter, selected_rows);
 }
 
 namespace storage {

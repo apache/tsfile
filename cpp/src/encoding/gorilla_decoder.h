@@ -19,7 +19,12 @@
 #ifndef ENCODING_GORILLA_DECODER_H
 #define ENCODING_GORILLA_DECODER_H
 
+#include <algorithm>
 #include <climits>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 #include "common/allocator/byte_stream.h"
 #include "decoder.h"
@@ -29,6 +34,23 @@
 #include "utils/util_define.h"
 
 namespace storage {
+
+FORCE_INLINE int gorilla_count_leading_zeros_nonzero(uint64_t value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_clzll(value);
+#elif defined(_MSC_VER)
+    unsigned long index;
+    _BitScanReverse64(&index, value);
+    return 63 - static_cast<int>(index);
+#else
+    int count = 0;
+    while ((value & (UINT64_C(1) << 63)) == 0) {
+        value <<= 1;
+        ++count;
+    }
+    return count;
+#endif
+}
 
 // ── Raw-pointer bit reader ────────────────────────────────────────────────
 // Operates directly on a contiguous byte array, bypassing ByteStream's
@@ -89,6 +111,37 @@ struct GorillaBitReader {
         bool bit = ((buffer >> (bits - 1)) & 1) != 0;
         bits--;
         return bit;
+    }
+
+    // Consume up to max_count consecutive zero control bits. The first one bit
+    // remains unread so the normal control decoder can handle the following
+    // changed value. This turns long repeated-value runs into one leading-zero
+    // count per reservoir instead of one read_next() call per value.
+    FORCE_INLINE int consume_zero_bits(int max_count) {
+        int consumed = 0;
+        while (consumed < max_count) {
+            if (UNLIKELY(!refill_if_empty())) {
+                break;
+            }
+
+            const int available_bits = bits;
+            const uint64_t aligned =
+                available_bits == 64 ? buffer : buffer << (64 - available_bits);
+            const int zero_bits =
+                aligned == 0 ? available_bits
+                             : gorilla_count_leading_zeros_nonzero(aligned);
+            const int remaining = max_count - consumed;
+            const int take = std::min(zero_bits, remaining);
+            bits -= take;
+            consumed += take;
+
+            // A one bit follows the consumed zeros. Leave it in the reservoir
+            // for read_control_bits(), or stop once the requested limit is met.
+            if (zero_bits < available_bits || consumed == max_count) {
+                break;
+            }
+        }
+        return consumed;
     }
 
     FORCE_INLINE uint64_t read_long(int n) {
@@ -460,8 +513,21 @@ class GorillaDecoder : public Decoder {
 
         // Main batch loop
         while (actual < capacity && has_next_) {
-            out[actual++] =
+            const Output decoded =
                 GorillaDecodeOutput<T, Output>::convert(stored_value_);
+            const int repeated = r.consume_zero_bits(capacity - actual - 1);
+            const int run_length = repeated + 1;
+            // Include the current value in the bulk fill. Besides removing a
+            // scalar store and a second position update for every run, this
+            // gives the compiler one contiguous range to vectorize. Integer
+            // and floating-point outputs are copied without arithmetic, so
+            // special IEEE-754 bit patterns remain unchanged.
+            std::fill_n(out + actual, run_length, decoded);
+            actual += run_length;
+
+            // Prime the next value even when the repeated run exactly fills the
+            // caller's buffer. This preserves the scalar decoder invariant that
+            // stored_value_ is the next value to return on the following call.
             if (UNLIKELY(!GorillaRawOps<T>::read_next(
                     r, stored_value_, stored_leading_zeros_,
                     stored_trailing_zeros_))) {
