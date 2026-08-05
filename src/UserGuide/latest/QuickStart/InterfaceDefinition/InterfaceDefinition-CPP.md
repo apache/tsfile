@@ -269,6 +269,46 @@ public:
 };
 ```
 
+### RestorableTsFileIOWriter
+> V2.3.1
+
+```cpp
+namespace storage {
+/**
+ * RestorableTsFileIOWriter is used to open a TsFile and perform optional recovery operations on it.
+ * Inherits from TsFileIOWriter and supports continuous writing after file recovery.
+ *
+ * (1) If the TsFile was closed normally: has_crashed()=false, can_write()=false
+ *
+ * (2) If the TsFile is incomplete / the program crashed: has_crashed()=true,
+ * can_write()=true. The writer will truncate the corrupted data and allow further writing.
+ *
+ * Implemented based on standard C++11, uses RAII and smart pointers to avoid memory leaks.
+ */
+class RestorableTsFileIOWriter : public TsFileIOWriter {
+   public:
+    RestorableTsFileIOWriter();
+
+    /**
+     * Opens a TsFile for recovery / appending data.
+     * Uses O_RDWR|O_CREAT mode without O_TRUNC, so the original file content is preserved.
+     *
+     * @param file_path Path of the TsFile
+     * @param truncate_corrupted If true, truncate the corrupted data;
+     *        If false, do not truncate (the incomplete file remains unchanged)
+     * @return E_OK on success, error code on failure
+     */
+    int open(const std::string& file_path, bool truncate_corrupted = true);
+
+    /**
+     * Closes the file
+     */
+    void close();
+};
+
+}  // namespace storage
+```
+
 ### Configuring encoding and compression
 
 Encoding and compression are chosen **per data type**: each type has a default
