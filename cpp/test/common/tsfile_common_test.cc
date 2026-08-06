@@ -482,6 +482,33 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].value.empty());
 }
 
+TEST_F(TsFileMetaTest, DeserializesLegacyEmptyBloomFilterEncoding) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_str("legacy", *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(3, *out_));
+    ASSERT_EQ(common::E_OK, out_->write_buf("old", 3));
+
+    TsFileMeta meta(&pa_);
+    ASSERT_EQ(common::E_OK, meta.deserialize_from(*out_));
+    ASSERT_EQ(1U, meta.tsfile_properties_.size());
+    ASSERT_FALSE(meta.tsfile_properties_["legacy"].is_null);
+    EXPECT_EQ((std::vector<uint8_t>{'o', 'l', 'd'}),
+              meta.tsfile_properties_["legacy"].value);
+    EXPECT_EQ(0U, out_->remaining_size());
+}
+
 TEST_F(TsFileMetaTest, RejectsPropertyKeyLengthBeyondRemainingInput) {
     ASSERT_EQ(common::E_OK,
               common::SerializationUtil::write_var_uint(0, *out_));

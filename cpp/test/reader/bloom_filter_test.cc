@@ -79,6 +79,18 @@ TEST(BloomfilterTest, EmptyFilterUsesJavaCompatibleEncoding) {
     EXPECT_EQ(0U, out.remaining_size());
 }
 
+TEST(BloomfilterTest, DeserializesLegacyEmptyFilterEncoding) {
+    common::ByteStream out(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, out));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, out));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, out));
+
+    BloomFilter deserialized;
+    ASSERT_EQ(common::E_OK, deserialized.deserialize_from(out));
+    EXPECT_TRUE(deserialized.is_empty());
+    EXPECT_EQ(0U, out.remaining_size());
+}
+
 TEST(BloomfilterTest, RejectsInvalidHashFunctionCount) {
     common::ByteStream out(1024, common::MOD_DEFAULT);
     const uint8_t filter_byte = 1;

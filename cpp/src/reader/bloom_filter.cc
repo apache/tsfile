@@ -255,6 +255,25 @@ int BloomFilter::deserialize_from(ByteStream& in) {
     uint8_t* filter_data = nullptr;
     if (RET_FAIL(SerializationUtil::read_var_uint(filter_data_bytes_len, in))) {
     } else if (filter_data_bytes_len == 0) {
+        // Older C++ writers serialized an empty filter as three zero varints:
+        // byte length, bit count, and hash-function count. The Java-compatible
+        // encoding contains only the byte length. Probe the two legacy fields
+        // and restore the cursor when the following data is instead the
+        // TsFile property count from the current encoding.
+        const uint64_t legacy_fields_pos = in.read_pos();
+        if (in.remaining_size() >= 2) {
+            uint32_t legacy_size = 0;
+            uint32_t legacy_hash_func_count = 0;
+            int probe_ret = SerializationUtil::read_var_uint(legacy_size, in);
+            if (probe_ret == E_OK && legacy_size == 0) {
+                probe_ret = SerializationUtil::read_var_uint(
+                    legacy_hash_func_count, in);
+            }
+            if (probe_ret != E_OK || legacy_size != 0 ||
+                legacy_hash_func_count != 0) {
+                in.set_read_pos(legacy_fields_pos);
+            }
+        }
         size_ = 0;
         hash_func_count_ = 0;
         return E_OK;
