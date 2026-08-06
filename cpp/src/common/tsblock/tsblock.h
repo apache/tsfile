@@ -174,6 +174,28 @@ class RowAppender {
         }
     }
 
+    FORCE_INLINE bool can_bulk_append_fixed(uint32_t slot_index,
+                                            uint32_t elem_size) const {
+        ASSERT(slot_index < tsblock_->tuple_desc_->get_column_count());
+        Vector* vec = tsblock_->vectors_[slot_index];
+        TSDataType datatype = vec->get_vector_type();
+        if (datatype == STRING || datatype == TEXT || datatype == BLOB) {
+            return false;
+        }
+        return static_cast<FixedLengthVector*>(vec)->get_type_len() ==
+               elem_size;
+    }
+
+    FORCE_INLINE void bulk_append_fixed(uint32_t slot_index, const char* values,
+                                        uint32_t count) {
+        ASSERT(slot_index < tsblock_->tuple_desc_->get_column_count());
+        Vector* vec = tsblock_->vectors_[slot_index];
+        ASSERT(vec->get_vector_type() != STRING &&
+               vec->get_vector_type() != TEXT &&
+               vec->get_vector_type() != BLOB);
+        static_cast<FixedLengthVector*>(vec)->append_batch(values, count);
+    }
+
     FORCE_INLINE void append_null(uint32_t slot_index) {
         Vector* vec = tsblock_->vectors_[slot_index];
         vec->set_null(tsblock_->row_count_ - 1);

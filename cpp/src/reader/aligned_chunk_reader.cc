@@ -922,6 +922,30 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
             }
         }
 
+        // Dense fixed-width batches are already laid out exactly as the two
+        // destination vectors expect. Appending them row by row would issue
+        // two tiny memcpy calls per row (time + value), plus virtual dispatch
+        // and bookkeeping. Copy each column once instead. Integral value
+        // filters still need the scalar satisfy(time, value) check unless the
+        // decoder proved the whole block passes, so those batches retain the
+        // fallback below.
+        const bool needs_integral_value_filter =
+            std::is_integral<T>::value && filter != nullptr && !block_all_pass;
+        if (pass_count == time_count && nonnull_count == time_count &&
+            !needs_integral_value_filter &&
+            row_appender.can_bulk_append_fixed(0, sizeof(int64_t)) &&
+            row_appender.can_bulk_append_fixed(1, sizeof(T))) {
+            row_appender.bulk_append_fixed(0,
+                                           reinterpret_cast<const char*>(times),
+                                           static_cast<uint32_t>(time_count));
+            row_appender.bulk_append_fixed(
+                1, reinterpret_cast<const char*>(values),
+                static_cast<uint32_t>(time_count));
+            row_appender.add_rows(static_cast<uint32_t>(time_count));
+            cur_value_index += time_count;
+            continue;
+        }
+
         int val_idx = 0;
         for (int i = 0; i < time_count; ++i) {
             cur_value_index++;

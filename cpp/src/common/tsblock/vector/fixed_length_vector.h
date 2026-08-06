@@ -49,6 +49,13 @@ class FixedLengthVector : public Vector {
         values_.append_fixed_value(value, len);
     }
 
+    FORCE_INLINE void append_batch(const char* values, uint32_t count) {
+        values_.append_fixed_value(values, count * type_len_);
+        add_row_nums(count);
+    }
+
+    FORCE_INLINE uint32_t get_type_len() const { return type_len_; }
+
     // cppcheck-suppress missingOverride
     FORCE_INLINE char* read(uint32_t* __restrict len, bool* __restrict null,
                             uint32_t rowid) OVERRIDE {

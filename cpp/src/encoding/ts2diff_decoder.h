@@ -648,6 +648,43 @@ inline int TS2DIFFDecoder<int64_t>::read_batch_int64(int64_t* out, int capacity,
         int64_t prev = first_value_;
         int32_t i = 0;
 
+        // An evenly spaced timestamp block has no packed residual data. Build
+        // the arithmetic progression directly instead of entering the generic
+        // bit-extraction path (whose SIMD guard requires readable input bytes).
+        if (bit_width_ == 0) {
+#ifdef ENABLE_SIMD
+            if (remaining >= 4) {
+                int64_t value1 = prev + delta_min_;
+                int64_t value2 = value1 + delta_min_;
+                int64_t value3 = value2 + delta_min_;
+                int64_t value4 = value3 + delta_min_;
+                simde__m256i values =
+                    simde_mm256_set_epi64x(value4, value3, value2, value1);
+
+                simde__m256i step = simde_mm256_set1_epi64x(delta_min_);
+                step = simde_mm256_add_epi64(step, step);
+                step = simde_mm256_add_epi64(step, step);
+
+                for (; i + 3 < remaining; i += 4) {
+                    simde_mm256_storeu_si256(
+                        reinterpret_cast<simde__m256i*>(out + actual), values);
+                    actual += 4;
+                    values = simde_mm256_add_epi64(values, step);
+                }
+                prev = out[actual - 1];
+            }
+#endif
+
+            for (; i < remaining; ++i) {
+                prev += delta_min_;
+                out[actual++] = prev;
+            }
+
+            first_value_ = prev;
+            current_index_ = 0;
+            continue;
+        }
+
 #ifdef ENABLE_SIMD
         // SIMD path: decode 4 INT64 values at a time
         for (; i + 3 < remaining; i += 4) {

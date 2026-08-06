@@ -63,6 +63,43 @@ TEST(TsBlockTest, ColAppender_AddRowAndAppend) {
     EXPECT_EQ(col_appender.get_col_row_count(), 50);
 }
 
+TEST(TsBlockTest, RowAppenderBulkAppendFixedAtExactCapacity) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("time", TIMESTAMP, UNCOMPRESSED, PLAIN));
+    tuple_desc.push_back(ColumnSchema("value", FLOAT, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 4);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    RowAppender row_appender(&ts_block);
+
+    const int64_t times[] = {101, 103, 107, 109};
+    const float values[] = {1.25f, 2.5f, 3.75f, 5.0f};
+    ASSERT_TRUE(row_appender.can_bulk_append_fixed(0, sizeof(int64_t)));
+    ASSERT_TRUE(row_appender.can_bulk_append_fixed(1, sizeof(float)));
+    EXPECT_FALSE(row_appender.can_bulk_append_fixed(1, sizeof(double)));
+
+    row_appender.bulk_append_fixed(0, reinterpret_cast<const char*>(times), 4);
+    row_appender.bulk_append_fixed(1, reinterpret_cast<const char*>(values), 4);
+    row_appender.add_rows(4);
+
+    EXPECT_EQ(ts_block.get_row_count(), 4u);
+    EXPECT_EQ(row_appender.remaining(), 0u);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 4u);
+    EXPECT_EQ(ts_block.get_vector(1)->get_row_num(), 4u);
+
+    ColIterator time_iter(0, &ts_block);
+    ColIterator value_iter(1, &ts_block);
+    for (uint32_t i = 0; i < 4; ++i) {
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time_iter.read(&len)), times[i]);
+        EXPECT_EQ(len, sizeof(int64_t));
+        EXPECT_FLOAT_EQ(*reinterpret_cast<float*>(value_iter.read(&len)),
+                        values[i]);
+        EXPECT_EQ(len, sizeof(float));
+        time_iter.next();
+        value_iter.next();
+    }
+}
+
 TEST(TsBlockTest, RowIterator_ReadAndNext) {
     TupleDesc tuple_desc;
     ColumnSchema col1("test_col1", INT32, SNAPPY, RLE);
