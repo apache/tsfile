@@ -271,13 +271,9 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
    */
   @Override
   @TsFileApi
-  public void close() {
+  public void close() throws IOException {
     LOG.info(Messages.get("log.write.close_file"));
-    try {
-      flush();
-      fileWriter.endFile();
-    } catch (IOException e) {
-      LOG.warn(Messages.get("log.write.close_file_exception"), e);
-    }
+    flush();
+    fileWriter.endFile();
   }
 }
