@@ -31,10 +31,14 @@ enum TSDataType : uint8_t {
     FLOAT = 3,
     DOUBLE = 4,
     TEXT = 5,
+    VECTOR = 6,
+    UNKNOWN = 7,
     TIMESTAMP = 8,
     DATE = 9,
     BLOB = 10,
     STRING = 11,
+    NULL_TYPE = 254,
+    INVALID_DATATYPE = 255,
 };
 
 // 值编码。各编码适用于哪些类型见下表。
@@ -42,10 +46,16 @@ enum TSEncoding : uint8_t {
     PLAIN = 0,
     DICTIONARY = 1,
     RLE = 2,
+    DIFF = 3,
     TS_2DIFF = 4,
+    BITMAP = 5,
+    GORILLA_V1 = 6,
+    REGULAR = 7,
     GORILLA = 8,
     ZIGZAG = 9,
+    FREQ = 10,
     SPRINTZ = 12,
+    INVALID_ENCODING = 255,
 };
 
 // 压缩类型。SNAPPY/GZIP/LZO/LZ4 取决于构建选项；默认压缩为 LZ4。
@@ -54,7 +64,11 @@ enum CompressionType : uint8_t {
     SNAPPY = 1,
     GZIP = 2,
     LZO = 3,
+    SDT = 4,
+    PAA = 5,
+    PLA = 6,
     LZ4 = 7,
+    INVALID_COMPRESSION = 255,
 };
 
 // 列在表 schema 内的角色。
@@ -336,7 +350,12 @@ uint8_t common::get_global_compression();
 // 时间列的编码/压缩（数据类型固定为 INT64）。
 int  common::set_global_time_encoding(uint8_t encoding);
 int  common::set_global_time_compression(uint8_t compression);
+uint8_t common::get_global_time_encoding();
+uint8_t common::get_global_time_compression();
 ```
+
+全局压缩支持 `UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO` 和 `LZ4`。
+压缩枚举中也包含 `SDT`、`PAA`、`PLA` 等历史值，但全局压缩 setter 会拒绝这些值。
 
 ## 读取接口
 ### Tsfile Reader
@@ -375,6 +394,16 @@ class TsFileReader {
      */
     int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
+     * @brief 通过路径列表、起始时间和结束时间查询 tsfile。用于 tree 模型。
+     *
+     * @param [in] path_list 完整路径列表。
+     * @param [in] start_time 起始时间。
+     * @param [in] end_time 结束时间。
+     * @param [out] result_set 查询结果集。
+     */
+    int query(std::vector<std::string>& path_list, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
+    /**
      * @brief 通过表名、列名、起始时间和结束时间查询 tsfile。
      *
      * @param [in] table_name 表名。
@@ -385,7 +414,7 @@ class TsFileReader {
      */
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
+              int64_t end_time, ResultSet *&result_set, int batch_size = -1);
               
     /**
      * @brief 通过表名、列名、开始时间、结束时间和标签过滤器查询 tsfile。
@@ -399,7 +428,14 @@ class TsFileReader {
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
+              int batch_size = 0);
+
+    /**
+     * @brief 按行查询 tree 模型序列，支持 offset/limit。
+     */
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
 
     /**
      * @brief 按行查询表，支持偏移量/行数限制下推与可选的标签过滤。
@@ -419,11 +455,38 @@ class TsFileReader {
                    Filter* tag_filter = nullptr, int batch_size = 0);
 
     /**
+     * @brief 按测点名在时间范围内查询 tree 模型数据。
+     */
+    int query_table_on_tree(const std::vector<std::string>& measurement_names,
+                            int64_t start_time, int64_t end_time,
+                            ResultSet*& result_set);
+
+    /**
      * @brief 销毁结果集，该方法应在查询完成并使用完 result_set 后调用。
      *
      * @param qds 查询结果集。
      */
     void destroy_query_data_set(ResultSet *qds);
+
+    ResultSet* read_timeseries(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_name);
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
+        std::string table_name);
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
+                              std::vector<MeasurementSchema>& result);
+
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
     /**
      * @brief 根据表名获取表的模式信息。
      *
@@ -440,6 +503,11 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
 ```
+
+`DeviceTimeseriesMetadataMap` 是 `get_timeseries_metadata()` 返回的元数据
+map：`std::map<std::shared_ptr<IDeviceID>,
+std::vector<std::shared_ptr<ITimeseriesIndex>>, IDeviceIDComparator>`。
+
 ### ResultSet
 ```cpp
 /**
@@ -579,6 +647,8 @@ class TagFilterBuilder {
     Filter* reg_exp(const std::string& columnName, const std::string& value);
     Filter* not_reg_exp(const std::string& columnName,
                         const std::string& value);
+    Filter* is_null(const std::string& columnName);
+    Filter* is_not_null(const std::string& columnName);
     Filter* between_and(const std::string& columnName, const std::string& lower,
                         const std::string& upper);
     Filter* not_between_and(const std::string& columnName,

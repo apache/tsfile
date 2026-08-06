@@ -32,10 +32,12 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
+    TS_DATATYPE_VECTOR = 6,
     TS_DATATYPE_TIMESTAMP = 8,
     TS_DATATYPE_DATE = 9,
     TS_DATATYPE_BLOB = 10,
     TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_NULL_TYPE = 254,
     TS_DATATYPE_INVALID = 255
 } TSDataType;
 
@@ -93,11 +95,49 @@ typedef struct result_set_meta_data {
     TSDataType* data_types;
     int column_num;
 } ResultSetMetaData;
+
+typedef struct arrow_schema ArrowSchema;
+typedef struct arrow_array ArrowArray;
+
+typedef struct TsFileStatisticBase {
+    bool has_statistic;
+    TSDataType type;
+    int32_t row_count;
+    int64_t start_time;
+    int64_t end_time;
+} TsFileStatisticBase;
+
+typedef struct TsFileBoolStatistic { TsFileStatisticBase base; double sum; bool first_bool; bool last_bool; } TsFileBoolStatistic;
+typedef struct TsFileIntStatistic { TsFileStatisticBase base; double sum; int64_t min_int64; int64_t max_int64; int64_t first_int64; int64_t last_int64; } TsFileIntStatistic;
+typedef struct TsFileFloatStatistic { TsFileStatisticBase base; double sum; double min_float64; double max_float64; double first_float64; double last_float64; } TsFileFloatStatistic;
+typedef struct TsFileStringStatistic { TsFileStatisticBase base; char* str_min; char* str_max; char* str_first; char* str_last; } TsFileStringStatistic;
+typedef struct TsFileTextStatistic { TsFileStatisticBase base; char* str_first; char* str_last; } TsFileTextStatistic;
+
+typedef union TimeseriesStatisticUnion {
+    TsFileBoolStatistic bool_s;
+    TsFileIntStatistic int_s;
+    TsFileFloatStatistic float_s;
+    TsFileStringStatistic string_s;
+    TsFileTextStatistic text_s;
+} TimeseriesStatisticUnion;
+
+typedef struct TimeseriesStatistic {
+    TimeseriesStatisticUnion u;
+} TimeseriesStatistic;
+
+#define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
 ```
 
 > `ColumnSchema` does not carry encoding/compression: on write, columns follow the
 > global defaults (see [Configuration](#configuration-encoding--compression)); on
 > read, each column is decoded with the file's actual settings.
+> The encoding and compression constants listed above are the values accepted by
+> the current writer/configuration path.
+>
+> `TimeseriesStatistic` is a tagged union in `tsfile_cwrapper.h`. Read common
+> fields through `tsfile_statistic_base(&statistic)` and then use the active
+> typed member (`int_s`, `float_s`, `bool_s`, `string_s`, or `text_s`) according
+> to the statistic data type.
 
 
 ## Write Interface
@@ -220,9 +260,11 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
  * @param value [in] Null-terminated string. Ownership remains with caller.
  * @return ERRNO.
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
  // Supports multiple data types
 ERRNO tablet_add_value_by_name_int32_t(Tablet tablet, uint32_t row_index,
@@ -250,9 +292,11 @@ ERRNO tablet_add_value_by_name_bool(Tablet tablet, uint32_t row_index,
  *
  * @param value [in] Null-terminated string. Copied internally.
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 
 // Supports multiple data types
@@ -333,7 +377,11 @@ Allowed encodings per data type, and the default used when you do not change it:
 | `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
 | `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
 
-Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
+The time column uses the global time configuration and accepts `PLAIN`,
+`TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, or `SPRINTZ`.
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`,
+or `LZ4` (default `LZ4`).
 
 ```C
 // e.g. write every column with LZ4 compression
@@ -412,6 +460,31 @@ void free_tsfile_result_set(ResultSet* result_set);
 ```
 
 
+### Tree queries
+
+```C
+/**
+ * @brief Query tree-model data by measurement names within a time range.
+ */
+ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
+                                     uint32_t column_num, Timestamp start_time,
+                                     Timestamp end_time, ERRNO* err_code);
+
+/**
+ * @brief Query tree-model data by row with offset/limit.
+ *
+ * @param device_ids Array of device identifiers.
+ * @param measurement_names Array of measurement names.
+ * @param offset Leading rows to skip (>= 0).
+ * @param limit Max rows to return; < 0 means unlimited.
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+```
+
 
 ### Filtering by tag
 
@@ -436,6 +509,8 @@ typedef enum {
     TAG_FILTER_GTEQ = 5,        // column >= value
     TAG_FILTER_REGEXP = 6,      // column matches the regex value
     TAG_FILTER_NOT_REGEXP = 7,  // column does not match the regex value
+    TAG_FILTER_IS_NULL = 8,     // column is null
+    TAG_FILTER_IS_NOT_NULL = 9, // column is not null
 } TagFilterOp;
 
 /**
@@ -444,7 +519,7 @@ typedef enum {
  * @param reader      [in] Valid TsFileReader handle.
  * @param table_name  [in] Table whose schema defines the TAG columns.
  * @param column_name [in] Name of the TAG column to filter on.
- * @param value       [in] Comparison value (TAG columns are STRING).
+ * @param value       [in] Comparison value (ignored for IS NULL / IS NOT NULL).
  * @param op          [in] Comparison operator (TagFilterOp).
  * @param err_code    [out] RET_OK(0) on success, or error code in errno_define_c.h.
  * @return TagFilterHandle on success; NULL on failure.
@@ -464,6 +539,20 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           const char* column_name,
                                           const char* lower, const char* upper,
                                           bool is_not, ERRNO* err_code);
+
+// Convenience builders for common single-column predicates.
+TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader, const char* table_name,
+                                      const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader, const char* table_name,
+                                       const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader, const char* table_name,
+                                       const char* column_name, const char* value);
 
 // Combine predicates. AND/OR/NOT take ownership of their children; free the root only.
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left, TagFilterHandle right);
@@ -520,6 +609,18 @@ ResultSet tsfile_query_table_with_tag_filter(
     TsFileReader reader, const char* table_name, char** columns,
     uint32_t column_num, Timestamp start_time, Timestamp end_time,
     TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
+```
+
+### Read batch results as Arrow
+
+Batch query result sets (`batch_size > 0`) can be fetched as Arrow C Data
+Interface arrays and schemas. The caller owns the returned Arrow objects and
+must call their `release` callbacks when finished.
+
+```C
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema);
 ```
 
 Example — read `temperature` only for devices whose `region` TAG equals
@@ -670,11 +771,3 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
  */
 void free_table_schema(TableSchema schema);
 ```
-
-
-
-
-
-
-
-
