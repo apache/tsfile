@@ -106,6 +106,12 @@ class TsFileTableWriter {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int flush();
+
+    /** Add or replace a binary file-level property while the writer is open. */
+    int add_tsfile_property(const std::string& key, const uint8_t* value,
+                            uint32_t value_len);
+    int add_tsfile_property(const std::string& key,
+                            const std::vector<uint8_t>& value);
     /**
      * Closes the writer and releases any resources held by it.
      * After calling this method, no further operations should be performed on

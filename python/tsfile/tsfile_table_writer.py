@@ -232,6 +232,12 @@ class TsFileTableWriter:
         """
         self.writer.close()
 
+    def add_tsfile_property(self, key: str, value: bytes):
+        """
+        Add or replace a binary file-level property while the writer is open.
+        """
+        self.writer.add_tsfile_property(key, value)
+
     def flush(self):
         """
         Flush current data to tsfile.

@@ -527,6 +527,15 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     return result;
 }
 
+TsFileProperties TsFileReader::get_tsfile_properties() {
+    if (tsfile_executor_ == nullptr) {
+        return TsFileProperties();
+    }
+    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
+    return file_metadata == nullptr ? TsFileProperties()
+                                    : file_metadata->tsfile_properties_;
+}
+
 ResultSet* TsFileReader::read_timeseries(
     const std::shared_ptr<IDeviceID>& device_id,
     const std::vector<std::string>& measurement_name) {

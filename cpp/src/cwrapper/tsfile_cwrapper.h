@@ -230,6 +230,21 @@ typedef struct DeviceTimeseriesMetadataMap {
     uint32_t device_count;
 } DeviceTimeseriesMetadataMap;
 
+/**
+ * @brief One file-level property with length-aware binary storage.
+ *
+ * @p key is allocated with one trailing NUL for convenience, while @p key_len
+ * is authoritative and preserves embedded NUL bytes. @p is_null distinguishes
+ * a null value from a non-null zero-length value.
+ */
+typedef struct TsFileProperty {
+    char* key;
+    uint32_t key_len;
+    uint8_t* value;
+    uint32_t value_len;
+    bool is_null;
+} TsFileProperty;
+
 /** Frees path, table_name, and segments inside @p d; zeros @p d. */
 void tsfile_device_id_free_contents(DeviceID* d);
 
@@ -436,6 +451,17 @@ TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
 ERRNO tsfile_writer_close(TsFileWriter writer);
 
 /**
+ * @brief Adds or replaces a file-level property while the table writer is open.
+ *
+ * The key and value are copied immediately. A NULL value with value_len == 0
+ * represents a null property; a non-NULL value with value_len == 0 represents
+ * an empty byte array.
+ */
+ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                        uint32_t key_len, const uint8_t* value,
+                                        uint32_t value_len);
+
+/**
  * @brief Releases resources associated with a TsFileReader.
  *
  * @param reader [in] Reader handle obtained from tsfile_reader_new().
@@ -476,6 +502,17 @@ ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
 
 void tsfile_free_device_timeseries_metadata_map(
     DeviceTimeseriesMetadataMap* map);
+
+/**
+ * @brief Returns a heap-allocated array containing all file-level properties.
+ *
+ * Caller must release the result with tsfile_free_tsfile_properties().
+ */
+ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
+                                          TsFileProperty** out_properties,
+                                          uint32_t* out_length);
+
+void tsfile_free_tsfile_properties(TsFileProperty* properties, uint32_t length);
 
 /*--------------------------Tablet API------------------------ */
 
@@ -1054,6 +1091,11 @@ ERRNO _tsfile_writer_close(TsFileWriter writer);
 
 // Flush Chunk into tsfile from current tsFileWriter
 ERRNO _tsfile_writer_flush(TsFileWriter writer);
+
+// Add or replace a file-level property on the generic writer used by Python.
+ERRNO _tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                         uint32_t key_len, const uint8_t* value,
+                                         uint32_t value_len);
 
 // Queries time-series data for a specific device within a given time range.
 ResultSet _tsfile_reader_query_device(TsFileReader reader,

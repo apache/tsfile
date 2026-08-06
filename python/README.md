@@ -61,3 +61,19 @@ Build by python command:
 python setup.py build_ext --inplace
 ```
 
+## File-level properties
+
+`TsFileWriter` and `TsFileTableWriter` accept binary properties while they are
+open. The setter accepts `bytes` only. Readers return `dict[str, bytes | None]`,
+preserving null and empty values separately.
+
+```python
+with TsFileWriter("example.tsfile") as writer:
+    writer.add_tsfile_property("binary-property", b"\x01\x00\xff")
+
+with TsFileReader("example.tsfile") as reader:
+    properties = reader.get_tsfile_properties()
+```
+
+Values do not carry a data type; use an explicit portable encoding when storing
+numbers or structures.

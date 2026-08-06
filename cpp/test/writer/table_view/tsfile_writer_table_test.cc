@@ -144,6 +144,30 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     delete table_schema;
 }
 
+TEST_F(TsFileWriterTableTest, AddTsFilePropertyDelegatesToWriter) {
+    auto table_schema = gen_table_schema(0);
+    TsFileTableWriter writer(&write_file_, table_schema);
+    const std::vector<uint8_t> before_flush = {'b', 'e', 'f', 'o', 'r', 'e'};
+    const std::vector<uint8_t> after_flush = {0x00, 0xFF, 0x01};
+
+    ASSERT_EQ(common::E_OK,
+              writer.add_tsfile_property("table-property", before_flush));
+    ASSERT_EQ(common::E_OK, writer.flush());
+    ASSERT_EQ(common::E_OK,
+              writer.add_tsfile_property("table-property", after_flush));
+    ASSERT_EQ(common::E_OK, writer.close());
+    ASSERT_EQ(common::E_FILE_WRITE_ERR,
+              writer.add_tsfile_property("closed", after_flush));
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    TsFileProperties properties = reader.get_tsfile_properties();
+    ASSERT_FALSE(properties.at("table-property").is_null);
+    EXPECT_EQ(after_flush, properties.at("table-property").value);
+    EXPECT_EQ(common::E_OK, reader.close());
+    delete table_schema;
+}
+
 TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;

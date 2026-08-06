@@ -31,6 +31,8 @@
 #endif
 
 #include <cstring>
+#include <limits>
+#include <new>
 #include <set>
 #include <vector>
 
@@ -256,6 +258,27 @@ ERRNO tsfile_writer_close(TsFileWriter writer) {
     }
     delete w;
     return ret;
+}
+
+ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                        uint32_t key_len, const uint8_t* value,
+                                        uint32_t value_len) {
+    if (writer == nullptr || key == nullptr ||
+        (value == nullptr && value_len > 0)) {
+        return common::E_INVALID_ARG;
+    }
+    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    try {
+        auto* w = static_cast<storage::TsFileTableWriter*>(writer);
+        return w->add_tsfile_property(std::string(key, key_len), value,
+                                      value_len);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
 }
 
 ERRNO tsfile_reader_close(TsFileReader reader) {
@@ -1432,6 +1455,110 @@ void tsfile_free_device_timeseries_metadata_map(
     map->device_count = 0;
 }
 
+void tsfile_free_tsfile_properties(TsFileProperty* properties,
+                                   uint32_t length) {
+    if (properties == nullptr) {
+        return;
+    }
+    for (uint32_t i = 0; i < length; i++) {
+        free(properties[i].key);
+        properties[i].key = nullptr;
+        free(properties[i].value);
+        properties[i].value = nullptr;
+        properties[i].key_len = 0;
+        properties[i].value_len = 0;
+        properties[i].is_null = false;
+    }
+    free(properties);
+}
+
+ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
+                                          TsFileProperty** out_properties,
+                                          uint32_t* out_length) {
+    if (out_properties == nullptr || out_length == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_properties = nullptr;
+    *out_length = 0;
+    if (reader == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        storage::TsFileProperties cpp_properties = r->get_tsfile_properties();
+        if (cpp_properties.size() >
+                static_cast<size_t>(std::numeric_limits<uint32_t>::max()) ||
+            cpp_properties.size() >
+                std::numeric_limits<size_t>::max() / sizeof(TsFileProperty)) {
+            return common::E_OUT_OF_RANGE;
+        }
+        if (cpp_properties.empty()) {
+            return common::E_OK;
+        }
+
+        auto* properties = static_cast<TsFileProperty*>(
+            malloc(sizeof(TsFileProperty) * cpp_properties.size()));
+        if (properties == nullptr) {
+            return common::E_OOM;
+        }
+        memset(properties, 0, sizeof(TsFileProperty) * cpp_properties.size());
+
+        uint32_t property_index = 0;
+        for (const auto& cpp_property : cpp_properties) {
+            TsFileProperty& property = properties[property_index];
+            if (cpp_property.first.size() >
+                static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+                tsfile_free_tsfile_properties(properties, property_index);
+                return common::E_OUT_OF_RANGE;
+            }
+            property.key_len = static_cast<uint32_t>(cpp_property.first.size());
+            property.key = static_cast<char*>(
+                malloc(static_cast<size_t>(property.key_len) + 1U));
+            if (property.key == nullptr) {
+                tsfile_free_tsfile_properties(properties, property_index + 1);
+                return common::E_OOM;
+            }
+            if (property.key_len > 0) {
+                memcpy(property.key, cpp_property.first.data(),
+                       property.key_len);
+            }
+            property.key[property.key_len] = '\0';
+
+            const storage::TsFilePropertyValue& cpp_value = cpp_property.second;
+            property.is_null = cpp_value.is_null;
+            if (!cpp_value.is_null) {
+                if (cpp_value.value.size() >
+                    static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+                    tsfile_free_tsfile_properties(properties,
+                                                  property_index + 1);
+                    return common::E_OUT_OF_RANGE;
+                }
+                property.value_len =
+                    static_cast<uint32_t>(cpp_value.value.size());
+                if (property.value_len > 0) {
+                    property.value =
+                        static_cast<uint8_t*>(malloc(property.value_len));
+                    if (property.value == nullptr) {
+                        tsfile_free_tsfile_properties(properties,
+                                                      property_index + 1);
+                        return common::E_OOM;
+                    }
+                    memcpy(property.value, cpp_value.value.data(),
+                           property.value_len);
+                }
+            }
+            property_index++;
+        }
+
+        *out_properties = properties;
+        *out_length = static_cast<uint32_t>(cpp_properties.size());
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
 // delete pointer
 void _free_tsfile_ts_record(TsRecord* record) {
     if (*record != nullptr) {
@@ -1638,6 +1765,27 @@ ERRNO _tsfile_writer_close(TsFileWriter writer) {
 ERRNO _tsfile_writer_flush(TsFileWriter writer) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     return w->flush();
+}
+
+ERRNO _tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                         uint32_t key_len, const uint8_t* value,
+                                         uint32_t value_len) {
+    if (writer == nullptr || key == nullptr ||
+        (value == nullptr && value_len > 0)) {
+        return common::E_INVALID_ARG;
+    }
+    if (key_len > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    try {
+        auto* w = static_cast<storage::TsFileWriter*>(writer);
+        return w->add_tsfile_property(std::string(key, key_len), value,
+                                      value_len);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
 }
 
 ResultSet _tsfile_reader_query_device(TsFileReader reader,

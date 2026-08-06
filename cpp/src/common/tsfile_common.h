@@ -1126,13 +1126,35 @@ struct MetaIndexNode {
 
 class TableSchema;
 
+struct TsFilePropertyValue {
+    /** A default-constructed property represents a null value. */
+    TsFilePropertyValue() : is_null(true), value() {}
+
+    /** A vector, including an empty vector, represents a non-null value. */
+    explicit TsFilePropertyValue(const std::vector<uint8_t>& value)
+        : is_null(false), value(value) {}
+
+    /** nullptr represents null; a non-null pointer with length 0 is empty. */
+    TsFilePropertyValue(const uint8_t* data, uint32_t value_len)
+        : is_null(data == nullptr), value() {
+        if (data != nullptr && value_len > 0) {
+            value.assign(data, data + value_len);
+        }
+    }
+
+    bool is_null;
+    std::vector<uint8_t> value;
+};
+
+using TsFileProperties = std::unordered_map<std::string, TsFilePropertyValue>;
+
 struct TsFileMeta {
     typedef std::map<std::shared_ptr<IDeviceID>, std::shared_ptr<MetaIndexNode>,
                      IDeviceIDComparator>
         DeviceNodeMap;
     std::map<std::string, std::shared_ptr<MetaIndexNode>>
         table_metadata_index_node_map_;
-    std::unordered_map<std::string, std::string*> tsfile_properties_;
+    TsFileProperties tsfile_properties_;
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
         TableSchemasMap;
     TableSchemasMap table_schemas_;
@@ -1170,18 +1192,12 @@ struct TsFileMeta {
         if (bloom_filter_ != nullptr) {
             bloom_filter_->destroy();
         }
-        for (auto properties : tsfile_properties_) {
-            if (properties.second != nullptr) {
-                delete properties.second;
-                properties.second = nullptr;
-            }
-        }
         tsfile_properties_.clear();
         table_metadata_index_node_map_.clear();
         table_schemas_.clear();
     }
 
-    int serialize_to(common::ByteStream& out);
+    int serialize_to(common::ByteStream& out, int32_t& serialized_size);
 
     int deserialize_from(common::ByteStream& in);
 
