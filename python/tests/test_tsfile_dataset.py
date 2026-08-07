@@ -16,6 +16,8 @@
 # under the License.
 #
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -255,6 +257,212 @@ def test_dataset_basic_access_patterns(tmp_path, capsys):
         assert "TsFileDataFrame(table model, 2 time series, 2 files)" in repr(tsdf)
         aligned.show(2)
         assert "AlignedTimeseries(6 rows, 2 series)" in capsys.readouterr().out
+
+
+def test_dataset_description_get_set_and_column_roles(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    description_path = tmp_path / "description.json"
+    _write_weather_file(path, 0)
+    description_path.write_text(
+        json.dumps(
+            {
+                "weather": {
+                    "temperature": "C",
+                    "humidity": "T",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with TsFileDataFrame(
+        str(path),
+        show_progress=False,
+        description_path=description_path,
+    ) as tsdf:
+        assert tsdf.get("weather") == {
+            "temperature": "C",
+            "humidity": "T",
+        }
+        assert tsdf.get("missing") is None
+        assert tsdf.get("missing", {"default": True}) == {"default": True}
+        assert tsdf.get_covariate_columns("weather") == ["temperature"]
+        assert tsdf.get_target_columns("weather") == ["humidity"]
+        assert tsdf.get_covariate_column_count("weather") == 1
+        assert tsdf.get_target_column_count("weather") == 1
+        assert tsdf.get_covariate_columns("missing") == []
+        assert tsdf.get_target_column_count("missing") == 0
+
+        description = tsdf.get("weather")
+        description["temperature"] = "T"
+        assert tsdf.get_covariate_columns("weather") == ["temperature"]
+
+        with pytest.raises(TypeError, match="must be JSON serializable"):
+            tsdf.set("invalid", object())
+        assert tsdf.get("invalid") is None
+
+        subset = tsdf[:1]
+        subset.set(
+            "weather",
+            {
+                "temperature": "T",
+                "humidity": "T",
+            },
+        )
+        assert tsdf.get_covariate_column_count("weather") == 0
+        assert tsdf.get_target_columns("weather") == ["temperature", "humidity"]
+
+    assert json.loads(description_path.read_text(encoding="utf-8")) == {
+        "weather": {
+            "temperature": "T",
+            "humidity": "T",
+        }
+    }
+
+
+def test_dataset_description_set_creates_missing_file(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    description_path = tmp_path / "nested" / "description.json"
+    _write_weather_file(path, 0)
+
+    with TsFileDataFrame(
+        str(path),
+        show_progress=False,
+        description_path=description_path,
+    ) as tsdf:
+        assert tsdf.get("weather") is None
+        tsdf.set("weather", {"temperature": "C", "humidity": "T"})
+
+    assert json.loads(description_path.read_text(encoding="utf-8")) == {
+        "weather": {"temperature": "C", "humidity": "T"}
+    }
+
+
+def test_dataset_description_rejects_invalid_json_and_roles(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    description_path = tmp_path / "description.json"
+    _write_weather_file(path, 0)
+
+    description_path.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        TsFileDataFrame(
+            str(path),
+            show_progress=False,
+            description_path=description_path,
+        )
+
+    description_path.write_text(
+        json.dumps({"weather": {"temperature": "X"}}), encoding="utf-8"
+    )
+    with TsFileDataFrame(
+        str(path),
+        show_progress=False,
+        description_path=description_path,
+    ) as tsdf:
+        with pytest.raises(ValueError, match="expected 'C' or 'T'"):
+            tsdf.get_covariate_columns("weather")
+
+        tsdf.set("weather", {"temperature": ["C"]})
+        with pytest.raises(ValueError, match="expected 'C' or 'T'"):
+            tsdf.get_target_columns("weather")
+
+
+def test_dataset_device_counts_and_metadata_follow_dataframe_view(tmp_path):
+    path = tmp_path / "multi_device.tsfile"
+    _write_multi_tag_file(path)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        assert tsdf.get_device_count("weather") == 2
+        assert tsdf.get_device_node_counts("weather") == {
+            ("beijing", "device_a"): 2,
+            ("shanghai", "device_b"): 2,
+        }
+        assert tsdf.get_device_point_counts("weather") == {
+            ("beijing", "device_a"): 4,
+            ("shanghai", "device_b"): 4,
+        }
+        assert tsdf.get_device_point_count("weather", ("beijing", "device_a")) == 4
+        assert (
+            tsdf.get_device_stats("weather", {"city": "beijing", "device": "device_a"})[
+                "point_count"
+            ]
+            == 4
+        )
+        assert tsdf.get_device_statistics("weather") == {
+            ("beijing", "device_a"): {
+                "node_count": 2,
+                "point_count": 4,
+                "value_count": 4,
+                "start_time": 0,
+                "end_time": 1,
+            },
+            ("shanghai", "device_b"): {
+                "node_count": 2,
+                "point_count": 4,
+                "value_count": 4,
+                "start_time": 0,
+                "end_time": 1,
+            },
+        }
+
+        device_metadata = tsdf.list_device_metadata("weather")
+        assert list(device_metadata.columns) == [
+            "table",
+            "node_count",
+            "point_count",
+            "value_count",
+            "start_time",
+            "end_time",
+            "city",
+            "device",
+        ]
+        assert device_metadata[
+            ["city", "device", "node_count", "point_count", "value_count"]
+        ].to_dict("records") == [
+            {
+                "city": "beijing",
+                "device": "device_a",
+                "node_count": 2,
+                "point_count": 4,
+                "value_count": 4,
+            },
+            {
+                "city": "shanghai",
+                "device": "device_b",
+                "node_count": 2,
+                "point_count": 4,
+                "value_count": 4,
+            },
+        ]
+
+        subset = tsdf[[0, 2]]
+        assert subset.get_device_count("weather") == 2
+        assert subset.get_device_node_counts("weather") == {
+            ("beijing", "device_a"): 1,
+            ("shanghai", "device_b"): 1,
+        }
+        assert subset.get_device_point_counts("weather") == {
+            ("beijing", "device_a"): 2,
+            ("shanghai", "device_b"): 2,
+        }
+
+        assert tsdf.get_device_count("missing") == 0
+        assert tsdf.get_device_node_counts("missing") == {}
+
+    numeric_path = tmp_path / "numeric_and_text.tsfile"
+    _write_numeric_and_text_file(numeric_path)
+    with TsFileDataFrame(str(numeric_path), show_progress=False) as tsdf:
+        # The NaN row is part of the returned time series timeline, but is not
+        # counted as a non-null value by native value statistics.
+        assert tsdf.get_device_statistics("weather") == {
+            ("device_a",): {
+                "node_count": 1,
+                "point_count": 3,
+                "value_count": 2,
+                "start_time": 0,
+                "end_time": 2,
+            }
+        }
 
 
 def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_path):
@@ -1478,6 +1686,29 @@ def test_dataset_tree_model_metadata_and_repr(tmp_path):
         assert list(tsdf["field"]) == ["status", "temperature", "status"]
         with pytest.raises(KeyError):
             tsdf["table"]
+
+        assert tsdf.get_device_count("root") == 2
+        assert tsdf.get_device_node_counts("root") == {
+            ("ln", "wf01", "wt01"): 2,
+            ("ln", "wf02", "wt02"): 1,
+        }
+        assert tsdf.get_device_point_counts("root") == {
+            ("ln", "wf01", "wt01"): 10,
+            ("ln", "wf02", "wt02"): 5,
+        }
+        assert tsdf.get_device_point_count("root", ("ln", "wf02", "wt02")) == 5
+        device_metadata = tsdf.list_device_metadata("root")
+        assert list(device_metadata.columns) == [
+            "node_count",
+            "point_count",
+            "value_count",
+            "start_time",
+            "end_time",
+            "_col_1",
+            "_col_2",
+            "_col_3",
+        ]
+        assert device_metadata["node_count"].tolist() == [2, 1]
 
 
 def test_dataset_tree_model_series_access(tmp_path):

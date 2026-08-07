@@ -19,11 +19,14 @@
 """Top-level dataset accessors for TsFile shards."""
 
 from collections import defaultdict
+import copy
 from dataclasses import dataclass, field
 import heapq
+import json
 import os
 import sys
-from typing import Dict, List, Optional, Tuple, Union
+import tempfile
+from typing import Any, Dict, List, Optional, Tuple, Union
 import warnings
 
 import numpy as np
@@ -54,6 +57,56 @@ _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 # large enough to avoid excessive query_by_row round-trips when overlap spans
 # multiple shards.
 _OVERLAP_ROW_CHUNK_SIZE = 256
+
+_COVARIATE_ROLE = "C"
+_TARGET_ROLE = "T"
+_DESCRIPTION_ROLES = {_COVARIATE_ROLE, _TARGET_ROLE}
+
+
+def _load_dataframe_description(description_path: Optional[str]) -> dict:
+    """Load a dataframe description JSON object.
+
+    A missing optional description file is treated as an empty description so
+    callers can create it later through :meth:`TsFileDataFrame.set`.
+    """
+    if description_path is None:
+        return {}
+
+    try:
+        with open(description_path, "r", encoding="utf-8") as description_file:
+            description = json.load(description_file)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Invalid dataframe description JSON in '{description_path}': {exc.msg}"
+        ) from exc
+
+    if not isinstance(description, dict):
+        raise ValueError(
+            f"Dataframe description in '{description_path}' must be a JSON object"
+        )
+    return description
+
+
+def _write_dataframe_description(description_path: str, description: dict) -> None:
+    """Atomically write a dataframe description JSON object to disk."""
+    directory = os.path.dirname(description_path) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(
+        prefix=".tsfile-description-", suffix=".tmp", dir=directory
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as description_file:
+            json.dump(description, description_file, ensure_ascii=False, indent=2)
+            description_file.write("\n")
+        os.replace(temporary_path, description_path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 @dataclass(**_DATACLASS_SLOTS)
@@ -618,11 +671,37 @@ class _LocIndexer:
 
 
 class TsFileDataFrame:
-    """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
+    """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
 
-    def __init__(self, paths: Union[str, List[str]], show_progress: bool = True):
+    ``description_path`` optionally points to a JSON object describing the
+    columns in each table.  A description uses the following shape::
+
+        {
+          "weather": {
+            "temperature": "C",
+            "humidity": "T"
+          }
+        }
+
+    ``C`` marks a covariate column and ``T`` marks a target column.  The
+    description is independent of the TsFile data and is shared by dataframe
+    subsets created through slicing or boolean selection.
+    """
+
+    def __init__(
+        self,
+        paths: Union[str, List[str]],
+        show_progress: bool = True,
+        description_path: Optional[Union[str, os.PathLike]] = None,
+    ):
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
+        self._description_path = (
+            os.path.abspath(os.fspath(description_path))
+            if description_path is not None
+            else None
+        )
+        self._description = _load_dataframe_description(self._description_path)
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -640,6 +719,8 @@ class TsFileDataFrame:
         obj._is_view = True
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
+        obj._description_path = parent._description_path
+        obj._description = parent._description
         obj._readers = parent._readers
         # Reuse the parent's full mapping but restrict the membership scope to
         # the requested subset.
@@ -660,6 +741,88 @@ class TsFileDataFrame:
 
     def _owner(self) -> "TsFileDataFrame":
         return self._root if self._is_view else self
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return a top-level value from the JSON description.
+
+        The returned value is copied, so mutating a dictionary or list from a
+        ``get`` call cannot change the in-memory description without going
+        through :meth:`set`.
+        """
+        if not isinstance(key, str):
+            raise TypeError(f"Description key must be a string, got {type(key)}")
+        owner = self._owner()
+        return copy.deepcopy(owner._description.get(key, default))
+
+    def set(self, key: str, value: Any) -> None:
+        """Set a top-level JSON description value and persist it if configured.
+
+        ``value`` must be JSON serializable.  If no ``description_path`` was
+        supplied, the update is kept in memory for the lifetime of the root
+        dataframe and can still be read through :meth:`get` or the role APIs.
+        """
+        if not isinstance(key, str):
+            raise TypeError(f"Description key must be a string, got {type(key)}")
+
+        owner = self._owner()
+        updated_description = copy.deepcopy(owner._description)
+        updated_description[key] = copy.deepcopy(value)
+
+        try:
+            json.dumps(updated_description, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("Description value must be JSON serializable") from exc
+
+        if owner._description_path is not None:
+            _write_dataframe_description(owner._description_path, updated_description)
+        owner._description = updated_description
+
+    def _get_role_columns(self, table_name: str, role: str) -> List[str]:
+        if not isinstance(table_name, str):
+            raise TypeError(
+                f"Description table name must be a string, got {type(table_name)}"
+            )
+
+        table_description = self._owner()._description.get(table_name)
+        if table_description is None:
+            return []
+        if not isinstance(table_description, dict):
+            raise ValueError(
+                f"Description for table '{table_name}' must be a JSON object"
+            )
+
+        invalid_roles = {
+            column: column_role
+            for column, column_role in table_description.items()
+            if not isinstance(column_role, str) or column_role not in _DESCRIPTION_ROLES
+        }
+        if invalid_roles:
+            column, column_role = next(iter(invalid_roles.items()))
+            raise ValueError(
+                f"Invalid role {column_role!r} for column '{column}' in table "
+                f"'{table_name}'; expected 'C' or 'T'"
+            )
+        return [
+            column
+            for column, column_role in table_description.items()
+            if column_role == role
+        ]
+
+    def get_covariate_columns(self, table_name: str) -> List[str]:
+        """Return the columns marked ``C`` for ``table_name``."""
+        return self._get_role_columns(table_name, _COVARIATE_ROLE)
+
+    def get_target_columns(self, table_name: str) -> List[str]:
+        """Return the columns marked ``T`` for ``table_name``."""
+        return self._get_role_columns(table_name, _TARGET_ROLE)
+
+    def get_covariate_column_count(self, table_name: str) -> int:
+        """Return the number of columns marked ``C`` for ``table_name``."""
+        return len(self.get_covariate_columns(table_name))
+
+    def get_target_column_count(self, table_name: str) -> int:
+        """Return the number of columns marked ``T`` for ``table_name``."""
+        return len(self.get_target_columns(table_name))
 
     def _assert_open(self):
         if self._owner()._closed:
@@ -825,6 +988,207 @@ class TsFileDataFrame:
     @property
     def model(self) -> str:
         return self._index.model
+
+    def _get_device_node_counts_by_index(self, table_name: str) -> Dict[int, int]:
+        """Count unique physical series per device in the current dataframe view."""
+        if not isinstance(table_name, str):
+            raise TypeError(f"Table name must be a string, got {type(table_name)}")
+
+        node_indices_by_device: Dict[int, set] = {}
+        seen_series = set()
+        for device_idx, field_idx in self._index.series:
+            device_table_name, _ = self._index.devices[device_idx]
+            if device_table_name != table_name:
+                continue
+
+            series_ref = (device_idx, field_idx)
+            if series_ref in seen_series:
+                continue
+            seen_series.add(series_ref)
+            node_indices_by_device.setdefault(device_idx, set()).add(field_idx)
+
+        return {
+            device_idx: len(node_indices)
+            for device_idx, node_indices in node_indices_by_device.items()
+        }
+
+    def _get_device_statistics_by_index(self, table_name: str) -> Dict[int, dict]:
+        """Aggregate physical-series statistics per device in the current view."""
+        node_counts_by_device = self._get_device_node_counts_by_index(table_name)
+        point_counts_by_device: Dict[int, int] = {}
+        value_counts_by_device: Dict[int, int] = {}
+        seen_series = set()
+        for device_idx, field_idx in self._index.series:
+            if device_idx not in node_counts_by_device:
+                continue
+
+            series_ref = (device_idx, field_idx)
+            if series_ref in seen_series:
+                continue
+            seen_series.add(series_ref)
+
+            for reader, reader_device_id, reader_field_idx in self._index.series_shards[
+                series_ref
+            ]:
+                series_info = reader.get_series_info_by_ref(
+                    reader_device_id, reader_field_idx
+                )
+                point_counts_by_device[device_idx] = point_counts_by_device.get(
+                    device_idx, 0
+                ) + int(series_info["timeline_length"])
+                value_counts_by_device[device_idx] = value_counts_by_device.get(
+                    device_idx, 0
+                ) + int(series_info["length"])
+
+        statistics_by_device = {}
+        for device_idx, node_count in node_counts_by_device.items():
+            if device_idx < len(self._index.device_time_bounds):
+                min_time, max_time = self._index.device_time_bounds[device_idx]
+            else:
+                min_time, max_time = None, None
+            statistics_by_device[device_idx] = {
+                "node_count": node_count,
+                # point_count follows Timeseries.stats['count']: every row on
+                # every physically present node, including NaN rows.
+                "point_count": point_counts_by_device.get(device_idx, 0),
+                # value_count counts only non-null values from native stats.
+                "value_count": value_counts_by_device.get(device_idx, 0),
+                "start_time": min_time,
+                "end_time": max_time,
+            }
+        return statistics_by_device
+
+    def get_device_count(self, table_name: str) -> int:
+        """Return the number of devices represented under ``table_name``.
+
+        A subset dataframe only counts devices that own at least one series in
+        that subset. A table that is not present returns ``0``.
+        """
+        return len(self._get_device_node_counts_by_index(table_name))
+
+    def get_device_node_counts(self, table_name: str) -> Dict[Tuple[Any, ...], int]:
+        """Return ``{device_tag_values: node_count}`` for ``table_name``.
+
+        Each key is the device's ordered tag-value tuple. For tree-model files,
+        it is the tuple of device path segments after the root. ``node_count``
+        is the number of unique, physically present numeric time series for the
+        device in the current dataframe view.
+        """
+        counts_by_index = self._get_device_node_counts_by_index(table_name)
+        return {
+            self._index.devices[device_idx][1]: counts_by_index[device_idx]
+            for device_idx in range(len(self._index.devices))
+            if device_idx in counts_by_index
+        }
+
+    def get_device_statistics(self, table_name: str) -> Dict[Tuple[Any, ...], dict]:
+        """Return per-device counts and time bounds for ``table_name``.
+
+        Each value contains ``node_count``, ``point_count`` (the sum of the
+        per-node timeline counts), ``value_count`` (the sum of non-null values),
+        ``start_time``, and ``end_time``. The key is the device's ordered
+        tag-value tuple.
+        """
+        statistics_by_index = self._get_device_statistics_by_index(table_name)
+        return {
+            self._index.devices[device_idx][1]: stats
+            for device_idx, stats in statistics_by_index.items()
+        }
+
+    def get_device_point_counts(self, table_name: str) -> Dict[Tuple[Any, ...], int]:
+        """Return ``{device_tag_values: point_count}`` for ``table_name``."""
+        return {
+            tag_values: stats["point_count"]
+            for tag_values, stats in self.get_device_statistics(table_name).items()
+        }
+
+    def _resolve_device_index(self, table_name: str, device) -> int:
+        """Resolve a public device selector to a dataframe-local device index."""
+        if not isinstance(table_name, str):
+            raise TypeError(f"Table name must be a string, got {type(table_name)}")
+        table_entry = self._index.table_entries.get(table_name)
+        if table_entry is None:
+            raise KeyError(f"Table not found: '{table_name}'")
+
+        if isinstance(device, SeriesPath):
+            if device.table != table_name:
+                raise KeyError(
+                    f"Device {device!r} does not belong to table '{table_name}'"
+                )
+            tag_values = device.tags
+        elif isinstance(device, dict):
+            tag_values = tuple(device.get(column) for column in table_entry.tag_columns)
+        elif isinstance(device, (tuple, list)):
+            tag_values = tuple(device)
+        elif len(table_entry.tag_columns) == 1:
+            tag_values = (device,)
+        else:
+            raise TypeError(
+                "A device with multiple tag columns must be identified by an "
+                "ordered tuple/list or a tag-value dictionary"
+            )
+
+        device_idx = self._index.device_index.get(
+            (table_name, _normalize_tag_values(tag_values))
+        )
+        if device_idx is None:
+            raise KeyError(f"Device not found in table '{table_name}': {device!r}")
+        if device_idx not in self._get_device_node_counts_by_index(table_name):
+            raise KeyError(
+                f"Device is not represented in the current dataframe view: {device!r}"
+            )
+        return device_idx
+
+    def get_device_stats(self, table_name: str, device) -> dict:
+        """Return statistics for one device selected by tags or ``SeriesPath``."""
+        device_idx = self._resolve_device_index(table_name, device)
+        return self._get_device_statistics_by_index(table_name)[device_idx].copy()
+
+    def get_device_point_count(self, table_name: str, device) -> int:
+        """Return the timeline point count for one selected device."""
+        return self.get_device_stats(table_name, device)["point_count"]
+
+    def list_device_metadata(self, table_name: str):
+        """Return a pandas DataFrame with one row and statistics per device.
+
+        Declared tag columns are expanded into named columns. Short tag tuples
+        are padded with ``None`` so nullable table tags and tree devices of
+        different depths remain position preserving.
+        """
+        import pandas as pd
+
+        statistics_by_index = self._get_device_statistics_by_index(table_name)
+        table_entry = self._index.table_entries.get(table_name)
+        tag_columns = list(table_entry.tag_columns) if table_entry else []
+        leading_columns = [
+            "node_count",
+            "point_count",
+            "value_count",
+            "start_time",
+            "end_time",
+        ]
+        if self._index.model != MODEL_TREE:
+            leading_columns.insert(0, "table")
+        columns = leading_columns + tag_columns
+
+        rows = []
+        for device_idx in range(len(self._index.devices)):
+            if device_idx not in statistics_by_index:
+                continue
+            _, tag_values = self._index.devices[device_idx]
+            ordered_tag_values = list(tag_values)
+            if len(ordered_tag_values) < len(tag_columns):
+                ordered_tag_values.extend(
+                    [None] * (len(tag_columns) - len(ordered_tag_values))
+                )
+
+            row = statistics_by_index[device_idx].copy()
+            if self._index.model != MODEL_TREE:
+                row["table"] = table_name
+            row.update(zip(tag_columns, ordered_tag_values))
+            rows.append(row)
+
+        return pd.DataFrame(rows, columns=columns)
 
     def list_timeseries(self, path_prefix: str = "") -> List[SeriesPath]:
         if not path_prefix:

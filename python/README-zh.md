@@ -37,6 +37,47 @@
 
 你可以在 `./examples/examples.py` 中找到读写示例。
 
+## TsFileDataFrame 列角色描述
+
+`TsFileDataFrame` 可以加载表和列的 JSON 描述文件。列值使用 `C` 表示协变量，
+使用 `T` 表示目标变量：
+
+```json
+{
+  "weather": {
+    "temperature": "C",
+    "humidity": "T"
+  }
+}
+```
+
+创建 dataframe 时传入描述文件路径。`get` 和 `set` 提供对 JSON 顶层键的字典式
+访问，其中 `set` 会将更新后的描述写回文件；另外还可以按表获取协变量列、目标
+变量列及其数量：
+
+```python
+df = TsFileDataFrame("weather.tsfile", description_path="description.json")
+df.get("weather")
+df.get_covariate_columns("weather")
+df.get_target_columns("weather")
+df.get_covariate_column_count("weather")
+df.get_target_column_count("weather")
+df.get_device_count("weather")
+df.get_device_node_counts("weather")
+df.get_device_point_counts("weather")
+df.get_device_statistics("weather")
+df.get_device_point_count("weather", "device_a")
+df.get_device_stats("weather", {"device": "device_a"})
+df.list_device_metadata("weather")
+df.set("weather", {"temperature": "T", "humidity": "T"})
+df.close()
+```
+
+这里的节点数量指设备下实际存在的数值时间序列数量。`get_device_node_counts`
+使用设备有序标签值元组作为 key。`get_device_statistics` 还会返回点数、非空值数量
+和时间范围，`list_device_metadata` 则将标签展开为带名称的列。其中 `point_count`
+遵循 DataFrame 的时间线数量（包含 NaN 行），`value_count` 只统计非空值。
+
 ---
 
 ## 如何贡献
@@ -67,7 +108,6 @@ mvn -P with-cpp,with-python clean verify
 ```sh
 python setup.py build_ext --inplace
 ```
-
 ## 文件级 Properties
 
 `TsFileWriter` 和 `TsFileTableWriter` 可以在打开期间写入二进制 property。

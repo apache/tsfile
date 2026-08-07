@@ -34,6 +34,49 @@ This directory contains the Python implementation of TsFile. The Python version 
 
 The source code can be found in the `./tsfile` directory. Files ending with `.pyx` and `.pyd` are wrapper code written in Cython. The `tsfile/tsfile.py` defines some user interfaces. You can find some examples of reading and writing in the `.examples/examples.py`.
 
+## TsFileDataFrame column roles
+
+`TsFileDataFrame` can load a JSON description for table columns. Use `C` for a
+covariate and `T` for a target column:
+
+```json
+{
+  "weather": {
+    "temperature": "C",
+    "humidity": "T"
+  }
+}
+```
+
+Pass the description path when opening the dataframe. `get` and `set` provide
+dictionary-style access to top-level JSON values; `set` writes the updated
+description back to disk.
+
+```python
+df = TsFileDataFrame("weather.tsfile", description_path="description.json")
+df.get("weather")
+df.get_covariate_columns("weather")
+df.get_target_columns("weather")
+df.get_covariate_column_count("weather")
+df.get_target_column_count("weather")
+df.get_device_count("weather")
+df.get_device_node_counts("weather")
+df.get_device_point_counts("weather")
+df.get_device_statistics("weather")
+df.get_device_point_count("weather", "device_a")
+df.get_device_stats("weather", {"device": "device_a"})
+df.list_device_metadata("weather")
+df.set("weather", {"temperature": "T", "humidity": "T"})
+df.close()
+```
+
+Device node counts refer to the physically present numeric time series under
+each device. `get_device_node_counts` uses each device's ordered tag-value tuple
+as its key, while `get_device_statistics` also reports point/value counts and
+time bounds, and `list_device_metadata` expands those tags into named columns.
+`point_count` follows the DataFrame timeline count (including NaN rows), while
+`value_count` counts non-null values.
+
 
 ## How to make contributions
 
@@ -60,7 +103,6 @@ Build by python command:
 ```sh
 python setup.py build_ext --inplace
 ```
-
 ## File-level properties
 
 `TsFileWriter` and `TsFileTableWriter` accept binary properties while they are
