@@ -952,15 +952,10 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
 
     int read_batch_float(float* out, int capacity, int& actual,
                          common::ByteStream& in) override {
-        // Reuse SIMD batch decode for int32, then bit-cast to float
-        int32_t* buf = reinterpret_cast<int32_t*>(out);
-        int ret = TS2DIFFDecoder<int32_t>::read_batch_int32(buf, capacity,
-                                                            actual, in);
-        if (ret != common::E_OK) return ret;
-        for (int i = 0; i < actual; ++i) {
-            out[i] = common::int_to_float(buf[i]);
-        }
-        return common::E_OK;
+        // FLOAT TS_2DIFF segments have a scale/overflow prefix before the
+        // integer delta block. The integer batch decoder does not consume
+        // that prefix, so use the segment-aware scalar decoder here.
+        return Decoder::read_batch_float(out, capacity, actual, in);
     }
 
    private:
@@ -989,15 +984,10 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
 
     int read_batch_double(double* out, int capacity, int& actual,
                           common::ByteStream& in) override {
-        // Reuse SIMD batch decode for int64, then bit-cast to double
-        int64_t* buf = reinterpret_cast<int64_t*>(out);
-        int ret = TS2DIFFDecoder<int64_t>::read_batch_int64(buf, capacity,
-                                                            actual, in);
-        if (ret != common::E_OK) return ret;
-        for (int i = 0; i < actual; ++i) {
-            out[i] = common::long_to_double(buf[i]);
-        }
-        return common::E_OK;
+        // DOUBLE TS_2DIFF uses the same segment prefix. Bypassing
+        // read_double() misreads that prefix as a block header and can spin
+        // at end-of-input while decoding an otherwise valid page.
+        return Decoder::read_batch_double(out, capacity, actual, in);
     }
 
    private:

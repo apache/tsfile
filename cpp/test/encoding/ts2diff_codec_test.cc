@@ -187,6 +187,49 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleRoundTrip) {
     EXPECT_FALSE(decoder_double_->has_remaining(out_stream));
 }
 
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       ReadBatchFloatConsumesPrefixesAcrossSegments) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 300;
+    std::vector<float> expected(row_num);
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = static_cast<float>(i) * 0.25f + 0.5f;
+        ASSERT_EQ(encoder_float_->encode(expected[i], out_stream),
+                  common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out_stream), common::E_OK);
+
+    std::vector<float> actual_values(row_num);
+    int actual = 0;
+    ASSERT_EQ(decoder_float_->read_batch_float(actual_values.data(), row_num,
+                                               actual, out_stream),
+              common::E_OK);
+    ASSERT_EQ(actual, row_num);
+    for (int i = 0; i < row_num; ++i) {
+        EXPECT_FLOAT_EQ(actual_values[i], expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, ReadBatchDoubleConsumesOverflowPrefix) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const double expected[] = {3.123456768E20, std::nan("")};
+    for (double value : expected) {
+        ASSERT_EQ(encoder_double_->encode(value, out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_double_->flush(out_stream), common::E_OK);
+
+    double actual_values[2] = {};
+    int actual = 0;
+    ASSERT_EQ(decoder_double_->read_batch_double(actual_values, 2, actual,
+                                                 out_stream),
+              common::E_OK);
+    ASSERT_EQ(actual, 2);
+    EXPECT_DOUBLE_EQ(actual_values[0], expected[0]);
+    EXPECT_TRUE(std::isnan(actual_values[1]));
+    EXPECT_FALSE(decoder_double_->has_remaining(out_stream));
+}
+
 TEST_F(TS2DIFFCodecTest, TestIntEncoding1) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 10000;
