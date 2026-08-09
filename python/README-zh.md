@@ -44,12 +44,18 @@
 
 ```json
 {
-  "weather": {
-    "temperature": "C",
-    "humidity": "T"
+  "multivariate": {
+    "weather": {
+      "columns": {
+        "temperature": "C",
+        "humidity": "T"
+      }
+    }
   }
 }
 ```
+
+未作为多变量训练数据使用的表可以不写入 `multivariate`。
 
 创建 dataframe 时传入描述文件路径。`get` 和 `set` 提供对 JSON 顶层键的字典式
 访问，其中 `set` 会将更新后的描述写回文件；另外还可以按表获取协变量列、目标
@@ -57,7 +63,7 @@
 
 ```python
 df = TsFileDataFrame("weather.tsfile", description_path="description.json")
-df.get("weather")
+df.get("multivariate")
 df.get_covariate_columns("weather")
 df.get_target_columns("weather")
 df.get_covariate_column_count("weather")
@@ -69,7 +75,10 @@ df.get_device_statistics("weather")
 df.get_device_point_count("weather", "device_a")
 df.get_device_stats("weather", {"device": "device_a"})
 df.list_device_metadata("weather")
-df.set("weather", {"temperature": "T", "humidity": "T"})
+df.set(
+    "multivariate",
+    {"weather": {"columns": {"temperature": "T", "humidity": "T"}}},
+)
 df.close()
 ```
 

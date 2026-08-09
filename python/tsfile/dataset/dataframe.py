@@ -61,6 +61,8 @@ _OVERLAP_ROW_CHUNK_SIZE = 256
 _COVARIATE_ROLE = "C"
 _TARGET_ROLE = "T"
 _DESCRIPTION_ROLES = {_COVARIATE_ROLE, _TARGET_ROLE}
+_MULTIVARIATE_KEY = "multivariate"
+_COLUMNS_KEY = "columns"
 
 
 def _load_dataframe_description(description_path: Optional[str]) -> dict:
@@ -674,18 +676,24 @@ class TsFileDataFrame:
     """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
 
     ``description_path`` optionally points to a JSON object describing the
-    columns in each table.  A description uses the following shape::
+    columns in multivariate tables.  A description uses the following shape::
 
         {
-          "weather": {
-            "temperature": "C",
-            "humidity": "T"
+          "multivariate": {
+            "weather": {
+              "columns": {
+                "temperature": "C",
+                "humidity": "T"
+              }
+            }
           }
         }
 
-    ``C`` marks a covariate column and ``T`` marks a target column.  The
-    description is independent of the TsFile data and is shared by dataframe
-    subsets created through slicing or boolean selection.
+    Tables that are not used as multivariate training data do not need to be
+    listed under ``multivariate``. ``C`` marks a covariate column and ``T``
+    marks a target column. The description is independent of the TsFile data
+    and is shared by dataframe subsets created through slicing or boolean
+    selection.
     """
 
     def __init__(
@@ -783,17 +791,31 @@ class TsFileDataFrame:
                 f"Description table name must be a string, got {type(table_name)}"
             )
 
-        table_description = self._owner()._description.get(table_name)
+        multivariate_description = self._owner()._description.get(_MULTIVARIATE_KEY)
+        if multivariate_description is None:
+            return []
+        if not isinstance(multivariate_description, dict):
+            raise ValueError("Description field 'multivariate' must be a JSON object")
+
+        table_description = multivariate_description.get(table_name)
         if table_description is None:
             return []
         if not isinstance(table_description, dict):
             raise ValueError(
-                f"Description for table '{table_name}' must be a JSON object"
+                f"Description for multivariate table '{table_name}' must be a JSON object"
+            )
+
+        columns_description = table_description.get(_COLUMNS_KEY)
+        if columns_description is None:
+            return []
+        if not isinstance(columns_description, dict):
+            raise ValueError(
+                f"Description field 'multivariate.{table_name}.columns' must be a JSON object"
             )
 
         invalid_roles = {
             column: column_role
-            for column, column_role in table_description.items()
+            for column, column_role in columns_description.items()
             if not isinstance(column_role, str) or column_role not in _DESCRIPTION_ROLES
         }
         if invalid_roles:
@@ -804,7 +826,7 @@ class TsFileDataFrame:
             )
         return [
             column
-            for column, column_role in table_description.items()
+            for column, column_role in columns_description.items()
             if column_role == role
         ]
 

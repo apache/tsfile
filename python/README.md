@@ -41,12 +41,19 @@ covariate and `T` for a target column:
 
 ```json
 {
-  "weather": {
-    "temperature": "C",
-    "humidity": "T"
+  "multivariate": {
+    "weather": {
+      "columns": {
+        "temperature": "C",
+        "humidity": "T"
+      }
+    }
   }
 }
 ```
+
+Tables that are not used as multivariate training data may be omitted from
+`multivariate`.
 
 Pass the description path when opening the dataframe. `get` and `set` provide
 dictionary-style access to top-level JSON values; `set` writes the updated
@@ -54,7 +61,7 @@ description back to disk.
 
 ```python
 df = TsFileDataFrame("weather.tsfile", description_path="description.json")
-df.get("weather")
+df.get("multivariate")
 df.get_covariate_columns("weather")
 df.get_target_columns("weather")
 df.get_covariate_column_count("weather")
@@ -66,7 +73,10 @@ df.get_device_statistics("weather")
 df.get_device_point_count("weather", "device_a")
 df.get_device_stats("weather", {"device": "device_a"})
 df.list_device_metadata("weather")
-df.set("weather", {"temperature": "T", "humidity": "T"})
+df.set(
+    "multivariate",
+    {"weather": {"columns": {"temperature": "T", "humidity": "T"}}},
+)
 df.close()
 ```
 

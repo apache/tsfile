@@ -266,9 +266,13 @@ def test_dataset_description_get_set_and_column_roles(tmp_path):
     description_path.write_text(
         json.dumps(
             {
-                "weather": {
-                    "temperature": "C",
-                    "humidity": "T",
+                "multivariate": {
+                    "weather": {
+                        "columns": {
+                            "temperature": "C",
+                            "humidity": "T",
+                        }
+                    }
                 }
             }
         ),
@@ -280,9 +284,13 @@ def test_dataset_description_get_set_and_column_roles(tmp_path):
         show_progress=False,
         description_path=description_path,
     ) as tsdf:
-        assert tsdf.get("weather") == {
-            "temperature": "C",
-            "humidity": "T",
+        assert tsdf.get("multivariate") == {
+            "weather": {
+                "columns": {
+                    "temperature": "C",
+                    "humidity": "T",
+                }
+            }
         }
         assert tsdf.get("missing") is None
         assert tsdf.get("missing", {"default": True}) == {"default": True}
@@ -293,8 +301,8 @@ def test_dataset_description_get_set_and_column_roles(tmp_path):
         assert tsdf.get_covariate_columns("missing") == []
         assert tsdf.get_target_column_count("missing") == 0
 
-        description = tsdf.get("weather")
-        description["temperature"] = "T"
+        description = tsdf.get("multivariate")
+        description["weather"]["columns"]["temperature"] = "T"
         assert tsdf.get_covariate_columns("weather") == ["temperature"]
 
         with pytest.raises(TypeError, match="must be JSON serializable"):
@@ -303,19 +311,27 @@ def test_dataset_description_get_set_and_column_roles(tmp_path):
 
         subset = tsdf[:1]
         subset.set(
-            "weather",
+            "multivariate",
             {
-                "temperature": "T",
-                "humidity": "T",
+                "weather": {
+                    "columns": {
+                        "temperature": "T",
+                        "humidity": "T",
+                    }
+                }
             },
         )
         assert tsdf.get_covariate_column_count("weather") == 0
         assert tsdf.get_target_columns("weather") == ["temperature", "humidity"]
 
     assert json.loads(description_path.read_text(encoding="utf-8")) == {
-        "weather": {
-            "temperature": "T",
-            "humidity": "T",
+        "multivariate": {
+            "weather": {
+                "columns": {
+                    "temperature": "T",
+                    "humidity": "T",
+                }
+            }
         }
     }
 
@@ -330,12 +346,44 @@ def test_dataset_description_set_creates_missing_file(tmp_path):
         show_progress=False,
         description_path=description_path,
     ) as tsdf:
-        assert tsdf.get("weather") is None
-        tsdf.set("weather", {"temperature": "C", "humidity": "T"})
+        assert tsdf.get("multivariate") is None
+        tsdf.set(
+            "multivariate",
+            {
+                "weather": {
+                    "columns": {
+                        "temperature": "C",
+                        "humidity": "T",
+                    }
+                }
+            },
+        )
 
     assert json.loads(description_path.read_text(encoding="utf-8")) == {
-        "weather": {"temperature": "C", "humidity": "T"}
+        "multivariate": {
+            "weather": {
+                "columns": {
+                    "temperature": "C",
+                    "humidity": "T",
+                }
+            }
+        }
     }
+
+
+def test_dataset_description_allows_empty_or_unlisted_multivariate_tables(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    description_path = tmp_path / "description.json"
+    _write_weather_file(path, 0)
+    description_path.write_text(json.dumps({"multivariate": {}}), encoding="utf-8")
+
+    with TsFileDataFrame(
+        str(path),
+        show_progress=False,
+        description_path=description_path,
+    ) as tsdf:
+        assert tsdf.get_covariate_columns("weather") == []
+        assert tsdf.get_target_columns("weather") == []
 
 
 def test_dataset_description_rejects_invalid_json_and_roles(tmp_path):
@@ -352,7 +400,8 @@ def test_dataset_description_rejects_invalid_json_and_roles(tmp_path):
         )
 
     description_path.write_text(
-        json.dumps({"weather": {"temperature": "X"}}), encoding="utf-8"
+        json.dumps({"multivariate": {"weather": {"columns": {"temperature": "X"}}}}),
+        encoding="utf-8",
     )
     with TsFileDataFrame(
         str(path),
@@ -362,7 +411,10 @@ def test_dataset_description_rejects_invalid_json_and_roles(tmp_path):
         with pytest.raises(ValueError, match="expected 'C' or 'T'"):
             tsdf.get_covariate_columns("weather")
 
-        tsdf.set("weather", {"temperature": ["C"]})
+        tsdf.set(
+            "multivariate",
+            {"weather": {"columns": {"temperature": ["C"]}}},
+        )
         with pytest.raises(ValueError, match="expected 'C' or 'T'"):
             tsdf.get_target_columns("weather")
 
