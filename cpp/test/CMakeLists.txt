@@ -169,6 +169,11 @@ endif()
 
 enable_testing()
 
+add_test(
+        NAME DependencySourceCMakeTest
+        COMMAND ${CMAKE_COMMAND} -P
+                ${CMAKE_SOURCE_DIR}/cmake/tests/DependencySourceTest.cmake)
+
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
         "encoding/*_test.cc"

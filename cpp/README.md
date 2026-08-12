@@ -156,6 +156,35 @@ cmake -S cpp -B cpp/build/static \
 cmake --build cpp/build/static --target tsfile
 ```
 
+### Dependency Source Selection
+
+The global `TSFILE_DEPENDENCY_SOURCE` CMake option defines how migrated C++
+dependencies are resolved:
+
+- `AUTO` (default): prefer a compatible system package and fall back to the
+  bundled dependency.
+- `SYSTEM`: require compatible system packages and fail configuration with a
+  clear error when one is unavailable.
+- `BUNDLED`: use pinned dependencies managed by the TsFile build.
+
+For a direct CMake build, select the policy with:
+
+```bash
+cmake -S cpp -B cpp/build/system \
+  -DTSFILE_DEPENDENCY_SOURCE=SYSTEM
+```
+
+For a Maven build, use the corresponding Maven property:
+
+```bash
+mvn clean verify -P with-cpp \
+  -Dtsfile.dependency.source=SYSTEM
+```
+
+Dependencies are being migrated to this framework incrementally. Until an
+individual dependency is migrated, it continues to use its existing resolution
+behavior.
+
 Before you submit your code to GitHub, please ensure that the compilation is correct.
 
 ### configure the cross-compilation toolchain

@@ -31,6 +31,8 @@ if (POLICY CMP0079)
 endif ()
 set(TsFile_CPP_VERSION 2.3.2.dev)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
+
 option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
 message("cmake using: TSFILE_BUILD_SHARED=${TSFILE_BUILD_SHARED}")
 
