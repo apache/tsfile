@@ -26,26 +26,23 @@ set(GTEST_URL_LIST
         "https://hub.nuaa.cf/google/googletest/archive/refs/tags/release-1.12.1.zip"
         "https://hub.yzuu.cf/google/googletest/archive/refs/tags/release-1.12.1.zip"
 )
+set(GTEST_SHA256 "24564e3b712d3eb30ac9a85d92f7d720f60cc0173730ac166f27dda7fed76cb2")
 
 set(GTEST_ZIP_PATH "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip")
 set(DOWNLOADED 0)
 set(GTEST_URL "")
 set(TIMEOUT 30)
 
-# Treat only a real ZIP as valid (local header magic PK\x03\x04 -> hex 504b0304).
-# EXISTS alone is wrong: failed downloads often leave a 0-byte file.
-# Do not use plain file(READ)+string LENGTH on binary: CMake may report length > LIMIT.
+# Trust a cached archive only when it exactly matches the expected upstream file.
 set(GTEST_ZIP_LOCAL_VALID 0)
 if (EXISTS "${GTEST_ZIP_PATH}")
-    file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
-    string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-    string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-    if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
+    file(SHA256 "${GTEST_ZIP_PATH}" GTEST_ZIP_LOCAL_SHA256)
+    if ("${GTEST_ZIP_LOCAL_SHA256}" STREQUAL "${GTEST_SHA256}")
         set(GTEST_ZIP_LOCAL_VALID 1)
     else ()
         message(
                 WARNING
-                "Local googletest zip is empty or not a zip (${GTEST_ZIP_PATH}); "
+                "Local googletest zip has an unexpected SHA-256 (${GTEST_ZIP_PATH}); "
                 "will try download."
         )
         file(REMOVE "${GTEST_ZIP_PATH}")
@@ -63,22 +60,16 @@ endif ()
 if (NOT DOWNLOADED)
     foreach (URL ${GTEST_URL_LIST})
         message(STATUS "Trying to download from ${URL}")
-        file(DOWNLOAD ${URL} "${GTEST_ZIP_PATH}" STATUS DOWNLOAD_STATUS TIMEOUT
-                ${TIMEOUT})
+        file(DOWNLOAD "${URL}" "${GTEST_ZIP_PATH}" STATUS DOWNLOAD_STATUS TIMEOUT
+                ${TIMEOUT} EXPECTED_HASH "SHA256=${GTEST_SHA256}")
 
         list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
         if (${DOWNLOAD_RESULT} EQUAL 0 AND EXISTS "${GTEST_ZIP_PATH}")
-            file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
-            string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-            string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-            if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
-                set(DOWNLOADED 1)
-                set(GTEST_URL ${GTEST_ZIP_PATH})
-                break()
-            else ()
-                message(WARNING "Download from ${URL} did not yield a valid zip; trying next URL...")
-                file(REMOVE "${GTEST_ZIP_PATH}")
-            endif ()
+            set(DOWNLOADED 1)
+            set(GTEST_URL ${GTEST_ZIP_PATH})
+            break()
+        else ()
+            file(REMOVE "${GTEST_ZIP_PATH}")
         endif ()
     endforeach ()
 endif ()

@@ -257,14 +257,24 @@ License: https://github.com/trinodb/trino/blob/master/LICENSE
 
 --------------------------------------------------------------------------------
 
-The following files include code is copied from lz4 project.
+The following files include code modified from the ANTLR4 project.
 
-./cpp/src/compress/lz4.c
-./cpp/src/compress/lz4.h
+./cpp/third_party/antlr4-cpp-runtime-4/
+
+Copyright: (c) 2012-2017 The ANTLR Project. All rights reserved.
+Project page: https://github.com/antlr/antlr4
+License: ./cpp/third_party/antlr4-cpp-runtime-4/LICENSE.txt (BSD-3-Clause and MIT notices)
+
+--------------------------------------------------------------------------------
+
+The following files include code copied from the LZ4 project.
+
+./cpp/third_party/lz4/lz4.c
+./cpp/third_party/lz4/lz4.h
 
 Copyright: (C) 2011-2020, Yann Collet.
 Project page: http://www.lz4.org
-License: https://github.com/lz4/lz4/blob/dev/LICENSE
+License: ./cpp/third_party/lz4/LICENSE (BSD-2-Clause)
 
 --------------------------------------------------------------------------------
 
@@ -295,6 +305,16 @@ The following files include code is copied from lzokay project.
 Copyright: (c) 2018 Jack Andersen
 Project page: https://github.com/AxioDL/lzokay
 License: https://github.com/AxioDL/lzokay/blob/master/LICENSE
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from the zlib project.
+
+./cpp/third_party/zlib-1.3.1/
+
+Copyright: (C) 1995-2022 Jean-loup Gailly and Mark Adler
+Project page: https://github.com/madler/zlib
+License: ./cpp/third_party/zlib-1.3.1/LICENSE (zlib License)
 
 --------------------------------------------------------------------------------
 
