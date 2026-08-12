@@ -66,6 +66,11 @@ public class NullColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    return create(type, positionCount);
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return true;
   }

@@ -80,6 +80,17 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    TSDataType sourceType = getDataType();
+    if (type == sourceType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(sourceType, type);
+    // Transform the single stored value and keep the run-length representation.
+    return new RunLengthEncodedColumn(value.convertTo(type), positionCount);
+  }
+
+  @Override
   public boolean getBoolean(int position) {
     return value.getBoolean(0);
   }

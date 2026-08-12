@@ -253,6 +253,24 @@ public final class DictionaryColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    TSDataType sourceType = getDataType();
+    if (type == sourceType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(sourceType, type);
+    // Transform dictionary values only, preserving the ids and dictionary encoding.
+    return new DictionaryColumn(
+        idsOffset,
+        positionCount,
+        dictionary.convertTo(type),
+        ids,
+        isCompact(),
+        isSequentialIds,
+        randomDictionaryId());
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return mayHaveNull && dictionary.mayHaveNull();
   }

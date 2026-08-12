@@ -20,9 +20,11 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -93,6 +95,24 @@ public class DoubleColumn implements Column {
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.INT64_ARRAY;
+  }
+
+  @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.DOUBLE) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.DOUBLE, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else {
+        builder.writeDouble(getDouble(position));
+      }
+    }
+    return builder.build();
   }
 
   @Override

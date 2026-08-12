@@ -36,6 +36,9 @@ public interface Column {
   /** Get the encoding for this column. */
   ColumnEncoding getEncoding();
 
+  /** Converts this column to the specified data type. */
+  Column convertTo(TSDataType type);
+
   /** Gets a boolean at {@code position}. */
   default boolean getBoolean(int position) {
     throw new UnsupportedOperationException(getClass().getName());

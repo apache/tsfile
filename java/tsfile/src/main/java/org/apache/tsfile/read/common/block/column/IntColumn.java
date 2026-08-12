@@ -20,9 +20,11 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -122,6 +124,28 @@ public class IntColumn implements Column {
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.INT32_ARRAY;
+  }
+
+  @Override
+  public Column convertTo(TSDataType type) {
+    if (type == dataType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(dataType, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else if (dataType == TSDataType.DATE) {
+        // DATE has an int physical representation but a formatted text cast.
+        builder.writeBinary(
+            new Binary(TSDataType.getDateStringValue(getInt(position)), StandardCharsets.UTF_8));
+      } else {
+        builder.writeInt(getInt(position));
+      }
+    }
+    return builder.build();
   }
 
   @Override
