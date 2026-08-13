@@ -237,6 +237,7 @@ message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
 
 if (ENABLE_SNAPPY)
     add_definitions(-DENABLE_SNAPPY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SnappyDependency.cmake)
 endif()
 
 option(ENABLE_LZ4 "Enable LZ4 compression" ON)

@@ -29,7 +29,75 @@ else()
     message("ANTLR4 runtime is disabled")
 endif()
 if (ENABLE_SNAPPY)
-    add_subdirectory(google_snappy)
+    if (TSFILE_SNAPPY_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/SnappySource.cmake)
+
+        # Snappy's 1.2.1 probe accepts older NEON implementations even though
+        # its source requires the ARMv8 table-lookup intrinsic. Seed the
+        # upstream result with the complete capability check without modifying
+        # the downloaded source.
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles("
+#include <arm_neon.h>
+#include <stdint.h>
+int main() {
+  uint8_t val = 3, dup[16];
+  uint8x16_t v1 = vld1q_dup_u8(&val);
+  uint8x16_t v2 = vqtbl1q_u8(v1, v1);
+  vst1q_u8(dup, v2);
+  return 0;
+}" TSFILE_SNAPPY_HAVE_NEON)
+        set(SNAPPY_HAVE_NEON ${TSFILE_SNAPPY_HAVE_NEON}
+                CACHE INTERNAL
+                "Whether Snappy's required NEON intrinsics are available"
+                FORCE)
+
+        set(SNAPPY_BUILD_TESTS OFF CACHE BOOL
+                "Disable tests in the TsFile-managed Snappy build" FORCE)
+        set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL
+                "Disable benchmarks in the TsFile-managed Snappy build" FORCE)
+        set(SNAPPY_INSTALL OFF CACHE BOOL
+                "Disable installation from the TsFile-managed Snappy build"
+                FORCE)
+
+        # Always embed a position-independent static Snappy library in TsFile,
+        # while preserving a caller's global BUILD_SHARED_LIBS cache value.
+        get_property(_TSFILE_BUILD_SHARED_LIBS_WAS_SET
+                CACHE BUILD_SHARED_LIBS PROPERTY TYPE SET)
+        if (_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+            get_property(_TSFILE_BUILD_SHARED_LIBS_VALUE
+                    CACHE BUILD_SHARED_LIBS PROPERTY VALUE)
+        endif ()
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL
+                "Build the TsFile-managed Snappy library statically" FORCE)
+        add_subdirectory(
+                "${TSFILE_SNAPPY_SOURCE_DIR}"
+                "${CMAKE_BINARY_DIR}/third_party/snappy"
+                EXCLUDE_FROM_ALL)
+        if (_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+            set(BUILD_SHARED_LIBS ${_TSFILE_BUILD_SHARED_LIBS_VALUE}
+                    CACHE BOOL "Build shared libraries" FORCE)
+        else ()
+            unset(BUILD_SHARED_LIBS CACHE)
+        endif ()
+        unset(_TSFILE_BUILD_SHARED_LIBS_VALUE)
+        unset(_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+
+        set_target_properties(snappy PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+    elseif (NOT TARGET Snappy::snappy)
+        message(FATAL_ERROR
+                "System Snappy was selected, but the Snappy::snappy target "
+                "is missing.")
+    endif ()
+
+    add_library(tsfile_snappy INTERFACE)
+    if (TSFILE_SNAPPY_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_snappy INTERFACE snappy)
+    else ()
+        target_link_libraries(tsfile_snappy INTERFACE Snappy::snappy)
+    endif ()
+    add_library(TsFile::Snappy ALIAS tsfile_snappy)
 endif()
 
 if (ENABLE_LZ4)

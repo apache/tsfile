@@ -57,13 +57,6 @@ set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
 )
 
-if (ENABLE_SNAPPY)
-    list(APPEND PROJECT_INCLUDE_DIR
-            ${THIRD_PARTY_INCLUDE}/google_snappy
-            ${CMAKE_SOURCE_DIR}/third_party/google_snappy
-    )
-endif()
-
 if (ENABLE_ANTLR4)
     list(APPEND PROJECT_INCLUDE_DIR
             ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
@@ -106,7 +99,7 @@ add_subdirectory(writer)
 set(COMPRESSION_LIBS "")
 
 if (ENABLE_SNAPPY)
-    list(APPEND COMPRESSION_LIBS snappy)
+    list(APPEND COMPRESSION_LIBS TsFile::Snappy)
 endif()
 
 if (ENABLE_LZ4)

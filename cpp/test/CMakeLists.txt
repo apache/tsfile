@@ -146,11 +146,6 @@ include_directories(
         ${THIRD_PARTY_INCLUDE}
 )
 
-if (ENABLE_SNAPPY)
-    include_directories(${THIRD_PARTY_INCLUDE}/google_snappy)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/google_snappy)
-endif()
-
 if (ENABLE_ANTLR4)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
 endif()
@@ -161,6 +156,11 @@ add_test(
         NAME DependencySourceCMakeTest
         COMMAND ${CMAKE_COMMAND} -P
                 ${CMAKE_SOURCE_DIR}/cmake/tests/DependencySourceTest.cmake)
+add_test(
+        NAME SnappyDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/SnappyDependencyTest.cmake)
 add_test(
         NAME LZ4DependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
@@ -248,6 +248,9 @@ target_link_libraries(
         GTest::gmock
         tsfile
 )
+if (ENABLE_SNAPPY)
+    target_link_libraries(TsFile_Test TsFile::Snappy)
+endif ()
 if (ENABLE_LZ4)
     target_link_libraries(TsFile_Test TsFile::LZ4)
 endif ()

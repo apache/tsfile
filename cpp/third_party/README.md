@@ -29,7 +29,7 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. LZ4, lzokay, and zlib have migrated to these modes; the other
+modes. Snappy, LZ4, lzokay, and zlib have migrated to these modes; the other
 dependencies in the inventory continue to use their repository copies until
 they are migrated incrementally.
 
@@ -38,7 +38,7 @@ they are migrated incrementally.
 | Dependency | Source management | Upstream version | License |
 | --- | --- | --- | --- |
 | ANTLR4 C++ Runtime | `antlr4-cpp-runtime-4` | [`4.9.3`](https://github.com/antlr/antlr4/tree/4.9.3/runtime/Cpp) | BSD-3-Clause, with MIT notices; see `antlr4-cpp-runtime-4/LICENSE.txt` |
-| Snappy | `google_snappy` | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; see `google_snappy/COPYING` |
+| Snappy | Verified tag archive downloaded during configuration | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | lzokay | Verified commit archive downloaded during configuration | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | SIMDe | `simde-0.8.4-rc3` | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; see `simde-0.8.4-rc3/COPYING` |
@@ -59,13 +59,19 @@ they are migrated incrementally.
 
 ### Snappy
 
-- Origin and scope: selected library sources and CMake files from upstream tag
-  `1.2.1`.
-- Trimming: command-line, C API, tests, benchmarks, fuzzers, Bazel files,
-  documentation, test data, and upstream submodules are omitted.
-- Local modifications: CMake defaults enable position-independent code and
-  disable upstream tests and benchmarks; the NEON probe was adjusted; and
-  `snappy.cc` adds the headers needed for local compiler configurations.
+- Origin and scope: the upstream `1.2.1` tag archive. The build uses the
+  upstream CMake target with tests, benchmarks, and installation disabled.
+- Archive URL:
+  `https://github.com/google/snappy/archive/refs/tags/1.2.1.tar.gz`.
+- Archive SHA-256:
+  `736aeb64d86566d2236ddffa2865ee5d7a82d26c9016b36218fcc27ea4f09f86`.
+- Repository scope and local modifications: no Snappy source is committed and
+  no upstream source is modified. TsFile's CMake integration enables PIC and
+  supplies a stricter ARM NEON capability probe before configuring upstream.
+- Resolution: `SYSTEM` accepts Snappy 1.2.1 or newer in the 1.x release series
+  through the `Snappy::snappy` target; `BUNDLED` downloads or reuses the
+  verified archive; and `AUTO` prefers a compatible system package before
+  falling back to the verified archive.
 
 ### LZ4
 
