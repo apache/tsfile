@@ -24,13 +24,13 @@
 Keeping third-party source code in the repository is an exception. Such source
 must be small and stable, have a license that permits redistribution, and be
 accepted through community review. Build-managed dependencies should instead
-use pinned upstream source archives with cryptographic digest verification. When a
-dependency is added or updated, this file and the root `LICENSE` file must be
-updated together.
+use pinned upstream source archives with cryptographic digest verification.
+When a dependency is added or updated, this file and the root `LICENSE` file
+must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. LZ4 has migrated to these modes; the other dependencies in the bundled
-inventory continue to use their bundled copies until they are migrated
+modes. LZ4 and zlib have migrated to these modes; the other dependencies in the
+inventory continue to use their repository copies until they are migrated
 incrementally.
 
 ## Dependency Inventory
@@ -42,9 +42,9 @@ incrementally.
 | LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | lzokay | `lzokay` | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; see `lzokay/LICENSE` |
 | SIMDe | `simde-0.8.4-rc3` | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; see `simde-0.8.4-rc3/COPYING` |
-| zlib | `zlib-1.3.1` | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; see `zlib-1.3.1/LICENSE` |
+| zlib | Verified tag archive downloaded during configuration | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; included in the downloaded archive and reproduced in the root `LICENSE` |
 
-## Bundling Details
+## Dependency Details
 
 ### ANTLR4 C++ Runtime
 
@@ -98,13 +98,20 @@ incrementally.
 
 ### zlib
 
-- Origin and scope: the upstream tree at tag `v1.3.1`.
-- Trimming: generated `zconf.h` and `treebuild.xml` are omitted.
-- Local modifications: `CMakeLists.txt` compiles `zlibstatic` with `-fPIC`.
-  Some text files have normalized line endings; no source behavior changes are
-  recorded.
+- Origin and scope: the upstream `v1.3.1` tag archive. The upstream CMake build
+  produces the static library used by TsFile.
+- Archive URL:
+  `https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz`.
+- Archive SHA-256:
+  `17e88863f3600672ab49182f217281b6fc4d3c762bde361935e436a95214d05c`.
+- Repository scope and local modifications: no zlib source is committed and no
+  upstream source is modified. The TsFile-owned CMake integration disables
+  upstream examples and enables position-independent code on `zlibstatic`.
+- Resolution: `SYSTEM` accepts zlib 1.3.1 or newer and earlier than 2.0.0;
+  `BUNDLED` downloads or reuses the verified archive; and `AUTO` prefers a
+  compatible system zlib before falling back to the verified archive.
 
-## Non-Bundled Dependencies
+## Other Build Dependencies
 
 | Dependency | Purpose | Upstream version | License | Current resolution |
 | --- | --- | --- | --- | --- |

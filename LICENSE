@@ -267,8 +267,8 @@ License: ./cpp/third_party/antlr4-cpp-runtime-4/LICENSE.txt (BSD-3-Clause and MI
 
 --------------------------------------------------------------------------------
 
-When built with TSFILE_DEPENDENCY_SOURCE=BUNDLED, the C++ library includes code
-from the LZ4 project, downloaded from the verified v1.9.4 tag source archive.
+When the C++ build uses the TsFile-managed LZ4 source, the library includes
+code downloaded from the verified LZ4 v1.9.4 tag source archive.
 
 Project page: https://github.com/lz4/lz4
 Source archive: https://github.com/lz4/lz4/archive/refs/tags/v1.9.4.tar.gz
@@ -331,13 +331,35 @@ License: https://github.com/AxioDL/lzokay/blob/master/LICENSE
 
 --------------------------------------------------------------------------------
 
-The following files include code modified from the zlib project.
+When the C++ build uses the TsFile-managed zlib source, the library includes
+code downloaded from the verified zlib v1.3.1 tag source archive.
 
-./cpp/third_party/zlib-1.3.1/
-
-Copyright: (C) 1995-2022 Jean-loup Gailly and Mark Adler
 Project page: https://github.com/madler/zlib
-License: ./cpp/third_party/zlib-1.3.1/LICENSE (zlib License)
+Source archive: https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz
+SHA-256: 17e88863f3600672ab49182f217281b6fc4d3c762bde361935e436a95214d05c
+
+Copyright notice:
+
+ (C) 1995-2022 Jean-loup Gailly and Mark Adler
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  Jean-loup Gailly        Mark Adler
+  jloup@gzip.org          madler@alumni.caltech.edu
 
 --------------------------------------------------------------------------------
 

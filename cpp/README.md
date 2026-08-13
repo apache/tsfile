@@ -162,15 +162,17 @@ The global `TSFILE_DEPENDENCY_SOURCE` CMake option defines how migrated C++
 dependencies are resolved:
 
 - `AUTO` (default): prefer a compatible system package and fall back to the
-  bundled dependency.
+  verified source archive managed by the build.
 - `SYSTEM`: require compatible system packages and fail configuration with a
   clear error when one is unavailable.
 - `BUNDLED`: download and build pinned dependency source archives managed by
   the TsFile build.
 
-LZ4 is currently resolved through this policy. A compatible system LZ4 must
-be version 1.9.4 or newer in the 1.x release series. Other dependencies retain
-their existing resolution behavior until they are migrated incrementally.
+LZ4 and zlib are currently resolved through this policy. A compatible system
+LZ4 must be version 1.9.4 or newer in the 1.x release series. A compatible
+system zlib must be version 1.3.1 or newer and earlier than 2.0.0. Other
+dependencies retain their existing resolution behavior until they are migrated
+incrementally.
 
 For a direct CMake build, select the policy with:
 
@@ -179,12 +181,14 @@ cmake -S cpp -B cpp/build/system \
   -DTSFILE_DEPENDENCY_SOURCE=SYSTEM
 ```
 
-If LZ4 is installed in a non-standard prefix, set `LZ4_ROOT`:
+If LZ4 or zlib is installed in a non-standard prefix, set `LZ4_ROOT` or
+`ZLIB_ROOT`, respectively:
 
 ```bash
 cmake -S cpp -B cpp/build/system \
   -DTSFILE_DEPENDENCY_SOURCE=SYSTEM \
-  -DLZ4_ROOT=/path/to/lz4
+  -DLZ4_ROOT=/path/to/lz4 \
+  -DZLIB_ROOT=/path/to/zlib
 ```
 
 For a Maven build, use the corresponding Maven property:
@@ -194,12 +198,14 @@ mvn clean verify -P with-cpp \
   -Dtsfile.dependency.source=SYSTEM
 ```
 
-In `BUNDLED` mode, LZ4 v1.9.4 is downloaded from its upstream GitHub tag
-archive and verified with SHA-256 before extraction. Third-party source is
-placed in the build directory and is not committed to this repository.
+In `BUNDLED` mode, LZ4 v1.9.4 and zlib v1.3.1 are downloaded from their
+upstream GitHub tag archives and verified with SHA-256 before extraction.
+Third-party source is placed in the build directory and is not committed to
+this repository.
 
-For an offline build, first place `lz4-v1.9.4.tar.gz` in a persistent cache,
-then configure with network access disabled:
+For an offline build with both dependencies enabled, first place
+`lz4-v1.9.4.tar.gz` and `zlib-v1.3.1.tar.gz` in a persistent cache, then
+configure with network access disabled:
 
 ```bash
 cmake -S cpp -B cpp/build/offline \
@@ -208,9 +214,10 @@ cmake -S cpp -B cpp/build/offline \
   -DTSFILE_DEPENDENCY_CACHE=/path/to/dependency-cache
 ```
 
-The archive can also be supplied explicitly with
-`-DTSFILE_LZ4_ARCHIVE=/path/to/lz4-v1.9.4.tar.gz`. Both cached and explicitly
-supplied archives must match the pinned SHA-256 digest. The equivalent Maven
+The archives can also be supplied explicitly with
+`-DTSFILE_LZ4_ARCHIVE=/path/to/lz4-v1.9.4.tar.gz` and
+`-DTSFILE_ZLIB_ARCHIVE=/path/to/zlib-v1.3.1.tar.gz`. Cached and explicitly
+supplied archives must match their pinned SHA-256 digests. The equivalent Maven
 properties are `tsfile.dependency.offline` and `tsfile.dependency.cache`.
 
 Dependencies are being migrated to this framework incrementally. Until an

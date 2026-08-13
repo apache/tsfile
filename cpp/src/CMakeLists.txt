@@ -70,15 +70,6 @@ if (ENABLE_LZOKAY)
     )
 endif()
 
-if (ENABLE_ZLIB)
-    list(APPEND PROJECT_INCLUDE_DIR
-            # zlib.h ships in the source tree; zconf.h is generated into the
-            # build tree by zlib's own CMake, so both directories are needed.
-            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.3.1
-            ${THIRD_PARTY_INCLUDE}/zlib-1.3.1
-    )
-endif()
-
 if (ENABLE_ANTLR4)
     list(APPEND PROJECT_INCLUDE_DIR
             ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
@@ -133,7 +124,7 @@ if (ENABLE_LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)
-    list(APPEND COMPRESSION_LIBS zlibstatic)
+    list(APPEND COMPRESSION_LIBS TsFile::ZLIB)
 endif()
 
 message("Compression libraries: ${COMPRESSION_LIBS}")

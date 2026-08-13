@@ -60,7 +60,30 @@ if (ENABLE_LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)
-    add_subdirectory(zlib-1.3.1)
+    if (TSFILE_ZLIB_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/ZLIBSource.cmake)
+        set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL
+                "Disable examples in the TsFile-managed zlib build" FORCE)
+        set(SKIP_INSTALL_ALL ON)
+        add_subdirectory(
+                "${TSFILE_ZLIB_SOURCE_DIR}"
+                "${CMAKE_BINARY_DIR}/third_party/zlib"
+                EXCLUDE_FROM_ALL)
+        unset(SKIP_INSTALL_ALL)
+        set_target_properties(zlibstatic PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+    elseif (NOT TARGET ZLIB::ZLIB)
+        message(FATAL_ERROR
+                "System zlib was selected, but the ZLIB::ZLIB target is missing.")
+    endif ()
+
+    add_library(tsfile_zlib INTERFACE)
+    if (TSFILE_ZLIB_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_zlib INTERFACE zlibstatic)
+    else ()
+        target_link_libraries(tsfile_zlib INTERFACE ZLIB::ZLIB)
+    endif ()
+    add_library(TsFile::ZLIB ALIAS tsfile_zlib)
 endif()
 
 if (ENABLE_SIMD)
