@@ -29,9 +29,9 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. LZ4 and zlib have migrated to these modes; the other dependencies in the
-inventory continue to use their repository copies until they are migrated
-incrementally.
+modes. LZ4, lzokay, and zlib have migrated to these modes; the other
+dependencies in the inventory continue to use their repository copies until
+they are migrated incrementally.
 
 ## Dependency Inventory
 
@@ -40,7 +40,7 @@ incrementally.
 | ANTLR4 C++ Runtime | `antlr4-cpp-runtime-4` | [`4.9.3`](https://github.com/antlr/antlr4/tree/4.9.3/runtime/Cpp) | BSD-3-Clause, with MIT notices; see `antlr4-cpp-runtime-4/LICENSE.txt` |
 | Snappy | `google_snappy` | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; see `google_snappy/COPYING` |
 | LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
-| lzokay | `lzokay` | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; see `lzokay/LICENSE` |
+| lzokay | Verified commit archive downloaded during configuration | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | SIMDe | `simde-0.8.4-rc3` | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; see `simde-0.8.4-rc3/COPYING` |
 | zlib | Verified tag archive downloaded during configuration | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; included in the downloaded archive and reproduced in the root `LICENSE` |
 
@@ -84,11 +84,20 @@ incrementally.
 
 ### lzokay
 
-- Origin and scope: `lzokay.cpp`, `lzokay.hpp`, and `LICENSE` from upstream
-  commit `5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2`.
-- Trimming: upstream build, example, and repository metadata files are omitted.
-- Local modifications: `lzokay.cpp` comments out unused constants and
-  initializes `lb_pos` to zero. The header and license are unchanged.
+- Origin and scope: the upstream archive at commit
+  `5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2`. The build compiles
+  `lzokay.cpp` and exposes `lzokay.hpp` from the extracted archive.
+- Archive URL:
+  `https://github.com/AxioDL/lzokay/archive/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2.tar.gz`.
+- Archive SHA-256:
+  `eb518bf793da0b4420a3ffdf1511851575bc62ef350b303f14ff7355f370da6a`.
+- Repository scope and local modifications: no lzokay source is committed and
+  no upstream source is modified. The earlier repository copy's warning-only
+  changes and defensive initialization are no longer carried.
+- Resolution: `SYSTEM` accepts an upstream-compatible CMake package version
+  0.1 or newer and earlier than 1.0; `BUNDLED` downloads or reuses the verified
+  archive; and `AUTO` prefers a compatible system package before falling back
+  to the verified archive.
 
 ### SIMDe
 

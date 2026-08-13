@@ -33,9 +33,10 @@ and `storage::TsFileTableWriter` APIs and does not modify the storage engine.
 The CLI is part of the C++ module and is built by default (CMake option `BUILD_TOOLS=ON`).
 The CMake target is `tsfile_cli`; the produced executable is named `tsfile-cli`.
 
-**Prerequisites:** a C++11 compiler (GCC / Clang / MSVC) and CMake ≥ 3.11. The third-party
-dependencies (ANTLR4, Snappy, LZ4, LZOKAY, Zlib, GoogleTest) are bundled under
-`cpp/third_party/` and built automatically — no separate install step needed.
+**Prerequisites:** a C++11 compiler (GCC / Clang / MSVC) and CMake ≥ 3.11. The
+build resolves third-party dependencies automatically from compatible system
+packages, verified source archives, or the remaining repository copies. No
+separate install step is needed with the default dependency policy.
 
 Choose any one of the following.
 

@@ -64,12 +64,6 @@ if (ENABLE_SNAPPY)
     )
 endif()
 
-if (ENABLE_LZOKAY)
-    list(APPEND PROJECT_INCLUDE_DIR
-            ${CMAKE_SOURCE_DIR}/third_party/lzokay
-    )
-endif()
-
 if (ENABLE_ANTLR4)
     list(APPEND PROJECT_INCLUDE_DIR
             ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
@@ -120,7 +114,7 @@ if (ENABLE_LZ4)
 endif()
 
 if (ENABLE_LZOKAY)
-    list(APPEND COMPRESSION_LIBS lzokay)
+    list(APPEND COMPRESSION_LIBS TsFile::LZOKAY)
 endif()
 
 if (ENABLE_ZLIB)

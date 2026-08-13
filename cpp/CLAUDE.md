@@ -86,7 +86,9 @@ cpp/src/
 - **C++11** standard, targets CMake 3.11+
 - Dual data model: **tree-view** (`TsFileTreeWriter/Reader`) and **table-view** (`TsFileTableWriter`, `TableQueryExecutor`)
 - Parallel column encoding in table write path, controlled by `ENABLE_THREADS`
-- Third-party libraries are bundled under `third_party/` (ANTLR4, Snappy, LZ4, LZOKAY, Zlib, SIMDe)
+- Third-party dependencies are either retained under `third_party/` or resolved
+  from compatible system packages and verified source archives; see
+  `third_party/README.md`.
 - `cwrapper/` provides the C API that the Python module binds to via Cython
 
 ## Code Style

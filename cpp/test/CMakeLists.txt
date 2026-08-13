@@ -151,10 +151,6 @@ if (ENABLE_SNAPPY)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/google_snappy)
 endif()
 
-if (ENABLE_LZOKAY)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/lzokay)
-endif()
-
 if (ENABLE_ANTLR4)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
 endif()
@@ -175,6 +171,11 @@ add_test(
         COMMAND ${CMAKE_COMMAND}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZLIBDependencyTest.cmake)
+add_test(
+        NAME LZOKAYDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZOKAYDependencyTest.cmake)
 
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
@@ -249,6 +250,9 @@ target_link_libraries(
 )
 if (ENABLE_LZ4)
     target_link_libraries(TsFile_Test TsFile::LZ4)
+endif ()
+if (ENABLE_LZOKAY)
+    target_link_libraries(TsFile_Test TsFile::LZOKAY)
 endif ()
 if (ENABLE_ZLIB)
     target_link_libraries(TsFile_Test TsFile::ZLIB)

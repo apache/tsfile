@@ -252,6 +252,7 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 
 if (ENABLE_LZOKAY)
     add_definitions(-DENABLE_LZOKAY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LZOKAYDependency.cmake)
 endif()
 
 option(ENABLE_ZLIB "Enable Zlib compression" ON)

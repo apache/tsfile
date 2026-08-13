@@ -56,7 +56,34 @@ if (ENABLE_LZ4)
 endif()
 
 if (ENABLE_LZOKAY)
-    add_subdirectory(lzokay)
+    if (TSFILE_LZOKAY_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/LZOKAYSource.cmake)
+        add_library(tsfile_lzokay_bundled STATIC
+                "${TSFILE_LZOKAY_SOURCE_DIR}/lzokay.cpp")
+        set_target_properties(tsfile_lzokay_bundled PROPERTIES
+                POSITION_INDEPENDENT_CODE ON
+                CXX_STANDARD 14
+                CXX_STANDARD_REQUIRED ON)
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(tsfile_lzokay_bundled PRIVATE
+                    -Wno-unused-variable)
+        endif ()
+        target_include_directories(tsfile_lzokay_bundled PUBLIC
+                "${TSFILE_LZOKAY_SOURCE_DIR}")
+    elseif (NOT TARGET lzokay::lzokay)
+        message(FATAL_ERROR
+                "System lzokay was selected, but the lzokay::lzokay target "
+                "is missing.")
+    endif ()
+
+    add_library(tsfile_lzokay INTERFACE)
+    if (TSFILE_LZOKAY_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_lzokay INTERFACE
+                tsfile_lzokay_bundled)
+    else ()
+        target_link_libraries(tsfile_lzokay INTERFACE lzokay::lzokay)
+    endif ()
+    add_library(TsFile::LZOKAY ALIAS tsfile_lzokay)
 endif()
 
 if (ENABLE_ZLIB)
