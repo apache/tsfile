@@ -269,6 +269,14 @@ if (ENABLE_ZLIB)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZLIBDependency.cmake)
 endif()
 
+option(ENABLE_ZSTD "Enable Zstandard compression dependency" OFF)
+message("cmake using: ENABLE_ZSTD=${ENABLE_ZSTD}")
+
+if (ENABLE_ZSTD)
+    add_definitions(-DENABLE_ZSTD)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZSTDDependency.cmake)
+endif ()
+
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 

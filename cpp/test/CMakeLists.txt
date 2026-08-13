@@ -168,6 +168,11 @@ add_test(
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZLIBDependencyTest.cmake)
 add_test(
+        NAME ZSTDDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZSTDDependencyTest.cmake)
+add_test(
         NAME LZOKAYDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests

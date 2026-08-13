@@ -258,6 +258,55 @@ if (ENABLE_ZLIB)
     add_library(TsFile::ZLIB ALIAS tsfile_zlib)
 endif()
 
+if (ENABLE_ZSTD)
+    if (TSFILE_ZSTD_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/ZSTDSource.cmake)
+        set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL
+                "Disable programs in the TsFile-managed Zstandard build"
+                FORCE)
+        set(ZSTD_BUILD_TESTS OFF CACHE BOOL
+                "Disable tests in the TsFile-managed Zstandard build" FORCE)
+        set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL
+                "Disable contrib in the TsFile-managed Zstandard build"
+                FORCE)
+        set(ZSTD_BUILD_STATIC ON CACHE BOOL
+                "Build the TsFile-managed Zstandard library statically"
+                FORCE)
+        set(ZSTD_BUILD_SHARED OFF CACHE BOOL
+                "Do not build a shared TsFile-managed Zstandard library"
+                FORCE)
+        set(ZSTD_BUILD_DICTBUILDER OFF CACHE BOOL
+                "Disable dictionary builder in TsFile-managed Zstandard"
+                FORCE)
+        set(ZSTD_BUILD_DEPRECATED OFF CACHE BOOL
+                "Disable deprecated TsFile-managed Zstandard APIs" FORCE)
+        set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL
+                "Disable legacy frame support in TsFile-managed Zstandard"
+                FORCE)
+        set(ZSTD_MULTITHREAD_SUPPORT OFF CACHE BOOL
+                "Disable Zstandard-internal threading in TsFile" FORCE)
+        add_subdirectory(
+                "${TSFILE_ZSTD_SOURCE_DIR}/build/cmake"
+                "${CMAKE_BINARY_DIR}/third_party/zstd"
+                EXCLUDE_FROM_ALL)
+        set_target_properties(libzstd_static PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+    elseif ("${TSFILE_ZSTD_SYSTEM_TARGET}" STREQUAL "")
+        message(FATAL_ERROR
+                "System Zstandard was selected, but no usable target is "
+                "available.")
+    endif ()
+
+    add_library(tsfile_zstd INTERFACE)
+    if (TSFILE_ZSTD_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_zstd INTERFACE libzstd_static)
+    else ()
+        target_link_libraries(tsfile_zstd INTERFACE
+                ${TSFILE_ZSTD_SYSTEM_TARGET})
+    endif ()
+    add_library(TsFile::ZSTD ALIAS tsfile_zstd)
+endif ()
+
 if (ENABLE_SIMD)
     if (TSFILE_SIMDE_SOURCE STREQUAL "BUNDLED")
         include(${CMAKE_SOURCE_DIR}/cmake/SIMDeSource.cmake)

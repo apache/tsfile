@@ -29,9 +29,9 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, and zlib have migrated to these
-modes. In `BUNDLED` mode, source is downloaded into the build cache rather
-than kept in this repository.
+modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, and Zstandard have migrated to
+these modes. In `BUNDLED` mode, source is downloaded into the build cache
+rather than kept in this repository.
 
 ## Dependency Inventory
 
@@ -43,6 +43,7 @@ than kept in this repository.
 | lzokay | Verified commit archive downloaded during configuration | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | SIMDe | Verified tag archive downloaded during configuration | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | zlib | Verified tag archive downloaded during configuration | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; included in the downloaded archive and reproduced in the root `LICENSE` |
+| Zstandard | Verified tag archive downloaded during configuration | [`v1.5.7`](https://github.com/facebook/zstd/tree/v1.5.7) | BSD-3-Clause option selected from the upstream dual license; included in the downloaded archive and reproduced in the root `LICENSE` |
 
 ## Dependency Details
 
@@ -148,6 +149,26 @@ than kept in this repository.
 - Resolution: `SYSTEM` accepts zlib 1.3.1 or newer and earlier than 2.0.0;
   `BUNDLED` downloads or reuses the verified archive; and `AUTO` prefers a
   compatible system zlib before falling back to the verified archive.
+
+### Zstandard
+
+- Origin and scope: the upstream `v1.5.7` tag archive. The upstream CMake build
+  produces a PIC static compression/decompression library; programs, tests,
+  contrib code, dictionary-builder code, deprecated APIs, legacy frame support,
+  and Zstandard-internal threading are disabled.
+- Archive URL:
+  `https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz`.
+- Archive SHA-256:
+  `37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3`.
+- License choice: upstream offers BSD-3-Clause or GPLv2. TsFile selects only
+  the BSD-3-Clause option. BSD-3-Clause is an ASF Category A license.
+- Repository scope and local modifications: no Zstandard source is committed
+  and no upstream source is modified. `ENABLE_ZSTD` is off by default until a
+  TsFile compression implementation consumes the `TsFile::ZSTD` target.
+- Resolution: `SYSTEM` accepts Zstandard 1.5.7 or newer and earlier than 2.0.0
+  through an upstream CMake target; `BUNDLED` downloads or reuses the verified
+  archive; and `AUTO` prefers a compatible system package before falling back
+  to the verified archive.
 
 ## Other Build Dependencies
 
