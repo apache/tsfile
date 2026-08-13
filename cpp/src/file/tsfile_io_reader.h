@@ -20,6 +20,7 @@
 #ifndef FILE_TSFILE_IO_REAER_H
 #define FILE_TSFILE_IO_REAER_H
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +34,9 @@
 #include "utils/storage_utils.h"
 namespace storage {
 class TsFileSeriesScanIterator;
+class PreparedSeries;
+struct FileGeneration;
+struct PreparedLocator;
 
 /*
  * TODO:
@@ -85,6 +89,15 @@ class TsFileIOReader {
                         const std::vector<std::string>& measurement_names,
                         TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
                         Filter* time_filter = nullptr);
+
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+
+    int alloc_prepared_ssi(const std::shared_ptr<PreparedSeries>& prepared,
+                           TsFileSeriesScanIterator*& ssi,
+                           common::PageArena& pa,
+                           Filter* time_filter = nullptr);
 
     void revert_ssi(TsFileSeriesScanIterator* ssi);
 

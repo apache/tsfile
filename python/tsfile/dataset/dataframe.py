@@ -23,8 +23,8 @@ from dataclasses import dataclass, field
 import heapq
 import os
 import sys
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple, Union
-import warnings
 
 import numpy as np
 
@@ -628,6 +628,8 @@ class TsFileDataFrame:
         self._is_view = False
         self._root = None
         self._closed = False
+        self._runtime = None
+        self._runtime_lease = None
         self._load_metadata()
 
     @classmethod
@@ -641,40 +643,74 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._readers = parent._readers
-        # Reuse the parent's full mapping but restrict the membership scope to
-        # the requested subset.
         subset_refs = list(series_refs)
-        parent_shards = parent._index.series_shards
-        subset_shards = {ref: parent_shards[ref] for ref in subset_refs}
-        obj._index = _DataFrameCatalog(
+        obj._index = SimpleNamespace(
             model=parent._index.model,
             table_entries=parent._index.table_entries,
             devices=parent._index.devices,
             device_index=parent._index.device_index,
             device_time_bounds=parent._index.device_time_bounds,
             series=subset_refs,
-            series_shards=subset_shards,
+            series_shards=parent._index.series_shards,
         )
+        obj._runtime = parent._runtime
+        obj._runtime_lease = (
+            parent._runtime_lease.clone() if parent._runtime_lease is not None else None
+        )
+        obj._readers = parent._readers
         obj._closed = False
         return obj
 
     def _owner(self) -> "TsFileDataFrame":
-        return self._root if self._is_view else self
+        return self
 
     def _assert_open(self):
-        if self._owner()._closed:
+        if self._closed:
             raise RuntimeError("Current TsFileDataFrame is closed.")
 
     def _load_metadata(self):
-        """Build the logical cross-file index and the derived per-series caches."""
+        """Map a valid persistent index, or build it once under a file lock."""
         from .reader import TsFileSeriesReader
+        from .index import (
+            build_index_from_dataframe,
+            index_matches_paths,
+            index_path_for,
+        )
+        from .runtime import DatasetRuntime
 
-        if len(self._paths) >= 2:
-            self._load_metadata_parallel(TsFileSeriesReader)
-        else:
-            self._load_metadata_serial(TsFileSeriesReader)
+        index_path = index_path_for(self._paths)
+        if not index_matches_paths(index_path, self._paths):
+            lock_path = index_path + ".lock"
+            os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+            with open(lock_path, "a+b") as lock_file:
+                try:
+                    import fcntl
 
-        if not self._index.series:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                except ImportError:
+                    pass
+                if not index_matches_paths(index_path, self._paths):
+                    if len(self._paths) >= 2:
+                        self._load_metadata_parallel(TsFileSeriesReader)
+                    else:
+                        self._load_metadata_serial(TsFileSeriesReader)
+
+                    if not self._index.series:
+                        raise ValueError(
+                            "No valid time series found in the provided TsFile files"
+                        )
+                    try:
+                        build_index_from_dataframe(self, index_path)
+                    finally:
+                        for reader in self._readers.values():
+                            reader.close()
+                        self._readers.clear()
+
+        self._runtime = DatasetRuntime(index_path)
+        self._runtime_lease = self._runtime.lease()
+        self._index = self._runtime.catalog
+        if len(self._index.series) == 0:
+            self._runtime_lease.close()
             raise ValueError("No valid time series found in the provided TsFile files")
 
     def _show_loading_progress(self, done: int, total: int, total_series: int = None):
@@ -913,17 +949,21 @@ class TsFileDataFrame:
     def _get_timeseries(self, series_ref: SeriesRefKey) -> Timeseries:
         self._assert_open()
         series_name = self._build_series_name(series_ref)
+        runtime_lease = (
+            self._runtime_lease.clone() if self._runtime_lease is not None else None
+        )
         return Timeseries(
             series_name,
             self._index.series_shards[series_ref],
             _build_runtime_series_stats(self._index.series_shards[series_ref]),
-            self._assert_open,
+            self._assert_open if runtime_lease is None else None,
             lambda: _merge_field_timestamps(
                 series_name, self._index.series_shards[series_ref]
             ),
             lambda offset, limit: _read_field_by_position(
                 series_name, self._index.series_shards[series_ref], offset, limit
             ),
+            runtime_lease=runtime_lease,
         )
 
     def __getitem__(self, key):
@@ -1087,24 +1127,19 @@ class TsFileDataFrame:
         print(self._repr_header() + self._format_table(max_rows=max_rows))
 
     def close(self):
-        if self._is_view:
-            warnings.warn(
-                "close() on a subset TsFileDataFrame is a no-op; only the root dataframe owns the readers.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return
         if self._closed:
             return
-        for reader in self._readers.values():
-            reader.close()
-        self._readers.clear()
         self._closed = True
+        if self._runtime_lease is not None:
+            self._runtime_lease.close()
+        else:
+            for reader in self._readers.values():
+                reader.close()
+            self._readers.clear()
 
     def __del__(self):
         try:
-            if not getattr(self, "_is_view", False):
-                self.close()
+            self.close()
         except Exception:
             pass
 

@@ -187,6 +187,7 @@ file(GLOB_RECURSE TEST_SRCS
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
         "compress/*_test.cc"
+        "dataset/*_test.cc"
 )
 
 # Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.

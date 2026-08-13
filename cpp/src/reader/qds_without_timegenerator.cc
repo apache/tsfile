@@ -34,6 +34,50 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader* io_reader,
     return init_internal(io_reader, qe);
 }
 
+int QDSWithoutTimeGenerator::init_prepared(
+    TsFileIOReader* io_reader, const std::shared_ptr<PreparedSeries>& prepared,
+    Filter* owned_time_filter, int offset, int limit,
+    const std::string& column_name) {
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
+    io_reader_ = io_reader;
+    qe_ = nullptr;
+    owned_time_filter_ = owned_time_filter;
+    remaining_offset_ = offset;
+    remaining_limit_ = limit;
+    is_single_path_ = true;
+    index_lookup_.insert({"time", 0});
+
+    TsFileSeriesScanIterator* ssi = nullptr;
+    int ret =
+        io_reader_->alloc_prepared_ssi(prepared, ssi, pa_, owned_time_filter_);
+    if (ret == E_NO_MORE_DATA) {
+        // Preserve the normal empty-result contract even when the global
+        // statistic rejects the range before an SSI is allocated.
+        row_record_ = new RowRecord(1);
+        result_set_metadata_ = std::make_shared<ResultSetMetadata>(
+            std::vector<std::string>(), std::vector<common::TSDataType>());
+        return E_OK;
+    }
+    if (ret != E_OK) {
+        return ret;
+    }
+    ssi->set_row_range(offset, limit);
+    ssi_vec_.push_back(ssi);
+    tsblocks_.resize(1);
+    time_iters_.resize(1);
+    value_iters_.resize(1);
+    row_record_ = new RowRecord(2);
+    index_lookup_.insert({column_name, 1});
+    get_next_tsblock(0, true);
+    remaining_offset_ = ssi->get_row_offset();
+    remaining_limit_ = ssi->get_row_limit();
+    result_set_metadata_ = std::make_shared<ResultSetMetadata>(
+        std::vector<std::string>(1, column_name),
+        std::vector<common::TSDataType>(1, ssi->get_data_type()));
+    return E_OK;
+}
+
 int QDSWithoutTimeGenerator::init(TsFileIOReader* io_reader,
                                   QueryExpression* qe, int offset, int limit) {
     remaining_offset_ = offset;
@@ -166,6 +210,10 @@ void QDSWithoutTimeGenerator::close() {
     if (qe_ != nullptr) {
         delete qe_;
         qe_ = nullptr;
+    }
+    if (owned_time_filter_ != nullptr) {
+        delete owned_time_filter_;
+        owned_time_filter_ = nullptr;
     }
     pa_.destroy();
 }

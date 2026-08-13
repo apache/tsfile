@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include "common/global.h"
+#include "reader/prepared_series.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
 #endif
@@ -29,6 +30,23 @@
 using namespace common;
 
 namespace storage {
+
+int TsFileSeriesScanIterator::init_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, ReadFile* read_file,
+    Filter* time_filter, common::PageArena& data_pa) {
+    if (prepared == nullptr || prepared->index() == nullptr ||
+        read_file == nullptr) {
+        return E_INVALID_ARG;
+    }
+    prepared_ = prepared;
+    itimeseries_index_ = prepared->index();
+    measurement_name_ =
+        itimeseries_index_->get_measurement_name().to_std_string();
+    read_file_ = read_file;
+    time_filter_ = time_filter;
+    data_pa_ = &data_pa;
+    return E_OK;
+}
 
 namespace {
 bool chunk_may_satisfy_filter(ChunkMeta* chunk_meta, Filter* filter) {
@@ -57,8 +75,6 @@ void TsFileSeriesScanIterator::destroy() {
             dynamic_cast<MultiAlignedTimeseriesIndex*>(itimeseries_index_)) {
         std::vector<TimeseriesIndex*>().swap(multi->value_ts_idxs_);
     }
-    itimeseries_index_ = nullptr;
-    timeseries_index_pa_.destroy();
     if (chunk_reader_ != nullptr) {
         // destroy() already runs manual destructors on internal members
         // (chunk_header_, decoders, compressor, ...), so calling
@@ -68,6 +84,10 @@ void TsFileSeriesScanIterator::destroy() {
         chunk_reader_->destroy();
         common::mem_free(chunk_reader_);
         chunk_reader_ = nullptr;
+    }
+    itimeseries_index_ = nullptr;
+    if (prepared_ == nullptr) {
+        timeseries_index_pa_.destroy();
     }
     if (tsblock_ != nullptr) {
         tsblock_->~TsBlock();
@@ -82,6 +102,7 @@ void TsFileSeriesScanIterator::destroy() {
     std::vector<common::SimpleList<ChunkMeta*>::Iterator>().swap(
         value_chunk_meta_cursors_);
     device_id_.reset();
+    prepared_.reset();
     std::string().swap(measurement_name_);
 }
 

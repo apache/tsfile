@@ -43,6 +43,11 @@ cdef public api void free_c_tablet(Tablet tablet)
 cdef public api void free_c_row_record(TsRecord record)
 cdef public api TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except NULL
 cdef public api TsFileReader tsfile_reader_new_c(object pathname) except NULL
+cdef public api PreparedSeriesHandle tsfile_reader_prepare_series_c(
+    TsFileReader reader, object locator) except NULL
+cdef public api ResultSet tsfile_reader_query_prepared_c(
+    TsFileReader reader, PreparedSeriesHandle prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit)
 cdef public api ErrorCode tsfile_writer_register_device_py_cpp(TsFileWriter writer, DeviceSchema *schema)
 cdef public api ErrorCode tsfile_writer_register_timeseries_py_cpp(TsFileWriter writer, object device_name,
                                                         TimeseriesSchema *schema)

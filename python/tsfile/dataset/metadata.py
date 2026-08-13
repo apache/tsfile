@@ -41,6 +41,15 @@ class SeriesStats(NamedTuple):
     timeline_length: int
     timeline_min_time: int
     timeline_max_time: int
+    data_type: int = -1
+    value_metadata_offset: int = 0
+    value_metadata_length: int = 0
+    time_metadata_offset: int = 0
+    time_metadata_length: int = 0
+    chunk_meta_count: int = 0
+    time_chunk_meta_count: int = 0
+    layout: int = 0
+    locator_flags: int = 0
 
 
 @dataclass(**_DATACLASS_SLOTS)

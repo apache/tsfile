@@ -21,6 +21,7 @@
 #define READER_QDS_WITHOUT_TIMEGENERATOR_H
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "expression.h"
@@ -42,11 +43,16 @@ class QDSWithoutTimeGenerator : public ResultSet {
           heap_time_(),
           remaining_offset_(0),
           remaining_limit_(-1),
+          owned_time_filter_(nullptr),
           is_single_path_(false) {}
     ~QDSWithoutTimeGenerator() { close(); }
     int init(TsFileIOReader* io_reader, QueryExpression* qe);
     int init(TsFileIOReader* io_reader, QueryExpression* qe, int offset,
              int limit);
+    int init_prepared(TsFileIOReader* io_reader,
+                      const std::shared_ptr<PreparedSeries>& prepared,
+                      Filter* owned_time_filter, int offset, int limit,
+                      const std::string& column_name);
     void close();
     int next(bool& has_next);
     bool is_null(const std::string& column_name);
@@ -72,6 +78,7 @@ class QDSWithoutTimeGenerator : public ResultSet {
         heap_time_;  // key-->time, value-->path_index
     int remaining_offset_;
     int remaining_limit_;
+    Filter* owned_time_filter_;
     bool is_single_path_;
 };
 

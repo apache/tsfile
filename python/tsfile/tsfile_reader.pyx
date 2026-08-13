@@ -309,6 +309,30 @@ cdef class ResultSetPy:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+cdef class PreparedSeriesPy:
+    """Reusable native metadata parsed from one exact Dataset Index locator."""
+    cdef PreparedSeriesHandle prepared
+
+    def __cinit__(self):
+        self.prepared = NULL
+
+    cdef init_c(self, PreparedSeriesHandle prepared):
+        self.prepared = prepared
+
+    def close(self):
+        if self.prepared != NULL:
+            tsfile_prepared_series_free(self.prepared)
+            self.prepared = NULL
+
+    def __dealloc__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 cdef class TsFileReaderPy:
     """
     Cython wrapper class for interacting with TsFileReader C implementation.
@@ -467,6 +491,29 @@ cdef class TsFileReaderPy:
         result = tsfile_reader_query_paths_c(self.reader, device_name, sensor_list, start_time, end_time)
         pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, device_name)
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def prepare_series(self, locator) -> PreparedSeriesPy:
+        """Prepare a 12-field native locator tuple for repeated queries."""
+        if len(locator) != 12:
+            raise ValueError("prepared locator must contain exactly 12 fields")
+        cdef PreparedSeriesHandle prepared = tsfile_reader_prepare_series_c(
+            self.reader, locator)
+        py_prepared = PreparedSeriesPy()
+        py_prepared.init_c(prepared)
+        return py_prepared
+
+    def query_prepared(self, PreparedSeriesPy prepared,
+                       start_time : int = INT64_MIN,
+                       end_time : int = INT64_MAX,
+                       offset : int = 0, limit : int = -1) -> ResultSetPy:
+        if prepared.prepared == NULL:
+            raise RuntimeError("PreparedSeries is closed")
+        cdef ResultSet result = tsfile_reader_query_prepared_c(
+            self.reader, prepared.prepared, start_time, end_time, offset, limit)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, "prepared")
         self.activate_result_set_list.add(pyresult)
         return pyresult
 

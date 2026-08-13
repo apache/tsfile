@@ -783,6 +783,36 @@ cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     check_error(errno)
     return reader
 
+cdef PreparedSeriesHandle tsfile_reader_prepare_series_c(
+        TsFileReader reader, object locator) except NULL:
+    cdef TsFilePreparedLocator native
+    cdef ErrorCode code = 0
+    native.mapped_index_identity = locator[0]
+    native.file_id = locator[1]
+    native.file_size = locator[2]
+    native.file_fingerprint = locator[3]
+    native.locator_id = locator[4]
+    native.layout = locator[5]
+    native.flags = locator[6]
+    native.value_metadata_offset = locator[7]
+    native.value_metadata_length = locator[8]
+    native.time_metadata_offset = locator[9]
+    native.time_metadata_length = locator[10]
+    native.chunk_count_hint = locator[11]
+    cdef PreparedSeriesHandle prepared = tsfile_reader_prepare_series(
+        reader, &native, &code)
+    check_error(code, b"Failed to prepare Dataset Index locator")
+    return prepared
+
+cdef ResultSet tsfile_reader_query_prepared_c(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit):
+    cdef ErrorCode code = 0
+    cdef ResultSet result = tsfile_reader_query_prepared(
+        reader, prepared, start_time, end_time, offset, limit, &code)
+    check_error(code, b"Failed to query prepared series")
+    return result
+
 cpdef object get_tsfile_config():
     return {
         "tsblock_mem_inc_step_size_": g_config_value_.tsblock_mem_inc_step_size_,
@@ -1257,6 +1287,13 @@ cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
         int(m.chunk_meta_count),
         stat,
         timeline_stat,
+        int(m.value_metadata_offset),
+        int(m.value_metadata_length),
+        int(m.time_metadata_offset),
+        int(m.time_metadata_length),
+        int(m.time_chunk_meta_count),
+        int(m.layout),
+        int(m.locator_flags),
     )
 
 cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):

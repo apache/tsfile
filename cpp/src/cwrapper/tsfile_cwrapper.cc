@@ -419,6 +419,67 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet) {
 
 // Query
 
+PreparedSeriesHandle tsfile_reader_prepare_series(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
+    if (reader == nullptr || locator == nullptr) {
+        return nullptr;
+    }
+    storage::FileGeneration generation;
+    generation.mapped_index_identity = locator->mapped_index_identity;
+    generation.file_id = locator->file_id;
+    generation.file_size = locator->file_size;
+    generation.file_fingerprint = locator->file_fingerprint;
+    storage::PreparedLocator native_locator;
+    native_locator.locator_id = locator->locator_id;
+    native_locator.layout = locator->layout;
+    native_locator.flags = locator->flags;
+    native_locator.value_metadata_offset = locator->value_metadata_offset;
+    native_locator.value_metadata_length = locator->value_metadata_length;
+    native_locator.time_metadata_offset = locator->time_metadata_offset;
+    native_locator.time_metadata_length = locator->time_metadata_length;
+    native_locator.chunk_count_hint = locator->chunk_count_hint;
+    std::shared_ptr<storage::PreparedSeries> prepared;
+    *err_code = static_cast<storage::TsFileReader*>(reader)->prepare_series(
+        generation, native_locator, prepared);
+    if (*err_code != common::E_OK) {
+        return nullptr;
+    }
+    auto* handle = new (std::nothrow)
+        std::shared_ptr<storage::PreparedSeries>(std::move(prepared));
+    if (handle == nullptr) {
+        *err_code = common::E_OOM;
+    }
+    return handle;
+}
+
+void tsfile_prepared_series_free(PreparedSeriesHandle prepared) {
+    delete static_cast<std::shared_ptr<storage::PreparedSeries>*>(prepared);
+}
+
+ResultSet tsfile_reader_query_prepared(TsFileReader reader,
+                                       PreparedSeriesHandle prepared,
+                                       Timestamp start_time, Timestamp end_time,
+                                       int offset, int limit, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
+    if (reader == nullptr || prepared == nullptr) {
+        return nullptr;
+    }
+    auto* handle =
+        static_cast<std::shared_ptr<storage::PreparedSeries>*>(prepared);
+    storage::ResultSet* result = nullptr;
+    *err_code = static_cast<storage::TsFileReader*>(reader)->query_prepared(
+        *handle, start_time, end_time, offset, limit, result);
+    return result;
+}
+
 ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              char** columns, uint32_t column_num,
                              Timestamp start_time, Timestamp end_time,
@@ -1305,8 +1366,32 @@ ERRNO populate_c_metadata_map_from_cpp(
                 aligned_idx->value_ts_idx_ != nullptr) {
                 m.data_type = static_cast<TSDataType>(
                     aligned_idx->value_ts_idx_->get_data_type());
+                const storage::TimeseriesIndex* value_idx =
+                    aligned_idx->value_ts_idx_;
+                const storage::TimeseriesIndex* time_idx =
+                    aligned_idx->time_ts_idx_;
+                if (value_idx->get_metadata_offset() >= 0) {
+                    m.value_metadata_offset =
+                        static_cast<uint64_t>(value_idx->get_metadata_offset());
+                    m.value_metadata_length = value_idx->get_metadata_length();
+                }
+                if (time_idx != nullptr &&
+                    time_idx->get_metadata_offset() >= 0) {
+                    m.time_metadata_offset =
+                        static_cast<uint64_t>(time_idx->get_metadata_offset());
+                    m.time_metadata_length = time_idx->get_metadata_length();
+                }
+                m.layout = 1;
             } else {
                 m.data_type = static_cast<TSDataType>(idx->get_data_type());
+                const storage::TimeseriesIndex* value_idx =
+                    dynamic_cast<const storage::TimeseriesIndex*>(idx.get());
+                if (value_idx != nullptr &&
+                    value_idx->get_metadata_offset() >= 0) {
+                    m.value_metadata_offset =
+                        static_cast<uint64_t>(value_idx->get_metadata_offset());
+                    m.value_metadata_length = value_idx->get_metadata_length();
+                }
             }
             storage::Statistic* st = idx->get_statistic();
             int32_t chunk_cnt = 0;
@@ -1316,6 +1401,21 @@ ERRNO populate_c_metadata_map_from_cpp(
                 chunk_cnt = static_cast<int32_t>(cl->size());
             }
             m.chunk_meta_count = chunk_cnt;
+            if (chunk_cnt >= 0 && m.value_metadata_length > 0) {
+                m.locator_flags |= 1;
+            }
+            if (aligned_idx != nullptr) {
+                auto* time_chunks = idx->get_time_chunk_meta_list();
+                if (time_chunks != nullptr) {
+                    m.time_chunk_meta_count =
+                        static_cast<uint32_t>(time_chunks->size());
+                }
+                if (m.time_metadata_length == 0 ||
+                    m.time_chunk_meta_count !=
+                        static_cast<uint32_t>(chunk_cnt)) {
+                    m.locator_flags &= ~static_cast<uint16_t>(1);
+                }
+            }
             const int st_rc = fill_timeseries_statistic(st, &m.statistic);
             if (st_rc != common::E_OK) {
                 for (uint32_t u = 0; u < slot; u++) {

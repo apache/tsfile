@@ -419,6 +419,15 @@ class TsFileSeriesReader:
                 timeline_length=int(timeline_statistic.row_count),
                 timeline_min_time=int(timeline_statistic.start_time),
                 timeline_max_time=int(timeline_statistic.end_time),
+                data_type=int(timeseries.data_type),
+                value_metadata_offset=int(timeseries.value_metadata_offset),
+                value_metadata_length=int(timeseries.value_metadata_length),
+                time_metadata_offset=int(timeseries.time_metadata_offset),
+                time_metadata_length=int(timeseries.time_metadata_length),
+                chunk_meta_count=int(timeseries.chunk_meta_count),
+                time_chunk_meta_count=int(timeseries.time_chunk_meta_count),
+                layout=int(timeseries.layout),
+                locator_flags=int(timeseries.locator_flags),
             )
         return stats
 

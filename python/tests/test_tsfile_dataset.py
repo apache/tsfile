@@ -833,7 +833,7 @@ def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(
         np.testing.assert_array_equal(series[1:5], np.array([20.0, 30.0, 40.0, 50.0]))
 
 
-def test_dataset_rejects_data_access_after_close(tmp_path):
+def test_dataset_close_only_releases_current_handle(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
@@ -844,18 +844,22 @@ def test_dataset_rejects_data_access_after_close(tmp_path):
     with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
         _ = tsdf[0]
 
-    with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+    assert series[0] == 20.0
+    series.close()
+    with pytest.raises(RuntimeError, match="Timeseries is closed"):
         _ = series[0]
 
 
-def test_subset_close_warns_and_does_not_close_root(tmp_path):
+def test_subset_close_releases_only_subset_lease(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
         subset = tsdf[:1]
-        with pytest.warns(RuntimeWarning, match="no-op"):
-            subset.close()
+        subset.close()
+
+        with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+            _ = subset[0]
 
         series = tsdf[0]
         assert series[0] == 20.0

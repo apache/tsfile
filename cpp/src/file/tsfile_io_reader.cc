@@ -19,7 +19,10 @@
 
 #include "file/tsfile_io_reader.h"
 
+#include <limits>
+
 #include "common/allocator/alloc_base.h"
+#include "reader/prepared_series.h"
 
 using namespace common;
 
@@ -84,6 +87,131 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
             mem_free(ssi);
             ssi = nullptr;
         }
+    }
+    return ret;
+}
+
+namespace {
+int load_exact_timeseries_index(ReadFile* read_file, uint64_t offset,
+                                uint32_t length, PageArena& arena,
+                                TimeseriesIndex*& index) {
+    if (read_file == nullptr || length == 0 ||
+        length > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+        offset > static_cast<uint64_t>(read_file->file_size()) ||
+        length > static_cast<uint64_t>(read_file->file_size()) - offset) {
+        return E_TSFILE_CORRUPTED;
+    }
+    char* bytes = static_cast<char*>(arena.alloc(length));
+    void* index_memory = arena.alloc(sizeof(TimeseriesIndex));
+    if (bytes == nullptr || index_memory == nullptr) {
+        return E_OOM;
+    }
+    int32_t read_length = 0;
+    int ret = read_file->read(static_cast<int64_t>(offset), bytes,
+                              static_cast<int32_t>(length), read_length);
+    if (ret != E_OK || read_length != static_cast<int32_t>(length)) {
+        return ret == E_OK ? E_TSFILE_CORRUPTED : ret;
+    }
+    ByteStream stream;
+    stream.wrap_from(bytes, length);
+    index = new (index_memory) TimeseriesIndex;
+    ret = index->deserialize_from(stream, &arena);
+    if (ret != E_OK || stream.read_pos() != length) {
+        index = nullptr;
+        return ret == E_OK ? E_TSFILE_CORRUPTED : ret;
+    }
+    index->set_metadata_range(static_cast<int64_t>(offset), length);
+    return E_OK;
+}
+}  // namespace
+
+int TsFileIOReader::prepare_series(const FileGeneration& generation,
+                                   const PreparedLocator& locator,
+                                   std::shared_ptr<PreparedSeries>& prepared) {
+    prepared.reset();
+    uint64_t actual_size = 0;
+    uint64_t actual_fingerprint = 0;
+    if (read_file_ == nullptr || generation.file_size == 0 ||
+        read_file_->generation(actual_size, actual_fingerprint) != E_OK ||
+        actual_size != generation.file_size ||
+        (generation.file_fingerprint != 0 &&
+         actual_fingerprint != generation.file_fingerprint) ||
+        locator.value_metadata_length == 0 || locator.layout > 1) {
+        return E_INVALID_ARG;
+    }
+    std::shared_ptr<PreparedSeries> candidate =
+        std::make_shared<PreparedSeries>(generation, locator);
+    TimeseriesIndex* value_index = nullptr;
+    int ret = load_exact_timeseries_index(
+        read_file_, locator.value_metadata_offset,
+        locator.value_metadata_length, candidate->arena(), value_index);
+    if (ret != E_OK) {
+        return ret;
+    }
+    if (locator.chunk_count_hint != 0 &&
+        value_index->get_chunk_meta_list()->size() !=
+            locator.chunk_count_hint) {
+        return E_TSFILE_CORRUPTED;
+    }
+    if (locator.layout == 0) {
+        candidate->set_index(value_index);
+    } else {
+        if ((locator.flags & 1U) == 0 || locator.time_metadata_length == 0) {
+            return E_NOT_SUPPORT;
+        }
+        TimeseriesIndex* time_index = nullptr;
+        ret = load_exact_timeseries_index(
+            read_file_, locator.time_metadata_offset,
+            locator.time_metadata_length, candidate->arena(), time_index);
+        if (ret != E_OK) {
+            return ret;
+        }
+        if (time_index->get_chunk_meta_list()->size() !=
+            value_index->get_chunk_meta_list()->size()) {
+            return E_NOT_SUPPORT;
+        }
+        void* aligned_memory =
+            candidate->arena().alloc(sizeof(AlignedTimeseriesIndex));
+        if (aligned_memory == nullptr) {
+            return E_OOM;
+        }
+        AlignedTimeseriesIndex* aligned =
+            new (aligned_memory) AlignedTimeseriesIndex;
+        aligned->time_ts_idx_ = time_index;
+        aligned->value_ts_idx_ = value_index;
+        candidate->set_index(aligned);
+    }
+    prepared = candidate;
+    return E_OK;
+}
+
+int TsFileIOReader::alloc_prepared_ssi(
+    const std::shared_ptr<PreparedSeries>& prepared,
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+    Filter* time_filter) {
+    ssi = nullptr;
+    if (prepared == nullptr || prepared->index() == nullptr) {
+        return E_INVALID_ARG;
+    }
+    if (time_filter != nullptr &&
+        !filter_stasify(prepared->index(), time_filter)) {
+        return E_NO_MORE_DATA;
+    }
+    void* memory =
+        mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
+    if (memory == nullptr) {
+        return E_OOM;
+    }
+    ssi = new (memory) TsFileSeriesScanIterator;
+    int ret = ssi->init_prepared(prepared, read_file_, time_filter, pa);
+    if (ret == E_OK) {
+        ret = ssi->init_chunk_reader();
+    }
+    if (ret != E_OK) {
+        ssi->destroy();
+        mem_free(ssi);
+        ssi = nullptr;
     }
     return ret;
 }
@@ -900,7 +1028,14 @@ int TsFileIOReader::get_time_column_metadata(
             return E_OOM;
         }
         ret_timeseries_index = new (buf) TimeseriesIndex;
-        ret_timeseries_index->deserialize_from(buffer, &pa);
+        if (RET_FAIL(ret_timeseries_index->deserialize_from(buffer, &pa))) {
+            return ret;
+        }
+        if (buffer.read_pos() > UINT32_MAX) {
+            return E_OVERFLOW;
+        }
+        ret_timeseries_index->set_metadata_range(
+            start_idx, static_cast<uint32_t>(buffer.read_pos()));
     } else if (measurement_node->node_type_ == INTERNAL_MEASUREMENT) {
         start_idx = measurement_node->children_[0]->get_offset();
         end_idx = measurement_node->children_[1]->get_offset();
@@ -947,8 +1082,18 @@ int TsFileIOReader::do_load_timeseries_index(
             TimeseriesIndex cur_timeseries_index;
             PageArena cur_timeseries_index_pa;
             cur_timeseries_index_pa.init(512, MOD_TSFILE_READER);  // TODO 512
+            const uint64_t relative_start = bs.read_pos();
             if (RET_FAIL(cur_timeseries_index.deserialize_from(
                     bs, &cur_timeseries_index_pa))) {
+            } else if (bs.read_pos() < relative_start ||
+                       bs.read_pos() - relative_start > UINT32_MAX) {
+                ret = E_OVERFLOW;
+            } else {
+                cur_timeseries_index.set_metadata_range(
+                    start_offset + relative_start,
+                    static_cast<uint32_t>(bs.read_pos() - relative_start));
+            }
+            if (RET_FAIL(ret)) {
             } else if (is_aligned &&
                        cur_timeseries_index.get_measurement_name().equal_to(
                            target_measurement_name)) {
@@ -1012,12 +1157,20 @@ int TsFileIOReader::do_load_all_timeseries_index(
         ByteStream bs;
         bs.wrap_from(ti_buf, read_size);
         while (bs.has_remaining()) {
+            const uint64_t relative_start = bs.read_pos();
             void* buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
             auto ts_idx = new (buf) TimeseriesIndex;
             if (RET_FAIL(
                     ts_idx->deserialize_from(bs, &in_timeseries_index_pa))) {
                 return ret;
             }
+            if (bs.read_pos() < relative_start ||
+                bs.read_pos() - relative_start > UINT32_MAX) {
+                return E_OVERFLOW;
+            }
+            ts_idx->set_metadata_range(
+                start_offset + relative_start,
+                static_cast<uint32_t>(bs.read_pos() - relative_start));
             if (ts_idx->get_measurement_name().len_ == 0) continue;
             ts_indexs.push_back(ts_idx);
         }

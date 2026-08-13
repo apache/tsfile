@@ -22,6 +22,8 @@
 #include "expression.h"
 #include "qds_with_timegenerator.h"
 #include "qds_without_timegenerator.h"
+#include "reader/filter/time_operator.h"
+#include "reader/prepared_series.h"
 
 using namespace common;
 
@@ -100,6 +102,34 @@ int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds,
     }
     ret_qds = qds;
     return ret;
+}
+
+int TsFileExecutor::prepare_series(const FileGeneration& generation,
+                                   const PreparedLocator& locator,
+                                   std::shared_ptr<PreparedSeries>& prepared) {
+    ASSERT(is_inited_);
+    return io_reader_.prepare_series(generation, locator, prepared);
+}
+
+int TsFileExecutor::execute_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit, const std::string& column_name,
+    ResultSet*& ret_qds) {
+    ASSERT(is_inited_);
+    ret_qds = nullptr;
+    if (prepared == nullptr || start_time > end_time || offset < 0) {
+        return E_INVALID_ARG;
+    }
+    QDSWithoutTimeGenerator* qds = new QDSWithoutTimeGenerator;
+    Filter* time_filter = new TimeBetween(start_time, end_time, false);
+    int ret = qds->init_prepared(&io_reader_, prepared, time_filter, offset,
+                                 limit, column_name);
+    if (ret != E_OK) {
+        delete qds;
+        return ret;
+    }
+    ret_qds = qds;
+    return E_OK;
 }
 
 int TsFileExecutor::execute_may_with_global_timefilter(QueryExpression* qe,

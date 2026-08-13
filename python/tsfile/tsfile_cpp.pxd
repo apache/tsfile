@@ -17,7 +17,7 @@
 #
 
 #cython: language_level=3
-from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
+from libc.stdint cimport uint16_t, uint32_t, int32_t, int64_t, uint64_t, uint8_t
 
 ctypedef int32_t ErrorCode
 
@@ -38,6 +38,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     ctypedef void * Tablet
     ctypedef void * TsRecord
     ctypedef void * ResultSet
+    ctypedef void * PreparedSeriesHandle
 
     # enum types
     ctypedef enum TSDataType:
@@ -166,6 +167,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         int32_t chunk_meta_count
         TimeseriesStatistic statistic
         TimeseriesStatistic timeline_statistic
+        uint64_t value_metadata_offset
+        uint32_t value_metadata_length
+        uint64_t time_metadata_offset
+        uint32_t time_metadata_length
+        uint32_t time_chunk_meta_count
+        uint16_t layout
+        uint16_t locator_flags
 
     ctypedef struct DeviceID:
         char * path
@@ -193,6 +201,20 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         char** column_names
         TSDataType * data_types
         int column_num
+
+    ctypedef struct TsFilePreparedLocator:
+        uint64_t mapped_index_identity
+        uint32_t file_id
+        uint64_t file_size
+        uint64_t file_fingerprint
+        uint32_t locator_id
+        uint16_t layout
+        uint16_t flags
+        uint64_t value_metadata_offset
+        uint32_t value_metadata_length
+        uint64_t time_metadata_offset
+        uint32_t time_metadata_length
+        uint32_t chunk_count_hint
 
     # Function Declarations
 
@@ -269,6 +291,15 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                  const char * table_name,
                                  const char** columns, uint32_t column_num,
                                  int64_t start_time, int64_t end_time, ErrorCode *err_code)
+
+    PreparedSeriesHandle tsfile_reader_prepare_series(
+        TsFileReader reader, const TsFilePreparedLocator * locator,
+        ErrorCode * err_code)
+    void tsfile_prepared_series_free(PreparedSeriesHandle prepared)
+    ResultSet tsfile_reader_query_prepared(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ErrorCode * err_code)
 
     ResultSet tsfile_query_table_on_tree(TsFileReader reader,
                          char** columns, uint32_t column_num,

@@ -21,6 +21,7 @@
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
 #include <limits>
+#include <memory>
 #include <string>
 
 #include "aligned_chunk_reader.h"
@@ -34,6 +35,7 @@
 namespace storage {
 
 class TsFileIOReader;
+class PreparedSeries;
 
 class TsFileSeriesScanIterator {
    public:
@@ -49,6 +51,7 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
+          prepared_(),
           is_aligned_(false),
           is_multi_value_(false),
           row_offset_(0),
@@ -65,6 +68,9 @@ class TsFileSeriesScanIterator {
         data_pa_ = &data_pa;
         return common::E_OK;
     }
+    int init_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                      ReadFile* read_file, Filter* time_filter,
+                      common::PageArena& data_pa);
     void destroy();
 
     /**
@@ -210,6 +216,9 @@ class TsFileSeriesScanIterator {
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
+    // Keeps the arena-backed index alive until the chunk reader has released
+    // every pointer into it. Empty for the legacy path-owned metadata arena.
+    std::shared_ptr<PreparedSeries> prepared_;
     bool is_aligned_ = false;
     bool is_multi_value_ = false;
     int row_offset_;
