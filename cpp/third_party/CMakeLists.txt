@@ -17,14 +17,91 @@ specific language governing permissions and limitations
 under the License.
 ]]
 if (ENABLE_ANTLR4)
-    # Build the ANTLR4 runtime against the dynamic CRT (/MD) so it links the
-    # same C runtime as the rest of the project (avoiding LNK2038 mismatches).
-    # ANTLR4's own option is named WITH_STATIC_CRT and defaults to ON (=> /MT);
-    # pre-seeding it in the cache makes its option() call a no-op.
-    set(WITH_STATIC_CRT OFF CACHE BOOL
-        "Link the ANTLR4 runtime against the dynamic CRT" FORCE)
-    add_subdirectory(antlr4-cpp-runtime-4)
-    message("ANTLR4 runtime is enabled")
+    if (TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/ANTLR4Source.cmake)
+
+        file(GLOB _TSFILE_ANTLR4_SOURCES
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/atn/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/dfa/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/misc/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/support/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/tree/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/tree/pattern/*.cpp"
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src/tree/xpath/*.cpp")
+
+        add_library(tsfile_utf8cpp_bundled INTERFACE)
+        target_include_directories(tsfile_utf8cpp_bundled INTERFACE
+                "${TSFILE_UTF8CPP_SOURCE_DIR}/source")
+
+        add_library(tsfile_antlr4_bundled STATIC ${_TSFILE_ANTLR4_SOURCES})
+        set_target_properties(tsfile_antlr4_bundled PROPERTIES
+                POSITION_INDEPENDENT_CODE ON
+                CXX_STANDARD 11)
+        target_include_directories(tsfile_antlr4_bundled PUBLIC
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src")
+        target_compile_definitions(tsfile_antlr4_bundled PUBLIC
+                ANTLR4CPP_STATIC
+                USE_UTF8_INSTEAD_OF_CODECVT)
+        target_link_libraries(tsfile_antlr4_bundled PUBLIC
+                tsfile_utf8cpp_bundled)
+
+        if (MSVC)
+            target_compile_options(tsfile_antlr4_bundled PRIVATE /wd4251)
+        else ()
+            target_compile_options(tsfile_antlr4_bundled PRIVATE
+                    -Wno-overloaded-virtual)
+            if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+                target_compile_options(tsfile_antlr4_bundled PRIVATE
+                        -Wno-dollar-in-identifier-extension
+                        -Wno-four-char-constants)
+            elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Intel")
+                target_compile_options(tsfile_antlr4_bundled PRIVATE
+                        -Wno-multichar)
+            endif ()
+        endif ()
+
+        if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            find_library(TSFILE_UUID_LIBRARY NAMES uuid)
+            if (NOT TSFILE_UUID_LIBRARY)
+                message(FATAL_ERROR
+                        "The bundled ANTLR4 runtime requires libuuid on Linux.")
+            endif ()
+            target_link_libraries(tsfile_antlr4_bundled PUBLIC
+                    "${TSFILE_UUID_LIBRARY}")
+        elseif (APPLE)
+            find_library(TSFILE_COREFOUNDATION_LIBRARY CoreFoundation)
+            if (NOT TSFILE_COREFOUNDATION_LIBRARY)
+                message(FATAL_ERROR
+                        "The bundled ANTLR4 runtime requires CoreFoundation "
+                        "on Apple platforms.")
+            endif ()
+            target_link_libraries(tsfile_antlr4_bundled PUBLIC
+                    "${TSFILE_COREFOUNDATION_LIBRARY}")
+        elseif (WIN32)
+            target_link_libraries(tsfile_antlr4_bundled PUBLIC ole32)
+        endif ()
+        unset(_TSFILE_ANTLR4_SOURCES)
+    elseif ("${TSFILE_ANTLR4_SYSTEM_TARGET}" STREQUAL "")
+        message(FATAL_ERROR
+                "System ANTLR4 was selected, but no runtime target is "
+                "available.")
+    endif ()
+
+    add_library(tsfile_antlr4 INTERFACE)
+    if (TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_antlr4 INTERFACE
+                tsfile_antlr4_bundled)
+    else ()
+        target_link_libraries(tsfile_antlr4 INTERFACE
+                ${TSFILE_ANTLR4_SYSTEM_TARGET})
+        if (TSFILE_ANTLR4_SYSTEM_STATIC)
+            target_compile_definitions(tsfile_antlr4 INTERFACE
+                    ANTLR4CPP_STATIC)
+        endif ()
+    endif ()
+    add_library(TsFile::ANTLR4 ALIAS tsfile_antlr4)
+    message("ANTLR4 runtime is enabled (${TSFILE_ANTLR4_SOURCE})")
 else()
     message("ANTLR4 runtime is disabled")
 endif()

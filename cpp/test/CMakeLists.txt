@@ -146,10 +146,6 @@ include_directories(
         ${THIRD_PARTY_INCLUDE}
 )
 
-if (ENABLE_ANTLR4)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
-endif()
-
 enable_testing()
 
 add_test(
@@ -181,6 +177,12 @@ add_test(
         COMMAND ${CMAKE_COMMAND}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/SIMDeDependencyTest.cmake)
+add_test(
+        NAME ANTLR4DependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -DTEST_ANTLR4_ARCHIVE=${TSFILE_ANTLR4_ARCHIVE_RESOLVED}
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/ANTLR4DependencyTest.cmake)
 
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
@@ -229,11 +231,6 @@ if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
-if (ENABLE_ANTLR4)
-    add_definitions(-DANTLR4CPP_STATIC)
-    set(ANTLR4_WITH_STATIC_CRT OFF)
-endif()
-
 add_executable(TsFile_Test ${TEST_SRCS})
 # Force the vendored GTest headers ahead of any system installation so the test
 # code reliably compiles against the vendored 1.12.1 headers.
@@ -267,6 +264,9 @@ if (ENABLE_ZLIB)
 endif ()
 if (ENABLE_SIMD)
     target_link_libraries(TsFile_Test TsFile::SIMDe)
+endif ()
+if (ENABLE_ANTLR4)
+    target_link_libraries(TsFile_Test TsFile::ANTLR4)
 endif ()
 if (BUILD_TOOLS)
     target_link_libraries(TsFile_Test tsfile_cli_obj)

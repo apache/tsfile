@@ -35,8 +35,6 @@ message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
 
 set(SDK_LIB_DIR_DEBUG ${PROJECT_SOURCE_DIR}/../build/Debug/lib)
 message("SDK_LIB_DIR_DEBUG: ${SDK_LIB_DIR_DEBUG}")
-include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/runtime/src)
-
 set(BUILD_TYPE "Release")
 include_directories(${SDK_INCLUDE_DIR})
 

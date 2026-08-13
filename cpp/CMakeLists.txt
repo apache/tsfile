@@ -232,6 +232,10 @@ message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
+if (ENABLE_ANTLR4)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ANTLR4Dependency.cmake)
+endif ()
+
 option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
 message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
 
@@ -305,13 +309,21 @@ else ()
 endif ()
 add_subdirectory(third_party)
 
-# SIMDe is header-only and its headers are used throughout src, tools, tests,
-# and examples. Apply the selected target to all targets created below.
-if (ENABLE_SIMD)
+# ANTLR4 headers are exposed through public TsFile headers, and SIMDe is used
+# throughout the implementation. Apply both selected targets to the project
+# targets created below.
+if (ENABLE_ANTLR4 OR ENABLE_SIMD)
     get_property(_TSFILE_BASE_LINK_LIBRARIES
             DIRECTORY PROPERTY LINK_LIBRARIES)
+endif ()
+if (ENABLE_ANTLR4)
+    link_libraries(TsFile::ANTLR4)
+endif ()
+if (ENABLE_SIMD)
     link_libraries(TsFile::SIMDe)
-    get_property(_TSFILE_SIMD_LINK_LIBRARIES
+endif ()
+if (ENABLE_ANTLR4 OR ENABLE_SIMD)
+    get_property(_TSFILE_PROJECT_LINK_LIBRARIES
             DIRECTORY PROPERTY LINK_LIBRARIES)
 endif ()
 
@@ -320,10 +332,10 @@ if (BUILD_TOOLS)
     add_subdirectory(tools)
 endif ()
 if (BUILD_TEST)
-    # The test target links SIMDe explicitly. Do not make downloaded
-    # GoogleTest targets inherit it, because their upstream install export
-    # cannot export a TsFile-owned target.
-    if (ENABLE_SIMD)
+    # The test target links project dependencies explicitly. Do not make
+    # downloaded GoogleTest targets inherit them, because their upstream
+    # install export cannot export TsFile-owned targets.
+    if (ENABLE_ANTLR4 OR ENABLE_SIMD)
         set_property(DIRECTORY PROPERTY LINK_LIBRARIES
                 "${_TSFILE_BASE_LINK_LIBRARIES}")
     endif ()
@@ -335,11 +347,11 @@ else()
     message("BUILD_TEST is OFF, skipping test directory")
 endif ()
 
-if (ENABLE_SIMD)
+if (ENABLE_ANTLR4 OR ENABLE_SIMD)
     set_property(DIRECTORY PROPERTY LINK_LIBRARIES
-            "${_TSFILE_SIMD_LINK_LIBRARIES}")
+            "${_TSFILE_PROJECT_LINK_LIBRARIES}")
     unset(_TSFILE_BASE_LINK_LIBRARIES)
-    unset(_TSFILE_SIMD_LINK_LIBRARIES)
+    unset(_TSFILE_PROJECT_LINK_LIBRARIES)
 endif ()
 
 add_subdirectory(examples)

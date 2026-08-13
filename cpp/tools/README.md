@@ -62,15 +62,6 @@ cmake ../.. -DCMAKE_BUILD_TYPE=Debug
 make -j tsfile_cli                 # -> build/Debug/bin/tsfile-cli
 ```
 
-> **CMake 4.x note.** The bundled ANTLR4 runtime sets old CMake policies that CMake 4
-> rejects (`Policy CMP00xx may not be set to OLD behavior`). The reader and CLI do not use
-> ANTLR4, so disable it — `--disable-antlr4` for the build script, or `-DENABLE_ANTLR4=OFF`
-> for plain CMake:
->
-> ```bash
-> bash build.sh -t=Debug --disable-antlr4
-> ```
-
 Verify the binary:
 
 ```bash

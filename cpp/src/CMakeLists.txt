@@ -45,24 +45,13 @@ if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
-if (ENABLE_ANTLR4)
-    add_definitions(-DANTLR4CPP_STATIC)
-    set(ANTLR4_WITH_STATIC_CRT OFF)
-    message("ANTLR4 is enabled, adding ANTLR4 definitions")
-else()
+if (NOT ENABLE_ANTLR4)
     message("ANTLR4 is disabled")
 endif()
 
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
 )
-
-if (ENABLE_ANTLR4)
-    list(APPEND PROJECT_INCLUDE_DIR
-            ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
-    )
-    message("Adding ANTLR4 include directory")
-endif()
 
 include_directories(${PROJECT_INCLUDE_DIR})
 
@@ -110,8 +99,8 @@ endif()
 message("Compression libraries: ${COMPRESSION_LIBS}")
 
 if (ENABLE_ANTLR4)
-    target_link_libraries(parser_obj antlr4_static)
-    message("Linking parser_obj with antlr4_static")
+    target_link_libraries(parser_obj TsFile::ANTLR4)
+    message("Linking parser_obj with the selected ANTLR4 runtime")
 endif()
 
 target_link_libraries(compress_obj ${COMPRESSION_LIBS})

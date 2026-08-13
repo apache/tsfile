@@ -29,15 +29,15 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. Snappy, LZ4, lzokay, SIMDe, and zlib have migrated to these modes; the
-other dependencies in the inventory continue to use their repository copies
-until they are migrated incrementally.
+modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, and zlib have migrated to these
+modes. In `BUNDLED` mode, source is downloaded into the build cache rather
+than kept in this repository.
 
 ## Dependency Inventory
 
 | Dependency | Source management | Upstream version | License |
 | --- | --- | --- | --- |
-| ANTLR4 C++ Runtime | `antlr4-cpp-runtime-4` | [`4.9.3`](https://github.com/antlr/antlr4/tree/4.9.3/runtime/Cpp) | BSD-3-Clause, with MIT notices; see `antlr4-cpp-runtime-4/LICENSE.txt` |
+| ANTLR4 C++ Runtime | Verified tag archive downloaded during configuration | [`4.9.3`](https://github.com/antlr/antlr4/tree/4.9.3/runtime/Cpp) | BSD-3-Clause, with MIT notices; included in the downloaded archive and reproduced in the root `LICENSE` |
 | Snappy | Verified tag archive downloaded during configuration | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | lzokay | Verified commit archive downloaded during configuration | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
@@ -48,14 +48,27 @@ until they are migrated incrementally.
 
 ### ANTLR4 C++ Runtime
 
-- Origin and scope: the `runtime/Cpp` subtree from upstream tag `4.9.3`.
-- Trimming: `CMakeSettings.json` is omitted. The runtime, CMake support, and
-  demos are retained.
-- Local modifications: CMake integration was adapted for position-independent
-  code and local demo/UTF-8 handling. Portability and compiler fixes modify
-  `RuleContext.h`, `Token.h`, `Vocabulary.cpp`, `ATN.cpp`, `LL1Analyzer.cpp`,
-  `LL1Analyzer.h`, `LexerATNSimulator.cpp`, `LexerATNSimulator.h`,
-  `IntervalSet.cpp`, `Any.h`, and `CPPUtils.cpp`.
+- Origin and scope: the upstream `4.9.3` tag archive. The build compiles the
+  C++ runtime sources under `runtime/Cpp/runtime/src` into a PIC static library;
+  upstream demos, tests, packaging, and installation rules are not configured.
+- Archive URL:
+  `https://github.com/antlr/antlr4/archive/refs/tags/4.9.3.tar.gz`.
+- Archive SHA-256:
+  `efe4057d75ab48145d4683100fec7f77d7f87fa258707330cadd1f8e6f7eecae`.
+- UTF-8 support: bundled ANTLR4 uses the utf8cpp `v3.1.1` tag archive from
+  `https://github.com/nemtrif/utfcpp/archive/refs/tags/v3.1.1.tar.gz`, with
+  SHA-256
+  `33496a4c3cc2de80e9809c4997052331af5fb32079f43ab4d667cd48c3a36e88`.
+- Repository scope and local modifications: no ANTLR4 or utf8cpp source is
+  committed. During extraction, `ANTLR4Patch.cmake` applies and verifies the
+  existing TsFile portability and compiler fixes to `RuleContext.h`, `Token.h`,
+  `Vocabulary.cpp`, `ATN.cpp`, `LL1Analyzer.cpp`, `LL1Analyzer.h`,
+  `LexerATNSimulator.cpp`, `LexerATNSimulator.h`, `IntervalSet.cpp`, `Any.h`,
+  and `CPPUtils.cpp`. utf8cpp is not modified.
+- Resolution: `SYSTEM` accepts ANTLR4 4.9.3 or newer and earlier than 5.0.0
+  through an `antlr4_static` or `antlr4_shared` target; `BUNDLED` downloads or
+  reuses both verified archives; and `AUTO` prefers a compatible system
+  package before falling back to the verified archives.
 
 ### Snappy
 
@@ -140,12 +153,10 @@ until they are migrated incrementally.
 
 | Dependency | Purpose | Upstream version | License | Current resolution |
 | --- | --- | --- | --- | --- |
-| utf8cpp | ANTLR4 UTF-8 support | [`v3.1.1`](https://github.com/nemtrif/utfcpp/tree/v3.1.1) | Boost Software License 1.0 | Use a CMake package or installed headers when available; otherwise clone the tag during the build |
 | GoogleTest | C++ tests | [`release-1.12.1`](https://github.com/google/googletest/tree/release-1.12.1) | BSD-3-Clause | Download the release archive during test configuration |
 
-Neither dependency is committed to this repository, and TsFile does not carry
-local source modifications for either dependency. The GoogleTest archive is
-verified with SHA-256 digest
+GoogleTest is not committed to this repository and TsFile does not carry local
+source modifications for it. Its archive is verified with SHA-256 digest
 `24564e3b712d3eb30ac9a85d92f7d720f60cc0173730ac166f27dda7fed76cb2`
 before extraction. A previously downloaded local archive is subject to the same
 verification.
