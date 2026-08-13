@@ -182,7 +182,22 @@ if (ENABLE_ZLIB)
 endif()
 
 if (ENABLE_SIMD)
-    add_subdirectory(simde-0.8.4-rc3)
+    if (TSFILE_SIMDE_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/SIMDeSource.cmake)
+    elseif (NOT TARGET simde::simde)
+        message(FATAL_ERROR
+                "System SIMDe was selected, but the simde::simde target "
+                "is missing.")
+    endif ()
+
+    add_library(tsfile_simde INTERFACE)
+    if (TSFILE_SIMDE_SOURCE STREQUAL "BUNDLED")
+        target_include_directories(tsfile_simde INTERFACE
+                "${TSFILE_SIMDE_SOURCE_DIR}")
+    else ()
+        target_link_libraries(tsfile_simde INTERFACE simde::simde)
+    endif ()
+    add_library(TsFile::SIMDe ALIAS tsfile_simde)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

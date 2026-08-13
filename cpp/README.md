@@ -168,14 +168,17 @@ dependencies are resolved:
 - `BUNDLED`: download and build pinned dependency source archives managed by
   the TsFile build.
 
-Snappy, LZ4, lzokay, and zlib are currently resolved through this policy. A
-compatible system Snappy must be version 1.2.1 or newer in the 1.x release
-series and provide the `Snappy::snappy` CMake target. A compatible system LZ4
-must be version 1.9.4 or newer in the 1.x release series. A compatible system
-lzokay package must be version 0.1 or newer and earlier than 1.0, and provide
-the `lzokay::lzokay` CMake target. A compatible system zlib must be version
-1.3.1 or newer and earlier than 2.0.0. Other dependencies retain their
-existing resolution behavior until they are migrated incrementally.
+Snappy, LZ4, lzokay, SIMDe, and zlib are currently resolved through this
+policy. A compatible system Snappy must be version 1.2.1 or newer in the 1.x
+release series and provide the `Snappy::snappy` CMake target. A compatible
+system LZ4 must be version 1.9.4 or newer in the 1.x release series. A
+compatible system lzokay package must be version 0.1 or newer and earlier than
+1.0, and provide the `lzokay::lzokay` CMake target. A compatible system SIMDe
+installation must be version 0.8.4 or newer and earlier than 1.0.0; the build
+accepts either its `simde::simde` CMake target or installed headers. A
+compatible system zlib must be version 1.3.1 or newer and earlier than 2.0.0.
+Other dependencies retain their existing resolution behavior until they are
+migrated incrementally.
 
 For a direct CMake build, select the policy with:
 
@@ -184,10 +187,10 @@ cmake -S cpp -B cpp/build/system \
   -DTSFILE_DEPENDENCY_SOURCE=SYSTEM
 ```
 
-If LZ4 or zlib is installed in a non-standard prefix, set `LZ4_ROOT` or
-`ZLIB_ROOT`, respectively. For Snappy and lzokay, set `Snappy_DIR` or
-`lzokay_DIR` to the directory containing the corresponding package
-configuration file:
+If LZ4, SIMDe, or zlib is installed in a non-standard prefix, set `LZ4_ROOT`,
+`SIMDE_ROOT`, or `ZLIB_ROOT`, respectively. For Snappy and lzokay, set
+`Snappy_DIR` or `lzokay_DIR` to the directory containing the corresponding
+package configuration file:
 
 ```bash
 cmake -S cpp -B cpp/build/system \
@@ -195,6 +198,7 @@ cmake -S cpp -B cpp/build/system \
   -DSnappy_DIR=/path/to/lib/cmake/Snappy \
   -DLZ4_ROOT=/path/to/lz4 \
   -Dlzokay_DIR=/path/to/lib/cmake/lzokay \
+  -DSIMDE_ROOT=/path/to/simde \
   -DZLIB_ROOT=/path/to/zlib
 ```
 
@@ -205,16 +209,16 @@ mvn clean verify -P with-cpp \
   -Dtsfile.dependency.source=SYSTEM
 ```
 
-In `BUNDLED` mode, Snappy v1.2.1, LZ4 v1.9.4, lzokay commit `5cb18da`, and zlib
-v1.3.1 are downloaded from their upstream GitHub archives and verified with
-SHA-256 before extraction. Third-party source is placed in the build directory
-and is not committed to this repository.
+In `BUNDLED` mode, Snappy v1.2.1, LZ4 v1.9.4, lzokay commit `5cb18da`, SIMDe
+v0.8.4-rc3, and zlib v1.3.1 are downloaded from their upstream GitHub archives
+and verified with SHA-256 before extraction. Third-party source is placed in
+the build directory and is not committed to this repository.
 
 For an offline build with the migrated dependencies enabled, first place
 `snappy-1.2.1.tar.gz`, `lz4-v1.9.4.tar.gz`,
-`lzokay-5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2.tar.gz`, and
-`zlib-v1.3.1.tar.gz` in a persistent cache, then configure with network access
-disabled:
+`lzokay-5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2.tar.gz`,
+`simde-v0.8.4-rc3.tar.gz`, and `zlib-v1.3.1.tar.gz` in a persistent cache,
+then configure with network access disabled:
 
 ```bash
 cmake -S cpp -B cpp/build/offline \
@@ -226,7 +230,8 @@ cmake -S cpp -B cpp/build/offline \
 The archives can also be supplied explicitly with
 `-DTSFILE_SNAPPY_ARCHIVE=/path/to/snappy-1.2.1.tar.gz`,
 `-DTSFILE_LZ4_ARCHIVE=/path/to/lz4-v1.9.4.tar.gz`,
-`-DTSFILE_LZOKAY_ARCHIVE=/path/to/lzokay.tar.gz`, and
+`-DTSFILE_LZOKAY_ARCHIVE=/path/to/lzokay.tar.gz`,
+`-DTSFILE_SIMDE_ARCHIVE=/path/to/simde-v0.8.4-rc3.tar.gz`, and
 `-DTSFILE_ZLIB_ARCHIVE=/path/to/zlib-v1.3.1.tar.gz`. Cached and explicitly
 supplied archives must match their pinned SHA-256 digests. The equivalent Maven
 properties are `tsfile.dependency.offline` and `tsfile.dependency.cache`.

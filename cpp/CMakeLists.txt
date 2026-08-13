@@ -279,11 +279,7 @@ message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
 if (ENABLE_SIMD)
     add_definitions(-DENABLE_SIMD)
-    # common/statistic.h is a public header included by src, tools, tests and
-    # the cwrapper; under ENABLE_SIMD it pulls in <simde/x86/sse4.2.h>. Add the
-    # SIMDe include path here (before every add_subdirectory below) so all
-    # targets inherit it, instead of repeating it per subdirectory.
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SIMDeDependency.cmake)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
@@ -309,17 +305,41 @@ else ()
 endif ()
 add_subdirectory(third_party)
 
+# SIMDe is header-only and its headers are used throughout src, tools, tests,
+# and examples. Apply the selected target to all targets created below.
+if (ENABLE_SIMD)
+    get_property(_TSFILE_BASE_LINK_LIBRARIES
+            DIRECTORY PROPERTY LINK_LIBRARIES)
+    link_libraries(TsFile::SIMDe)
+    get_property(_TSFILE_SIMD_LINK_LIBRARIES
+            DIRECTORY PROPERTY LINK_LIBRARIES)
+endif ()
+
 add_subdirectory(src)
 if (BUILD_TOOLS)
     add_subdirectory(tools)
 endif ()
 if (BUILD_TEST)
+    # The test target links SIMDe explicitly. Do not make downloaded
+    # GoogleTest targets inherit it, because their upstream install export
+    # cannot export a TsFile-owned target.
+    if (ENABLE_SIMD)
+        set_property(DIRECTORY PROPERTY LINK_LIBRARIES
+                "${_TSFILE_BASE_LINK_LIBRARIES}")
+    endif ()
     add_subdirectory(test)
     if (TESTS_ENABLED)
         add_dependencies(TsFile_Test tsfile)
     endif ()
 else()
     message("BUILD_TEST is OFF, skipping test directory")
+endif ()
+
+if (ENABLE_SIMD)
+    set_property(DIRECTORY PROPERTY LINK_LIBRARIES
+            "${_TSFILE_SIMD_LINK_LIBRARIES}")
+    unset(_TSFILE_BASE_LINK_LIBRARIES)
+    unset(_TSFILE_SIMD_LINK_LIBRARIES)
 endif ()
 
 add_subdirectory(examples)

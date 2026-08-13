@@ -64,13 +64,6 @@ if (ENABLE_ANTLR4)
     message("Adding ANTLR4 include directory")
 endif()
 
-if (ENABLE_SIMD)
-    add_definitions(-DENABLE_SIMD)
-    list(APPEND PROJECT_INCLUDE_DIR
-            ${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3
-    )
-endif()
-
 include_directories(${PROJECT_INCLUDE_DIR})
 
 # Configure TSFILE_API (see utils/util_define.h) for every translation unit

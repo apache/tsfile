@@ -29,9 +29,9 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. Snappy, LZ4, lzokay, and zlib have migrated to these modes; the other
-dependencies in the inventory continue to use their repository copies until
-they are migrated incrementally.
+modes. Snappy, LZ4, lzokay, SIMDe, and zlib have migrated to these modes; the
+other dependencies in the inventory continue to use their repository copies
+until they are migrated incrementally.
 
 ## Dependency Inventory
 
@@ -41,7 +41,7 @@ they are migrated incrementally.
 | Snappy | Verified tag archive downloaded during configuration | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | lzokay | Verified commit archive downloaded during configuration | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
-| SIMDe | `simde-0.8.4-rc3` | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; see `simde-0.8.4-rc3/COPYING` |
+| SIMDe | Verified tag archive downloaded during configuration | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | zlib | Verified tag archive downloaded during configuration | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; included in the downloaded archive and reproduced in the root `LICENSE` |
 
 ## Dependency Details
@@ -107,9 +107,19 @@ they are migrated incrementally.
 
 ### SIMDe
 
-- Origin and scope: the upstream tree at tag `v0.8.4-rc3`.
-- Trimming: the `test/munit` Git submodule content is omitted.
-- Local modifications: no source modifications are recorded.
+- Origin and scope: the upstream `v0.8.4-rc3` tag archive. SIMDe is
+  header-only; the build exposes the extracted header root without configuring
+  its upstream tests or installation rules.
+- Archive URL:
+  `https://github.com/simd-everywhere/simde/archive/refs/tags/v0.8.4-rc3.tar.gz`.
+- Archive SHA-256:
+  `a5407985439fef1435ac1f091a4d2e6c71981faed213e1be156aca575ce7052c`.
+- Repository scope and local modifications: no SIMDe source is committed and
+  no upstream source is modified.
+- Resolution: `SYSTEM` accepts SIMDe 0.8.4 or newer and earlier than 1.0.0,
+  either through the `simde::simde` CMake target or installed headers;
+  `BUNDLED` downloads or reuses the verified archive; and `AUTO` prefers a
+  compatible system installation before falling back to the verified archive.
 
 ### zlib
 

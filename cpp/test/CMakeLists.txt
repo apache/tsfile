@@ -176,6 +176,11 @@ add_test(
         COMMAND ${CMAKE_COMMAND}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZOKAYDependencyTest.cmake)
+add_test(
+        NAME SIMDeDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/SIMDeDependencyTest.cmake)
 
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
@@ -259,6 +264,9 @@ if (ENABLE_LZOKAY)
 endif ()
 if (ENABLE_ZLIB)
     target_link_libraries(TsFile_Test TsFile::ZLIB)
+endif ()
+if (ENABLE_SIMD)
+    target_link_libraries(TsFile_Test TsFile::SIMDe)
 endif ()
 if (BUILD_TOOLS)
     target_link_libraries(TsFile_Test tsfile_cli_obj)

@@ -443,12 +443,32 @@ License: https://github.com/apache/commons-collections/blob/master/LICENSE.txt
 
 --------------------------------------------------------------------------------
 
-The following files include code from SIMDe (SIMD Everywhere) project.
+When the C++ build uses the TsFile-managed SIMDe source, the library includes
+headers downloaded from the verified SIMDe v0.8.4-rc3 tag source archive.
 
-./cpp/third_party/simde-0.8.4-rc3/
-
-Copyright: (c) 2017 Evan Nemerson <evan@nemerson.com>
 Project page: https://github.com/simd-everywhere/simde
-License: https://github.com/simd-everywhere/simde/blob/master/COPYING (MIT)
+Source archive: https://github.com/simd-everywhere/simde/archive/refs/tags/v0.8.4-rc3.tar.gz
+SHA-256: a5407985439fef1435ac1f091a4d2e6c71981faed213e1be156aca575ce7052c
+
+Copyright (c) 2017 Evan Nemerson <evan@nemerson.com>
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
