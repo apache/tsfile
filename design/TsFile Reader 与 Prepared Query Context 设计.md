@@ -211,3 +211,13 @@ PageLocator {
 - ResultSet 消费期间 ReaderSession 与 PreparedSeries 均保持存活。
 - 普通单文件 TsFileReaderPy API 与异常类型保持兼容。
 - 基准分别记录 prepare 延迟、重复 row window 延迟、PagePositionIndex 容量和 Reader reopen 后的复用收益；v1 不以这些指标声明内存硬上限。
+
+## 11\. 实施与验收记录（2026-08-14）
+
+C++ Reader 已记录每条 `TimeseriesIndex` 的精确 source offset/length，并在 C wrapper、Cython metadata 与 Dataset Index builder 之间完整传递。`prepare_series` 会先校验当前 `ReadFile` 的 FileGeneration 和 locator range，再只读取该段 bytes，在 `PreparedSeries` 自有 `PageArena` 中完整反序列化并要求无尾随数据。aligned 路径分别读取共享 time 与 value metadata，并校验 chunk cardinality 后构造 `AlignedTimeseriesIndex`；对象不引用 Reader arena、executor 或 decoder。
+
+C wrapper 已提供不透明 PreparedSeries handle 的 prepare/query/free 窄接口，Cython `PreparedSeriesPy` 负责确定性释放。当前实现以同一个 prepared query 入口的 `start_time/end_time + offset/limit` 参数承载 `queryPrepared` 与 `queryPreparedByRow` 两种语义；每次调用仍创建独立 SSI、filter、decoder、TsBlock 和 ResultSet。Runtime 在 ResultSet 完整消费期间同时持有 QueryLease、ReaderSession active use 和 PreparedSeries strong reference。
+
+`PagePositionIndex` 已实现线程安全的无空洞前缀发布、按 `row_begin` 二分和失败不推进边界，并通过顺序与 64 writer 并发测试。当前 v1 查询仍使用 SSI 已有的 chunk/page count 跳过逻辑，尚未把扫描得到的 page 物理 offset 回填到 `PagePositionIndex`；因此该可选索引在实际 benchmark 中保持为空，重复查询收益来自 PreparedSeries、Reader 与 OS page cache 复用，不能归因于 page locator。后续接入时不改变公开 API 或现有正确性路径。
+
+验证结果：Prepared/PagePosition 聚焦 C++ 测试 2/2 通过；Dataset Index 聚焦及真实跨语言索引 C++ 测试 7/7 通过；Python 完整回归 181/181 通过。`buildings_900k` 首次 256 行 prepared 查询在 1/2/4 进程组中的中位数分别为 1.26/1.26/1.20 ms，同一 PreparedSeries 的 20 次重复读取中位数约 0.30 ms，最大组内 p95 为 0.345 ms。

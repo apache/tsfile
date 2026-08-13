@@ -47,10 +47,25 @@ def _index_path(dataset: str) -> str:
 
 def _process_memory_kib(pid: int) -> Dict[str, int]:
     values: Dict[str, int] = {}
+    accepted = {
+        "Rss",
+        "Pss",
+        "Pss_Dirty",
+        "Pss_Anon",
+        "Pss_File",
+        "Pss_Shmem",
+        "Shared_Clean",
+        "Shared_Dirty",
+        "Private_Clean",
+        "Private_Dirty",
+        "Anonymous",
+        "Swap",
+        "SwapPss",
+    }
     with open(f"/proc/{pid}/smaps_rollup", encoding="ascii") as stream:
         for line in stream:
             name, separator, remainder = line.partition(":")
-            if not separator:
+            if not separator or name not in accepted:
                 continue
             token = remainder.strip().split(maxsplit=1)[0]
             if token.isdigit():
@@ -61,7 +76,13 @@ def _process_memory_kib(pid: int) -> Dict[str, int]:
     return values
 
 
-def _worker(dataset: str, query_rows: int, ready, release) -> None:
+def _percentile(values, fraction: float) -> float:
+    ordered = sorted(values)
+    position = max(0, min(len(ordered) - 1, int(len(ordered) * fraction) - 1))
+    return ordered[position]
+
+
+def _worker(dataset: str, query_rows: int, query_repeats: int, ready, release) -> None:
     started = time.perf_counter_ns()
     dataframe = None
     series = None
@@ -72,12 +93,22 @@ def _worker(dataset: str, query_rows: int, ready, release) -> None:
         query_started = time.perf_counter_ns()
         values = series[: min(query_rows, len(series))]
         query_finished = time.perf_counter_ns()
+        repeat_query_ms = []
+        for _ in range(query_repeats):
+            repeat_started = time.perf_counter_ns()
+            values = series[: min(query_rows, len(series))]
+            repeat_query_ms.append(
+                (time.perf_counter_ns() - repeat_started) / 1_000_000
+            )
         gc.collect()
         ready.send(
             {
                 "pid": os.getpid(),
                 "construct_ms": (constructed - started) / 1_000_000,
                 "first_query_ms": (query_finished - query_started) / 1_000_000,
+                "repeat_query_ms_median": statistics.median(repeat_query_ms),
+                "repeat_query_ms_p95": _percentile(repeat_query_ms, 0.95),
+                "query_repeats": query_repeats,
                 "query_rows": int(len(values)),
                 "series_count": len(dataframe),
                 "first_series_count": len(series),
@@ -101,7 +132,9 @@ def _worker(dataset: str, query_rows: int, ready, release) -> None:
             dataframe.close()
 
 
-def _run_group(dataset: str, process_count: int, query_rows: int) -> dict:
+def _run_group(
+    dataset: str, process_count: int, query_rows: int, query_repeats: int
+) -> dict:
     context = mp.get_context("spawn")
     release = context.Event()
     processes = []
@@ -111,7 +144,7 @@ def _run_group(dataset: str, process_count: int, query_rows: int) -> dict:
         receiver, sender = context.Pipe(duplex=False)
         process = context.Process(
             target=_worker,
-            args=(dataset, query_rows, sender, release),
+            args=(dataset, query_rows, query_repeats, sender, release),
         )
         process.start()
         sender.close()
@@ -153,6 +186,12 @@ def _run_group(dataset: str, process_count: int, query_rows: int) -> dict:
         "first_query_ms": [result["first_query_ms"] for result in worker_results],
         "first_query_ms_median": statistics.median(
             result["first_query_ms"] for result in worker_results
+        ),
+        "repeat_query_ms_median": statistics.median(
+            result["repeat_query_ms_median"] for result in worker_results
+        ),
+        "repeat_query_ms_p95_max": max(
+            result["repeat_query_ms_p95"] for result in worker_results
         ),
         "worker_results": worker_results,
         "memory_kib_by_pid": memory,
@@ -200,8 +239,11 @@ def main() -> None:
     )
     parser.add_argument("--processes", default="1,2,4")
     parser.add_argument("--query-rows", type=int, default=256)
+    parser.add_argument("--query-repeats", type=int, default=20)
     parser.add_argument("--output")
     args = parser.parse_args()
+    if args.query_rows < 0 or args.query_repeats < 1:
+        parser.error("--query-rows must be non-negative and --query-repeats positive")
 
     dataset = os.path.abspath(args.dataset)
     report = {
@@ -223,7 +265,7 @@ def main() -> None:
                 f"hot-start benchmark requires {report['index_path']}"
             )
         report["groups"] = [
-            _run_group(dataset, count, args.query_rows)
+            _run_group(dataset, count, args.query_rows, args.query_repeats)
             for count in (int(value) for value in args.processes.split(","))
         ]
 

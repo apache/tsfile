@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -246,6 +247,25 @@ TEST_F(DatasetIndexTest, WriterRejectsMalformedSectionCount) {
 TEST(DatasetIndexChecksumTest, MatchesKnownCrc32cVector) {
     const char* value = "123456789";
     EXPECT_EQ(0xE3069283U, dataset_index_crc32c(value, 9));
+}
+
+TEST(DatasetIndexCrossLanguageTest, OpensExternalIndexWhenConfigured) {
+    const char* path = std::getenv("TSFILE_DATASET_INDEX_TEST_PATH");
+    if (path == nullptr || path[0] == '\0') {
+        GTEST_SKIP() << "TSFILE_DATASET_INDEX_TEST_PATH is not set";
+    }
+
+    MappedDatasetIndex index;
+    ASSERT_EQ(DatasetIndexStatus::OK, index.open(path))
+        << index.error_message();
+    DatasetIndexSectionView files;
+    DatasetIndexSectionView series;
+    ASSERT_EQ(DatasetIndexStatus::OK,
+              index.section(DatasetIndexSectionType::TSFILE_RECORD, files));
+    ASSERT_EQ(DatasetIndexStatus::OK,
+              index.section(DatasetIndexSectionType::LOGICAL_SERIES, series));
+    EXPECT_GT(files.count, 0U);
+    EXPECT_GT(series.count, 0U);
 }
 
 }  // namespace

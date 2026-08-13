@@ -409,3 +409,26 @@ df.close()
 Python 包不公开 DatasetRuntime、ReaderSessionPool、PreparedSeriesCache、PreparedSeries 或 DatasetMergeKernel。用户仍通过 TsFileDataFrame、Timeseries 与 AlignedTimeseries 完成 Dataset 操作。
 
 Dataset Index 不保存 JSON、pickle、C++ 指针、Python 对象或执行状态。具体 magic、Header、DirectoryEntry、section、字段和兼容规则只由 Format 子文档定义；主文档不复制第二套布局。
+
+## 3\.9 实施结论与发布验收（2026-08-14）
+
+本设计已在 `feature/tsfile-dataframe-runtime` 分支实现。实现从 Apache `origin/develop` 的 `5681978b84a0d9ee26e1eab94f78afaccf93607a` 建立独立 worktree；四份冻结设计位于提交 `506f2a8bb`，主体代码位于提交 `a03a7f1d3`。Format、Runtime、Reader/Prepared 与 Python DataFrame 的实现边界分别落在对应子文档中，本节只汇总发布判断。
+
+|范围|已实现内容|验收|
+|---|---|---|
+|Dataset Index Format v1|C++/Python 14-section codec、CRC32C、结构与引用校验、原子发布、只读 mmap、名称/series/span 查找、generation 校验|合成 C++ 测试与 506,136,064-byte Python 实际索引的 C++ 完整打开均通过|
+|C++ Reader / Prepared|精确 TimeseriesMetadata range、独立 arena、aligned time/value 配对、prepared query C/Cython handle、查询局部 ResultSet|Release shared library 构建通过；C++ 聚合回归 757 passed、1 个外部数据可选测试 skipped；真实索引测试另行 7/7 通过|
+|进程本地 Runtime|独立 Runtime、对象/查询 lease、Reader LRU 硬上限、Prepared single-flight、lazy mapped catalog、确定性 close|生命周期、并发、stale generation、Reader cap 与 cache 复用测试通过|
+|Python / Cython|公开 DataFrame API 兼容、热启动 mmap 路径、typed overlap merge、view/Timeseries lease|Python 181/181 通过；Snappy/LZ4/LZO/Zlib 数据均由正式构建回归|
+
+`/data/lotsa` 实际是 116 个独立数据集目录，共 647 个 TsFile、约 519 GiB，不应作为一个混合 schema DataFrame 直接加载。本次选择其中最大的完整数据集 `buildings_900k`：61 个 TsFile、65,856,302,628 bytes、1,792,328 条逻辑序列。冷构建耗时 205.13 秒，索引 506,136,064 bytes，峰值 RSS 11,250,788 KiB，无 swap；这是一次性的 metadata object graph 与 section 排序/写出成本。
+
+稳定索引上的 1/2/4 进程热启动结果如下。每个进程构造独立 Runtime，读取同一 file-backed mmap，并执行一次及重复 256 行 prepared 查询。
+
+|进程数|构造中位数|首次查询中位数|重复查询中位数|总 PSS|总 USS|
+|---:|---:|---:|---:|---:|---:|
+|1|529.26 ms|1.26 ms|0.300 ms|84.95 MiB|57.98 MiB|
+|2|527.26 ms|1.26 ms|0.302 ms|144.19 MiB|99.45 MiB|
+|4|523.28 ms|1.20 ms|0.300 ms|251.13 MiB|198.09 MiB|
+
+发布结论：核心 Format、Runtime、C++ prepared path、Python API 与 1/2/4 多进程目标已经达到当前 v1 验收条件。`PagePositionIndex` 的并发、无空洞发布结构已经实现，但实际 SSI 扫描尚未向其中回填 page offset；当前按行查询继续走正确的 fallback scan。这是可选性能优化的明确剩余项，不影响索引格式、查询正确性或本次多进程内存结论。

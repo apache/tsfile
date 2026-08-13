@@ -282,3 +282,16 @@ while i < len(spans) and spans[i].min_time <= query_end:
 ```
 
 **内存与 mmap。** Runtime 可以 mmap 整个索引的虚拟地址空间，但启动阶段仅主动读取 64 B Header 和 448 B Directory。SectionView 只保存 `base pointer + count + record_size`；名称索引、逻辑记录和 span 均在查询时按需触页。名称 lookup 的结果可以做有界缓存，但不要求把字符串、schema 或所有 record 反序列化成堆对象。
+
+## 实施与验收记录（2026-08-14）
+
+Format v1 已在 C++ 与 Python 两侧落地。C++ `dataset_index` 模块实现 14 个 section 的定长布局、CRC32C、边界/宽度/字符串引用/外键校验、只读 mmap、名称二分查找，以及临时文件写入、文件与目录 fsync、原子 rename。Python builder 使用同一布局，冷构建完成后由 `MappedDatasetIndex` 直接提供惰性 typed view；热启动不再恢复完整 Python metadata catalog。
+
+构建器已从 Reader 导出的精确 TimeseriesMetadata byte range 生成 `DeviceFileSpan` 与 `SeriesLocator`。aligned locator 只有在 time/value chunk 数量一致时才设置配对有效标志；无法证明配对关系时拒绝发布 fast-path locator。文件 generation 使用 file size 与 mtime-ns 的稳定 fingerprint，映射和 Reader prepare 均会重新校验。
+
+验收覆盖如下：
+
+- C++ format 聚焦测试覆盖原子写入/映射/查找、版本拒绝、Header 与 section checksum、非法 section 数和 CRC32C 标准向量。
+- Python format/runtime 测试覆盖布局、损坏 Header、真实 aligned locator、过期 fingerprint、range 越界、热启动不调用旧 metadata reader，以及 Reader/Prepared cache 行为。
+- Python 生成的真实大索引由 C++ parser 完整打开并校验通过：61 个 TsFile、1,792,328 条 LogicalSeries、索引长度 506,136,064 bytes；该跨语言校验耗时 4.66 秒。
+- `/data/lotsa/buildings_900k` 的冷构建耗时 205.13 秒、峰值 RSS 11,250,788 KiB。该峰值属于一次性 builder；稳定索引发布后的 DataFrame 热启动使用只读 mmap，不复制这套对象图。

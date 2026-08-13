@@ -240,3 +240,21 @@ df = TsFileDataFrame(paths, show_progress=False)
 - PreparedSeriesCache v1 没有虚构的 entry/bytes 预算或 LRU 语义。
 - 跨文件 merge 首版位于 typed Cython，Python 不做逐行归并。
 - 最后一个对象 lease 和所有 QueryLease 结束后，Reader、PreparedSeries 与 mmap 均被释放。
+
+## 12. 实施与验收记录（2026-08-14）
+
+Runtime 主链路已经实现：每次独立 `TsFileDataFrame` 构造创建独立 `DatasetRuntime`；Runtime 持有只读 `MappedDatasetIndex`、严格 `max_open_files` 的 LRU `ReaderSessionPool`、single-flight `PreparedSeriesCache` 和对象/查询 lease 状态。DataFrame view 与惰性 Timeseries 各自克隆 `RuntimeLease`，任一 handle 的 `close()` 只释放自身；最后一个对象 lease 结束后拒绝新查询，等待活动 `QueryLease` 归零，再按 Prepared cache、Reader pool、mmap 的顺序 teardown。
+
+跨文件不重叠片段走 typed Cython 连续复制，重叠片段走 typed k-way merge 并检查重复时间戳。Reader 在命中 span 后才打开，prepared entry 由 `(mapped index identity, FileGeneration, locator_id)` 唯一确定；Reader 被 LRU 回收不会使其独立 arena 中的 PreparedSeries 失效。公开构造和选择 API 保持不变。
+
+本地回归结果为 Python `181 passed`；其中包含 DataFrame/view/Timeseries 生命周期、Reader 数量硬上限、prepared cache 复用、过期 generation、非法 locator、aligned exact range、跨文件 merge 和原有 Dataset API 回归。正式 C++ Release shared library 在 Snappy、LZ4、LZO、Zlib 全启用配置下构建通过。
+
+远端 `buildings_900k` 热启动验收如下。机器为 32 CPU、62 GiB RAM、Linux 6.8，数据集为 61 个文件、65,856,302,628 bytes，索引为 506,136,064 bytes。每个 worker 构造独立 Runtime，读取同一只读 mmap，随后读取首条序列的 256 行并保留一个 PreparedSeries；内存来自 `/proc/<pid>/smaps_rollup`。
+
+|进程数|构造中位数|首次查询中位数|缓存后 20 次查询中位数|总 RSS|总 PSS|总 USS|总 open FD|
+|---:|---:|---:|---:|---:|---:|---:|---:|
+|1|529.26 ms|1.26 ms|0.300 ms|116.64 MiB|84.95 MiB|57.98 MiB|12|
+|2|527.26 ms|1.26 ms|0.302 ms|233.01 MiB|144.19 MiB|99.45 MiB|24|
+|4|523.28 ms|1.20 ms|0.300 ms|465.93 MiB|251.13 MiB|198.09 MiB|48|
+
+这些数据表明 483 MiB 的索引映射没有按进程复制为等量私有内存；4 进程总 USS 约 198 MiB。RSS 会把共享 file-backed 页在每个进程中重复计数，因此跨进程容量判断应优先看 PSS 与 USS。上述数值是观测结果，不改变“只有 `max_open_files` 是 v1 硬约束”的设计结论。
