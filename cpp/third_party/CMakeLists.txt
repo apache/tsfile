@@ -307,6 +307,144 @@ if (ENABLE_ZSTD)
     add_library(TsFile::ZSTD ALIAS tsfile_zstd)
 endif ()
 
+if (ENABLE_LZMA2)
+    if (TSFILE_LIBLZMA_SOURCE STREQUAL "BUNDLED")
+        if (CMAKE_VERSION VERSION_LESS "3.20")
+            message(FATAL_ERROR
+                    "The verified XZ Utils 5.8.3 CMake build requires CMake "
+                    "3.20 or newer. Use TSFILE_DEPENDENCY_SOURCE=SYSTEM with "
+                    "a compatible liblzma package when using older CMake.")
+        endif ()
+        include(${CMAKE_SOURCE_DIR}/cmake/LibLZMASource.cmake)
+
+        # Build only the 0BSD liblzma LZMA1/LZMA2 implementation. XZ's CLI,
+        # scripts, documentation, tests, and GNU getopt replacement are not
+        # linked into this target.
+        set(XZ_NLS OFF CACHE BOOL "Disable XZ translations" FORCE)
+        set(XZ_THREADS no CACHE STRING
+                "Disable liblzma-internal threading in TsFile" FORCE)
+        set(XZ_CHECKS "crc32;crc64" CACHE STRING
+                "Checks enabled in the TsFile-managed liblzma" FORCE)
+        set(XZ_ENCODERS "lzma1;lzma2" CACHE STRING
+                "Encoders enabled in the TsFile-managed liblzma" FORCE)
+        set(XZ_DECODERS "lzma1;lzma2" CACHE STRING
+                "Decoders enabled in the TsFile-managed liblzma" FORCE)
+        set(XZ_MICROLZMA_ENCODER OFF CACHE BOOL
+                "Disable MicroLZMA encoding in TsFile" FORCE)
+        set(XZ_MICROLZMA_DECODER OFF CACHE BOOL
+                "Disable MicroLZMA decoding in TsFile" FORCE)
+        set(XZ_LZIP_DECODER OFF CACHE BOOL
+                "Disable lzip decoding in TsFile" FORCE)
+        set(XZ_TOOL_XZ OFF CACHE BOOL "Do not build the xz CLI" FORCE)
+        set(XZ_TOOL_XZDEC OFF CACHE BOOL "Do not build xzdec" FORCE)
+        set(XZ_TOOL_LZMADEC OFF CACHE BOOL "Do not build lzmadec" FORCE)
+        set(XZ_TOOL_LZMAINFO OFF CACHE BOOL "Do not build lzmainfo" FORCE)
+        set(XZ_TOOL_SCRIPTS OFF CACHE BOOL
+                "Do not install XZ's GPL scripts" FORCE)
+        set(XZ_DOXYGEN OFF CACHE BOOL "Do not build XZ API docs" FORCE)
+        set(XZ_DOC OFF CACHE BOOL "Do not install XZ documentation" FORCE)
+        set(XZ_SANDBOX no CACHE STRING
+                "Disable sandbox probes for disabled XZ tools" FORCE)
+        set(XZ_SYMBOL_VERSIONING no CACHE STRING
+                "Disable symbol versioning for static liblzma" FORCE)
+
+        get_property(_TSFILE_BUILD_SHARED_LIBS_WAS_SET
+                CACHE BUILD_SHARED_LIBS PROPERTY TYPE SET)
+        if (_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+            get_property(_TSFILE_BUILD_SHARED_LIBS_VALUE
+                    CACHE BUILD_SHARED_LIBS PROPERTY VALUE)
+        endif ()
+        get_property(_TSFILE_BUILD_TESTING_WAS_SET
+                CACHE BUILD_TESTING PROPERTY TYPE SET)
+        if (_TSFILE_BUILD_TESTING_WAS_SET)
+            get_property(_TSFILE_BUILD_TESTING_VALUE
+                    CACHE BUILD_TESTING PROPERTY VALUE)
+        endif ()
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL
+                "Build the TsFile-managed liblzma statically" FORCE)
+        set(BUILD_TESTING OFF CACHE BOOL
+                "Disable tests in the TsFile-managed XZ build" FORCE)
+        add_subdirectory(
+                "${TSFILE_LIBLZMA_SOURCE_DIR}"
+                "${CMAKE_BINARY_DIR}/third_party/xz"
+                EXCLUDE_FROM_ALL)
+        if (_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+            set(BUILD_SHARED_LIBS ${_TSFILE_BUILD_SHARED_LIBS_VALUE}
+                    CACHE BOOL "Build shared libraries" FORCE)
+        else ()
+            unset(BUILD_SHARED_LIBS CACHE)
+        endif ()
+        if (_TSFILE_BUILD_TESTING_WAS_SET)
+            set(BUILD_TESTING ${_TSFILE_BUILD_TESTING_VALUE}
+                    CACHE BOOL "Build tests" FORCE)
+        else ()
+            unset(BUILD_TESTING CACHE)
+        endif ()
+        unset(_TSFILE_BUILD_SHARED_LIBS_VALUE)
+        unset(_TSFILE_BUILD_SHARED_LIBS_WAS_SET)
+        unset(_TSFILE_BUILD_TESTING_VALUE)
+        unset(_TSFILE_BUILD_TESTING_WAS_SET)
+
+        set_target_properties(liblzma PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+        get_target_property(_TSFILE_LIBLZMA_SOURCES liblzma SOURCES)
+        foreach (_TSFILE_LIBLZMA_SOURCE IN LISTS _TSFILE_LIBLZMA_SOURCES)
+            if (_TSFILE_LIBLZMA_SOURCE MATCHES "^\\$<")
+                message(FATAL_ERROR
+                        "Cannot verify the license of generated liblzma "
+                        "source expression: ${_TSFILE_LIBLZMA_SOURCE}")
+            elseif (IS_ABSOLUTE "${_TSFILE_LIBLZMA_SOURCE}")
+                set(_TSFILE_LIBLZMA_SOURCE_FILE
+                        "${_TSFILE_LIBLZMA_SOURCE}")
+            else ()
+                set(_TSFILE_LIBLZMA_SOURCE_FILE
+                        "${TSFILE_LIBLZMA_SOURCE_DIR}/${_TSFILE_LIBLZMA_SOURCE}")
+            endif ()
+            if (EXISTS "${_TSFILE_LIBLZMA_SOURCE_FILE}")
+                file(READ "${_TSFILE_LIBLZMA_SOURCE_FILE}"
+                        _TSFILE_LIBLZMA_LICENSE_HEADER LIMIT 512)
+                if (NOT _TSFILE_LIBLZMA_LICENSE_HEADER MATCHES
+                        "SPDX-License-Identifier: 0BSD")
+                    message(FATAL_ERROR
+                            "The TsFile-managed liblzma target contains a "
+                            "source that is not marked 0BSD: "
+                            "${_TSFILE_LIBLZMA_SOURCE_FILE}")
+                endif ()
+            else ()
+                message(FATAL_ERROR
+                        "Cannot verify missing liblzma target source: "
+                        "${_TSFILE_LIBLZMA_SOURCE_FILE}")
+            endif ()
+        endforeach ()
+        unset(_TSFILE_LIBLZMA_LICENSE_HEADER)
+        unset(_TSFILE_LIBLZMA_SOURCE)
+        unset(_TSFILE_LIBLZMA_SOURCE_FILE)
+        unset(_TSFILE_LIBLZMA_SOURCES)
+        get_target_property(_TSFILE_LIBLZMA_LINK_LIBRARIES
+                liblzma LINK_LIBRARIES)
+        if (_TSFILE_LIBLZMA_LINK_LIBRARIES MATCHES
+                "(^|;)libgnu(;|$)")
+            message(FATAL_ERROR
+                    "The TsFile-managed liblzma target must not link XZ's "
+                    "LGPL-licensed GNU getopt replacement.")
+        endif ()
+        unset(_TSFILE_LIBLZMA_LINK_LIBRARIES)
+    elseif ("${TSFILE_LIBLZMA_SYSTEM_TARGET}" STREQUAL "")
+        message(FATAL_ERROR
+                "System liblzma was selected, but no usable target is "
+                "available.")
+    endif ()
+
+    add_library(tsfile_liblzma INTERFACE)
+    if (TSFILE_LIBLZMA_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_liblzma INTERFACE liblzma)
+    else ()
+        target_link_libraries(tsfile_liblzma INTERFACE
+                ${TSFILE_LIBLZMA_SYSTEM_TARGET})
+    endif ()
+    add_library(TsFile::LibLZMA ALIAS tsfile_liblzma)
+endif ()
+
 if (ENABLE_SIMD)
     if (TSFILE_SIMDE_SOURCE STREQUAL "BUNDLED")
         include(${CMAKE_SOURCE_DIR}/cmake/SIMDeSource.cmake)

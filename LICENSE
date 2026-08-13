@@ -467,6 +467,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 
+When the C++ build uses the TsFile-managed liblzma source, the resulting target
+includes only 0BSD-licensed liblzma code from the verified XZ Utils v5.8.3
+release archive. The upstream archive is a mixed-license distribution; its
+GPL-licensed scripts and LGPL-licensed GNU getopt replacement are not compiled,
+linked, installed, or redistributed by TsFile.
+
+Project page: https://github.com/tukaani-project/xz
+Source archive: https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz
+SHA-256: 3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0
+
+BSD Zero Clause License
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+--------------------------------------------------------------------------------
+
 When the C++ build uses the TsFile-managed lzokay source, the library includes
 code downloaded from the verified upstream commit
 5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2.

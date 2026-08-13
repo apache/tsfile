@@ -277,6 +277,14 @@ if (ENABLE_ZSTD)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZSTDDependency.cmake)
 endif ()
 
+option(ENABLE_LZMA2 "Enable LZMA2 compression dependency" OFF)
+message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
+
+if (ENABLE_LZMA2)
+    add_definitions(-DENABLE_LZMA2)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LibLZMADependency.cmake)
+endif ()
+
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 

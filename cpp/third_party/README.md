@@ -29,9 +29,9 @@ When a dependency is added or updated, this file and the root `LICENSE` file
 must be updated together.
 
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
-modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, and Zstandard have migrated to
-these modes. In `BUNDLED` mode, source is downloaded into the build cache
-rather than kept in this repository.
+modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma have
+migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
+cache rather than kept in this repository.
 
 ## Dependency Inventory
 
@@ -44,6 +44,7 @@ rather than kept in this repository.
 | SIMDe | Verified tag archive downloaded during configuration | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; included in the downloaded archive and reproduced in the root `LICENSE` |
 | zlib | Verified tag archive downloaded during configuration | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; included in the downloaded archive and reproduced in the root `LICENSE` |
 | Zstandard | Verified tag archive downloaded during configuration | [`v1.5.7`](https://github.com/facebook/zstd/tree/v1.5.7) | BSD-3-Clause option selected from the upstream dual license; included in the downloaded archive and reproduced in the root `LICENSE` |
+| liblzma (XZ Utils) | Verified release archive downloaded during configuration | [`v5.8.3`](https://github.com/tukaani-project/xz/tree/v5.8.3/src/liblzma) | 0BSD for `liblzma`; the mixed-license archive's GPL/LGPL tools and scripts are excluded from the build and distribution |
 
 ## Dependency Details
 
@@ -169,6 +170,33 @@ rather than kept in this repository.
   through an upstream CMake target; `BUNDLED` downloads or reuses the verified
   archive; and `AUTO` prefers a compatible system package before falling back
   to the verified archive.
+
+### liblzma (XZ Utils)
+
+- Origin and scope: the `liblzma` component of the upstream XZ Utils `v5.8.3`
+  release. The build enables the LZMA1/LZMA2 encoders and decoders with CRC32
+  and CRC64 checks in a PIC static library. It disables threading, MicroLZMA,
+  lzip, optional Delta/BCJ filters, tools, scripts, tests, translations,
+  examples, and documentation.
+- Archive URL:
+  `https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz`.
+- Archive SHA-256:
+  `3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0`.
+- License boundary: XZ Utils is a mixed-license source distribution. The
+  `liblzma` source and the CMake files used to build it are 0BSD, an ASF
+  Category A license. GPL-licensed scripts and LGPL-licensed GNU getopt code
+  exist elsewhere in the downloaded upstream archive but are not compiled,
+  linked, installed, committed, or redistributed by TsFile. The integration
+  verifies that every source in the configured `liblzma` target is marked
+  0BSD and rejects any configuration that links `libgnu` into `liblzma`.
+- Repository scope and local modifications: no XZ or liblzma source is
+  committed and no upstream source is modified. `ENABLE_LZMA2` is off by
+  default until a TsFile compression implementation consumes the
+  `TsFile::LibLZMA` target. The upstream bundled build requires CMake 3.20 or
+  newer; SYSTEM mode remains available with TsFile's CMake 3.11 baseline.
+- Resolution: `SYSTEM` accepts liblzma 5.8.3 or newer and earlier than 6.0.0;
+  `BUNDLED` downloads or reuses the verified XZ archive; and `AUTO` prefers a
+  compatible system package before falling back to the verified archive.
 
 ## Other Build Dependencies
 
