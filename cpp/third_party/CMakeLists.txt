@@ -33,7 +33,26 @@ if (ENABLE_SNAPPY)
 endif()
 
 if (ENABLE_LZ4)
-    add_subdirectory(lz4)
+    if (TSFILE_LZ4_SOURCE STREQUAL "BUNDLED")
+        include(${CMAKE_SOURCE_DIR}/cmake/LZ4Source.cmake)
+        add_library(tsfile_lz4_bundled STATIC
+                "${TSFILE_LZ4_SOURCE_DIR}/lib/lz4.c")
+        set_target_properties(tsfile_lz4_bundled PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+        target_include_directories(tsfile_lz4_bundled PUBLIC
+                "${TSFILE_LZ4_SOURCE_DIR}/lib")
+    elseif (NOT TARGET LZ4::LZ4)
+        message(FATAL_ERROR
+                "System LZ4 was selected, but the LZ4::LZ4 target is missing.")
+    endif ()
+
+    add_library(tsfile_lz4 INTERFACE)
+    if (TSFILE_LZ4_SOURCE STREQUAL "BUNDLED")
+        target_link_libraries(tsfile_lz4 INTERFACE tsfile_lz4_bundled)
+    else ()
+        target_link_libraries(tsfile_lz4 INTERFACE LZ4::LZ4)
+    endif ()
+    add_library(TsFile::LZ4 ALIAS tsfile_lz4)
 endif()
 
 if (ENABLE_LZOKAY)

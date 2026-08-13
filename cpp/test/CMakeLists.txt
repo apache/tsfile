@@ -151,10 +151,6 @@ if (ENABLE_SNAPPY)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/google_snappy)
 endif()
 
-if (ENABLE_LZ4)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/lz4)
-endif()
-
 if (ENABLE_LZOKAY)
     include_directories(${CMAKE_SOURCE_DIR}/third_party/lzokay)
 endif()
@@ -173,6 +169,11 @@ add_test(
         NAME DependencySourceCMakeTest
         COMMAND ${CMAKE_COMMAND} -P
                 ${CMAKE_SOURCE_DIR}/cmake/tests/DependencySourceTest.cmake)
+add_test(
+        NAME LZ4DependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZ4DependencyTest.cmake)
 
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
@@ -245,6 +246,9 @@ target_link_libraries(
         GTest::gmock
         tsfile
 )
+if (ENABLE_LZ4)
+    target_link_libraries(TsFile_Test TsFile::LZ4)
+endif ()
 if (BUILD_TOOLS)
     target_link_libraries(TsFile_Test tsfile_cli_obj)
 endif ()

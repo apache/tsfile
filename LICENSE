@@ -267,14 +267,37 @@ License: ./cpp/third_party/antlr4-cpp-runtime-4/LICENSE.txt (BSD-3-Clause and MI
 
 --------------------------------------------------------------------------------
 
-The following files include code copied from the LZ4 project.
+When built with TSFILE_DEPENDENCY_SOURCE=BUNDLED, the C++ library includes code
+from the LZ4 project, downloaded from the verified v1.9.4 tag source archive.
 
-./cpp/third_party/lz4/lz4.c
-./cpp/third_party/lz4/lz4.h
+Project page: https://github.com/lz4/lz4
+Source archive: https://github.com/lz4/lz4/archive/refs/tags/v1.9.4.tar.gz
+SHA-256: 0b0e3aa07c8c063ddf40b082bdf7e37a1562bda40a0ff5272957f3e987e0e54b
 
-Copyright: (C) 2011-2020, Yann Collet.
-Project page: http://www.lz4.org
-License: ./cpp/third_party/lz4/LICENSE (BSD-2-Clause)
+LZ4 Library
+Copyright (c) 2011-2020, Yann Collet
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this
+  list of conditions and the following disclaimer in the documentation and/or
+  other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 

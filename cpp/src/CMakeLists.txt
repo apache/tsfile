@@ -64,12 +64,6 @@ if (ENABLE_SNAPPY)
     )
 endif()
 
-if (ENABLE_LZ4)
-    list(APPEND PROJECT_INCLUDE_DIR
-            ${CMAKE_SOURCE_DIR}/third_party/lz4
-    )
-endif()
-
 if (ENABLE_LZOKAY)
     list(APPEND PROJECT_INCLUDE_DIR
             ${CMAKE_SOURCE_DIR}/third_party/lzokay
@@ -131,7 +125,7 @@ if (ENABLE_SNAPPY)
 endif()
 
 if (ENABLE_LZ4)
-    list(APPEND COMPRESSION_LIBS LZ4)
+    list(APPEND COMPRESSION_LIBS TsFile::LZ4)
 endif()
 
 if (ENABLE_LZOKAY)
@@ -151,6 +145,7 @@ endif()
 
 target_link_libraries(compress_obj ${COMPRESSION_LIBS})
 target_link_libraries(common_obj ${COMPRESSION_LIBS})
+target_link_libraries(file_obj ${COMPRESSION_LIBS})
 target_link_libraries(read_obj ${COMPRESSION_LIBS})
 target_link_libraries(write_obj ${COMPRESSION_LIBS})
 

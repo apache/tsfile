@@ -19,6 +19,13 @@ under the License.
 
 include_guard(GLOBAL)
 
+set(TSFILE_DEPENDENCY_CACHE "${CMAKE_BINARY_DIR}/dependency-cache"
+        CACHE PATH
+        "Directory containing downloaded third-party source archives")
+set(TSFILE_DEPENDENCY_OFFLINE OFF
+        CACHE BOOL
+        "Disallow network downloads and require cached dependency archives")
+
 set(TSFILE_DEPENDENCY_SOURCE "AUTO"
         CACHE STRING
         "Dependency source policy: AUTO, SYSTEM, or BUNDLED")

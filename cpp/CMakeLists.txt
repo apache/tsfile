@@ -32,6 +32,7 @@ endif ()
 set(TsFile_CPP_VERSION 2.3.2.dev)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
 message("cmake using: TSFILE_BUILD_SHARED=${TSFILE_BUILD_SHARED}")
@@ -240,6 +241,7 @@ message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
 
 if (ENABLE_LZ4)
     add_definitions(-DENABLE_LZ4)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LZ4Dependency.cmake)
 endif()
 
 option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)

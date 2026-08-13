@@ -37,6 +37,8 @@
         <build.test>ON</build.test>
         <tsfile.build.shared>ON</tsfile.build.shared>
         <tsfile.dependency.source>AUTO</tsfile.dependency.source>
+        <tsfile.dependency.offline>OFF</tsfile.dependency.offline>
+        <tsfile.dependency.cache>${project.build.directory}/dependency-cache</tsfile.dependency.cache>
         <enable.snappy>ON</enable.snappy>
         <enable.lz4>ON</enable.lz4>
         <enable.lzokay>ON</enable.lzokay>
@@ -86,6 +88,8 @@
                                 <option>-DBUILD_TEST=${build.test}</option>
                                 <option>-DTSFILE_BUILD_SHARED=${tsfile.build.shared}</option>
                                 <option>-DTSFILE_DEPENDENCY_SOURCE=${tsfile.dependency.source}</option>
+                                <option>-DTSFILE_DEPENDENCY_OFFLINE=${tsfile.dependency.offline}</option>
+                                <option>-DTSFILE_DEPENDENCY_CACHE=${tsfile.dependency.cache}</option>
                                 <option>-DENABLE_ANTLR4=${enable.antlr4}</option>
                                 <option>-DENABLE_SNAPPY=${enable.snappy}</option>
                                 <option>-DENABLE_LZ4=${enable.lz4}</option>

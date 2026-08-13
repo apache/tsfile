@@ -21,23 +21,25 @@
 
 # C++ Third-Party Dependencies
 
-Keeping third-party source code in the repository is an exception. A bundled
-dependency must be small and stable, have a license that permits
-redistribution, and be accepted through community review. When a bundled
+Keeping third-party source code in the repository is an exception. Such source
+must be small and stable, have a license that permits redistribution, and be
+accepted through community review. Build-managed dependencies should instead
+use pinned upstream source archives with cryptographic digest verification. When a
 dependency is added or updated, this file and the root `LICENSE` file must be
 updated together.
 
-The current build resolves all dependencies in the bundled inventory below
-from the bundled copies. A later migration will add explicit `SYSTEM`,
-`BUNDLED`, and `AUTO` dependency source modes.
+The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
+modes. LZ4 has migrated to these modes; the other dependencies in the bundled
+inventory continue to use their bundled copies until they are migrated
+incrementally.
 
 ## Dependency Inventory
 
-| Dependency | Bundled path | Upstream version | License |
+| Dependency | Source management | Upstream version | License |
 | --- | --- | --- | --- |
 | ANTLR4 C++ Runtime | `antlr4-cpp-runtime-4` | [`4.9.3`](https://github.com/antlr/antlr4/tree/4.9.3/runtime/Cpp) | BSD-3-Clause, with MIT notices; see `antlr4-cpp-runtime-4/LICENSE.txt` |
 | Snappy | `google_snappy` | [`1.2.1`](https://github.com/google/snappy/tree/1.2.1) | BSD-3-Clause; see `google_snappy/COPYING` |
-| LZ4 | `lz4` | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; see `lz4/LICENSE` |
+| LZ4 | Verified tag archive downloaded during configuration | [`v1.9.4`](https://github.com/lz4/lz4/tree/v1.9.4/lib) | BSD-2-Clause; included in the downloaded archive and reproduced in the root `LICENSE` |
 | lzokay | `lzokay` | [`5cb18da`](https://github.com/AxioDL/lzokay/commit/5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2) | MIT; see `lzokay/LICENSE` |
 | SIMDe | `simde-0.8.4-rc3` | [`v0.8.4-rc3`](https://github.com/simd-everywhere/simde/tree/v0.8.4-rc3) | MIT; see `simde-0.8.4-rc3/COPYING` |
 | zlib | `zlib-1.3.1` | [`v1.3.1`](https://github.com/madler/zlib/tree/v1.3.1) | zlib License; see `zlib-1.3.1/LICENSE` |
@@ -67,11 +69,18 @@ from the bundled copies. A later migration will add explicit `SYSTEM`,
 
 ### LZ4
 
-- Origin and scope: `lib/lz4.c` and `lib/lz4.h` from upstream tag `v1.9.4`.
-- Trimming: all other upstream files are omitted except the applicable library
-  license.
-- Local modifications: the two source files were mechanically reformatted. No
-  intentional algorithm changes are recorded.
+- Origin and scope: the upstream `v1.9.4` tag archive. The build
+  compiles `lib/lz4.c` and exposes `lib/lz4.h` from the extracted archive.
+- Archive URL:
+  `https://github.com/lz4/lz4/archive/refs/tags/v1.9.4.tar.gz`.
+- Archive SHA-256:
+  `0b0e3aa07c8c063ddf40b082bdf7e37a1562bda40a0ff5272957f3e987e0e54b`.
+- Repository scope and local modifications: no LZ4 source is committed and no
+  upstream source is modified. The TsFile-owned CMake integration selects and
+  compiles the required files after verification.
+- Resolution: `SYSTEM` accepts LZ4 1.9.4 or newer in the 1.x release series;
+  `BUNDLED` downloads or reuses the verified archive; and `AUTO` prefers a
+  compatible system LZ4 before falling back to the verified archive.
 
 ### lzokay
 
