@@ -1,0 +1,220 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Compatibility-Test
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/compatibility-test.yml'
+      - '.mvn/**'
+      - 'cpp/**'
+      - 'java/**'
+      - 'mvnw'
+      - 'pom.xml'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/compatibility-test.yml'
+      - '.mvn/**'
+      - 'cpp/**'
+      - 'java/**'
+      - 'mvnw'
+      - 'pom.xml'
+  workflow_dispatch:
+    inputs:
+      forceUpdates:
+        description: "Forces a snapshot update"
+        required: false
+        default: 'false'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  generate-fixtures:
+    name: Generate ${{ matrix.language }} fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ java, cpp ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5.6.0
+        with:
+          distribution: corretto
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Cache verified C++ dependency archives
+        if: matrix.language == 'cpp'
+        uses: actions/cache@v6
+        with:
+          path: cpp/target/dependency-cache
+          key: ${{ runner.os }}-tsfile-cpp-deps-${{ hashFiles('cpp/CMakeLists.txt', 'cpp/cmake/*Source.cmake', 'cpp/third_party/CMakeLists.txt') }}
+
+      - name: Generate Java table fixtures
+        if: matrix.language == 'java'
+        shell: bash
+        run: |
+          mkdir -p compat-fixtures/java
+          ./mvnw -P with-java \
+            -Dtest=TableModelEncodingCompressionCompatibilityTest#generateFixtures \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtsfile.compat.generate.dir="$PWD/compat-fixtures/java" \
+            test
+
+      - name: Build C++ tests
+        if: matrix.language == 'cpp'
+        shell: bash
+        run: |
+          ./mvnw -P with-cpp \
+            -Dbuild.type=Release \
+            -DskipTests \
+            -Dtsfile.dependency.source=BUNDLED \
+            -Denable.antlr4=OFF \
+            -Denable.snappy=OFF \
+            -Denable.lz4=ON \
+            -Denable.lzokay=OFF \
+            -Denable.zlib=OFF \
+            -Denable.zstd=ON \
+            -Denable.lzma2=ON \
+            -Denable.simd=OFF \
+            package
+
+      - name: Generate C++ table fixtures
+        if: matrix.language == 'cpp'
+        shell: bash
+        run: |
+          mkdir -p compat-fixtures/cpp
+          TSFILE_COMPAT_GENERATE_DIR="$PWD/compat-fixtures/cpp" \
+            ./cpp/target/build/test/lib/TsFile_Test \
+            --gtest_filter=TableModelEncodingCompressionCompatibilityTest.GenerateFixtures
+
+      - name: Upload ${{ matrix.language }} fixtures
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-${{ matrix.language }}-compat-fixtures
+          path: compat-fixtures/${{ matrix.language }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  validate-fixtures:
+    name: Validate ${{ matrix.writer }} fixtures with ${{ matrix.reader }}
+    needs: generate-fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - writer: java
+            reader: cpp
+          - writer: cpp
+            reader: java
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5.6.0
+        with:
+          distribution: corretto
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Cache verified C++ dependency archives
+        if: matrix.reader == 'cpp'
+        uses: actions/cache@v6
+        with:
+          path: cpp/target/dependency-cache
+          key: ${{ runner.os }}-tsfile-cpp-deps-${{ hashFiles('cpp/CMakeLists.txt', 'cpp/cmake/*Source.cmake', 'cpp/third_party/CMakeLists.txt') }}
+
+      - name: Download ${{ matrix.writer }} fixtures
+        uses: actions/download-artifact@v8
+        with:
+          name: tsfile-${{ matrix.writer }}-compat-fixtures
+          path: compat-fixtures/${{ matrix.writer }}
+
+      - name: Validate ${{ matrix.writer }} fixtures with Java
+        if: matrix.reader == 'java'
+        shell: bash
+        run: |
+          ./mvnw -P with-java \
+            -Dtest=TableModelEncodingCompressionCompatibilityTest#validateFixtures \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.writer }}" \
+            test
+
+      - name: Build C++ tests
+        if: matrix.reader == 'cpp'
+        shell: bash
+        run: |
+          ./mvnw -P with-cpp \
+            -Dbuild.type=Release \
+            -DskipTests \
+            -Dtsfile.dependency.source=BUNDLED \
+            -Denable.antlr4=OFF \
+            -Denable.snappy=OFF \
+            -Denable.lz4=ON \
+            -Denable.lzokay=OFF \
+            -Denable.zlib=OFF \
+            -Denable.zstd=ON \
+            -Denable.lzma2=ON \
+            -Denable.simd=OFF \
+            package
+
+      - name: Validate ${{ matrix.writer }} fixtures with C++
+        if: matrix.reader == 'cpp'
+        shell: bash
+        run: |
+          TSFILE_COMPAT_VALIDATE_DIR="$PWD/compat-fixtures/${{ matrix.writer }}" \
+            ./cpp/target/build/test/lib/TsFile_Test \
+            --gtest_filter=TableModelEncodingCompressionCompatibilityTest.ValidateFixtures
