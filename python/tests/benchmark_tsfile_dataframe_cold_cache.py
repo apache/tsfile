@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Cold-cache, random-series TsFileDataFrame comparison benchmark.
+"""Cold/hot-cache, random-series TsFileDataFrame comparison benchmark.
 
 The benchmark intentionally imports ``tsfile`` only in spawned workers.  This
 lets the coordinator execute ``sync`` and Linux ``drop_caches`` before every
@@ -23,8 +23,11 @@ process-count group without importing the implementation under test first.
 
 Each worker uses a deterministic, worker-specific random seed.  Worker 0
 therefore uses the same positions in the 1, 2, and 4 process groups, while the
-additional workers exercise different series.  The output includes every
-position so two implementations can be checked for an identical workload.
+additional workers exercise different series.  After the cold random pass,
+each worker repeats the exact same positions in the same order without
+dropping caches, producing a directly comparable hot-cache pass.  The output
+includes every position so two implementations can be checked for an
+identical workload.
 """
 
 from __future__ import annotations
@@ -172,6 +175,7 @@ def _worker(
     seed: int,
     first_start,
     random_start,
+    hot_start,
     release,
     sender,
 ) -> None:
@@ -243,6 +247,29 @@ def _worker(
                 "random_wall_ms": random_wall_ms,
             }
         )
+
+        hot_start.wait()
+        hot_started = time.perf_counter_ns()
+        hot_ms = []
+        hot_rows = []
+        for position in positions[1:]:
+            elapsed_ms, rows = _read_window(dataframe, position, query_rows)
+            hot_ms.append(elapsed_ms)
+            hot_rows.append(rows)
+        hot_wall_ms = (time.perf_counter_ns() - hot_started) / 1_000_000
+        gc.collect()
+        sender.send(
+            {
+                "phase": "hot_complete",
+                **common,
+                "hot_query_ms": hot_ms,
+                "hot_query_summary": _summary(hot_ms),
+                "hot_query_rows_min": min(hot_rows),
+                "hot_query_rows_max": max(hot_rows),
+                "hot_query_rows_total": sum(hot_rows),
+                "hot_wall_ms": hot_wall_ms,
+            }
+        )
         release.wait()
     except BaseException as exc:
         try:
@@ -291,6 +318,7 @@ def _run_group(
     context = mp.get_context("spawn")
     first_start = context.Event()
     random_start = context.Event()
+    hot_start = context.Event()
     release = context.Event()
     processes = []
     receivers = []
@@ -308,6 +336,7 @@ def _run_group(
                 seed,
                 first_start,
                 random_start,
+                hot_start,
                 release,
                 sender,
             ),
@@ -335,13 +364,27 @@ def _run_group(
         ) / 1_000_000
         memory_after_random_query = _memory_snapshot(random_complete)
 
+        hot_phase_started = time.perf_counter_ns()
+        hot_start.set()
+        hot_complete = _receive_phase(receivers, "hot_complete")
+        hot_phase_wall_ms = (
+            time.perf_counter_ns() - hot_phase_started
+        ) / 1_000_000
+        memory_after_hot_query = _memory_snapshot(hot_complete)
+
         first_ms = [result["first_query_ms"] for result in first_complete]
         random_ms = [
             elapsed
             for result in random_complete
             for elapsed in result["random_query_ms"]
         ]
+        hot_ms = [
+            elapsed
+            for result in hot_complete
+            for elapsed in result["hot_query_ms"]
+        ]
         query_wall_ms = max(result["random_wall_ms"] for result in random_complete)
+        hot_query_wall_ms = max(result["hot_wall_ms"] for result in hot_complete)
         if any(result["first_query_rows"] != query_rows for result in first_complete):
             raise RuntimeError(f"first query did not return {query_rows} rows")
         if any(
@@ -350,6 +393,12 @@ def _run_group(
             for result in random_complete
         ):
             raise RuntimeError(f"random query did not return {query_rows} rows")
+        if any(
+            result["hot_query_rows_min"] != query_rows
+            or result["hot_query_rows_max"] != query_rows
+            for result in hot_complete
+        ):
+            raise RuntimeError(f"hot query did not return {query_rows} rows")
         if len({result["series_count"] for result in constructed}) != 1:
             raise RuntimeError("workers observed different series counts")
 
@@ -379,6 +428,7 @@ def _run_group(
                 "workers": first_complete,
             },
             "random_query": {
+                "cache_state": "cold first pass over random_positions",
                 "query_wall_ms": query_wall_ms,
                 "coordinator_phase_wall_ms_including_worker_gc": random_phase_wall_ms,
                 "aggregate_qps": len(random_ms) / (query_wall_ms / 1000),
@@ -388,14 +438,30 @@ def _run_group(
                 "rows_total": len(random_ms) * query_rows,
                 "workers": random_complete,
             },
+            "hot_query": {
+                "cache_state": (
+                    "immediate second pass over the same random_positions "
+                    "in the same order without dropping caches"
+                ),
+                "query_wall_ms": hot_query_wall_ms,
+                "coordinator_phase_wall_ms_including_worker_gc": hot_phase_wall_ms,
+                "aggregate_qps": len(hot_ms) / (hot_query_wall_ms / 1000),
+                "latency": _summary(hot_ms),
+                "query_count": len(hot_ms),
+                "rows_per_query": query_rows,
+                "rows_total": len(hot_ms) * query_rows,
+                "workers": hot_complete,
+            },
             "memory_before_query_kib": memory_before_query,
             "memory_after_random_query_kib": memory_after_random_query,
+            "memory_after_hot_query_kib": memory_after_hot_query,
         }
         print(
             "completed cold-cache group: "
             f"processes={process_count}, "
             f"first_p50={result['first_query']['latency']['p50_ms']:.3f} ms, "
-            f"random_p50={result['random_query']['latency']['p50_ms']:.3f} ms",
+            f"cold_random_p50={result['random_query']['latency']['p50_ms']:.3f} ms, "
+            f"hot_p50={result['hot_query']['latency']['p50_ms']:.3f} ms",
             file=sys.stderr,
             flush=True,
         )
