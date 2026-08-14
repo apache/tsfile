@@ -22,6 +22,10 @@ if (NOT TSFILE_ANTLR4_RUNTIME_DIR)
 endif ()
 
 function(_tsfile_patch_antlr4_file RELATIVE_PATH OLD_TEXT NEW_TEXT)
+    if (TSFILE_ANTLR4_PATCH_VERIFY_ONLY)
+        return()
+    endif ()
+
     set(_TSFILE_PATCH_FILE
             "${TSFILE_ANTLR4_RUNTIME_DIR}/src/${RELATIVE_PATH}")
     file(READ "${_TSFILE_PATCH_FILE}" _TSFILE_PATCH_CONTENT)
@@ -99,8 +103,17 @@ _tsfile_patch_antlr4_file("support/CPPUtils.cpp"
           // else fall through]])
 
 function(_tsfile_verify_antlr4_patch RELATIVE_PATH EXPECTED_SHA256)
-    file(SHA256 "${TSFILE_ANTLR4_RUNTIME_DIR}/src/${RELATIVE_PATH}"
-            _TSFILE_PATCHED_SHA256)
+    # CMake writes text files using the host newline convention. Hash the
+    # reviewed patch content after normalizing line endings so the same source
+    # is accepted on Unix and Windows while every other byte remains covered.
+    file(READ "${TSFILE_ANTLR4_RUNTIME_DIR}/src/${RELATIVE_PATH}"
+            _TSFILE_PATCHED_CONTENT)
+    string(REPLACE "\r\n" "\n" _TSFILE_PATCHED_CONTENT
+            "${_TSFILE_PATCHED_CONTENT}")
+    string(REPLACE "\r" "\n" _TSFILE_PATCHED_CONTENT
+            "${_TSFILE_PATCHED_CONTENT}")
+    string(SHA256 _TSFILE_PATCHED_SHA256
+            "${_TSFILE_PATCHED_CONTENT}")
     if (NOT _TSFILE_PATCHED_SHA256 STREQUAL EXPECTED_SHA256)
         message(FATAL_ERROR
                 "The patched ANTLR4 file ${RELATIVE_PATH} does not match "

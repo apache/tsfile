@@ -132,4 +132,28 @@ if (TEST_ANTLR4_ARCHIVE)
             UTF8CPP_OFFLINE_MISSING "Offline dependency mode requires.*utf8cpp")
     _tsfile_assert_antlr4_source_failure(
             UTF8CPP_INVALID_ARCHIVE "utf8cpp.*unexpected SHA-256")
+
+    # The patched sources are written with CRLF on Windows. Recreate that
+    # representation on every platform and verify that the reviewed patch hash
+    # remains stable after newline normalization.
+    set(_TSFILE_PATCH_TEST_RUNTIME
+            "${_TSFILE_TEST_ROOT}/source-failure-UTF8CPP_OFFLINE_MISSING/_deps/antlr4-4.9.3/runtime/Cpp/runtime")
+    set(_TSFILE_PATCH_TEST_FILE
+            "${_TSFILE_PATCH_TEST_RUNTIME}/src/RuleContext.h")
+    if (NOT EXISTS "${_TSFILE_PATCH_TEST_FILE}")
+        message(FATAL_ERROR
+                "ANTLR4 patched-source fixture was not preserved.")
+    endif ()
+    file(READ "${_TSFILE_PATCH_TEST_FILE}" _TSFILE_PATCH_TEST_CONTENT)
+    string(REPLACE "\r\n" "\n" _TSFILE_PATCH_TEST_CONTENT
+            "${_TSFILE_PATCH_TEST_CONTENT}")
+    string(REPLACE "\n" "\r\n" _TSFILE_PATCH_TEST_CONTENT
+            "${_TSFILE_PATCH_TEST_CONTENT}")
+    file(WRITE "${_TSFILE_PATCH_TEST_FILE}"
+            "${_TSFILE_PATCH_TEST_CONTENT}")
+    set(TSFILE_ANTLR4_RUNTIME_DIR "${_TSFILE_PATCH_TEST_RUNTIME}")
+    set(TSFILE_ANTLR4_PATCH_VERIFY_ONLY TRUE)
+    include("${CMAKE_CURRENT_LIST_DIR}/../ANTLR4Patch.cmake")
+    unset(TSFILE_ANTLR4_PATCH_VERIFY_ONLY)
+    unset(TSFILE_ANTLR4_RUNTIME_DIR)
 endif ()
