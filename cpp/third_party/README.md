@@ -34,11 +34,14 @@ migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
 cache rather than kept in this repository.
 
 CI validates the modes at two levels. The cross-platform C++ unit-test
-workflows explicitly use `AUTO`. The dedicated `Cpp-Dependency-Source`
-workflow builds every dependency from a fresh `BUNDLED` archive cache, repeats
-the build with that cache in offline mode, and builds against an independently
-installed `SYSTEM` prefix. Each dedicated job checks the reported source for
-every enabled dependency before compiling and linking TsFile.
+workflows explicitly use `BUNDLED` so their dependency versions do not depend
+on packages preinstalled on the runner. Their CMake tests exercise `AUTO` with
+controlled compatible, missing, too-old, and incompatible package fixtures.
+The dedicated `Cpp-Dependency-Source` workflow builds every dependency from a
+fresh `BUNDLED` archive cache, repeats the build with that cache in offline
+mode, and builds against an independently installed `SYSTEM` prefix. Each
+dedicated job checks the reported source for every enabled dependency before
+compiling and linking TsFile.
 
 ## Dependency Inventory
 
