@@ -211,13 +211,13 @@ mvn clean verify -P with-cpp \
 ```
 
 In `BUNDLED` mode, ANTLR4 4.9.3, its utf8cpp v3.1.1 support library, Snappy
-v1.2.1, LZ4 v1.9.4, lzokay commit `5cb18da`, SIMDe v0.8.4-rc3, and zlib v1.3.1
+v1.2.2, LZ4 v1.9.4, lzokay commit `5cb18da`, SIMDe v0.8.4-rc3, and zlib v1.3.1
 are downloaded from their upstream GitHub archives and verified with SHA-256
 before extraction. Third-party source is placed in the build directory and is
 not committed to this repository.
 
 For an offline build with the migrated dependencies enabled, first place
-`antlr4-4.9.3.tar.gz`, `utfcpp-v3.1.1.tar.gz`, `snappy-1.2.1.tar.gz`,
+`antlr4-4.9.3.tar.gz`, `utfcpp-v3.1.1.tar.gz`, `snappy-1.2.2.tar.gz`,
 `lz4-v1.9.4.tar.gz`,
 `lzokay-5cb18da508cc4d3ec41bc04dccdeef9c5ffedfb2.tar.gz`,
 `simde-v0.8.4-rc3.tar.gz`, and `zlib-v1.3.1.tar.gz` in a persistent cache,
@@ -233,7 +233,7 @@ cmake -S cpp -B cpp/build/offline \
 The archives can also be supplied explicitly with
 `-DTSFILE_ANTLR4_ARCHIVE=/path/to/antlr4-4.9.3.tar.gz`,
 `-DTSFILE_UTF8CPP_ARCHIVE=/path/to/utfcpp-v3.1.1.tar.gz`,
-`-DTSFILE_SNAPPY_ARCHIVE=/path/to/snappy-1.2.1.tar.gz`,
+`-DTSFILE_SNAPPY_ARCHIVE=/path/to/snappy-1.2.2.tar.gz`,
 `-DTSFILE_LZ4_ARCHIVE=/path/to/lz4-v1.9.4.tar.gz`,
 `-DTSFILE_LZOKAY_ARCHIVE=/path/to/lzokay.tar.gz`,
 `-DTSFILE_SIMDE_ARCHIVE=/path/to/simde-v0.8.4-rc3.tar.gz`, and

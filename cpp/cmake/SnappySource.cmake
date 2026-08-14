@@ -22,7 +22,7 @@ set(_TSFILE_SNAPPY_ARCHIVE_NAME
 set(_TSFILE_SNAPPY_URL
         "https://github.com/google/snappy/archive/refs/tags/${TSFILE_SNAPPY_BUNDLED_VERSION}.tar.gz")
 set(_TSFILE_SNAPPY_SHA256
-        "736aeb64d86566d2236ddffa2865ee5d7a82d26c9016b36218fcc27ea4f09f86")
+        "90f74bc1fbf78a6c56b3c4a082a05103b3a56bb17bca1a27e052ea11723292dc")
 set(TSFILE_SNAPPY_ARCHIVE ""
         CACHE FILEPATH
         "Optional pre-downloaded Snappy source archive")

@@ -109,26 +109,6 @@ if (ENABLE_SNAPPY)
     if (TSFILE_SNAPPY_SOURCE STREQUAL "BUNDLED")
         include(${CMAKE_SOURCE_DIR}/cmake/SnappySource.cmake)
 
-        # Snappy's 1.2.1 probe accepts older NEON implementations even though
-        # its source requires the ARMv8 table-lookup intrinsic. Seed the
-        # upstream result with the complete capability check without modifying
-        # the downloaded source.
-        include(CheckCXXSourceCompiles)
-        check_cxx_source_compiles("
-#include <arm_neon.h>
-#include <stdint.h>
-int main() {
-  uint8_t val = 3, dup[16];
-  uint8x16_t v1 = vld1q_dup_u8(&val);
-  uint8x16_t v2 = vqtbl1q_u8(v1, v1);
-  vst1q_u8(dup, v2);
-  return 0;
-}" TSFILE_SNAPPY_HAVE_NEON)
-        set(SNAPPY_HAVE_NEON ${TSFILE_SNAPPY_HAVE_NEON}
-                CACHE INTERNAL
-                "Whether Snappy's required NEON intrinsics are available"
-                FORCE)
-
         set(SNAPPY_BUILD_TESTS OFF CACHE BOOL
                 "Disable tests in the TsFile-managed Snappy build" FORCE)
         set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL
