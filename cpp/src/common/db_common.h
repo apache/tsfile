@@ -92,12 +92,14 @@ enum CompressionType : uint8_t {
     PAA = 5,
     PLA = 6,
     LZ4 = 7,
+    ZSTD = 8,
+    LZMA2 = 9,
     INVALID_COMPRESSION = 255
 };
 
 extern TSFILE_API const char* s_data_type_names[8];
 extern TSFILE_API const char* s_encoding_names[12];
-extern TSFILE_API const char* s_compression_names[8];
+extern TSFILE_API const char* s_compression_names[10];
 }  // namespace common
 
 #if defined(__GLIBCXX__) && (__GNUC__ < 7)
@@ -159,6 +161,7 @@ FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {
 }
 
 FORCE_INLINE const char* get_compression_name(CompressionType type) {
+    ASSERT(type >= UNCOMPRESSED && type <= LZMA2);
     return s_compression_names[type];
 }
 

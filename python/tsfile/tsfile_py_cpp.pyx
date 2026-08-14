@@ -133,6 +133,8 @@ cdef dict COMPRESSION_TYPE_MAP = {
     CompressorPy.PAA: CompressionType.TS_COMPRESSION_PAA,
     CompressorPy.PLA: CompressionType.TS_COMPRESSION_PLA,
     CompressorPy.LZ4: CompressionType.TS_COMPRESSION_LZ4,
+    CompressorPy.ZSTD: CompressionType.TS_COMPRESSION_ZSTD,
+    CompressorPy.LZMA2: CompressionType.TS_COMPRESSION_LZMA2,
 }
 
 cdef dict CATEGORY_MAP = {

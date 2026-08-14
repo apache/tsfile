@@ -36,7 +36,8 @@ bash build.sh -a=ON              # Enable AddressSanitizer
 bash build.sh -c=ON              # Enable code coverage
 
 # Disable optional compression libraries
-bash build.sh --disable-snappy --disable-lz4 --disable-lzokay --disable-zlib
+bash build.sh --disable-snappy --disable-lz4 --disable-lzokay --disable-zlib \
+  --disable-zstd --disable-lzma2
 
 # Or use CMake directly
 mkdir -p build/Release && cd build/Release
@@ -61,7 +62,7 @@ All `ON` by default unless noted:
 |--------|---------|
 | `BUILD_TEST` | Compile tests (GTest 1.12.1, auto-downloaded) |
 | `ENABLE_ANTLR4` | ANTLR4 parser runtime |
-| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` | Compression libraries |
+| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` / `ENABLE_ZSTD` / `ENABLE_LZMA2` | Compression libraries |
 | `ENABLE_THREADS` | Multi-threaded read/write via pthreads |
 | `ENABLE_ASAN` | AddressSanitizer (`OFF` by default) |
 | `ENABLE_SIMD` | SIMD acceleration |

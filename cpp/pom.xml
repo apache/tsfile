@@ -43,6 +43,8 @@
         <enable.lz4>ON</enable.lz4>
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
+        <enable.zstd>ON</enable.zstd>
+        <enable.lzma2>ON</enable.lzma2>
         <enable.antlr4>ON</enable.antlr4>
         <enable.simd>ON</enable.simd>
     </properties>
@@ -95,6 +97,8 @@
                                 <option>-DENABLE_LZ4=${enable.lz4}</option>
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
+                                <option>-DENABLE_ZSTD=${enable.zstd}</option>
+                                <option>-DENABLE_LZMA2=${enable.lzma2}</option>
                                 <option>-DENABLE_SIMD=${enable.simd}</option>
                                 <!--
                                     The Visual Studio generator additionally

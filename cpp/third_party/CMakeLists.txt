@@ -438,6 +438,12 @@ if (ENABLE_LZMA2)
     add_library(tsfile_liblzma INTERFACE)
     if (TSFILE_LIBLZMA_SOURCE STREQUAL "BUNDLED")
         target_link_libraries(tsfile_liblzma INTERFACE liblzma)
+        # XZ 5.8.3 marks its source-tree API include directory PRIVATE on the
+        # liblzma target. Expose only the public API directory through TsFile's
+        # facade so consumers can include <lzma.h> without depending on the
+        # downloaded archive layout themselves.
+        target_include_directories(tsfile_liblzma INTERFACE
+                "${TSFILE_LIBLZMA_SOURCE_DIR}/src/liblzma/api")
     else ()
         target_link_libraries(tsfile_liblzma INTERFACE
                 ${TSFILE_LIBLZMA_SYSTEM_TARGET})

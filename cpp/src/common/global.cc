@@ -141,8 +141,9 @@ const char* s_encoding_names[12] = {
     "PLAIN",      "DICTIONARY", "RLE",     "DIFF",   "TS_2DIFF", "BITMAP",
     "GORILLA_V1", "REGULAR",    "GORILLA", "ZIGZAG", "FREQ",     "SPRINTZ"};
 
-const char* s_compression_names[8] = {
-    "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "SDT", "PAA", "PLA", "LZ4",
+const char* s_compression_names[10] = {
+    "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO",  "SDT",
+    "PAA",          "PLA",    "LZ4",  "ZSTD", "LZMA2",
 };
 
 int init_common() {

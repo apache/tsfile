@@ -202,7 +202,7 @@ file(GLOB_RECURSE TEST_SRCS
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
-        "compress/*_test.cc"
+        "compress/*uncompressed*_test.cc"
 )
 
 # Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.
@@ -229,6 +229,16 @@ endif()
 if (ENABLE_ZLIB)
     file(GLOB_RECURSE ZLIB_TEST_SRCS "compress/*gzip*_test.cc")
     list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
+endif()
+
+if (ENABLE_ZSTD)
+    file(GLOB_RECURSE ZSTD_TEST_SRCS "compress/*zstd*_test.cc")
+    list(APPEND TEST_SRCS ${ZSTD_TEST_SRCS})
+endif()
+
+if (ENABLE_LZMA2)
+    file(GLOB_RECURSE LZMA2_TEST_SRCS "compress/*lzma2*_test.cc")
+    list(APPEND TEST_SRCS ${LZMA2_TEST_SRCS})
 endif()
 
 if (BUILD_TOOLS)
@@ -271,6 +281,12 @@ if (ENABLE_LZOKAY)
 endif ()
 if (ENABLE_ZLIB)
     target_link_libraries(TsFile_Test TsFile::ZLIB)
+endif ()
+if (ENABLE_ZSTD)
+    target_link_libraries(TsFile_Test TsFile::ZSTD)
+endif ()
+if (ENABLE_LZMA2)
+    target_link_libraries(TsFile_Test TsFile::LibLZMA)
 endif ()
 if (ENABLE_SIMD)
     target_link_libraries(TsFile_Test TsFile::SIMDe)

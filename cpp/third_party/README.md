@@ -164,8 +164,8 @@ cache rather than kept in this repository.
 - License choice: upstream offers BSD-3-Clause or GPLv2. TsFile selects only
   the BSD-3-Clause option. BSD-3-Clause is an ASF Category A license.
 - Repository scope and local modifications: no Zstandard source is committed
-  and no upstream source is modified. `ENABLE_ZSTD` is off by default until a
-  TsFile compression implementation consumes the `TsFile::ZSTD` target.
+  and no upstream source is modified. The TsFile Zstandard compressor consumes
+  only the `TsFile::ZSTD` target.
 - Resolution: `SYSTEM` accepts Zstandard 1.5.7 or newer and earlier than 2.0.0
   through an upstream CMake target; `BUNDLED` downloads or reuses the verified
   archive; and `AUTO` prefers a compatible system package before falling back
@@ -190,9 +190,9 @@ cache rather than kept in this repository.
   verifies that every source in the configured `liblzma` target is marked
   0BSD and rejects any configuration that links `libgnu` into `liblzma`.
 - Repository scope and local modifications: no XZ or liblzma source is
-  committed and no upstream source is modified. `ENABLE_LZMA2` is off by
-  default until a TsFile compression implementation consumes the
-  `TsFile::LibLZMA` target. The upstream bundled build requires CMake 3.20 or
+  committed and no upstream source is modified. The TsFile LZMA2 compressor
+  consumes only the `TsFile::LibLZMA` target. The upstream bundled build
+  requires CMake 3.20 or
   newer; SYSTEM mode remains available with TsFile's CMake 3.11 baseline.
 - Resolution: `SYSTEM` accepts liblzma 5.8.3 or newer and earlier than 6.0.0;
   `BUNDLED` downloads or reuses the verified XZ archive; and `AUTO` prefers a

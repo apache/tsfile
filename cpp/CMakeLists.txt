@@ -269,7 +269,7 @@ if (ENABLE_ZLIB)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZLIBDependency.cmake)
 endif()
 
-option(ENABLE_ZSTD "Enable Zstandard compression dependency" OFF)
+option(ENABLE_ZSTD "Enable Zstandard compression" ON)
 message("cmake using: ENABLE_ZSTD=${ENABLE_ZSTD}")
 
 if (ENABLE_ZSTD)
@@ -277,7 +277,7 @@ if (ENABLE_ZSTD)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZSTDDependency.cmake)
 endif ()
 
-option(ENABLE_LZMA2 "Enable LZMA2 compression dependency" OFF)
+option(ENABLE_LZMA2 "Enable LZMA2 compression" ON)
 message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
 
 if (ENABLE_LZMA2)

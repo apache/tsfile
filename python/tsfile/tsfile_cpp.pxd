@@ -78,6 +78,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_COMPRESSION_PAA = 5,
         TS_COMPRESSION_PLA = 6,
         TS_COMPRESSION_LZ4 = 7,
+        TS_COMPRESSION_ZSTD = 8,
+        TS_COMPRESSION_LZMA2 = 9,
         TS_COMPRESSION_INVALID = 255
 
     ctypedef enum ColumnCategory:

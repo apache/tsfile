@@ -58,9 +58,10 @@ FORCE_INLINE int set_global_time_encoding(uint8_t encoding) {
 }
 
 FORCE_INLINE int set_global_time_compression(uint8_t compression) {
-    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZMA2);
     if (compression != UNCOMPRESSED && compression != SNAPPY &&
-        compression != GZIP && compression != LZO && compression != LZ4) {
+        compression != GZIP && compression != LZO && compression != LZ4 &&
+        compression != ZSTD && compression != LZMA2) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.time_compress_type_ =
@@ -122,9 +123,10 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 }
 
 FORCE_INLINE int set_global_compression(uint8_t compression) {
-    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZMA2);
     if (compression != UNCOMPRESSED && compression != SNAPPY &&
-        compression != GZIP && compression != LZO && compression != LZ4) {
+        compression != GZIP && compression != LZO && compression != LZ4 &&
+        compression != ZSTD && compression != LZMA2) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.default_compression_type_ =

@@ -96,6 +96,14 @@ if (ENABLE_ZLIB)
     list(APPEND COMPRESSION_LIBS TsFile::ZLIB)
 endif()
 
+if (ENABLE_ZSTD)
+    list(APPEND COMPRESSION_LIBS TsFile::ZSTD)
+endif()
+
+if (ENABLE_LZMA2)
+    list(APPEND COMPRESSION_LIBS TsFile::LibLZMA)
+endif()
+
 message("Compression libraries: ${COMPRESSION_LIBS}")
 
 if (ENABLE_ANTLR4)

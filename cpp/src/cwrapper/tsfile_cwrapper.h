@@ -69,6 +69,8 @@ typedef enum {
     TS_COMPRESSION_PAA = 5,
     TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
+    TS_COMPRESSION_ZSTD = 8,
+    TS_COMPRESSION_LZMA2 = 9,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
@@ -350,7 +352,7 @@ int set_global_time_encoding(uint8_t encoding);
  * @brief Sets the global time column compression method
  *
  * Validates and sets the compression type for time series timestamps.
- * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD, LZMA2
  *
  * @param compression The compression type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid compression
@@ -375,7 +377,8 @@ int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
  * @brief Set the global default compression type
  * @param compression Compression type to set
  * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
- * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD,
+ *       LZMA2
  */
 int set_global_compression(uint8_t compression);
 
