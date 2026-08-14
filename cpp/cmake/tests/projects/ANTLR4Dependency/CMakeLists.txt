@@ -43,3 +43,8 @@ if (TSFILE_ANTLR4_SOURCE STREQUAL "SYSTEM" AND
     message(FATAL_ERROR
             "System ANTLR4 did not preserve its public include directory.")
 endif ()
+
+if (TSFILE_ANTLR4_SOURCE STREQUAL "SYSTEM" AND NOT TARGET utf8cpp)
+    message(FATAL_ERROR
+            "System ANTLR4 did not resolve its utf8cpp target dependency.")
+endif ()

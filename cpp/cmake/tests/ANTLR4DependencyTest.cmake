@@ -32,14 +32,20 @@ file(REMOVE_RECURSE "${_TSFILE_TEST_ROOT}")
 
 function(_tsfile_write_fake_antlr4 ROOT VERSION TARGET_NAME)
     set(_TSFILE_PACKAGE_DIR "${ROOT}/lib/cmake/antlr4-runtime")
+    set(_TSFILE_UTF8CPP_PACKAGE_DIR "${ROOT}/lib/cmake/utf8cpp")
     set(_TSFILE_INCLUDE_DIR "${ROOT}/include/antlr4-runtime")
     file(MAKE_DIRECTORY "${_TSFILE_PACKAGE_DIR}")
+    file(MAKE_DIRECTORY "${_TSFILE_UTF8CPP_PACKAGE_DIR}")
     file(MAKE_DIRECTORY "${_TSFILE_INCLUDE_DIR}")
+    file(WRITE "${_TSFILE_UTF8CPP_PACKAGE_DIR}/utf8cppConfig.cmake"
+            "add_library(utf8cpp INTERFACE IMPORTED)\n")
     file(WRITE "${_TSFILE_PACKAGE_DIR}/antlr4-runtime-config.cmake"
             "set(ANTLR_VERSION \"${VERSION}\")\n"
             "set(antlr4-runtime_VERSION \"${VERSION}\")\n"
             "set(ANTLR4_INCLUDE_DIR \"${_TSFILE_INCLUDE_DIR}\")\n"
-            "add_library(${TARGET_NAME} INTERFACE IMPORTED)\n")
+            "add_library(${TARGET_NAME} INTERFACE IMPORTED)\n"
+            "set_property(TARGET ${TARGET_NAME} PROPERTY "
+            "INTERFACE_LINK_LIBRARIES utf8cpp)\n")
 endfunction()
 
 function(_tsfile_run_antlr4_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS ROOT)

@@ -24,6 +24,11 @@ set(TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR "")
 set(_TSFILE_SYSTEM_ANTLR4_FOUND FALSE)
 
 if (NOT TSFILE_DEPENDENCY_SOURCE STREQUAL "BUNDLED")
+    # ANTLR4 4.9.3 exports its header-only utf8cpp dependency as the bare
+    # target name "utf8cpp". Load that package first so CMake resolves the
+    # name as a target instead of translating it to the nonexistent
+    # -lutf8cpp linker option.
+    find_package(utf8cpp CONFIG QUIET)
     find_package(antlr4-runtime CONFIG QUIET)
 
     set(_TSFILE_SYSTEM_ANTLR4_VERSION "${antlr4-runtime_VERSION}")
