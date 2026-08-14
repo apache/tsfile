@@ -50,7 +50,7 @@
 - `prepare_series` 校验 FileGeneration 和 range，在 PreparedSeries 独立 `PageArena` 中定点反序列化 metadata。
 - aligned time/value metadata 独立读取并校验 chunk cardinality；普通与 aligned 查询均复用现有 SSI/ChunkReader/ResultSet。
 - C wrapper 与 Cython 提供不透明 PreparedSeries handle 的 prepare/query/free 生命周期。
-- `PagePositionIndex` 已实现并发无空洞发布与二分查找；实际 SSI page offset 回填仍是可选后续优化。
+- `PagePositionIndex` 已实现并发无空洞发布与二分查找，但实际 SSI page offset 尚未回填，按行查询仍走正确性 fallback；2880 行冷缓存结果表明该缺口需要作为性能验收项继续处理。
 
 ### 2.3 Runtime 与 Python
 
@@ -104,6 +104,8 @@
 
 ### 4.3 1/2/4 进程热启动与查询
 
+> 本节保留的是早期 256 行、首条序列、暖 OS cache 微基准，只能说明稳定热路径和 mmap 内存共享，不能代表随机序列或冷缓存查询性能。严格冷缓存的 2880 行结果见下一节；涉及“查询是否回退”的判断以后者为准。
+
 每个 worker 独立构造 DataFrame，映射同一索引，选择首条逻辑序列，执行一次 256 行查询，再在相同 PreparedSeries 上重复 20 次。采样发生在 DataFrame、Reader 和一个 PreparedSeries 保持存活时。
 
 |进程数|组 ready|DataFrame 构造中位数|首次查询中位数|重复查询中位数|重复查询最大 p95|总 RSS|总 PSS|总 USS|总 FD|
@@ -119,6 +121,19 @@
 - RSS 会在每个进程中重复计入共享 file-backed 页；评估机器实际容量应使用 PSS/USS，而不是简单相加 RSS。
 - 首次查询包含 Reader open、generation 校验和 PreparedSeries 构建；随后 256 行窗口约 0.30 ms。
 - 总 FD 包含 Python multiprocessing pipe、stdio、mmap file 和 Reader FD，不等同于 ReaderSession 数；Reader 硬上限由独立压力测试验证。
+
+### 4.4 2880 行随机序列冷缓存对照
+
+2026-08-14 补充了 PyPI 2.4.0 与新 Runtime 的严格冷缓存对照。每个实现的 1/2/4 进程分别运行三轮；每组启动前执行 `sync` 和 `drop_caches=3`，并复用同一份固定随机 workload。全部查询均返回 2880 行。
+
+三轮中位数显示：
+
+- 新 Runtime 冷构造快 83.9–90.4 倍。
+- 查询后 PSS 低 36.5–53.9 倍；4 进程 PSS 为 413.54 MiB，对比旧实现 21.77 GiB。
+- 首次随机查询慢 2.74–4.10 倍。
+- 后续随机查询 p50 慢 4.74–6.06 倍，聚合 QPS 低 81.1%–82.8%。
+
+完整方法、数据表、workload hash、结果解释和原始 JSON 路径见 [TsFileDataFrame 2880 窗口冷缓存性能报告](<TsFileDataFrame 2880 窗口冷缓存性能报告.md>)。这一结果表明内存与构造目标已经达到，但冷随机查询性能尚未通过无回退验收。
 
 ## 5. 复现方式
 
@@ -138,4 +153,6 @@ python tests/benchmark_tsfile_dataframe_runtime.py \
 
 ## 6. 剩余项与发布判断
 
-当前 v1 的 Format、Runtime、prepared Reader、Python API、生命周期、跨文件 merge 和多进程 mmap 目标均已实现并通过验收。唯一明确保留的可选优化是把 SSI 扫描得到的真实 page offset 增量发布到 `PagePositionIndex`；在此之前按行读取走现有正确性路径，因此不阻塞当前分支发布，但基准中的重复查询收益不能归因于 PagePositionIndex。
+当前 v1 的 Format、Runtime、prepared Reader、Python API、生命周期、跨文件 merge 和多进程 mmap 功能目标均已实现，并通过正确性与多进程内存验收。但 2880 行随机序列冷缓存基准发现 4.74–6.06 倍的 p50 查询回退，因此性能验收尚未完成。
+
+把 SSI 扫描得到的真实 page offset 发布到 `PagePositionIndex`，或提供等价的持久化 page locator/有界预取，已经不是单纯的可选优化。若发布标准包含“冷随机查询不回退”，则该项及其 I/O profiling 应作为发布前工作；优化后必须复用固定 workload 和 cache-drop 口径重新验收。
