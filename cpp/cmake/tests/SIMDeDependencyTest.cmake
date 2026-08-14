@@ -47,6 +47,7 @@ function(_tsfile_run_simde_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS ROOT)
                     "-DTSFILE_DEPENDENCY_SOURCE=${POLICY}"
                     "-DEXPECTED_SIMDE_SOURCE=${EXPECTED_SOURCE}"
                     "-DCMAKE_DISABLE_FIND_PACKAGE_simde=TRUE"
+                    "-DSIMDE_ROOT=${ROOT}"
                     "-DCMAKE_FIND_ROOT_PATH=${ROOT}"
                     "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
                     -S "${_TSFILE_FIXTURE_SOURCE}"

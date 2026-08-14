@@ -59,6 +59,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Install bundled build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-dev
+
       - name: Configure all dependencies from verified archives
         shell: bash
         run: |
@@ -99,6 +104,11 @@ jobs:
         with:
           name: tsfile-cpp-dependency-archives
           path: ${{ env.TSFILE_DEPENDENCY_CACHE }}
+
+      - name: Install offline build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-dev
 
       - name: Configure all dependencies offline
         shell: bash
@@ -150,7 +160,7 @@ jobs:
       - name: Install external build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y libutfcpp-dev pkg-config uuid-dev
+          sudo apt-get install -y cmake libutfcpp-dev pkg-config uuid-dev
 
       - name: Install external vcpkg dependencies
         shell: bash

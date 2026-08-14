@@ -112,6 +112,7 @@ jobs:
           ./mvnw -P with-cpp \
             -Dbuild.type=Release \
             -DskipTests \
+            -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
             -Denable.snappy=OFF \
@@ -200,6 +201,7 @@ jobs:
           ./mvnw -P with-cpp \
             -Dbuild.type=Release \
             -DskipTests \
+            -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
             -Denable.snappy=OFF \
