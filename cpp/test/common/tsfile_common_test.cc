@@ -565,4 +565,37 @@ TEST(DefaultCompressorTest, DefaultIsAllocatable) {
 #endif
     CompressorFactory::free(c);
 }
+
+TEST(CodecEnumAlignmentTest, JavaCodecIdsMapToNames) {
+    EXPECT_STREQ(common::get_encoding_name(common::CHIMP), "CHIMP");
+    EXPECT_STREQ(common::get_encoding_name(common::SPRINTZ), "SPRINTZ");
+    EXPECT_STREQ(common::get_encoding_name(common::RLBE), "RLBE");
+    EXPECT_STREQ(common::get_encoding_name(common::CAMEL), "CAMEL");
+    EXPECT_STREQ(common::get_compression_name(common::ZSTD), "ZSTD");
+    EXPECT_STREQ(common::get_compression_name(common::LZMA2), "LZMA2");
+}
+
+TEST(CodecEnumAlignmentTest, JavaEncodingsAreConfigurableWhenImplemented) {
+    EXPECT_EQ(common::set_datatype_encoding(common::INT32, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int32_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::INT64, common::RLBE),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int64_encoding_type_, common::RLBE);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.float_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::DOUBLE, common::CAMEL),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.double_encoding_type_, common::CAMEL);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CAMEL),
+              common::E_NOT_SUPPORT);
+}
+
+TEST(CodecEnumAlignmentTest, JavaCompressionCodecsAreConfigurable) {
+    EXPECT_EQ(common::set_global_compression(common::ZSTD), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::ZSTD);
+    EXPECT_EQ(common::set_global_compression(common::LZMA2), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::LZMA2);
+}
 }  // namespace storage

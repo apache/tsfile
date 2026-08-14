@@ -56,7 +56,10 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
+    TS_ENCODING_CHIMP = 11,
     TS_ENCODING_SPRINTZ = 12,
+    TS_ENCODING_RLBE = 13,
+    TS_ENCODING_CAMEL = 14,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -341,7 +344,7 @@ uint8_t get_global_compression();
  * @brief Sets the global time column encoding method
  *
  * Validates and sets the encoding type for time series timestamps.
- * Supported encodings: TS_2DIFF, PLAIN, GORILLA, ZIGZAG, RLE, SPRINTZ
+ * Supported encodings: PLAIN, TS_2DIFF
  *
  * @param encoding The encoding type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid encoding
@@ -367,8 +370,10 @@ int set_global_time_compression(uint8_t compression);
  * data type
  * @note Supported encodings per data type:
  *        - BOOLEAN: PLAIN only
- *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
- *        - FLOAT/DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ
+ *        - INT32/DATE/INT64/TIMESTAMP: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE,
+ *          SPRINTZ, CHIMP, RLBE
+ *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE
+ *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL
  *        - STRING: PLAIN, DICTIONARY
  */
 int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
