@@ -24,10 +24,11 @@ process-count group without importing the implementation under test first.
 Each worker uses a deterministic, worker-specific random seed.  Worker 0
 therefore uses the same positions in the 1, 2, and 4 process groups, while the
 additional workers exercise different series.  After the cold random pass,
-each worker repeats the exact same positions in the same order without
+each worker repeats the exact same series in the same order without
 dropping caches, producing a directly comparable hot-cache pass.  The output
-includes every position so two implementations can be checked for an
-identical workload.
+includes every logical series name so implementations with different catalog
+lengths or integer ordering can still be checked against an identical
+workload.
 """
 
 from __future__ import annotations
@@ -144,11 +145,11 @@ def _memory_snapshot(worker_results: list[dict[str, Any]]) -> dict[str, Any]:
     return {"by_pid": by_pid, "total": totals}
 
 
-def _read_window(dataframe, position: int, query_rows: int) -> tuple[float, int]:
+def _read_window(dataframe, selector: Any, query_rows: int) -> tuple[float, int]:
     series = None
     started = time.perf_counter_ns()
     try:
-        series = dataframe[position]
+        series = dataframe[selector]
         values = series[:query_rows]
         elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
         rows = len(values)
@@ -166,10 +167,17 @@ def _positions_hash(positions: list[int]) -> str:
     return hashlib.sha256(rendered).hexdigest()
 
 
+def _selectors_hash(selectors: list[Any]) -> str:
+    rendered = json.dumps(
+        selectors, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(rendered).hexdigest()
+
+
 def _worker(
     dataset: str,
     worker_index: int,
-    planned_positions: list[int] | None,
+    planned_selectors: list[Any] | None,
     sample_count: int,
     query_rows: int,
     seed: int,
@@ -186,19 +194,27 @@ def _worker(
         construct_started = time.perf_counter_ns()
         dataframe = TsFileDataFrame(dataset, show_progress=False)
         construct_ms = (time.perf_counter_ns() - construct_started) / 1_000_000
-        worker_seed = None if planned_positions is not None else seed + worker_index
-        positions = planned_positions
-        if positions is None:
-            positions = random.Random(worker_seed).sample(
+        worker_seed = None if planned_selectors is not None else seed + worker_index
+        selectors = planned_selectors
+        if selectors is None:
+            selectors = random.Random(worker_seed).sample(
                 range(len(dataframe)), sample_count + 1
             )
-        if len(positions) != sample_count + 1:
+        if len(selectors) != sample_count + 1:
             raise ValueError(
-                f"worker {worker_index} needs {sample_count + 1} positions, "
-                f"got {len(positions)}"
+                f"worker {worker_index} needs {sample_count + 1} selectors, "
+                f"got {len(selectors)}"
             )
-        if min(positions) < 0 or max(positions) >= len(dataframe):
-            raise ValueError(f"worker {worker_index} workload position is out of range")
+        if all(isinstance(selector, int) for selector in selectors):
+            if min(selectors) < 0 or max(selectors) >= len(dataframe):
+                raise ValueError(
+                    f"worker {worker_index} workload position is out of range"
+                )
+            positions = selectors
+        elif all(isinstance(selector, str) for selector in selectors):
+            positions = None
+        else:
+            raise TypeError("workload selectors must be all integers or all strings")
         common = {
             "pid": os.getpid(),
             "worker_index": worker_index,
@@ -206,14 +222,19 @@ def _worker(
             "construct_ms": construct_ms,
             "series_count": len(dataframe),
             "file_count": len(dataframe._paths),
-            "first_position": positions[0],
-            "random_positions": positions[1:],
-            "positions_sha256": _positions_hash(positions),
+            "first_selector": selectors[0],
+            "random_selectors": selectors[1:],
+            "selectors_sha256": _selectors_hash(selectors),
+            "first_position": None if positions is None else positions[0],
+            "random_positions": None if positions is None else positions[1:],
+            "positions_sha256": (
+                None if positions is None else _positions_hash(positions)
+            ),
         }
         sender.send({"phase": "constructed", **common})
 
         first_start.wait()
-        first_ms, first_rows = _read_window(dataframe, positions[0], query_rows)
+        first_ms, first_rows = _read_window(dataframe, selectors[0], query_rows)
         sender.send(
             {
                 "phase": "first_complete",
@@ -227,8 +248,8 @@ def _worker(
         random_started = time.perf_counter_ns()
         random_ms = []
         random_rows = []
-        for position in positions[1:]:
-            elapsed_ms, rows = _read_window(dataframe, position, query_rows)
+        for selector in selectors[1:]:
+            elapsed_ms, rows = _read_window(dataframe, selector, query_rows)
             random_ms.append(elapsed_ms)
             random_rows.append(rows)
         random_wall_ms = (time.perf_counter_ns() - random_started) / 1_000_000
@@ -252,8 +273,8 @@ def _worker(
         hot_started = time.perf_counter_ns()
         hot_ms = []
         hot_rows = []
-        for position in positions[1:]:
-            elapsed_ms, rows = _read_window(dataframe, position, query_rows)
+        for selector in selectors[1:]:
+            elapsed_ms, rows = _read_window(dataframe, selector, query_rows)
             hot_ms.append(elapsed_ms)
             hot_rows.append(rows)
         hot_wall_ms = (time.perf_counter_ns() - hot_started) / 1_000_000
@@ -307,7 +328,7 @@ def _run_group(
     query_rows: int,
     seed: int,
     drop_os_cache: bool,
-    workload_plan: dict[int, list[int]] | None,
+    workload_plan: dict[int, list[Any]] | None,
 ) -> dict[str, Any]:
     cache_drop = _drop_os_caches() if drop_os_cache else None
     print(
@@ -415,6 +436,9 @@ def _run_group(
                 {
                     "worker_index": item["worker_index"],
                     "worker_seed": item["worker_seed"],
+                    "first_selector": item["first_selector"],
+                    "random_selectors": item["random_selectors"],
+                    "selectors_sha256": item["selectors_sha256"],
                     "first_position": item["first_position"],
                     "random_positions": item["random_positions"],
                     "positions_sha256": item["positions_sha256"],
@@ -428,7 +452,7 @@ def _run_group(
                 "workers": first_complete,
             },
             "random_query": {
-                "cache_state": "cold first pass over random_positions",
+                "cache_state": "cold first pass over random_selectors",
                 "query_wall_ms": query_wall_ms,
                 "coordinator_phase_wall_ms_including_worker_gc": random_phase_wall_ms,
                 "aggregate_qps": len(random_ms) / (query_wall_ms / 1000),
@@ -440,7 +464,7 @@ def _run_group(
             },
             "hot_query": {
                 "cache_state": (
-                    "immediate second pass over the same random_positions "
+                    "immediate second pass over the same random_selectors "
                     "in the same order without dropping caches"
                 ),
                 "query_wall_ms": hot_query_wall_ms,
@@ -506,7 +530,8 @@ def _generate_workload_plan(
     from tsfile import TsFileDataFrame
 
     required = worker_count * (sample_count + 1)
-    accepted: list[int] = []
+    accepted: list[tuple[int, str]] = []
+    accepted_names: set[str] = set()
     attempted: set[int] = set()
     rejected: dict[str, int] = {}
     dataframe = TsFileDataFrame(dataset, show_progress=False)
@@ -519,6 +544,17 @@ def _generate_workload_plan(
                 continue
             attempted.add(position)
             try:
+                series = dataframe[position]
+                try:
+                    series_name = str(series.name)
+                finally:
+                    close = getattr(series, "close", None)
+                    if close is not None:
+                        close()
+                if series_name in accepted_names:
+                    key = "duplicate logical series name"
+                    rejected[key] = rejected.get(key, 0) + 1
+                    continue
                 _, rows = _read_window(dataframe, position, query_rows)
                 if rows != query_rows:
                     key = f"short result: {rows} rows"
@@ -528,7 +564,8 @@ def _generate_workload_plan(
                 key = _rejection_key(exc)
                 rejected[key] = rejected.get(key, 0) + 1
                 continue
-            accepted.append(position)
+            accepted.append((position, series_name))
+            accepted_names.add(series_name)
             if len(accepted) % 100 == 0 or len(accepted) == required:
                 print(
                     f"workload plan: accepted {len(accepted)}/{required}, "
@@ -544,12 +581,16 @@ def _generate_workload_plan(
         workers = []
         width = sample_count + 1
         for worker_index in range(worker_count):
-            positions = accepted[worker_index * width : (worker_index + 1) * width]
+            entries = accepted[worker_index * width : (worker_index + 1) * width]
+            positions = [position for position, _ in entries]
+            series_names = [series_name for _, series_name in entries]
             workers.append(
                 {
                     "worker_index": worker_index,
                     "positions": positions,
                     "positions_sha256": _positions_hash(positions),
+                    "series_names": series_names,
+                    "series_names_sha256": _selectors_hash(series_names),
                 }
             )
         return {
@@ -573,7 +614,7 @@ def _generate_workload_plan(
 
 def _load_workload_plan(
     path: str, sample_count: int, query_rows: int
-) -> tuple[dict[str, Any], dict[int, list[int]]]:
+) -> tuple[dict[str, Any], dict[int, list[Any]]]:
     with open(path, encoding="utf-8") as stream:
         raw = json.load(stream)
     if raw.get("query_rows") != query_rows:
@@ -585,15 +626,18 @@ def _load_workload_plan(
             "workload plan sample_count_per_worker="
             f"{raw.get('sample_count_per_worker')}, expected {sample_count}"
         )
-    workers = {
-        int(worker["worker_index"]): [int(value) for value in worker["positions"]]
-        for worker in raw["workers"]
-    }
-    if any(len(set(positions)) != len(positions) for positions in workers.values()):
-        raise ValueError("workload plan contains duplicate positions within a worker")
-    flattened = [position for positions in workers.values() for position in positions]
+    workers = {}
+    for worker in raw["workers"]:
+        if "series_names" in worker:
+            selectors = [str(value) for value in worker["series_names"]]
+        else:
+            selectors = [int(value) for value in worker["positions"]]
+        workers[int(worker["worker_index"])] = selectors
+    if any(len(set(selectors)) != len(selectors) for selectors in workers.values()):
+        raise ValueError("workload plan contains duplicate selectors within a worker")
+    flattened = [selector for selectors in workers.values() for selector in selectors]
     if len(set(flattened)) != len(flattened):
-        raise ValueError("workload plan contains positions shared by workers")
+        raise ValueError("workload plan contains selectors shared by workers")
     return raw, workers
 
 
