@@ -37,3 +37,9 @@ if (TSFILE_ANTLR4_SOURCE STREQUAL "SYSTEM" AND
     message(FATAL_ERROR
             "System ANTLR4 did not provide a supported runtime target.")
 endif ()
+
+if (TSFILE_ANTLR4_SOURCE STREQUAL "SYSTEM" AND
+        NOT IS_DIRECTORY "${TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR}")
+    message(FATAL_ERROR
+            "System ANTLR4 did not preserve its public include directory.")
+endif ()

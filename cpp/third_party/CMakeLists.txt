@@ -95,6 +95,10 @@ if (ENABLE_ANTLR4)
     else ()
         target_link_libraries(tsfile_antlr4 INTERFACE
                 ${TSFILE_ANTLR4_SYSTEM_TARGET})
+        if (TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR)
+            target_include_directories(tsfile_antlr4 INTERFACE
+                    "${TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR}")
+        endif ()
         if (TSFILE_ANTLR4_SYSTEM_STATIC)
             target_compile_definitions(tsfile_antlr4 INTERFACE
                     ANTLR4CPP_STATIC)

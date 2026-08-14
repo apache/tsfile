@@ -20,6 +20,7 @@ under the License.
 set(TSFILE_ANTLR4_MIN_VERSION "4.9.3")
 set(TSFILE_ANTLR4_BUNDLED_VERSION "4.9.3")
 set(TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION "5.0.0")
+set(TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR "")
 set(_TSFILE_SYSTEM_ANTLR4_FOUND FALSE)
 
 if (NOT TSFILE_DEPENDENCY_SOURCE STREQUAL "BUNDLED")
@@ -54,6 +55,14 @@ if (NOT TSFILE_DEPENDENCY_SOURCE STREQUAL "BUNDLED")
             _TSFILE_SYSTEM_ANTLR4_VERSION VERSION_LESS
                     TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION)
         set(_TSFILE_SYSTEM_ANTLR4_FOUND TRUE)
+        if (IS_DIRECTORY "${ANTLR4_INCLUDE_DIR}")
+            # ANTLR4 4.9.3's installed targets don't propagate their public
+            # include directory. Keep SYSTEM mode compatible with that
+            # upstream package while newer packages continue to use their
+            # target metadata normally.
+            set(TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR
+                    "${ANTLR4_INCLUDE_DIR}")
+        endif ()
         message(STATUS
                 "Found compatible system ANTLR4 "
                 "${_TSFILE_SYSTEM_ANTLR4_VERSION} target "

@@ -1,0 +1,227 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Cpp-Dependency-Source
+
+on:
+  push:
+    branches:
+      - develop
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/cpp-dependency-source.yml'
+      - 'cpp/**'
+      - 'pom.xml'
+  pull_request:
+    branches:
+      - develop
+      - dev/*
+      - iotdb
+      - rc/*
+    paths:
+      - '.github/workflows/cpp-dependency-source.yml'
+      - 'cpp/**'
+      - 'pom.xml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TSFILE_BUILD_DIR: cpp/target/dependency-source-build
+  TSFILE_DEPENDENCY_CACHE: cpp/target/dependency-source-cache
+
+jobs:
+  bundled:
+    name: BUNDLED from a fresh archive cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure all dependencies from verified archives
+        shell: bash
+        run: |
+          cmake -S cpp -B "$TSFILE_BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DTSFILE_DEPENDENCY_SOURCE=BUNDLED \
+            -DTSFILE_DEPENDENCY_CACHE="$GITHUB_WORKSPACE/$TSFILE_DEPENDENCY_CACHE" \
+            2>&1 | tee bundled-configure.log
+
+          for dependency in ANTLR4 Snappy LZ4 lzokay zlib Zstandard liblzma SIMDe; do
+            grep -F "TsFile dependency ${dependency}: BUNDLED" bundled-configure.log
+          done
+
+      - name: Build TsFile with bundled dependencies
+        run: cmake --build "$TSFILE_BUILD_DIR" --target tsfile --parallel 2
+
+      - name: Upload verified dependency archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-cpp-dependency-archives
+          path: ${{ env.TSFILE_DEPENDENCY_CACHE }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  offline:
+    name: BUNDLED from cache with network downloads disabled
+    needs: bundled
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download verified dependency archives
+        uses: actions/download-artifact@v8
+        with:
+          name: tsfile-cpp-dependency-archives
+          path: ${{ env.TSFILE_DEPENDENCY_CACHE }}
+
+      - name: Configure all dependencies offline
+        shell: bash
+        run: |
+          cmake -S cpp -B "$TSFILE_BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DTSFILE_DEPENDENCY_SOURCE=BUNDLED \
+            -DTSFILE_DEPENDENCY_OFFLINE=ON \
+            -DTSFILE_DEPENDENCY_CACHE="$GITHUB_WORKSPACE/$TSFILE_DEPENDENCY_CACHE" \
+            2>&1 | tee offline-configure.log
+
+          for dependency in ANTLR4 Snappy LZ4 lzokay zlib Zstandard liblzma SIMDe; do
+            grep -F "TsFile dependency ${dependency}: BUNDLED" offline-configure.log
+          done
+
+      - name: Build TsFile offline
+        run: cmake --build "$TSFILE_BUILD_DIR" --target tsfile --parallel 2
+
+  system:
+    name: SYSTEM from an external package prefix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      VCPKG_COMMIT: a2b75031b909a2d6b051725c3909230c72d4bd4a
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
+      ANTLR4_VERSION: 4.9.3
+      ANTLR4_SHA256: efe4057d75ab48145d4683100fec7f77d7f87fa258707330cadd1f8e6f7eecae
+      SIMDE_VERSION: 0.8.4-rc3
+      SIMDE_SHA256: a5407985439fef1435ac1f091a4d2e6c71981faed213e1be156aca575ce7052c
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Checkout pinned vcpkg registry
+        uses: actions/checkout@v7
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_COMMIT }}
+          path: vcpkg
+
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_COMMIT }}-tsfile-system-v2
+
+      - name: Install external build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libutfcpp-dev pkg-config uuid-dev
+
+      - name: Install external vcpkg dependencies
+        shell: bash
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          ./vcpkg/vcpkg install \
+            snappy:x64-linux \
+            lz4:x64-linux \
+            lzokay:x64-linux \
+            zlib:x64-linux \
+            zstd:x64-linux \
+            liblzma:x64-linux \
+            --clean-after-build
+
+      # ANTLR4 4.10 and later require C++17, while TsFile currently targets
+      # C++11. Build the compatible 4.9.3 runtime into the external prefix with
+      # Ubuntu's distro CMake; CMake 4 no longer accepts its legacy policies.
+      - name: Install external ANTLR4 runtime
+        shell: bash
+        run: |
+          mkdir -p system-prefix
+          curl --fail --location --retry 3 \
+            "https://github.com/antlr/antlr4/archive/refs/tags/${ANTLR4_VERSION}.tar.gz" \
+            --output antlr4.tar.gz
+          echo "${ANTLR4_SHA256}  antlr4.tar.gz" | sha256sum --check
+          tar -xzf antlr4.tar.gz
+          /usr/bin/cmake \
+            -S "antlr4-${ANTLR4_VERSION}/runtime/Cpp" \
+            -B antlr4-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/system-prefix" \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DANTLR4_INSTALL=ON \
+            -DWITH_DEMO=OFF
+          /usr/bin/cmake --build antlr4-build \
+            --target install --parallel 2
+
+      # vcpkg currently provides SIMDe 0.8.2, which is below TsFile's 0.8.4
+      # minimum. Install the verified upstream headers into a separate external
+      # prefix so SYSTEM mode still validates SIMD support.
+      - name: Install external SIMDe headers
+        shell: bash
+        run: |
+          mkdir -p system-prefix/include
+          curl --fail --location --retry 3 \
+            "https://github.com/simd-everywhere/simde/archive/refs/tags/v${SIMDE_VERSION}.tar.gz" \
+            --output simde.tar.gz
+          echo "${SIMDE_SHA256}  simde.tar.gz" | sha256sum --check
+          tar -xzf simde.tar.gz
+          cmake -E copy_directory \
+            "simde-${SIMDE_VERSION}/simde" \
+            system-prefix/include/simde
+
+      - name: Configure all dependencies from the system prefix
+        shell: bash
+        run: |
+          cmake -S cpp -B "$TSFILE_BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/system-prefix" \
+            -Dantlr4-runtime_DIR="$GITHUB_WORKSPACE/system-prefix/lib/cmake/antlr4-runtime" \
+            -DSIMDE_ROOT="$GITHUB_WORKSPACE/system-prefix" \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DTSFILE_DEPENDENCY_SOURCE=SYSTEM \
+            2>&1 | tee system-configure.log
+
+          for dependency in ANTLR4 Snappy LZ4 lzokay zlib Zstandard liblzma SIMDe; do
+            grep -F "TsFile dependency ${dependency}: SYSTEM" system-configure.log
+          done
+
+      - name: Build TsFile with system dependencies
+        run: cmake --build "$TSFILE_BUILD_DIR" --target tsfile --parallel 2

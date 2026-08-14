@@ -33,6 +33,13 @@ modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma have
 migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
 cache rather than kept in this repository.
 
+CI validates the modes at two levels. The cross-platform C++ unit-test
+workflows explicitly use `AUTO`. The dedicated `Cpp-Dependency-Source`
+workflow builds every dependency from a fresh `BUNDLED` archive cache, repeats
+the build with that cache in offline mode, and builds against an independently
+installed `SYSTEM` prefix. Each dedicated job checks the reported source for
+every enabled dependency before compiling and linking TsFile.
+
 ## Dependency Inventory
 
 | Dependency | Source management | Upstream version | License |
