@@ -24,11 +24,15 @@ build/runtime mismatch.
 
 ## Resolve the Target
 
-- Java/current checkout: read the root `pom.xml` project version and compiler
-  properties.
-- Python/current checkout: read `python/pyproject.toml` and `python/setup.py`.
-- C++ and C/current checkout: inspect public headers under `cpp/src/`, build
-  files, and maintained examples under `cpp/examples/`.
+- Run `scripts/resolve-version.sh` for the checkout that bundles the skill, or
+  `scripts/resolve-version.sh --root <checkout>` for another TsFile source tree.
+- Check `source_mode` first. `standalone` is a successful degraded result, not
+  a resolved TsFile version; its version fields intentionally remain
+  `unavailable`.
+- Use its Maven/Java, C++, Python, and Git fields independently; do not assume
+  every language package uses an identical version string.
+- If a language field is unavailable, inspect that binding's package/build
+  metadata instead of substituting the Maven project version.
 - External project: inspect Maven, Python, CMake, package-manager, lockfile, or
   deployed artifact metadata. Do not assume it matches this checkout.
 

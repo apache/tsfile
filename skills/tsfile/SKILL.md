@@ -30,9 +30,14 @@ sampling, and CSV/TSV-to-TsFile conversion.
 
 ## Operating Rules
 
-1. Resolve the target version instead of treating `latest` as a release number.
-   Read `references/source-policy.md` only when the version or authority is
-   ambiguous, sources conflict, or a freshness/published-release claim matters.
+1. Before giving a dependency version or version-sensitive API, run
+   `scripts/resolve-version.sh`. Pass `--root <checkout>` when the target is not
+   the repository that bundles this skill. A standalone skill download returns
+   `source_mode=standalone` with unavailable version fields; inspect the target
+   project's dependency metadata before giving version-sensitive code. Do not
+   treat `latest` as a release number. Read `references/source-policy.md` only
+   when the authority remains ambiguous, sources conflict, or a
+   freshness/published-release claim matters.
 2. Use `references/docs-map.yaml` only when an official online page, release,
    download, or repository link is needed.
 3. Choose Tree or Table model, then choose one language binding. Do not load all
@@ -50,7 +55,7 @@ Read only the files required by the current task:
   `references/docs-map.yaml`
 - Model selection, schema, data types, and generic read/write workflow:
   `references/core-concepts.md`
-- Java SDK code and current v4 API guardrails: `references/java.md`
+- Java SDK code and API guardrails: `references/java.md`
 - Python SDK code and binding-specific behavior: `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
 - C wrapper entry points and lifecycle: `references/c.md`
@@ -77,6 +82,10 @@ or language bindings.
 
 ## Bundled Resources
 
+- Run `scripts/resolve-version.sh [--root <checkout>]` to obtain Maven, C++,
+  Python, and Git version metadata without loading or copying source files. Its
+  output schema remains stable in standalone mode; check `source_mode` before
+  using any version field.
 - Use `scripts/build_tsfile.sh` for repository language build checks.
 - Use `scripts/example.py` only for Python API metadata or writer examples.
 - Copy or adapt templates from `assets/` only when the user needs standalone
