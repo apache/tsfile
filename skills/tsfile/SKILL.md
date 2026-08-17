@@ -30,25 +30,24 @@ sampling, and CSV/TSV-to-TsFile conversion.
 
 ## Operating Rules
 
-1. Determine the target version before choosing an API. For work in a TsFile
-   checkout, read its root `pom.xml` and language package metadata. For an
-   external project, inspect its declared dependency or ask for the target
-   release.
-2. Prefer public headers, tests, and maintained examples from the same checkout
-   over remembered or copied APIs. Treat the offline references as routing and
-   compatibility guidance, not as a substitute for version-matched source.
+1. Resolve the target version instead of treating `latest` as a release number.
+   Read `references/source-policy.md` only when the version or authority is
+   ambiguous, sources conflict, or a freshness/published-release claim matters.
+2. Use `references/docs-map.yaml` only when an official online page, release,
+   download, or repository link is needed.
 3. Choose Tree or Table model, then choose one language binding. Do not load all
    language references by default.
-4. Work offline first. Consult the official website only when the user requests
-   current published documentation or the local archive and source checkout do
-   not answer the question.
-5. Close writers, readers, and result sets so file footers and native resources
+4. Close writers, readers, and result sets so file footers and native resources
    are finalized. Validate files with every language that must consume them.
 
 ## Offline Reference Routing
 
 Read only the files required by the current task:
 
+- Source authority, version conflicts, offline/online selection, and update
+  rules: `references/source-policy.md`
+- Official website, download, release, and repository URL registry:
+  `references/docs-map.yaml`
 - Model selection, schema, data types, and generic read/write workflow:
   `references/core-concepts.md`
 - Java SDK code and current v4 API guardrails: `references/java.md`
