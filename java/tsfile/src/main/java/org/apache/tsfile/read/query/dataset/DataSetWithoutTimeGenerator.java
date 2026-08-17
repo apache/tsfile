@@ -139,8 +139,7 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
 
   /** keep heap from storing duplicate time. */
   private void timeHeapPut(long time) {
-    if (!timeSet.contains(time)) {
-      timeSet.add(time);
+    if (timeSet.add(time)) {
       timeHeap.enqueue(time);
     }
   }

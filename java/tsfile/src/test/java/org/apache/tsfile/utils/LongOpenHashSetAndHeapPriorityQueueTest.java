@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.utils;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -51,6 +52,8 @@ import static org.junit.Assert.fail;
  * </ul>
  */
 public class LongOpenHashSetAndHeapPriorityQueueTest {
+
+  private static final String RUN_PERFORMANCE_TEST_PROPERTY = "tsfile.runPerformanceTests";
 
   /**
    * Heap-only: empty-queue errors, natural order (incl. duplicates / extremes), {@code clear} and
@@ -254,10 +257,15 @@ public class LongOpenHashSetAndHeapPriorityQueueTest {
 
   /**
    * Micro-benchmark only (not a correctness test): boxed vs primitive under the same merge pattern.
-   * Soft guard against catastrophic regressions.
+   * Soft guard against catastrophic regressions. Gated like other TsFile perf tests via {@code
+   * -Dtsfile.runPerformanceTests=true}.
    */
   @Test
   public void testPrimitiveStructuresPerformance() {
+    Assume.assumeTrue(
+        "Set -Dtsfile.runPerformanceTests=true to run the performance test",
+        Boolean.getBoolean(RUN_PERFORMANCE_TEST_PROPERTY));
+
     final int series = 50;
     final int rows = 100_000;
     final long baseTime = 1_700_000_000_000L;
