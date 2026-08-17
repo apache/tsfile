@@ -86,7 +86,18 @@ or language bindings.
   Python, and Git version metadata without loading or copying source files. Its
   output schema remains stable in standalone mode; check `source_mode` before
   using any version field.
+- When `source_mode=checkout`, use maintained examples from the same commit:
+  `java/examples/`, `python/examples/example.py`, or `cpp/examples/`. Do not
+  copy an `assets/` template merely to answer an API question.
+- When `source_mode=standalone` and the user requests a starter project, copy
+  only the needed files from `assets/`. Supply the target Java dependency as
+  `-Dtsfile.version=<version>`; the template intentionally contains no default
+  TsFile version.
+- Run `scripts/validate-assets.sh [--root <checkout>]` after changing a
+  template. With source it compiles against that checkout. Without source it
+  performs dependency-free validation; pass either
+  `--tsfile-version <version>` or `--java-jar <path>` for Java,
+  `--cpp-include <dir>` for C++, or `--python-runtime` for an intentionally
+  selected Python environment.
 - Use `scripts/build_tsfile.sh` for repository language build checks.
 - Use `scripts/example.py` only for Python API metadata or writer examples.
-- Copy or adapt templates from `assets/` only when the user needs standalone
-  starter code; otherwise prefer maintained examples in the current checkout.

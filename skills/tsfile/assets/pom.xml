@@ -25,10 +25,9 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Match this to the current checkout's root pom.xml. -->
-        <tsfile.version>2.3.2-SNAPSHOT</tsfile.version>
     </properties>
     <dependencies>
+        <!-- Run Maven with -Dtsfile.version=<the target project's TsFile version>. -->
         <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>tsfile</artifactId>
@@ -36,6 +35,8 @@
         </dependency>
     </dependencies>
     <build>
+        <!-- Keep TsFileExample.java beside this POM in the copied template. -->
+        <sourceDirectory>${project.basedir}</sourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

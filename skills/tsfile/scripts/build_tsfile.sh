@@ -165,6 +165,7 @@ Usage: build_tsfile.sh <command> [language]
 
 Commands:
   check
+  validate-assets
   build <java|cpp|python|all>
   install <java|all>
   test <java|cpp|python|all>
@@ -184,6 +185,9 @@ case "${1:-}" in
         check_maven
         check_cpp
         check_python
+        ;;
+    validate-assets)
+        "${SCRIPT_DIR}/validate-assets.sh" --root "${TSFILE_ROOT}"
         ;;
     build)
         [[ -n "${2:-}" ]] || { show_usage; exit 1; }
