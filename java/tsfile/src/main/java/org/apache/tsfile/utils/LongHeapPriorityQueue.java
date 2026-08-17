@@ -25,13 +25,12 @@ import java.util.NoSuchElementException;
 /**
  * A type-specific heap-based priority queue for {@code long} values (natural order).
  *
- * <p>Copied and trimmed from fastutil 8.5.8 (Apache License 2.0,
- * http://fastutil.di.unimi.it/):
+ * <p>Copied and trimmed from fastutil 8.5.8 (Apache License 2.0, http://fastutil.di.unimi.it/):
  *
  * <ul>
  *   <li>{@code it.unimi.dsi.fastutil.longs.LongHeapPriorityQueue}
- *   <li>{@code it.unimi.dsi.fastutil.longs.LongHeaps} ({@code upHeap}/{@code downHeap} natural-order
- *       branches inlined below)
+ *   <li>{@code it.unimi.dsi.fastutil.longs.LongHeaps} ({@code upHeap}/{@code downHeap}
+ *       natural-order branches inlined below)
  * </ul>
  *
  * <p>Comparator / serialization / collection constructors were dropped. Array growth uses {@link
@@ -46,7 +45,9 @@ public class LongHeapPriorityQueue {
   /** The heap array. Copied from fastutil {@code LongHeapPriorityQueue#heap}. */
   private long[] heap = EMPTY;
 
-  /** The number of elements in this queue. Copied from fastutil {@code LongHeapPriorityQueue#size}. */
+  /**
+   * The number of elements in this queue. Copied from fastutil {@code LongHeapPriorityQueue#size}.
+   */
   private int size;
 
   /** Copied from fastutil {@code LongHeapPriorityQueue(int)} (natural order only). */

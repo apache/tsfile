@@ -24,8 +24,7 @@ import java.util.Arrays;
 /**
  * A type-specific open-addressing hash set for {@code long} values.
  *
- * <p>Copied and trimmed from fastutil 8.5.8 (Apache License 2.0,
- * http://fastutil.di.unimi.it/):
+ * <p>Copied and trimmed from fastutil 8.5.8 (Apache License 2.0, http://fastutil.di.unimi.it/):
  *
  * <ul>
  *   <li>{@code it.unimi.dsi.fastutil.longs.LongOpenHashSet}
@@ -52,7 +51,9 @@ public class LongOpenHashSet {
   /** The array of keys. Copied from fastutil {@code LongOpenHashSet#key}. */
   private long[] key;
 
-  /** The mask for wrapping a position counter. Copied from fastutil {@code LongOpenHashSet#mask}. */
+  /**
+   * The mask for wrapping a position counter. Copied from fastutil {@code LongOpenHashSet#mask}.
+   */
   private int mask;
 
   /**
