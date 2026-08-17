@@ -20,6 +20,7 @@ under the License.
 if (NOT TEST_BINARY_ROOT)
     message(FATAL_ERROR "TEST_BINARY_ROOT must be provided.")
 endif ()
+include("${CMAKE_CURRENT_LIST_DIR}/TestGeneratorArguments.cmake")
 
 set(_TSFILE_FIXTURE_SOURCE
         "${CMAKE_CURRENT_LIST_DIR}/projects/ANTLR4Dependency")
@@ -52,6 +53,7 @@ function(_tsfile_run_antlr4_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS ROOT
     set(_TSFILE_CASE_BINARY "${_TSFILE_TEST_ROOT}/build-${NAME}")
     execute_process(
             COMMAND "${CMAKE_COMMAND}"
+                    ${_TSFILE_TEST_GENERATOR_ARGUMENTS}
                     "-DTSFILE_DEPENDENCY_SOURCE=${POLICY}"
                     "-DEXPECTED_ANTLR4_SOURCE=${EXPECTED_SOURCE}"
                     "-DCMAKE_PREFIX_PATH=${ROOT}"

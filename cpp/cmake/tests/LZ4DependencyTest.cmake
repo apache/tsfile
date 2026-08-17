@@ -20,6 +20,7 @@ under the License.
 if (NOT TEST_BINARY_ROOT)
     message(FATAL_ERROR "TEST_BINARY_ROOT must be provided.")
 endif ()
+include("${CMAKE_CURRENT_LIST_DIR}/TestGeneratorArguments.cmake")
 
 set(_TSFILE_FIXTURE_SOURCE
         "${CMAKE_CURRENT_LIST_DIR}/projects/LZ4Dependency")
@@ -56,6 +57,7 @@ function(_tsfile_run_lz4_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS)
 
     execute_process(
             COMMAND "${CMAKE_COMMAND}"
+                    ${_TSFILE_TEST_GENERATOR_ARGUMENTS}
                     ${_TSFILE_CMAKE_ARGUMENTS}
                     -S "${_TSFILE_FIXTURE_SOURCE}"
                     -B "${_TSFILE_CASE_BINARY}"

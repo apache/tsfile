@@ -148,6 +148,19 @@ include_directories(
 
 enable_testing()
 
+# Script-mode tests launch nested CMake configurations, which otherwise select
+# a platform default instead of inheriting the generator used by this build.
+set(_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+        "-DTEST_CMAKE_GENERATOR=${CMAKE_GENERATOR}")
+if (CMAKE_GENERATOR_PLATFORM)
+    list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+            "-DTEST_CMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}")
+endif ()
+if (CMAKE_GENERATOR_TOOLSET)
+    list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+            "-DTEST_CMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}")
+endif ()
+
 add_test(
         NAME DependencySourceCMakeTest
         COMMAND ${CMAKE_COMMAND} -P
@@ -155,41 +168,49 @@ add_test(
 add_test(
         NAME SnappyDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/SnappyDependencyTest.cmake)
 add_test(
         NAME LZ4DependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZ4DependencyTest.cmake)
 add_test(
         NAME ZLIBDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZLIBDependencyTest.cmake)
 add_test(
         NAME ZSTDDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZSTDDependencyTest.cmake)
 add_test(
         NAME LibLZMADependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/LibLZMADependencyTest.cmake)
 add_test(
         NAME LZOKAYDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZOKAYDependencyTest.cmake)
 add_test(
         NAME SIMDeDependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/SIMDeDependencyTest.cmake)
 add_test(
         NAME ANTLR4DependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -DTEST_ANTLR4_ARCHIVE=${TSFILE_ANTLR4_ARCHIVE_RESOLVED}
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ANTLR4DependencyTest.cmake)
