@@ -347,3 +347,15 @@ Project page: https://github.com/simd-everywhere/simde
 License: https://github.com/simd-everywhere/simde/blob/master/COPYING (MIT)
 
 --------------------------------------------------------------------------------
+
+The following files include code modified from fastutil project.
+
+./java/tsfile/src/main/java/org/apache/tsfile/utils/LongHeapPriorityQueue.java
+./java/tsfile/src/main/java/org/apache/tsfile/utils/LongOpenHashSet.java
+
+Copyright: (C) 2002-2022 Sebastiano Vigna
+Copyright: (C) 2003-2022 Paolo Boldi and Sebastiano Vigna
+Project page: https://github.com/vigna/fastutil
+License: https://github.com/vigna/fastutil/blob/master/LICENSE-2.0
+
+--------------------------------------------------------------------------------
