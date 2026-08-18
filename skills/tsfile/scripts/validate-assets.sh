@@ -24,6 +24,7 @@ ASSETS_DIR="${SKILL_ROOT}/assets"
 DEFAULT_ROOT="${SCRIPT_DIR}/../../.."
 TSFILE_ROOT="${DEFAULT_ROOT}"
 EXPLICIT_ROOT="false"
+CHECKOUT_ROOT=""
 TSFILE_VERSION=""
 JAVA_JAR=""
 CPP_INCLUDE=""
@@ -39,15 +40,11 @@ Usage: validate-assets.sh [--root <checkout>]
                           [--cpp-include <include-directory>]
                           [--python-runtime]
 
-With a TsFile source checkout, validate Java and C++ templates against that
-checkout and run the Python template against its local binding. Without source,
-always validate XML/Python syntax; optional dependency arguments enable Java or
-C++ API compilation for a standalone skill download.
-
-Standalone Java validation may resolve the requested published artifact through
-Maven. --python-runtime validates against the active Python environment. These
-options are explicit so the script never mistakes an unrelated installed SDK
-for the user's target version.
+The script always validates XML and Python syntax. It automatically uses a
+co-located TsFile checkout when available. Explicit Java artifacts or versions,
+C++ headers, and --python-runtime override the corresponding automatically
+discovered dependency. A Java version may be resolved through Maven; the script
+never guesses one.
 EOF
 }
 
@@ -104,13 +101,10 @@ while (( $# > 0 )); do
 done
 
 if is_tsfile_checkout "${TSFILE_ROOT}"; then
-    source_mode="checkout"
-    TSFILE_ROOT="$(cd "${TSFILE_ROOT}" && pwd)"
+    CHECKOUT_ROOT="$(cd "${TSFILE_ROOT}" && pwd)"
 elif [[ "${EXPLICIT_ROOT}" == "true" ]]; then
     [[ -d "${TSFILE_ROOT}" ]] || fail "checkout does not exist: ${TSFILE_ROOT}"
     fail "not an Apache TsFile source checkout: ${TSFILE_ROOT}"
-else
-    source_mode="standalone"
 fi
 
 command_required python3
@@ -169,59 +163,51 @@ run_python_template() {
     python_template="compiled-and-ran"
 }
 
-if [[ "${source_mode}" == "checkout" ]]; then
-    if [[ -n "${TSFILE_VERSION}" || -n "${JAVA_JAR}" || \
-        -n "${CPP_INCLUDE}" || "${PYTHON_RUNTIME}" == "true" ]]; then
-        fail "dependency options are only for standalone validation"
-    fi
-
-    version_output="$("${SCRIPT_DIR}/resolve-version.sh" --root "${TSFILE_ROOT}")"
+if [[ -n "${TSFILE_VERSION}" && -n "${JAVA_JAR}" ]]; then
+    fail "use only one of --tsfile-version and --java-jar"
+elif [[ -n "${JAVA_JAR}" ]]; then
+    [[ -f "${JAVA_JAR}" ]] || fail "Java artifact not found: ${JAVA_JAR}"
+    compile_java_with_jar "${JAVA_JAR}"
+elif [[ -n "${TSFILE_VERSION}" ]]; then
+    command_required mvn
+    mkdir -p "${temp_dir}/java-template"
+    cp "${ASSETS_DIR}/pom.xml" "${ASSETS_DIR}/TsFileExample.java" \
+        "${temp_dir}/java-template/"
+    mvn -q -f "${temp_dir}/java-template/pom.xml" \
+        -Dtsfile.version="${TSFILE_VERSION}" compile
+    java_template="compiled"
+elif [[ -n "${CHECKOUT_ROOT}" ]]; then
+    version_output="$("${SCRIPT_DIR}/resolve-version.sh" --root "${CHECKOUT_ROOT}")"
     java_version="$(
         printf '%s\n' "${version_output}" | \
             awk -F= '$1 == "java_artifact_version" { print $2; exit }'
     )"
-    java_jar="${TSFILE_ROOT}/java/tsfile/target/tsfile-${java_version}.jar"
+    java_jar="${CHECKOUT_ROOT}/java/tsfile/target/tsfile-${java_version}.jar"
     if [[ ! -f "${java_jar}" ]]; then
-        [[ -x "${TSFILE_ROOT}/mvnw" ]] || fail "Maven wrapper not found"
-        "${TSFILE_ROOT}/mvnw" -pl java/tsfile -am package -DskipTests
+        [[ -x "${CHECKOUT_ROOT}/mvnw" ]] || fail "Maven wrapper not found"
+        "${CHECKOUT_ROOT}/mvnw" -pl java/tsfile -am package -DskipTests
     fi
     [[ -f "${java_jar}" ]] || fail "Java artifact not found after build: ${java_jar}"
     compile_java_with_jar "${java_jar}"
+fi
 
-    compile_cpp_with_include "${TSFILE_ROOT}/cpp/src"
+if [[ -n "${CPP_INCLUDE}" ]]; then
+    compile_cpp_with_include "${CPP_INCLUDE}"
+elif [[ -n "${CHECKOUT_ROOT}" ]]; then
+    compile_cpp_with_include "${CHECKOUT_ROOT}/cpp/src"
+fi
 
-    if PYTHONPATH="${TSFILE_ROOT}/python" \
+if [[ "${PYTHON_RUNTIME}" == "true" ]]; then
+    run_python_template
+elif [[ -n "${CHECKOUT_ROOT}" ]]; then
+    if PYTHONPATH="${CHECKOUT_ROOT}/python" \
         python3 -c 'import pandas, tsfile' >/dev/null 2>&1; then
-        run_python_template "${TSFILE_ROOT}/python"
+        run_python_template "${CHECKOUT_ROOT}/python"
     else
         python_template="syntax-valid-local-binding-unavailable"
     fi
-else
-    if [[ -n "${TSFILE_VERSION}" && -n "${JAVA_JAR}" ]]; then
-        fail "use only one of --tsfile-version and --java-jar"
-    elif [[ -n "${JAVA_JAR}" ]]; then
-        [[ -f "${JAVA_JAR}" ]] || fail "Java artifact not found: ${JAVA_JAR}"
-        compile_java_with_jar "${JAVA_JAR}"
-    elif [[ -n "${TSFILE_VERSION}" ]]; then
-        command_required mvn
-        mkdir -p "${temp_dir}/java-template"
-        cp "${ASSETS_DIR}/pom.xml" "${ASSETS_DIR}/TsFileExample.java" \
-            "${temp_dir}/java-template/"
-        mvn -q -f "${temp_dir}/java-template/pom.xml" \
-            -Dtsfile.version="${TSFILE_VERSION}" compile
-        java_template="compiled"
-    fi
-
-    if [[ -n "${CPP_INCLUDE}" ]]; then
-        compile_cpp_with_include "${CPP_INCLUDE}"
-    fi
-
-    if [[ "${PYTHON_RUNTIME}" == "true" ]]; then
-        run_python_template
-    fi
 fi
 
-printf 'source_mode=%s\n' "${source_mode}"
 printf 'pom_template=%s\n' "${pom_template}"
 printf 'java_template=%s\n' "${java_template}"
 printf 'cpp_template=%s\n' "${cpp_template}"

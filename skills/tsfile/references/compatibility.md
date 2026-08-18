@@ -26,9 +26,9 @@ build/runtime mismatch.
 
 - Run `scripts/resolve-version.sh` for the checkout that bundles the skill, or
   `scripts/resolve-version.sh --root <checkout>` for another TsFile source tree.
-- Check `source_mode` first. `standalone` is a successful degraded result, not
-  a resolved TsFile version; its version fields intentionally remain
-  `unavailable`.
+- If `version_source=unavailable`, the automatic checkout lookup did not
+  resolve a TsFile version; inspect the target project's dependency or artifact
+  metadata before selecting an API.
 - Use its Maven/Java, C++, Python, and Git fields independently; do not assume
   every language package uses an identical version string.
 - If a language field is unavailable, inspect that binding's package/build

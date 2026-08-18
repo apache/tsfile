@@ -30,10 +30,10 @@ registry; do not load it for ordinary offline API questions.
 2. For a checkout, run `scripts/resolve-version.sh`; pass `--root <checkout>`
    for a different source tree. For an external binary/project without source,
    inspect declared and locked dependencies before asking the user.
-3. If the script reports `source_mode=standalone`, no source version was
-   resolved. Use its offline reference scope only for routing and conceptual
-   guidance; inspect the target artifact or dependency metadata before making a
-   version-sensitive claim.
+3. If the script reports `version_source=unavailable`, no source version was
+   resolved. Use the offline reference scope only for routing and conceptual
+   guidance; inspect the target artifact or dependency metadata before making
+   a version-sensitive claim.
 4. Treat `latest` website URLs as mutable V2.x navigation aliases, not release
    identifiers. Use the download/release sources in `docs-map.yaml` to discover
    published versions.

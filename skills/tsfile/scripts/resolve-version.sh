@@ -31,9 +31,9 @@ Resolve version metadata from an Apache TsFile source checkout when available.
 Usage: resolve-version.sh [--root <checkout>]
 
 Output is line-oriented key=value data for Maven/Java, C++, Python, and Git.
-Without a bundled checkout, the script reports source_mode=standalone and
-unavailable version fields, then exits successfully. An invalid explicit
---root remains an error.
+If no checkout is discovered, version_source and version fields are reported as
+unavailable and the script exits successfully. An invalid explicit --root
+remains an error.
 EOF
 }
 
@@ -69,7 +69,6 @@ extract_offline_reference_metadata() {
 }
 
 print_result() {
-    printf 'source_mode=%s\n' "${source_mode}"
     printf 'version_source=%s\n' "${version_source}"
     printf 'tsfile_root=%s\n' "${tsfile_root}"
     printf 'maven_project_version=%s\n' "${project_version}"
@@ -85,8 +84,7 @@ print_result() {
         "${offline_reference_last_verified}"
 }
 
-print_standalone_result() {
-    source_mode="standalone"
+print_unresolved_result() {
     version_source="unavailable"
     tsfile_root="unavailable"
     project_version="unavailable"
@@ -132,7 +130,7 @@ if ! is_tsfile_checkout "${TSFILE_ROOT}"; then
             fail "root pom.xml not found: ${TSFILE_ROOT}/pom.xml"
         fail "not an Apache TsFile source checkout: ${TSFILE_ROOT}"
     fi
-    print_standalone_result
+    print_unresolved_result
     exit 0
 fi
 
@@ -218,7 +216,6 @@ if command -v git >/dev/null 2>&1 && git -C "${TSFILE_ROOT}" rev-parse --git-dir
     fi
 fi
 
-source_mode="checkout"
 version_source="checkout_metadata"
 tsfile_root="${TSFILE_ROOT}"
 print_result
