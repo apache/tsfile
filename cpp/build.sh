@@ -33,6 +33,10 @@ enable_snappy=ON
 enable_lz4=ON
 enable_lzokay=ON
 enable_zlib=ON
+enable_zstd=ON
+# Keep the default build compatible with CMake 3.11-era industrial toolchains.
+# Bundled XZ Utils requires CMake 3.20+, so LZMA2 must be enabled explicitly.
+enable_lzma2=OFF
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
 
@@ -66,6 +70,12 @@ Options:
   --disable-lzokay
   --enable-zlib=<ON|OFF>
   --disable-zlib
+  --enable-zstd=<ON|OFF>
+  --disable-zstd
+  --enable-lzma2=<ON|OFF>
+                         Enable LZMA2 explicitly (default: OFF; bundled XZ
+                         requires CMake 3.20 or newer).
+  --disable-lzma2
   -h, --help             Show this help message.
 EOF
 }
@@ -84,6 +94,8 @@ function print_config()
   echo "enable_lz4=$enable_lz4"
   echo "enable_lzokay=$enable_lzokay"
   echo "enable_zlib=$enable_zlib"
+  echo "enable_zstd=$enable_zstd"
+  echo "enable_lzma2=$enable_lzma2"
 }
 
 function run_test_for_cov()
@@ -132,6 +144,10 @@ parse_options()
       enable_lzokay=$(get_key_value "$1");;
     --enable-zlib=*)
       enable_zlib=$(get_key_value "$1");;
+    --enable-zstd=*)
+      enable_zstd=$(get_key_value "$1");;
+    --enable-lzma2=*)
+      enable_lzma2=$(get_key_value "$1");;
     --disable-antlr4)
       enable_antlr4=OFF;;
     --disable-snappy)
@@ -142,6 +158,10 @@ parse_options()
       enable_lzokay=OFF;;
     --disable-zlib)
       enable_zlib=OFF;;
+    --disable-zstd)
+      enable_zstd=OFF;;
+    --disable-lzma2)
+      enable_lzma2=OFF;;
     -h | --help)
       usage
       exit 0;;
@@ -209,7 +229,9 @@ cmake ../../                           \
   -DENABLE_SNAPPY=$enable_snappy       \
   -DENABLE_LZ4=$enable_lz4             \
   -DENABLE_LZOKAY=$enable_lzokay       \
-  -DENABLE_ZLIB=$enable_zlib
+  -DENABLE_ZLIB=$enable_zlib           \
+  -DENABLE_ZSTD=$enable_zstd           \
+  -DENABLE_LZMA2=$enable_lzma2
 
 VERBOSE=1 make
 if [ ${do_install} -eq 1 ]

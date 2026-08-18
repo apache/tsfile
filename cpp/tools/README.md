@@ -33,9 +33,10 @@ and `storage::TsFileTableWriter` APIs and does not modify the storage engine.
 The CLI is part of the C++ module and is built by default (CMake option `BUILD_TOOLS=ON`).
 The CMake target is `tsfile_cli`; the produced executable is named `tsfile-cli`.
 
-**Prerequisites:** a C++11 compiler (GCC / Clang / MSVC) and CMake ≥ 3.11. The third-party
-dependencies (ANTLR4, Snappy, LZ4, LZOKAY, Zlib, GoogleTest) are bundled under
-`cpp/third_party/` and built automatically — no separate install step needed.
+**Prerequisites:** a C++11 compiler (GCC / Clang / MSVC) and CMake ≥ 3.11. The
+build resolves third-party dependencies automatically from compatible system
+packages, verified source archives, or the remaining repository copies. No
+separate install step is needed with the default dependency policy.
 
 Choose any one of the following.
 
@@ -60,15 +61,6 @@ mkdir -p build/Debug && cd build/Debug
 cmake ../.. -DCMAKE_BUILD_TYPE=Debug
 make -j tsfile_cli                 # -> build/Debug/bin/tsfile-cli
 ```
-
-> **CMake 4.x note.** The bundled ANTLR4 runtime sets old CMake policies that CMake 4
-> rejects (`Policy CMP00xx may not be set to OLD behavior`). The reader and CLI do not use
-> ANTLR4, so disable it — `--disable-antlr4` for the build script, or `-DENABLE_ANTLR4=OFF`
-> for plain CMake:
->
-> ```bash
-> bash build.sh -t=Debug --disable-antlr4
-> ```
 
 Verify the binary:
 

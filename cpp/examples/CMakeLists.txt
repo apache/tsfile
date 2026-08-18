@@ -35,8 +35,6 @@ message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
 
 set(SDK_LIB_DIR_DEBUG ${PROJECT_SOURCE_DIR}/../build/Debug/lib)
 message("SDK_LIB_DIR_DEBUG: ${SDK_LIB_DIR_DEBUG}")
-include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/runtime/src)
-
 set(BUILD_TYPE "Release")
 include_directories(${SDK_INCLUDE_DIR})
 
@@ -54,6 +52,13 @@ endif ()
 add_subdirectory(cpp_examples)
 add_subdirectory(c_examples)
 
-add_executable(examples examples.cc)
-target_link_libraries(examples cpp_examples_obj c_examples_obj)
+if (CMAKE_VERSION VERSION_LESS "3.12")
+    add_executable(examples
+            examples.cc
+            $<TARGET_OBJECTS:cpp_examples_obj>
+            $<TARGET_OBJECTS:c_examples_obj>)
+else ()
+    add_executable(examples examples.cc)
+    target_link_libraries(examples cpp_examples_obj c_examples_obj)
+endif ()
 target_link_libraries(examples tsfile)

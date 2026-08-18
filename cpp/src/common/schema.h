@@ -210,8 +210,8 @@ class TableSchema {
         }
         for (const common::ColumnSchema& column_schema : column_schemas) {
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
-                column_schema.get_column_name(),
-                column_schema.get_data_type()));
+                column_schema.get_column_name(), column_schema.get_data_type(),
+                column_schema.get_encoding(), column_schema.get_compression()));
             column_categories_.emplace_back(
                 column_schema.get_column_category());
         }

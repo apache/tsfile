@@ -26,26 +26,23 @@ set(GTEST_URL_LIST
         "https://hub.nuaa.cf/google/googletest/archive/refs/tags/release-1.12.1.zip"
         "https://hub.yzuu.cf/google/googletest/archive/refs/tags/release-1.12.1.zip"
 )
+set(GTEST_SHA256 "24564e3b712d3eb30ac9a85d92f7d720f60cc0173730ac166f27dda7fed76cb2")
 
 set(GTEST_ZIP_PATH "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip")
 set(DOWNLOADED 0)
 set(GTEST_URL "")
 set(TIMEOUT 30)
 
-# Treat only a real ZIP as valid (local header magic PK\x03\x04 -> hex 504b0304).
-# EXISTS alone is wrong: failed downloads often leave a 0-byte file.
-# Do not use plain file(READ)+string LENGTH on binary: CMake may report length > LIMIT.
+# Trust a cached archive only when it exactly matches the expected upstream file.
 set(GTEST_ZIP_LOCAL_VALID 0)
 if (EXISTS "${GTEST_ZIP_PATH}")
-    file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
-    string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-    string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-    if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
+    file(SHA256 "${GTEST_ZIP_PATH}" GTEST_ZIP_LOCAL_SHA256)
+    if ("${GTEST_ZIP_LOCAL_SHA256}" STREQUAL "${GTEST_SHA256}")
         set(GTEST_ZIP_LOCAL_VALID 1)
     else ()
         message(
                 WARNING
-                "Local googletest zip is empty or not a zip (${GTEST_ZIP_PATH}); "
+                "Local googletest zip has an unexpected SHA-256 (${GTEST_ZIP_PATH}); "
                 "will try download."
         )
         file(REMOVE "${GTEST_ZIP_PATH}")
@@ -63,22 +60,16 @@ endif ()
 if (NOT DOWNLOADED)
     foreach (URL ${GTEST_URL_LIST})
         message(STATUS "Trying to download from ${URL}")
-        file(DOWNLOAD ${URL} "${GTEST_ZIP_PATH}" STATUS DOWNLOAD_STATUS TIMEOUT
-                ${TIMEOUT})
+        file(DOWNLOAD "${URL}" "${GTEST_ZIP_PATH}" STATUS DOWNLOAD_STATUS TIMEOUT
+                ${TIMEOUT} EXPECTED_HASH "SHA256=${GTEST_SHA256}")
 
         list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
         if (${DOWNLOAD_RESULT} EQUAL 0 AND EXISTS "${GTEST_ZIP_PATH}")
-            file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
-            string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-            string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
-            if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
-                set(DOWNLOADED 1)
-                set(GTEST_URL ${GTEST_ZIP_PATH})
-                break()
-            else ()
-                message(WARNING "Download from ${URL} did not yield a valid zip; trying next URL...")
-                file(REMOVE "${GTEST_ZIP_PATH}")
-            endif ()
+            set(DOWNLOADED 1)
+            set(GTEST_URL ${GTEST_ZIP_PATH})
+            break()
+        else ()
+            file(REMOVE "${GTEST_ZIP_PATH}")
         endif ()
     endforeach ()
 endif ()
@@ -155,28 +146,74 @@ include_directories(
         ${THIRD_PARTY_INCLUDE}
 )
 
-if (ENABLE_SNAPPY)
-    include_directories(${THIRD_PARTY_INCLUDE}/google_snappy)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/google_snappy)
-endif()
-
-if (ENABLE_LZ4)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/lz4)
-endif()
-
-if (ENABLE_LZOKAY)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/lzokay)
-endif()
-
-if (ENABLE_ZLIB)
-    include_directories(${THIRD_PARTY_INCLUDE}/zlib-1.3.1)
-endif()
-
-if (ENABLE_ANTLR4)
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
-endif()
-
 enable_testing()
+
+# Script-mode tests launch nested CMake configurations, which otherwise select
+# a platform default instead of inheriting the generator used by this build.
+set(_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+        "-DTEST_CMAKE_GENERATOR=${CMAKE_GENERATOR}")
+if (CMAKE_GENERATOR_PLATFORM)
+    list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+            "-DTEST_CMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}")
+endif ()
+if (CMAKE_GENERATOR_TOOLSET)
+    list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+            "-DTEST_CMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}")
+endif ()
+
+add_test(
+        NAME DependencySourceCMakeTest
+        COMMAND ${CMAKE_COMMAND} -P
+                ${CMAKE_SOURCE_DIR}/cmake/tests/DependencySourceTest.cmake)
+add_test(
+        NAME SnappyDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/SnappyDependencyTest.cmake)
+add_test(
+        NAME LZ4DependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZ4DependencyTest.cmake)
+add_test(
+        NAME ZLIBDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZLIBDependencyTest.cmake)
+add_test(
+        NAME ZSTDDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/ZSTDDependencyTest.cmake)
+add_test(
+        NAME LibLZMADependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/LibLZMADependencyTest.cmake)
+add_test(
+        NAME LZOKAYDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/LZOKAYDependencyTest.cmake)
+add_test(
+        NAME SIMDeDependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/SIMDeDependencyTest.cmake)
+add_test(
+        NAME ANTLR4DependencyCMakeTest
+        COMMAND ${CMAKE_COMMAND}
+                ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
+                -DTEST_ANTLR4_ARCHIVE=${TSFILE_ANTLR4_ARCHIVE_RESOLVED}
+                -P ${CMAKE_SOURCE_DIR}/cmake/tests/ANTLR4DependencyTest.cmake)
 
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
@@ -186,7 +223,7 @@ file(GLOB_RECURSE TEST_SRCS
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
-        "compress/*_test.cc"
+        "compress/*uncompressed*_test.cc"
 )
 
 # Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.
@@ -215,6 +252,16 @@ if (ENABLE_ZLIB)
     list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
 endif()
 
+if (ENABLE_ZSTD)
+    file(GLOB_RECURSE ZSTD_TEST_SRCS "compress/*zstd*_test.cc")
+    list(APPEND TEST_SRCS ${ZSTD_TEST_SRCS})
+endif()
+
+if (ENABLE_LZMA2)
+    file(GLOB_RECURSE LZMA2_TEST_SRCS "compress/*lzma2*_test.cc")
+    list(APPEND TEST_SRCS ${LZMA2_TEST_SRCS})
+endif()
+
 if (BUILD_TOOLS)
     file(GLOB_RECURSE TOOLS_TEST_SRCS "tools/*_test.cc")
     list(APPEND TEST_SRCS ${TOOLS_TEST_SRCS})
@@ -224,11 +271,6 @@ if (${COV_ENABLED})
     message("Enable code cov...")
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
-
-if (ENABLE_ANTLR4)
-    add_definitions(-DANTLR4CPP_STATIC)
-    set(ANTLR4_WITH_STATIC_CRT OFF)
-endif()
 
 add_executable(TsFile_Test ${TEST_SRCS})
 # Force the vendored GTest headers ahead of any system installation so the test
@@ -249,6 +291,30 @@ target_link_libraries(
         GTest::gmock
         tsfile
 )
+if (ENABLE_SNAPPY)
+    target_link_libraries(TsFile_Test TsFile::Snappy)
+endif ()
+if (ENABLE_LZ4)
+    target_link_libraries(TsFile_Test TsFile::LZ4)
+endif ()
+if (ENABLE_LZOKAY)
+    target_link_libraries(TsFile_Test TsFile::LZOKAY)
+endif ()
+if (ENABLE_ZLIB)
+    target_link_libraries(TsFile_Test TsFile::ZLIB)
+endif ()
+if (ENABLE_ZSTD)
+    target_link_libraries(TsFile_Test TsFile::ZSTD)
+endif ()
+if (ENABLE_LZMA2)
+    target_link_libraries(TsFile_Test TsFile::LibLZMA)
+endif ()
+if (ENABLE_SIMD)
+    target_link_libraries(TsFile_Test TsFile::SIMDe)
+endif ()
+if (ENABLE_ANTLR4)
+    target_link_libraries(TsFile_Test TsFile::ANTLR4)
+endif ()
 if (BUILD_TOOLS)
     target_link_libraries(TsFile_Test tsfile_cli_obj)
 endif ()

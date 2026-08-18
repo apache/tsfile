@@ -29,7 +29,13 @@ endif ()
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif ()
+if (POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)
+endif ()
 set(TsFile_CPP_VERSION 2.3.2.dev)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
 message("cmake using: TSFILE_BUILD_SHARED=${TSFILE_BUILD_SHARED}")
@@ -226,11 +232,16 @@ message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
+if (ENABLE_ANTLR4)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ANTLR4Dependency.cmake)
+endif ()
+
 option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
 message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
 
 if (ENABLE_SNAPPY)
     add_definitions(-DENABLE_SNAPPY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SnappyDependency.cmake)
 endif()
 
 option(ENABLE_LZ4 "Enable LZ4 compression" ON)
@@ -238,6 +249,7 @@ message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
 
 if (ENABLE_LZ4)
     add_definitions(-DENABLE_LZ4)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LZ4Dependency.cmake)
 endif()
 
 option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)
@@ -245,6 +257,7 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 
 if (ENABLE_LZOKAY)
     add_definitions(-DENABLE_LZOKAY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LZOKAYDependency.cmake)
 endif()
 
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
@@ -253,7 +266,36 @@ message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 if (ENABLE_ZLIB)
     add_definitions(-DENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZLIBDependency.cmake)
 endif()
+
+option(ENABLE_ZSTD "Enable Zstandard compression" ON)
+message("cmake using: ENABLE_ZSTD=${ENABLE_ZSTD}")
+
+if (ENABLE_ZSTD)
+    add_definitions(-DENABLE_ZSTD)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZSTDDependency.cmake)
+endif ()
+
+# LZMA2 is opt-in so this optional codec does not raise the CMake 3.11 baseline
+# used by long-lived industrial and legacy toolchains. The verified bundled XZ
+# Utils 5.8.3 build requires CMake 3.20 or newer; older CMake versions may still
+# enable LZMA2 when a compatible system liblzma package is available.
+option(ENABLE_LZMA2
+        "Enable LZMA2 compression (bundled liblzma requires CMake 3.20+)"
+        OFF)
+message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
+
+if (ENABLE_LZMA2)
+    add_definitions(-DENABLE_LZMA2)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LibLZMADependency.cmake)
+else ()
+    message(STATUS
+            "LZMA2 is disabled. It defaults to OFF so this optional codec "
+            "does not raise the build-system floor for legacy toolchains; "
+            "enable it explicitly with a compatible system liblzma or "
+            "with bundled XZ Utils on CMake 3.20+.")
+endif ()
 
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
 message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
@@ -269,11 +311,7 @@ message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
 if (ENABLE_SIMD)
     add_definitions(-DENABLE_SIMD)
-    # common/statistic.h is a public header included by src, tools, tests and
-    # the cwrapper; under ENABLE_SIMD it pulls in <simde/x86/sse4.2.h>. Add the
-    # SIMDe include path here (before every add_subdirectory below) so all
-    # targets inherit it, instead of repeating it per subdirectory.
-    include_directories(${CMAKE_SOURCE_DIR}/third_party/simde-0.8.4-rc3)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SIMDeDependency.cmake)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
@@ -299,11 +337,58 @@ else ()
 endif ()
 add_subdirectory(third_party)
 
+# CMake 3.11 cannot call target_link_libraries() on object-library targets, but
+# directory-level link_libraries() initializes both their usage requirements
+# and the final library's link dependencies. Apply every enabled project
+# dependency before creating the object libraries below. The test target links
+# these dependencies explicitly, so temporarily restore the original directory
+# property while configuring downloaded GoogleTest targets.
+set(_TSFILE_PROJECT_DEPENDENCIES "")
+if (ENABLE_ANTLR4)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ANTLR4)
+endif ()
+if (ENABLE_SNAPPY)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::Snappy)
+endif ()
+if (ENABLE_LZ4)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LZ4)
+endif ()
+if (ENABLE_LZOKAY)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LZOKAY)
+endif ()
+if (ENABLE_ZLIB)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ZLIB)
+endif ()
+if (ENABLE_ZSTD)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ZSTD)
+endif ()
+if (ENABLE_LZMA2)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LibLZMA)
+endif ()
+if (ENABLE_SIMD)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::SIMDe)
+endif ()
+
+if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
+    get_property(_TSFILE_BASE_LINK_LIBRARIES
+            DIRECTORY PROPERTY LINK_LIBRARIES)
+    link_libraries(${_TSFILE_PROJECT_DEPENDENCIES})
+    get_property(_TSFILE_PROJECT_LINK_LIBRARIES
+            DIRECTORY PROPERTY LINK_LIBRARIES)
+endif ()
+
 add_subdirectory(src)
 if (BUILD_TOOLS)
     add_subdirectory(tools)
 endif ()
 if (BUILD_TEST)
+    # The test target links project dependencies explicitly. Do not make
+    # downloaded GoogleTest targets inherit them, because their upstream
+    # install export cannot export TsFile-owned targets.
+    if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
+        set_property(DIRECTORY PROPERTY LINK_LIBRARIES
+                "${_TSFILE_BASE_LINK_LIBRARIES}")
+    endif ()
     add_subdirectory(test)
     if (TESTS_ENABLED)
         add_dependencies(TsFile_Test tsfile)
@@ -311,5 +396,13 @@ if (BUILD_TEST)
 else()
     message("BUILD_TEST is OFF, skipping test directory")
 endif ()
+
+if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
+    set_property(DIRECTORY PROPERTY LINK_LIBRARIES
+            "${_TSFILE_PROJECT_LINK_LIBRARIES}")
+    unset(_TSFILE_BASE_LINK_LIBRARIES)
+    unset(_TSFILE_PROJECT_LINK_LIBRARIES)
+endif ()
+unset(_TSFILE_PROJECT_DEPENDENCIES)
 
 add_subdirectory(examples)

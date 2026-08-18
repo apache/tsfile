@@ -85,6 +85,9 @@ TEST(EncodingNameTest, KnownEncodings) {
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::PLAIN), "PLAIN");
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::TS_2DIFF), "TS_2DIFF");
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::SPRINTZ), "SPRINTZ");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(common::CHIMP), "CHIMP");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(common::RLBE), "RLBE");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(common::CAMEL), "CAMEL");
 }
 
 TEST(CompressionNameTest, KnownCompressors) {
@@ -92,6 +95,8 @@ TEST(CompressionNameTest, KnownCompressors) {
                  "UNCOMPRESSED");
     EXPECT_STREQ(tsfile_cli::compression_name(common::SNAPPY), "SNAPPY");
     EXPECT_STREQ(tsfile_cli::compression_name(common::LZ4), "LZ4");
+    EXPECT_STREQ(tsfile_cli::compression_name(common::ZSTD), "ZSTD");
+    EXPECT_STREQ(tsfile_cli::compression_name(common::LZMA2), "LZMA2");
 }
 
 TEST(RowWriterTest, TsvWritesHeaderThenRows) {

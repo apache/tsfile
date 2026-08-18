@@ -67,6 +67,10 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_ENCODING_GORILLA = 8,
         TS_ENCODING_ZIGZAG = 9,
         TS_ENCODING_FREQ = 10,
+        TS_ENCODING_CHIMP = 11,
+        TS_ENCODING_SPRINTZ = 12,
+        TS_ENCODING_RLBE = 13,
+        TS_ENCODING_CAMEL = 14,
         TS_ENCODING_INVALID = 255
 
     ctypedef enum CompressionType:
@@ -78,6 +82,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_COMPRESSION_PAA = 5,
         TS_COMPRESSION_PLA = 6,
         TS_COMPRESSION_LZ4 = 7,
+        TS_COMPRESSION_ZSTD = 8,
+        TS_COMPRESSION_LZMA2 = 9,
         TS_COMPRESSION_INVALID = 255
 
     ctypedef enum ColumnCategory:

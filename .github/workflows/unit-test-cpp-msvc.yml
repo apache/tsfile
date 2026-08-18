@@ -156,5 +156,7 @@ jobs:
             $TOOLSET_ARG \
             -Denable.asan=$ASAN_VALUE \
             -Dbuild.type=${{ matrix.build_type }} \
+            -Denable.lzma2=ON \
+            -Dtsfile.dependency.source=BUNDLED \
             -Dspotless.skip=true \
             clean verify

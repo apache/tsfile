@@ -36,11 +36,6 @@ target_include_directories(tsfile_cli_obj PUBLIC
 # can compile these sources before the headers exist.
 add_dependencies(tsfile_cli_obj tsfile)
 
-if (ENABLE_ANTLR4)
-    target_include_directories(tsfile_cli_obj PUBLIC
-            ${PROJECT_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
-endif ()
-
 target_compile_definitions(tsfile_cli_obj PRIVATE
         TSFILE_CLI_VERSION="${TsFile_CPP_VERSION}")
 

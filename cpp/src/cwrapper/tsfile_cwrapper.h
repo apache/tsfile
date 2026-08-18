@@ -56,7 +56,10 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
+    TS_ENCODING_CHIMP = 11,
     TS_ENCODING_SPRINTZ = 12,
+    TS_ENCODING_RLBE = 13,
+    TS_ENCODING_CAMEL = 14,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -69,6 +72,8 @@ typedef enum {
     TS_COMPRESSION_PAA = 5,
     TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
+    TS_COMPRESSION_ZSTD = 8,
+    TS_COMPRESSION_LZMA2 = 9,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
@@ -339,7 +344,7 @@ uint8_t get_global_compression();
  * @brief Sets the global time column encoding method
  *
  * Validates and sets the encoding type for time series timestamps.
- * Supported encodings: TS_2DIFF, PLAIN, GORILLA, ZIGZAG, RLE, SPRINTZ
+ * Supported encodings: PLAIN, TS_2DIFF
  *
  * @param encoding The encoding type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid encoding
@@ -350,7 +355,7 @@ int set_global_time_encoding(uint8_t encoding);
  * @brief Sets the global time column compression method
  *
  * Validates and sets the compression type for time series timestamps.
- * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD, LZMA2
  *
  * @param compression The compression type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid compression
@@ -365,8 +370,10 @@ int set_global_time_compression(uint8_t compression);
  * data type
  * @note Supported encodings per data type:
  *        - BOOLEAN: PLAIN only
- *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
- *        - FLOAT/DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ
+ *        - INT32/DATE/INT64/TIMESTAMP: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE,
+ *          SPRINTZ, CHIMP, RLBE
+ *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE
+ *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL
  *        - STRING: PLAIN, DICTIONARY
  */
 int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
@@ -375,7 +382,8 @@ int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
  * @brief Set the global default compression type
  * @param compression Compression type to set
  * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
- * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD,
+ *       LZMA2
  */
 int set_global_compression(uint8_t compression);
 
