@@ -696,7 +696,18 @@ class ByteStream {
         if (UNLIKELY(read_page_ == nullptr)) {
             read_page_ = head_.load();
         } else if (UNLIKELY((read_pos_ & page_mask_) == 0)) {
-            read_page_ = read_page_->next_.load();
+            // At a page boundary the cursor may have been parked here by a
+            // preceding sequential read (read_page_ is the page just
+            // finished, advance one) or by set_read_pos() (read_page_ is
+            // already the boundary page, advancing would skip it).  The
+            // two states are indistinguishable, so recompute the page
+            // from the head instead of blindly following next_.
+            Page* p = head_.load();
+            uint64_t page_idx = read_pos_ / page_size_;
+            while (p != nullptr && page_idx-- > 0) {
+                p = p->next_.load();
+            }
+            read_page_ = p;
         }
         if (UNLIKELY(read_page_ == nullptr)) {
             return common::E_OUT_OF_RANGE;

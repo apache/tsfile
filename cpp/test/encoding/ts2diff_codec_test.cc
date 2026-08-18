@@ -523,4 +523,161 @@ TEST(FloatTS2DIFFEncoderResetTest, ResetClearsUnderflowFlags) {
     }
 }
 
+// Regression: legacy raw float/double segments (written by the old C++
+// encoders, i.e. plain int delta blocks with no maxPointNumber / overflow
+// prefix, values stored as bit-cast float bits) must stay decodable through
+// read_batch_float / read_batch_double.  The per-block prefix heuristic
+// used to misclassify a valid raw header as a maxPointNumber prefix,
+// desyncing the stream and spinning at end-of-input (PR #901 review).
+TEST_F(FloatDoubleTS2DIFFCodecTest, ReadBatchFloatLegacyRawSegments) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 129;
+    std::vector<float> expected(row_num);
+    // 128 equal values followed by a change: the first legacy block has
+    // bit_width = 0 and delta_min = 0, exactly the pattern the old
+    // heuristic misclassified.  The trailing 1-value block (write_index = 0)
+    // exercised the same heuristic again.
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = (i < 128) ? 1.5f : 2.5f;
+    }
+    IntTS2DIFFEncoder raw_encoder;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(
+            raw_encoder.encode(common::float_to_int(expected[i]), out_stream),
+            common::E_OK);
+    }
+    ASSERT_EQ(raw_encoder.flush(out_stream), common::E_OK);
+
+    std::vector<float> actual_values(row_num);
+    int decoded = 0;
+    // Small batches exercise the layout decision plus repeated block
+    // transitions.
+    while (decoded < row_num) {
+        int actual = 0;
+        ASSERT_EQ(decoder_float_->read_batch_float(
+                      actual_values.data() + decoded, 16, actual, out_stream),
+                  common::E_OK);
+        ASSERT_GT(actual, 0);
+        decoded += actual;
+    }
+    for (int i = 0; i < row_num; ++i) {
+        EXPECT_EQ(actual_values[i], expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, ReadBatchDoubleLegacyRawSegments) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 129;
+    std::vector<double> expected(row_num);
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = (i < 128) ? 1.5 : 2.5;
+    }
+    LongTS2DIFFEncoder raw_encoder;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(
+            raw_encoder.encode(common::double_to_long(expected[i]), out_stream),
+            common::E_OK);
+    }
+    ASSERT_EQ(raw_encoder.flush(out_stream), common::E_OK);
+
+    std::vector<double> actual_values(row_num);
+    int decoded = 0;
+    while (decoded < row_num) {
+        int actual = 0;
+        ASSERT_EQ(decoder_double_->read_batch_double(
+                      actual_values.data() + decoded, 16, actual, out_stream),
+                  common::E_OK);
+        ASSERT_GT(actual, 0);
+        decoded += actual;
+    }
+    for (int i = 0; i < row_num; ++i) {
+        EXPECT_EQ(actual_values[i], expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(out_stream));
+}
+
+// The layout decision must also cover the scalar path: legacy raw pages
+// read one value at a time via read_float / read_double keep the bit-cast
+// semantics across the 128-value block boundary.
+TEST_F(FloatDoubleTS2DIFFCodecTest, ReadFloatLegacyRawScalar) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 129;
+    std::vector<float> expected(row_num);
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = (i < 128) ? 1.5f : 2.5f;
+    }
+    IntTS2DIFFEncoder raw_encoder;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(
+            raw_encoder.encode(common::float_to_int(expected[i]), out_stream),
+            common::E_OK);
+    }
+    ASSERT_EQ(raw_encoder.flush(out_stream), common::E_OK);
+
+    float v = 0.f;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(decoder_float_->read_float(v, out_stream), common::E_OK);
+        EXPECT_EQ(v, expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, ReadDoubleLegacyRawScalar) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 129;
+    std::vector<double> expected(row_num);
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = (i < 128) ? 1.5 : 2.5;
+    }
+    LongTS2DIFFEncoder raw_encoder;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(
+            raw_encoder.encode(common::double_to_long(expected[i]), out_stream),
+            common::E_OK);
+    }
+    ASSERT_EQ(raw_encoder.flush(out_stream), common::E_OK);
+
+    double v = 0.;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(decoder_double_->read_double(v, out_stream), common::E_OK);
+        EXPECT_EQ(v, expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(out_stream));
+}
+
+// Mixed reads must not re-trigger the layout scan mid-page: batch first,
+// then scalar reads must continue on the same layout decision.
+TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyRawBatchThenScalarReads) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 129;
+    std::vector<float> expected(row_num);
+    for (int i = 0; i < row_num; ++i) {
+        expected[i] = (i < 128) ? 0.5f : 100.25f;
+    }
+    IntTS2DIFFEncoder raw_encoder;
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(
+            raw_encoder.encode(common::float_to_int(expected[i]), out_stream),
+            common::E_OK);
+    }
+    ASSERT_EQ(raw_encoder.flush(out_stream), common::E_OK);
+
+    float batch_out[40];
+    int actual = 0;
+    ASSERT_EQ(
+        decoder_float_->read_batch_float(batch_out, 40, actual, out_stream),
+        common::E_OK);
+    ASSERT_EQ(actual, 40);
+    for (int i = 0; i < 40; ++i) {
+        EXPECT_EQ(batch_out[i], expected[i]) << "row " << i;
+    }
+    float v = 0.f;
+    for (int i = 40; i < row_num; ++i) {
+        ASSERT_EQ(decoder_float_->read_float(v, out_stream), common::E_OK);
+        EXPECT_EQ(v, expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
+}
+
 }  // namespace storage
