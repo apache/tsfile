@@ -78,49 +78,37 @@ add_subdirectory(reader)
 add_subdirectory(utils)
 add_subdirectory(writer)
 
-set(COMPRESSION_LIBS "")
-
-if (ENABLE_SNAPPY)
-    list(APPEND COMPRESSION_LIBS TsFile::Snappy)
-endif()
-
-if (ENABLE_LZ4)
-    list(APPEND COMPRESSION_LIBS TsFile::LZ4)
-endif()
-
-if (ENABLE_LZOKAY)
-    list(APPEND COMPRESSION_LIBS TsFile::LZOKAY)
-endif()
-
-if (ENABLE_ZLIB)
-    list(APPEND COMPRESSION_LIBS TsFile::ZLIB)
-endif()
-
-if (ENABLE_ZSTD)
-    list(APPEND COMPRESSION_LIBS TsFile::ZSTD)
-endif()
-
-if (ENABLE_LZMA2)
-    list(APPEND COMPRESSION_LIBS TsFile::LibLZMA)
-endif()
-
-message("Compression libraries: ${COMPRESSION_LIBS}")
-
+set(_TSFILE_OBJECT_TARGETS
+        common_obj
+        compress_obj
+        cwrapper_obj
+        file_obj
+        read_obj
+        write_obj)
 if (ENABLE_ANTLR4)
-    target_link_libraries(parser_obj TsFile::ANTLR4)
-    message("Linking parser_obj with the selected ANTLR4 runtime")
-endif()
+    list(APPEND _TSFILE_OBJECT_TARGETS parser_obj)
+endif ()
 
-target_link_libraries(compress_obj ${COMPRESSION_LIBS})
-target_link_libraries(common_obj ${COMPRESSION_LIBS})
-target_link_libraries(file_obj ${COMPRESSION_LIBS})
-target_link_libraries(read_obj ${COMPRESSION_LIBS})
-target_link_libraries(write_obj ${COMPRESSION_LIBS})
+if (CMAKE_VERSION VERSION_LESS "3.12")
+    set(_TSFILE_OBJECT_SOURCES "")
+    foreach (_TSFILE_OBJECT_TARGET IN LISTS _TSFILE_OBJECT_TARGETS)
+        list(APPEND _TSFILE_OBJECT_SOURCES
+                $<TARGET_OBJECTS:${_TSFILE_OBJECT_TARGET}>)
+    endforeach ()
+endif ()
 
 if (TSFILE_BUILD_SHARED)
-    add_library(tsfile SHARED)
+    if (CMAKE_VERSION VERSION_LESS "3.12")
+        add_library(tsfile SHARED ${_TSFILE_OBJECT_SOURCES})
+    else ()
+        add_library(tsfile SHARED)
+    endif ()
 else()
-    add_library(tsfile STATIC)
+    if (CMAKE_VERSION VERSION_LESS "3.12")
+        add_library(tsfile STATIC ${_TSFILE_OBJECT_SOURCES})
+    else ()
+        add_library(tsfile STATIC)
+    endif ()
     # Consumers of the CMake target must see TSFILE_API without DLL import
     # decoration when linking the static library on MSVC.
     target_compile_definitions(tsfile INTERFACE TSFILE_STATIC)
@@ -135,19 +123,21 @@ if (${COV_ENABLED})
     else()
         set(COV_LINK_LIB -lgcov)
     endif()
-    if (ENABLE_ANTLR4)
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj ${COV_LINK_LIB})
+    if (CMAKE_VERSION VERSION_LESS "3.12")
+        target_link_libraries(tsfile ${COV_LINK_LIB})
     else()
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj ${COV_LINK_LIB})
+        target_link_libraries(tsfile ${_TSFILE_OBJECT_TARGETS} ${COV_LINK_LIB})
     endif()
 else()
     message("Disable code cov...")
-    if (ENABLE_ANTLR4)
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
-    else()
-        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
+    if (NOT CMAKE_VERSION VERSION_LESS "3.12")
+        target_link_libraries(tsfile ${_TSFILE_OBJECT_TARGETS})
     endif()
 endif()
+
+unset(_TSFILE_OBJECT_SOURCES)
+unset(_TSFILE_OBJECT_TARGET)
+unset(_TSFILE_OBJECT_TARGETS)
 
 add_dependencies(tsfile utils_obj encoding_obj)
 

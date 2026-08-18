@@ -33,15 +33,24 @@ modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma have
 migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
 cache rather than kept in this repository.
 
+LZMA2 support is disabled by default so this optional codec does not raise the
+CMake 3.11 baseline for long-lived industrial and legacy toolchains. Set
+`ENABLE_LZMA2=ON` to opt in: CMake 3.11 through 3.19 requires a compatible
+system liblzma, while the verified bundled XZ Utils build is available with
+CMake 3.20 or newer.
+
 CI validates the modes at two levels. The cross-platform C++ unit-test
 workflows explicitly use `BUNDLED` so their dependency versions do not depend
-on packages preinstalled on the runner. Their CMake tests exercise `AUTO` with
-controlled compatible, missing, too-old, and incompatible package fixtures.
-The dedicated `Cpp-Dependency-Source` workflow builds every dependency from a
-fresh `BUNDLED` archive cache, repeats the build with that cache in offline
-mode, and builds against an independently installed `SYSTEM` prefix. Each
-dedicated job checks the reported source for every enabled dependency before
-compiling and linking TsFile.
+on packages preinstalled on the runner, and explicitly enable LZMA2 on their
+modern CMake hosts. Their CMake tests exercise `AUTO` with controlled
+compatible, missing, too-old, and incompatible package fixtures. The dedicated
+`Cpp-Dependency-Source` workflow verifies the dependency-free legacy core with
+CMake 3.11, verifies LZMA2 against an external system liblzma with CMake 3.11,
+and confirms that bundled LZMA2 is rejected clearly there. It also builds every
+dependency from a fresh `BUNDLED` archive cache, repeats the build with that
+cache in offline mode, and builds against an independently installed `SYSTEM`
+prefix. Each dedicated job checks the reported source for every enabled
+dependency before compiling and linking TsFile.
 
 ## Dependency Inventory
 

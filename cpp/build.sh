@@ -34,7 +34,9 @@ enable_lz4=ON
 enable_lzokay=ON
 enable_zlib=ON
 enable_zstd=ON
-enable_lzma2=ON
+# Keep the default build compatible with CMake 3.11-era industrial toolchains.
+# Bundled XZ Utils requires CMake 3.20+, so LZMA2 must be enabled explicitly.
+enable_lzma2=OFF
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
 
@@ -71,6 +73,8 @@ Options:
   --enable-zstd=<ON|OFF>
   --disable-zstd
   --enable-lzma2=<ON|OFF>
+                         Enable LZMA2 explicitly (default: OFF; bundled XZ
+                         requires CMake 3.20 or newer).
   --disable-lzma2
   -h, --help             Show this help message.
 EOF

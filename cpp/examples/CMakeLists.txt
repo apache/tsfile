@@ -52,6 +52,13 @@ endif ()
 add_subdirectory(cpp_examples)
 add_subdirectory(c_examples)
 
-add_executable(examples examples.cc)
-target_link_libraries(examples cpp_examples_obj c_examples_obj)
+if (CMAKE_VERSION VERSION_LESS "3.12")
+    add_executable(examples
+            examples.cc
+            $<TARGET_OBJECTS:cpp_examples_obj>
+            $<TARGET_OBJECTS:c_examples_obj>)
+else ()
+    add_executable(examples examples.cc)
+    target_link_libraries(examples cpp_examples_obj c_examples_obj)
+endif ()
 target_link_libraries(examples tsfile)

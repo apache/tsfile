@@ -39,6 +39,9 @@ bash build.sh -c=ON              # Enable code coverage
 bash build.sh --disable-snappy --disable-lz4 --disable-lzokay --disable-zlib \
   --disable-zstd --disable-lzma2
 
+# LZMA2 is opt-in; its bundled XZ build requires CMake 3.20+
+bash build.sh --enable-lzma2=ON
+
 # Or use CMake directly
 mkdir -p build/Release && cd build/Release
 cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=ON
@@ -62,7 +65,8 @@ All `ON` by default unless noted:
 |--------|---------|
 | `BUILD_TEST` | Compile tests (GTest 1.12.1, auto-downloaded) |
 | `ENABLE_ANTLR4` | ANTLR4 parser runtime |
-| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` / `ENABLE_ZSTD` / `ENABLE_LZMA2` | Compression libraries |
+| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` / `ENABLE_ZSTD` | Compression libraries |
+| `ENABLE_LZMA2` | LZMA2 compression (`OFF` by default; bundled XZ requires CMake 3.20+) |
 | `ENABLE_THREADS` | Multi-threaded read/write via pthreads |
 | `ENABLE_ASAN` | AddressSanitizer (`OFF` by default) |
 | `ENABLE_SIMD` | SIMD acceleration |
@@ -84,7 +88,8 @@ cpp/src/
 
 ## Architecture Notes
 
-- **C++11** standard, targets CMake 3.11+
+- **C++11** standard, targets CMake 3.11+; bundled XZ/LZMA2 requires CMake
+  3.20+, while older CMake can enable LZMA2 with a compatible system liblzma
 - Dual data model: **tree-view** (`TsFileTreeWriter/Reader`) and **table-view** (`TsFileTableWriter`, `TableQueryExecutor`)
 - Parallel column encoding in table write path, controlled by `ENABLE_THREADS`
 - Third-party dependencies are either retained under `third_party/` or resolved

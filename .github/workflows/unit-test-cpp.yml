@@ -149,5 +149,6 @@ jobs:
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp \
            -Denable.asan=$ASAN_VALUE \
            -Dbuild.type=${{ matrix.build_type }} \
+           -Denable.lzma2=ON \
            -Dtsfile.dependency.source=BUNDLED \
            clean verify

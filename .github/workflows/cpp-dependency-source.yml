@@ -51,6 +51,128 @@ env:
   TSFILE_DEPENDENCY_CACHE: cpp/target/dependency-source-cache
 
 jobs:
+  legacy-cmake:
+    name: Legacy core build with CMake 3.11
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      CMAKE_3_11_VERSION: 3.11.4
+      CMAKE_3_11_SHA256: 6dab016a6b82082b8bcd0f4d1e53418d6372015dd983d29367b9153f1a376435
+      XZ_VERSION: 5.8.3
+      XZ_SHA256: 3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install verified CMake 3.11
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            "https://cmake.org/files/v3.11/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64.tar.gz" \
+            --output cmake-3.11.tar.gz
+          echo "${CMAKE_3_11_SHA256}  cmake-3.11.tar.gz" | sha256sum --check
+          tar -xzf cmake-3.11.tar.gz
+
+      - name: Configure the legacy core with default LZMA2 setting
+        shell: bash
+        run: |
+          mkdir -p "$TSFILE_BUILD_DIR"
+          cd "$TSFILE_BUILD_DIR"
+          "$GITHUB_WORKSPACE/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64/bin/cmake" \
+            "$GITHUB_WORKSPACE/cpp" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DENABLE_ANTLR4=OFF \
+            -DENABLE_SNAPPY=OFF \
+            -DENABLE_LZ4=OFF \
+            -DENABLE_LZOKAY=OFF \
+            -DENABLE_ZLIB=OFF \
+            -DENABLE_ZSTD=OFF \
+            -DENABLE_SIMD=OFF
+          grep -Fx "ENABLE_LZMA2:BOOL=OFF" CMakeCache.txt
+          ! grep -q '^TSFILE_LIBLZMA' CMakeCache.txt
+
+      - name: Build TsFile with CMake 3.11
+        shell: bash
+        run: |
+          cd "$TSFILE_BUILD_DIR"
+          "$GITHUB_WORKSPACE/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64/bin/cmake" \
+            --build . --target tsfile -- -j2
+
+      - name: Install an external liblzma for the legacy SYSTEM build
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            "https://github.com/tukaani-project/xz/releases/download/v${XZ_VERSION}/xz-${XZ_VERSION}.tar.gz" \
+            --output xz.tar.gz
+          echo "${XZ_SHA256}  xz.tar.gz" | sha256sum --check
+          tar -xzf xz.tar.gz
+          cd "xz-${XZ_VERSION}"
+          ./configure \
+            --prefix="$GITHUB_WORKSPACE/system-liblzma" \
+            --disable-static \
+            --disable-xz \
+            --disable-xzdec \
+            --disable-lzmadec \
+            --disable-lzmainfo \
+            --disable-lzma-links \
+            --disable-scripts \
+            --disable-doc \
+            --disable-nls
+          make -j2
+          make install
+
+      - name: Build LZMA2 against SYSTEM liblzma with CMake 3.11
+        shell: bash
+        run: |
+          mkdir -p "${TSFILE_BUILD_DIR}-lzma2-system"
+          cd "${TSFILE_BUILD_DIR}-lzma2-system"
+          "$GITHUB_WORKSPACE/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64/bin/cmake" \
+            "$GITHUB_WORKSPACE/cpp" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/system-liblzma" \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DENABLE_ANTLR4=OFF \
+            -DENABLE_SNAPPY=OFF \
+            -DENABLE_LZ4=OFF \
+            -DENABLE_LZOKAY=OFF \
+            -DENABLE_ZLIB=OFF \
+            -DENABLE_ZSTD=OFF \
+            -DENABLE_LZMA2=ON \
+            -DENABLE_SIMD=OFF \
+            -DTSFILE_DEPENDENCY_SOURCE=SYSTEM \
+            2>&1 | tee configure.log
+          grep -F "TsFile dependency liblzma: SYSTEM" configure.log
+          "$GITHUB_WORKSPACE/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64/bin/cmake" \
+            --build . --target tsfile -- -j2
+
+      - name: Reject bundled LZMA2 with CMake 3.11 clearly
+        shell: bash
+        run: |
+          mkdir -p "${TSFILE_BUILD_DIR}-lzma2-bundled-rejected"
+          cd "${TSFILE_BUILD_DIR}-lzma2-bundled-rejected"
+          if "$GITHUB_WORKSPACE/cmake-${CMAKE_3_11_VERSION}-Linux-x86_64/bin/cmake" \
+            "$GITHUB_WORKSPACE/cpp" \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DENABLE_ANTLR4=OFF \
+            -DENABLE_SNAPPY=OFF \
+            -DENABLE_LZ4=OFF \
+            -DENABLE_LZOKAY=OFF \
+            -DENABLE_ZLIB=OFF \
+            -DENABLE_ZSTD=OFF \
+            -DENABLE_LZMA2=ON \
+            -DENABLE_SIMD=OFF \
+            -DTSFILE_DEPENDENCY_SOURCE=BUNDLED \
+            > configure.log 2>&1; then
+            echo "Bundled LZMA2 unexpectedly configured with CMake 3.11."
+            exit 1
+          fi
+          grep -F "bundled XZ Utils 5.8.3 build requires CMake 3.20" \
+            configure.log
+
   bundled:
     name: BUNDLED from a fresh archive cache
     runs-on: ubuntu-latest
@@ -71,6 +193,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TEST=OFF \
             -DBUILD_TOOLS=OFF \
+            -DENABLE_LZMA2=ON \
             -DTSFILE_DEPENDENCY_SOURCE=BUNDLED \
             -DTSFILE_DEPENDENCY_CACHE="$GITHUB_WORKSPACE/$TSFILE_DEPENDENCY_CACHE" \
             2>&1 | tee bundled-configure.log
@@ -117,6 +240,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TEST=OFF \
             -DBUILD_TOOLS=OFF \
+            -DENABLE_LZMA2=ON \
             -DTSFILE_DEPENDENCY_SOURCE=BUNDLED \
             -DTSFILE_DEPENDENCY_OFFLINE=ON \
             -DTSFILE_DEPENDENCY_CACHE="$GITHUB_WORKSPACE/$TSFILE_DEPENDENCY_CACHE" \
@@ -226,6 +350,7 @@ jobs:
             -DSIMDE_ROOT="$GITHUB_WORKSPACE/system-prefix" \
             -DBUILD_TEST=OFF \
             -DBUILD_TOOLS=OFF \
+            -DENABLE_LZMA2=ON \
             -DTSFILE_DEPENDENCY_SOURCE=SYSTEM \
             2>&1 | tee system-configure.log
 

@@ -125,6 +125,7 @@ jobs:
         run: |
           ./mvnw -P with-cpp,with-cppcheck -pl cpp \
             -Dbuild.test=OFF \
+            -Denable.lzma2=ON \
             cmake:generate@cmake-generate-test-compile
           test -s cpp/target/build/compile_commands.json
 

@@ -277,12 +277,24 @@ if (ENABLE_ZSTD)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ZSTDDependency.cmake)
 endif ()
 
-option(ENABLE_LZMA2 "Enable LZMA2 compression" ON)
+# LZMA2 is opt-in so this optional codec does not raise the CMake 3.11 baseline
+# used by long-lived industrial and legacy toolchains. The verified bundled XZ
+# Utils 5.8.3 build requires CMake 3.20 or newer; older CMake versions may still
+# enable LZMA2 when a compatible system liblzma package is available.
+option(ENABLE_LZMA2
+        "Enable LZMA2 compression (bundled liblzma requires CMake 3.20+)"
+        OFF)
 message("cmake using: ENABLE_LZMA2=${ENABLE_LZMA2}")
 
 if (ENABLE_LZMA2)
     add_definitions(-DENABLE_LZMA2)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LibLZMADependency.cmake)
+else ()
+    message(STATUS
+            "LZMA2 is disabled. It defaults to OFF so this optional codec "
+            "does not raise the build-system floor for legacy toolchains; "
+            "enable it explicitly with a compatible system liblzma or "
+            "with bundled XZ Utils on CMake 3.20+.")
 endif ()
 
 option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
@@ -325,20 +337,42 @@ else ()
 endif ()
 add_subdirectory(third_party)
 
-# ANTLR4 headers are exposed through public TsFile headers, and SIMDe is used
-# throughout the implementation. Apply both selected targets to the project
-# targets created below.
-if (ENABLE_ANTLR4 OR ENABLE_SIMD)
-    get_property(_TSFILE_BASE_LINK_LIBRARIES
-            DIRECTORY PROPERTY LINK_LIBRARIES)
-endif ()
+# CMake 3.11 cannot call target_link_libraries() on object-library targets, but
+# directory-level link_libraries() initializes both their usage requirements
+# and the final library's link dependencies. Apply every enabled project
+# dependency before creating the object libraries below. The test target links
+# these dependencies explicitly, so temporarily restore the original directory
+# property while configuring downloaded GoogleTest targets.
+set(_TSFILE_PROJECT_DEPENDENCIES "")
 if (ENABLE_ANTLR4)
-    link_libraries(TsFile::ANTLR4)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ANTLR4)
+endif ()
+if (ENABLE_SNAPPY)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::Snappy)
+endif ()
+if (ENABLE_LZ4)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LZ4)
+endif ()
+if (ENABLE_LZOKAY)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LZOKAY)
+endif ()
+if (ENABLE_ZLIB)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ZLIB)
+endif ()
+if (ENABLE_ZSTD)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::ZSTD)
+endif ()
+if (ENABLE_LZMA2)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::LibLZMA)
 endif ()
 if (ENABLE_SIMD)
-    link_libraries(TsFile::SIMDe)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::SIMDe)
 endif ()
-if (ENABLE_ANTLR4 OR ENABLE_SIMD)
+
+if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
+    get_property(_TSFILE_BASE_LINK_LIBRARIES
+            DIRECTORY PROPERTY LINK_LIBRARIES)
+    link_libraries(${_TSFILE_PROJECT_DEPENDENCIES})
     get_property(_TSFILE_PROJECT_LINK_LIBRARIES
             DIRECTORY PROPERTY LINK_LIBRARIES)
 endif ()
@@ -351,7 +385,7 @@ if (BUILD_TEST)
     # The test target links project dependencies explicitly. Do not make
     # downloaded GoogleTest targets inherit them, because their upstream
     # install export cannot export TsFile-owned targets.
-    if (ENABLE_ANTLR4 OR ENABLE_SIMD)
+    if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
         set_property(DIRECTORY PROPERTY LINK_LIBRARIES
                 "${_TSFILE_BASE_LINK_LIBRARIES}")
     endif ()
@@ -363,11 +397,12 @@ else()
     message("BUILD_TEST is OFF, skipping test directory")
 endif ()
 
-if (ENABLE_ANTLR4 OR ENABLE_SIMD)
+if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
     set_property(DIRECTORY PROPERTY LINK_LIBRARIES
             "${_TSFILE_PROJECT_LINK_LIBRARIES}")
     unset(_TSFILE_BASE_LINK_LIBRARIES)
     unset(_TSFILE_PROJECT_LINK_LIBRARIES)
 endif ()
+unset(_TSFILE_PROJECT_DEPENDENCIES)
 
 add_subdirectory(examples)

@@ -75,7 +75,7 @@ jobs:
     - name: Manual build
       if: matrix.build-mode == 'manual'
       run: |
-        .\mvnw.cmd clean package -P with-cpp
+        .\mvnw.cmd clean package -P with-cpp -Denable.lzma2=ON
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4.37.3

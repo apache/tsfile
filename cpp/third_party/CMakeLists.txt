@@ -295,9 +295,12 @@ if (ENABLE_LZMA2)
     if (TSFILE_LIBLZMA_SOURCE STREQUAL "BUNDLED")
         if (CMAKE_VERSION VERSION_LESS "3.20")
             message(FATAL_ERROR
-                    "The verified XZ Utils 5.8.3 CMake build requires CMake "
-                    "3.20 or newer. Use TSFILE_DEPENDENCY_SOURCE=SYSTEM with "
-                    "a compatible liblzma package when using older CMake.")
+                    "ENABLE_LZMA2=ON with the verified bundled XZ Utils 5.8.3 "
+                    "build requires CMake 3.20 or newer. TsFile retains a "
+                    "CMake 3.11 baseline for legacy industrial toolchains, "
+                    "so LZMA2 is disabled by default. Disable LZMA2 or use "
+                    "TSFILE_DEPENDENCY_SOURCE=SYSTEM with a compatible "
+                    "liblzma package when using older CMake.")
         endif ()
         include(${CMAKE_SOURCE_DIR}/cmake/LibLZMASource.cmake)
 

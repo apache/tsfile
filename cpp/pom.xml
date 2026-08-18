@@ -44,7 +44,12 @@
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
         <enable.zstd>ON</enable.zstd>
-        <enable.lzma2>ON</enable.lzma2>
+        <!--
+            Keep Maven's default build compatible with CMake 3.11-era
+            industrial toolchains. Bundled XZ Utils requires CMake 3.20+;
+            explicitly pass -Denable.lzma2=ON on a compatible build host.
+        -->
+        <enable.lzma2>OFF</enable.lzma2>
         <enable.antlr4>ON</enable.antlr4>
         <enable.simd>ON</enable.simd>
     </properties>
