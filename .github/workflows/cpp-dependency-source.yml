@@ -170,8 +170,11 @@ jobs:
             echo "Bundled LZMA2 unexpectedly configured with CMake 3.11."
             exit 1
           fi
-          grep -F "bundled XZ Utils 5.8.3 build requires CMake 3.20" \
-            configure.log
+          cat configure.log
+          # CMake wraps long FATAL_ERROR messages, so match short fragments
+          # instead of assuming the complete sentence remains on one line.
+          grep -F "XZ Utils 5.8.3" configure.log
+          grep -F "CMake 3.20 or newer" configure.log
 
   bundled:
     name: BUNDLED from a fresh archive cache
