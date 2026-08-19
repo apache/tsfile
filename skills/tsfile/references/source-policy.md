@@ -25,15 +25,13 @@ registry; do not load it for ordinary offline API questions.
 
 ## Resolve Scope First
 
-1. Classify the task as current-checkout development, a named release, an
-   external project's dependency, or version-independent concepts.
+1. Treat the current skill baseline as the default. Override it only for an
+   explicit checkout, named release, or external project's dependency.
 2. For a checkout, run `scripts/resolve-version.sh`; pass `--root <checkout>`
    for a different source tree. For an external binary/project without source,
    inspect declared and locked dependencies before asking the user.
-3. If the script reports `version_source=unavailable`, no source version was
-   resolved. Use the offline reference scope only for routing and conceptual
-   guidance; inspect the target artifact or dependency metadata before making
-   a version-sensitive claim.
+3. If no checkout is discovered, use the returned `skill_baseline` versions;
+   do not infer or emulate an earlier TsFile API line.
 4. Treat `latest` website URLs as mutable V2.x navigation aliases, not release
    identifiers. Use the download/release sources in `docs-map.yaml` to discover
    published versions.
@@ -77,8 +75,9 @@ branch unless the same code is verified in the requested release.
 2. Choose the source matching the requested artifact or checkout.
 3. Do not combine constructors, method names, defaults, or dependencies across
    releases or language bindings.
-4. If the target remains unknown and compilable code is required, stop and ask
-   for the version. For conceptual guidance, state the assumed major line.
+4. If the user does not identify another target, generate code for the current
+   skill baseline. Ask for a version only when the request explicitly targets
+   an external or different release but does not identify it.
 5. Treat ecosystem integration pages as leads that require dependency and
    connector-version verification because they may evolve independently.
 
@@ -92,5 +91,5 @@ branch unless the same code is verified in the requested release.
   reference.
 - Update `docs-map.yaml:last_verified` only after checking its official URLs.
   Do not record a discovered latest release as a permanent constant.
-- Replace obsolete offline facts instead of appending historical sections.
-  Preserve legacy guidance only when it has an explicit version scope.
+- Replace obsolete offline facts instead of appending historical sections. Do
+  not carry prior-version fallback instructions in this skill.

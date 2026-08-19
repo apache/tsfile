@@ -32,11 +32,12 @@ sampling, and CSV/TSV-to-TsFile conversion.
 
 1. Before giving a dependency version or version-sensitive API, run
    `scripts/resolve-version.sh`. Pass `--root <checkout>` when the target is not
-   the repository that bundles this skill. If `version_source=unavailable`,
-   inspect the target project's dependency metadata before giving
-   version-sensitive code. Do not treat `latest` as a release number. Read
-   `references/source-policy.md` only when the authority remains ambiguous,
-   sources conflict, or a freshness/published-release claim matters.
+   the repository that bundles this skill. When no checkout is present, the
+   script returns the current skill baseline. Inspect external dependency
+   metadata only when the user targets a different project or release. Do not
+   treat `latest` as a release number. Read `references/source-policy.md` only
+   when the authority remains ambiguous, sources conflict, or a
+   freshness/published-release claim matters.
 2. Use `references/docs-map.yaml` only when an official online page, release,
    download, or repository link is needed.
 3. Choose Tree or Table model, then choose one language binding. Do not load all
@@ -83,8 +84,8 @@ or language bindings.
 
 - Run `scripts/resolve-version.sh [--root <checkout>]` to obtain Maven, C++,
   Python, and Git version metadata without loading or copying source files. Its
-  output schema remains stable when no checkout is discovered; use a version
-  field only when its value is not `unavailable`.
+  output schema remains stable when no checkout is discovered and then reports
+  the baseline shipped with this skill.
 - When a compatible checkout is available, use maintained examples from the
   same commit: `java/examples/`, `python/examples/example.py`, or
   `cpp/examples/`. Do not copy an `assets/` template merely to answer an API

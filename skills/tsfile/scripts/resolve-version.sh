@@ -26,14 +26,14 @@ DOCS_MAP="${SCRIPT_DIR}/../references/docs-map.yaml"
 
 usage() {
     cat <<'EOF'
-Resolve version metadata from an Apache TsFile source checkout when available.
+Resolve version metadata from an Apache TsFile source checkout or this skill's
+current-source baseline.
 
 Usage: resolve-version.sh [--root <checkout>]
 
 Output is line-oriented key=value data for Maven/Java, C++, Python, and Git.
-If no checkout is discovered, version_source and version fields are reported as
-unavailable and the script exits successfully. An invalid explicit --root
-remains an error.
+If no checkout is discovered, version fields come from the skill baseline in
+references/docs-map.yaml. An invalid explicit --root remains an error.
 EOF
 }
 
@@ -42,11 +42,11 @@ fail() {
     exit 1
 }
 
-extract_offline_reference_metadata() {
-    offline_reference_scope="unavailable"
-    offline_reference_last_verified="unavailable"
+extract_skill_metadata() {
+    offline_reference_scope="current-source"
+    offline_reference_last_verified="not-recorded"
 
-    [[ -f "${DOCS_MAP}" ]] || return 0
+    [[ -f "${DOCS_MAP}" ]] || fail "docs map not found: ${DOCS_MAP}"
 
     parsed_last_verified="$(
         awk '$1 == "last_verified:" { gsub(/\"/, "", $2); print $2; exit }' \
@@ -55,17 +55,38 @@ extract_offline_reference_metadata() {
     [[ -z "${parsed_last_verified}" ]] || \
         offline_reference_last_verified="${parsed_last_verified}"
 
-    parsed_scope="$(
-        awk '
-            $1 == "-" && $2 == "id:" && $3 == "user-guide-v2-zh" {
-                selected = 1
-                next
+    read_baseline_value() {
+        local key="$1"
+        awk -v key="${key}:" '
+            $1 == "skill_baseline:" { selected = 1; next }
+            selected && /^[^[:space:]]/ { exit }
+            selected && $1 == key {
+                value = $2
+                gsub(/"/, "", value)
+                print value
+                exit
             }
-            selected && $1 == "version_scope:" { print $2; exit }
-            selected && $1 == "-" && $2 == "id:" { exit }
         ' "${DOCS_MAP}"
-    )"
-    [[ -z "${parsed_scope}" ]] || offline_reference_scope="${parsed_scope}"
+    }
+
+    baseline_scope="$(read_baseline_value scope)"
+    baseline_source_ref="$(read_baseline_value source_ref)"
+    baseline_project_version="$(read_baseline_value maven_project_version)"
+    baseline_java_release="$(read_baseline_value java_release)"
+    baseline_cpp_version="$(read_baseline_value cpp_sdk_version)"
+    baseline_python_version="$(read_baseline_value python_package_version)"
+
+    [[ -n "${baseline_scope}" ]] || fail "skill baseline scope not found"
+    [[ -n "${baseline_source_ref}" ]] || fail "skill baseline source ref not found"
+    [[ -n "${baseline_project_version}" ]] || \
+        fail "skill baseline Maven version not found"
+    [[ -n "${baseline_java_release}" ]] || \
+        fail "skill baseline Java release not found"
+    [[ -n "${baseline_cpp_version}" ]] || \
+        fail "skill baseline C++ version not found"
+    [[ -n "${baseline_python_version}" ]] || \
+        fail "skill baseline Python version not found"
+    offline_reference_scope="${baseline_scope}"
 }
 
 print_result() {
@@ -84,16 +105,16 @@ print_result() {
         "${offline_reference_last_verified}"
 }
 
-print_unresolved_result() {
-    version_source="unavailable"
-    tsfile_root="unavailable"
-    project_version="unavailable"
-    java_release="unavailable"
-    cpp_version="unavailable"
-    python_version="unavailable"
-    git_commit="unavailable"
-    git_ref="unavailable"
-    git_dirty="unavailable"
+print_baseline_result() {
+    version_source="skill_baseline"
+    tsfile_root="not-present"
+    project_version="${baseline_project_version}"
+    java_release="${baseline_java_release}"
+    cpp_version="${baseline_cpp_version}"
+    python_version="${baseline_python_version}"
+    git_commit="not-recorded"
+    git_ref="${baseline_source_ref}"
+    git_dirty="not-applicable"
     print_result
 }
 
@@ -103,7 +124,7 @@ is_tsfile_checkout() {
     grep -q '<artifactId>tsfile-parent</artifactId>' "${root}/pom.xml"
 }
 
-extract_offline_reference_metadata
+extract_skill_metadata
 
 while (( $# > 0 )); do
     case "$1" in
@@ -130,7 +151,7 @@ if ! is_tsfile_checkout "${TSFILE_ROOT}"; then
             fail "root pom.xml not found: ${TSFILE_ROOT}/pom.xml"
         fail "not an Apache TsFile source checkout: ${TSFILE_ROOT}"
     fi
-    print_unresolved_result
+    print_baseline_result
     exit 0
 fi
 
@@ -179,29 +200,27 @@ project_version="$(extract_project_version "${POM}")"
 project_version="$(resolve_maven_property "${project_version}")"
 
 java_release="$(extract_xml_property maven.compiler.release)"
-[[ -n "${java_release}" ]] || java_release="unavailable"
+[[ -n "${java_release}" ]] || fail "Java release not found in ${POM}"
 
-cpp_version="unavailable"
-if [[ -f "${TSFILE_ROOT}/cpp/CMakeLists.txt" ]]; then
-    parsed_cpp_version="$(
-        sed -n 's/^[[:space:]]*set(TsFile_CPP_VERSION[[:space:]]*"\{0,1\}\([^"[:space:])]*\)"\{0,1\}[[:space:]]*).*/\1/p' \
-            "${TSFILE_ROOT}/cpp/CMakeLists.txt" | sed -n '1p'
-    )"
-    [[ -z "${parsed_cpp_version}" ]] || cpp_version="${parsed_cpp_version}"
-fi
+[[ -f "${TSFILE_ROOT}/cpp/CMakeLists.txt" ]] || \
+    fail "C++ metadata not found: ${TSFILE_ROOT}/cpp/CMakeLists.txt"
+cpp_version="$(
+    sed -n 's/^[[:space:]]*set(TsFile_CPP_VERSION[[:space:]]*"\{0,1\}\([^"[:space:])]*\)"\{0,1\}[[:space:]]*).*/\1/p' \
+        "${TSFILE_ROOT}/cpp/CMakeLists.txt" | sed -n '1p'
+)"
+[[ -n "${cpp_version}" ]] || fail "C++ SDK version not found"
 
-python_version="unavailable"
-if [[ -f "${TSFILE_ROOT}/python/pyproject.toml" ]]; then
-    parsed_python_version="$(
-        sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-            "${TSFILE_ROOT}/python/pyproject.toml" | sed -n '1p'
-    )"
-    [[ -z "${parsed_python_version}" ]] || python_version="${parsed_python_version}"
-fi
+[[ -f "${TSFILE_ROOT}/python/pyproject.toml" ]] || \
+    fail "Python metadata not found: ${TSFILE_ROOT}/python/pyproject.toml"
+python_version="$(
+    sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+        "${TSFILE_ROOT}/python/pyproject.toml" | sed -n '1p'
+)"
+[[ -n "${python_version}" ]] || fail "Python package version not found"
 
-git_commit="unavailable"
-git_ref="unavailable"
-git_dirty="unavailable"
+git_commit="not-recorded"
+git_ref="not-recorded"
+git_dirty="not-applicable"
 if command -v git >/dev/null 2>&1 && git -C "${TSFILE_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
     git_commit="$(git -C "${TSFILE_ROOT}" rev-parse HEAD)"
     git_ref="$(git -C "${TSFILE_ROOT}" describe --tags --exact-match 2>/dev/null || true)"

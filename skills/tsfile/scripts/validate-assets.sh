@@ -204,7 +204,7 @@ elif [[ -n "${CHECKOUT_ROOT}" ]]; then
         python3 -c 'import pandas, tsfile' >/dev/null 2>&1; then
         run_python_template "${CHECKOUT_ROOT}/python"
     else
-        python_template="syntax-valid-local-binding-unavailable"
+        python_template="syntax-valid-local-binding-not-built"
     fi
 fi
 

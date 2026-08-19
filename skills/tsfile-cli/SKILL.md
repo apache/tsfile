@@ -35,8 +35,6 @@ the sibling `tsfile` skill at `../tsfile/SKILL.md`.
 
 - Name `tsfile-cli` (CMake target `tsfile_cli`). Find: `ls cpp/build/*/bin/tsfile-cli`.
 - Build only if missing: `cd cpp && bash build.sh -t=Debug`.
-- CMake ≥4 aborts on bundled ANTLR4 (`Policy CMP00xx ... OLD`) → add `--disable-antlr4`
-  (reader/CLI don't use ANTLR4).
 
 ## Read
 
