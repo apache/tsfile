@@ -565,6 +565,7 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     void reset() override {
         TS2DIFFEncoder<int32_t>::reset();
         underflow_flags_.clear();
+        max_point_number_saved_ = false;
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -609,6 +610,11 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     int max_point_number_;
     double max_point_value_;
     std::vector<int8_t> underflow_flags_;
+    // Java FloatDecoder reads maxPointNumber once per page; this flag
+    // makes sure only the first 128-value segment of a page carries the
+    // prefix. PageWriter/ValuePageWriter reset() between pages clears it,
+    // so every page starts with a fresh prefix (apache/tsfile#910).
+    bool max_point_number_saved_{false};
 };
 
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
@@ -623,6 +629,7 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
     void reset() override {
         TS2DIFFEncoder<int64_t>::reset();
         underflow_flags_.clear();
+        max_point_number_saved_ = false;
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -667,6 +674,11 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
     int max_point_number_;
     double max_point_value_;
     std::vector<int8_t> underflow_flags_;
+    // Java FloatDecoder reads maxPointNumber once per page; this flag
+    // makes sure only the first 128-value segment of a page carries the
+    // prefix. PageWriter/ValuePageWriter reset() between pages clears it,
+    // so every page starts with a fresh prefix (apache/tsfile#910).
+    bool max_point_number_saved_{false};
 };
 
 typedef TS2DIFFEncoder<int32_t> IntTS2DIFFEncoder;
@@ -784,9 +796,14 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     }
     const int num_values = write_index_ + 1;
     common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
-    if (RET_FAIL(common::SerializationUtil::write_var_uint(
-            static_cast<uint32_t>(max_point_number_), inner))) {
-        return ret;
+    // Java FloatDecoder reads maxPointNumber only once per page; emit it
+    // just for the page's first segment (apache/tsfile#910).
+    if (!max_point_number_saved_) {
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                static_cast<uint32_t>(max_point_number_), inner))) {
+            return ret;
+        }
+        max_point_number_saved_ = true;
     }
     SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
@@ -871,9 +888,14 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     }
     const int num_values = write_index_ + 1;
     common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
-    if (RET_FAIL(common::SerializationUtil::write_var_uint(
-            static_cast<uint32_t>(max_point_number_), inner))) {
-        return ret;
+    // Java FloatDecoder reads maxPointNumber only once per page; emit it
+    // just for the page's first segment (apache/tsfile#910).
+    if (!max_point_number_saved_) {
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(
+                static_cast<uint32_t>(max_point_number_), inner))) {
+            return ret;
+        }
+        max_point_number_saved_ = true;
     }
     SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);

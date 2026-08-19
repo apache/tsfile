@@ -680,4 +680,381 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyRawBatchThenScalarReads) {
     EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
 }
 
+
+// ============================================================================
+// apache/tsfile#910 regression: Java reads the maxPointNumber field only
+// once per page (before the first segment); the old C++ encoder repeated it
+// at every segment boundary, so multi-segment pages could be misparsed by
+// Java readers (TsFileSketchTool / print-tsfile.bat crash).
+//
+// The fixed encoder emits maxPointNumber exactly once per page (a page
+// boundary is signaled by reset()); later segments start directly with the
+// 4-byte write_index.  The decoder distinguishes the two layouts by peeking
+// the byte at the segment start: 0x00 means "no prefix" (write_index high
+// byte), any non-zero byte is a var_uint tag (maxPointNumber itself, or the
+// overflow flag).
+// ============================================================================
+
+namespace {
+
+// LEB128 var_uint, matching common::SerializationUtil::write_var_uint.
+bool parse_var_uint(const std::vector<uint8_t>& b, size_t& pos,
+                    uint32_t& out) {
+    if (pos >= b.size()) return false;
+    out = 0;
+    int shift = 0;
+    while (true) {
+        if (pos >= b.size() || shift > 28) return false;
+        uint8_t byte = b[pos++];
+        out |= static_cast<uint32_t>(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) return true;
+        shift += 7;
+    }
+}
+
+int32_t read_i32_be(const std::vector<uint8_t>& b, size_t pos) {
+    return (static_cast<int32_t>(b[pos]) << 24) |
+           (static_cast<int32_t>(b[pos + 1]) << 16) |
+           (static_cast<int32_t>(b[pos + 2]) << 8) |
+           static_cast<int32_t>(b[pos + 3]);
+}
+
+// Dumps the full stream content and CONSUMES the stream (read position
+// moves to the end).  Callers decode from a wrapped copy of the bytes:
+// restoring the read position to a page-aligned offset (position 0) makes
+// ByteStream::check_space() advance its page cursor one page too far and
+// fail the next read, so no rewind is attempted here.
+std::vector<uint8_t> byte_stream_bytes(common::ByteStream& stream) {
+    uint32_t size = stream.total_size();
+    std::vector<uint8_t> buf(size);
+    uint32_t read_len = 0;
+    EXPECT_EQ(stream.read_buf(buf.data(), size, read_len), common::E_OK);
+    EXPECT_EQ(read_len, size);
+    return buf;
+}
+
+// Wraps dumped page bytes for decoding (same path production chunk readers
+// use — a wrapped ByteStream).
+void wrap_bytes(const std::vector<uint8_t>& b, common::ByteStream& s) {
+    s.wrap_from(reinterpret_cast<const char*>(b.data()),
+                static_cast<int32_t>(b.size()));
+}
+
+// Walks a float/double TS_2DIFF page and asserts the apache/tsfile#910
+// layout invariant: the maxPointNumber var_uint appears only on the page's
+// first segment (possibly after a leading overflow-marker section); every
+// later segment starts directly with its 4-byte write_index, so any
+// non-flag tag on a later segment is a regression.  Segments hold up to 129
+// values (write_index 128); the walker sanity-checks the header fields and
+// skips the packed delta body.
+void expect_max_pn_once_per_page(const std::vector<uint8_t>& b,
+                                 bool is_double) {
+    const uint32_t FLAG_SCALED = 2147483647u;
+    const uint32_t FLAG_ORIGINAL = 2147483646u;
+    size_t pos = 0;
+    bool first_segment = true;
+    int segment_count = 0;
+    while (pos < b.size()) {
+        size_t seg_start = pos;
+        if (pos < b.size() && b[pos] != 0x00) {
+            uint32_t tag = 0;
+            size_t p = pos;
+            ASSERT_TRUE(parse_var_uint(b, p, tag));
+            if (tag == FLAG_SCALED || tag == FLAG_ORIGINAL) {
+                // Overflow marker section: value count + underflow bitmap
+                // (+ overflow bitmap for original-value overflow).
+                uint32_t n = 0;
+                ASSERT_TRUE(parse_var_uint(b, p, n));
+                EXPECT_GE(n, 1u);
+                size_t bm_len = static_cast<size_t>(n / 8 + 1);
+                ASSERT_LE(p + bm_len, b.size());
+                p += bm_len;
+                if (tag == FLAG_ORIGINAL) {
+                    ASSERT_LE(p + bm_len, b.size());
+                    p += bm_len;
+                }
+                // Only the page's first segment may carry maxPointNumber
+                // after the bitmaps.
+                if (first_segment && p < b.size() && b[p] != 0x00) {
+                    uint32_t mpn = 0;
+                    ASSERT_TRUE(parse_var_uint(b, p, mpn));
+                    EXPECT_GE(mpn, 1u);
+                }
+                pos = p;
+            } else {
+                // A non-flag tag is the maxPointNumber prefix; it must not
+                // appear on any segment after the first.
+                EXPECT_TRUE(first_segment)
+                    << "maxPointNumber prefix found on segment "
+                    << segment_count + 1 << " (byte " << seg_start << ")";
+                pos = p;
+            }
+        }
+        // Segment header: write_index + bit_width (+ delta_min + first_value).
+        size_t h = pos;
+        size_t header_len = is_double ? 24 : 16;
+        ASSERT_LE(h + header_len, b.size());
+        int32_t wi = read_i32_be(b, h);
+        int32_t bw = read_i32_be(b, h + 4);
+        ASSERT_GE(wi, 0) << "negative write_index at segment "
+                         << segment_count + 1;
+        EXPECT_LE(wi, 128);
+        ASSERT_GE(bw, 0);
+        EXPECT_LE(bw, 64);
+        pos = h + header_len;
+        pos += (static_cast<size_t>(wi) * static_cast<size_t>(bw) + 7) / 8;
+        ASSERT_LE(pos, b.size());
+        first_segment = false;
+        segment_count++;
+    }
+    EXPECT_GE(segment_count, 2) << "test must produce a multi-segment page";
+}
+
+}  // namespace
+
+// A page holds multiple 129-value segments; the maxPointNumber must appear
+// exactly once, at the page start — not at every segment boundary.
+TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberOncePerPageFloatMultiSegment) {
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 400;  // 4 segments: 129 + 129 + 129 + 13
+    std::vector<float> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<float>(i) * 0.25f + 0.5f;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_float_->encode(data[i], out), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
+
+    // Ramp data has bit_width 0, so the only 0x02 byte in the page is the
+    // maxPointNumber prefix.
+    std::vector<uint8_t> b = byte_stream_bytes(out);
+    size_t prefix_count = 0;
+    for (uint8_t byte : b) {
+        if (byte == 0x02) prefix_count++;
+    }
+    EXPECT_EQ(prefix_count, 1u)
+        << "maxPointNumber must be written once per page, not per segment";
+    expect_max_pn_once_per_page(b, false);
+
+    common::ByteStream dec;
+    wrap_bytes(b, dec);
+    float x = 0.0f;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, dec), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(dec));
+}
+
+// Same invariant for the double encoder (i64 delta path).
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       MaxPointNumberOncePerPageDoubleMultiSegment) {
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 400;
+    std::vector<double> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<double>(i) * 0.25 + 0.5;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_double_->encode(data[i], out), common::E_OK);
+    }
+    ASSERT_EQ(encoder_double_->flush(out), common::E_OK);
+
+    std::vector<uint8_t> b = byte_stream_bytes(out);
+    size_t prefix_count = 0;
+    for (uint8_t byte : b) {
+        if (byte == 0x02) prefix_count++;
+    }
+    EXPECT_EQ(prefix_count, 1u);
+    expect_max_pn_once_per_page(b, true);
+
+    common::ByteStream dec;
+    wrap_bytes(b, dec);
+    double y = 0.0;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_double_->read_double(y, dec), common::E_OK);
+        EXPECT_DOUBLE_EQ(y, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(dec));
+}
+
+// The #910 crash scenario: a value that overflows the scaled range in the
+// first segment.  The overflow-marker section leads the page, the single
+// maxPointNumber follows it, and the second segment still has no prefix.
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       MaxPointNumberOncePerPageFloatWithOverflow) {
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 140;  // segment 1 (129 values) + segment 2 (11 values)
+    std::vector<float> data(row_num);
+    data[0] = 0.5f;
+    data[1] = 3.0e7f;  // *100 = 3e9 > INT32_MAX → scaled overflow (flag 0)
+    for (int i = 2; i < row_num; i++) {
+        data[i] = 0.75f + static_cast<float>(i - 2) * 0.25f;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_float_->encode(data[i], out), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
+
+    // Byte layout: [FLAG var_uint][n=129][underflow bitmap (17B)]
+    //              [maxPointNumber 0x02][seg1 header][packed]
+    //              [seg2 header starting with 0x00 — no prefix]
+    std::vector<uint8_t> b = byte_stream_bytes(out);
+    size_t pos = 0;
+    uint32_t tag = 0;
+    ASSERT_TRUE(parse_var_uint(b, pos, tag));
+    EXPECT_EQ(tag, ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW);
+    uint32_t n = 0;
+    ASSERT_TRUE(parse_var_uint(b, pos, n));
+    EXPECT_EQ(n, 129u);  // segment 1 value count
+    size_t bm_len = static_cast<size_t>(n / 8 + 1);
+    ASSERT_LE(pos + bm_len, b.size());
+    pos += bm_len;
+    // Exactly one maxPointNumber, directly after the bitmaps.
+    ASSERT_LT(pos, b.size());
+    EXPECT_EQ(b[pos], 0x02);
+    uint32_t mpn = 0;
+    ASSERT_TRUE(parse_var_uint(b, pos, mpn));
+    EXPECT_EQ(mpn, 2u);
+    // Segment 1 header: write_index == 128 (129 values).
+    ASSERT_LE(pos + 16, b.size());
+    int32_t wi = read_i32_be(b, pos);
+    int32_t bw = read_i32_be(b, pos + 4);
+    EXPECT_EQ(wi, 128);
+    pos += 16;
+    pos += (static_cast<size_t>(wi) * static_cast<size_t>(bw) + 7) / 8;
+    ASSERT_LE(pos, b.size());
+    // Segment 2 begins directly with its write_index (0x00 high byte).
+    EXPECT_EQ(b[pos], 0x00) << "segment 2 must not carry a maxPointNumber";
+
+    // Round-trip: the overflow value goes through the bitmap path.
+    common::ByteStream dec;
+    wrap_bytes(b, dec);
+    float x = 0.0f;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, dec), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(dec));
+}
+
+// Same overflow layout for double (scaled > INT64_MAX → 1.0e17 * 100).
+// The generic walker understands the FLAG + maxPointNumber + segments
+// structure; round-trip goes through the bitmap path.
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       MaxPointNumberOncePerPageDoubleWithOverflow) {
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 140;
+    std::vector<double> data(row_num);
+    data[0] = 0.5;
+    data[1] = 1.0e17;  // *100 = 1e19 > INT64_MAX → scaled overflow (flag 0)
+    for (int i = 2; i < row_num; i++) {
+        data[i] = 0.75 + static_cast<double>(i - 2) * 0.25;
+    }
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_double_->encode(data[i], out), common::E_OK);
+    }
+    ASSERT_EQ(encoder_double_->flush(out), common::E_OK);
+
+    std::vector<uint8_t> b = byte_stream_bytes(out);
+    expect_max_pn_once_per_page(b, true);
+
+    common::ByteStream dec;
+    wrap_bytes(b, dec);
+    double y = 0.0;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_double_->read_double(y, dec), common::E_OK);
+        EXPECT_DOUBLE_EQ(y, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(dec));
+}
+
+// PageWriter resets the encoder between pages; every page must carry its
+// own maxPointNumber prefix (exactly one per page).
+TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
+    const int row_num = 130;  // 129 + 1 → two segments per page
+    std::vector<float> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<float>(i) * 0.25f + 0.5f;
+    }
+    common::ByteStream page1(1024, common::MOD_TS2DIFF_OBJ, false);
+    common::ByteStream page2(1024, common::MOD_TS2DIFF_OBJ, false);
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_float_->encode(data[i], page1), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(page1), common::E_OK);
+    encoder_float_->reset();  // page boundary
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_float_->encode(data[i], page2), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(page2), common::E_OK);
+
+    std::vector<uint8_t> b1 = byte_stream_bytes(page1);
+    std::vector<uint8_t> b2 = byte_stream_bytes(page2);
+    size_t c1 = 0;
+    size_t c2 = 0;
+    for (uint8_t byte : b1) {
+        if (byte == 0x02) c1++;
+    }
+    for (uint8_t byte : b2) {
+        if (byte == 0x02) c2++;
+    }
+    EXPECT_EQ(c1, 1u) << "page 1 must carry exactly one maxPointNumber";
+    EXPECT_EQ(c2, 1u) << "page 2 must carry exactly one maxPointNumber";
+    expect_max_pn_once_per_page(b1, false);
+    expect_max_pn_once_per_page(b2, false);
+
+    // Both pages decode with the same decoder; PageReader calls reset()
+    // between pages, which must re-arm the per-page prefix state.
+    common::ByteStream d1;
+    common::ByteStream d2;
+    wrap_bytes(b1, d1);
+    wrap_bytes(b2, d2);
+    float x = 0.0f;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, d1), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "page1 row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(d1));
+    decoder_float_->reset();  // page boundary
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, d2), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "page2 row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(d2));
+}
+
+// Backward compatibility: files written by the pre-#910 encoder carry the
+// maxPointNumber at every segment boundary.  The decoder must keep reading
+// them (it rescales whenever a prefix is present instead of assuming
+// once-per-page).
+TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNStillDecodes) {
+    // Build an old-format page by hand: 0x02 prefix before BOTH segments.
+    const std::vector<float> expected = {0.5f,  0.75f, 1.0f,  1.25f,
+                                         1.5f,  1.75f, 2.0f,  2.25f};
+    common::ByteStream old_fmt(1024, common::MOD_TS2DIFF_OBJ, false);
+    // Segment 1: 6 values (first 50, five deltas of 25), bit_width 0.
+    ASSERT_EQ(common::SerializationUtil::write_var_uint(2, old_fmt),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(5, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(0, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(25, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(50, old_fmt), common::E_OK);
+    // Segment 2: 2 values (first 200, one delta of 25) — WITH prefix again.
+    ASSERT_EQ(common::SerializationUtil::write_var_uint(2, old_fmt),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(1, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(0, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(25, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(200, old_fmt), common::E_OK);
+
+    float x = 0.0f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, old_fmt), common::E_OK);
+        EXPECT_FLOAT_EQ(x, expected[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(old_fmt));
+}
+
 }  // namespace storage

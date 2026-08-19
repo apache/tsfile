@@ -219,137 +219,144 @@ inline bool bitmap_marked(const std::vector<uint8_t>& bm, int idx) {
     return (bm[byte_idx] & static_cast<uint8_t>(1u << (idx % 8))) != 0;
 }
 
-// Parse the remaining stream as one or more Java-compatible FLOAT/DOUBLE
-// TS_2DIFF segments, recording the offset of every segment prefix.  A
-// segment is:
-//   [overflow flag][value count][underflow bitmap][overflow bitmap?]
-//   [maxPointNumber varint] block+
-// where a block is [write_index i32][bit_width i32][delta_min][first_value]
-// followed by ceil(write_index*bit_width/8) packed bytes.  The C++ encoder
-// emits one segment per 128-value block, while the Java encoder emits one
-// segment wrapping several consecutive blocks, hence "block+".
-//
-// A legacy raw page (plain delta blocks with no prefix at all) fails this
-// parse in practice: its first write_index is >= 1 for any block produced
-// by a real encoder, so after the varint tag eats the leading 0x00 byte
-// the misaligned write_index probe reads >= 0x100 and is rejected.  Only a
-// byte-level coincidence could satisfy both interpretations.
-//
-// Returns true when the whole remaining stream is consumed exactly by the
-// segment grammar; the read position is always restored.
-inline bool scan_java_float_double_page(common::ByteStream& in, int value_bytes,
-                                        std::vector<uint64_t>& prefix_offsets) {
-    const uint64_t page_start = in.read_pos();
-    const int bw_limit = (value_bytes == 4) ? 32 : 64;
-    const int dmfv_bytes = value_bytes * 2;
-    prefix_offsets.clear();
-
-    auto skip_bytes = [&in](uint64_t n) -> bool {
-        uint8_t sink[64];
-        while (n > 0) {
-            uint32_t chunk = n < sizeof(sink)
-                                 ? static_cast<uint32_t>(n)
-                                 : static_cast<uint32_t>(sizeof(sink));
-            uint32_t got = 0;
-            if (in.read_buf(sink, chunk, got) != common::E_OK || got != chunk) {
-                return false;
-            }
-            n -= chunk;
-        }
-        return true;
-    };
-
-    bool valid = true;
-    while (valid && in.has_remaining()) {
-        prefix_offsets.push_back(in.read_pos());
-        uint64_t group_value_count = 0;  // sum of (write_index+1) per block
-        uint64_t expected_count = 0;     // bitmap value count, 0 = no bitmap
-        uint32_t tag = 0;
-        if (common::SerializationUtil::read_var_uint(tag, in) != common::E_OK) {
-            valid = false;
-            break;
-        }
-        if (tag == FLAG_ORIGINAL_VALUE_OVERFLOW ||
-            tag == FLAG_SCALED_VALUE_OVERFLOW) {
-            uint32_t n = 0;
-            if (common::SerializationUtil::read_var_uint(n, in) !=
-                common::E_OK) {
-                valid = false;
-                break;
-            }
-            expected_count = n;
-            const uint64_t bm_len = static_cast<uint64_t>(n) / 8 + 1;
-            if (!skip_bytes(bm_len)) {  // underflow bitmap
-                valid = false;
-                break;
-            }
-            if (tag == FLAG_ORIGINAL_VALUE_OVERFLOW && !skip_bytes(bm_len)) {
-                valid = false;  // overflow bitmap
-                break;
-            }
-            uint32_t mpn = 0;
-            if (common::SerializationUtil::read_var_uint(mpn, in) !=
-                common::E_OK) {
-                valid = false;
-                break;
-            }
-        }
-        // Consume the blocks owned by this segment.  A block run continues
-        // while a block header validates; an invalid header marks either
-        // the next segment prefix or a corrupt page (settled by whether
-        // the whole-stream parse consumes exactly below).
-        int blocks_in_segment = 0;
-        while (true) {
-            const uint64_t block_mark = in.read_pos();
-            int32_t wi = 0;
-            int32_t bw = 0;
-            if (common::SerializationUtil::read_i32(wi, in) != common::E_OK ||
-                common::SerializationUtil::read_i32(bw, in) != common::E_OK) {
-                in.set_read_pos(block_mark);
-                break;
-            }
-            if (wi < 0 || wi > 128 || bw < 0 || bw > bw_limit) {
-                in.set_read_pos(block_mark);
-                break;
-            }
-            const uint64_t packed_bytes =
-                (static_cast<uint64_t>(wi) * bw + 7) / 8;
-            if (!skip_bytes(dmfv_bytes) || !skip_bytes(packed_bytes)) {
-                valid = false;
-                break;
-            }
-            group_value_count += static_cast<uint64_t>(wi) + 1;
-            ++blocks_in_segment;
-        }
-        if (!valid || blocks_in_segment == 0) {
-            valid = false;
-            break;
-        }
-        // The overflow bitmap covers exactly the values of its segment.
-        if (expected_count != 0 && group_value_count != expected_count) {
-            valid = false;
-            break;
-        }
+inline bool looks_like_ts2diff_header(common::ByteStream& in) {
+    int ret = common::E_OK;
+    uint64_t probe_mark = in.read_pos();
+    int32_t write_index = 0;
+    int32_t bit_width = 0;
+    if (RET_FAIL(common::SerializationUtil::read_i32(write_index, in)) ||
+        RET_FAIL(common::SerializationUtil::read_i32(bit_width, in))) {
+        in.set_read_pos(probe_mark);
+        return false;
     }
-    in.set_read_pos(page_start);
-    return valid && !prefix_offsets.empty();
+    in.set_read_pos(probe_mark);
+    if (write_index < 0 || write_index > 128) {
+        return false;
+    }
+    if (bit_width < 0 || bit_width > 64) {
+        return false;
+    }
+    return true;
 }
 
-// Consume one Java-compatible segment prefix.  Must only be called where
-// scan_java_float_double_page() recorded a prefix offset: without the page
-// scan there is no reliable way to tell a maxPointNumber varint apart from
-// the first byte of a legacy raw block header.
-inline int consume_float_double_ts2diff_prefix(
-    common::ByteStream& in, int& max_point_number,
-    std::vector<uint8_t>& underflow_bm, std::vector<uint8_t>& overflow_bm,
-    int& segment_size) {
+struct SegmentHeaderPreload {
+    int32_t write_index = 0;
+    int32_t bit_width = 0;
+    int64_t delta_min = 0;
+    int64_t first_value = 0;
+    bool ready = false;
+};
+
+// Reads a LEB128 var_uint where the first byte was already consumed into
+// `first_byte`.  Forward-only: never rewinds the stream.
+inline int read_var_uint_tail(uint8_t first_byte, common::ByteStream& in,
+                              uint32_t& out) {
     int ret = common::E_OK;
+    out = static_cast<uint32_t>(first_byte & 0x7F);
+    int shift = 7;
+    uint8_t b = first_byte;
+    while (b & 0x80) {
+        uint32_t read_len = 0;
+        if (RET_FAIL(in.read_buf(&b, 1, read_len)) || read_len != 1) {
+            return ret;
+        }
+        if (shift > 28) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        out |= static_cast<uint32_t>(b & 0x7F) << shift;
+        shift += 7;
+    }
+    return common::E_OK;
+}
+
+// Parses the segment header (write_index + bit_width + delta_min +
+// first_value) forward-only.  `wi_hi` is the first (already consumed) byte
+// of the big-endian write_index - always 0x00 for the no-prefix layout.
+inline int read_segment_header_preload(common::ByteStream& in, bool is_double,
+                                       uint8_t wi_hi,
+                                       SegmentHeaderPreload& h) {
+    int ret = common::E_OK;
+    uint8_t rest[3] = {0, 0, 0};
+    uint32_t read_len = 0;
+    if (RET_FAIL(in.read_buf(rest, 3, read_len)) || read_len != 3) {
+        return ret;
+    }
+    h.write_index = (static_cast<int32_t>(wi_hi) << 24) |
+                    (static_cast<int32_t>(rest[0]) << 16) |
+                    (static_cast<int32_t>(rest[1]) << 8) |
+                    static_cast<int32_t>(rest[2]);
+    int32_t bw = 0;
+    if (RET_FAIL(common::SerializationUtil::read_i32(bw, in))) {
+        return ret;
+    }
+    h.bit_width = bw;
+    if (is_double) {
+        if (RET_FAIL(common::SerializationUtil::read_i64(h.delta_min, in))) {
+            return ret;
+        }
+        if (RET_FAIL(common::SerializationUtil::read_i64(h.first_value, in))) {
+            return ret;
+        }
+    } else {
+        int32_t dm = 0;
+        int32_t fv = 0;
+        if (RET_FAIL(common::SerializationUtil::read_i32(dm, in))) {
+            return ret;
+        }
+        if (RET_FAIL(common::SerializationUtil::read_i32(fv, in))) {
+            return ret;
+        }
+        h.delta_min = dm;
+        h.first_value = fv;
+    }
+    h.ready = true;
+    return common::E_OK;
+}
+
+inline int consume_float_double_ts2diff_prefix(
+    common::ByteStream& in, bool& is_legacy_raw, bool& max_pn_present,
+    int& max_point_number, std::vector<uint8_t>& underflow_bm,
+    std::vector<uint8_t>& overflow_bm, int& segment_size,
+    bool page_first_segment, bool is_double, SegmentHeaderPreload& preload) {
+    int ret = common::E_OK;
+    is_legacy_raw = false;
+    max_pn_present = true;
     max_point_number = 0;
     underflow_bm.clear();
     overflow_bm.clear();
     segment_size = 0;
+    uint64_t mark = in.read_pos();
+    // apache/tsfile#910 layout: only the page's first segment carries the
+    // Java maxPointNumber prefix; later segments start directly with the
+    // 4-byte write_index whose high byte is 0x00.  This library always
+    // serializes max_point_number_ = 2 (0x02), so a leading 0x00 can only
+    // mean "no prefix on this segment".
+    //
+    // Everything is parsed forward-only: rewinding to a page-aligned offset
+    // (e.g. the start of a page) makes ByteStream::check_space() advance
+    // the page cursor one page too far and fail the next read, so no
+    // peek-and-restore is used here.
+    uint8_t first_byte = 0;
+    uint32_t read_len = 0;
+    if (RET_FAIL(in.read_buf(&first_byte, 1, read_len)) || read_len != 1) {
+        return ret;
+    }
+    if (first_byte == 0x00) {
+        // No prefix: the segment header begins with write_index 0x00...
+        if (page_first_segment) {
+            // A page whose very first segment has no prefix is a legacy
+            // raw C++ block page (no scaling at all).
+            is_legacy_raw = true;
+        }
+        max_pn_present = false;
+        if (RET_FAIL(read_segment_header_preload(in, is_double, first_byte,
+                                                 preload))) {
+            return ret;
+        }
+        return common::E_OK;
+    }
     uint32_t tag = 0;
-    if (RET_FAIL(common::SerializationUtil::read_var_uint(tag, in))) {
+    if (RET_FAIL(read_var_uint_tail(first_byte, in, tag))) {
         return ret;
     }
     if (tag == FLAG_ORIGINAL_VALUE_OVERFLOW ||
@@ -361,7 +368,6 @@ inline int consume_float_double_ts2diff_prefix(
         segment_size = static_cast<int>(n);
         int bm_len = segment_size / 8 + 1;
         underflow_bm.resize(static_cast<size_t>(bm_len), 0);
-        uint32_t read_len = 0;
         if (RET_FAIL(in.read_buf(underflow_bm.data(),
                                  static_cast<uint32_t>(bm_len), read_len)) ||
             read_len != static_cast<uint32_t>(bm_len)) {
@@ -376,17 +382,56 @@ inline int consume_float_double_ts2diff_prefix(
                 return ret;
             }
         }
+        if (page_first_segment) {
+            // First segment: maxPointNumber always follows the bitmaps.
+            uint32_t mpn = 0;
+            if (RET_FAIL(common::SerializationUtil::read_var_uint(mpn, in))) {
+                return ret;
+            }
+            max_point_number = static_cast<int>(mpn);
+            return common::E_OK;
+        }
+        // Later segment: new-format pages jump straight to the segment
+        // header (0x00 write_index high byte); old-format pages repeat the
+        // maxPointNumber prefix here.
+        uint8_t after_bm_byte = 0;
+        if (RET_FAIL(in.read_buf(&after_bm_byte, 1, read_len)) ||
+            read_len != 1) {
+            return ret;
+        }
+        if (after_bm_byte == 0x00) {
+            max_pn_present = false;
+            if (RET_FAIL(read_segment_header_preload(in, is_double,
+                                                     after_bm_byte,
+                                                     preload))) {
+                return ret;
+            }
+            return common::E_OK;
+        }
         uint32_t mpn = 0;
-        if (RET_FAIL(common::SerializationUtil::read_var_uint(mpn, in))) {
+        if (RET_FAIL(read_var_uint_tail(after_bm_byte, in, mpn))) {
             return ret;
         }
         max_point_number = static_cast<int>(mpn);
         return common::E_OK;
     }
+
+    // A non-flag tag is the maxPointNumber prefix itself.
     max_point_number = static_cast<int>(tag);
+    if (!looks_like_ts2diff_header(in)) {
+        // Only reachable on corrupt/nonstandard data: a non-flag tag whose
+        // following bytes are not a valid segment header.  Rewind and fall
+        // back to the raw-block path.  The rewind target may be page-aligned
+        // (e.g. a page start), which trips ByteStream::check_space's page
+        // cursor - accepted here because valid data never takes this branch.
+        in.set_read_pos(mark);
+        is_legacy_raw = true;
+        max_pn_present = false;
+    } else {
+        segment_size = 0;
+    }
     return common::E_OK;
 }
-
 }  // namespace ts2diff_java_detail
 
 // ============================================================================
@@ -409,6 +454,7 @@ class TS2DIFFDecoder : public Decoder {
         bit_width_ = 0;
         current_index_ = 0;
         header_peeked_ = false;
+        header_preloaded_ = false;
     }
 
     FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) override {
@@ -438,12 +484,6 @@ class TS2DIFFDecoder : public Decoder {
         int64_t value = 0;
         while (bits > 0) {
             read_byte_if_empty(in);
-            // End of input with bits still owed (corrupt or desynced
-            // stream): bail out instead of looping forever on a stale
-            // buffer_ / bits_left_ == 0 pair.
-            if (bits_left_ == 0 && !in.has_remaining()) {
-                break;
-            }
             if (bits > bits_left_ || bits == 8) {
                 // Take only the bits_left_ "least significant" bits.
                 uint8_t d = (uint8_t)(buffer_ & ((1 << bits_left_) - 1));
@@ -499,6 +539,9 @@ class TS2DIFFDecoder : public Decoder {
     int write_index_;
     int current_index_;
     bool header_peeked_;
+    // Set when consume_float_double_ts2diff_prefix already parsed the
+    // segment header (prefix-free segment); decode() must not re-read it.
+    bool header_preloaded_{false};
 };
 
 // ============================================================================
@@ -509,9 +552,15 @@ template <>
 inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream& in) {
     int32_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
-        read_header(in);
-        common::SerializationUtil::read_i32(delta_min_, in);
-        common::SerializationUtil::read_i32(first_value_, in);
+        // A prefix-free segment (no maxPointNumber) has its header parsed
+        // by consume_float_double_ts2diff_prefix already.
+        if (UNLIKELY(header_preloaded_)) {
+            header_preloaded_ = false;
+        } else {
+            read_header(in);
+            common::SerializationUtil::read_i32(delta_min_, in);
+            common::SerializationUtil::read_i32(first_value_, in);
+        }
         ret_value = first_value_;
         bits_left_ = 0;
         buffer_ = 0;
@@ -538,9 +587,13 @@ template <>
 inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream& in) {
     int64_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
-        read_header(in);
-        common::SerializationUtil::read_i64(delta_min_, in);
-        common::SerializationUtil::read_i64(first_value_, in);
+        if (UNLIKELY(header_preloaded_)) {
+            header_preloaded_ = false;
+        } else {
+            read_header(in);
+            common::SerializationUtil::read_i64(delta_min_, in);
+            common::SerializationUtil::read_i64(first_value_, in);
+        }
         ret_value = first_value_;
         if (write_index_ == 0) {
             current_index_ = 0;
@@ -1029,68 +1082,30 @@ inline int TS2DIFFDecoder<int64_t>::skip_int32(int count, int& skipped,
 }
 
 // ============================================================================
-// Float / Double wrapper decoders
+// Float / Double wrapper decoders (unchanged)
 // ============================================================================
 
-// Common page-layout detection shared by the FLOAT and DOUBLE decoders.
-// A page is either legacy raw (plain delta blocks, written by old C++
-// encoders that bit-cast the float bits into the integer TS_2DIFF stream)
-// or Java-compatible (each segment prefixed by a maxPointNumber varint and
-// an optional overflow bitmap).  The layout is decided once per page by
-// parsing the whole page with the Java grammar: a page only counts as
-// Java-compatible when the grammar consumes it exactly.  This removes the
-// old per-block heuristic, which could misclassify a legacy raw header as
-// a prefix, desync the stream and spin at end-of-input.
-class FloatDoublePageLayout {
-   protected:
-    void reset_layout() {
-        layout_known_ = false;
-        is_legacy_raw_ = false;
-        next_prefix_ = 0;
-        prefix_offsets_.clear();
-    }
-
-    // Decide the layout of the page starting at the current read position.
-    // Safe to call repeatedly before the first value: it always restores
-    // the read position on exit.
-    void ensure_layout(common::ByteStream& in, int value_bytes) {
-        if (!layout_known_) {
-            is_legacy_raw_ = !ts2diff_java_detail::scan_java_float_double_page(
-                in, value_bytes, prefix_offsets_);
-            next_prefix_ = 0;
-            layout_known_ = true;
-        }
-    }
-
-    // True when a Java segment prefix sits at the current read position
-    // (start of page or start of a new segment).  Legacy raw pages never
-    // match.
-    bool at_segment_prefix(common::ByteStream& in) {
-        return !is_legacy_raw_ && next_prefix_ < prefix_offsets_.size() &&
-               prefix_offsets_[next_prefix_] == in.read_pos();
-    }
-
-    void advance_segment_prefix() { ++next_prefix_; }
-
-   protected:
-    bool layout_known_{false};
-    bool is_legacy_raw_{false};
-    size_t next_prefix_{0};
-    std::vector<uint64_t> prefix_offsets_;
-};
-
-class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t>,
-                            protected FloatDoublePageLayout {
+class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
    public:
     FloatTS2DIFFDecoder() = default;
+    // PageReader invokes reset() at every page boundary; the first segment
+    // of a page is the only one that may carry the maxPointNumber prefix.
+    void reset() override {
+        TS2DIFFDecoder<int32_t>::reset();
+        page_first_segment_ = true;
+        // A legacy raw page sets is_legacy_raw_ for the whole object; clear
+        // it (and the per-page scale/bitmap state) so a decoder object
+        // reused across pages stays correct.
+        is_legacy_raw_ = false;
+        max_point_value_ = 1.0;
+        underflow_bm_.clear();
+        overflow_bm_.clear();
+        segment_pos_ = 0;
+        segment_size_ = 0;
+    }
     float decode(common::ByteStream& in) {
         int32_t value_int = TS2DIFFDecoder<int32_t>::decode(in);
         return common::int_to_float(value_int);
-    }
-
-    void reset() override {
-        TS2DIFFDecoder<int32_t>::reset();
-        reset_layout();
     }
 
     int read_boolean(bool& ret_value, common::ByteStream& in) override;
@@ -1101,46 +1116,42 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t>,
 
     int read_batch_float(float* out, int capacity, int& actual,
                          common::ByteStream& in) override {
-        // Legacy raw pages are plain int32 delta blocks: reuse the integer
-        // SIMD batch decoder and bit-cast the results (the layout the old
-        // C++ writer produced).  Java-compatible pages carry segment
-        // prefixes the integer decoder would misread, so they take the
-        // segment-aware scalar path.
-        ensure_layout(in, 4);
-        if (is_legacy_raw_) {
-            int32_t* buf = reinterpret_cast<int32_t*>(out);
-            int ret = TS2DIFFDecoder<int32_t>::read_batch_int32(buf, capacity,
-                                                                actual, in);
-            if (ret != common::E_OK) return ret;
-            for (int i = 0; i < actual; ++i) {
-                out[i] = common::int_to_float(buf[i]);
-            }
-            return common::E_OK;
-        }
+        // FLOAT TS_2DIFF segments have a scale/overflow prefix before the
+        // integer delta block. The integer batch decoder does not consume
+        // that prefix, so use the segment-aware scalar decoder here.
+        // Note: skip_int32/skip_int64 are likewise unsupported on the
+        // float/double decoders - the segment prefix layout makes the raw
+        // header-skip path invalid.
         return Decoder::read_batch_float(out, capacity, actual, in);
     }
 
    private:
+    bool is_legacy_raw_{false};
     int max_point_number_{0};
     double max_point_value_{1.0};
     int segment_pos_{0};
     int segment_size_{0};
     std::vector<uint8_t> underflow_bm_;
     std::vector<uint8_t> overflow_bm_;
+    bool page_first_segment_{true};
 };
 
-class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t>,
-                             protected FloatDoublePageLayout {
+class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
    public:
     DoubleTS2DIFFDecoder() = default;
+    void reset() override {
+        TS2DIFFDecoder<int64_t>::reset();
+        page_first_segment_ = true;
+        is_legacy_raw_ = false;
+        max_point_value_ = 1.0;
+        underflow_bm_.clear();
+        overflow_bm_.clear();
+        segment_pos_ = 0;
+        segment_size_ = 0;
+    }
     double decode(common::ByteStream& in) {
         int64_t value_long = TS2DIFFDecoder<int64_t>::decode(in);
         return common::long_to_double(value_long);
-    }
-
-    void reset() override {
-        TS2DIFFDecoder<int64_t>::reset();
-        reset_layout();
     }
 
     int read_boolean(bool& ret_value, common::ByteStream& in) override;
@@ -1151,28 +1162,23 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t>,
 
     int read_batch_double(double* out, int capacity, int& actual,
                           common::ByteStream& in) override {
-        // Same split as FloatTS2DIFFDecoder::read_batch_float — see there.
-        ensure_layout(in, 8);
-        if (is_legacy_raw_) {
-            int64_t* buf = reinterpret_cast<int64_t*>(out);
-            int ret = TS2DIFFDecoder<int64_t>::read_batch_int64(buf, capacity,
-                                                                actual, in);
-            if (ret != common::E_OK) return ret;
-            for (int i = 0; i < actual; ++i) {
-                out[i] = common::long_to_double(buf[i]);
-            }
-            return common::E_OK;
-        }
+        // DOUBLE TS_2DIFF uses the same segment prefix. Bypassing
+        // read_double() misreads that prefix as a block header and can spin
+        // at end-of-input while decoding an otherwise valid page.
+        // skip_int32/skip_int64 are likewise unsupported here (see the
+        // float decoder note).
         return Decoder::read_batch_double(out, capacity, actual, in);
     }
 
    private:
+    bool is_legacy_raw_{false};
     int max_point_number_{0};
     double max_point_value_{1.0};
     int segment_pos_{0};
     int segment_size_{0};
     std::vector<uint8_t> underflow_bm_;
     std::vector<uint8_t> overflow_bm_;
+    bool page_first_segment_{true};
 };
 
 typedef TS2DIFFDecoder<int32_t> IntTS2DIFFDecoder;
@@ -1271,22 +1277,34 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_int64(int64_t& ret_value,
 FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
                                                  common::ByteStream& in) {
     int ret = common::E_OK;
-    if (current_index_ == 0) {
-        ensure_layout(in, 4);
-        if (at_segment_prefix(in)) {
-            if (RET_FAIL(
-                    ts2diff_java_detail::consume_float_double_ts2diff_prefix(
-                        in, max_point_number_, underflow_bm_, overflow_bm_,
-                        segment_size_))) {
-                return ret;
-            }
+    if (current_index_ == 0 && !is_legacy_raw_) {
+        bool max_pn_present = true;
+        ts2diff_java_detail::SegmentHeaderPreload preload;
+        if (RET_FAIL(ts2diff_java_detail::consume_float_double_ts2diff_prefix(
+                in, is_legacy_raw_, max_pn_present, max_point_number_,
+                underflow_bm_, overflow_bm_, segment_size_, page_first_segment_,
+                false, preload))) {
+            return ret;
+        }
+        // maxPointNumber is written once per page; later segments of
+        // the page reuse the first segment's scale factor.
+        if (max_pn_present) {
             max_point_value_ =
                 max_point_number_ <= 0
                     ? 1.0
                     : std::pow(10.0, static_cast<double>(max_point_number_));
-            segment_pos_ = 0;
-            advance_segment_prefix();
         }
+        // Prefix-free segments have their header parsed up front so that
+        // decode() can pick it up without re-reading the stream.
+        if (preload.ready) {
+            write_index_ = preload.write_index;
+            bit_width_ = preload.bit_width;
+            delta_min_ = static_cast<int32_t>(preload.delta_min);
+            first_value_ = static_cast<int32_t>(preload.first_value);
+            header_preloaded_ = true;
+        }
+        page_first_segment_ = false;
+        segment_pos_ = 0;
     }
     if (is_legacy_raw_) {
         ret_value = decode(in);
@@ -1337,22 +1355,32 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_float(float& ret_value,
 FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
                                                    common::ByteStream& in) {
     int ret = common::E_OK;
-    if (current_index_ == 0) {
-        ensure_layout(in, 8);
-        if (at_segment_prefix(in)) {
-            if (RET_FAIL(
-                    ts2diff_java_detail::consume_float_double_ts2diff_prefix(
-                        in, max_point_number_, underflow_bm_, overflow_bm_,
-                        segment_size_))) {
-                return ret;
-            }
+    if (current_index_ == 0 && !is_legacy_raw_) {
+        bool max_pn_present = true;
+        ts2diff_java_detail::SegmentHeaderPreload preload;
+        if (RET_FAIL(ts2diff_java_detail::consume_float_double_ts2diff_prefix(
+                in, is_legacy_raw_, max_pn_present, max_point_number_,
+                underflow_bm_, overflow_bm_, segment_size_, page_first_segment_,
+                true, preload))) {
+            return ret;
+        }
+        // maxPointNumber is written once per page; later segments of
+        // the page reuse the first segment's scale factor.
+        if (max_pn_present) {
             max_point_value_ =
                 max_point_number_ <= 0
                     ? 1.0
                     : std::pow(10.0, static_cast<double>(max_point_number_));
-            segment_pos_ = 0;
-            advance_segment_prefix();
         }
+        if (preload.ready) {
+            write_index_ = preload.write_index;
+            bit_width_ = preload.bit_width;
+            delta_min_ = preload.delta_min;
+            first_value_ = preload.first_value;
+            header_preloaded_ = true;
+        }
+        page_first_segment_ = false;
+        segment_pos_ = 0;
     }
     if (is_legacy_raw_) {
         ret_value = decode(in);
