@@ -680,7 +680,6 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyRawBatchThenScalarReads) {
     EXPECT_FALSE(decoder_float_->has_remaining(out_stream));
 }
 
-
 // ============================================================================
 // apache/tsfile#910 regression: Java reads the maxPointNumber field only
 // once per page (before the first segment); the old C++ encoder repeated it
@@ -698,8 +697,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyRawBatchThenScalarReads) {
 namespace {
 
 // LEB128 var_uint, matching common::SerializationUtil::write_var_uint.
-bool parse_var_uint(const std::vector<uint8_t>& b, size_t& pos,
-                    uint32_t& out) {
+bool parse_var_uint(const std::vector<uint8_t>& b, size_t& pos, uint32_t& out) {
     if (pos >= b.size()) return false;
     out = 0;
     int shift = 0;
@@ -814,7 +812,8 @@ void expect_max_pn_once_per_page(const std::vector<uint8_t>& b,
 
 // A page holds multiple 129-value segments; the maxPointNumber must appear
 // exactly once, at the page start — not at every segment boundary.
-TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberOncePerPageFloatMultiSegment) {
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       MaxPointNumberOncePerPageFloatMultiSegment) {
     common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 400;  // 4 segments: 129 + 129 + 129 + 13
     std::vector<float> data(row_num);
@@ -1031,8 +1030,8 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
 // once-per-page).
 TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNStillDecodes) {
     // Build an old-format page by hand: 0x02 prefix before BOTH segments.
-    const std::vector<float> expected = {0.5f,  0.75f, 1.0f,  1.25f,
-                                         1.5f,  1.75f, 2.0f,  2.25f};
+    const std::vector<float> expected = {0.5f, 0.75f, 1.0f, 1.25f,
+                                         1.5f, 1.75f, 2.0f, 2.25f};
     common::ByteStream old_fmt(1024, common::MOD_TS2DIFF_OBJ, false);
     // Segment 1: 6 values (first 50, five deltas of 25), bit_width 0.
     ASSERT_EQ(common::SerializationUtil::write_var_uint(2, old_fmt),
@@ -1047,7 +1046,8 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNStillDecodes) {
     ASSERT_EQ(common::SerializationUtil::write_ui32(1, old_fmt), common::E_OK);
     ASSERT_EQ(common::SerializationUtil::write_ui32(0, old_fmt), common::E_OK);
     ASSERT_EQ(common::SerializationUtil::write_ui32(25, old_fmt), common::E_OK);
-    ASSERT_EQ(common::SerializationUtil::write_ui32(200, old_fmt), common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(200, old_fmt),
+              common::E_OK);
 
     float x = 0.0f;
     for (size_t i = 0; i < expected.size(); i++) {

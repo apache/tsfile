@@ -273,8 +273,7 @@ inline int read_var_uint_tail(uint8_t first_byte, common::ByteStream& in,
 // first_value) forward-only.  `wi_hi` is the first (already consumed) byte
 // of the big-endian write_index - always 0x00 for the no-prefix layout.
 inline int read_segment_header_preload(common::ByteStream& in, bool is_double,
-                                       uint8_t wi_hi,
-                                       SegmentHeaderPreload& h) {
+                                       uint8_t wi_hi, SegmentHeaderPreload& h) {
     int ret = common::E_OK;
     uint8_t rest[3] = {0, 0, 0};
     uint32_t read_len = 0;
@@ -402,8 +401,7 @@ inline int consume_float_double_ts2diff_prefix(
         if (after_bm_byte == 0x00) {
             max_pn_present = false;
             if (RET_FAIL(read_segment_header_preload(in, is_double,
-                                                     after_bm_byte,
-                                                     preload))) {
+                                                     after_bm_byte, preload))) {
                 return ret;
             }
             return common::E_OK;
