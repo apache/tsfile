@@ -1358,17 +1358,17 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 auto* ctx_ptr = &ctx;
                 futures.push_back(common::g_thread_pool_->submit(
                     [&write_time_segments, ctx_ptr]() {
-                        return write_time_segments(ctx_ptr->tcw,
-                                                   ctx_ptr->segments,
-                                                   ctx_ptr->initial_page_points);
+                        return write_time_segments(
+                            ctx_ptr->tcw, ctx_ptr->segments,
+                            ctx_ptr->initial_page_points);
                     }));
                 for (auto& vt : ctx.value_tasks) {
                     auto* vt_ptr = &vt;
                     futures.push_back(common::g_thread_pool_->submit(
                         [&write_value_segments, vt_ptr, ctx_ptr]() {
                             return write_value_segments(
-                                vt_ptr->vcw, vt_ptr->col_idx,
-                                ctx_ptr->segments, ctx_ptr->initial_page_points);
+                                vt_ptr->vcw, vt_ptr->col_idx, ctx_ptr->segments,
+                                ctx_ptr->initial_page_points);
                         }));
                 }
             }
