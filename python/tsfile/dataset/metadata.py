@@ -20,7 +20,7 @@
 
 from dataclasses import dataclass, field
 import sys
-from typing import Any, Dict, Iterable, Iterator, List, NamedTuple, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple
 
 from ..constants import TSDataType
 
@@ -41,6 +41,15 @@ class SeriesStats(NamedTuple):
     timeline_length: int
     timeline_min_time: int
     timeline_max_time: int
+    data_type: int = -1
+    value_metadata_offset: int = 0
+    value_metadata_length: int = 0
+    time_metadata_offset: int = 0
+    time_metadata_length: int = 0
+    chunk_meta_count: int = 0
+    time_chunk_meta_count: int = 0
+    layout: int = 0
+    locator_flags: int = 0
 
 
 @dataclass(**_DATACLASS_SLOTS)
@@ -51,6 +60,8 @@ class TableEntry:
     tag_columns: Tuple[str, ...]
     tag_types: Tuple[TSDataType, ...]
     field_columns: Tuple[str, ...]
+    field_types: Tuple[TSDataType, ...] = ()
+    schema_columns: Tuple[Tuple[str, int, int], ...] = ()
     _field_index_by_name: Dict[str, int] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -97,6 +108,8 @@ class MetadataCatalog:
         tag_columns: Iterable[str],
         tag_types: Iterable[TSDataType],
         field_columns: Iterable[str],
+        field_types: Iterable[TSDataType] = (),
+        schema_columns: Iterable[Tuple[str, int, int]] = (),
     ) -> int:
         table_id = len(self.table_entries)
         self.table_entries.append(
@@ -105,6 +118,8 @@ class MetadataCatalog:
                 tag_columns=tuple(tag_columns),
                 tag_types=tuple(tag_types),
                 field_columns=tuple(field_columns),
+                field_types=tuple(field_types),
+                schema_columns=tuple(schema_columns),
             )
         )
         self.table_id_by_name[table_name] = table_id
@@ -160,6 +175,11 @@ class SeriesPath(str):
     ``field`` components, where a ``None`` entry in ``tags`` means the tag is
     null -- unambiguously distinct from the literal string value ``"null"``.
 
+    Paths returned by ``TsFileDataFrame.list_timeseries()`` may additionally
+    carry a snapshot-local ``series_id``. A DataFrame backed by the same index
+    snapshot can use that id directly; it is only a hint and is not encoded in
+    the string value.
+
     Trailing null tags are dropped (mirroring the device-id normalization), so
     ``tags`` keeps every interior null but not absent trailing ones.
 
@@ -171,9 +191,20 @@ class SeriesPath(str):
         SeriesPath("table.\\N.sensorA.temperature")            # a path string
     """
 
-    __slots__ = ("_table", "_tags", "_field")
+    __slots__ = (
+        "_table",
+        "_tags",
+        "_field",
+        "_index_identity",
+        "_series_id",
+    )
 
-    def __new__(cls, *args: Any) -> "SeriesPath":
+    def __new__(
+        cls,
+        *args: Any,
+        index_identity=None,
+        series_id: Optional[int] = None,
+    ) -> "SeriesPath":
         if len(args) == 3:
             table, tags, field = args
         elif len(args) == 1:
@@ -197,6 +228,8 @@ class SeriesPath(str):
         obj._table = table
         obj._tags = normalized
         obj._field = field
+        obj._index_identity = index_identity
+        obj._series_id = series_id
         return obj
 
     @property
@@ -210,6 +243,11 @@ class SeriesPath(str):
     @property
     def field(self) -> str:
         return self._field
+
+    @property
+    def series_id(self) -> Optional[int]:
+        """Snapshot-local logical series id, when produced by a DataFrame."""
+        return self._series_id
 
 
 def _escape_path_component(value: Any) -> str:
@@ -290,8 +328,17 @@ def build_logical_series_path(
     tag_values: Iterable[Any],
     field_name: str,
     tag_columns: Iterable[str] = (),
+    *,
+    index_identity=None,
+    series_id: Optional[int] = None,
 ) -> SeriesPath:
-    return SeriesPath(table_name, tag_values, field_name)
+    return SeriesPath(
+        table_name,
+        tag_values,
+        field_name,
+        index_identity=index_identity,
+        series_id=series_id,
+    )
 
 
 def build_logical_series_components(

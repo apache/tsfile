@@ -40,6 +40,10 @@ class ReadFile {
     FORCE_INLINE int64_t file_size() const { return file_size_; }
     FORCE_INLINE const std::string& file_path() const { return file_path_; }
 
+    /** Return size and the Dataset Index v1 FNV fingerprint of size+mtime_ns.
+     */
+    int generation(uint64_t& size, uint64_t& fingerprint) const;
+
     /*
      * try to reader @buf_size bytes from @offset of this file
      * into @buf. @read_len return the actual len reader.

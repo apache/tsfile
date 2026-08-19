@@ -16,21 +16,10 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
+message("Running in src/dataset directory")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} dataset_SRC_LIST)
+add_library(dataset_obj OBJECT ${dataset_SRC_LIST})
 
-set(_TSFILE_TEST_GENERATOR_ARGUMENTS "")
-if (TEST_CMAKE_GENERATOR)
-    list(APPEND _TSFILE_TEST_GENERATOR_ARGUMENTS
-            -G "${TEST_CMAKE_GENERATOR}")
-endif ()
-if (TEST_CMAKE_MAKE_PROGRAM)
-    list(APPEND _TSFILE_TEST_GENERATOR_ARGUMENTS
-            "-DCMAKE_MAKE_PROGRAM=${TEST_CMAKE_MAKE_PROGRAM}")
-endif ()
-if (TEST_CMAKE_GENERATOR_PLATFORM)
-    list(APPEND _TSFILE_TEST_GENERATOR_ARGUMENTS
-            -A "${TEST_CMAKE_GENERATOR_PLATFORM}")
-endif ()
-if (TEST_CMAKE_GENERATOR_TOOLSET)
-    list(APPEND _TSFILE_TEST_GENERATOR_ARGUMENTS
-            -T "${TEST_CMAKE_GENERATOR_TOOLSET}")
-endif ()
+file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+copy_to_dir(${HEADERS} "dataset_obj")

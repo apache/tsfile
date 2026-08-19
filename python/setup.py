@@ -264,6 +264,7 @@ common = dict(
 )
 
 exts = [
+    Extension("tsfile.dataset._merge", ["tsfile/dataset/_merge.pyx"], **common),
     Extension("tsfile.tsfile_py_cpp", ["tsfile/tsfile_py_cpp.pyx"], **common),
     Extension("tsfile.tsfile_reader", ["tsfile/tsfile_reader.pyx"], **common),
     Extension("tsfile.tsfile_writer", ["tsfile/tsfile_writer.pyx"], **common),

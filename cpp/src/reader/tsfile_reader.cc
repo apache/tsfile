@@ -228,6 +228,39 @@ int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
     return ret;
 }
 
+int TsFileReader::prepare_series(const FileGeneration& generation,
+                                 const PreparedLocator& locator,
+                                 std::shared_ptr<PreparedSeries>& prepared) {
+    return tsfile_executor_->prepare_series(generation, locator, prepared);
+}
+
+int TsFileReader::prepare_series(
+    const FileGeneration& generation, const PreparedLocator& locator,
+    const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+    std::shared_ptr<PreparedSeries>& prepared) {
+    return tsfile_executor_->prepare_series(generation, locator,
+                                            aligned_time_owner, prepared);
+}
+
+int TsFileReader::query_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit, ResultSet*& result_set) {
+    if (prepared == nullptr || prepared->index() == nullptr) {
+        return E_INVALID_ARG;
+    }
+    return tsfile_executor_->execute_prepared(
+        prepared, start_time, end_time, offset, limit,
+        prepared->index()->get_measurement_name().to_std_string(), result_set);
+}
+
+int TsFileReader::query_prepared_multi(
+    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+    int64_t start_time, int64_t end_time, int offset, int limit,
+    ResultSet*& result_set) {
+    return tsfile_executor_->execute_prepared_multi(
+        prepared, start_time, end_time, offset, limit, result_set);
+}
+
 int TsFileReader::queryByRow(const std::string& table_name,
                              const std::vector<std::string>& column_names,
                              int offset, int limit, ResultSet*& result_set,

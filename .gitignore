@@ -32,6 +32,8 @@ python/tsfile/*dll*
 python/tsfile/*dylib*
 python/tsfile/*.h
 python/tsfile/*.cpp
+python/tsfile/**/*.cpp
+python/tsfile/**/*so*
 python/data
 python/venv/*
 python/tests/__pycache__/*

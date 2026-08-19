@@ -19,6 +19,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import threading
 
 from tsfile.dataset import dataframe as dataframe_module
 from tsfile import (
@@ -41,6 +42,7 @@ from tsfile.dataset.reader import (
     TsFileSeriesReader,
     _build_exact_tag_filter,
 )
+from tsfile.dataset.runtime import RuntimeSeriesReader
 
 
 def _write_weather_file(path, start):
@@ -154,6 +156,50 @@ def _write_weather_with_extra_field_file(path, start):
     )
     with TsFileTableWriter(str(path), schema) as writer:
         writer.write_dataframe(df)
+
+
+def _write_weather_int_temperature_file(path, start):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.INT64, ColumnCategory.FIELD),
+            ColumnSchema("humidity", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(
+            pd.DataFrame(
+                {
+                    "time": [start, start + 1],
+                    "device": ["device_a", "device_a"],
+                    "temperature": [20, 21],
+                    "humidity": [50.0, 51.0],
+                }
+            )
+        )
+
+
+def _write_weather_boolean_status_file(path, start):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("status", TSDataType.BOOLEAN, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(
+            pd.DataFrame(
+                {
+                    "time": [start, start + 1],
+                    "device": ["device_a", "device_a"],
+                    "temperature": [20.0, 21.0],
+                    "status": [True, False],
+                }
+            )
+        )
 
 
 def _write_multi_tag_file(path):
@@ -293,6 +339,129 @@ def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_pa
         assert np.isnan(aligned.values[1, 1])
         assert aligned.values[2, 0] == 300.0
         assert aligned.values[2, 1] == 30.0
+
+
+def test_dataset_loc_batches_aligned_fields_per_device_then_unions_devices(tmp_path):
+    path = tmp_path / "weather_multi_device.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 1, 2],
+            "device": ["device_a", "device_a", "device_b", "device_b"],
+            "temperature": [10.0, 11.0, 20.0, 21.0],
+            "humidity": [100.0, 101.0, 200.0, 201.0],
+        },
+    )
+
+    requested = [
+        "weather.device_a.temperature",
+        "weather.device_a.humidity",
+        "weather.device_b.humidity",
+    ]
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[0:2, requested]
+
+        assert aligned.series_names == requested
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
+        np.testing.assert_allclose(
+            aligned.values,
+            np.array(
+                [
+                    [10.0, 100.0, np.nan],
+                    [11.0, 101.0, 200.0],
+                    [np.nan, np.nan, 201.0],
+                ]
+            ),
+            equal_nan=True,
+        )
+
+
+def test_dataset_loc_runs_independent_device_groups_concurrently(tmp_path, monkeypatch):
+    path = tmp_path / "weather_concurrent_devices.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 0, 1],
+            "device": ["device_a", "device_a", "device_b", "device_b"],
+            "temperature": [10.0, 11.0, 20.0, 21.0],
+            "humidity": [100.0, 101.0, 200.0, 201.0],
+        },
+    )
+    monkeypatch.setenv("TSFILE_DATAFRAME_QUERY_WORKERS", "2")
+    monkeypatch.setenv("TSFILE_DATAFRAME_QUERY_PARALLEL_MIN_ROWS", "1")
+
+    original = RuntimeSeriesReader.read_device_fields_by_time_range
+    rendezvous = threading.Barrier(2)
+    worker_ids = set()
+
+    def observed_read(reader, device_id, column_ids, start_time, end_time):
+        worker_ids.add(threading.get_ident())
+        rendezvous.wait(timeout=2)
+        return original(reader, device_id, column_ids, start_time, end_time)
+
+    monkeypatch.setattr(
+        RuntimeSeriesReader,
+        "read_device_fields_by_time_range",
+        observed_read,
+    )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[
+            0:1,
+            [
+                "weather.device_a.temperature",
+                "weather.device_a.humidity",
+                "weather.device_b.humidity",
+            ],
+        ]
+
+        assert len(worker_ids) == 2
+        np.testing.assert_allclose(
+            aligned.values,
+            np.array([[10.0, 100.0, 200.0], [11.0, 101.0, 201.0]]),
+        )
+
+
+def test_dataset_loc_keeps_small_device_groups_inline(tmp_path, monkeypatch):
+    path = tmp_path / "weather_inline_devices.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 0, 1],
+            "device": ["device_a", "device_a", "device_b", "device_b"],
+            "temperature": [10.0, 11.0, 20.0, 21.0],
+            "humidity": [100.0, 101.0, 200.0, 201.0],
+        },
+    )
+    monkeypatch.setenv("TSFILE_DATAFRAME_QUERY_WORKERS", "2")
+    monkeypatch.setenv("TSFILE_DATAFRAME_QUERY_PARALLEL_MIN_ROWS", "8192")
+
+    original = RuntimeSeriesReader.read_device_fields_by_time_range
+    caller_id = threading.get_ident()
+    worker_ids = set()
+
+    def observed_read(reader, device_id, column_ids, start_time, end_time):
+        worker_ids.add(threading.get_ident())
+        return original(reader, device_id, column_ids, start_time, end_time)
+
+    monkeypatch.setattr(
+        RuntimeSeriesReader,
+        "read_device_fields_by_time_range",
+        observed_read,
+    )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        tsdf.loc[
+            0:1,
+            [
+                "weather.device_a.temperature",
+                "weather.device_b.humidity",
+            ],
+        ]
+
+    assert worker_ids == {caller_id}
 
 
 def test_dataset_reads_nullable_tag_devices_in_isolation(tmp_path):
@@ -788,10 +957,8 @@ def test_dataset_rejects_duplicate_timestamps_across_shards(tmp_path):
     _write_weather_file(path1, 0)
     _write_weather_file(path2, 2)
 
-    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
-        series = tsdf["weather.device_a.temperature"]
-        with pytest.raises(ValueError, match="Duplicate timestamp"):
-            _ = series.timestamps
+    with pytest.raises(ValueError, match="Duplicate timestamp"):
+        TsFileDataFrame([str(path1), str(path2)], show_progress=False)
 
 
 def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(
@@ -825,6 +992,11 @@ def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(
 
     monkeypatch.setattr(dataframe_module, "_merge_field_timestamps", fail_merge)
 
+    def fail_span_lookup(*_args, **_kwargs):
+        raise AssertionError("overlap position reads must reuse descriptor locators")
+
+    monkeypatch.setattr(RuntimeSeriesReader, "_span", fail_span_lookup)
+
     with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
         series = tsdf["weather.device_a.temperature"]
         assert series[0] == 10.0
@@ -833,7 +1005,7 @@ def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(
         np.testing.assert_array_equal(series[1:5], np.array([20.0, 30.0, 40.0, 50.0]))
 
 
-def test_dataset_rejects_data_access_after_close(tmp_path):
+def test_dataset_close_only_releases_current_handle(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
@@ -844,18 +1016,22 @@ def test_dataset_rejects_data_access_after_close(tmp_path):
     with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
         _ = tsdf[0]
 
-    with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+    assert series[0] == 20.0
+    series.close()
+    with pytest.raises(RuntimeError, match="Timeseries is closed"):
         _ = series[0]
 
 
-def test_subset_close_warns_and_does_not_close_root(tmp_path):
+def test_subset_close_releases_only_subset_lease(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
         subset = tsdf[:1]
-        with pytest.warns(RuntimeWarning, match="no-op"):
-            subset.close()
+        subset.close()
+
+        with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+            _ = subset[0]
 
         series = tsdf[0]
         assert series[0] == 20.0
@@ -869,6 +1045,79 @@ def test_dataset_rejects_incompatible_table_schemas_across_shards(tmp_path):
 
     with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
         TsFileDataFrame([str(path1), str(path2)], show_progress=False)
+
+
+def test_dataset_rejects_same_field_name_with_different_type(tmp_path):
+    path1 = tmp_path / "double.tsfile"
+    path2 = tmp_path / "int64.tsfile"
+    _write_weather_file(path1, 0)
+    _write_weather_int_temperature_file(path2, 3)
+
+    with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
+        TsFileDataFrame([str(path1), str(path2)], show_progress=False)
+
+
+def test_dataset_rejects_nonnumeric_declared_schema_difference(tmp_path):
+    path1 = tmp_path / "text-status.tsfile"
+    path2 = tmp_path / "boolean-status.tsfile"
+    _write_numeric_and_text_file(path1)
+    _write_weather_boolean_status_file(path2, 3)
+
+    with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
+        TsFileDataFrame([str(path1), str(path2)], show_progress=False)
+
+
+def test_dataset_close_waits_for_an_active_public_query(tmp_path, monkeypatch):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+    entered = threading.Event()
+    release = threading.Event()
+    query_error = []
+    original = RuntimeSeriesReader.read_device_fields_by_time_range
+
+    def blocked_read(reader, device_id, column_ids, start_time, end_time):
+        entered.set()
+        assert release.wait(timeout=2)
+        return original(reader, device_id, column_ids, start_time, end_time)
+
+    monkeypatch.setattr(
+        RuntimeSeriesReader,
+        "read_device_fields_by_time_range",
+        blocked_read,
+    )
+
+    dataframe = TsFileDataFrame(str(path), show_progress=False)
+    query_done = threading.Event()
+
+    def run_query():
+        try:
+            result = dataframe.loc[0:2, [0]]
+            assert result.values.shape == (3, 1)
+        except BaseException as exc:
+            query_error.append(exc)
+        finally:
+            query_done.set()
+
+    query_thread = threading.Thread(target=run_query)
+    query_thread.start()
+    assert entered.wait(timeout=2)
+
+    close_done = threading.Event()
+
+    def close_dataframe():
+        dataframe.close()
+        close_done.set()
+
+    close_thread = threading.Thread(target=close_dataframe)
+    close_thread.start()
+    assert not close_done.wait(timeout=0.05)
+
+    release.set()
+    query_thread.join(timeout=2)
+    close_thread.join(timeout=2)
+    assert query_done.is_set()
+    assert close_done.is_set()
+    assert query_error == []
 
 
 def test_dataset_skips_empty_tsfile_shards(tmp_path):
