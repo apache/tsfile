@@ -130,6 +130,29 @@ TEST(CliRequirementsV07, DuplicateSingletonOptionsAreUsageErrors) {
     EXPECT_NE(err.str().find("--format specified more than once"),
               std::string::npos)
         << err.str();
+
+    const std::vector<std::vector<std::string> > duplicate_singletons = {
+        {"cat", "-n", "1", "--limit", "2", f.path},
+        {"cat", "--offset", "0", "--offset", "1", f.path},
+        {"cat", "--start", "0", "--start", "1", f.path},
+        {"cat", "--end", "1", "--end", "2", f.path},
+        {"export", "-t", "table1", "--type", "csv", "-o", "a.csv", "--output",
+         "b.csv", f.path},
+        {"export", "-t", "table1", "--type", "csv", "--output-dir", "a",
+         "--output-dir", "b", f.path},
+        {"export", "-t", "table1", "--type", "csv", "-o", "a.csv", "--force",
+         "--force", f.path},
+    };
+    for (const std::vector<std::string>& args : duplicate_singletons) {
+        std::ostringstream dup_out;
+        std::ostringstream dup_err;
+        EXPECT_EQ(tsfile_cli::run_cli(args, dup_out, dup_err), 1)
+            << dup_err.str();
+        EXPECT_TRUE(dup_out.str().empty());
+        EXPECT_NE(dup_err.str().find("specified more than once"),
+                  std::string::npos)
+            << dup_err.str();
+    }
 }
 
 TEST(CliRequirementsV07, PositionalFileMustBeFinalUnlessAfterDoubleDash) {

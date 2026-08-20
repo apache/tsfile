@@ -155,6 +155,11 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         p.columns += name + ":" + type + ":" + category;
     };
     bool positional_file_set = false;
+    bool limit_set = false;
+    bool offset_set = false;
+    bool output_set = false;
+    bool output_dir_set = false;
+    bool force_set = false;
     for (; i < args.size(); ++i) {
         const std::string& a = args[i];
         std::string val;
@@ -217,6 +222,10 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             }
             p.measurements.push_back(val);
         } else if (a == "-n" || a == "--limit") {
+            if (limit_set) {
+                p.error = "--limit specified more than once";
+                return p;
+            }
             if (!need_value(a, val)) {
                 return p;
             }
@@ -224,7 +233,12 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 p.error = "Invalid -n/--limit: " + val;
                 return p;
             }
+            limit_set = true;
         } else if (a == "--offset") {
+            if (offset_set) {
+                p.error = "--offset specified more than once";
+                return p;
+            }
             if (!need_value(a, val)) {
                 return p;
             }
@@ -232,7 +246,12 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 p.error = "Invalid --offset: " + val;
                 return p;
             }
+            offset_set = true;
         } else if (a == "--start") {
+            if (p.has_start) {
+                p.error = "--start specified more than once";
+                return p;
+            }
             if (!need_value(a, val)) {
                 return p;
             }
@@ -242,6 +261,10 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             }
             p.has_start = true;
         } else if (a == "--end") {
+            if (p.has_end) {
+                p.error = "--end specified more than once";
+                return p;
+            }
             if (!need_value(a, val)) {
                 return p;
             }
@@ -274,13 +297,23 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             }
             p.export_format_set = true;
         } else if (a == "-o" || a == "--output") {
+            if (output_set) {
+                p.error = "--output specified more than once";
+                return p;
+            }
             if (!need_value(a, p.output)) {
                 return p;
             }
+            output_set = true;
         } else if (a == "--output-dir") {
+            if (output_dir_set) {
+                p.error = "--output-dir specified more than once";
+                return p;
+            }
             if (!need_value(a, p.output_dir)) {
                 return p;
             }
+            output_dir_set = true;
         } else if (a == "--columns") {
             p.error = "Unknown flag: --columns";
             return p;
@@ -315,7 +348,12 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             }
             i += 2;  // Parsed for syntax now; write currently uses engine defaults.
         } else if (a == "--force") {
+            if (force_set) {
+                p.error = "--force specified more than once";
+                return p;
+            }
             p.force = true;
+            force_set = true;
         } else if (a == "-v" || a == "--verbose") {
             p.verbose = true;
         } else if (a == "--header-match") {
