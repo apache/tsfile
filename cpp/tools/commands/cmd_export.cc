@@ -21,6 +21,9 @@
 #include <set>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -41,9 +44,25 @@ bool path_exists(const std::string& path) {
     return in.good();
 }
 
+bool stat_is_directory(const struct stat& st) {
+#ifdef _WIN32
+    return (st.st_mode & S_IFDIR) != 0;
+#else
+    return S_ISDIR(st.st_mode);
+#endif
+}
+
 bool directory_exists(const std::string& path) {
     struct stat st;
-    return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+    return stat(path.c_str(), &st) == 0 && stat_is_directory(st);
+}
+
+int make_directory(const std::string& path) {
+#ifdef _WIN32
+    return _mkdir(path.c_str());
+#else
+    return mkdir(path.c_str(), 0777);
+#endif
 }
 
 bool any_path_exists(const std::string& path) {
@@ -57,7 +76,7 @@ int create_directory_no_replace(const std::string& path, std::ostream& err) {
             << "' already exists\n";
         return kExitRuntime;
     }
-    if (mkdir(path.c_str(), 0777) != 0) {
+    if (make_directory(path) != 0) {
         err << "Error: cannot create output directory '" << path << "'\n";
         return kExitRuntime;
     }

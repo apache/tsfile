@@ -92,8 +92,16 @@ bool parse_strict_timestamp_cell(const std::string& s, int64_t& out) {
     return true;
 }
 
+bool stat_is_regular_file(const struct stat& st) {
+#ifdef _WIN32
+    return (st.st_mode & S_IFREG) != 0;
+#else
+    return S_ISREG(st.st_mode);
+#endif
+}
+
 bool stat_regular_file(const std::string& path, struct stat& st) {
-    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+    return stat(path.c_str(), &st) == 0 && stat_is_regular_file(st);
 }
 
 bool path_exists(const std::string& path) {
