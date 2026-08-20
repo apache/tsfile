@@ -23,6 +23,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
@@ -32,6 +35,11 @@ namespace {
 struct TableFixture {
     std::string path = tsfile_cli_test::write_table_fixture();
     ~TableFixture() { std::remove(path.c_str()); }
+};
+
+struct MultiTableFixture {
+    std::string path = tsfile_cli_test::write_multi_table_fixture();
+    ~MultiTableFixture() { std::remove(path.c_str()); }
 };
 
 bool file_exists(const std::string& path) {
@@ -193,6 +201,29 @@ TEST(CliRequirementsV07, LegacyColumnsOptionIsRejected) {
         << err.str();
 }
 
+TEST(CliRequirementsV07, WriteRejectsImplicitInputAndFormatFlag) {
+    std::ostringstream implicit_out;
+    std::ostringstream implicit_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t1", "--field", "s1",
+                                   "INT64", "-o", "x.tsfile", "in.csv"},
+                                  implicit_out, implicit_err),
+              1);
+    EXPECT_NE(implicit_err.str().find("choose exactly one of --input or --stdin"),
+              std::string::npos)
+        << implicit_err.str();
+
+    std::ostringstream format_out;
+    std::ostringstream format_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t1", "--field", "s1",
+                                   "INT64", "-f", "csv", "--stdin", "-o",
+                                   "x.tsfile"},
+                                  format_out, format_err),
+              1);
+    EXPECT_NE(format_err.str().find("--format is not valid"),
+              std::string::npos)
+        << format_err.str();
+}
+
 TEST(CliRequirementsV07, ExportWritesSingleObjectAtomically) {
     TableFixture f;
     std::string out_path =
@@ -208,6 +239,62 @@ TEST(CliRequirementsV07, ExportWritesSingleObjectAtomically) {
     EXPECT_EQ(read_file(out_path), "time,s1\n0,0\n1,10\n2,20\n3,30\n4,40\n");
 
     std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, ExportWritesMultiObjectManifestAndNumberedFiles) {
+    MultiTableFixture f;
+    std::string dir =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_multi_export", "");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"export", "-t", "sensors_a", "-t", "sensors_b", "--output-dir", dir,
+         "--type", "csv", "-m", "s1", f.path},
+        out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_EQ(read_file(dir + "/0001.csv"), "time,s1\n0,10\n");
+    EXPECT_EQ(read_file(dir + "/0002.csv"), "time,s1\n0,20\n");
+    std::string manifest = read_file(dir + "/_manifest.json");
+    EXPECT_NE(manifest.find("\"complete\": true"), std::string::npos)
+        << manifest;
+    EXPECT_NE(manifest.find("\"file\":\"0001.csv\""), std::string::npos)
+        << manifest;
+    EXPECT_NE(manifest.find("\"object\":\"sensors_b\""), std::string::npos)
+        << manifest;
+    EXPECT_NE(manifest.find("\"rows\":\"1\""), std::string::npos)
+        << manifest;
+
+    std::remove((dir + "/0001.csv").c_str());
+    std::remove((dir + "/0002.csv").c_str());
+    std::remove((dir + "/_manifest.json").c_str());
+#ifndef _WIN32
+    rmdir(dir.c_str());
+#endif
+}
+
+TEST(CliRequirementsV07, MultipleTagFiltersRequireAndHonorTagMatch) {
+    std::string path = tsfile_cli_test::write_tag_filter_fixture();
+    std::ostringstream missing_out;
+    std::ostringstream missing_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "eq", "dev_a", "--tag-filter", "id1",
+                                   "eq", "dev_c", "-f", "csv", path},
+                                  missing_out, missing_err),
+              1);
+
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "eq", "dev_a", "--tag-filter", "id1",
+                                   "eq", "dev_c", "--tag-match", "any", "-f",
+                                   "csv", path},
+                                  out, err),
+              0)
+        << err.str();
+    EXPECT_EQ(out.str(), "time,s1\n0,10\n3,40\n");
+    std::remove(path.c_str());
 }
 
 TEST(CliRequirementsV07, SketchRejectsRegularResultFormat) {

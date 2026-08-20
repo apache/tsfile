@@ -53,9 +53,11 @@ int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
         }
     }
 
-    RowWriter w(out, fmt, {"name"}, {common::STRING}, args.no_header);
+    const std::string model = is_table_model(args, reader) ? "table" : "tree";
+    RowWriter w(out, fmt, {"model", "object"},
+                {common::STRING, common::STRING}, false);
     for (const std::string& n : names) {
-        w.write({n}, {false});
+        w.write({model, n}, {false, false});
     }
     w.finish();
     return kExitOk;

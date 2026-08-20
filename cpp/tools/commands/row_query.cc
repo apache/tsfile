@@ -60,55 +60,44 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
     }
 
     storage::TagFilterBuilder builder(schema.get());
-    storage::Filter* filter = nullptr;
-    switch (args.tag_filter_op) {
-        case ParsedArgs::TagFilterOp::kEq:
-            filter = builder.eq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kNeq:
-            filter = builder.neq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kLt:
-            filter = builder.lt(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kLteq:
-            filter =
-                builder.lteq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kGt:
-            filter = builder.gt(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kGteq:
-            filter =
-                builder.gteq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kRegexp:
-            filter =
-                builder.reg_exp(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kNotRegexp:
-            filter = builder.not_reg_exp(args.tag_filter_column,
-                                         args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kBetween:
-            filter = builder.between_and(args.tag_filter_column,
-                                         args.tag_filter_value,
-                                         args.tag_filter_value2);
-            break;
-        case ParsedArgs::TagFilterOp::kNotBetween:
-            filter = builder.not_between_and(args.tag_filter_column,
-                                             args.tag_filter_value,
-                                             args.tag_filter_value2);
-            break;
-        case ParsedArgs::TagFilterOp::kNone:
-            break;
+    std::unique_ptr<storage::Filter> combined;
+    for (const ParsedArgs::TagFilterSpec& spec : args.tag_filters) {
+        storage::Filter* filter = nullptr;
+        switch (spec.op) {
+            case ParsedArgs::TagFilterOp::kEq:
+                filter = builder.eq(spec.column, spec.value);
+                break;
+            case ParsedArgs::TagFilterOp::kNeq:
+                filter = builder.neq(spec.column, spec.value);
+                break;
+            case ParsedArgs::TagFilterOp::kRegexp:
+                filter = builder.reg_exp(spec.column, spec.value);
+                break;
+            case ParsedArgs::TagFilterOp::kIsNull:
+                filter = builder.is_null(spec.column);
+                break;
+            case ParsedArgs::TagFilterOp::kNotNull:
+                filter = builder.is_not_null(spec.column);
+                break;
+            case ParsedArgs::TagFilterOp::kNone:
+                break;
+        }
+        if (filter == nullptr) {
+            err << "Error: invalid tag filter column '" << spec.column
+                << "' for table " << table_name << "\n";
+            return std::unique_ptr<storage::Filter>();
+        }
+        if (!combined) {
+            combined.reset(filter);
+        } else if (args.tag_match == "any") {
+            combined.reset(storage::TagFilterBuilder::or_filter(
+                combined.release(), filter));
+        } else {
+            combined.reset(storage::TagFilterBuilder::and_filter(
+                combined.release(), filter));
+        }
     }
-    if (filter == nullptr) {
-        err << "Error: invalid tag filter column '" << args.tag_filter_column
-            << "' for table " << table_name << "\n";
-        return std::unique_ptr<storage::Filter>();
-    }
-    return std::unique_ptr<storage::Filter>(filter);
+    return combined;
 }
 
 std::vector<std::string> collect_tree_query_paths(

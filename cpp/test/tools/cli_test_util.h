@@ -29,6 +29,8 @@
 
 #include <sstream>
 #include <string>
+#include <memory>
+#include <vector>
 
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -139,6 +141,60 @@ inline std::string write_tag_filter_fixture() {
 
     delete writer;
     delete schema;
+    return out_path;
+}
+
+inline void write_one_table_row(storage::TsFileTableWriter* writer,
+                                const std::string& table_name, int64_t time,
+                                int64_t value) {
+    storage::Tablet tablet(
+        table_name, {"id1", "s1"}, {common::STRING, common::INT64},
+        {common::ColumnCategory::TAG, common::ColumnCategory::FIELD}, 1);
+    tablet.add_timestamp(0, time);
+    tablet.add_value(0, "id1", table_name + "_tag");
+    tablet.add_value(0, "s1", value);
+    writer->write_table(tablet);
+}
+
+inline std::string write_multi_table_fixture() {
+    storage::libtsfile_init();
+    std::string out_path =
+        unique_temp_path("tsfile_cli_multi_table_fixture", ".tsfile");
+
+    storage::WriteFile file;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    file.create(out_path, flags, 0666);
+
+    auto* schema_a = new storage::TableSchema(
+        "sensors_a",
+        {
+            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::INT64, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+        });
+    auto* writer = new storage::TsFileTableWriter(&file, schema_a);
+    auto schema_b = std::make_shared<storage::TableSchema>(
+        "sensors_b",
+        std::vector<common::ColumnSchema>{
+            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::INT64, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+        });
+    writer->register_table(schema_b);
+
+    write_one_table_row(writer, "sensors_a", 0, 10);
+    write_one_table_row(writer, "sensors_b", 0, 20);
+
+    writer->flush();
+    writer->close();
+
+    delete writer;
+    delete schema_a;
     return out_path;
 }
 

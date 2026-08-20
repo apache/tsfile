@@ -53,11 +53,11 @@ TEST(ErrorCodeMessageTest, UnknownCodeFallsBackToInternalError) {
     EXPECT_GT(std::string(tsfile_cli::error_code_message(-1)).size(), 0u);
 }
 
-TEST(ResolveFormatTest, AutoUsesTableOnTtyTsvOtherwise) {
+TEST(ResolveFormatTest, AutoAlwaysUsesTable) {
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kAuto, true),
               OutputFormat::kTable);
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kAuto, false),
-              OutputFormat::kTsv);
+              OutputFormat::kTable);
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kJson, true),
               OutputFormat::kJson);
 }

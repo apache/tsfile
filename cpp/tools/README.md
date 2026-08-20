@@ -91,12 +91,13 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 |---|---|
 | `ls` | List devices (tree model) or tables (table model), one name per line |
 | `schema` | Per-series `target, measurement, datatype, encoding, compression` |
-| `meta` | File summary: model, device/table/series counts, time range, file size |
+| `meta` | File summary: `size_bytes`, `format_version`, and `model` |
 | `stats` | Per-series `count, start_time, end_time, min, max, first, last, sum` |
 | `count` | Per-series row counts plus a `total` row (from statistics, no page scan) |
+| `sketch` | Print the physical file sketch, optionally to `-o` |
 | `head` | First N rows (default 10; use `-n`) |
 | `cat` | All matching rows, streamed (`table` format buffers to align columns) |
-| `sample` | Reproducible reservoir sample (default 10; `-n`, `--seed`) |
+| `export` | Export one object to `-o`, or multiple objects to `--output-dir` |
 
 The metadata commands (`ls` / `schema` / `meta` / `stats` / `count`) answer most questions
 without decoding data pages.
@@ -105,36 +106,34 @@ Shared options:
 
 | Option | Meaning |
 |---|---|
-| `-f, --format csv\|tsv\|json\|table` | Output format; defaults to `table` on a TTY, `tsv` when piped |
+| `-f, --format table\|ndjson\|csv` | Output format; defaults to `table` |
 | `-d, --device <id>` / `-t, --table <name>` | Scope to one device / table (mutually exclusive) |
-| `-m, --measurements a,b,c` | Column projection (`schema`, `stats`, `count`, `head`, `cat`, `sample`) |
-| `-n, --limit N` / `--offset N` | Max rows / rows to skip (`head`, `cat`; `--offset` not valid for `sample`) |
-| `--start <ms>` / `--end <ms>` | Inclusive epoch-millisecond time range (`head`, `cat`, `sample`) |
-| `--seed N` | Reproducible sampling seed (`sample` only) |
-| `--tag-filter C OP V` / `--tag-between C L U` / `--tag-not-between C L U` | Table TAG predicate for `head`, `cat`, `sample`; `OP` is `eq`, `neq`, `lt`, `lteq`, `gt`, `gteq`, `regexp`, or `not-regexp` |
-| `--no-header` | Omit the header row |
-| `--model tree\|table` | Force the model (otherwise auto-detected) |
+| `-m, --measurements <name>` | Column projection; repeat once per column |
+| `-n, --limit N` / `--offset N` | Max rows / rows to skip (`head`, `cat`, `export`) |
+| `--start <ms>` / `--end <ms>` | Inclusive epoch-millisecond time range (`head`, `cat`, `export`) |
+| `--tag-filter C OP [V]` | Table TAG predicate for row reads; `OP` is `eq`, `neq`, `regexp`, `is-null`, or `not-null` |
+| `--tag-match all\|any` | Required when more than one `--tag-filter` is supplied |
 
-`json` output is NDJSON (one object per line; numbers/booleans bare, other values quoted,
-nulls as `null`; non-finite floats — NaN/Inf — become `null`). CSV output follows RFC 4180.
+`ndjson` output emits one JSON object per line; numbers/booleans are bare, other values are
+quoted, nulls are `null`, and non-finite floats become `null`. CSV output follows RFC 4180.
 Timestamps are raw epoch milliseconds. The `table` format buffers all rows in memory to
-align columns, so prefer `csv`/`tsv`/`json` when dumping large files.
+align columns, so prefer `csv`/`ndjson` when dumping large files.
 
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli
-$BIN ls -f tsv data.tsfile                          # list tables / devices
+$BIN ls -f csv data.tsfile                          # list tables / devices
 $BIN meta data.tsfile                               # quick file overview
-$BIN count -t table1 -f tsv data.tsfile             # row counts, no page scan
-$BIN cat -t table1 --tag-filter device eq dev_1 -m temp -f tsv data.tsfile
-$BIN cat -m temp,humidity --start 1700000000000 -f csv data.tsfile | head
-$BIN sample -m temp -n 20 --seed 42 -f json data.tsfile | jq .
+$BIN count -t table1 -f csv data.tsfile             # row counts, no page scan
+$BIN cat -t table1 --tag-filter device eq dev_1 -m temp -f csv data.tsfile
+$BIN cat -m temp -m humidity --start 1700000000000 -f csv data.tsfile | head
+$BIN export -t table1 --type csv -o table1.csv data.tsfile
 ```
 
 ### Writing (import)
 
-`tsfile-cli write` imports CSV/TSV rows into a **new table-model** `.tsfile` (the output is
-overwritten). The first input column is the timestamp (epoch milliseconds); the remaining
-columns are declared explicitly with `--columns` — there is no type inference.
+`tsfile-cli write` imports CSV rows into a **new table-model** `.tsfile`. The first input
+column is the timestamp (epoch milliseconds); the remaining columns are declared explicitly
+with repeated `--tag` and `--field` options. There is no type inference.
 
 Timestamps must be **strictly increasing per device**, where a device is identified by its
 `tag` column values (rows that share the same tags form one device's timeline). Rows for
@@ -143,25 +142,24 @@ rejected with the offending line number, and a failed import leaves no output fi
 `--output` must differ from the input file.
 
 ```
-tsfile-cli write --table <name> --columns <spec> -o <out.tsfile> \
-                 [-f csv|tsv] [--no-header] [--header-match] [-v] [<input> | -]
+tsfile-cli write --table <name> [--tag <name> STRING]... --field <name> <TYPE>... \
+                 -o <out.tsfile> (--input <csv> | --stdin) \
+                 [--no-header] [--header-match] [-v]
 ```
 
-`--columns` is a comma-separated list of `name:TYPE:category`, where `category` (case-insensitive)
-is `tag` or `field` and `TYPE` (case-insensitive) is one of `BOOLEAN, INT32, INT64, FLOAT, DOUBLE,
-STRING, TEXT, TIMESTAMP, DATE, BLOB` — for example `--columns "id1:STRING:tag,s1:INT64:field"`.
+`TYPE` is one of `BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE, BLOB`.
 `DATE` cells are written as `YYYY-MM-DD`; `TIMESTAMP` cells as epoch milliseconds. Each column is
 stored with the engine's default encoding and compression for its type.
 
 | Option | Meaning |
 |---|---|
 | `--table <name>` | Output table name (lower-cased) |
-| `--columns <spec>` | Ordered data columns (excludes the leading timestamp column) |
+| `--tag <name> STRING` | Ordered TAG column; may be repeated |
+| `--field <name> <TYPE>` | Ordered FIELD column; may be repeated |
 | `-o, --output <path>` | Output `.tsfile` (required; overwritten) |
-| `<input>` / `-` | Input file, or `-` / omitted for stdin |
-| `-f csv\|tsv` | Input delimiter (default csv; `json` / `table` are rejected) |
+| `-i, --input <path>` / `--stdin` | Choose exactly one CSV input source |
 | `--no-header` | Input has no header row (default: first line is a header and is skipped) |
-| `--header-match` | Validate header names against `--columns` |
+| `--header-match` | Validate header names against the declared columns |
 | `-v, --verbose` | Print `wrote N rows to <out>` to stderr (otherwise silent on success) |
 
 An empty cell is written as null. The command is silent on success (Unix-style); pass `-v`
@@ -170,8 +168,8 @@ for a one-line summary.
 ```bash
 # round-trip through a pipe
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
-  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
-tsfile-cli count -f tsv out.tsfile          # -> t1.dev  s1  2
+  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 -o out.tsfile --stdin
+tsfile-cli count -f csv out.tsfile          # -> target,measurement,count,...
 ```
 
 For tree-model writes, JSON input, or programmatic use, use the C++ SDK directly — see
@@ -209,7 +207,7 @@ tsfile-cli skill").
 cpp/tools/
 ├── tools_main.cc          # main(): forwards argv to run_cli
 ├── cli/                   # argument parsing, top-level dispatch, exit codes
-├── format/                # csv/tsv/json/table output + CSV/TSV input parsing
+├── format/                # csv/ndjson/table output + CSV input parsing
 ├── commands/              # one file per command + shared row-query / statistics helpers
 └── skills/tsfile-cli/     # model-facing skill reference (for AI assistants)
 ```

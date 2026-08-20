@@ -19,27 +19,34 @@
 
 #include "cli/cli_args.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
-#include <sstream>
 
 namespace tsfile_cli {
 namespace {
 
-std::vector<std::string> split_csv(const std::string& s) {
-    std::vector<std::string> out;
-    std::string item;
-    std::istringstream iss(s);
-    while (std::getline(iss, item, ',')) {
-        if (!item.empty()) {
-            out.push_back(item);
+bool has_strict_decimal_body(const std::string& s, size_t start) {
+    if (start >= s.size()) {
+        return false;
+    }
+    if (s[start] == '0' && start + 1 != s.size()) {
+        return false;
+    }
+    for (size_t i = start; i < s.size(); ++i) {
+        if (s[i] < '0' || s[i] > '9') {
+            return false;
         }
     }
-    return out;
+    return true;
 }
 
-bool parse_ll(const std::string& s, long long& out) {
+bool parse_strict_i64(const std::string& s, long long& out) {
     if (s.empty()) {
+        return false;
+    }
+    size_t start = (s[0] == '-') ? 1 : 0;
+    if (!has_strict_decimal_body(s, start)) {
         return false;
     }
     char* endp = nullptr;
@@ -52,12 +59,27 @@ bool parse_ll(const std::string& s, long long& out) {
     return true;
 }
 
+bool parse_strict_non_negative(const std::string& s, long long& out) {
+    if (s.empty()) {
+        return false;
+    }
+    if (!has_strict_decimal_body(s, 0)) {
+        return false;
+    }
+    char* endp = nullptr;
+    errno = 0;
+    long long v = std::strtoll(s.c_str(), &endp, 10);
+    if (endp == nullptr || *endp != '\0' || errno == ERANGE || v < 0) {
+        return false;
+    }
+    out = v;
+    return true;
+}
+
 bool parse_format(const std::string& s, ParsedArgs::Format& out) {
     if (s == "csv") {
         out = ParsedArgs::Format::kCsv;
-    } else if (s == "tsv") {
-        out = ParsedArgs::Format::kTsv;
-    } else if (s == "json") {
+    } else if (s == "ndjson") {
         out = ParsedArgs::Format::kJson;
     } else if (s == "table") {
         out = ParsedArgs::Format::kTable;
@@ -68,26 +90,26 @@ bool parse_format(const std::string& s, ParsedArgs::Format& out) {
 }
 
 bool parse_tag_filter_op(const std::string& s, ParsedArgs::TagFilterOp& out) {
-    if (s == "eq" || s == "=" || s == "==") {
+    if (s == "eq") {
         out = ParsedArgs::TagFilterOp::kEq;
-    } else if (s == "neq" || s == "ne" || s == "!=") {
+    } else if (s == "neq") {
         out = ParsedArgs::TagFilterOp::kNeq;
-    } else if (s == "lt" || s == "<") {
-        out = ParsedArgs::TagFilterOp::kLt;
-    } else if (s == "lteq" || s == "lte" || s == "le" || s == "<=") {
-        out = ParsedArgs::TagFilterOp::kLteq;
-    } else if (s == "gt" || s == ">") {
-        out = ParsedArgs::TagFilterOp::kGt;
-    } else if (s == "gteq" || s == "gte" || s == "ge" || s == ">=") {
-        out = ParsedArgs::TagFilterOp::kGteq;
-    } else if (s == "regexp" || s == "regex" || s == "=~") {
+    } else if (s == "regexp") {
         out = ParsedArgs::TagFilterOp::kRegexp;
-    } else if (s == "not-regexp" || s == "not-regex" || s == "!~") {
-        out = ParsedArgs::TagFilterOp::kNotRegexp;
+    } else if (s == "is-null") {
+        out = ParsedArgs::TagFilterOp::kIsNull;
+    } else if (s == "not-null") {
+        out = ParsedArgs::TagFilterOp::kNotNull;
     } else {
         return false;
     }
     return true;
+}
+
+bool tag_filter_op_needs_value(ParsedArgs::TagFilterOp op) {
+    return op == ParsedArgs::TagFilterOp::kEq ||
+           op == ParsedArgs::TagFilterOp::kNeq ||
+           op == ParsedArgs::TagFilterOp::kRegexp;
 }
 
 }  // namespace
@@ -122,48 +144,62 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         dst = args[++i];
         return true;
     };
-    auto need_tag_filter_slot = [&](const std::string& flag) -> bool {
-        if (p.has_tag_filter) {
-            p.error = "Only one tag filter predicate is supported";
-            return false;
+    auto append_column = [&](const std::string& name, const std::string& type,
+                             const std::string& category) {
+        if (!p.columns.empty()) {
+            p.columns += ",";
         }
-        if (i + 3 >= args.size()) {
-            p.error = "Missing value for " + flag;
-            return false;
-        }
-        return true;
+        p.columns += name + ":" + type + ":" + category;
     };
-
     for (; i < args.size(); ++i) {
         const std::string& a = args[i];
         std::string val;
         if (a == "-f" || a == "--format") {
+            if (p.format_set) {
+                p.error = "--format specified more than once";
+                return p;
+            }
             if (!need_value(a, val)) {
                 return p;
             }
             if (!parse_format(val, p.format)) {
-                p.error =
-                    "Invalid format: " + val + " (use csv|tsv|json|table)";
+                p.error = "unsupported format '" + val +
+                          "'; expected table, ndjson, or csv";
                 return p;
             }
+            p.format_set = true;
         } else if (a == "-d" || a == "--device") {
-            if (!need_value(a, p.device)) {
+            if (!need_value(a, val)) {
                 return p;
             }
+            p.device = val;
+            p.devices.push_back(val);
         } else if (a == "-t" || a == "--table") {
-            if (!need_value(a, p.table)) {
+            if (!need_value(a, val)) {
                 return p;
             }
+            p.table = val;
+            p.tables.push_back(val);
         } else if (a == "-m" || a == "--measurements") {
             if (!need_value(a, val)) {
                 return p;
             }
-            p.measurements = split_csv(val);
+            if (val.find(',') != std::string::npos) {
+                p.error =
+                    "--measurements accepts one column per option; repeat -m";
+                return p;
+            }
+            if (std::find(p.measurements.begin(), p.measurements.end(), val) !=
+                p.measurements.end()) {
+                p.error = "measurement '" + val + "' specified more than once";
+                return p;
+            }
+            p.measurements.push_back(val);
         } else if (a == "-n" || a == "--limit") {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (!parse_ll(val, p.limit)) {
+            if (!parse_strict_non_negative(val, p.limit)) {
                 p.error = "Invalid -n/--limit: " + val;
                 return p;
             }
@@ -171,7 +207,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (!parse_ll(val, p.offset)) {
+            if (!parse_strict_non_negative(val, p.offset)) {
                 p.error = "Invalid --offset: " + val;
                 return p;
             }
@@ -179,7 +215,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (!parse_ll(val, p.start)) {
+            if (!parse_strict_i64(val, p.start)) {
                 p.error = "Invalid --start: " + val;
                 return p;
             }
@@ -188,7 +224,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (!parse_ll(val, p.end)) {
+            if (!parse_strict_i64(val, p.end)) {
                 p.error = "Invalid --end: " + val;
                 return p;
             }
@@ -197,56 +233,111 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (!parse_ll(val, p.seed)) {
+            if (!parse_strict_i64(val, p.seed)) {
                 p.error = "Invalid --seed: " + val;
                 return p;
             }
             p.has_seed = true;
+        } else if (a == "--type") {
+            if (p.export_format_set) {
+                p.error = "--type specified more than once";
+                return p;
+            }
+            if (!need_value(a, val)) {
+                return p;
+            }
+            if (!parse_format(val, p.export_format)) {
+                p.error = "unsupported export type '" + val +
+                          "'; expected table, ndjson, or csv";
+                return p;
+            }
+            p.export_format_set = true;
         } else if (a == "-o" || a == "--output") {
             if (!need_value(a, p.output)) {
                 return p;
             }
-        } else if (a == "--columns") {
-            if (!need_value(a, p.columns)) {
+        } else if (a == "--output-dir") {
+            if (!need_value(a, p.output_dir)) {
                 return p;
             }
+        } else if (a == "--columns") {
+            p.error = "Unknown flag: --columns";
+            return p;
+        } else if (a == "--field" || a == "--tag") {
+            if (i + 2 >= args.size()) {
+                p.error = "Missing value for " + a;
+                return p;
+            }
+            std::string name = args[++i];
+            std::string type = args[++i];
+            append_column(name, type, a == "--tag" ? "tag" : "field");
+        } else if (a == "-i" || a == "--input") {
+            if (p.input_set) {
+                p.error = "choose exactly one of --input or --stdin";
+                return p;
+            }
+            if (!need_value(a, p.file)) {
+                return p;
+            }
+            p.input_set = true;
+        } else if (a == "--stdin") {
+            if (p.input_set) {
+                p.error = "choose exactly one of --input or --stdin";
+                return p;
+            }
+            p.file = "-";
+            p.input_set = true;
+        } else if (a == "--encoding" || a == "--compression") {
+            if (i + 2 >= args.size()) {
+                p.error = "Missing value for " + a;
+                return p;
+            }
+            i += 2;  // Parsed for syntax now; write currently uses engine defaults.
+        } else if (a == "--force") {
+            p.force = true;
         } else if (a == "-v" || a == "--verbose") {
             p.verbose = true;
         } else if (a == "--header-match") {
             p.header_match = true;
         } else if (a == "--tag-filter") {
-            if (!need_tag_filter_slot(a)) {
+            if (i + 2 >= args.size()) {
+                p.error = "Missing value for " + a;
                 return p;
             }
-            p.has_tag_filter = true;
-            p.tag_filter_column = args[++i];
+            ParsedArgs::TagFilterSpec spec;
+            spec.column = args[++i];
             std::string op = args[++i];
-            if (!parse_tag_filter_op(op, p.tag_filter_op)) {
+            if (!parse_tag_filter_op(op, spec.op)) {
                 p.error = "Invalid --tag-filter operator: " + op +
-                          " (use eq|neq|lt|lteq|gt|gteq|regexp|not-regexp)";
+                          " (use eq|neq|regexp|is-null|not-null)";
                 return p;
             }
-            p.tag_filter_value = args[++i];
-        } else if (a == "--tag-between" || a == "--tag-not-between") {
-            if (!need_tag_filter_slot(a)) {
-                return p;
+            if (tag_filter_op_needs_value(spec.op)) {
+                if (i + 1 >= args.size()) {
+                    p.error = "Missing value for " + a;
+                    return p;
+                }
+                spec.value = args[++i];
             }
             p.has_tag_filter = true;
-            p.tag_filter_op = (a == "--tag-between")
-                                  ? ParsedArgs::TagFilterOp::kBetween
-                                  : ParsedArgs::TagFilterOp::kNotBetween;
-            p.tag_filter_column = args[++i];
-            p.tag_filter_value = args[++i];
-            p.tag_filter_value2 = args[++i];
-        } else if (a == "--model") {
+            p.tag_filters.push_back(spec);
+        } else if (a == "--tag-match") {
             if (!need_value(a, val)) {
                 return p;
             }
-            if (val != "tree" && val != "table") {
-                p.error = "Invalid --model: " + val + " (use tree|table)";
+            if (val != "all" && val != "any") {
+                p.error = "Invalid --tag-match: " + val +
+                          " (use all or any)";
                 return p;
             }
-            p.model = val;
+            if (!p.tag_match.empty()) {
+                p.error = "--tag-match specified more than once";
+                return p;
+            }
+            p.tag_match = val;
+        } else if (a == "--model") {
+            p.error = "Unknown flag: --model";
+            return p;
         } else if (a == "--no-header") {
             p.no_header = true;
         } else if (a == "-h" || a == "--help") {

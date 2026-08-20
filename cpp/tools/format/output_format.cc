@@ -83,7 +83,8 @@ OutputFormat resolve_format(ParsedArgs::Format f, bool stdout_is_tty) {
             return OutputFormat::kTable;
         case ParsedArgs::Format::kAuto:
         default:
-            return stdout_is_tty ? OutputFormat::kTable : OutputFormat::kTsv;
+            (void)stdout_is_tty;
+            return OutputFormat::kTable;
     }
 }
 
