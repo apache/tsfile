@@ -242,6 +242,18 @@ bool json_nonfinite(common::TSDataType t, const std::string& cell) {
     return cell.find_first_of("nNiI") != std::string::npos;
 }
 
+std::string blob_hex(const std::string& cell) {
+    static const char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(2 + cell.size() * 2);
+    out += "0x";
+    for (unsigned char c : cell) {
+        out += kHex[c >> 4];
+        out += kHex[c & 0x0f];
+    }
+    return out;
+}
+
 }  // namespace
 
 RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
@@ -257,20 +269,25 @@ bool RowWriter::emits_json_bare(size_t col) const {
     if (col >= types_.size()) {
         return false;
     }
-    // These types serialize to a bare (unquoted) JSON token: numbers as numeric
-    // literals, BOOLEAN as the literal true/false, TIMESTAMP as a number.
-    // Everything else (strings, blobs, dates) is quoted.
+    // External NDJSON keeps INT64 and TIMESTAMP as decimal strings so JavaScript
+    // consumers do not lose precision. Smaller and floating-point numeric types
+    // remain bare JSON tokens; everything else is quoted.
     switch (types_[col]) {
         case common::BOOLEAN:
         case common::INT32:
-        case common::INT64:
         case common::FLOAT:
         case common::DOUBLE:
-        case common::TIMESTAMP:
             return true;
         default:
             return false;
     }
+}
+
+std::string RowWriter::format_cell(size_t col, const std::string& cell) const {
+    if (col < types_.size() && types_[col] == common::BLOB) {
+        return blob_hex(cell);
+    }
+    return cell;
 }
 
 void RowWriter::ensure_header() {
@@ -309,13 +326,17 @@ void RowWriter::write(const std::vector<std::string>& cells,
             if (i < is_null.size() && is_null[i]) {
                 out_ << "null";
             } else if (emits_json_bare(i)) {
-                if (i >= cells.size() || json_nonfinite(types_[i], cells[i])) {
+                const std::string cell =
+                    format_cell(i, i < cells.size() ? cells[i] : "");
+                if (json_nonfinite(types_[i], cell)) {
                     out_ << "null";  // NaN/Inf: match JSON serializer practice
                 } else {
-                    out_ << cells[i];
+                    out_ << cell;
                 }
             } else {
-                out_ << "\"" << json_escape(i < cells.size() ? cells[i] : "")
+                out_ << "\""
+                     << json_escape(format_cell(
+                            i, i < cells.size() ? cells[i] : ""))
                      << "\"";
             }
         }
@@ -331,9 +352,17 @@ void RowWriter::write(const std::vector<std::string>& cells,
         }
         bool null_cell = i < is_null.size() && is_null[i];
         if (null_cell) {
+            if (fmt_ == OutputFormat::kCsv) {
+                out_ << "\\N";
+            }
             continue;
         }
-        out_ << (fmt_ == OutputFormat::kCsv ? csv_escape(cells[i]) : cells[i]);
+        const std::string cell = format_cell(i, cells[i]);
+        if (fmt_ == OutputFormat::kCsv && cell.empty()) {
+            out_ << "\"\"";
+        } else {
+            out_ << (fmt_ == OutputFormat::kCsv ? csv_escape(cell) : cell);
+        }
     }
     out_ << "\n";
 }
@@ -363,8 +392,9 @@ void RowWriter::finish() {
                     const std::vector<bool>& nulls) {
         for (size_t i = 0; i < ncols; ++i) {
             std::string cell =
-                (i < cells.size() && !(i < nulls.size() && nulls[i])) ? cells[i]
-                                                                      : "";
+                (i < cells.size() && !(i < nulls.size() && nulls[i]))
+                    ? format_cell(i, cells[i])
+                    : "";
             out_ << cell;
             if (i + 1 < ncols) {
                 out_ << std::string(width[i] - cell.size() + 2, ' ');

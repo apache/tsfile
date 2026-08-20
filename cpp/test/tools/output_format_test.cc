@@ -119,22 +119,45 @@ TEST(RowWriterTest, NoHeaderSuppressesHeader) {
 
 TEST(RowWriterTest, CsvEscapesCells) {
     std::ostringstream out;
-    RowWriter w(out, OutputFormat::kCsv, {"name"}, {common::STRING}, false);
-    w.write({"a,b"}, {false});
+    RowWriter w(out, OutputFormat::kCsv, {"name", "note"},
+                {common::STRING, common::STRING}, false);
+    w.write({"a,b", ""}, {false, true});
+    w.write({"", ""}, {false, false});
     w.finish();
-    EXPECT_EQ(out.str(), "name\n\"a,b\"\n");
+    EXPECT_EQ(out.str(), "name,note\n\"a,b\",\\N\n\"\",\"\"\n");
 }
 
-TEST(RowWriterTest, JsonNumbersUnquotedStringsQuotedNullEmitted) {
+TEST(RowWriterTest, JsonQuotesInt64TimestampAndLeavesSmallNumbersBare) {
     std::ostringstream out;
-    RowWriter w(out, OutputFormat::kJson, {"time", "name"},
-                {common::INT64, common::STRING}, false);
-    w.write({"5", "dev1"}, {false, false});
-    w.write({"6", ""}, {false, true});
+    RowWriter w(out, OutputFormat::kJson,
+                {"time", "small", "ts", "name"},
+                {common::INT64, common::INT32, common::TIMESTAMP,
+                 common::STRING},
+                false);
+    w.write({"5", "10", "1700000000000", "dev1"},
+            {false, false, false, false});
+    w.write({"6", "11", "1700000000001", ""}, {false, false, false, true});
     w.finish();
     EXPECT_EQ(out.str(),
-              "{\"time\":5,\"name\":\"dev1\"}\n"
-              "{\"time\":6,\"name\":null}\n");
+              "{\"time\":\"5\",\"small\":10,\"ts\":\"1700000000000\","
+              "\"name\":\"dev1\"}\n"
+              "{\"time\":\"6\",\"small\":11,\"ts\":\"1700000000001\","
+              "\"name\":null}\n");
+}
+
+TEST(RowWriterTest, BlobCellsUseLowercaseHexLexeme) {
+    std::ostringstream json;
+    RowWriter jw(json, OutputFormat::kJson, {"payload"}, {common::BLOB},
+                 false);
+    jw.write({std::string("A\0z", 3)}, {false});
+    jw.finish();
+    EXPECT_EQ(json.str(), "{\"payload\":\"0x41007a\"}\n");
+
+    std::ostringstream csv;
+    RowWriter cw(csv, OutputFormat::kCsv, {"payload"}, {common::BLOB}, false);
+    cw.write({"hello"}, {false});
+    cw.finish();
+    EXPECT_EQ(csv.str(), "payload\n0x68656c6c6f\n");
 }
 
 TEST(RowWriterTest, TableAlignsColumns) {

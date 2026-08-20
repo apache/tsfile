@@ -101,7 +101,7 @@ TEST(CliRequirementsV07, FormatVocabularyIsTableNdjsonCsvOnly) {
                                   ndjson_out, ndjson_err),
               0)
         << ndjson_err.str();
-    EXPECT_EQ(ndjson_out.str(), "{\"time\":0,\"s1\":0}\n");
+    EXPECT_EQ(ndjson_out.str(), "{\"time\":\"0\",\"s1\":\"0\"}\n");
 
     std::ostringstream json_out;
     std::ostringstream json_err;

@@ -57,6 +57,7 @@ class RowWriter {
    private:
     void ensure_header();
     bool emits_json_bare(size_t col) const;
+    std::string format_cell(size_t col, const std::string& cell) const;
 
     std::ostream& out_;
     OutputFormat fmt_;

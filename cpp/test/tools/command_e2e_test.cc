@@ -231,7 +231,7 @@ TEST(CliE2E, CatJsonIsNdjson) {
         {"cat", "-m", "s1", "--start", "0", "--end", "0", "-f", "ndjson", f.path},
         out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "{\"time\":0,\"s1\":0}\n");
+    EXPECT_EQ(out.str(), "{\"time\":\"0\",\"s1\":\"0\"}\n");
 }
 
 TEST(CliE2E, MetaReportsFileSummary) {
@@ -256,7 +256,7 @@ TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
     EXPECT_TRUE(err.str().empty());
     EXPECT_NE(out.str().find("target,measurement,count"), std::string::npos);
     EXPECT_NE(out.str().find(",s1,5"), std::string::npos);
-    EXPECT_NE(out.str().find("total,,"), std::string::npos);
+    EXPECT_NE(out.str().find("total,\\N,"), std::string::npos);
 }
 
 TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
@@ -460,7 +460,8 @@ TEST(CliE2E, WriteAllowsSameTimestampAcrossDevices) {
     std::ostringstream cout_;
     std::ostringstream cerr_;
     tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_);
-    EXPECT_NE(cout_.str().find("total,,3"), std::string::npos) << cout_.str();
+    EXPECT_NE(cout_.str().find("total,\\N,3"), std::string::npos)
+        << cout_.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -735,13 +736,16 @@ TEST(CliE2E, WriteRoundTripsTimestampDateBlob) {
     ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "csv", out_path}, rout, rerr),
               0)
         << rerr.str();
-    // TIMESTAMP prints as raw epoch ms, DATE as YYYY-MM-DD, BLOB as its bytes.
+    // TIMESTAMP stays a decimal string, DATE uses YYYY-MM-DD, and BLOB uses
+    // the external 0x-prefixed lowercase hex lexeme.
     EXPECT_NE(rout.str().find("1700000000000"), std::string::npos)
         << rout.str();
     EXPECT_NE(rout.str().find("2024-01-15"), std::string::npos) << rout.str();
     EXPECT_NE(rout.str().find("2024-12-31"), std::string::npos) << rout.str();
-    EXPECT_NE(rout.str().find("hello"), std::string::npos) << rout.str();
-    EXPECT_NE(rout.str().find("world"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("0x68656c6c6f"), std::string::npos)
+        << rout.str();
+    EXPECT_NE(rout.str().find("0x776f726c64"), std::string::npos)
+        << rout.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -832,11 +836,11 @@ TEST(CliE2E, WriteMapsEachColumnToItsOwnValue) {
     const std::string& j = rout.str();
     EXPECT_NE(j.find("\"a_bool\":true"), std::string::npos) << j;
     EXPECT_NE(j.find("\"b_int\":42"), std::string::npos) << j;
-    EXPECT_NE(j.find("\"c_long\":9000000000"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"c_long\":\"9000000000\""), std::string::npos) << j;
     EXPECT_NE(j.find("\"d_float\":1.5"), std::string::npos) << j;
     EXPECT_NE(j.find("\"e_double\":3.25"), std::string::npos) << j;
     EXPECT_NE(j.find("\"f_str\":\"hello\""), std::string::npos) << j;
-    EXPECT_NE(j.find("\"g_ts\":1700000000000"), std::string::npos) << j;
+    EXPECT_NE(j.find("\"g_ts\":\"1700000000000\""), std::string::npos) << j;
     EXPECT_NE(j.find("\"h_date\":\"2024-06-15\""), std::string::npos) << j;
 
     std::remove(csv.c_str());
@@ -880,7 +884,8 @@ TEST(CliE2E, WriteMultiTypeAcrossBatchesRoundTrips) {
                                   rout, rerr),
               0)
         << rerr.str();
-    EXPECT_NE(rout.str().find("\"n\":7200"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("\"n\":\"7200\""), std::string::npos)
+        << rout.str();
     EXPECT_NE(rout.str().find("\"note\":\"row2400\""), std::string::npos)
         << rout.str();
 
