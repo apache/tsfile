@@ -18,7 +18,7 @@ under the License.
 ]]
 
 cmake_minimum_required(VERSION 3.11)
-project(TsFileANTLR4DependencyTest NONE)
+project(TsFileANTLR4DependencyTest LANGUAGES CXX)
 
 get_filename_component(_TSFILE_CMAKE_DIR
         "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
