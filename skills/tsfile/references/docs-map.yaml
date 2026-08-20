@@ -123,11 +123,33 @@ ecosystem:
   spark: https://tsfile.apache.org/UserGuide/latest/Ecosystem-Integration/Spark-TsFile.html
 
 tools:
-  owner_skill:
-    path: ../tsfile-cli/SKILL.md
-    base: skill_root
-  cli: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-CLI.html
-  viewer: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-Viewer.html
-  local_authorities:
-    - cpp/tools/README.md
-    - cpp/tools/
+  java:
+    owner_skill:
+      path: SKILL.md
+      base: skill_root
+    import:
+      formats:
+        - csv
+        - parquet
+        - arrow
+      local_authorities:
+        - java/tools/README.md
+        - java/tools/src/main/java/org/apache/tsfile/tools/
+        - java/tools/src/assembly/resources/tools/
+        - skills/tsfile/references/java-tools.md
+    table_point_count:
+      local_authorities:
+        - java/tools/README.md
+        - java/tsfile/src/main/java/org/apache/tsfile/utils/TsFileTablePointCountTool.java
+        - java/tools/src/assembly/resources/tools/tsfile-table-point-count.sh
+        - java/tools/src/assembly/resources/tools/tsfile-table-point-count.bat
+        - skills/tsfile/references/java-tools.md
+  cpp_cli:
+    owner_skill:
+      path: ../tsfile-cli/SKILL.md
+      base: skill_root
+    cli: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-CLI.html
+    viewer: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-Viewer.html
+    local_authorities:
+      - cpp/tools/README.md
+      - cpp/tools/

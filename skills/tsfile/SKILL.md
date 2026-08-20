@@ -16,17 +16,18 @@
 # specific language governing permissions and limitations
 # under the License.
 name: tsfile
-description: Work with Apache TsFile programmatic SDKs and file-format concepts in Java, Python, C++, or C. Use for reading, writing, querying, schema or data-model design, encoding/compression decisions, performance analysis, API compatibility, and cross-language TsFile integration. Route shell inspection, preview, export, sampling, and CSV/TSV conversion to the sibling tsfile-cli skill.
+description: Work with Apache TsFile SDKs, Java command-line tools, and file-format concepts. Use for Java, Python, C++, or C reading and writing; schema or data-model design; CSV, Parquet, or Arrow import through the Java tools; table point-count metadata checks or backfill; encoding/compression decisions; performance analysis; API compatibility; and cross-language integration. Route C++ tsfile-cli inspection, preview, export, sampling, and its explicit single-table CSV/TSV write command to the sibling tsfile-cli skill.
 ---
 
 # TsFile
 
 ## Scope
 
-Use this skill for SDK code, Tree/Table model decisions, schema design,
-compatibility, and cross-language integration. Use the sibling
-`../tsfile-cli/SKILL.md` for shell-oriented inspection, preview, export,
-sampling, and CSV/TSV-to-TsFile conversion.
+Use this skill for SDK code, Java import and point-count tools, Tree/Table model
+decisions, schema design, compatibility, and cross-language integration. Use
+the sibling `../tsfile-cli/SKILL.md` for the C++ `tsfile-cli` binary: file
+inspection, preview, export, sampling, and its explicit single-table CSV/TSV
+`write` operation.
 
 ## Operating Rules
 
@@ -56,6 +57,8 @@ Read only the files required by the current task:
 - Model selection, schema, data types, and generic read/write workflow:
   `references/core-concepts.md`
 - Java SDK code and API guardrails: `references/java.md`
+- Java CSV/Parquet/Arrow import and table point-count tools:
+  `references/java-tools.md`
 - Python SDK code and binding-specific behavior: `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
 - C wrapper entry points and lifecycle: `references/c.md`
@@ -79,6 +82,20 @@ resources.
 For compatibility questions, report the local source version and the requested
 release separately. Never silently combine signatures from different versions
 or language bindings.
+
+## Java Tools
+
+- Route `csv2tsfile`, `parquet2tsfile`, `arrow2tsfile`, schema-driven import,
+  import auto-inference, directory import, and failed-file handling to the Java
+  tools in `java/tools/`. Read `references/java-tools.md` before constructing or
+  running a command.
+- Route requests to inspect or backfill the persisted table-level point-count
+  property to the Java `tsfile-table-point-count` tool. This operation can
+  replace the input file when metadata is missing, so follow the mutation
+  checks in `references/java-tools.md`.
+- Do not substitute C++ `tsfile-cli count` for the Java point-count tool. The
+  former reports per-series counts without changing the file; the latter
+  validates and may backfill table-level metadata.
 
 ## Bundled Resources
 
