@@ -25,7 +25,7 @@
 importing Apache TsFile (`.tsfile`) files from the shell — the TsFile analogue of
 `parquet-cli` / `pqrs`. Read commands print data to **stdout** and diagnostics to
 **stderr**, so they compose with `awk`, `jq`, `sort`, and friends; the `write` command
-imports CSV/TSV into a new `.tsfile`. It is built on the public `storage::TsFileReader`
+imports CSV into a new `.tsfile`. It is built on the public `storage::TsFileReader`
 and `storage::TsFileTableWriter` APIs and does not modify the storage engine.
 
 ## Building from source
