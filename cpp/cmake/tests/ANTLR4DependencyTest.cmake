@@ -84,7 +84,7 @@ endfunction()
 
 _tsfile_write_fake_antlr4("${_TSFILE_COMPATIBLE_ROOT}" 4.9.3 antlr4_static)
 _tsfile_write_fake_antlr4("${_TSFILE_TOO_OLD_ROOT}" 4.9.2 antlr4_static)
-_tsfile_write_fake_antlr4("${_TSFILE_INCOMPATIBLE_ROOT}" 5.0.0 antlr4_shared)
+_tsfile_write_fake_antlr4("${_TSFILE_INCOMPATIBLE_ROOT}" 4.10.0 antlr4_shared)
 file(MAKE_DIRECTORY "${_TSFILE_MISSING_ROOT}")
 
 _tsfile_run_antlr4_case(system-compatible SYSTEM SYSTEM TRUE

@@ -46,4 +46,19 @@ set_target_properties(tsfile_cli PROPERTIES
         OUTPUT_NAME tsfile-cli
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
-install(TARGETS tsfile_cli RUNTIME DESTINATION bin)
+# Keep the installed CLI self-contained with the sibling lib directory. This
+# is relative to the executable location and therefore remains valid when the
+# installation prefix is relocated.
+if (APPLE)
+    set_target_properties(tsfile_cli PROPERTIES
+            INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}"
+            BUILD_WITH_INSTALL_RPATH TRUE)
+elseif (UNIX)
+    set_target_properties(tsfile_cli PROPERTIES
+            INSTALL_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
+            BUILD_WITH_INSTALL_RPATH TRUE)
+endif ()
+
+install(TARGETS tsfile_cli
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT tools)

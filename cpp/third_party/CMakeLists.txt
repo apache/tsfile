@@ -35,6 +35,12 @@ if (ENABLE_ANTLR4)
                 "${TSFILE_UTF8CPP_SOURCE_DIR}/source")
 
         add_library(tsfile_antlr4_bundled STATIC ${_TSFILE_ANTLR4_SOURCES})
+        set(TSFILE_ANTLR4_INCLUDE_ROOT
+                "${TSFILE_ANTLR4_SOURCE_DIR}/runtime/Cpp/runtime/src"
+                CACHE INTERNAL "Resolved ANTLR4 include root" FORCE)
+        set(TSFILE_UTF8CPP_INCLUDE_ROOT
+                "${TSFILE_UTF8CPP_SOURCE_DIR}/source"
+                CACHE INTERNAL "Resolved utf8cpp include root" FORCE)
         set_target_properties(tsfile_antlr4_bundled PROPERTIES
                 POSITION_INDEPENDENT_CODE ON
                 CXX_STANDARD 11)
@@ -93,6 +99,17 @@ if (ENABLE_ANTLR4)
         target_link_libraries(tsfile_antlr4 INTERFACE
                 tsfile_antlr4_bundled)
     else ()
+        set(TSFILE_ANTLR4_INCLUDE_ROOT
+                "${TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR}"
+                CACHE INTERNAL "Resolved ANTLR4 include root" FORCE)
+        if (TARGET utf8cpp)
+            get_target_property(_TSFILE_UTF8CPP_INCLUDE_ROOT utf8cpp
+                    INTERFACE_INCLUDE_DIRECTORIES)
+            set(TSFILE_UTF8CPP_INCLUDE_ROOT
+                    "${_TSFILE_UTF8CPP_INCLUDE_ROOT}"
+                    CACHE INTERNAL "Resolved utf8cpp include root" FORCE)
+            unset(_TSFILE_UTF8CPP_INCLUDE_ROOT)
+        endif ()
         target_link_libraries(tsfile_antlr4 INTERFACE
                 ${TSFILE_ANTLR4_SYSTEM_TARGET})
         if (TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR)
@@ -449,9 +466,15 @@ if (ENABLE_SIMD)
 
     add_library(tsfile_simde INTERFACE)
     if (TSFILE_SIMDE_SOURCE STREQUAL "BUNDLED")
+        set(TSFILE_SIMDE_INCLUDE_ROOT "${TSFILE_SIMDE_SOURCE_DIR}"
+                CACHE INTERNAL "Resolved SIMDe include root" FORCE)
         target_include_directories(tsfile_simde INTERFACE
                 "${TSFILE_SIMDE_SOURCE_DIR}")
     else ()
+        get_target_property(TSFILE_SIMDE_INCLUDE_ROOT simde::simde
+                INTERFACE_INCLUDE_DIRECTORIES)
+        set(TSFILE_SIMDE_INCLUDE_ROOT "${TSFILE_SIMDE_INCLUDE_ROOT}"
+                CACHE INTERNAL "Resolved SIMDe include root" FORCE)
         target_link_libraries(tsfile_simde INTERFACE simde::simde)
     endif ()
     add_library(TsFile::SIMDe ALIAS tsfile_simde)

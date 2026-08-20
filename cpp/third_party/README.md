@@ -86,7 +86,7 @@ dependency before compiling and linking TsFile.
   `Vocabulary.cpp`, `ATN.cpp`, `LL1Analyzer.cpp`, `LL1Analyzer.h`,
   `LexerATNSimulator.cpp`, `LexerATNSimulator.h`, `IntervalSet.cpp`, `Any.h`,
   and `CPPUtils.cpp`. utf8cpp is not modified.
-- Resolution: `SYSTEM` accepts ANTLR4 4.9.3 or newer and earlier than 5.0.0
+- Resolution: `SYSTEM` accepts ANTLR4 4.9.3 or newer and earlier than 4.10.0
   through an `antlr4_static` or `antlr4_shared` target; `BUNDLED` downloads or
   reuses both verified archives; and `AUTO` prefers a compatible system
   package before falling back to the verified archives.

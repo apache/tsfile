@@ -78,6 +78,18 @@ add_subdirectory(reader)
 add_subdirectory(utils)
 add_subdirectory(writer)
 
+# Object libraries need the directory-level project dependencies on older
+# CMake versions, but those dependencies are implementation details of the
+# shared library and must not become exported consumer requirements. Keep the
+# platform thread target in the directory scope for its public link interface,
+# then link codecs explicitly as PRIVATE below.
+get_property(_TSFILE_SRC_LINK_LIBRARIES DIRECTORY PROPERTY LINK_LIBRARIES)
+if (ENABLE_THREADS)
+    set_property(DIRECTORY PROPERTY LINK_LIBRARIES Threads::Threads)
+else ()
+    set_property(DIRECTORY PROPERTY LINK_LIBRARIES "")
+endif ()
+
 set(_TSFILE_OBJECT_TARGETS
         common_obj
         compress_obj
@@ -123,17 +135,23 @@ if (${COV_ENABLED})
     else()
         set(COV_LINK_LIB -lgcov)
     endif()
-    if (CMAKE_VERSION VERSION_LESS "3.12")
-        target_link_libraries(tsfile ${COV_LINK_LIB})
-    else()
-        target_link_libraries(tsfile ${_TSFILE_OBJECT_TARGETS} ${COV_LINK_LIB})
-    endif()
+    target_link_libraries(tsfile PRIVATE ${COV_LINK_LIB})
 else()
     message("Disable code cov...")
-    if (NOT CMAKE_VERSION VERSION_LESS "3.12")
-        target_link_libraries(tsfile ${_TSFILE_OBJECT_TARGETS})
-    endif()
 endif()
+
+# Linking object libraries directly makes static-library exports depend on
+# private, non-exported object targets. Add their object files as sources
+# instead; this works on the CMake 3.11 baseline and keeps the install target
+# self-contained for both shared and static builds.
+foreach (_TSFILE_OBJECT_TARGET IN LISTS _TSFILE_OBJECT_TARGETS)
+    target_sources(tsfile PRIVATE
+            $<TARGET_OBJECTS:${_TSFILE_OBJECT_TARGET}>)
+endforeach ()
+
+if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
+    target_link_libraries(tsfile PRIVATE ${_TSFILE_PROJECT_DEPENDENCIES})
+endif ()
 
 unset(_TSFILE_OBJECT_SOURCES)
 unset(_TSFILE_OBJECT_TARGET)
@@ -141,17 +159,91 @@ unset(_TSFILE_OBJECT_TARGETS)
 
 add_dependencies(tsfile utils_obj encoding_obj)
 
+set_property(DIRECTORY PROPERTY LINK_LIBRARIES
+        "${_TSFILE_SRC_LINK_LIBRARIES}")
+unset(_TSFILE_SRC_LINK_LIBRARIES)
+
 if (TSFILE_BUILD_SHARED)
-    set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
-    set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
+    # Keep development suffixes out of the install name and SONAME. The ABI
+    # epoch changes only for incompatible binary interface changes.
+    set(LIBTSFILE_PROJECT_VERSION ${TSFILE_PACKAGE_VERSION})
+    set(LIBTSFILE_SO_VERSION ${TSFILE_ABI_VERSION})
     set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
     set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 endif()
+
+add_library(TsFile::tsfile ALIAS tsfile)
+
+target_include_directories(tsfile PUBLIC
+        $<BUILD_INTERFACE:${LIBRARY_INCLUDE_DIR}>
+        $<BUILD_INTERFACE:${PROJECT_INCLUDE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/tsfile>)
+if (ENABLE_SIMD AND TSFILE_SIMDE_INCLUDE_ROOT)
+    # Public TsFile headers include SIMDe directly. Copy the resolved header
+    # tree into the install prefix so consumers do not need the build host's
+    # system or dependency-cache paths.
+    target_include_directories(tsfile PUBLIC
+            $<BUILD_INTERFACE:${TSFILE_SIMDE_INCLUDE_ROOT}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+endif ()
+if (ENABLE_ANTLR4 AND TSFILE_ANTLR4_INCLUDE_ROOT)
+    target_include_directories(tsfile PUBLIC
+            $<BUILD_INTERFACE:${TSFILE_ANTLR4_INCLUDE_ROOT}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+endif ()
+if (ENABLE_ANTLR4 AND TSFILE_UTF8CPP_INCLUDE_ROOT)
+    target_include_directories(tsfile PUBLIC
+            $<BUILD_INTERFACE:${TSFILE_UTF8CPP_INCLUDE_ROOT}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+endif ()
+target_compile_features(tsfile PUBLIC cxx_std_11)
+set(_TSFILE_PUBLIC_FEATURE_DEFINITIONS "")
+foreach (_TSFILE_PUBLIC_FEATURE
+        ENABLE_ANTLR4
+        ENABLE_MEM_STAT
+        ENABLE_SNAPPY
+        ENABLE_LZ4
+        ENABLE_LZOKAY
+        ENABLE_ZLIB
+        ENABLE_GZIP
+        ENABLE_ZSTD
+        ENABLE_LZMA2
+        ENABLE_THREADS
+        ENABLE_SIMD)
+    if (${_TSFILE_PUBLIC_FEATURE})
+        list(APPEND _TSFILE_PUBLIC_FEATURE_DEFINITIONS
+                ${_TSFILE_PUBLIC_FEATURE})
+    endif ()
+endforeach ()
+if (NOT "${_TSFILE_PUBLIC_FEATURE_DEFINITIONS}" STREQUAL "")
+    target_compile_definitions(tsfile INTERFACE
+            ${_TSFILE_PUBLIC_FEATURE_DEFINITIONS})
+endif ()
+unset(_TSFILE_PUBLIC_FEATURE)
+unset(_TSFILE_PUBLIC_FEATURE_DEFINITIONS)
+
+if (TSFILE_BUILD_SHARED)
+    # A shared library already resolves its private codec and object-library
+    # dependencies at link time. Do not export those build-only targets as
+    # consumer link requirements; they are not installed with the package.
+    set_property(TARGET tsfile PROPERTY INTERFACE_LINK_LIBRARIES "")
+endif ()
 
 # A shared library is a RUNTIME plus an import ARCHIVE on Windows and a LIBRARY
 # on Unix. A static library is an ARCHIVE on every platform. Cover all three so
 # the install step works for either library type.
 install(TARGETS tsfile
-        RUNTIME DESTINATION ${LIBRARY_OUTPUT_PATH}
-        LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH}
-        ARCHIVE DESTINATION ${LIBRARY_OUTPUT_PATH})
+        EXPORT TsFileTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT runtime
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT development)
+
+install(EXPORT TsFileTargets
+        FILE TsFileTargets.cmake
+        NAMESPACE TsFile::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/TsFile
+        COMPONENT development)

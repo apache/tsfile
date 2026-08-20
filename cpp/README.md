@@ -80,6 +80,13 @@ TsFile C++ now supports:
 - **macOS**: Clang
 - **Windows**: MSVC 2017+ and MinGW
 
+### Installation and Packages
+
+The C++ install layout supports CMake consumers, pkg-config, a relocatable
+TGZ archive, native Linux DEB/RPM packages, and Homebrew on macOS. See
+[`packaging/README.md`](../packaging/README.md) for build commands and the
+platform-specific release rules.
+
 All code must compile without errors on all supported platforms before submission.
 
 We welcome any bug reports. You can open an issue with a title starting with [CPP] to describe the bug, like: https://github.com/apache/tsfile/issues/94
@@ -170,7 +177,7 @@ dependencies are resolved:
 
 ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma are currently
 resolved through this policy. A compatible system ANTLR4 must be version 4.9.3
-or newer and earlier than 5.0.0, and provide an `antlr4_static` or
+or newer and earlier than 4.10.0, and provide an `antlr4_static` or
 `antlr4_shared` target. A compatible system Snappy must be version 1.2.1 or
 newer in the 1.x release series and provide the `Snappy::snappy` CMake target.
 A compatible system LZ4 must be version 1.9.4 or newer in the 1.x release

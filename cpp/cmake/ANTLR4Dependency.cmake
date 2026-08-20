@@ -19,7 +19,11 @@ under the License.
 
 set(TSFILE_ANTLR4_MIN_VERSION "4.9.3")
 set(TSFILE_ANTLR4_BUNDLED_VERSION "4.9.3")
-set(TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION "5.0.0")
+# The generated parser in this repository follows the 4.9 runtime API. ANTLR
+# 4.10 introduced breaking C++ runtime changes (and raised its language floor
+# to C++17), so newer system runtimes must use the verified bundled fallback
+# until the parser is regenerated and reviewed.
+set(TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION "4.10.0")
 set(TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR "")
 set(_TSFILE_SYSTEM_ANTLR4_FOUND FALSE)
 
