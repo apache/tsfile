@@ -112,10 +112,15 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"stats", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_NE(out.str().find("target,measurement,count,start_time,end_"
-                             "time,min,max,first,last,sum"),
-              std::string::npos);
-    EXPECT_NE(out.str().find("s1,5,0,4,0,40,0,40,100"), std::string::npos);
+    EXPECT_NE(out.str().find("model,object,tag.id1,tag.id2,field,data_type,"
+                             "non_null_count,null_count,min_time,max_time,min,"
+                             "max,first,last,sum,stats_source"),
+              std::string::npos)
+        << out.str();
+    EXPECT_NE(out.str().find("table,table1,id1_field_1,id2_field_2,s1,INT64,"
+                             "5,0,0,4,0,40,0,40,\\N,scan"),
+              std::string::npos)
+        << out.str();
 }
 
 TEST(CliE2E, HeadProjectsAndLimits) {
@@ -243,16 +248,25 @@ TEST(CliE2E, MetaReportsFileSummary) {
     EXPECT_NE(out.str().find(",4,table\n"), std::string::npos) << out.str();
 }
 
-TEST(CliE2E, CountReportsSeriesCountsAndTotal) {
+TEST(CliE2E, CountReportsColumnCountsWithoutSummaryRows) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"count", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
     EXPECT_TRUE(err.str().empty());
-    EXPECT_NE(out.str().find("target,measurement,count"), std::string::npos);
-    EXPECT_NE(out.str().find(",s1,5"), std::string::npos);
-    EXPECT_NE(out.str().find("total,\\N,"), std::string::npos);
+    EXPECT_NE(out.str().find("model,object,column,category,row_count,entity_"
+                             "count,non_null_count,null_count,min_time,"
+                             "max_time,time_source"),
+              std::string::npos)
+        << out.str();
+    EXPECT_NE(out.str().find("table,table1,id1,TAG,5,1,5,0,0,4,scan"),
+              std::string::npos)
+        << out.str();
+    EXPECT_NE(out.str().find("table,table1,s1,FIELD,5,1,5,0,0,4,scan"),
+              std::string::npos)
+        << out.str();
+    EXPECT_EQ(out.str().find("total"), std::string::npos) << out.str();
 }
 
 TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
@@ -274,7 +288,7 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
         tsfile_cli::run_cli({"count", "-t", "TABLE1", "-f", "csv", f.path},
                             count_out, count_err),
         0);
-    EXPECT_NE(count_out.str().find("table1.id1_field_1.id2_field_2,s1,5"),
+    EXPECT_NE(count_out.str().find("table,table1,s1,FIELD,5,1,5,0,0,4,scan"),
               std::string::npos)
         << count_out.str();
 
@@ -284,7 +298,8 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
         tsfile_cli::run_cli({"stats", "-t", "TABLE1", "-f", "csv", f.path},
                             stats_out, stats_err),
         0);
-    EXPECT_NE(stats_out.str().find("table1.id1_field_1.id2_field_2,s1,5"),
+    EXPECT_NE(stats_out.str().find("table,table1,id1_field_1,id2_field_2,s1,"
+                                   "INT64,5,0,0,4,0,40,0,40,\\N,scan"),
               std::string::npos)
         << stats_out.str();
 }
@@ -312,7 +327,9 @@ TEST(CliE2E, WriteThenReadRoundTrip) {
     int cc =
         tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_);
     EXPECT_EQ(cc, 0);
-    EXPECT_NE(cout_.str().find(",s1,3"), std::string::npos) << cout_.str();
+    EXPECT_NE(cout_.str().find("table,t1,s1,FIELD,3,1,3,0,0,2,scan"),
+              std::string::npos)
+        << cout_.str();
 
     std::ostringstream rout;
     std::ostringstream rerr;
@@ -383,7 +400,9 @@ TEST(CliE2E, WriteImportsQuotedFieldWithEmbeddedNewline) {
     std::ostringstream cerr_;
     ASSERT_EQ(
         tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_), 0);
-    EXPECT_NE(cout_.str().find(",note,2"), std::string::npos) << cout_.str();
+    EXPECT_NE(cout_.str().find("table,t1,note,FIELD,2,1,2,0,0,1,scan"),
+              std::string::npos)
+        << cout_.str();
 
     std::ostringstream rout;
     std::ostringstream rerr;
@@ -458,7 +477,8 @@ TEST(CliE2E, WriteAllowsSameTimestampAcrossDevices) {
     std::ostringstream cout_;
     std::ostringstream cerr_;
     tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_);
-    EXPECT_NE(cout_.str().find("total,\\N,3"), std::string::npos)
+    EXPECT_NE(cout_.str().find("table,t,s1,FIELD,3,2,3,0,1,2,scan"),
+              std::string::npos)
         << cout_.str();
 
     std::remove(csv.c_str());
@@ -676,7 +696,9 @@ TEST(CliE2E, WriteStreamsLargeInputRoundTrips) {
     std::ostringstream cout_;
     std::ostringstream cerr_;
     tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_);
-    EXPECT_NE(cout_.str().find(",s1,3000"), std::string::npos) << cout_.str();
+    EXPECT_NE(cout_.str().find("table,big,s1,FIELD,3000,1,3000,0,1,3000,scan"),
+              std::string::npos)
+        << cout_.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -879,7 +901,9 @@ TEST(CliE2E, WriteMultiTypeAcrossBatchesRoundTrips) {
     std::ostringstream cerr_;
     ASSERT_EQ(
         tsfile_cli::run_cli({"count", "-f", "csv", out_path}, cout_, cerr_), 0);
-    EXPECT_NE(cout_.str().find(",n,2500"), std::string::npos) << cout_.str();
+    EXPECT_NE(cout_.str().find("table,t,n,FIELD,2500,1,2500,0,0,2499,scan"),
+              std::string::npos)
+        << cout_.str();
 
     // Spot-check a row from the last batch keeps n and note paired correctly.
     std::ostringstream rout;

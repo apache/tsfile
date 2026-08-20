@@ -156,11 +156,9 @@ stored with the engine's default encoding and compression for its type.
 | `--table <name>` | Output table name (lower-cased) |
 | `--tag <name> STRING` | Ordered TAG column; may be repeated |
 | `--field <name> <TYPE>` | Ordered FIELD column; may be repeated |
-| `-o, --output <path>` | Output `.tsfile` (required; overwritten) |
+| `-o, --output <path>` | Output `.tsfile` (required; must not already exist) |
 | `-i, --input <path>` / `--stdin` | Choose exactly one CSV input source |
-| `--no-header` | Input has no header row (default: first line is a header and is skipped) |
-| `--header-match` | Validate header names against the declared columns |
-| `-v, --verbose` | Print `wrote N rows to <out>` to stderr (otherwise silent on success) |
+| `-v, --verbose` | Print a creation summary to stderr after commit (otherwise silent on success) |
 
 An empty cell is written as null. The command is silent on success (Unix-style); pass `-v`
 for a one-line summary.
@@ -169,7 +167,7 @@ for a one-line summary.
 # round-trip through a pipe
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
   | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 -o out.tsfile --stdin
-tsfile-cli count -f csv out.tsfile          # -> target,measurement,count,...
+tsfile-cli count -f csv out.tsfile          # -> model,object,column,category,...
 ```
 
 For tree-model writes, JSON input, or programmatic use, use the C++ SDK directly — see
