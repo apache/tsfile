@@ -23,6 +23,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatRLBE;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import org.junit.After;
@@ -256,6 +257,62 @@ public class RLBEDecoderTest {
     assertEquals(d, decoder.readDouble(buffer), doubleDelta);
     assertEquals(e, decoder.readDouble(buffer), doubleDelta);
     assertEquals(f, decoder.readDouble(buffer), doubleDelta);
+  }
+
+  @Test
+  public void testRejectsInvalidBlockSize() {
+    ByteBuffer buffer = ByteBuffer.wrap(new byte[4]);
+    try {
+      new IntRLBEDecoder().readInt(buffer);
+      fail("Expected invalid RLBE block size to be rejected");
+    } catch (TsFileDecodingException expected) {
+      // expected
+    }
+  }
+
+  @Test
+  public void testRejectsRunLengthBeyondBlock() {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    BitWriter bits = new BitWriter(output);
+    bits.write(1, 32); // block size
+    bits.write(1, 6); // segment length
+    bits.write(0b011, 3); // Fibonacci code for run length 2, plus terminator
+    bits.write(0, 2); // delta payload (not reached after validation)
+    bits.flush();
+
+    try {
+      new IntRLBEDecoder().readInt(ByteBuffer.wrap(output.toByteArray()));
+      fail("Expected RLBE run length to be rejected");
+    } catch (TsFileDecodingException expected) {
+      // expected
+    }
+  }
+
+  private static class BitWriter {
+    private final ByteArrayOutputStream output;
+    private int currentByte;
+    private int bitCount;
+
+    private BitWriter(ByteArrayOutputStream output) {
+      this.output = output;
+    }
+
+    private void write(int value, int width) {
+      for (int i = width - 1; i >= 0; i--) {
+        currentByte = (currentByte << 1) | ((value >>> i) & 1);
+        if (++bitCount == 8) {
+          output.write(currentByte);
+          currentByte = 0;
+          bitCount = 0;
+        }
+      }
+    }
+
+    private void flush() {
+      if (bitCount > 0) {
+        output.write(currentByte << (8 - bitCount));
+      }
+    }
   }
 
   private void testFloatLength(List<Float> valueList, boolean isDebug, int repeatCount)

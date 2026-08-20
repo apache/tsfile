@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -29,6 +30,23 @@
 #include "encoding/rlbe_encoder.h"
 
 namespace storage {
+
+namespace {
+
+void append_bits(std::vector<uint8_t>& bytes, int& bit_count, uint32_t value,
+                 int width) {
+    for (int i = width - 1; i >= 0; --i) {
+        if (bytes.empty() || bit_count == 8) {
+            bytes.push_back(0);
+            bit_count = 0;
+        }
+        bytes.back() =
+            static_cast<uint8_t>((bytes.back() << 1) | ((value >> i) & 1));
+        ++bit_count;
+    }
+}
+
+}  // namespace
 
 TEST(RLBECodecTest, Int32RoundTrip) {
     IntRLBEEncoder encoder;
@@ -155,6 +173,31 @@ TEST(RLBECodecTest, FactoryAllocatesRLBECodecs) {
     DecoderFactory::free(float_decoder);
     EncoderFactory::free(double_encoder);
     DecoderFactory::free(double_decoder);
+}
+
+TEST(RLBECodecTest, RejectsInvalidBlockSize) {
+    std::vector<uint8_t> bytes(4, 0);
+    common::ByteStream stream;
+    stream.wrap_from(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    IntRLBEDecoder decoder;
+    int32_t value = 0;
+    EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
+}
+
+TEST(RLBECodecTest, RejectsRunLengthBeyondBlock) {
+    std::vector<uint8_t> bytes;
+    int bit_count = 0;
+    append_bits(bytes, bit_count, 1, 32);     // block size
+    append_bits(bytes, bit_count, 1, 6);      // segment length (int32 RLBE)
+    append_bits(bytes, bit_count, 0b011, 3);  // Fibonacci code for run length 2
+    append_bits(bytes, bit_count, 0, 2);      // delta payload (not reached)
+    bytes.back() <<= (8 - bit_count);
+
+    common::ByteStream stream;
+    stream.wrap_from(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    IntRLBEDecoder decoder;
+    int32_t value = 0;
+    EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
 }
 
 }  // namespace storage
