@@ -1,0 +1,133 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+schema_version: 1
+last_verified: "2026-08-17"
+policy_reference: references/source-policy.md
+path_bases:
+  policy_reference: skill_root
+  local_fallbacks_and_authorities: tsfile_repository_root
+
+skill_baseline:
+  scope: current-source
+  source_ref: develop
+  maven_project_version: "2.3.2-SNAPSHOT"
+  java_release: "17"
+  cpp_sdk_version: "2.3.2.dev"
+  python_package_version: "2.3.2.dev"
+
+official_url_prefixes:
+  - https://tsfile.apache.org/
+  - https://github.com/apache/tsfile
+
+release_sources:
+  - id: apache-downloads-zh
+    purpose: published_artifacts
+    url: https://tsfile.apache.org/zh/Download/
+    mutable: true
+  - id: github-releases
+    purpose: release_notes_and_tags
+    url: https://github.com/apache/tsfile/releases
+    mutable: true
+  - id: source-develop
+    purpose: active_development_source
+    url: https://github.com/apache/tsfile/tree/develop
+    version_scope: develop
+    mutable: true
+
+guide_roots:
+  - id: user-guide-v2-zh
+    locale: zh-CN
+    version_scope: v2.x_latest_alias
+    url: https://tsfile.apache.org/zh/UserGuide/latest/
+    mutable: true
+  - id: user-guide-v2-en
+    locale: en
+    version_scope: v2.x_latest_alias
+    url: https://tsfile.apache.org/UserGuide/latest/
+    mutable: true
+concepts:
+  - id: time-series-concepts-zh
+    url: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/Navigating_Time_Series_Data.html
+    version_scope: v2.x_latest_alias
+    local_fallbacks:
+      - docs/src/zh/UserGuide/latest/QuickStart/Navigating_Time_Series_Data.md
+      - skills/tsfile/references/core-concepts.md
+  - id: data-model-zh
+    url: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/Data-Model.html
+    version_scope: v2.x_latest_alias
+    local_fallbacks:
+      - docs/src/zh/UserGuide/latest/QuickStart/Data-Model.md
+      - skills/tsfile/references/core-concepts.md
+
+language_guides:
+  java:
+    quick_start: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/QuickStart.html
+    interface: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/InterfaceDefinition/InterfaceDefinition-Java.html
+    version_scope: v2.x_latest_alias
+    local_authorities:
+      - java/examples/src/main/java/org/apache/tsfile/v4/
+      - java/tsfile/src/main/java/
+      - skills/tsfile/references/java.md
+  python:
+    quick_start: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/QuickStart-PYTHON.html
+    interface: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/InterfaceDefinition/InterfaceDefinition-Python.html
+    version_scope: v2.x_latest_alias
+    local_authorities:
+      - python/examples/example.py
+      - python/tsfile/
+      - python/tests/
+      - skills/tsfile/references/python.md
+  cpp:
+    quick_start: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/QuickStart-CPP.html
+    interface: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/InterfaceDefinition/InterfaceDefinition-CPP.html
+    version_scope: v2.x_latest_alias
+    local_authorities:
+      - cpp/examples/cpp_examples/
+      - cpp/src/
+      - skills/tsfile/references/cpp.md
+  c:
+    quick_start: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/QuickStart-C.html
+    interface: https://tsfile.apache.org/zh/UserGuide/latest/QuickStart/InterfaceDefinition/InterfaceDefinition-C.html
+    version_scope: v2.x_latest_alias
+    local_authorities:
+      - cpp/examples/c_examples/
+      - cpp/src/cwrapper/tsfile_cwrapper.h
+      - skills/tsfile/references/c.md
+
+dataframe:
+  guide_zh: https://tsfile.apache.org/zh/UserGuide/latest/DataFrame/TsFileDataFrame.html
+  version_scope: v2.x_latest_alias
+  local_authorities:
+    - python/tsfile/
+    - python/tests/
+
+ecosystem:
+  version_policy: verify_connector_dependencies_before_use
+  flink: https://tsfile.apache.org/UserGuide/latest/Ecosystem-Integration/Flink-TsFile.html
+  hive: https://tsfile.apache.org/UserGuide/latest/Ecosystem-Integration/Hive-TsFile.html
+  spark: https://tsfile.apache.org/UserGuide/latest/Ecosystem-Integration/Spark-TsFile.html
+
+tools:
+  owner_skill:
+    path: ../tsfile-cli/SKILL.md
+    base: skill_root
+  cli: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-CLI.html
+  viewer: https://tsfile.apache.org/UserGuide/latest/Tools/Tsfile-Viewer.html
+  local_authorities:
+    - cpp/tools/README.md
+    - cpp/tools/
