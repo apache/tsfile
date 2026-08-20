@@ -31,6 +31,10 @@
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
 
+#ifndef TSFILE_CPP_SOURCE_DIR
+#define TSFILE_CPP_SOURCE_DIR "."
+#endif
+
 namespace {
 
 struct TableFixture {
@@ -127,7 +131,8 @@ TEST(CliRequirementsV07,
 }
 
 TEST(CliRequirementsV07, SkillShipsRequiredReferenceFiles) {
-    const std::string root = "cpp/tools/skills/tsfile-cli/references/";
+    const std::string root = std::string(TSFILE_CPP_SOURCE_DIR) +
+                             "/tools/skills/tsfile-cli/references/";
     const std::vector<std::string> refs = {"commands.md", "errors.md",
                                            "examples.md"};
     for (const auto& ref : refs) {
