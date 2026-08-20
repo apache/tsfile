@@ -68,7 +68,6 @@ jobs:
             -DTSFILE_DEPENDENCY_SOURCE=AUTO \
             -DTSFILE_ENABLE_NATIVE_ARCH=OFF
           cmake --build build/deb --parallel
-          cmake --install build/deb
 
       - name: Build and inspect DEB packages
         run: |
@@ -111,7 +110,6 @@ jobs:
             -DTSFILE_DEPENDENCY_SOURCE=AUTO \
             -DTSFILE_ENABLE_NATIVE_ARCH=OFF
           cmake --build build/rpm --parallel
-          cmake --install build/rpm
 
       - name: Build and inspect RPM packages
         run: |
