@@ -136,6 +136,9 @@ class RLBEDecoder : public Decoder {
                 return ret;
             }
             int segment_length = static_cast<int>(bits);
+            if (segment_length < 1 || segment_length > Traits::VALUE_BITS) {
+                return common::E_TSFILE_CORRUPTED;
+            }
 
             int now = 0;
             int next = 0;

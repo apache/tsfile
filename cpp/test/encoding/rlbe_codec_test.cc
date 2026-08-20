@@ -200,4 +200,42 @@ TEST(RLBECodecTest, RejectsRunLengthBeyondBlock) {
     EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
 }
 
+TEST(RLBECodecTest, RejectsInvalidIntSegmentLength) {
+    for (int segment_length : {0, 33}) {
+        std::vector<uint8_t> bytes;
+        int bit_count = 0;
+        append_bits(bytes, bit_count, 1, 32);  // block size
+        append_bits(bytes, bit_count, static_cast<uint32_t>(segment_length),
+                    6);  // segment length
+        bytes.back() <<= (8 - bit_count);
+
+        common::ByteStream stream;
+        stream.wrap_from(reinterpret_cast<const char*>(bytes.data()),
+                         bytes.size());
+        IntRLBEDecoder decoder;
+        int32_t value = 0;
+        EXPECT_EQ(decoder.read_int32(value, stream),
+                  common::E_TSFILE_CORRUPTED);
+    }
+}
+
+TEST(RLBECodecTest, RejectsInvalidLongSegmentLength) {
+    for (int segment_length : {0, 65}) {
+        std::vector<uint8_t> bytes;
+        int bit_count = 0;
+        append_bits(bytes, bit_count, 1, 32);  // block size
+        append_bits(bytes, bit_count, static_cast<uint32_t>(segment_length),
+                    7);  // segment length
+        bytes.back() <<= (8 - bit_count);
+
+        common::ByteStream stream;
+        stream.wrap_from(reinterpret_cast<const char*>(bytes.data()),
+                         bytes.size());
+        LongRLBEDecoder decoder;
+        int64_t value = 0;
+        EXPECT_EQ(decoder.read_int64(value, stream),
+                  common::E_TSFILE_CORRUPTED);
+    }
+}
+
 }  // namespace storage

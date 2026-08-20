@@ -95,6 +95,9 @@ public class IntRLBEDecoder extends Decoder {
       for (int j = 5; j >= 0; j--) {
         seglength |= (readbit(buffer) << j);
       }
+      if (seglength < 1 || seglength > 32) {
+        throw new TsFileDecodingException("Invalid RLBE segment length: " + seglength);
+      }
 
       // generate repeat time of rle on delta
       int now = readbit(buffer);

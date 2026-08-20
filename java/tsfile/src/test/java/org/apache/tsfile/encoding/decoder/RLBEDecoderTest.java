@@ -288,6 +288,40 @@ public class RLBEDecoderTest {
     }
   }
 
+  @Test
+  public void testRejectsInvalidIntSegmentLength() {
+    for (int seglength : new int[] {0, 33}) {
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      BitWriter bits = new BitWriter(output);
+      bits.write(1, 32); // block size
+      bits.write(seglength, 6); // invalid segment length
+      bits.flush();
+      try {
+        new IntRLBEDecoder().readInt(ByteBuffer.wrap(output.toByteArray()));
+        fail("Expected RLBE segment length to be rejected: " + seglength);
+      } catch (TsFileDecodingException expected) {
+        // expected
+      }
+    }
+  }
+
+  @Test
+  public void testRejectsInvalidLongSegmentLength() {
+    for (int seglength : new int[] {0, 65}) {
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      BitWriter bits = new BitWriter(output);
+      bits.write(1, 32); // block size
+      bits.write(seglength, 7); // invalid segment length
+      bits.flush();
+      try {
+        new LongRLBEDecoder().readLong(ByteBuffer.wrap(output.toByteArray()));
+        fail("Expected RLBE segment length to be rejected: " + seglength);
+      } catch (TsFileDecodingException expected) {
+        // expected
+      }
+    }
+  }
+
   private static class BitWriter {
     private final ByteArrayOutputStream output;
     private int currentByte;
