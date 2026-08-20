@@ -113,8 +113,73 @@ dataframe:
   guide_zh: https://tsfile.apache.org/zh/UserGuide/latest/DataFrame/TsFileDataFrame.html
   version_scope: v2.x_latest_alias
   local_authorities:
-    - python/tsfile/
-    - python/tests/
+    - python/tsfile/utils.py
+    - python/tsfile/dataset/
+    - python/tsfile/tsfile_reader.pyx
+    - python/tsfile/tsfile_writer.pyx
+    - python/tsfile/tsfile_table_writer.py
+    - python/tests/test_dataframe.py
+    - python/tests/test_tsfile_dataset.py
+    - python/tests/test_batch_arrow.py
+    - python/tests/test_write_arrow.py
+    - skills/tsfile/references/dataframe-arrow.md
+
+current_capabilities:
+  file_properties_and_tag_filters:
+    local_authorities:
+      - java/tsfile/src/main/java/org/apache/tsfile/read/filter/factory/TagFilterBuilder.java
+      - java/tsfile/src/main/java/org/apache/tsfile/read/v4/ITsFileReader.java
+      - java/tsfile/src/main/java/org/apache/tsfile/write/v4/ITsFileWriter.java
+      - cpp/src/reader/filter/tag_filter.h
+      - cpp/src/reader/tsfile_reader.h
+      - cpp/src/writer/tsfile_writer.h
+      - cpp/src/writer/tsfile_table_writer.h
+      - cpp/src/cwrapper/tsfile_cwrapper.h
+      - python/tsfile/tag_filter.py
+      - python/tsfile/tsfile_reader.pyx
+      - python/tsfile/tsfile_writer.pyx
+      - python/tsfile/tsfile_table_writer.py
+      - skills/tsfile/references/properties-filters.md
+  cpp_build_and_parallel_write:
+    local_authorities:
+      - cpp/CMakeLists.txt
+      - cpp/src/CMakeLists.txt
+      - cpp/build.sh
+      - cpp/src/common/global.h
+      - cpp/src/common/global.cc
+      - cpp/src/common/config/config.h
+      - cpp/src/writer/tsfile_writer.cc
+      - skills/tsfile/references/cpp-build-write.md
+  encoding_and_compression_factories:
+    local_authorities:
+      - java/tsfile/src/main/java/org/apache/tsfile/file/metadata/enums/TSEncoding.java
+      - java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/TSEncodingBuilder.java
+      - java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/Decoder.java
+      - java/tsfile/src/main/java/org/apache/tsfile/file/metadata/enums/CompressionType.java
+      - java/tsfile/src/main/java/org/apache/tsfile/compress/ICompressor.java
+      - java/tsfile/src/main/java/org/apache/tsfile/compress/IUnCompressor.java
+      - cpp/src/encoding/encoder_factory.h
+      - cpp/src/encoding/decoder_factory.h
+      - cpp/src/compress/compressor_factory.h
+      - cpp/src/common/db_common.h
+      - skills/tsfile/references/encoding-compression.md
+  advanced_apis:
+    local_authorities:
+      - cpp/src/reader/tsfile_reader.h
+      - cpp/src/reader/tsfile_tree_reader.h
+      - cpp/src/cwrapper/tsfile_cwrapper.h
+      - python/tsfile/tsfile_reader.pyx
+      - python/tsfile/schema.py
+      - java/tsfile/src/main/java/org/apache/tsfile/write/v4/TableTsBlock2TsFileWriter.java
+      - java/tsfile/src/main/java/org/apache/tsfile/write/record/Tablet.java
+      - java/tsfile/src/main/java/org/apache/tsfile/read/TsFileSequenceReader.java
+      - java/tsfile/src/main/java/org/apache/tsfile/read/reader/TsFileInput.java
+      - java/tsfile/src/main/java/org/apache/tsfile/read/reader/BufferedTsFileInput.java
+      - cpp/src/file/restorable_tsfile_io_writer.h
+      - cpp/src/writer/tsfile_tree_writer.h
+      - cpp/src/writer/tsfile_table_writer.h
+      - java/common/src/main/java/org/apache/tsfile/utils/BitMap.java
+      - skills/tsfile/references/advanced-apis.md
 
 ecosystem:
   version_policy: verify_connector_dependencies_before_use

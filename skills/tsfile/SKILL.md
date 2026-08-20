@@ -16,7 +16,14 @@
 # specific language governing permissions and limitations
 # under the License.
 name: tsfile
-description: Work with Apache TsFile SDKs, Java command-line tools, and file-format concepts. Use for Java, Python, C++, or C reading and writing; schema or data-model design; CSV, Parquet, or Arrow import through the Java tools; table point-count metadata checks or backfill; encoding/compression decisions; performance analysis; API compatibility; and cross-language integration. Route C++ tsfile-cli inspection, preview, export, sampling, and its explicit single-table CSV/TSV write command to the sibling tsfile-cli skill.
+description: >-
+  Work with the current Apache TsFile SDKs, tools, and file format. Use for
+  Java, Python, C++, or C reads and writes; Python DataFrame and Arrow batches;
+  Java CSV/Parquet/Arrow import; file properties; TAG filters; query-by-row and
+  metadata APIs; static/shared C++ builds; parallel and TsBlock writes;
+  encoding/compression factories; schema design; performance; and
+  cross-language integration. Route operations specific to the C++ tsfile-cli
+  binary to the sibling tsfile-cli skill.
 ---
 
 # TsFile
@@ -59,6 +66,16 @@ Read only the files required by the current task:
 - Java SDK code and API guardrails: `references/java.md`
 - Java CSV/Parquet/Arrow import and table point-count tools:
   `references/java-tools.md`
+- Python DataFrame datasets, pandas conversion, and Arrow batch I/O:
+  `references/dataframe-arrow.md`
+- File-level properties and Table-model TAG filters across bindings:
+  `references/properties-filters.md`
+- C++ static/shared linking and parallel write configuration:
+  `references/cpp-build-write.md`
+- Current Java and C++ encoding/compression factory matrices:
+  `references/encoding-compression.md`
+- Query-by-row, timeseries metadata, Java TsBlock writes, custom/buffered
+  input, and Tablet object/size APIs: `references/advanced-apis.md`
 - Python SDK code and binding-specific behavior: `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
 - C wrapper entry points and lifecycle: `references/c.md`
@@ -82,6 +99,23 @@ resources.
 For compatibility questions, report the local source version and the requested
 release separately. Never silently combine signatures from different versions
 or language bindings.
+
+## Current Baseline Routing
+
+- Use `references/dataframe-arrow.md` for `TsFileDataFrame`, pandas conversion,
+  PyArrow `Table`/`RecordBatch`, or Arrow C Data batch paths.
+- Use `references/properties-filters.md` for binary file properties or
+  Table-model TAG predicate construction and composition.
+- Use `references/cpp-build-write.md` for C++ library linkage or write
+  concurrency. Configure the current source APIs; do not emit legacy aliases.
+- Use `references/encoding-compression.md` before naming a factory or claiming
+  that an encoding/type or compressor combination is constructible.
+- Use `references/advanced-apis.md` for the remaining current advanced read and
+  write surfaces listed in Offline Reference Routing.
+
+Treat these as baseline capabilities. Do not add alternate calls, degraded
+results, or compatibility branches for earlier TsFile source lines unless the
+user explicitly targets a different checkout or release.
 
 ## Java Tools
 
