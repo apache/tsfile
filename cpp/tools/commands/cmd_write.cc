@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -109,8 +110,33 @@ bool path_exists(const std::string& path) {
     return lstat(path.c_str(), &st) == 0;
 }
 
-bool same_file_identity(const struct stat& a, const struct stat& b) {
+bool same_file_identity(const std::string& input_path, const struct stat& a,
+                        const std::string& output_path, const struct stat& b) {
+#ifdef _WIN32
+    (void)a;
+    (void)b;
+    char input_full[4096];
+    char output_full[4096];
+    const char* input_res =
+        _fullpath(input_full, input_path.c_str(), sizeof(input_full));
+    const char* output_res =
+        _fullpath(output_full, output_path.c_str(), sizeof(output_full));
+    std::string input_norm = input_res == nullptr ? input_path : input_full;
+    std::string output_norm = output_res == nullptr ? output_path : output_full;
+    std::replace(input_norm.begin(), input_norm.end(), '\\', '/');
+    std::replace(output_norm.begin(), output_norm.end(), '\\', '/');
+    std::transform(input_norm.begin(), input_norm.end(), input_norm.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    std::transform(output_norm.begin(), output_norm.end(), output_norm.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    return input_norm == output_norm;
+#else
     return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+#endif
 }
 
 // Parse a calendar date in strict YYYY-MM-DD form into a std::tm (year offset
@@ -343,7 +369,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     if (has_input_stat) {
         struct stat output_stat;
         if (stat(args.output.c_str(), &output_stat) == 0 &&
-            same_file_identity(input_stat, output_stat)) {
+            same_file_identity(args.file, input_stat, args.output,
+                               output_stat)) {
             err << "Error: --output is the same as the input file: "
                 << args.output << "\n";
             return kExitUsage;

@@ -40,8 +40,8 @@ namespace tsfile_cli {
 namespace {
 
 bool path_exists(const std::string& path) {
-    std::ifstream in(path.c_str(), std::ios::binary);
-    return in.good();
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
 }
 
 bool stat_is_directory(const struct stat& st) {
@@ -66,8 +66,7 @@ int make_directory(const std::string& path) {
 }
 
 bool any_path_exists(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
+    return path_exists(path);
 }
 
 int create_directory_no_replace(const std::string& path, std::ostream& err) {
@@ -110,6 +109,12 @@ int write_atomic_text(const std::string& path, const std::string& content,
         }
     }
     if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+#ifdef _WIN32
+        if (force && std::remove(path.c_str()) == 0 &&
+            std::rename(tmp.c_str(), path.c_str()) == 0) {
+            return kExitOk;
+        }
+#endif
         err << "Error: failed to commit output target '" << path << "'\n";
         std::remove(tmp.c_str());
         return kExitRuntime;
