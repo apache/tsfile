@@ -27,9 +27,9 @@
 #include <unistd.h>
 #endif
 
+#include <memory>
 #include <sstream>
 #include <string>
-#include <memory>
 #include <vector>
 
 #include "common/schema.h"

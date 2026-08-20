@@ -87,10 +87,9 @@ TEST(CliE2E, SchemaShowsFieldColumnAndType) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"schema", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_NE(
-        out.str().find("model,object,column,category,data_type,encoding,"
-                       "compression"),
-        std::string::npos);
+    EXPECT_NE(out.str().find("model,object,column,category,data_type,encoding,"
+                             "compression"),
+              std::string::npos);
     EXPECT_NE(out.str().find("s1"), std::string::npos);
     EXPECT_NE(out.str().find("INT64"), std::string::npos);
 }
@@ -102,8 +101,7 @@ TEST(CliE2E, SchemaTableMeasurementFilterOnlyShowsRequestedColumn) {
     int code = tsfile_cli::run_cli({"schema", "-m", "s1", "-f", "csv", f.path},
                                    out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_NE(out.str().find("table,table1,s1,FIELD,INT64"),
-              std::string::npos);
+    EXPECT_NE(out.str().find("table,table1,s1,FIELD,INT64"), std::string::npos);
     EXPECT_EQ(out.str().find("table1,id1"), std::string::npos);
     EXPECT_EQ(out.str().find("table1,id2"), std::string::npos);
 }
@@ -117,8 +115,7 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
     EXPECT_NE(out.str().find("target,measurement,count,start_time,end_"
                              "time,min,max,first,last,sum"),
               std::string::npos);
-    EXPECT_NE(out.str().find("s1,5,0,4,0,40,0,40,100"),
-              std::string::npos);
+    EXPECT_NE(out.str().find("s1,5,0,4,0,40,0,40,100"), std::string::npos);
 }
 
 TEST(CliE2E, HeadProjectsAndLimits) {
@@ -202,11 +199,10 @@ TEST(CliE2E, HeadFiltersRowsByTagRegexp) {
     TagFilterFixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"head", "-m", "s1", "--tag-filter", "id1",
-                             "regexp", "dev_[bc]", "-n", "10", "-f", "csv",
-                             f.path},
-                            out, err);
+    int code = tsfile_cli::run_cli(
+        {"head", "-m", "s1", "--tag-filter", "id1", "regexp", "dev_[bc]", "-n",
+         "10", "-f", "csv", f.path},
+        out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_EQ(out.str(), "time,s1\n1,20\n2,30\n3,40\n");
 }
@@ -227,9 +223,9 @@ TEST(CliE2E, CatJsonIsNdjson) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"cat", "-m", "s1", "--start", "0", "--end", "0", "-f", "ndjson", f.path},
-        out, err);
+    int code = tsfile_cli::run_cli({"cat", "-m", "s1", "--start", "0", "--end",
+                                    "0", "-f", "ndjson", f.path},
+                                   out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(out.str(), "{\"time\":\"0\",\"s1\":\"0\"}\n");
 }
@@ -306,8 +302,8 @@ TEST(CliE2E, WriteThenReadRoundTrip) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "s1", "INT64",
-         "-i", csv_path, "-o", out_path},
+        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "s1",
+         "INT64", "-i", csv_path, "-o", out_path},
         wout, werr);
     EXPECT_EQ(wc, 0) << werr.str();
 
@@ -342,10 +338,10 @@ TEST(CliE2E, WriteThenReadFloatDoubleRoundTripLossless) {
 
     std::ostringstream wout;
     std::ostringstream werr;
-    int wc =
-        tsfile_cli::run_cli({"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "f1", "FLOAT", "--field", "d1", "DOUBLE",
-                             "-i", csv_path, "-o", out_path},
-                            wout, werr);
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "f1",
+         "FLOAT", "--field", "d1", "DOUBLE", "-i", csv_path, "-o", out_path},
+        wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
     std::ostringstream rout;
@@ -378,7 +374,8 @@ TEST(CliE2E, WriteImportsQuotedFieldWithEmbeddedNewline) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "note", "TEXT", "-i", csv_path, "-o", out_path},
+        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "note",
+         "TEXT", "-i", csv_path, "-o", out_path},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
@@ -390,8 +387,8 @@ TEST(CliE2E, WriteImportsQuotedFieldWithEmbeddedNewline) {
 
     std::ostringstream rout;
     std::ostringstream rerr;
-    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr),
-              0);
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr), 0);
     EXPECT_NE(rout.str().find("line one\\nline two"), std::string::npos)
         << rout.str();
 
@@ -427,7 +424,8 @@ TEST(CliE2E, WriteRejectsOutOfOrderTimestampsAndLeavesNoOutput) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                    "INT64", "-i", csv, "-o", out_path},
                                    out, err);
     EXPECT_EQ(code, 2);
     EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
@@ -452,8 +450,8 @@ TEST(CliE2E, WriteAllowsSameTimestampAcrossDevices) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "s1", "INT64",
-         "-i", csv, "-o", out_path},
+        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "s1",
+         "INT64", "-i", csv, "-o", out_path},
         out, err);
     EXPECT_EQ(code, 0) << err.str();
 
@@ -476,7 +474,8 @@ TEST(CliE2E, WriteRejectsOutputEqualsInput) {
     }
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", csv},
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                    "INT64", "-i", csv, "-o", csv},
                                    out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("same as the input"), std::string::npos)
@@ -502,7 +501,8 @@ TEST(CliE2E, WriteFailureOnBadValueLeavesNoOutput) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                    "INT64", "-i", csv, "-o", out_path},
                                    out, err);
     EXPECT_EQ(code, 2);
     EXPECT_FALSE(path_exists(out_path));
@@ -515,8 +515,8 @@ TEST(CliE2E, WriteRejectsDuplicateColumnNames) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--field", "s1", "INT64", "--field", "s1", "INT64",
-         "--stdin", "-o", "x.tsfile"},
+        {"write", "--table", "t", "--field", "s1", "INT64", "--field", "s1",
+         "INT64", "--stdin", "-o", "x.tsfile"},
         out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("duplicate column"), std::string::npos)
@@ -527,8 +527,8 @@ TEST(CliE2E, WriteRejectsHeaderMatchWithNoHeader) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--field", "s1", "INT64", "-o",
-         "x.tsfile", "--stdin", "--no-header", "--header-match"},
+        {"write", "--table", "t", "--field", "s1", "INT64", "-o", "x.tsfile",
+         "--stdin", "--no-header", "--header-match"},
         out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("--header-match"), std::string::npos) << err.str();
@@ -582,10 +582,9 @@ int write_one_value(const std::string& type, const std::string& value,
         tsfile_cli_test::unique_temp_path("tsfile_cli_ovf_out", ".tsfile");
     std::ostringstream out;
     std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", type,
-                             "-i", csv, "-o", out_path},
-                            out, err);
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                    type, "-i", csv, "-o", out_path},
+                                   out, err);
     err_out = err.str();
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -642,7 +641,8 @@ TEST(CliE2E, WriteRejectsOutOfOrderAcrossBatches) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                    "INT64", "-i", csv, "-o", out_path},
                                    out, err);
     EXPECT_EQ(code, 2);
     EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
@@ -668,7 +668,8 @@ TEST(CliE2E, WriteStreamsLargeInputRoundTrips) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli({"write", "--table", "big", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
+    int code = tsfile_cli::run_cli({"write", "--table", "big", "--field", "s1",
+                                    "INT64", "-i", csv, "-o", out_path},
                                    out, err);
     EXPECT_EQ(code, 0) << err.str();
 
@@ -696,8 +697,7 @@ TEST(CliE2E, StatsRejectsRowOnlyFlag) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"stats", "--start", "1", f.path}, out, err);
     EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("only valid for head/cat"),
-              std::string::npos)
+    EXPECT_NE(err.str().find("only valid for head/cat"), std::string::npos)
         << err.str();
 }
 
@@ -726,7 +726,8 @@ TEST(CliE2E, WriteRoundTripsTimestampDateBlob) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "ts1", "TIMESTAMP", "--field", "d1", "DATE", "--field", "b1", "BLOB", "-o",
+        {"write", "--table", "t1", "--tag", "id1", "STRING", "--field", "ts1",
+         "TIMESTAMP", "--field", "d1", "DATE", "--field", "b1", "BLOB", "-o",
          out_path, "-i", csv},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
@@ -742,10 +743,8 @@ TEST(CliE2E, WriteRoundTripsTimestampDateBlob) {
         << rout.str();
     EXPECT_NE(rout.str().find("2024-01-15"), std::string::npos) << rout.str();
     EXPECT_NE(rout.str().find("2024-12-31"), std::string::npos) << rout.str();
-    EXPECT_NE(rout.str().find("0x68656c6c6f"), std::string::npos)
-        << rout.str();
-    EXPECT_NE(rout.str().find("0x776f726c64"), std::string::npos)
-        << rout.str();
+    EXPECT_NE(rout.str().find("0x68656c6c6f"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("0x776f726c64"), std::string::npos) << rout.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -769,9 +768,9 @@ TEST(CliE2E, WriteVerboseEchoesConfig) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"write", "--table", "vt", "--field", "s1", "INT64", "-v", "-i", csv, "-o", out_path},
-                            out, err);
+    int code = tsfile_cli::run_cli({"write", "--table", "vt", "--field", "s1",
+                                    "INT64", "-v", "-i", csv, "-o", out_path},
+                                   out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_NE(err.str().find("table=vt"), std::string::npos) << err.str();
     EXPECT_NE(err.str().find("column s1:INT64:field"), std::string::npos)
@@ -794,10 +793,10 @@ TEST(CliE2E, WriteRejectsHeaderMatch) {
 
     std::ostringstream out;
     std::ostringstream err;
-    int code = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--field", "s1", "INT64",
-         "--header-match", "-i", csv, "-o", out_path},
-        out, err);
+    int code =
+        tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64",
+                             "--header-match", "-i", csv, "-o", out_path},
+                            out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("--header-match"), std::string::npos) << err.str();
 
@@ -823,15 +822,19 @@ TEST(CliE2E, WriteMapsEachColumnToItsOwnValue) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t1", "--field", "a_bool", "BOOLEAN", "--field", "b_int", "INT32", "--field", "c_long", "INT64", "--field", "d_float", "FLOAT", "--field", "e_double", "DOUBLE", "--field", "f_str", "STRING", "--field", "g_ts", "TIMESTAMP", "--field", "h_date", "DATE",
-         "-i", csv, "-o", out_path},
+        {"write",   "--table", "t1",     "--field", "a_bool",   "BOOLEAN",
+         "--field", "b_int",   "INT32",  "--field", "c_long",   "INT64",
+         "--field", "d_float", "FLOAT",  "--field", "e_double", "DOUBLE",
+         "--field", "f_str",   "STRING", "--field", "g_ts",     "TIMESTAMP",
+         "--field", "h_date",  "DATE",   "-i",      csv,        "-o",
+         out_path},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
     std::ostringstream rout;
     std::ostringstream rerr;
-    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr),
-              0)
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr), 0)
         << rerr.str();
     const std::string& j = rout.str();
     EXPECT_NE(j.find("\"a_bool\":true"), std::string::npos) << j;
@@ -866,7 +869,8 @@ TEST(CliE2E, WriteMultiTypeAcrossBatchesRoundTrips) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "n", "INT64", "--field", "note", "TEXT", "-i", csv, "-o", out_path},
+        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "n",
+         "INT64", "--field", "note", "TEXT", "-i", csv, "-o", out_path},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
@@ -910,15 +914,16 @@ TEST(CliE2E, WriteRoundTripsQuotedSpecialChars) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "note", "STRING", "-i", csv, "-o", out_path},
+        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "note",
+         "STRING", "-i", csv, "-o", out_path},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
     // JSON escapes the embedded quotes; the comma is preserved verbatim.
     std::ostringstream rout;
     std::ostringstream rerr;
-    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr),
-              0)
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr), 0)
         << rerr.str();
     EXPECT_NE(rout.str().find("\"note\":\"a,b \\\"q\\\" c\""),
               std::string::npos)
@@ -969,15 +974,15 @@ TEST(CliE2E, WriteEmptyCellBecomesNull) {
     std::ostringstream wout;
     std::ostringstream werr;
     int wc = tsfile_cli::run_cli(
-        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "n", "INT64",
-         "-i", csv, "-o", out_path},
+        {"write", "--table", "t", "--tag", "id", "STRING", "--field", "n",
+         "INT64", "-i", csv, "-o", out_path},
         wout, werr);
     ASSERT_EQ(wc, 0) << werr.str();
 
     std::ostringstream rout;
     std::ostringstream rerr;
-    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr),
-              0)
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr), 0)
         << rerr.str();
     EXPECT_NE(rout.str().find("\"n\":null"), std::string::npos) << rout.str();
 

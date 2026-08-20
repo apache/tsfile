@@ -129,13 +129,11 @@ TEST(RowWriterTest, CsvEscapesCells) {
 
 TEST(RowWriterTest, JsonQuotesInt64TimestampAndLeavesSmallNumbersBare) {
     std::ostringstream out;
-    RowWriter w(out, OutputFormat::kJson,
-                {"time", "small", "ts", "name"},
-                {common::INT64, common::INT32, common::TIMESTAMP,
-                 common::STRING},
-                false);
-    w.write({"5", "10", "1700000000000", "dev1"},
-            {false, false, false, false});
+    RowWriter w(
+        out, OutputFormat::kJson, {"time", "small", "ts", "name"},
+        {common::INT64, common::INT32, common::TIMESTAMP, common::STRING},
+        false);
+    w.write({"5", "10", "1700000000000", "dev1"}, {false, false, false, false});
     w.write({"6", "11", "1700000000001", ""}, {false, false, false, true});
     w.finish();
     EXPECT_EQ(out.str(),
@@ -147,8 +145,7 @@ TEST(RowWriterTest, JsonQuotesInt64TimestampAndLeavesSmallNumbersBare) {
 
 TEST(RowWriterTest, BlobCellsUseLowercaseHexLexeme) {
     std::ostringstream json;
-    RowWriter jw(json, OutputFormat::kJson, {"payload"}, {common::BLOB},
-                 false);
+    RowWriter jw(json, OutputFormat::kJson, {"payload"}, {common::BLOB}, false);
     jw.write({std::string("A\0z", 3)}, {false});
     jw.finish();
     EXPECT_EQ(json.str(), "{\"payload\":\"0x41007a\"}\n");
