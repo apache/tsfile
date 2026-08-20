@@ -46,6 +46,9 @@ bool parse_strict_i64(const std::string& s, long long& out) {
         return false;
     }
     size_t start = (s[0] == '-') ? 1 : 0;
+    if (s[0] == '-' && start + 1 == s.size() && s[start] == '0') {
+        return false;
+    }
     if (!has_strict_decimal_body(s, start)) {
         return false;
     }
@@ -151,9 +154,27 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         }
         p.columns += name + ":" + type + ":" + category;
     };
+    bool positional_file_set = false;
     for (; i < args.size(); ++i) {
         const std::string& a = args[i];
         std::string val;
+        if (positional_file_set) {
+            p.error = "Unexpected argument after file: " + a;
+            return p;
+        }
+        if (a == "--") {
+            if (i + 1 >= args.size()) {
+                p.error = "Missing value after --";
+                return p;
+            }
+            if (!p.file.empty() || i + 2 != args.size()) {
+                p.error = "Unexpected argument after file: " + args[i + 1];
+                return p;
+            }
+            p.file = args[++i];
+            positional_file_set = true;
+            continue;
+        }
         if (a == "-f" || a == "--format") {
             if (p.format_set) {
                 p.error = "--format specified more than once";
@@ -352,6 +373,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         } else {
             if (p.file.empty()) {
                 p.file = a;
+                positional_file_set = true;
             } else {
                 p.error = "Unexpected argument: " + a;
                 return p;

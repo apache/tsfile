@@ -88,7 +88,8 @@ TEST(CliE2E, SchemaShowsFieldColumnAndType) {
     int code = tsfile_cli::run_cli({"schema", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
     EXPECT_NE(
-        out.str().find("target,measurement,datatype,encoding,compression"),
+        out.str().find("model,object,column,category,data_type,encoding,"
+                       "compression"),
         std::string::npos);
     EXPECT_NE(out.str().find("s1"), std::string::npos);
     EXPECT_NE(out.str().find("INT64"), std::string::npos);
@@ -101,7 +102,8 @@ TEST(CliE2E, SchemaTableMeasurementFilterOnlyShowsRequestedColumn) {
     int code = tsfile_cli::run_cli({"schema", "-m", "s1", "-f", "csv", f.path},
                                    out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_NE(out.str().find("table1,s1,INT64"), std::string::npos);
+    EXPECT_NE(out.str().find("table,table1,s1,FIELD,INT64"),
+              std::string::npos);
     EXPECT_EQ(out.str().find("table1,id1"), std::string::npos);
     EXPECT_EQ(out.str().find("table1,id2"), std::string::npos);
 }
@@ -266,7 +268,8 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
         tsfile_cli::run_cli({"schema", "-t", "TABLE1", "-f", "csv", f.path},
                             schema_out, schema_err),
         0);
-    EXPECT_NE(schema_out.str().find("table1,s1,INT64"), std::string::npos)
+    EXPECT_NE(schema_out.str().find("table,table1,s1,FIELD,INT64"),
+              std::string::npos)
         << schema_out.str();
 
     std::ostringstream count_out;
@@ -426,7 +429,7 @@ TEST(CliE2E, WriteRejectsOutOfOrderTimestampsAndLeavesNoOutput) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
                                    out, err);
-    EXPECT_EQ(code, 3);
+    EXPECT_EQ(code, 2);
     EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
         << err.str();
     EXPECT_NE(err.str().find("line 3"), std::string::npos) << err.str();
@@ -500,7 +503,7 @@ TEST(CliE2E, WriteFailureOnBadValueLeavesNoOutput) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
                                    out, err);
-    EXPECT_EQ(code, 3);
+    EXPECT_EQ(code, 2);
     EXPECT_FALSE(path_exists(out_path));
 
     std::remove(csv.c_str());
@@ -558,7 +561,7 @@ TEST(CliE2E, SchemaTableShowsEncodingAndCompression) {
     EXPECT_EQ(code, 0);
     // Table-model schema must report the fixture's configured encoding and
     // compression rather than blanks.
-    EXPECT_NE(out.str().find(",s1,INT64,PLAIN,UNCOMPRESSED\n"),
+    EXPECT_NE(out.str().find(",s1,FIELD,INT64,PLAIN,UNCOMPRESSED\n"),
               std::string::npos)
         << out.str();
 }
@@ -591,7 +594,7 @@ int write_one_value(const std::string& type, const std::string& value,
 
 TEST(CliE2E, WriteRejectsInt32Overflow) {
     std::string err;
-    EXPECT_EQ(write_one_value("INT32", "3000000000", err), 3);
+    EXPECT_EQ(write_one_value("INT32", "3000000000", err), 2);
     EXPECT_NE(err.find("INT32 out of range"), std::string::npos) << err;
 }
 
@@ -602,19 +605,19 @@ TEST(CliE2E, WriteAcceptsInt32Boundary) {
 
 TEST(CliE2E, WriteRejectsInt64Overflow) {
     std::string err;
-    EXPECT_EQ(write_one_value("INT64", "99999999999999999999999999", err), 3);
+    EXPECT_EQ(write_one_value("INT64", "99999999999999999999999999", err), 2);
     EXPECT_NE(err.find("INT64 out of range"), std::string::npos) << err;
 }
 
 TEST(CliE2E, WriteRejectsDoubleOverflow) {
     std::string err;
-    EXPECT_EQ(write_one_value("DOUBLE", "1e400", err), 3);
+    EXPECT_EQ(write_one_value("DOUBLE", "1e400", err), 2);
     EXPECT_NE(err.find("DOUBLE out of range"), std::string::npos) << err;
 }
 
 TEST(CliE2E, WriteRejectsNonNumericInt64) {
     std::string err;
-    EXPECT_EQ(write_one_value("INT64", "12abc", err), 3);
+    EXPECT_EQ(write_one_value("INT64", "12abc", err), 2);
     EXPECT_NE(err.find("bad INT64"), std::string::npos) << err;
 }
 
@@ -640,7 +643,7 @@ TEST(CliE2E, WriteRejectsOutOfOrderAcrossBatches) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1", "INT64", "-i", csv, "-o", out_path},
                                    out, err);
-    EXPECT_EQ(code, 3);
+    EXPECT_EQ(code, 2);
     EXPECT_NE(err.str().find("strictly increasing"), std::string::npos)
         << err.str();
     EXPECT_FALSE(path_exists(out_path));
@@ -746,7 +749,7 @@ TEST(CliE2E, WriteRoundTripsTimestampDateBlob) {
 
 TEST(CliE2E, WriteRejectsBadDate) {
     std::string err;
-    EXPECT_EQ(write_one_value("DATE", "not-a-date", err), 3);
+    EXPECT_EQ(write_one_value("DATE", "not-a-date", err), 2);
     EXPECT_NE(err.find("bad DATE"), std::string::npos) << err;
 }
 
@@ -923,20 +926,20 @@ TEST(CliE2E, WriteRoundTripsQuotedSpecialChars) {
 TEST(CliE2E, WriteRejectsTimestampOverflow) {
     std::string err;
     EXPECT_EQ(write_one_value("TIMESTAMP", "99999999999999999999999999", err),
-              3);
+              2);
     EXPECT_NE(err.find("TIMESTAMP out of range"), std::string::npos) << err;
 }
 
 TEST(CliE2E, WriteRejectsNonNumericTimestampColumn) {
     std::string err;
-    EXPECT_EQ(write_one_value("TIMESTAMP", "not-a-number", err), 3);
+    EXPECT_EQ(write_one_value("TIMESTAMP", "not-a-number", err), 2);
     EXPECT_NE(err.find("bad TIMESTAMP"), std::string::npos) << err;
 }
 
 TEST(CliE2E, WriteRejectsImpossibleDate) {
     // Syntactically YYYY-MM-DD but not a real calendar date.
     std::string err;
-    EXPECT_EQ(write_one_value("DATE", "2024-13-40", err), 3);
+    EXPECT_EQ(write_one_value("DATE", "2024-13-40", err), 2);
     EXPECT_NE(err.find("bad DATE"), std::string::npos) << err;
 }
 

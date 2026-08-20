@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 #ifndef _WIN32
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -77,6 +78,19 @@ TEST(CliRequirementsV07, SampleIsNotACommand) {
     EXPECT_NE(err.str().find("Unknown command"), std::string::npos) << err.str();
 }
 
+TEST(CliRequirementsV07, VersionIncludesConcreteBuildMetadata) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"--version"}, out, err);
+    EXPECT_EQ(code, 0);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("tsfile-cli "), std::string::npos) << out.str();
+    EXPECT_NE(out.str().find(" tsfile="), std::string::npos) << out.str();
+    EXPECT_NE(out.str().find(" commit="), std::string::npos) << out.str();
+    EXPECT_NE(out.str().find(" built="), std::string::npos) << out.str();
+    EXPECT_EQ(out.str().find("unknown"), std::string::npos) << out.str();
+}
+
 TEST(CliRequirementsV07, FormatVocabularyIsTableNdjsonCsvOnly) {
     TableFixture f;
 
@@ -116,6 +130,27 @@ TEST(CliRequirementsV07, DuplicateSingletonOptionsAreUsageErrors) {
     EXPECT_NE(err.str().find("--format specified more than once"),
               std::string::npos)
         << err.str();
+}
+
+TEST(CliRequirementsV07, PositionalFileMustBeFinalUnlessAfterDoubleDash) {
+    TableFixture f;
+
+    std::ostringstream bad_out;
+    std::ostringstream bad_err;
+    int bad_code = tsfile_cli::run_cli({"cat", f.path, "-f", "csv"}, bad_out,
+                                       bad_err);
+    EXPECT_EQ(bad_code, 1);
+    EXPECT_TRUE(bad_out.str().empty());
+    EXPECT_NE(bad_err.str().find("Unexpected argument after file"),
+              std::string::npos)
+        << bad_err.str();
+
+    std::ostringstream ok_out;
+    std::ostringstream ok_err;
+    int ok_code = tsfile_cli::run_cli({"cat", "-m", "s1", "--", f.path},
+                                      ok_out, ok_err);
+    EXPECT_EQ(ok_code, 0) << ok_err.str();
+    EXPECT_TRUE(ok_err.str().empty());
 }
 
 TEST(CliRequirementsV07, MeasurementOptionRepeatsAndRejectsCommaLists) {
@@ -158,6 +193,80 @@ TEST(CliRequirementsV07, LsReturnsModelAndObjectFields) {
     EXPECT_EQ(out.str(), "model,object\ntable,table1\n");
 }
 
+TEST(CliRequirementsV07, SchemaReturnsFixedSevenFieldContract) {
+    TableFixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"schema", "-f", "csv", f.path}, out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_EQ(out.str().substr(
+                  0, std::string("model,object,column,category,data_type,"
+                                  "encoding,compression\n")
+                         .size()),
+              "model,object,column,category,data_type,encoding,compression\n")
+        << out.str();
+    EXPECT_NE(out.str().find("table,table1,id1,TAG,STRING"), std::string::npos)
+        << out.str();
+    EXPECT_NE(out.str().find("table,table1,s1,FIELD,INT64"), std::string::npos)
+        << out.str();
+}
+
+TEST(CliRequirementsV07, HeadCatAndExportRejectOffsetWithZeroLimit) {
+    TableFixture f;
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_zero_limit_export",
+                                          ".csv");
+
+    std::ostringstream head_out;
+    std::ostringstream head_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"head", "-n", "0", "--offset", "1",
+                                   f.path},
+                                  head_out, head_err),
+              1);
+    EXPECT_TRUE(head_out.str().empty());
+
+    std::ostringstream cat_out;
+    std::ostringstream cat_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-n", "0", "--offset", "1",
+                                   f.path},
+                                  cat_out, cat_err),
+              1);
+    EXPECT_TRUE(cat_out.str().empty());
+
+    std::ostringstream export_out;
+    std::ostringstream export_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"export", "-t", "table1", "--type", "csv",
+                                   "-o", out_path, "-n", "0", "--offset",
+                                   "1", f.path},
+                                  export_out, export_err),
+              1);
+    EXPECT_TRUE(export_out.str().empty());
+    EXPECT_FALSE(file_exists(out_path));
+    std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, HeadAndCatRequireScopeForMultiObjectFiles) {
+    MultiTableFixture f;
+
+    std::ostringstream cat_out;
+    std::ostringstream cat_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "-f", "csv", f.path},
+                                  cat_out, cat_err),
+              1);
+    EXPECT_TRUE(cat_out.str().empty());
+    EXPECT_NE(cat_err.str().find("requires -t/--table"), std::string::npos)
+        << cat_err.str();
+
+    std::ostringstream head_out;
+    std::ostringstream head_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"head", "-m", "s1", "-f", "csv", f.path},
+                                  head_out, head_err),
+              1);
+    EXPECT_TRUE(head_out.str().empty());
+    EXPECT_NE(head_err.str().find("requires -t/--table"), std::string::npos)
+        << head_err.str();
+}
+
 TEST(CliRequirementsV07, WriteUsesExplicitTagAndFieldOptions) {
     std::string csv = tsfile_cli_test::unique_temp_path("tsfile_cli_v07_in", ".csv");
     {
@@ -186,6 +295,79 @@ TEST(CliRequirementsV07, WriteUsesExplicitTagAndFieldOptions) {
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, WriteRejectsExistingOutputWithoutTruncating) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_existing_in", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,10\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_existing_out", ".tsfile");
+    {
+        std::ofstream o(out_path.c_str());
+        o << "keep-me";
+    }
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t1", "--field",
+                                    "s1", "INT64", "-i", csv, "-o",
+                                    out_path},
+                                   out, err);
+    EXPECT_EQ(code, 3);
+    EXPECT_EQ(read_file(out_path), "keep-me");
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, WriteRejectsNonRegularInputBeforeCreatingOutput) {
+#ifndef _WIN32
+    std::string dir =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_input_dir", "");
+    ASSERT_EQ(mkdir(dir.c_str(), 0777), 0);
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_input_dir_out", ".tsfile");
+
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t1", "--field",
+                                    "s1", "INT64", "-i", dir, "-o",
+                                    out_path},
+                                   out, err);
+    EXPECT_EQ(code, 2);
+    EXPECT_FALSE(file_exists(out_path));
+
+    rmdir(dir.c_str());
+#endif
+}
+
+TEST(CliRequirementsV07, WriteRejectsNonCanonicalTimeLexemesAsInputErrors) {
+    const char* bad_times[] = {"+1", "01", "-0"};
+    for (const char* bad_time : bad_times) {
+        std::string csv =
+            tsfile_cli_test::unique_temp_path("tsfile_cli_bad_time", ".csv");
+        {
+            std::ofstream o(csv.c_str());
+            o << "time,s1\n" << bad_time << ",10\n";
+        }
+        std::string out_path =
+            tsfile_cli_test::unique_temp_path("tsfile_cli_bad_time_out",
+                                              ".tsfile");
+        std::ostringstream out;
+        std::ostringstream err;
+        int code = tsfile_cli::run_cli({"write", "--table", "t1", "--field",
+                                        "s1", "INT64", "-i", csv, "-o",
+                                        out_path},
+                                       out, err);
+        EXPECT_EQ(code, 2) << bad_time << " " << err.str();
+        EXPECT_FALSE(file_exists(out_path)) << bad_time;
+        std::remove(csv.c_str());
+        std::remove(out_path.c_str());
+    }
 }
 
 TEST(CliRequirementsV07, LegacyColumnsOptionIsRejected) {
@@ -236,7 +418,15 @@ TEST(CliRequirementsV07, ExportWritesSingleObjectAtomically) {
                                    out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_TRUE(out.str().empty());
-    EXPECT_EQ(read_file(out_path), "time,s1\n0,0\n1,10\n2,20\n3,30\n4,40\n");
+
+    std::ostringstream cat_out;
+    std::ostringstream cat_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-t", "table1", "-m", "s1", "-f",
+                                   "csv", f.path},
+                                  cat_out, cat_err),
+              0)
+        << cat_err.str();
+    EXPECT_EQ(read_file(out_path), cat_out.str());
 
     std::remove(out_path.c_str());
 }

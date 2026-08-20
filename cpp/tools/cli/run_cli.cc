@@ -41,6 +41,12 @@
 #ifndef TSFILE_CLI_VERSION
 #define TSFILE_CLI_VERSION "unknown"
 #endif
+#ifndef TSFILE_CLI_COMMIT
+#define TSFILE_CLI_COMMIT "unknown"
+#endif
+#ifndef TSFILE_CLI_BUILT
+#define TSFILE_CLI_BUILT "unknown"
+#endif
 
 namespace tsfile_cli {
 namespace {
@@ -97,6 +103,12 @@ bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
     }
     if (p.offset < 0) {
         err << "Error: --offset must be >= 0\n";
+        return false;
+    }
+    if ((p.command == "head" || p.command == "cat" ||
+         p.command == "export") &&
+        p.limit == 0 && p.offset > 0) {
+        err << "Error: --offset requires a positive --limit\n";
         return false;
     }
     if (p.has_start && p.has_end && p.start > p.end) {
@@ -357,7 +369,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     if (p.version) {
         out << "tsfile-cli " << TSFILE_CLI_VERSION
             << " tsfile=" << TSFILE_CLI_VERSION
-            << " commit=unknown built=unknown\n";
+            << " commit=" << TSFILE_CLI_COMMIT
+            << " built=" << TSFILE_CLI_BUILT << "\n";
         return kExitOk;
     }
     if (args.empty()) {

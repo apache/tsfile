@@ -32,6 +32,20 @@
 namespace tsfile_cli {
 namespace {
 
+const char* column_category_name(common::ColumnCategory category) {
+    switch (category) {
+        case common::ColumnCategory::TIME:
+            return "TIME";
+        case common::ColumnCategory::TAG:
+            return "TAG";
+        case common::ColumnCategory::ATTRIBUTE:
+            return "ATTRIBUTE";
+        case common::ColumnCategory::FIELD:
+        default:
+            return "FIELD";
+    }
+}
+
 void write_table_schema_rows(const ParsedArgs& args,
                              storage::TsFileReader& reader, RowWriter& w) {
     const std::string target_table_name = storage::to_lower(args.table);
@@ -44,7 +58,10 @@ void write_table_schema_rows(const ParsedArgs& args,
             schema->get_table_name() != target_table_name) {
             continue;
         }
-        for (const auto& ms : schema->get_measurement_schemas()) {
+        auto categories = schema->get_column_categories();
+        auto measurements = schema->get_measurement_schemas();
+        for (size_t i = 0; i < measurements.size(); ++i) {
+            const auto& ms = measurements[i];
             if (!ms) {
                 continue;
             }
@@ -54,11 +71,20 @@ void write_table_schema_rows(const ParsedArgs& args,
                           name) == args.measurements.end()) {
                 continue;
             }
-            w.write({schema->get_table_name(), name,
+            common::ColumnCategory category =
+                i < categories.size() ? categories[i]
+                                      : common::ColumnCategory::FIELD;
+            const bool physical_null =
+                category == common::ColumnCategory::TIME ||
+                category == common::ColumnCategory::ATTRIBUTE;
+            w.write({"table", schema->get_table_name(), name,
+                     column_category_name(category),
                      tsdatatype_name(ms->data_type_),
-                     tsencoding_name(ms->encoding_),
-                     compression_name(ms->compression_type_)},
-                    {false, false, false, false, false});
+                     physical_null ? "" : tsencoding_name(ms->encoding_),
+                     physical_null ? ""
+                                   : compression_name(ms->compression_type_)},
+                    {false, false, false, false, false, physical_null,
+                     physical_null});
         }
     }
 }
@@ -69,9 +95,10 @@ int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
                OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
     RowWriter w(
         out, fmt,
-        {"target", "measurement", "datatype", "encoding", "compression"},
+        {"model", "object", "column", "category", "data_type", "encoding",
+         "compression"},
         {common::STRING, common::STRING, common::STRING, common::STRING,
-         common::STRING},
+         common::STRING, common::STRING, common::STRING},
         args.no_header);
 
     if (is_table_model(args, reader)) {
@@ -120,9 +147,10 @@ int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
                 enc = it->second.first;
                 comp = it->second.second;
             }
-            w.write(
-                {target, m, tsdatatype_name(ts->get_data_type()), enc, comp},
-                {false, false, false, enc.empty(), comp.empty()});
+            w.write({"tree", target, m, "FIELD",
+                     tsdatatype_name(ts->get_data_type()), enc, comp},
+                    {false, false, false, false, false, enc.empty(),
+                     comp.empty()});
         }
     }
     w.finish();

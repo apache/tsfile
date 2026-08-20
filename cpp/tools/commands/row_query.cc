@@ -170,6 +170,11 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                 err << "Error: no table found in file\n";
                 return kExitRuntime;
             }
+            if (schemas.size() != 1) {
+                err << "Error: head/cat requires -t/--table when the file "
+                       "contains multiple tables\n";
+                return kExitUsage;
+            }
             table_name = schemas[0]->get_table_name();
         }
         std::vector<std::string> cols = args.measurements;
@@ -197,7 +202,22 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             err << "Error: tag filter flags are only valid for table model\n";
             return kExitUsage;
         }
-        std::vector<std::string> paths = collect_tree_query_paths(args, reader);
+        ParsedArgs effective_args = args;
+        if (effective_args.device.empty()) {
+            auto devices = reader.get_all_device_ids();
+            if (devices.empty() || !devices[0]) {
+                err << "Error: no device found in file\n";
+                return kExitRuntime;
+            }
+            if (devices.size() != 1) {
+                err << "Error: head/cat requires -d/--device when the file "
+                       "contains multiple devices\n";
+                return kExitUsage;
+            }
+            effective_args.device = devices[0]->get_device_name();
+        }
+        std::vector<std::string> paths =
+            collect_tree_query_paths(effective_args, reader);
         if (paths.empty()) {
             err << "Error: no time series found\n";
             return kExitRuntime;

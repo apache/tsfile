@@ -18,6 +18,7 @@
  */
 
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -42,6 +43,10 @@
 #include "format/input_format.h"
 #include "writer/tsfile_table_writer.h"
 
+#ifdef _WIN32
+#define lstat stat
+#endif
+
 namespace tsfile_cli {
 namespace {
 
@@ -50,6 +55,55 @@ struct DataRow {
     int64_t timestamp;
     std::vector<std::string> cells;
 };
+
+bool has_strict_decimal_body(const std::string& s, size_t start) {
+    if (start >= s.size()) {
+        return false;
+    }
+    if (s[start] == '0' && start + 1 != s.size()) {
+        return false;
+    }
+    for (size_t i = start; i < s.size(); ++i) {
+        if (s[i] < '0' || s[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool parse_strict_timestamp_cell(const std::string& s, int64_t& out) {
+    if (s.empty()) {
+        return false;
+    }
+    size_t start = (s[0] == '-') ? 1 : 0;
+    if (s[0] == '-' && start + 1 == s.size() && s[start] == '0') {
+        return false;
+    }
+    if (!has_strict_decimal_body(s, start)) {
+        return false;
+    }
+    char* e = nullptr;
+    errno = 0;
+    long long ts = std::strtoll(s.c_str(), &e, 10);
+    if (e == nullptr || *e != '\0' || errno == ERANGE) {
+        return false;
+    }
+    out = static_cast<int64_t>(ts);
+    return true;
+}
+
+bool stat_regular_file(const std::string& path, struct stat& st) {
+    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+bool path_exists(const std::string& path) {
+    struct stat st;
+    return lstat(path.c_str(), &st) == 0;
+}
+
+bool same_file_identity(const struct stat& a, const struct stat& b) {
+    return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+}
 
 // Parse a calendar date in strict YYYY-MM-DD form into a std::tm (year offset
 // from 1900, month 0-based) the way storage::Tablet expects for DATE columns.
@@ -194,7 +248,15 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
 
     std::istream* in = &std::cin;
     std::ifstream fin;
+    struct stat input_stat;
+    bool has_input_stat = false;
     if (!args.file.empty() && args.file != "-") {
+        if (!stat_regular_file(args.file, input_stat)) {
+            err << "Error: input must be a regular CSV file: " << args.file
+                << "\n";
+            return kExitFile;
+        }
+        has_input_stat = true;
         fin.open(args.file.c_str());
         if (!fin.is_open()) {
             err << "Error: cannot open input: " << args.file << "\n";
@@ -234,15 +296,15 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                 if (h.size() != expected) {
                     err << "Error: header has " << h.size()
                         << " columns, expected " << expected
-                        << " (time + --columns) (line 1)\n";
-                    return kExitRuntime;
+                        << " (time + declared columns) (line 1)\n";
+                    return kExitFile;
                 }
                 for (size_t i = 0; i < columns.size(); ++i) {
                     if (h[i + 1] != columns[i].name) {
                         err << "Error: header column " << (i + 2) << " is '"
                             << h[i + 1] << "', expected '" << columns[i].name
                             << "' (line 1)\n";
-                        return kExitRuntime;
+                        return kExitFile;
                     }
                 }
             }
@@ -270,10 +332,18 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     // Creating the output truncates it; refuse to clobber the input we are
     // still reading from, which would otherwise silently destroy the source
     // data.
-    if (!args.file.empty() && args.file != "-" && args.output == args.file) {
-        err << "Error: --output is the same as the input file: " << args.output
-            << "\n";
-        return kExitUsage;
+    if (has_input_stat) {
+        struct stat output_stat;
+        if (stat(args.output.c_str(), &output_stat) == 0 &&
+            same_file_identity(input_stat, output_stat)) {
+            err << "Error: --output is the same as the input file: "
+                << args.output << "\n";
+            return kExitUsage;
+        }
+    }
+    if (path_exists(args.output)) {
+        err << "Error: output target already exists: " << args.output << "\n";
+        return kExitRuntime;
     }
 
     storage::WriteFile file;
@@ -303,9 +373,9 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     // located message instead of an opaque write failure.
     std::unordered_map<std::string, int64_t> last_ts_by_device;
 
-    auto flush_batch = [&]() -> bool {
+    auto flush_batch = [&]() -> int {
         if (batch.empty()) {
-            return true;
+            return kExitOk;
         }
         storage::Tablet tablet(args.table, names, types, cats,
                                static_cast<int>(batch.size()));
@@ -318,7 +388,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                                      columns[j], batch[i].cells[j], cell_err)) {
                     err << "Error: " << cell_err << " (line "
                         << batch[i].line_no << ")\n";
-                    return false;
+                    return kExitFile;
                 }
             }
         }
@@ -326,11 +396,11 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (wt != 0) {
             err << "Error: failed to write rows: " << error_code_message(wt)
                 << " (code " << wt << ")\n";
-            return false;
+            return kExitRuntime;
         }
         total_rows += static_cast<long long>(batch.size());
         batch.clear();
-        return true;
+        return kExitOk;
     };
 
     while (read_record(*in, csv_quotes, line, record_lines)) {
@@ -342,21 +412,19 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (fields.size() != columns.size() + 1) {
             err << "Error: expected " << (columns.size() + 1) << " fields, got "
                 << fields.size() << " (line " << line_no << ")\n";
-            result_code = kExitRuntime;
+            result_code = kExitFile;
             break;
         }
-        char* e = nullptr;
-        errno = 0;
-        long long ts = std::strtoll(fields[0].c_str(), &e, 10);
-        if (e == nullptr || *e != '\0' || errno == ERANGE) {
+        int64_t ts = 0;
+        if (!parse_strict_timestamp_cell(fields[0], ts)) {
             err << "Error: bad timestamp '" << fields[0] << "' (line "
                 << line_no << ")\n";
-            result_code = kExitRuntime;
+            result_code = kExitFile;
             break;
         }
         DataRow r;
         r.line_no = line_no;
-        r.timestamp = static_cast<int64_t>(ts);
+        r.timestamp = ts;
         r.cells.assign(fields.begin() + 1, fields.end());
 
         std::string device_key;
@@ -370,20 +438,22 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                    "(line "
                 << line_no << ": " << r.timestamp << " <= previous "
                 << seen->second << ")\n";
-            result_code = kExitRuntime;
+            result_code = kExitFile;
             break;
         }
         last_ts_by_device[device_key] = r.timestamp;
 
         batch.push_back(std::move(r));
-        if (batch.size() >= kBatch && !flush_batch()) {
-            result_code = kExitRuntime;
+        if (batch.size() >= kBatch) {
+            result_code = flush_batch();
+        }
+        if (result_code != kExitOk) {
             break;
         }
     }
 
-    if (result_code == kExitOk && !flush_batch()) {
-        result_code = kExitRuntime;
+    if (result_code == kExitOk) {
+        result_code = flush_batch();
     }
 
     if (result_code == kExitOk) {
