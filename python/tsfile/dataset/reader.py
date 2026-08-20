@@ -24,7 +24,7 @@ from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
 
-from ..constants import ColumnCategory, TSDataType
+from ..constants import ColumnCategory, NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from .metadata import (
@@ -36,14 +36,7 @@ from .metadata import (
     resolve_series_path,
 )
 
-_NUMERIC_FIELD_TYPES = {
-    TSDataType.BOOLEAN,
-    TSDataType.INT32,
-    TSDataType.INT64,
-    TSDataType.FLOAT,
-    TSDataType.DOUBLE,
-    TSDataType.TIMESTAMP,
-}
+_NUMERIC_FIELD_TYPES = NUMERIC_DATASET_FIELD_TYPES
 
 
 def _to_python_scalar(value):

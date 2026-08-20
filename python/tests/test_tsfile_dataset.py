@@ -1067,6 +1067,23 @@ def test_dataset_rejects_nonnumeric_declared_schema_difference(tmp_path):
         TsFileDataFrame([str(path1), str(path2)], show_progress=False)
 
 
+def test_dataset_table_model_omits_boolean_fields(tmp_path):
+    # The numeric dataset surface must drop BOOLEAN fields (they are not
+    # numeric) rather than surfacing them as a series that crashes the runtime
+    # read path. Regression for the reader/runtime field-type whitelist drift.
+    path = tmp_path / "weather_boolean.tsfile"
+    _write_weather_boolean_status_file(path, 0)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        assert tsdf.model == "table"
+        assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
+        with pytest.raises(KeyError):
+            tsdf["weather.device_a.status"]
+        np.testing.assert_array_equal(
+            tsdf["weather.device_a.temperature"][:], np.array([20.0, 21.0])
+        )
+
+
 def test_dataset_close_waits_for_an_active_public_query(tmp_path, monkeypatch):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
@@ -2074,4 +2091,55 @@ def test_dataset_tree_model_omits_non_numeric_measurements(tmp_path):
             tsdf["root.a.b.status"]
         np.testing.assert_array_equal(
             tsdf["root.a.b.temp"][:], np.array([0.5, 1.5, 2.5])
+        )
+
+
+def test_dataset_tree_model_loc_aligns_sparse_non_aligned_fields(tmp_path):
+    # Non-aligned (tree) device whose two measurements are sampled at
+    # different timestamps must produce a timestamp union with NaN fill,
+    # instead of raising when the per-field timelines differ. Regression for
+    # read_device_fields_by_time_range on non-aligned devices.
+    from tsfile import Field, RowRecord, TimeseriesSchema, TsFileWriter
+
+    path = tmp_path / "sparse_tree.tsfile"
+    writer = TsFileWriter(str(path))
+    writer.register_timeseries("root.a.b", TimeseriesSchema("m1", TSDataType.DOUBLE))
+    writer.register_timeseries("root.a.b", TimeseriesSchema("m2", TSDataType.DOUBLE))
+    writer.write_row_record(
+        RowRecord("root.a.b", 0, [Field("m1", 0.5, TSDataType.DOUBLE)])
+    )
+    writer.write_row_record(
+        RowRecord("root.a.b", 1, [Field("m2", 10.5, TSDataType.DOUBLE)])
+    )
+    writer.write_row_record(
+        RowRecord("root.a.b", 2, [Field("m1", 2.5, TSDataType.DOUBLE)])
+    )
+    writer.write_row_record(
+        RowRecord("root.a.b", 3, [Field("m2", 30.5, TSDataType.DOUBLE)])
+    )
+    writer.write_row_record(
+        RowRecord("root.a.b", 4, [Field("m1", 4.5, TSDataType.DOUBLE)])
+    )
+    writer.close()
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        assert tsdf.model == "tree"
+        aligned = tsdf.loc[0:5, ["root.a.b.m1", "root.a.b.m2"]]
+        assert isinstance(aligned, AlignedTimeseries)
+        assert aligned.series_names == ["root.a.b.m1", "root.a.b.m2"]
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([0, 1, 2, 3, 4], dtype=np.int64)
+        )
+        np.testing.assert_allclose(
+            aligned.values,
+            np.array(
+                [
+                    [0.5, np.nan],
+                    [np.nan, 10.5],
+                    [2.5, np.nan],
+                    [np.nan, 30.5],
+                    [4.5, np.nan],
+                ]
+            ),
+            equal_nan=True,
         )

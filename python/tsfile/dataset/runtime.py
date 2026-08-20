@@ -30,7 +30,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from ..constants import TSDataType
+from ..constants import NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from .index import (
@@ -53,6 +53,7 @@ from .metadata import (
     _join_series_path,
     split_logical_series_path,
 )
+from .merge import build_aligned_matrix
 
 _SERIES_DESCRIPTOR_CACHE_SIZE = 4096
 
@@ -473,10 +474,7 @@ class _TableMapping(Mapping):
             if column[7] == 0:
                 tags.append((column[2], column_name, TSDataType(column[3])))
             elif column[7] == 1 and column[3] in {
-                int(TSDataType.INT32),
-                int(TSDataType.INT64),
-                int(TSDataType.FLOAT),
-                int(TSDataType.DOUBLE),
+                int(data_type) for data_type in NUMERIC_DATASET_FIELD_TYPES
             }:
                 fields.append((column[2], column_name, TSDataType(column[3])))
         tags.sort()
@@ -995,19 +993,17 @@ class RuntimeSeriesReader:
                 )
                 return self._consume_multi(result, column_names)
 
-        parts = [
-            self.read_series_by_ref(device_id, column_id, start_time, end_time)
-            for column_id in column_ids
-        ]
-        if not parts:
-            return np.array([], dtype=np.int64), {}
-        # Existing dataframe merge aligns separate field parts across files;
-        # this method is only a compatibility surface for a single file.
-        timestamps = parts[0][0]
-        values = {}
-        for column_id, (current_timestamps, current_values) in zip(column_ids, parts):
-            if not np.array_equal(current_timestamps, timestamps):
-                raise ValueError("single-file fields do not share one timeline")
+        # Non-aligned device (or fields spanning different device spans): each
+        # field carries its own timeline, so align them onto a single timestamp
+        # union with NaN for missing values. This matches the cross-file merge
+        # semantics of build_aligned_matrix rather than requiring identical
+        # per-field timelines.
+        parts = {}
+        for column_id in column_ids:
             _, _, _, name = self._identity(device_id, column_id)
-            values[name] = current_values
-        return timestamps, values
+            parts[name] = self.read_series_by_ref(
+                device_id, column_id, start_time, end_time
+            )
+        names = list(parts)
+        timestamps, matrix = build_aligned_matrix(names, parts)
+        return timestamps, {name: matrix[:, index] for index, name in enumerate(names)}
