@@ -181,7 +181,7 @@ TEST(RLBECodecTest, RejectsInvalidBlockSize) {
     stream.wrap_from(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     IntRLBEDecoder decoder;
     int32_t value = 0;
-    EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
+    EXPECT_EQ(decoder.read_int32(value, stream), common::E_DECODE_ERR);
 }
 
 TEST(RLBECodecTest, RejectsRunLengthBeyondBlock) {
@@ -197,7 +197,7 @@ TEST(RLBECodecTest, RejectsRunLengthBeyondBlock) {
     stream.wrap_from(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     IntRLBEDecoder decoder;
     int32_t value = 0;
-    EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
+    EXPECT_EQ(decoder.read_int32(value, stream), common::E_DECODE_ERR);
 }
 
 TEST(RLBECodecTest, RejectsInvalidIntSegmentLength) {
@@ -215,7 +215,7 @@ TEST(RLBECodecTest, RejectsInvalidIntSegmentLength) {
         IntRLBEDecoder decoder;
         int32_t value = 0;
         EXPECT_EQ(decoder.read_int32(value, stream),
-                  common::E_TSFILE_CORRUPTED);
+                  common::E_DECODE_ERR);
     }
 }
 
@@ -234,7 +234,7 @@ TEST(RLBECodecTest, RejectsInvalidLongSegmentLength) {
         LongRLBEDecoder decoder;
         int64_t value = 0;
         EXPECT_EQ(decoder.read_int64(value, stream),
-                  common::E_TSFILE_CORRUPTED);
+                  common::E_DECODE_ERR);
     }
 }
 
