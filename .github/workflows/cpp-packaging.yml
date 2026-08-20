@@ -1,0 +1,128 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Cpp-Packaging
+
+on:
+  push:
+    branches:
+      - develop
+      - rc/**
+    paths:
+      - '.github/workflows/cpp-packaging.yml'
+      - 'cpp/**'
+      - 'packaging/**'
+      - 'LICENSE'
+      - 'NOTICE'
+  pull_request:
+    branches:
+      - develop
+      - rc/**
+    paths:
+      - '.github/workflows/cpp-packaging.yml'
+      - 'cpp/**'
+      - 'packaging/**'
+      - 'LICENSE'
+      - 'NOTICE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    name: Debian package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config dpkg-dev uuid-dev
+
+      - name: Configure and build
+        run: |
+          cmake -S cpp -B build/deb -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=ON \
+            -DTSFILE_ENABLE_CPACK=ON \
+            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
+            -DTSFILE_ENABLE_NATIVE_ARCH=OFF
+          cmake --build build/deb --parallel
+
+      - name: Build and inspect DEB packages
+        run: |
+          cpack --config build/deb/CPackConfig.cmake -G DEB
+          ls -lh ./*.deb
+          for package in ./*.deb; do
+            dpkg-deb --info "$package"
+            dpkg-deb --contents "$package" | grep -E '(/libtsfile|/tsfile-cli|TsFileConfig|libtsfile.pc)' || true
+          done
+
+      - name: Upload DEB packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-deb
+          path: '*.deb'
+          if-no-files-found: error
+
+  rpm:
+    name: Fedora package
+    runs-on: ubuntu-24.04
+    container: fedora:latest
+    timeout-minutes: 30
+    steps:
+      - name: Install build and packaging tools
+        run: |
+          dnf install -y \
+            cmake gcc-c++ make ninja-build pkgconf-pkg-config rpm-build \
+            git curl tar xz unzip gzip libuuid-devel
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure and build
+        run: |
+          cmake -S cpp -B build/rpm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=ON \
+            -DTSFILE_ENABLE_CPACK=ON \
+            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
+            -DTSFILE_ENABLE_NATIVE_ARCH=OFF
+          cmake --build build/rpm --parallel
+
+      - name: Build and inspect RPM packages
+        run: |
+          cpack --config build/rpm/CPackConfig.cmake -G RPM
+          ls -lh ./*.rpm
+          for package in ./*.rpm; do
+            rpm -qip "$package"
+            rpm -qlp "$package" | grep -E '(/libtsfile|/tsfile-cli|TsFileConfig|libtsfile.pc)' || true
+          done
+
+      - name: Upload RPM packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-rpm
+          path: '*.rpm'
+          if-no-files-found: error
