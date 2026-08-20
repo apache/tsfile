@@ -52,6 +52,13 @@ DatasetIndexSectionData fixed_section(DatasetIndexSectionType type,
     return section;
 }
 
+template <typename T>
+void append_fixed_record(DatasetIndexSectionData& section, const T& record) {
+    const size_t offset = section.bytes.size();
+    section.bytes.resize(offset + sizeof(T));
+    std::memcpy(section.bytes.data() + offset, &record, sizeof(T));
+}
+
 std::vector<DatasetIndexSectionData> make_minimal_sections() {
     const std::string strings[] = {"table", "device", "value", "/tmp/a.tsfile"};
     std::vector<uint32_t> offsets(1, 0);
@@ -202,15 +209,11 @@ TEST_F(DatasetIndexTest, RejectsDuplicateCanonicalTableNames) {
         if (section.type == DatasetIndexSectionType::TABLE_NAME_INDEX) {
             const TableNameIndexRecord duplicate = {
                 dataset_index_name_hash("table", 5), 0, 1};
-            const uint8_t* data = reinterpret_cast<const uint8_t*>(&duplicate);
-            section.bytes.insert(section.bytes.end(), data,
-                                 data + sizeof(duplicate));
+            append_fixed_record(section, duplicate);
             ++section.count;
         } else if (section.type == DatasetIndexSectionType::TABLE_RECORD) {
             const TableRecord duplicate = {0, 0, 0, 0, 0, 0, 0};
-            const uint8_t* data = reinterpret_cast<const uint8_t*>(&duplicate);
-            section.bytes.insert(section.bytes.end(), data,
-                                 data + sizeof(duplicate));
+            append_fixed_record(section, duplicate);
             ++section.count;
         }
     }

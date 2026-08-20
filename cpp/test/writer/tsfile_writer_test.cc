@@ -20,9 +20,16 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstring>
 #include <fstream>
 #include <random>
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "common/path.h"
 #include "common/record.h"
@@ -78,6 +85,18 @@ class TsFileWriterTest : public ::testing::Test {
         for (int i = 0; i < length; ++i) {
             random_string += chars[dis(gen)];
         }
+
+        // CTest runs writer tests in separate processes. A clock-seeded
+        // generator can produce the same name when two processes start in
+        // the same clock tick, allowing one test to remove the other's file.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> counter{0};
+        random_string += "_" + std::to_string(process_id) + "_" +
+                         std::to_string(counter.fetch_add(1));
         return random_string;
     }
 
