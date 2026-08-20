@@ -497,7 +497,7 @@ TEST(CliE2E, WriteRejectsOutputEqualsInput) {
     int code = tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
                                     "INT64", "-i", csv, "-o", csv},
                                    out, err);
-    EXPECT_EQ(code, 1);
+    EXPECT_EQ(code, 3);
     EXPECT_NE(err.str().find("same as the input"), std::string::npos)
         << err.str();
     // The input file must be untouched.
@@ -795,10 +795,13 @@ TEST(CliE2E, WriteVerboseEchoesConfig) {
                                     "INT64", "-v", "-i", csv, "-o", out_path},
                                    out, err);
     EXPECT_EQ(code, 0) << err.str();
-    EXPECT_NE(err.str().find("table=vt"), std::string::npos) << err.str();
-    EXPECT_NE(err.str().find("column s1:INT64:field"), std::string::npos)
+    EXPECT_NE(err.str().find("created model=table object=vt rows=1 output="),
+              std::string::npos)
         << err.str();
-    EXPECT_NE(err.str().find("wrote 1 rows"), std::string::npos) << err.str();
+    EXPECT_NE(err.str().find("column=s1 category=FIELD data_type=INT64"),
+              std::string::npos)
+        << err.str();
+    EXPECT_NE(err.str().find("source=default"), std::string::npos) << err.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -984,14 +987,13 @@ TEST(CliE2E, WriteAcceptsDateBoundary) {
         << err;  // leap day
 }
 
-// An empty cell writes a null, which JSON renders as null (not the type's
-// zero).
-TEST(CliE2E, WriteEmptyCellBecomesNull) {
+// CSV nulls use unquoted \N; quoted empty strings stay distinct from null.
+TEST(CliE2E, WriteDistinguishesCsvNullAndEmptyString) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_null", ".csv");
     {
         std::ofstream o(csv.c_str());
-        o << "time,id,n\n0,dev,\n";  // n is empty -> null
+        o << "time,id,n\n0,dev,\\N\n1,\"\",7\n";
     }
     std::string out_path =
         tsfile_cli_test::unique_temp_path("tsfile_cli_null_out", ".tsfile");
@@ -1010,6 +1012,7 @@ TEST(CliE2E, WriteEmptyCellBecomesNull) {
         tsfile_cli::run_cli({"cat", "-f", "ndjson", out_path}, rout, rerr), 0)
         << rerr.str();
     EXPECT_NE(rout.str().find("\"n\":null"), std::string::npos) << rout.str();
+    EXPECT_NE(rout.str().find("\"id\":\"\""), std::string::npos) << rout.str();
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());

@@ -346,7 +346,14 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 p.error = "Missing value for " + a;
                 return p;
             }
-            i += 2;  // Parsed for syntax now; write currently uses engine defaults.
+            ParsedArgs::PhysicalOverride override;
+            override.kind =
+                a == "--encoding"
+                    ? ParsedArgs::PhysicalOverride::Kind::kEncoding
+                    : ParsedArgs::PhysicalOverride::Kind::kCompression;
+            override.data_type = args[++i];
+            override.value = args[++i];
+            p.physical_overrides.push_back(override);
         } else if (a == "--force") {
             if (force_set) {
                 p.error = "--force specified more than once";
@@ -385,8 +392,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
                 return p;
             }
             if (val != "all" && val != "any") {
-                p.error = "Invalid --tag-match: " + val +
-                          " (use all or any)";
+                p.error = "Invalid --tag-match: " + val + " (use all or any)";
                 return p;
             }
             if (!p.tag_match.empty()) {

@@ -89,15 +89,15 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 
 | Command | Description |
 |---|---|
-| `ls` | List devices (tree model) or tables (table model), one name per line |
-| `schema` | Per-series `target, measurement, datatype, encoding, compression` |
+| `ls` | List pure-model objects as `model, object` rows |
+| `schema` | List schema rows for devices or tables |
 | `meta` | File summary: `size_bytes`, `format_version`, and `model` |
-| `stats` | Per-series `count, start_time, end_time, min, max, first, last, sum` |
-| `count` | Per-series row counts plus a `total` row (from statistics, no page scan) |
+| `stats` | FIELD statistics with counts, null counts, time range, values, and source |
+| `count` | Object/column counts; no synthetic summary row |
 | `sketch` | Print the physical file sketch, optionally to `-o` |
 | `head` | First N rows (default 10; use `-n`) |
 | `cat` | All matching rows, streamed (`table` format buffers to align columns) |
-| `export` | Export one object to `-o`, or multiple objects to `--output-dir` |
+| `export` | Export one object to `-o`, or multiple objects to `--output-dir`, using `--type` |
 
 The metadata commands (`ls` / `schema` / `meta` / `stats` / `count`) answer most questions
 without decoding data pages.
@@ -108,16 +108,17 @@ Shared options:
 |---|---|
 | `-f, --format table\|ndjson\|csv` | Output format; defaults to `table` |
 | `-d, --device <id>` / `-t, --table <name>` | Scope to one device / table (mutually exclusive) |
-| `-m, --measurements <name>` | Column projection; repeat once per column |
+| `-m, --measurements <name>` | Column projection; repeat once per column. For `stats`, only FIELD columns are valid |
 | `-n, --limit N` / `--offset N` | Max rows / rows to skip (`head`, `cat`, `export`) |
-| `--start <ms>` / `--end <ms>` | Inclusive epoch-millisecond time range (`head`, `cat`, `export`) |
+| `--start <time>` / `--end <time>` | Inclusive raw int64 timestamp range (`head`, `cat`, `export`) |
 | `--tag-filter C OP [V]` | Table TAG predicate for row reads; `OP` is `eq`, `neq`, `regexp`, `is-null`, or `not-null` |
 | `--tag-match all\|any` | Required when more than one `--tag-filter` is supplied |
 
 `ndjson` output emits one JSON object per line; numbers/booleans are bare, other values are
 quoted, nulls are `null`, and non-finite floats become `null`. CSV output follows RFC 4180.
-Timestamps are raw epoch milliseconds. The `table` format buffers all rows in memory to
-align columns, so prefer `csv`/`ndjson` when dumping large files.
+CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Timestamps are raw int64
+values. The `table` format buffers all rows in memory to align columns, so prefer
+`csv`/`ndjson` when dumping large files. `sketch` does not accept `--format`.
 
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli
@@ -131,37 +132,49 @@ $BIN export -t table1 --type csv -o table1.csv data.tsfile
 
 ### Writing (import)
 
-`tsfile-cli write` imports CSV rows into a **new table-model** `.tsfile`. The first input
-column is the timestamp (epoch milliseconds); the remaining columns are declared explicitly
-with repeated `--tag` and `--field` options. There is no type inference.
+`tsfile-cli write` imports strict CSV rows into a **new table-model** `.tsfile`.
+It never creates a tree-model file. The CSV must contain a unique header with the
+reserved `time` column plus exactly the TAG and FIELD names declared on the command line.
+Data rows are mapped by header name, not by physical column order. There is no type
+inference.
 
 Timestamps must be **strictly increasing per device**, where a device is identified by its
 `tag` column values (rows that share the same tags form one device's timeline). Rows for
 different tag combinations may freely interleave and reuse timestamps. Out-of-order input is
 rejected with the offending line number, and a failed import leaves no output file behind.
-`--output` must differ from the input file.
+`--output` must not already exist and must differ from the input file.
 
 ```
 tsfile-cli write --table <name> [--tag <name> STRING]... --field <name> <TYPE>... \
                  -o <out.tsfile> (--input <csv> | --stdin) \
-                 [--no-header] [--header-match] [-v]
+                 [--encoding <TYPE> <ENC>]... [--compression <TYPE> <COMP>]... [-v]
 ```
 
 `TYPE` is one of `BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE, BLOB`.
-`DATE` cells are written as `YYYY-MM-DD`; `TIMESTAMP` cells as epoch milliseconds. Each column is
-stored with the engine's default encoding and compression for its type.
+`DATE` cells are written as `YYYY-MM-DD`; `TIMESTAMP` cells as raw int64 timestamps.
+By default each column uses the engine's default encoding and compression for its type.
+`--encoding` and `--compression` override by canonical data type, applying to every declared
+TAG/FIELD of that type; they do not target individual columns and do not affect `time`.
 
 | Option | Meaning |
 |---|---|
 | `--table <name>` | Output table name (lower-cased) |
 | `--tag <name> STRING` | Ordered TAG column; may be repeated |
 | `--field <name> <TYPE>` | Ordered FIELD column; may be repeated |
+| `--encoding <TYPE> <ENC>` | Override encoding for all declared columns of the data type |
+| `--compression <TYPE> <COMP>` | Override compression for all declared columns of the data type |
 | `-o, --output <path>` | Output `.tsfile` (required; must not already exist) |
 | `-i, --input <path>` / `--stdin` | Choose exactly one CSV input source |
 | `-v, --verbose` | Print a creation summary to stderr after commit (otherwise silent on success) |
 
-An empty cell is written as null. The command is silent on success (Unix-style); pass `-v`
-for a one-line summary.
+CSV input uses RFC 4180 quoting with comma separators. A null value is unquoted `\N`;
+an empty string is `""`. Header errors, unused or duplicate physical overrides, unknown
+types, and incompatible encodings fail before data rows are read. Target-file problems
+such as an existing output, a missing parent directory, or output equal to input return
+exit code `3`.
+
+The command is silent on success (Unix-style). With `-v`, it prints a post-commit summary
+and the effective physical settings for each declared column.
 
 ```bash
 # round-trip through a pipe

@@ -21,14 +21,16 @@
 #include <sys/stat.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -42,6 +44,7 @@
 #include "common/tablet.h"
 #include "file/write_file.h"
 #include "format/input_format.h"
+#include "format/output_format.h"
 #include "writer/tsfile_table_writer.h"
 
 #ifdef _WIN32
@@ -51,10 +54,20 @@
 namespace tsfile_cli {
 namespace {
 
+struct CsvCell {
+    std::string value;
+    bool quoted;
+};
+
 struct DataRow {
     long long line_no;
     int64_t timestamp;
-    std::vector<std::string> cells;
+    std::vector<CsvCell> cells;
+};
+
+struct WritePhysicalConfig {
+    std::map<common::TSDataType, common::TSEncoding> encodings;
+    std::map<common::TSDataType, common::CompressionType> compressions;
 };
 
 bool has_strict_decimal_body(const std::string& s, size_t start) {
@@ -125,14 +138,12 @@ bool same_file_identity(const std::string& input_path, const struct stat& a,
     std::string output_norm = output_res == nullptr ? output_path : output_full;
     std::replace(input_norm.begin(), input_norm.end(), '\\', '/');
     std::replace(output_norm.begin(), output_norm.end(), '\\', '/');
-    std::transform(input_norm.begin(), input_norm.end(), input_norm.begin(),
-                   [](unsigned char c) {
-                       return static_cast<char>(std::tolower(c));
-                   });
-    std::transform(output_norm.begin(), output_norm.end(), output_norm.begin(),
-                   [](unsigned char c) {
-                       return static_cast<char>(std::tolower(c));
-                   });
+    std::transform(
+        input_norm.begin(), input_norm.end(), input_norm.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(
+        output_norm.begin(), output_norm.end(), output_norm.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return input_norm == output_norm;
 #else
     return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
@@ -159,12 +170,257 @@ bool parse_date_cell(const std::string& cell, std::tm& out) {
     return common::DateConverter::date_to_int(out, date_int) == common::E_OK;
 }
 
+std::string lower_ascii(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+bool parse_encoding_name(const std::string& name, common::TSEncoding& out) {
+    static const std::pair<const char*, common::TSEncoding> kEncodings[] = {
+        {"PLAIN", common::PLAIN},
+        {"DICTIONARY", common::DICTIONARY},
+        {"RLE", common::RLE},
+        {"DIFF", common::DIFF},
+        {"TS_2DIFF", common::TS_2DIFF},
+        {"BITMAP", common::BITMAP},
+        {"GORILLA_V1", common::GORILLA_V1},
+        {"REGULAR", common::REGULAR},
+        {"GORILLA", common::GORILLA},
+        {"ZIGZAG", common::ZIGZAG},
+        {"FREQ", common::FREQ},
+        {"CHIMP", common::CHIMP},
+        {"SPRINTZ", common::SPRINTZ},
+        {"RLBE", common::RLBE},
+        {"CAMEL", common::CAMEL},
+    };
+    for (const auto& e : kEncodings) {
+        if (name == e.first) {
+            out = e.second;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool parse_compression_name(const std::string& name,
+                            common::CompressionType& out) {
+    static const std::pair<const char*, common::CompressionType>
+        kCompressions[] = {{"UNCOMPRESSED", common::UNCOMPRESSED},
+                           {"SNAPPY", common::SNAPPY},
+                           {"GZIP", common::GZIP},
+                           {"LZO", common::LZO},
+                           {"SDT", common::SDT},
+                           {"PAA", common::PAA},
+                           {"PLA", common::PLA},
+                           {"LZ4", common::LZ4},
+                           {"ZSTD", common::ZSTD},
+                           {"LZMA2", common::LZMA2}};
+    for (const auto& c : kCompressions) {
+        if (name == c.first) {
+            out = c.second;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool encoding_supported(common::TSDataType type, common::TSEncoding encoding) {
+    switch (type) {
+        case common::BOOLEAN:
+            return encoding == common::PLAIN;
+        case common::INT32:
+        case common::DATE:
+        case common::INT64:
+        case common::TIMESTAMP:
+            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
+                   encoding == common::GORILLA || encoding == common::ZIGZAG ||
+                   encoding == common::RLE || encoding == common::SPRINTZ ||
+                   encoding == common::CHIMP || encoding == common::RLBE;
+        case common::FLOAT:
+            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
+                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
+                   encoding == common::CHIMP || encoding == common::RLBE;
+        case common::DOUBLE:
+            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
+                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
+                   encoding == common::CHIMP || encoding == common::RLBE ||
+                   encoding == common::CAMEL;
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB:
+            return encoding == common::PLAIN || encoding == common::DICTIONARY;
+        default:
+            return false;
+    }
+}
+
+bool compression_supported(common::CompressionType compression) {
+    return compression == common::UNCOMPRESSED ||
+           compression == common::SNAPPY || compression == common::GZIP ||
+           compression == common::LZO || compression == common::LZ4 ||
+           compression == common::ZSTD || compression == common::LZMA2;
+}
+
+bool build_physical_config(const ParsedArgs& args,
+                           const std::vector<ColumnDef>& columns,
+                           WritePhysicalConfig& config, std::ostream& err) {
+    std::set<common::TSDataType> used_types;
+    for (const ColumnDef& c : columns) {
+        used_types.insert(c.type);
+    }
+    for (const ParsedArgs::PhysicalOverride& o : args.physical_overrides) {
+        common::TSDataType type = common::INVALID_DATATYPE;
+        if (!parse_datatype_name(o.data_type, type) ||
+            o.data_type != tsdatatype_name(type)) {
+            err << "Error: physical override type '" << o.data_type
+                << "' must be a used canonical data type\n";
+            return false;
+        }
+        if (used_types.find(type) == used_types.end()) {
+            err << "Error: physical override type " << o.data_type
+                << " is not used by any declared TAG or FIELD\n";
+            return false;
+        }
+        if (o.kind == ParsedArgs::PhysicalOverride::Kind::kEncoding) {
+            if (config.encodings.find(type) != config.encodings.end()) {
+                err << "Error: encoding for data type " << o.data_type
+                    << " specified more than once\n";
+                return false;
+            }
+            common::TSEncoding encoding = common::INVALID_ENCODING;
+            if (!parse_encoding_name(o.value, encoding) ||
+                !encoding_supported(type, encoding)) {
+                err << "Error: encoding " << o.value
+                    << " is not supported for data type " << o.data_type
+                    << "\n";
+                return false;
+            }
+            config.encodings[type] = encoding;
+        } else {
+            if (config.compressions.find(type) != config.compressions.end()) {
+                err << "Error: compression for data type " << o.data_type
+                    << " specified more than once\n";
+                return false;
+            }
+            common::CompressionType compression = common::INVALID_COMPRESSION;
+            if (!parse_compression_name(o.value, compression) ||
+                !compression_supported(compression)) {
+                err << "Error: compression " << o.value
+                    << " is not supported\n";
+                return false;
+            }
+            config.compressions[type] = compression;
+        }
+    }
+    return true;
+}
+
+bool build_header_mapping(const std::string& header,
+                          const std::vector<ColumnDef>& columns,
+                          std::vector<size_t>& field_indexes,
+                          size_t& time_index, std::ostream& err) {
+    std::vector<std::string> fields = split_line(header, ',', true);
+    std::set<std::string> seen_lower;
+    std::map<std::string, size_t> header_indexes;
+    bool found_time = false;
+    for (size_t i = 0; i < fields.size(); ++i) {
+        std::string folded = lower_ascii(fields[i]);
+        if (seen_lower.find(folded) != seen_lower.end()) {
+            err << "Error: CSV header name '" << fields[i]
+                << "' conflicts case-insensitively\n";
+            return false;
+        }
+        seen_lower.insert(folded);
+        if (folded == "time") {
+            found_time = true;
+            time_index = i;
+        } else {
+            header_indexes[fields[i]] = i;
+        }
+    }
+    if (!found_time) {
+        err << "Error: CSV header is missing required column 'time'\n";
+        return false;
+    }
+
+    std::set<std::string> declared;
+    field_indexes.clear();
+    field_indexes.reserve(columns.size());
+    for (const ColumnDef& c : columns) {
+        declared.insert(c.name);
+        auto it = header_indexes.find(c.name);
+        if (it == header_indexes.end()) {
+            err << "Error: CSV header is missing required column '" << c.name
+                << "'\n";
+            return false;
+        }
+        field_indexes.push_back(it->second);
+    }
+    for (const auto& kv : header_indexes) {
+        if (declared.find(kv.first) == declared.end()) {
+            err << "Error: CSV contains undeclared column '" << kv.first
+                << "'\n";
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<CsvCell> split_csv_cells(const std::string& line, char delim,
+                                     bool& closed_quotes) {
+    std::vector<CsvCell> out;
+    CsvCell field;
+    field.quoted = false;
+    bool in_quotes = false;
+    bool at_field_start = true;
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+        if (in_quotes) {
+            if (c == '"') {
+                if (i + 1 < line.size() && line[i + 1] == '"') {
+                    field.value += '"';
+                    ++i;
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                field.value += c;
+            }
+        } else if (c == '"') {
+            if (at_field_start) {
+                field.quoted = true;
+            }
+            in_quotes = true;
+            at_field_start = false;
+        } else if (c == delim) {
+            out.push_back(field);
+            field = CsvCell();
+            at_field_start = true;
+        } else {
+            field.value += c;
+            at_field_start = false;
+        }
+    }
+    out.push_back(field);
+    closed_quotes = !in_quotes;
+    return out;
+}
+
+bool is_csv_null(const CsvCell& cell) {
+    return !cell.quoted && cell.value == "\\N";
+}
+
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                      uint32_t schema_index, const ColumnDef& def,
-                     const std::string& cell, std::string& error) {
-    if (cell.empty()) {
+                     const CsvCell& csv_cell, std::string& error) {
+    if (is_csv_null(csv_cell)) {
         return true;  // null
     }
+    const std::string& cell = csv_cell.value;
     char* e = nullptr;
     switch (def.type) {
         case common::BOOLEAN: {
@@ -279,6 +535,10 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         err << "Error: " << perr << "\n";
         return kExitUsage;
     }
+    WritePhysicalConfig physical_config;
+    if (!build_physical_config(args, columns, physical_config, err)) {
+        return kExitUsage;
+    }
 
     std::istream* in = &std::cin;
     std::ifstream fin;
@@ -299,50 +559,27 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         in = &fin;
     }
 
-    const char delim = (args.format == ParsedArgs::Format::kTsv) ? '\t' : ',';
-    const bool csv_quotes = (delim == ',');
-
-    if (args.verbose) {
-        // Echo the resolved write configuration so the user can self-check the
-        // parsed flags before any rows are imported.
-        err << "write: table=" << args.table << " output=" << args.output
-            << " input=" << (args.file.empty() ? "-" : args.file)
-            << " format=" << (delim == '\t' ? "tsv" : "csv")
-            << " header=" << (args.no_header ? "none" : "yes")
-            << (args.header_match ? " (match)" : "") << "\n";
-        for (const ColumnDef& d : columns) {
-            err << "  column " << d.name << ":" << tsdatatype_name(d.type) << ":"
-                << (d.category == common::ColumnCategory::TAG ? "tag" : "field")
-                << "\n";
-        }
-    }
+    const char delim = ',';
+    const bool csv_quotes = true;
 
     std::string line;
     long long line_no = 0;
     long long record_lines = 0;
-    if (!args.no_header) {
-        if (read_record(*in, csv_quotes, line, record_lines)) {
-            line_no += record_lines;
-            if (args.header_match) {
-                std::vector<std::string> h =
-                    split_line(line, delim, csv_quotes);
-                const size_t expected = columns.size() + 1;
-                if (h.size() != expected) {
-                    err << "Error: header has " << h.size()
-                        << " columns, expected " << expected
-                        << " (time + declared columns) (line 1)\n";
-                    return kExitFile;
-                }
-                for (size_t i = 0; i < columns.size(); ++i) {
-                    if (h[i + 1] != columns[i].name) {
-                        err << "Error: header column " << (i + 2) << " is '"
-                            << h[i + 1] << "', expected '" << columns[i].name
-                            << "' (line 1)\n";
-                        return kExitFile;
-                    }
-                }
-            }
-        }
+    if (!read_record(*in, csv_quotes, line, record_lines)) {
+        err << "Error: CSV header is missing required column 'time'\n";
+        return kExitFile;
+    }
+    line_no += record_lines;
+    bool closed_quotes = true;
+    split_csv_cells(line, delim, closed_quotes);
+    if (!closed_quotes) {
+        err << "Error: unterminated quoted CSV field in header\n";
+        return kExitFile;
+    }
+    std::vector<size_t> field_indexes;
+    size_t time_index = 0;
+    if (!build_header_mapping(line, columns, field_indexes, time_index, err)) {
+        return kExitFile;
     }
 
     std::vector<std::string> names;
@@ -355,9 +592,18 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         names.push_back(d.name);
         types.push_back(d.type);
         cats.push_back(d.category);
-        col_schemas.push_back(common::ColumnSchema(
-            d.name, d.type, common::get_default_compressor(),
-            common::get_value_encoder(d.type), d.category));
+        common::CompressionType compression = common::get_default_compressor();
+        auto comp_it = physical_config.compressions.find(d.type);
+        if (comp_it != physical_config.compressions.end()) {
+            compression = comp_it->second;
+        }
+        common::TSEncoding encoding = common::get_value_encoder(d.type);
+        auto enc_it = physical_config.encodings.find(d.type);
+        if (enc_it != physical_config.encodings.end()) {
+            encoding = enc_it->second;
+        }
+        col_schemas.push_back(common::ColumnSchema(d.name, d.type, compression,
+                                                   encoding, d.category));
         if (d.category == common::ColumnCategory::TAG) {
             tag_idx.push_back(j);
         }
@@ -373,7 +619,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
                                output_stat)) {
             err << "Error: --output is the same as the input file: "
                 << args.output << "\n";
-            return kExitUsage;
+            return kExitRuntime;
         }
     }
     if (path_exists(args.output)) {
@@ -390,7 +636,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     if (cret != 0) {
         err << "Error: cannot create output " << args.output << ": "
             << error_code_message(cret) << " (code " << cret << ")\n";
-        return kExitFile;
+        return kExitRuntime;
     }
     auto* schema = new storage::TableSchema(args.table, col_schemas);
     auto* writer = new storage::TsFileTableWriter(&file, schema);
@@ -443,28 +689,44 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (line.empty()) {
             continue;
         }
-        std::vector<std::string> fields = split_line(line, delim, csv_quotes);
-        if (fields.size() != columns.size() + 1) {
-            err << "Error: expected " << (columns.size() + 1) << " fields, got "
-                << fields.size() << " (line " << line_no << ")\n";
+        std::vector<CsvCell> fields =
+            split_csv_cells(line, delim, closed_quotes);
+        if (!closed_quotes) {
+            err << "Error: unterminated quoted CSV field (line " << line_no
+                << ")\n";
+            result_code = kExitFile;
+            break;
+        }
+        if (fields.size() != field_indexes.size() + 1) {
+            err << "Error: expected " << (field_indexes.size() + 1)
+                << " fields, got " << fields.size() << " (line " << line_no
+                << ")\n";
             result_code = kExitFile;
             break;
         }
         int64_t ts = 0;
-        if (!parse_strict_timestamp_cell(fields[0], ts)) {
-            err << "Error: bad timestamp '" << fields[0] << "' (line "
-                << line_no << ")\n";
+        if (!parse_strict_timestamp_cell(fields[time_index].value, ts)) {
+            err << "Error: bad timestamp '" << fields[time_index].value
+                << "' (line " << line_no << ")\n";
             result_code = kExitFile;
             break;
         }
         DataRow r;
         r.line_no = line_no;
         r.timestamp = ts;
-        r.cells.assign(fields.begin() + 1, fields.end());
+        r.cells.resize(columns.size());
+        for (size_t j = 0; j < columns.size(); ++j) {
+            r.cells[j] = fields[field_indexes[j]];
+        }
 
         std::string device_key;
         for (size_t k : tag_idx) {
-            device_key += r.cells[k];
+            if (is_csv_null(r.cells[k])) {
+                device_key += '\1';
+            } else {
+                device_key += '\2';
+                device_key += r.cells[k].value;
+            }
             device_key.push_back('\0');
         }
         auto seen = last_ts_by_device.find(device_key);
@@ -516,7 +778,32 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         file.close();
         std::remove(args.output.c_str());
     } else if (args.verbose) {
-        err << "wrote " << total_rows << " rows to " << args.output << "\n";
+        err << "created model=table object=" << args.table
+            << " rows=" << total_rows << " output=" << args.output << "\n";
+        for (const ColumnDef& d : columns) {
+            auto enc_it = physical_config.encodings.find(d.type);
+            common::TSEncoding encoding =
+                enc_it == physical_config.encodings.end()
+                    ? common::get_value_encoder(d.type)
+                    : enc_it->second;
+            auto comp_it = physical_config.compressions.find(d.type);
+            common::CompressionType compression =
+                comp_it == physical_config.compressions.end()
+                    ? common::get_default_compressor()
+                    : comp_it->second;
+            err << "column=" << d.name << " category="
+                << (d.category == common::ColumnCategory::TAG ? "TAG" : "FIELD")
+                << " data_type=" << tsdatatype_name(d.type)
+                << " encoding=" << tsencoding_name(encoding) << " source="
+                << (enc_it == physical_config.encodings.end() ? "default"
+                                                              : "type-override")
+                << " compression=" << compression_name(compression)
+                << " source="
+                << (comp_it == physical_config.compressions.end()
+                        ? "default"
+                        : "type-override")
+                << "\n";
+        }
     }
     return result_code;
 }

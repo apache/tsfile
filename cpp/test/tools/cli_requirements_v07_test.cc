@@ -131,7 +131,7 @@ TEST(CliRequirementsV07, DuplicateSingletonOptionsAreUsageErrors) {
               std::string::npos)
         << err.str();
 
-    const std::vector<std::vector<std::string> > duplicate_singletons = {
+    const std::vector<std::vector<std::string>> duplicate_singletons = {
         {"cat", "-n", "1", "--limit", "2", f.path},
         {"cat", "--offset", "0", "--offset", "1", f.path},
         {"cat", "--start", "0", "--start", "1", f.path},
@@ -319,6 +319,152 @@ TEST(CliRequirementsV07, WriteUsesExplicitTagAndFieldOptions) {
     std::remove(out_path.c_str());
 }
 
+TEST(CliRequirementsV07, WriteMapsInputByHeaderName) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_header_order", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "temp,time,site\n21.5,1000,beijing\n22.0,2000,shanghai\n";
+    }
+    std::string out_path = tsfile_cli_test::unique_temp_path(
+        "tsfile_cli_header_order_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write", "--table", "sensors", "--tag", "site", "STRING", "--field",
+         "temp", "FLOAT", "-i", csv, "-o", out_path},
+        wout, werr);
+    EXPECT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream rout;
+    std::ostringstream rerr;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"cat", "-t", "sensors", "-f", "csv", out_path}, rout, rerr),
+              0)
+        << rerr.str();
+    EXPECT_EQ(rout.str(),
+              "time,site,temp\n1000,beijing,21.5\n2000,shanghai,22\n");
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, WriteRejectsHeaderShapeErrorsBeforeCreatingOutput) {
+    struct Case {
+        const char* name;
+        const char* content;
+        const char* needle;
+    };
+    const Case cases[] = {
+        {"missing", "time,site\n1000,beijing\n", "missing required column"},
+        {"undeclared", "time,site,temp,status\n1000,beijing,21.5,true\n",
+         "undeclared column"},
+        {"duplicate", "time,site,temp,TEMP\n1000,beijing,21.5,22.0\n",
+         "conflict"},
+    };
+    for (const Case& c : cases) {
+        std::string csv = tsfile_cli_test::unique_temp_path(
+            std::string("tsfile_cli_header_") + c.name, ".csv");
+        {
+            std::ofstream o(csv.c_str());
+            o << c.content;
+        }
+        std::string out_path = tsfile_cli_test::unique_temp_path(
+            std::string("tsfile_cli_header_out_") + c.name, ".tsfile");
+
+        std::ostringstream out;
+        std::ostringstream err;
+        int code = tsfile_cli::run_cli(
+            {"write", "--table", "sensors", "--tag", "site", "STRING",
+             "--field", "temp", "FLOAT", "-i", csv, "-o", out_path},
+            out, err);
+        EXPECT_EQ(code, 2) << c.name << " " << err.str();
+        EXPECT_TRUE(out.str().empty());
+        EXPECT_NE(err.str().find(c.needle), std::string::npos)
+            << c.name << " " << err.str();
+        EXPECT_FALSE(file_exists(out_path));
+
+        std::remove(csv.c_str());
+        std::remove(out_path.c_str());
+    }
+}
+
+TEST(CliRequirementsV07, WriteAppliesAndValidatesTypePhysicalOverrides) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_type_override", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,site,temp,humidity\n"
+             "1000,beijing,21.0,40.5\n"
+             "2000,beijing,21.5,41.0\n";
+    }
+    std::string out_path = tsfile_cli_test::unique_temp_path(
+        "tsfile_cli_type_override_out", ".tsfile");
+
+    std::ostringstream wout;
+    std::ostringstream werr;
+    int wc = tsfile_cli::run_cli(
+        {"write",      "--table",      "sensors",  "--tag",
+         "site",       "STRING",       "--field",  "temp",
+         "FLOAT",      "--field",      "humidity", "FLOAT",
+         "--encoding", "FLOAT",        "GORILLA",  "--compression",
+         "FLOAT",      "UNCOMPRESSED", "-i",       csv,
+         "-o",         out_path},
+        wout, werr);
+    EXPECT_EQ(wc, 0) << werr.str();
+
+    std::ostringstream schema_out;
+    std::ostringstream schema_err;
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"schema", "-t", "sensors", "-f", "csv", out_path},
+                            schema_out, schema_err),
+        0)
+        << schema_err.str();
+    EXPECT_NE(schema_out.str().find(
+                  "table,sensors,temp,FIELD,FLOAT,GORILLA,UNCOMPRESSED\n"),
+              std::string::npos)
+        << schema_out.str();
+    EXPECT_NE(schema_out.str().find(
+                  "table,sensors,humidity,FIELD,FLOAT,GORILLA,UNCOMPRESSED\n"),
+              std::string::npos)
+        << schema_out.str();
+
+    std::ostringstream dup_out;
+    std::ostringstream dup_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"write", "--table", "sensors", "--field", "temp", "FLOAT",
+                   "--encoding", "FLOAT", "GORILLA", "--encoding", "FLOAT",
+                   "PLAIN", "--stdin", "-o", "unused.tsfile"},
+                  dup_out, dup_err),
+              1);
+    EXPECT_NE(dup_err.str().find("specified more than once"), std::string::npos)
+        << dup_err.str();
+
+    std::ostringstream unused_out;
+    std::ostringstream unused_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "sensors", "--field",
+                                   "temp", "FLOAT", "--encoding", "DOUBLE",
+                                   "GORILLA", "--stdin", "-o", "unused.tsfile"},
+                                  unused_out, unused_err),
+              1);
+    EXPECT_NE(unused_err.str().find("not used"), std::string::npos)
+        << unused_err.str();
+
+    std::ostringstream bad_out;
+    std::ostringstream bad_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "binary_data", "--field",
+                                   "payload", "BLOB", "--encoding", "BLOB",
+                                   "GORILLA", "--stdin", "-o", "unused.tsfile"},
+                                  bad_out, bad_err),
+              1);
+    EXPECT_NE(bad_err.str().find("not supported"), std::string::npos)
+        << bad_err.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
 TEST(CliRequirementsV07, WriteRejectsExistingOutputWithoutTruncating) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_existing_in", ".csv");
@@ -387,6 +533,117 @@ TEST(CliRequirementsV07, WriteRejectsNonCanonicalTimeLexemesAsInputErrors) {
         std::remove(csv.c_str());
         std::remove(out_path.c_str());
     }
+}
+
+TEST(CliRequirementsV07, WriteTargetFailuresAreRuntimeErrors) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_target", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,1\n";
+    }
+
+    std::ostringstream same_out;
+    std::ostringstream same_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t1", "--field", "s1",
+                                   "INT64", "-i", csv, "-o", csv},
+                                  same_out, same_err),
+              3);
+    EXPECT_TRUE(same_out.str().empty());
+    EXPECT_NE(same_err.str().find("same as the input"), std::string::npos)
+        << same_err.str();
+    EXPECT_EQ(read_file(csv), "time,s1\n0,1\n");
+
+    std::string parent =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_missing_parent", "");
+    std::string child = parent + "/out.tsfile";
+    std::ostringstream parent_out;
+    std::ostringstream parent_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t1", "--field", "s1",
+                                   "INT64", "-i", csv, "-o", child},
+                                  parent_out, parent_err),
+              3);
+    EXPECT_TRUE(parent_out.str().empty());
+    EXPECT_NE(parent_err.str().find("cannot create output"), std::string::npos)
+        << parent_err.str();
+    EXPECT_FALSE(file_exists(child));
+
+    std::remove(csv.c_str());
+}
+
+TEST(CliRequirementsV07, WriteCsvNullAndEmptyStringRemainDistinctTags) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_tag_null", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,site,temp\n1000,\\N,21.0\n1000,\"\",22.0\n";
+    }
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_tag_null_out", ".tsfile");
+    std::ostringstream out;
+    std::ostringstream err;
+    ASSERT_EQ(tsfile_cli::run_cli(
+                  {"write", "--table", "sensors", "--tag", "site", "STRING",
+                   "--field", "temp", "FLOAT", "-i", csv, "-o", out_path},
+                  out, err),
+              0)
+        << err.str();
+
+    std::ostringstream cat_out;
+    std::ostringstream cat_err;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-t", "sensors", "-f", "ndjson", out_path},
+                            cat_out, cat_err),
+        0)
+        << cat_err.str();
+    EXPECT_NE(cat_out.str().find("\"site\":null"), std::string::npos)
+        << cat_out.str();
+    EXPECT_NE(cat_out.str().find("\"site\":\"\""), std::string::npos)
+        << cat_out.str();
+    EXPECT_NE(cat_out.str().find("\"temp\":21"), std::string::npos)
+        << cat_out.str();
+    EXPECT_NE(cat_out.str().find("\"temp\":22"), std::string::npos)
+        << cat_out.str();
+
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"count", "-t", "sensors", "-m", "site", "-f",
+                                   "csv", out_path},
+                                  count_out, count_err),
+              0)
+        << count_err.str();
+    EXPECT_NE(count_out.str().find("table,sensors,site,TAG,2,2"),
+              std::string::npos)
+        << count_out.str();
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
+}
+
+TEST(CliRequirementsV07, WriteRejectsUnterminatedQuotedCsvField) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_unclosed_quote", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,site,temp\n1000,\"beijing,21.0\n";
+    }
+    std::string out_path = tsfile_cli_test::unique_temp_path(
+        "tsfile_cli_unclosed_quote_out", ".tsfile");
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"write", "--table", "sensors", "--tag", "site", "STRING",
+                   "--field", "temp", "FLOAT", "-i", csv, "-o", out_path},
+                  out, err),
+              2);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("unterminated quoted CSV field"),
+              std::string::npos)
+        << err.str();
+    EXPECT_FALSE(file_exists(out_path));
+
+    std::remove(csv.c_str());
+    std::remove(out_path.c_str());
 }
 
 TEST(CliRequirementsV07, LegacyColumnsOptionIsRejected) {
