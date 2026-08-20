@@ -366,31 +366,44 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
             std::ostream& err) {
     ParsedArgs p = parse_args(args);
 
-    if (p.version) {
-        out << "tsfile-cli " << TSFILE_CLI_VERSION
-            << " tsfile=" << TSFILE_CLI_VERSION
-            << " commit=" << TSFILE_CLI_COMMIT
-            << " built=" << TSFILE_CLI_BUILT << "\n";
-        return kExitOk;
-    }
     if (args.empty()) {
         print_usage(err);
         return kExitUsage;
-    }
-    if (p.command == "help" || p.command == "--help" || p.command == "-h" ||
-        p.help) {
-        print_usage(out);
-        return kExitOk;
     }
     if (!p.error.empty()) {
         err << "Error: " << p.error << "\n";
         print_usage(err);
         return kExitUsage;
     }
+    if (p.command == "--version") {
+        if (args.size() != 1) {
+            err << "Error: --version must appear by itself\n";
+            print_usage(err);
+            return kExitUsage;
+        }
+        out << "tsfile-cli " << TSFILE_CLI_VERSION
+            << " tsfile=" << TSFILE_CLI_VERSION
+            << " commit=" << TSFILE_CLI_COMMIT
+            << " built=" << TSFILE_CLI_BUILT << "\n";
+        return kExitOk;
+    }
+    if (p.command == "help" || p.command == "--help" || p.command == "-h") {
+        if (args.size() != 1) {
+            err << "Error: " << p.command << " must appear by itself\n";
+            print_usage(err);
+            return kExitUsage;
+        }
+        print_usage(out);
+        return kExitOk;
+    }
     if (!is_known_command(p.command)) {
         err << "Unknown command: " << p.command << "\n";
         print_usage(err);
         return kExitUsage;
+    }
+    if (p.help) {
+        print_usage(out);
+        return kExitOk;
     }
     if (p.command != "write" && p.file.empty()) {
         err << "Error: missing <file.tsfile> argument\n";

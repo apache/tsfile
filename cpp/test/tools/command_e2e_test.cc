@@ -682,13 +682,14 @@ TEST(CliE2E, WriteStreamsLargeInputRoundTrips) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliE2E, HelpWithPositionalFilePrintsUsage) {
+TEST(CliE2E, HelpWithPositionalFileIsUsageError) {
     Fixture f;
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"cat", "--help", f.path}, out, err);
-    EXPECT_EQ(code, 0);
-    EXPECT_NE(out.str().find("Usage:"), std::string::npos) << out.str();
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
 }
 
 TEST(CliE2E, StatsRejectsRowOnlyFlag) {

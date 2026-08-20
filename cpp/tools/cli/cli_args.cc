@@ -362,11 +362,17 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         } else if (a == "--no-header") {
             p.no_header = true;
         } else if (a == "-h" || a == "--help") {
+            if (i != 1 || args.size() != 2) {
+                p.error =
+                    "--help must appear by itself or immediately after a "
+                    "command";
+                return p;
+            }
             p.help = true;
-            return p;  // help wins; stop parsing the rest
+            return p;
         } else if (a == "--version") {
-            p.version = true;
-            return p;  // version wins; stop parsing the rest
+            p.error = "--version must appear by itself";
+            return p;
         } else if (a.size() > 1 && a[0] == '-') {
             p.error = "Unknown flag: " + a;
             return p;

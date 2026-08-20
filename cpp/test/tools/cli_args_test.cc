@@ -34,6 +34,34 @@ TEST(RunCliTest, VersionFlagPrintsVersionAndReturnsOk) {
     EXPECT_TRUE(err.str().empty());
 }
 
+TEST(RunCliTest, VersionMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"cat", "--version", "data.tsfile"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--version"), std::string::npos) << err.str();
+}
+
+TEST(RunCliTest, TopLevelHelpMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"--help", "cat"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
+}
+
+TEST(RunCliTest, CommandHelpMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"cat", "--help", "data.tsfile"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
+}
+
 TEST(RunCliTest, NoArgsPrintsUsageToErrAndReturnsUsageError) {
     std::ostringstream out;
     std::ostringstream err;
