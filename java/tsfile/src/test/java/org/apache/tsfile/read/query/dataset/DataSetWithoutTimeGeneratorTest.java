@@ -22,6 +22,7 @@ package org.apache.tsfile.read.query.dataset;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
@@ -36,6 +37,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -54,32 +56,11 @@ public class DataSetWithoutTimeGeneratorTest {
 
     DataSetWithoutTimeGenerator dataSet = new DataSetWithoutTimeGenerator(paths, types, readers);
 
-    assertTrue(dataSet.hasNext());
-    RowRecord row1 = dataSet.next();
-    assertEquals(1L, row1.getTimestamp());
-    assertEquals(10L, row1.getFields().get(0).getLongV());
-    assertNull(row1.getFields().get(1));
-
-    RowRecord row2 = dataSet.next();
-    assertEquals(2L, row2.getTimestamp());
-    assertNull(row2.getFields().get(0));
-    assertEquals(20L, row2.getFields().get(1).getLongV());
-
-    RowRecord row3 = dataSet.next();
-    assertEquals(3L, row3.getTimestamp());
-    assertEquals(30L, row3.getFields().get(0).getLongV());
-    assertEquals(31L, row3.getFields().get(1).getLongV());
-
-    RowRecord row4 = dataSet.next();
-    assertEquals(4L, row4.getTimestamp());
-    assertNull(row4.getFields().get(0));
-    assertEquals(40L, row4.getFields().get(1).getLongV());
-
-    RowRecord row5 = dataSet.next();
-    assertEquals(5L, row5.getTimestamp());
-    assertEquals(50L, row5.getFields().get(0).getLongV());
-    assertNull(row5.getFields().get(1));
-
+    assertRow(dataSet, 1, 10L, null);
+    assertRow(dataSet, 2, null, 20L);
+    assertRow(dataSet, 3, 30L, 31L);
+    assertRow(dataSet, 4, null, 40L);
+    assertRow(dataSet, 5, 50L, null);
     assertFalse(dataSet.hasNext());
   }
 
@@ -99,6 +80,54 @@ public class DataSetWithoutTimeGeneratorTest {
       times.add(dataSet.next().getTimestamp());
     }
     assertEquals(Arrays.asList(1L, 2L, 3L), times);
+  }
+
+  @Test
+  public void testMergeAcrossBatchesAndExtremeTimestamps() throws IOException {
+    AbstractFileSeriesReader firstReader =
+        new FakeSeriesReader(
+            batchOf(TSDataType.INT64, new long[] {Long.MIN_VALUE, -1}, new long[] {10, 11}),
+            batchOf(TSDataType.INT64, new long[] {5, Long.MAX_VALUE}, new long[] {12, 13}));
+    AbstractFileSeriesReader secondReader =
+        new FakeSeriesReader(
+            batchOf(TSDataType.INT64, new long[] {-1, 0}, new long[] {20, 21}),
+            batchOf(TSDataType.INT64, new long[] {6, Long.MAX_VALUE}, new long[] {22, 23}));
+    AbstractFileSeriesReader emptyReader = new FakeSeriesReader();
+
+    DataSetWithoutTimeGenerator dataSet =
+        new DataSetWithoutTimeGenerator(
+            Arrays.asList(
+                new Path("root.d1", "s0", true),
+                new Path("root.d1", "s1", true),
+                new Path("root.d1", "s2", true)),
+            Arrays.asList(TSDataType.INT64, TSDataType.INT64, TSDataType.INT64),
+            Arrays.asList(firstReader, secondReader, emptyReader));
+
+    assertRow(dataSet, Long.MIN_VALUE, 10L, null, null);
+    assertRow(dataSet, -1, 11L, 20L, null);
+    assertRow(dataSet, 0, null, 21L, null);
+    assertRow(dataSet, 5, 12L, null, null);
+    assertRow(dataSet, 6, null, 22L, null);
+    assertRow(dataSet, Long.MAX_VALUE, 13L, 23L, null);
+    assertFalse(dataSet.hasNext());
+  }
+
+  private static void assertRow(
+      DataSetWithoutTimeGenerator dataSet, long timestamp, Long... expectedValues)
+      throws IOException {
+    assertTrue(dataSet.hasNext());
+    RowRecord row = dataSet.next();
+    assertEquals(timestamp, row.getTimestamp());
+    assertEquals(expectedValues.length, row.getFields().size());
+    for (int i = 0; i < expectedValues.length; i++) {
+      Field field = row.getFields().get(i);
+      if (expectedValues[i] == null) {
+        assertNull(field);
+      } else {
+        assertNotNull(field);
+        assertEquals(expectedValues[i].longValue(), field.getLongV());
+      }
+    }
   }
 
   private static BatchData batchOf(TSDataType type, long[] times, long[] values) {

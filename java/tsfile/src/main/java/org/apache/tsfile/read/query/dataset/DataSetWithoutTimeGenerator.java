@@ -26,12 +26,9 @@ import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
-import org.apache.tsfile.utils.LongHeapPriorityQueue;
-import org.apache.tsfile.utils.LongOpenHashSet;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /** multi-way merging data set, no need to use TimeGenerator. */
@@ -39,14 +36,13 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
 
   private final List<AbstractFileSeriesReader> readers;
 
-  private List<BatchData> batchDataList;
+  private BatchData[] batchDataList;
 
-  private List<Boolean> hasDataRemaining;
+  private boolean[] hasDataRemaining;
 
-  /** heap only need to store time. */
-  private LongHeapPriorityQueue timeHeap;
+  private long nextTime;
 
-  private LongOpenHashSet timeSet;
+  private boolean hasNext;
 
   /**
    * constructor of DataSetWithoutTimeGenerator.
@@ -61,53 +57,50 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
       throws IOException {
     super(paths, dataTypes);
     this.readers = readers;
-    initHeap();
+    init();
   }
 
-  private void initHeap() throws IOException {
-    hasDataRemaining = new ArrayList<>();
-    batchDataList = new ArrayList<>();
-    int seriesCount = Math.max(paths.size(), 1);
-    timeHeap = new LongHeapPriorityQueue(seriesCount);
-    timeSet = new LongOpenHashSet(seriesCount);
+  private void init() throws IOException {
+    hasDataRemaining = new boolean[paths.size()];
+    batchDataList = new BatchData[paths.size()];
 
     for (int i = 0; i < paths.size(); i++) {
       AbstractFileSeriesReader reader = readers.get(i);
       if (!reader.hasNextBatch()) {
-        batchDataList.add(new BatchData());
-        hasDataRemaining.add(false);
+        batchDataList[i] = new BatchData();
       } else {
-        batchDataList.add(reader.nextBatch());
-        hasDataRemaining.add(true);
+        batchDataList[i] = reader.nextBatch();
+        hasDataRemaining[i] = true;
       }
     }
 
     for (BatchData data : batchDataList) {
       if (data.hasCurrent()) {
-        timeHeapPut(data.currentTime());
+        updateNextTime(data.currentTime());
       }
     }
   }
 
   @Override
   public boolean hasNextWithoutConstraint() {
-    return !timeHeap.isEmpty();
+    return hasNext;
   }
 
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   @Override
   public RowRecord nextWithoutConstraint() throws IOException {
-    long minTime = timeHeapGet();
+    long minTime = nextTime;
+    hasNext = false;
 
     RowRecord rowRecord = new RowRecord(minTime);
 
     for (int i = 0; i < paths.size(); i++) {
-      if (Boolean.FALSE.equals(hasDataRemaining.get(i))) {
+      if (!hasDataRemaining[i]) {
         rowRecord.addField(null);
         continue;
       }
 
-      BatchData data = batchDataList.get(i);
+      BatchData data = batchDataList[i];
 
       if (data.hasCurrent() && data.currentTime() == minTime) {
         Field field = putValueToField(data);
@@ -118,36 +111,31 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
           if (reader.hasNextBatch()) {
             data = reader.nextBatch();
             if (data.hasCurrent()) {
-              batchDataList.set(i, data);
-              timeHeapPut(data.currentTime());
+              batchDataList[i] = data;
             } else {
-              hasDataRemaining.set(i, false);
+              hasDataRemaining[i] = false;
             }
           } else {
-            hasDataRemaining.set(i, false);
+            hasDataRemaining[i] = false;
           }
-        } else {
-          timeHeapPut(data.currentTime());
         }
         rowRecord.addField(field);
       } else {
         rowRecord.addField(null);
       }
+
+      if (hasDataRemaining[i] && data.hasCurrent()) {
+        updateNextTime(data.currentTime());
+      }
     }
     return rowRecord;
   }
 
-  /** keep heap from storing duplicate time. */
-  private void timeHeapPut(long time) {
-    if (timeSet.add(time)) {
-      timeHeap.enqueue(time);
+  private void updateNextTime(long time) {
+    if (!hasNext || time < nextTime) {
+      nextTime = time;
+      hasNext = true;
     }
-  }
-
-  private long timeHeapGet() {
-    long t = timeHeap.dequeueLong();
-    timeSet.remove(t);
-    return t;
   }
 
   private Field putValueToField(BatchData col) {
