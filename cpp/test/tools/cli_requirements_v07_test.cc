@@ -70,6 +70,76 @@ TEST(CliRequirementsV07, HelpListsExactlyCurrentCommandSurface) {
     EXPECT_TRUE(err.str().empty());
 }
 
+TEST(CliRequirementsV07,
+     CommandHelpIsSpecificAndDocumentsSyntaxFieldsExamples) {
+    const std::vector<std::string> commands = {
+        "ls",     "schema", "meta", "stats",  "count",
+        "sketch", "head",   "cat",  "export", "write"};
+    for (const auto& command : commands) {
+        std::ostringstream out;
+        std::ostringstream err;
+        EXPECT_EQ(tsfile_cli::run_cli({command, "--help"}, out, err), 0)
+            << command;
+        EXPECT_TRUE(err.str().empty()) << command << ": " << err.str();
+        EXPECT_NE(out.str().find("Usage: tsfile-cli " + command),
+                  std::string::npos)
+            << command << ": " << out.str();
+        EXPECT_NE(out.str().find("Result fields:"), std::string::npos)
+            << command << ": " << out.str();
+        EXPECT_NE(out.str().find("Examples:"), std::string::npos)
+            << command << ": " << out.str();
+        EXPECT_EQ(out.str().find("Commands:"), std::string::npos)
+            << command << ": " << out.str();
+    }
+
+    std::ostringstream meta_out;
+    std::ostringstream meta_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"meta", "--help"}, meta_out, meta_err), 0);
+    EXPECT_TRUE(meta_err.str().empty());
+    EXPECT_NE(meta_out.str().find("Usage: tsfile-cli meta"), std::string::npos)
+        << meta_out.str();
+    EXPECT_NE(meta_out.str().find("Result fields:"), std::string::npos)
+        << meta_out.str();
+    EXPECT_NE(meta_out.str().find("size_bytes,format_version,model"),
+              std::string::npos)
+        << meta_out.str();
+    EXPECT_NE(meta_out.str().find("Examples:"), std::string::npos)
+        << meta_out.str();
+    EXPECT_EQ(meta_out.str().find("Commands:"), std::string::npos)
+        << meta_out.str();
+
+    std::ostringstream write_out;
+    std::ostringstream write_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "-h"}, write_out, write_err), 0);
+    EXPECT_TRUE(write_err.str().empty());
+    EXPECT_NE(write_out.str().find("Usage: tsfile-cli write"),
+              std::string::npos)
+        << write_out.str();
+    EXPECT_NE(write_out.str().find("--field <name> <type>"), std::string::npos)
+        << write_out.str();
+    EXPECT_NE(write_out.str().find("Default: success is silent"),
+              std::string::npos)
+        << write_out.str();
+    EXPECT_NE(write_out.str().find("Examples:"), std::string::npos)
+        << write_out.str();
+    EXPECT_EQ(write_out.str().find("Commands:"), std::string::npos)
+        << write_out.str();
+}
+
+TEST(CliRequirementsV07, SkillShipsRequiredReferenceFiles) {
+    const std::string root = "cpp/tools/skills/tsfile-cli/references/";
+    const std::vector<std::string> refs = {"commands.md", "errors.md",
+                                           "examples.md"};
+    for (const auto& ref : refs) {
+        std::ifstream in(root + ref);
+        ASSERT_TRUE(in.good()) << ref;
+        std::ostringstream body;
+        body << in.rdbuf();
+        EXPECT_NE(body.str().find("tsfile-cli"), std::string::npos)
+            << root + ref;
+    }
+}
+
 TEST(CliRequirementsV07, SampleIsNotACommand) {
     std::ostringstream out;
     std::ostringstream err;

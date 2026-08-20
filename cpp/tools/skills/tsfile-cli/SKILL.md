@@ -28,6 +28,12 @@ Single pipe-friendly C++ binary to inspect, read, export, and create `.tsfile`
 files. Source `cpp/tools/`. Result data goes to stdout except `export`,
 `sketch -o`, and `write`; diagnostics go to stderr.
 
+Reference files:
+
+- `references/commands.md`: command syntax and result fields.
+- `references/errors.md`: exit-code and failure-handling rules.
+- `references/examples.md`: reviewed command recipes.
+
 ## Binary
 
 - Name `tsfile-cli` (CMake target `tsfile_cli`). Find: `ls cpp/build/*/bin/tsfile-cli`.

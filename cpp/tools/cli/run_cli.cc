@@ -80,11 +80,142 @@ void print_usage(std::ostream& os) {
           "      --version                  print version\n";
 }
 
+void print_command_usage(const std::string& command, std::ostream& os) {
+    if (command == "ls") {
+        os << "Usage: tsfile-cli ls [-f|--format table|ndjson|csv] "
+              "<file.tsfile>\n"
+              "Lists every tree device or table object in a pure-model "
+              "TsFile.\n"
+              "Result fields: model,object\n"
+              "Default: --format table\n"
+              "Examples:\n"
+              "  tsfile-cli ls data.tsfile\n"
+              "  tsfile-cli ls -f ndjson data.tsfile\n";
+    } else if (command == "schema") {
+        os << "Usage: tsfile-cli schema [-d|--device <device> | "
+              "-t|--table <table>] [-m|--measurements <column>]... "
+              "[-f|--format table|ndjson|csv] <file.tsfile>\n"
+              "Shows TIME/TAG/ATTRIBUTE/FIELD structure and physical "
+              "settings.\n"
+              "Result fields: model,object,column,category,data_type,encoding,"
+              "compression\n"
+              "Default: --format table; omitted scope is valid only for a "
+              "single-object pure-model file.\n"
+              "Examples:\n"
+              "  tsfile-cli schema -t sensors -f csv data.tsfile\n"
+              "  tsfile-cli schema -d root.sg.d1 -m temperature data.tsfile\n";
+    } else if (command == "meta") {
+        os << "Usage: tsfile-cli meta [-f|--format table|ndjson|csv] "
+              "<file.tsfile>\n"
+              "Shows file-level metadata for a pure tree or pure table "
+              "TsFile.\n"
+              "Result fields: size_bytes,format_version,model\n"
+              "Default: --format table\n"
+              "Examples:\n"
+              "  tsfile-cli meta data.tsfile\n"
+              "  tsfile-cli meta -f ndjson data.tsfile\n";
+    } else if (command == "stats") {
+        os << "Usage: tsfile-cli stats [-d|--device <device> | "
+              "-t|--table <table>] [-m|--measurements <field>]... "
+              "[-f|--format table|ndjson|csv] <file.tsfile>\n"
+              "Shows FIELD value statistics and null counts.\n"
+              "Result fields: tree uses model,object,field,data_type,"
+              "non_null_count,null_count,min_time,max_time,min,max,first,last,"
+              "sum,stats_source; table inserts tag.<name> fields after "
+              "object.\n"
+              "Default: --format table; omitted scope is valid only for a "
+              "single-object pure-model file.\n"
+              "Examples:\n"
+              "  tsfile-cli stats -t sensors -m temperature -f csv "
+              "data.tsfile\n";
+    } else if (command == "count") {
+        os << "Usage: tsfile-cli count [-d|--device <device> | "
+              "-t|--table <table>] [-m|--measurements <column>]... "
+              "[-f|--format table|ndjson|csv] <file.tsfile>\n"
+              "Shows logical row, entity, and column counts.\n"
+              "Result fields: model,object,column,category,row_count,"
+              "entity_count,non_null_count,null_count,min_time,max_time,"
+              "time_source\n"
+              "Default: --format table; omitted scope is valid only for a "
+              "single-object pure-model file.\n"
+              "Examples:\n"
+              "  tsfile-cli count -t sensors -m site -f csv data.tsfile\n";
+    } else if (command == "sketch") {
+        os << "Usage: tsfile-cli sketch [-o|--output <file>] [--force] "
+              "<file.tsfile>\n"
+              "Writes the physical layout text from the bound printSketch "
+              "behavior.\n"
+              "Result fields: printSketch text; --format is not supported.\n"
+              "Default: stdout; --force requires --output and replaces only a "
+              "regular file.\n"
+              "Examples:\n"
+              "  tsfile-cli sketch data.tsfile\n"
+              "  tsfile-cli sketch -o layout.txt data.tsfile\n";
+    } else if (command == "head") {
+        os << "Usage: tsfile-cli head [-d|--device <device> | "
+              "-t|--table <table>] [-m|--measurements <field>]... "
+              "[--start <int64>] [--end <int64>] [--offset N] [-n|--limit N] "
+              "[--tag-filter <tag> <op> [value]] [--tag-match all|any] "
+              "[-f|--format table|ndjson|csv] <file.tsfile>\n"
+              "Reads the first matching rows from one object.\n"
+              "Result fields: time, all table TAG columns, selected FIELD "
+              "columns.\n"
+              "Default: --limit 10, --offset 0, --format table.\n"
+              "Examples:\n"
+              "  tsfile-cli head -t sensors -m temperature -n 5 data.tsfile\n";
+    } else if (command == "cat") {
+        os << "Usage: tsfile-cli cat [-d|--device <device> | "
+              "-t|--table <table>] [-m|--measurements <field>]... "
+              "[--start <int64>] [--end <int64>] [--offset N] [-n|--limit N] "
+              "[--tag-filter <tag> <op> [value]] [--tag-match all|any] "
+              "[-f|--format table|ndjson|csv] <file.tsfile>\n"
+              "Reads all matching rows from one object unless --limit is set.\n"
+              "Result fields: time, all table TAG columns, selected FIELD "
+              "columns.\n"
+              "Default: no row limit, --offset 0, --format table.\n"
+              "Examples:\n"
+              "  tsfile-cli cat -t sensors --tag-filter site eq a -f ndjson "
+              "data.tsfile\n";
+    } else if (command == "export") {
+        os << "Usage: tsfile-cli export (-d|--device <device> | "
+              "-t|--table <table>) -o|--output <file> "
+              "--type table|ndjson|csv [query options] [--force] "
+              "<file.tsfile>\n"
+              "       tsfile-cli export (-d <device>... | -t <table>...) "
+              "--output-dir <dir> --type table|ndjson|csv [query options] "
+              "<file.tsfile>\n"
+              "Writes one object atomically, or a numbered multi-object "
+              "directory with _manifest.json.\n"
+              "Result fields: same bytes as cat for the same scope and type; "
+              "multi-object manifest records file,model,object,type,rows.\n"
+              "Default: no row limit, --offset 0; --type is required.\n"
+              "Examples:\n"
+              "  tsfile-cli export -t sensors --type csv -o sensors.csv "
+              "data.tsfile\n";
+    } else if (command == "write") {
+        os << "Usage: tsfile-cli write --table <name> "
+              "(--tag <name> STRING)* (--field <name> <type>)+ "
+              "[--encoding <type> <encoding>] [--compression <type> "
+              "<compression>] (-i|--input <input.csv> | --stdin) "
+              "-o|--output <out.tsfile> [-v|--verbose]\n"
+              "Creates a new single-table, table-model TsFile from strict "
+              "CSV.\n"
+              "Result fields: none on stdout; -v writes a post-commit summary "
+              "and resolved column physical settings to stderr.\n"
+              "Default: success is silent; target must not exist; CSV header "
+              "must contain time and declared TAG/FIELD names.\n"
+              "Examples:\n"
+              "  tsfile-cli write --table sensors --tag site STRING "
+              "--field temperature DOUBLE -i input.csv -o out.tsfile\n";
+    } else {
+        print_usage(os);
+    }
+}
+
 bool is_known_command(const std::string& c) {
-    static const std::set<std::string> kCmds = {"ls",     "schema", "meta",
-                                                "stats",  "count",  "sketch",
-                                                "head",   "cat",    "export",
-                                                "write"};
+    static const std::set<std::string> kCmds = {
+        "ls",     "schema", "meta", "stats",  "count",
+        "sketch", "head",   "cat",  "export", "write"};
     return kCmds.find(c) != kCmds.end();
 }
 
@@ -105,8 +236,7 @@ bool validate_command_flags(const ParsedArgs& p, std::ostream& err) {
         err << "Error: --offset must be >= 0\n";
         return false;
     }
-    if ((p.command == "head" || p.command == "cat" ||
-         p.command == "export") &&
+    if ((p.command == "head" || p.command == "cat" || p.command == "export") &&
         p.limit == 0 && p.offset > 0) {
         err << "Error: --offset requires a positive --limit\n";
         return false;
@@ -136,7 +266,8 @@ bool validate_write_flags(const ParsedArgs& p, std::ostream& err) {
         return false;
     }
     if (p.format_set) {
-        err << "Error: write input format is fixed CSV; --format is not valid\n";
+        err << "Error: write input format is fixed CSV; --format is not "
+               "valid\n";
         return false;
     }
     if (!p.input_set) {
@@ -216,7 +347,8 @@ bool validate_export_flags(const ParsedArgs& p, std::ostream& err) {
         }
     }
     if (p.tag_filters.size() >= 2 && p.tag_match.empty()) {
-        err << "Error: two or more tag filters require --tag-match all or any\n";
+        err << "Error: two or more tag filters require --tag-match all or "
+               "any\n";
         return false;
     }
     const size_t scope_count = p.devices.size() + p.tables.size();
@@ -230,7 +362,8 @@ bool validate_export_flags(const ParsedArgs& p, std::ostream& err) {
             return false;
         }
         if (!p.output_dir.empty()) {
-            err << "Error: --output-dir is only valid for multi-object export\n";
+            err << "Error: --output-dir is only valid for multi-object "
+                   "export\n";
             return false;
         }
         return true;
@@ -256,8 +389,7 @@ bool validate_export_flags(const ParsedArgs& p, std::ostream& err) {
 bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
     const std::string& c = p.command;
     const bool is_row = (c == "head" || c == "cat");
-    const bool scoped =
-        is_row || c == "schema" || c == "stats" || c == "count";
+    const bool scoped = is_row || c == "schema" || c == "stats" || c == "count";
 
     if (c == "sketch") {
         if (p.format_set) {
@@ -330,7 +462,8 @@ bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
         }
     }
     if (p.tag_filters.size() >= 2 && p.tag_match.empty()) {
-        err << "Error: two or more tag filters require --tag-match all or any\n";
+        err << "Error: two or more tag filters require --tag-match all or "
+               "any\n";
         return false;
     }
     if (p.has_tag_filter && p.model == "tree") {
@@ -383,8 +516,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         }
         out << "tsfile-cli " << TSFILE_CLI_VERSION
             << " tsfile=" << TSFILE_CLI_VERSION
-            << " commit=" << TSFILE_CLI_COMMIT
-            << " built=" << TSFILE_CLI_BUILT << "\n";
+            << " commit=" << TSFILE_CLI_COMMIT << " built=" << TSFILE_CLI_BUILT
+            << "\n";
         return kExitOk;
     }
     if (p.command == "help" || p.command == "--help" || p.command == "-h") {
@@ -402,7 +535,7 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         return kExitUsage;
     }
     if (p.help) {
-        print_usage(out);
+        print_command_usage(p.command, out);
         return kExitOk;
     }
     if (p.command != "write" && p.file.empty()) {
@@ -446,8 +579,8 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
 
     // head/cat/export/schema dispatch on the data model and would silently
     // ignore the scope flag of the other model; reject that instead.
-    if (p.command == "head" || p.command == "cat" ||
-        p.command == "export" || p.command == "schema") {
+    if (p.command == "head" || p.command == "cat" || p.command == "export" ||
+        p.command == "schema") {
         const bool table_model = is_table_model(p, reader);
         if (table_model && !p.device.empty()) {
             err << "Error: -d/--device does not apply to the table model; "
