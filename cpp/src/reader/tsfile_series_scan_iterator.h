@@ -21,6 +21,7 @@
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
 #include <limits>
+#include <memory>
 #include <string>
 
 #include "aligned_chunk_reader.h"
@@ -34,6 +35,7 @@
 namespace storage {
 
 class TsFileIOReader;
+class PreparedSeries;
 
 class TsFileSeriesScanIterator {
    public:
@@ -49,8 +51,10 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
+          prepared_(),
           is_aligned_(false),
           is_multi_value_(false),
+          max_block_rows_(0),
           row_offset_(0),
           row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
@@ -65,6 +69,12 @@ class TsFileSeriesScanIterator {
         data_pa_ = &data_pa;
         return common::E_OK;
     }
+    int init_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                      ReadFile* read_file, Filter* time_filter,
+                      common::PageArena& data_pa);
+    int init_prepared_multi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        ReadFile* read_file, Filter* time_filter, common::PageArena& data_pa);
     void destroy();
 
     /**
@@ -75,6 +85,9 @@ class TsFileSeriesScanIterator {
     void set_row_range(int offset, int limit) {
         row_offset_ = offset;
         row_limit_ = limit;
+    }
+    void set_max_block_rows(uint32_t max_block_rows) {
+        max_block_rows_ = max_block_rows;
     }
 
     /** Current row offset/limit after chunk/page skip; used to sync with QDS
@@ -210,8 +223,15 @@ class TsFileSeriesScanIterator {
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
+    // Keeps the arena-backed index alive until the chunk reader has released
+    // every pointer into it. Empty for the legacy path-owned metadata arena.
+    std::shared_ptr<PreparedSeries> prepared_;
+    // Multi-column prepared queries borrow one aligned value index from each
+    // entry. Keep every owning arena alive until all chunk readers are gone.
+    std::vector<std::shared_ptr<PreparedSeries>> prepared_group_;
     bool is_aligned_ = false;
     bool is_multi_value_ = false;
+    uint32_t max_block_rows_;
     int row_offset_;
     int row_limit_;
 };

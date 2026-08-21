@@ -199,6 +199,13 @@ typedef struct TimeseriesMetadata {
     int32_t chunk_meta_count;
     TimeseriesStatistic statistic;
     TimeseriesStatistic timeline_statistic;
+    uint64_t value_metadata_offset;
+    uint32_t value_metadata_length;
+    uint64_t time_metadata_offset;
+    uint32_t time_metadata_length;
+    uint32_t time_chunk_meta_count;
+    uint16_t layout;
+    uint16_t locator_flags;
 } TimeseriesMetadata;
 
 /**
@@ -274,6 +281,21 @@ typedef void* TsRecord;
 
 typedef void* ResultSet;
 typedef void* TagFilterHandle;
+typedef void* PreparedSeriesHandle;
+
+typedef struct TsFilePreparedLocator {
+    uint64_t mapped_index_identity;
+    uint32_t file_id;
+    uint64_t file_size;
+    uint64_t file_fingerprint;
+    uint32_t locator_id;
+    uint16_t layout;
+    uint16_t flags;
+    uint64_t value_metadata_offset;
+    uint32_t value_metadata_length;
+    uint64_t time_metadata_offset;
+    uint32_t time_metadata_length;
+} TsFilePreparedLocator;
 
 typedef struct arrow_schema {
     // Array type description
@@ -663,6 +685,32 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
 // ERRNO tsfile_writer_flush_data(TsFileWriter writer);
 
 /*-------------------TsFile reader query data------------------ */
+
+/** Deserialize one exact Dataset Index locator into a reusable series. */
+PreparedSeriesHandle tsfile_reader_prepare_series(
+    TsFileReader reader, const TsFilePreparedLocator* locator, ERRNO* err_code);
+
+/** Prepare an aligned value locator by sharing an existing parsed time index.
+ */
+PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code);
+
+/** Release a prepared handle. Existing result sets remain independently owned.
+ */
+void tsfile_prepared_series_free(PreparedSeriesHandle prepared);
+
+/** Query a prepared series without traversing the TsFile footer index. */
+ResultSet tsfile_reader_query_prepared(TsFileReader reader,
+                                       PreparedSeriesHandle prepared,
+                                       Timestamp start_time, Timestamp end_time,
+                                       int offset, int limit, ERRNO* err_code);
+
+/** Query multiple aligned prepared value columns sharing one time axis. */
+ResultSet tsfile_reader_query_prepared_multi(
+    TsFileReader reader, const PreparedSeriesHandle* prepared,
+    uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
+    int offset, int limit, ERRNO* err_code);
 
 /**
  * @brief Queries time series data from a specific table within time range.

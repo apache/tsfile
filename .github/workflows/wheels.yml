@@ -96,6 +96,7 @@ jobs:
           ./mvnw -Pwith-cpp clean package \
             -DskipTests -Dspotless.check.skip=true -Dspotless.apply.skip=true \
             -Dbuild.test=OFF \
+            -Dtsfile.dependency.source=BUNDLED \
             -Denable.lzma2=ON \
             -Dcmake.args="-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"
           otool -l cpp/target/build/lib/libtsfile*.dylib | grep -A2 LC_VERSION_MIN_MACOSX || true
@@ -138,6 +139,7 @@ jobs:
             chmod +x mvnw || true
             ./mvnw -Pwith-cpp clean package \
               -DskipTests -Dbuild.test=OFF \
+              -Dtsfile.dependency.source=BUNDLED \
               -Denable.lzma2=ON \
               -Dspotless.check.skip=true -Dspotless.apply.skip=true
             test -d cpp/target/build/lib && test -d cpp/target/build/include
@@ -205,6 +207,7 @@ jobs:
           chmod +x mvnw || true
           ./mvnw -Pwith-cpp clean package \
             -DskipTests -Dbuild.test=OFF \
+            -Dtsfile.dependency.source=BUNDLED \
             -Denable.lzma2=ON \
             -Dspotless.check.skip=true -Dspotless.apply.skip=true
           test -d cpp/target/build/lib

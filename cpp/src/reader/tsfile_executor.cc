@@ -22,6 +22,10 @@
 #include "expression.h"
 #include "qds_with_timegenerator.h"
 #include "qds_without_timegenerator.h"
+#include "reader/block/prepared_series_tsblock_reader.h"
+#include "reader/filter/time_operator.h"
+#include "reader/prepared_series.h"
+#include "reader/table_result_set.h"
 
 using namespace common;
 
@@ -100,6 +104,80 @@ int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds,
     }
     ret_qds = qds;
     return ret;
+}
+
+int TsFileExecutor::prepare_series(const FileGeneration& generation,
+                                   const PreparedLocator& locator,
+                                   std::shared_ptr<PreparedSeries>& prepared) {
+    ASSERT(is_inited_);
+    return io_reader_.prepare_series(generation, locator, prepared);
+}
+
+int TsFileExecutor::prepare_series(
+    const FileGeneration& generation, const PreparedLocator& locator,
+    const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+    std::shared_ptr<PreparedSeries>& prepared) {
+    ASSERT(is_inited_);
+    return io_reader_.prepare_series(generation, locator, aligned_time_owner,
+                                     prepared);
+}
+
+int TsFileExecutor::execute_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit, const std::string& column_name,
+    ResultSet*& ret_qds) {
+    ASSERT(is_inited_);
+    ret_qds = nullptr;
+    if (prepared == nullptr || start_time > end_time || offset < 0) {
+        return E_INVALID_ARG;
+    }
+    auto tsblock_reader = std::unique_ptr<PreparedSeriesTsBlockReader>(
+        new PreparedSeriesTsBlockReader());
+    int ret = tsblock_reader->init(&io_reader_, prepared,
+                                   new TimeBetween(start_time, end_time, false),
+                                   offset, limit);
+    if (ret != E_OK) {
+        return ret;
+    }
+    std::vector<std::string> column_names(1, column_name);
+    std::vector<common::TSDataType> data_types(
+        1, tsblock_reader->value_data_type());
+    ret_qds = new TableResultSet(std::move(tsblock_reader), column_names,
+                                 data_types, RETURN_BATCH);
+    return E_OK;
+}
+
+int TsFileExecutor::execute_prepared_multi(
+    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+    int64_t start_time, int64_t end_time, int offset, int limit,
+    ResultSet*& ret_qds) {
+    ASSERT(is_inited_);
+    ret_qds = nullptr;
+    if (prepared.empty() || start_time > end_time || offset < 0) {
+        return E_INVALID_ARG;
+    }
+
+    auto tsblock_reader = std::unique_ptr<PreparedSeriesTsBlockReader>(
+        new PreparedSeriesTsBlockReader());
+    int ret = tsblock_reader->init_multi(
+        &io_reader_, prepared, new TimeBetween(start_time, end_time, false),
+        offset, limit);
+    if (ret != E_OK) {
+        return ret;
+    }
+
+    std::vector<std::string> column_names;
+    column_names.reserve(prepared.size());
+    for (const auto& entry : prepared) {
+        column_names.push_back(
+            entry->index()->get_measurement_name().to_std_string());
+    }
+    std::vector<common::TSDataType> data_types =
+        tsblock_reader->value_data_types();
+    ret_qds =
+        new TableResultSet(std::move(tsblock_reader), std::move(column_names),
+                           std::move(data_types), RETURN_BATCH);
+    return E_OK;
 }
 
 int TsFileExecutor::execute_may_with_global_timefilter(QueryExpression* qe,

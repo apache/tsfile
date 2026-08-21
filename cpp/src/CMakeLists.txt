@@ -72,6 +72,7 @@ endif()
 add_subdirectory(common)
 add_subdirectory(compress)
 add_subdirectory(cwrapper)
+add_subdirectory(dataset)
 add_subdirectory(encoding)
 add_subdirectory(file)
 add_subdirectory(reader)
@@ -82,6 +83,7 @@ set(_TSFILE_OBJECT_TARGETS
         common_obj
         compress_obj
         cwrapper_obj
+        dataset_obj
         file_obj
         read_obj
         write_obj)
