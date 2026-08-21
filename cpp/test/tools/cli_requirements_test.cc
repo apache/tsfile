@@ -61,7 +61,7 @@ std::string read_file(const std::string& path) {
 
 }  // namespace
 
-TEST(CliRequirementsV07, HelpListsExactlyCurrentCommandSurface) {
+TEST(CliRequirements, HelpListsExactlyCurrentCommandSurface) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"--help"}, out, err);
@@ -74,7 +74,7 @@ TEST(CliRequirementsV07, HelpListsExactlyCurrentCommandSurface) {
     EXPECT_TRUE(err.str().empty());
 }
 
-TEST(CliRequirementsV07,
+TEST(CliRequirements,
      CommandHelpIsSpecificAndDocumentsSyntaxFieldsExamples) {
     const std::vector<std::string> commands = {
         "ls",     "schema", "meta", "stats",  "count",
@@ -130,7 +130,7 @@ TEST(CliRequirementsV07,
         << write_out.str();
 }
 
-TEST(CliRequirementsV07, SkillShipsRequiredReferenceFiles) {
+TEST(CliRequirements, SkillShipsRequiredReferenceFiles) {
     const std::string root = std::string(TSFILE_CPP_SOURCE_DIR) +
                              "/tools/skills/tsfile-cli/references/";
     const std::vector<std::string> refs = {"commands.md", "errors.md",
@@ -145,7 +145,7 @@ TEST(CliRequirementsV07, SkillShipsRequiredReferenceFiles) {
     }
 }
 
-TEST(CliRequirementsV07, SampleIsNotACommand) {
+TEST(CliRequirements, SampleIsNotACommand) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"sample", "x.tsfile"}, out, err);
@@ -155,7 +155,7 @@ TEST(CliRequirementsV07, SampleIsNotACommand) {
         << err.str();
 }
 
-TEST(CliRequirementsV07, VersionIncludesConcreteBuildMetadata) {
+TEST(CliRequirements, VersionIncludesConcreteBuildMetadata) {
     std::ostringstream out;
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"--version"}, out, err);
@@ -168,7 +168,7 @@ TEST(CliRequirementsV07, VersionIncludesConcreteBuildMetadata) {
     EXPECT_EQ(out.str().find("unknown"), std::string::npos) << out.str();
 }
 
-TEST(CliRequirementsV07, FormatVocabularyIsTableNdjsonCsvOnly) {
+TEST(CliRequirements, FormatVocabularyIsTableNdjsonCsvOnly) {
     TableFixture f;
 
     std::ostringstream ndjson_out;
@@ -194,7 +194,7 @@ TEST(CliRequirementsV07, FormatVocabularyIsTableNdjsonCsvOnly) {
     EXPECT_TRUE(tsv_out.str().empty());
 }
 
-TEST(CliRequirementsV07, DuplicateSingletonOptionsAreUsageErrors) {
+TEST(CliRequirements, DuplicateSingletonOptionsAreUsageErrors) {
     TableFixture f;
     std::ostringstream out;
     std::ostringstream err;
@@ -230,7 +230,7 @@ TEST(CliRequirementsV07, DuplicateSingletonOptionsAreUsageErrors) {
     }
 }
 
-TEST(CliRequirementsV07, PositionalFileMustBeFinalUnlessAfterDoubleDash) {
+TEST(CliRequirements, PositionalFileMustBeFinalUnlessAfterDoubleDash) {
     TableFixture f;
 
     std::ostringstream bad_out;
@@ -251,7 +251,7 @@ TEST(CliRequirementsV07, PositionalFileMustBeFinalUnlessAfterDoubleDash) {
     EXPECT_TRUE(ok_err.str().empty());
 }
 
-TEST(CliRequirementsV07, MeasurementOptionRepeatsAndRejectsCommaLists) {
+TEST(CliRequirements, MeasurementOptionRepeatsAndRejectsCommaLists) {
     TableFixture f;
     std::ostringstream comma_out;
     std::ostringstream comma_err;
@@ -268,7 +268,7 @@ TEST(CliRequirementsV07, MeasurementOptionRepeatsAndRejectsCommaLists) {
         << dup_err.str();
 }
 
-TEST(CliRequirementsV07, MetaOnlyReturnsSizeFormatVersionAndModel) {
+TEST(CliRequirements, MetaOnlyReturnsSizeFormatVersionAndModel) {
     TableFixture f;
     std::ostringstream out;
     std::ostringstream err;
@@ -283,7 +283,7 @@ TEST(CliRequirementsV07, MetaOnlyReturnsSizeFormatVersionAndModel) {
     EXPECT_EQ(out.str().find("device_count"), std::string::npos) << out.str();
 }
 
-TEST(CliRequirementsV07, LsReturnsModelAndObjectFields) {
+TEST(CliRequirements, LsReturnsModelAndObjectFields) {
     TableFixture f;
     std::ostringstream out;
     std::ostringstream err;
@@ -292,7 +292,7 @@ TEST(CliRequirementsV07, LsReturnsModelAndObjectFields) {
     EXPECT_EQ(out.str(), "model,object\ntable,table1\n");
 }
 
-TEST(CliRequirementsV07, SchemaReturnsFixedSevenFieldContract) {
+TEST(CliRequirements, SchemaReturnsFixedSevenFieldContract) {
     TableFixture f;
     std::ostringstream out;
     std::ostringstream err;
@@ -310,7 +310,7 @@ TEST(CliRequirementsV07, SchemaReturnsFixedSevenFieldContract) {
         << out.str();
 }
 
-TEST(CliRequirementsV07, HeadCatAndExportRejectOffsetWithZeroLimit) {
+TEST(CliRequirements, HeadCatAndExportRejectOffsetWithZeroLimit) {
     TableFixture f;
     std::string out_path = tsfile_cli_test::unique_temp_path(
         "tsfile_cli_zero_limit_export", ".csv");
@@ -341,7 +341,7 @@ TEST(CliRequirementsV07, HeadCatAndExportRejectOffsetWithZeroLimit) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, HeadAndCatRequireScopeForMultiObjectFiles) {
+TEST(CliRequirements, HeadAndCatRequireScopeForMultiObjectFiles) {
     MultiTableFixture f;
 
     std::ostringstream cat_out;
@@ -363,15 +363,15 @@ TEST(CliRequirementsV07, HeadAndCatRequireScopeForMultiObjectFiles) {
         << head_err.str();
 }
 
-TEST(CliRequirementsV07, WriteUsesExplicitTagAndFieldOptions) {
+TEST(CliRequirements, WriteUsesExplicitTagAndFieldOptions) {
     std::string csv =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_v07_in", ".csv");
+        tsfile_cli_test::unique_temp_path("tsfile_cli_req_in", ".csv");
     {
         std::ofstream o(csv.c_str());
         o << "time,id1,s1\n0,dev,0\n1,dev,10\n";
     }
     std::string out_path =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_v07_out", ".tsfile");
+        tsfile_cli_test::unique_temp_path("tsfile_cli_req_out", ".tsfile");
 
     std::ostringstream wout;
     std::ostringstream werr;
@@ -394,7 +394,7 @@ TEST(CliRequirementsV07, WriteUsesExplicitTagAndFieldOptions) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, WriteMapsInputByHeaderName) {
+TEST(CliRequirements, WriteMapsInputByHeaderName) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_header_order", ".csv");
     {
@@ -425,7 +425,7 @@ TEST(CliRequirementsV07, WriteMapsInputByHeaderName) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, WriteRejectsHeaderShapeErrorsBeforeCreatingOutput) {
+TEST(CliRequirements, WriteRejectsHeaderShapeErrorsBeforeCreatingOutput) {
     struct Case {
         const char* name;
         const char* content;
@@ -465,7 +465,7 @@ TEST(CliRequirementsV07, WriteRejectsHeaderShapeErrorsBeforeCreatingOutput) {
     }
 }
 
-TEST(CliRequirementsV07, WriteAppliesAndValidatesTypePhysicalOverrides) {
+TEST(CliRequirements, WriteAppliesAndValidatesTypePhysicalOverrides) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_type_override", ".csv");
     {
@@ -540,7 +540,7 @@ TEST(CliRequirementsV07, WriteAppliesAndValidatesTypePhysicalOverrides) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, WriteRejectsExistingOutputWithoutTruncating) {
+TEST(CliRequirements, WriteRejectsExistingOutputWithoutTruncating) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_existing_in", ".csv");
     {
@@ -566,7 +566,7 @@ TEST(CliRequirementsV07, WriteRejectsExistingOutputWithoutTruncating) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, WriteRejectsNonRegularInputBeforeCreatingOutput) {
+TEST(CliRequirements, WriteRejectsNonRegularInputBeforeCreatingOutput) {
 #ifndef _WIN32
     std::string dir =
         tsfile_cli_test::unique_temp_path("tsfile_cli_input_dir", "");
@@ -586,7 +586,7 @@ TEST(CliRequirementsV07, WriteRejectsNonRegularInputBeforeCreatingOutput) {
 #endif
 }
 
-TEST(CliRequirementsV07, WriteRejectsNonCanonicalTimeLexemesAsInputErrors) {
+TEST(CliRequirements, WriteRejectsNonCanonicalTimeLexemesAsInputErrors) {
     const char* bad_times[] = {"+1", "01", "-0"};
     for (const char* bad_time : bad_times) {
         std::string csv =
@@ -610,7 +610,7 @@ TEST(CliRequirementsV07, WriteRejectsNonCanonicalTimeLexemesAsInputErrors) {
     }
 }
 
-TEST(CliRequirementsV07, WriteTargetFailuresAreRuntimeErrors) {
+TEST(CliRequirements, WriteTargetFailuresAreRuntimeErrors) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_target", ".csv");
     {
@@ -646,7 +646,7 @@ TEST(CliRequirementsV07, WriteTargetFailuresAreRuntimeErrors) {
     std::remove(csv.c_str());
 }
 
-TEST(CliRequirementsV07, WriteCsvNullAndEmptyStringRemainDistinctTags) {
+TEST(CliRequirements, WriteCsvNullAndEmptyStringRemainDistinctTags) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_tag_null", ".csv");
     {
@@ -695,7 +695,7 @@ TEST(CliRequirementsV07, WriteCsvNullAndEmptyStringRemainDistinctTags) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, WriteRejectsUnterminatedQuotedCsvField) {
+TEST(CliRequirements, WriteRejectsUnterminatedQuotedCsvField) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_unclosed_quote", ".csv");
     {
@@ -721,7 +721,7 @@ TEST(CliRequirementsV07, WriteRejectsUnterminatedQuotedCsvField) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, LegacyColumnsOptionIsRejected) {
+TEST(CliRequirements, LegacyColumnsOptionIsRejected) {
     std::ostringstream out;
     std::ostringstream err;
     int code =
@@ -734,7 +734,7 @@ TEST(CliRequirementsV07, LegacyColumnsOptionIsRejected) {
         << err.str();
 }
 
-TEST(CliRequirementsV07, WriteRejectsImplicitInputAndFormatFlag) {
+TEST(CliRequirements, WriteRejectsImplicitInputAndFormatFlag) {
     std::ostringstream implicit_out;
     std::ostringstream implicit_err;
     EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t1", "--field", "s1",
@@ -757,7 +757,7 @@ TEST(CliRequirementsV07, WriteRejectsImplicitInputAndFormatFlag) {
         << format_err.str();
 }
 
-TEST(CliRequirementsV07, ExportWritesSingleObjectAtomically) {
+TEST(CliRequirements, ExportWritesSingleObjectAtomically) {
     TableFixture f;
     std::string out_path =
         tsfile_cli_test::unique_temp_path("tsfile_cli_export", ".csv");
@@ -782,7 +782,7 @@ TEST(CliRequirementsV07, ExportWritesSingleObjectAtomically) {
     std::remove(out_path.c_str());
 }
 
-TEST(CliRequirementsV07, ExportWritesMultiObjectManifestAndNumberedFiles) {
+TEST(CliRequirements, ExportWritesMultiObjectManifestAndNumberedFiles) {
     MultiTableFixture f;
     std::string dir =
         tsfile_cli_test::unique_temp_path("tsfile_cli_multi_export", "");
@@ -814,7 +814,7 @@ TEST(CliRequirementsV07, ExportWritesMultiObjectManifestAndNumberedFiles) {
 #endif
 }
 
-TEST(CliRequirementsV07, MultipleTagFiltersRequireAndHonorTagMatch) {
+TEST(CliRequirements, MultipleTagFiltersRequireAndHonorTagMatch) {
     std::string path = tsfile_cli_test::write_tag_filter_fixture();
     std::ostringstream missing_out;
     std::ostringstream missing_err;
@@ -837,7 +837,7 @@ TEST(CliRequirementsV07, MultipleTagFiltersRequireAndHonorTagMatch) {
     std::remove(path.c_str());
 }
 
-TEST(CliRequirementsV07, SketchRejectsRegularResultFormat) {
+TEST(CliRequirements, SketchRejectsRegularResultFormat) {
     TableFixture f;
     std::ostringstream out;
     std::ostringstream err;
