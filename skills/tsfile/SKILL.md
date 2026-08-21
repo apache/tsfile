@@ -20,10 +20,10 @@ description: >-
   Work with the current Apache TsFile SDKs, tools, and file format. Use for
   Java, Python, C++, or C reads and writes; Python DataFrame and Arrow batches;
   Java CSV/Parquet/Arrow import; file properties; TAG filters; query-by-row and
-  metadata APIs; static/shared C++ builds; parallel and TsBlock writes;
-  encoding/compression factories; schema design; performance; and
-  cross-language integration. Route operations specific to the C++ tsfile-cli
-  binary to the sibling tsfile-cli skill.
+  metadata APIs; C++ incomplete-writer recovery and append; static/shared C++
+  builds; parallel and TsBlock writes; encoding/compression factories; schema
+  design; performance; and cross-language integration. Route operations
+  specific to the C++ tsfile-cli binary to the sibling tsfile-cli skill.
 ---
 
 # TsFile
@@ -74,8 +74,9 @@ Read only the files required by the current task:
   `references/cpp-build-write.md`
 - Current Java and C++ encoding/compression factory matrices:
   `references/encoding-compression.md`
-- Query-by-row, timeseries metadata, Java TsBlock writes, custom/buffered
-  input, and Tablet object/size APIs: `references/advanced-apis.md`
+- Query-by-row, timeseries metadata, C++ incomplete-file recovery and append,
+  Java TsBlock writes, custom/buffered input, and Tablet object/size APIs:
+  `references/advanced-apis.md`
 - Python SDK code and binding-specific behavior: `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
 - C wrapper entry points and lifecycle: `references/c.md`
@@ -110,8 +111,9 @@ or language bindings.
   concurrency. Configure the current source APIs; do not emit legacy aliases.
 - Use `references/encoding-compression.md` before naming a factory or claiming
   that an encoding/type or compressor combination is constructible.
-- Use `references/advanced-apis.md` for the remaining current advanced read and
-  write surfaces listed in Offline Reference Routing.
+- Use `references/advanced-apis.md` for C++ crash recovery and append through
+  `RestorableTsFileIOWriter`, plus the remaining current advanced read and write
+  surfaces listed in Offline Reference Routing.
 
 Treat these as baseline capabilities. Do not add alternate calls, degraded
 results, or compatibility branches for earlier TsFile source lines unless the
