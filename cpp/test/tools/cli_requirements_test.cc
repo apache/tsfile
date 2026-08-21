@@ -74,8 +74,7 @@ TEST(CliRequirements, HelpListsExactlyCurrentCommandSurface) {
     EXPECT_TRUE(err.str().empty());
 }
 
-TEST(CliRequirements,
-     CommandHelpIsSpecificAndDocumentsSyntaxFieldsExamples) {
+TEST(CliRequirements, CommandHelpIsSpecificAndDocumentsSyntaxFieldsExamples) {
     const std::vector<std::string> commands = {
         "ls",     "schema", "meta", "stats",  "count",
         "sketch", "head",   "cat",  "export", "write"};
