@@ -112,8 +112,8 @@ class RLBEDecoder : public Decoder {
             return ret;
         }
         block_size_ = static_cast<int>(bits);
-        if (block_size_ < 0 || block_size_ > RLBE_BLOCK_DEFAULT_SIZE) {
-            return common::E_TSFILE_CORRUPTED;
+        if (block_size_ <= 0 || block_size_ > RLBE_BLOCK_DEFAULT_SIZE) {
+            return common::E_DECODE_ERR;
         }
         for (int i = 0; i < block_size_ * 2; ++i) {
             data_[i] = 0;
@@ -136,6 +136,9 @@ class RLBEDecoder : public Decoder {
                 return ret;
             }
             int segment_length = static_cast<int>(bits);
+            if (segment_length < 1 || segment_length > Traits::VALUE_BITS) {
+                return common::E_DECODE_ERR;
+            }
 
             int now = 0;
             int next = 0;
@@ -147,10 +150,23 @@ class RLBEDecoder : public Decoder {
             uint64_t run_length = 0;
             int j = 1;
             while (true) {
+                if (j >= static_cast<int>(sizeof(fibonacci_) /
+                                          sizeof(fibonacci_[0]))) {
+                    return common::E_DECODE_ERR;
+                }
                 if (j > 1) {
                     fibonacci_[j] = fibonacci_[j - 1] + fibonacci_[j - 2];
+                    if (fibonacci_[j] <= fibonacci_[j - 1]) {
+                        return common::E_DECODE_ERR;
+                    }
                 }
                 if (now == 1) {
+                    const uint64_t remaining =
+                        static_cast<uint64_t>(block_size_ - write_index_ - 1);
+                    if (fibonacci_[j] > remaining ||
+                        run_length > remaining - fibonacci_[j]) {
+                        return common::E_DECODE_ERR;
+                    }
                     run_length += fibonacci_[j];
                 }
                 if (now == 1 && next == 1) {
