@@ -214,8 +214,7 @@ TEST(RLBECodecTest, RejectsInvalidIntSegmentLength) {
                          bytes.size());
         IntRLBEDecoder decoder;
         int32_t value = 0;
-        EXPECT_EQ(decoder.read_int32(value, stream),
-                  common::E_DECODE_ERR);
+        EXPECT_EQ(decoder.read_int32(value, stream), common::E_DECODE_ERR);
     }
 }
 
@@ -233,8 +232,7 @@ TEST(RLBECodecTest, RejectsInvalidLongSegmentLength) {
                          bytes.size());
         LongRLBEDecoder decoder;
         int64_t value = 0;
-        EXPECT_EQ(decoder.read_int64(value, stream),
-                  common::E_DECODE_ERR);
+        EXPECT_EQ(decoder.read_int64(value, stream), common::E_DECODE_ERR);
     }
 }
 
