@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.v4.DeviceTableModelReader;
+import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
@@ -41,6 +42,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -48,6 +50,43 @@ import java.util.Arrays;
 import java.util.List;
 
 public class TsFileV4ReadWriteInterfacesTest {
+
+  @Test
+  public void testTsFileProperties() throws IOException {
+    String filePath = TsFileGeneratorForTest.getTestTsFilePath("properties", 0, 0, 0);
+    File file = new File(filePath);
+    TableSchema tableSchema =
+        new TableSchema(
+            "t1",
+            Arrays.asList(new MeasurementSchema("s1", TSDataType.INT32)),
+            Arrays.asList(ColumnCategory.FIELD));
+
+    try {
+      try (ITsFileWriter writer =
+          new TsFileWriterBuilder().file(file).tableSchema(tableSchema).build()) {
+        writer.addTsFileProperty(
+            "creator", "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8));
+        writer.addTsFileProperty("version", "1".getBytes(StandardCharsets.UTF_8));
+      }
+
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(filePath)) {
+        Assert.assertArrayEquals(
+            "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8),
+            reader.getTsFileProperties().get("creator"));
+        Assert.assertArrayEquals(
+            "1".getBytes(StandardCharsets.UTF_8), reader.getTsFileProperties().get("version"));
+      }
+      try (ITsFileReader reader = new DeviceTableModelReader(file)) {
+        Assert.assertArrayEquals(
+            "TsFileV4ReadWriteInterfacesTest".getBytes(StandardCharsets.UTF_8),
+            reader.getTsFileProperties().get("creator"));
+        Assert.assertArrayEquals(
+            "1".getBytes(StandardCharsets.UTF_8), reader.getTsFileProperties().get("version"));
+      }
+    } finally {
+      Files.deleteIfExists(file.toPath());
+    }
+  }
 
   @Test
   public void testWriteSomeColumns() throws IOException, WriteProcessException {

@@ -18,6 +18,7 @@
  */
 #include "tsblock.h"
 
+#include <cstring>
 #include <string>
 
 namespace common {
@@ -73,29 +74,32 @@ void TsBlock::write_data(ByteStream* __restrict byte_stream,
     std::string strval;
     switch (type) {
         case common::INT64: {
-            int64_t ival = *reinterpret_cast<int64_t*>(val);
+            int64_t ival;
+            std::memcpy(&ival, val, sizeof(ival));
             strval = std::to_string(ival);
             break;
         }
         case common::INT32: {
-            int32_t ival = *reinterpret_cast<int32_t*>(val);
+            int32_t ival;
+            std::memcpy(&ival, val, sizeof(ival));
             strval = std::to_string(ival);
             break;
         }
         case common::FLOAT: {
-            float ival = *reinterpret_cast<float*>(
-                val);  // cppcheck-suppress invalidPointerCast
+            float ival;
+            std::memcpy(&ival, val, sizeof(ival));
             strval = std::to_string(ival);
             break;
         }
         case common::DOUBLE: {
-            double ival = *reinterpret_cast<double*>(
-                val);  // cppcheck-suppress invalidPointerCast
+            double ival;
+            std::memcpy(&ival, val, sizeof(ival));
             strval = std::to_string(ival);
             break;
         }
         case common::BOOLEAN: {
-            bool ival = *reinterpret_cast<bool*>(val);
+            bool ival;
+            std::memcpy(&ival, val, sizeof(ival));
             if (ival) {
                 strval = "true";
             } else {

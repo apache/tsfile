@@ -518,6 +518,13 @@ TEST_F(TreeQueryByRowTest, OffsetExceedsTotalRows) {
     ASSERT_EQ(E_OK, reader.queryByRow(devices, measurements, 100, -1, result));
     ASSERT_NE(result, nullptr);
 
+    // Even with no rows, the column type must reflect the series' real type
+    // (INT64) rather than NULL_TYPE — downstream bindings map this onto their
+    // own type enums and reject NULL_TYPE (254).
+    auto meta = result->get_metadata();
+    ASSERT_EQ(2u, meta->get_column_count());
+    EXPECT_EQ(INT64, meta->get_column_type(2));
+
     auto timestamps = collect_timestamps(result);
     EXPECT_EQ(timestamps.size(), 0u);
 
@@ -538,6 +545,12 @@ TEST_F(TreeQueryByRowTest, LimitZero) {
     ResultSet* result = nullptr;
     ASSERT_EQ(E_OK, reader.queryByRow(devices, measurements, 0, 0, result));
     ASSERT_NE(result, nullptr);
+
+    // limit==0 pushes down to the scan iterator and produces no TsBlock; the
+    // metadata must still report the real column type (INT64), not NULL_TYPE.
+    auto meta = result->get_metadata();
+    ASSERT_EQ(2u, meta->get_column_count());
+    EXPECT_EQ(INT64, meta->get_column_type(2));
 
     auto timestamps = collect_timestamps(result);
     EXPECT_EQ(timestamps.size(), 0u);

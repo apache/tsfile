@@ -19,14 +19,14 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'apache/tsfile' || github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           distribution: corretto
           java-version: 17
       - name: Cache Maven packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -34,14 +34,16 @@ jobs:
       - name: Generate code coverage reports
         run: |
           sudo apt-get install lcov
-          ./mvnw -B -P with-java,with-cpp,with-code-coverage clean verify -Dspotless.skip=true
+          ./mvnw -B -P with-java,with-cpp,with-code-coverage clean verify \
+            -Denable.lzma2=ON \
+            -Dspotless.skip=true
           lcov --capture --directory cpp/target/build/test --output-file cpp/target/build/test/coverage.info
           lcov --remove cpp/target/build/test/coverage.info '*/tsfile/cpp/test/*' --output-file cpp/target/build/test/coverage_filtered.info
           genhtml cpp/target/build/test/coverage_filtered.info --output-directory cpp/target/build/test/coverage_report
           rm -rf cpp/target/build/test/CMakeFiles/TsFile_Test.dir
           rm -rf cpp/target/build/test/coverage.info
       - name: Upload coverage reports to codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: java/tsfile/target/jacoco-merged-reports/jacoco.xml,cpp/target/build/test/coverage_report/index.html

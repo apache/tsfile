@@ -56,7 +56,10 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
+    TS_ENCODING_CHIMP = 11,
     TS_ENCODING_SPRINTZ = 12,
+    TS_ENCODING_RLBE = 13,
+    TS_ENCODING_CAMEL = 14,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -69,6 +72,8 @@ typedef enum {
     TS_COMPRESSION_PAA = 5,
     TS_COMPRESSION_PLA = 6,
     TS_COMPRESSION_LZ4 = 7,
+    TS_COMPRESSION_ZSTD = 8,
+    TS_COMPRESSION_LZMA2 = 9,
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
@@ -194,6 +199,13 @@ typedef struct TimeseriesMetadata {
     int32_t chunk_meta_count;
     TimeseriesStatistic statistic;
     TimeseriesStatistic timeline_statistic;
+    uint64_t value_metadata_offset;
+    uint32_t value_metadata_length;
+    uint64_t time_metadata_offset;
+    uint32_t time_metadata_length;
+    uint32_t time_chunk_meta_count;
+    uint16_t layout;
+    uint16_t locator_flags;
 } TimeseriesMetadata;
 
 /**
@@ -230,6 +242,21 @@ typedef struct DeviceTimeseriesMetadataMap {
     uint32_t device_count;
 } DeviceTimeseriesMetadataMap;
 
+/**
+ * @brief One file-level property with length-aware binary storage.
+ *
+ * @p key is allocated with one trailing NUL for convenience, while @p key_len
+ * is authoritative and preserves embedded NUL bytes. @p is_null distinguishes
+ * a null value from a non-null zero-length value.
+ */
+typedef struct TsFileProperty {
+    char* key;
+    uint32_t key_len;
+    uint8_t* value;
+    uint32_t value_len;
+    bool is_null;
+} TsFileProperty;
+
 /** Frees path, table_name, and segments inside @p d; zeros @p d. */
 void tsfile_device_id_free_contents(DeviceID* d);
 
@@ -254,6 +281,21 @@ typedef void* TsRecord;
 
 typedef void* ResultSet;
 typedef void* TagFilterHandle;
+typedef void* PreparedSeriesHandle;
+
+typedef struct TsFilePreparedLocator {
+    uint64_t mapped_index_identity;
+    uint32_t file_id;
+    uint64_t file_size;
+    uint64_t file_fingerprint;
+    uint32_t locator_id;
+    uint16_t layout;
+    uint16_t flags;
+    uint64_t value_metadata_offset;
+    uint32_t value_metadata_length;
+    uint64_t time_metadata_offset;
+    uint32_t time_metadata_length;
+} TsFilePreparedLocator;
 
 typedef struct arrow_schema {
     // Array type description
@@ -324,7 +366,7 @@ uint8_t get_global_compression();
  * @brief Sets the global time column encoding method
  *
  * Validates and sets the encoding type for time series timestamps.
- * Supported encodings: TS_2DIFF, PLAIN, GORILLA, ZIGZAG, RLE, SPRINTZ
+ * Supported encodings: PLAIN, TS_2DIFF
  *
  * @param encoding The encoding type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid encoding
@@ -335,7 +377,7 @@ int set_global_time_encoding(uint8_t encoding);
  * @brief Sets the global time column compression method
  *
  * Validates and sets the compression type for time series timestamps.
- * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD, LZMA2
  *
  * @param compression The compression type to set (as uint8_t)
  * @return int E_OK on success, E_NOT_SUPPORT for invalid compression
@@ -350,8 +392,10 @@ int set_global_time_compression(uint8_t compression);
  * data type
  * @note Supported encodings per data type:
  *        - BOOLEAN: PLAIN only
- *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
- *        - FLOAT/DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ
+ *        - INT32/DATE/INT64/TIMESTAMP: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE,
+ *          SPRINTZ, CHIMP, RLBE
+ *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE
+ *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL
  *        - STRING: PLAIN, DICTIONARY
  */
 int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
@@ -360,7 +404,8 @@ int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
  * @brief Set the global default compression type
  * @param compression Compression type to set
  * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
- * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD,
+ *       LZMA2
  */
 int set_global_compression(uint8_t compression);
 
@@ -436,6 +481,17 @@ TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
 ERRNO tsfile_writer_close(TsFileWriter writer);
 
 /**
+ * @brief Adds or replaces a file-level property while the table writer is open.
+ *
+ * The key and value are copied immediately. A NULL value with value_len == 0
+ * represents a null property; a non-NULL value with value_len == 0 represents
+ * an empty byte array.
+ */
+ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                        uint32_t key_len, const uint8_t* value,
+                                        uint32_t value_len);
+
+/**
  * @brief Releases resources associated with a TsFileReader.
  *
  * @param reader [in] Reader handle obtained from tsfile_reader_new().
@@ -476,6 +532,17 @@ ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
 
 void tsfile_free_device_timeseries_metadata_map(
     DeviceTimeseriesMetadataMap* map);
+
+/**
+ * @brief Returns a heap-allocated array containing all file-level properties.
+ *
+ * Caller must release the result with tsfile_free_tsfile_properties().
+ */
+ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
+                                          TsFileProperty** out_properties,
+                                          uint32_t* out_length);
+
+void tsfile_free_tsfile_properties(TsFileProperty* properties, uint32_t length);
 
 /*--------------------------Tablet API------------------------ */
 
@@ -618,6 +685,32 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
 // ERRNO tsfile_writer_flush_data(TsFileWriter writer);
 
 /*-------------------TsFile reader query data------------------ */
+
+/** Deserialize one exact Dataset Index locator into a reusable series. */
+PreparedSeriesHandle tsfile_reader_prepare_series(
+    TsFileReader reader, const TsFilePreparedLocator* locator, ERRNO* err_code);
+
+/** Prepare an aligned value locator by sharing an existing parsed time index.
+ */
+PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code);
+
+/** Release a prepared handle. Existing result sets remain independently owned.
+ */
+void tsfile_prepared_series_free(PreparedSeriesHandle prepared);
+
+/** Query a prepared series without traversing the TsFile footer index. */
+ResultSet tsfile_reader_query_prepared(TsFileReader reader,
+                                       PreparedSeriesHandle prepared,
+                                       Timestamp start_time, Timestamp end_time,
+                                       int offset, int limit, ERRNO* err_code);
+
+/** Query multiple aligned prepared value columns sharing one time axis. */
+ResultSet tsfile_reader_query_prepared_multi(
+    TsFileReader reader, const PreparedSeriesHandle* prepared,
+    uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
+    int offset, int limit, ERRNO* err_code);
 
 /**
  * @brief Queries time series data from a specific table within time range.
@@ -1054,6 +1147,11 @@ ERRNO _tsfile_writer_close(TsFileWriter writer);
 
 // Flush Chunk into tsfile from current tsFileWriter
 ERRNO _tsfile_writer_flush(TsFileWriter writer);
+
+// Add or replace a file-level property on the generic writer used by Python.
+ERRNO _tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
+                                         uint32_t key_len, const uint8_t* value,
+                                         uint32_t value_len);
 
 // Queries time-series data for a specific device within a given time range.
 ResultSet _tsfile_reader_query_device(TsFileReader reader,

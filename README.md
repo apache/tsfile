@@ -196,3 +196,9 @@ cpp/target/build/bin/tsfile-cli --help
 ```
 
 See [`cpp/tools/README.md`](./cpp/tools/README.md) for the full command and option reference.
+
+## Website Contributions
+
+For changes to the [Apache TsFile website](https://tsfile.apache.org/), open a pull request
+with the [`docs/dev`](https://github.com/apache/tsfile/tree/docs/dev) branch as the base
+branch.

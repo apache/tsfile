@@ -26,13 +26,13 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
+import org.apache.tsfile.utils.LongHeapPriorityQueue;
+import org.apache.tsfile.utils.LongOpenHashSet;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
-import java.util.Set;
 
 /** multi-way merging data set, no need to use TimeGenerator. */
 public class DataSetWithoutTimeGenerator extends QueryDataSet {
@@ -44,9 +44,9 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
   private List<Boolean> hasDataRemaining;
 
   /** heap only need to store time. */
-  private PriorityQueue<Long> timeHeap;
+  private LongHeapPriorityQueue timeHeap;
 
-  private Set<Long> timeSet;
+  private LongOpenHashSet timeSet;
 
   /**
    * constructor of DataSetWithoutTimeGenerator.
@@ -67,8 +67,9 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
   private void initHeap() throws IOException {
     hasDataRemaining = new ArrayList<>();
     batchDataList = new ArrayList<>();
-    timeHeap = new PriorityQueue<>();
-    timeSet = new HashSet<>();
+    int seriesCount = Math.max(paths.size(), 1);
+    timeHeap = new LongHeapPriorityQueue(seriesCount);
+    timeSet = new LongOpenHashSet(seriesCount);
 
     for (int i = 0; i < paths.size(); i++) {
       AbstractFileSeriesReader reader = readers.get(i);
@@ -138,14 +139,13 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
 
   /** keep heap from storing duplicate time. */
   private void timeHeapPut(long time) {
-    if (!timeSet.contains(time)) {
-      timeSet.add(time);
-      timeHeap.add(time);
+    if (timeSet.add(time)) {
+      timeHeap.enqueue(time);
     }
   }
 
-  private Long timeHeapGet() {
-    Long t = timeHeap.poll();
+  private long timeHeapGet() {
+    long t = timeHeap.dequeueLong();
     timeSet.remove(t);
     return t;
   }

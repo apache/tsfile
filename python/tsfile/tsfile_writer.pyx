@@ -23,7 +23,8 @@ from tsfile.schema import TableSchema as TableSchemaPy
 from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
 from tsfile.tablet import Tablet as TabletPy
 from libc.string cimport memset
-from libc.stdint cimport uintptr_t
+from libc.stdint cimport uint32_t, uint8_t, uintptr_t
+from cpython.bytes cimport PyBytes_AsStringAndSize
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
@@ -33,6 +34,7 @@ cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
     def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024):
+        self.writer = NULL
         self.writer = tsfile_writer_new_c(pathname, memory_threshold)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
@@ -162,6 +164,40 @@ cdef class TsFileWriterPy:
             if arrow_schema.release != NULL:
                 arrow_schema.release(&arrow_schema)
 
+    def add_tsfile_property(self, key: str, value: bytes):
+        """
+        Add or replace a binary file-level property while the writer is open.
+
+        ``value`` must be ``bytes``. The data is copied immediately, and a
+        later call with the same key replaces the previous value.
+        """
+        if not isinstance(key, str):
+            raise TypeError("TsFile property key must be str")
+        if type(value) is not bytes:
+            raise TypeError("TsFile property value must be bytes")
+        if self.writer == NULL:
+            check_error(RET_FILE_WRITE_ERR, b"TsFile writer is closed")
+
+        cdef bytes encoded_key = key.encode('utf-8')
+        cdef char * value_ptr = NULL
+        cdef Py_ssize_t value_len = 0
+        cdef ErrorCode errno
+        if len(encoded_key) > 0x7FFFFFFF:
+            raise OverflowError("TsFile property key is too large")
+        if PyBytes_AsStringAndSize(value, &value_ptr, &value_len) < 0:
+            raise TypeError("TsFile property value must be bytes")
+        if value_len > 0x7FFFFFFF:
+            raise OverflowError("TsFile property value is too large")
+
+        errno = _tsfile_writer_add_tsfile_property(
+            self.writer,
+            <const char *> encoded_key,
+            <uint32_t> len(encoded_key),
+            <const uint8_t *> value_ptr,
+            <uint32_t> value_len,
+        )
+        check_error(errno)
+
     cpdef close(self):
         """
         Flush data and Close tsfile writer.
@@ -185,7 +221,10 @@ cdef class TsFileWriterPy:
         check_error(errno)
 
     def __dealloc__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self

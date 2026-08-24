@@ -188,8 +188,8 @@ FORCE_INLINE Field* make_null_literal() {
 
 class RowRecord {
    public:
-    explicit RowRecord(uint32_t col_num) : col_num_(col_num) {
-        fields_ = new std::vector<Field*>();
+    explicit RowRecord(uint32_t col_num)
+        : time_(0), col_num_(col_num), fields_(new std::vector<Field*>()) {
         fields_->reserve(col_num);
         for (uint32_t i = 0; i < col_num; ++i) {
             Field* val = make_null_literal();
@@ -197,14 +197,17 @@ class RowRecord {
         }
     }
 
-    RowRecord(int64_t time, uint32_t col_num) : time_(time), col_num_(col_num) {
-        fields_ = new std::vector<Field*>();
+    RowRecord(int64_t time, uint32_t col_num)
+        : time_(time), col_num_(col_num), fields_(new std::vector<Field*>()) {
         fields_->reserve(col_num_);
         for (uint32_t i = 0; i < col_num_; ++i) {
             Field* val = make_null_literal();
             fields_->push_back(val);
         }
     }
+
+    RowRecord(const RowRecord&) = delete;
+    RowRecord& operator=(const RowRecord&) = delete;
 
     ~RowRecord() {
         if (fields_) {

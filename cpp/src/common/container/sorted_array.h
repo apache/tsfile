@@ -139,12 +139,13 @@ class SortedArray {
         }
 
         size_t new_capacity = (size_t)tmp;
-        array_ =
+        ValueType* new_array =
             (ValueType*)mem_realloc(array_, new_capacity * sizeof(*(array_)));
-        if (UNLIKELY(nullptr == array_)) {
+        if (UNLIKELY(nullptr == new_array)) {
             // log_err("realloc failed.");
             return E_OOM;
         }
+        array_ = new_array;
         capacity_ = new_capacity;
         return E_OK;
     }
@@ -153,14 +154,15 @@ class SortedArray {
         size_t new_capacity = (size_t)(capacity_ / 2);
         // if the size passed to realloc is smaller than before, OS will
         // automatically release the rest memory
-        array_ = (ValueType*)mem_realloc(
+        ValueType* new_array = (ValueType*)mem_realloc(
             array_,
             new_capacity *
                 sizeof(*(array_)));  // TODO: user ourself's mem_alloc()
-        if (UNLIKELY(nullptr == array_)) {
+        if (UNLIKELY(nullptr == new_array)) {
             // log_err("malloc failed.");
             return E_OOM;
         }
+        array_ = new_array;
         capacity_ = new_capacity;
         return E_OK;
     }

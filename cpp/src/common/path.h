@@ -40,9 +40,8 @@ struct Path {
 
     Path(std::string& device, std::string& measurement)
         : measurement_(measurement),
-          device_id_(std::make_shared<StringArrayDeviceID>(device)) {
-        full_path_ = device + "." + measurement;
-    }
+          device_id_(std::make_shared<StringArrayDeviceID>(device)),
+          full_path_(device + "." + measurement) {}
 
     Path(const std::string& path_sc, bool if_split = true) {
         if (!path_sc.empty()) {

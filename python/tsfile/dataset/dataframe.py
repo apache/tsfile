@@ -19,12 +19,13 @@
 """Top-level dataset accessors for TsFile shards."""
 
 from collections import defaultdict
+import contextlib
 from dataclasses import dataclass, field
 import heapq
 import os
 import sys
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple, Union
-import warnings
 
 import numpy as np
 
@@ -123,20 +124,27 @@ def _series_lookup_hint(name: str) -> str:
 def _validate_table_schema(
     existing: TableEntry, incoming: TableEntry, file_path: str
 ) -> None:
-    """Reject same-name tables whose tag/field layout differs across shards."""
+    """Reject same-name tables whose complete ordered schema differs."""
     if (
-        existing.tag_columns == incoming.tag_columns
+        existing.schema_columns
+        and incoming.schema_columns
+        and existing.schema_columns == incoming.schema_columns
+    ):
+        return
+    if (
+        not existing.schema_columns
+        and not incoming.schema_columns
+        and existing.tag_columns == incoming.tag_columns
         and existing.tag_types == incoming.tag_types
         and existing.field_columns == incoming.field_columns
+        and existing.field_types == incoming.field_types
     ):
         return
 
     raise ValueError(
         f"Incompatible schema for table '{incoming.table_name}' in '{file_path}'. "
-        f"Expected tags={list(existing.tag_columns)}, tag_types={list(existing.tag_types)}, "
-        f"fields={list(existing.field_columns)} but found "
-        f"tags={list(incoming.tag_columns)}, tag_types={list(incoming.tag_types)}, "
-        f"fields={list(incoming.field_columns)}."
+        f"Expected columns={list(existing.schema_columns)} but found "
+        f"columns={list(incoming.schema_columns)}."
     )
 
 
@@ -169,6 +177,8 @@ def _merge_tree_table_entries(existing: TableEntry, incoming: TableEntry) -> Tab
         tag_columns=tag_columns,
         tag_types=tag_types,
         field_columns=tuple(field_columns),
+        field_types=(),
+        schema_columns=(),
     )
 
 
@@ -254,6 +264,64 @@ def _register_reader(
         index.series_shards[series_ref].append((reader, device_id, field_idx))
 
 
+def _validate_unique_shard_timestamps(index: _DataFrameCatalog) -> None:
+    """Reject overlapping shards that contain the same logical timestamp."""
+    validated_timeline_pairs = set()
+    for series_ref in index.series:
+        fragments = []
+        for reader, device_id, field_idx in index.series_shards[series_ref]:
+            stats = reader.catalog.series_stats_by_ref[(device_id, field_idx)]
+            timeline_identity = (
+                reader.file_path,
+                device_id,
+                (
+                    stats.time_metadata_offset
+                    if stats.layout
+                    else stats.value_metadata_offset
+                ),
+                (
+                    stats.time_metadata_length
+                    if stats.layout
+                    else stats.value_metadata_length
+                ),
+            )
+            fragments.append(
+                (
+                    stats.timeline_min_time,
+                    stats.timeline_max_time,
+                    timeline_identity,
+                    reader,
+                    device_id,
+                    field_idx,
+                )
+            )
+        fragments.sort(key=lambda item: (item[0], item[1], item[2]))
+        for right_index, right in enumerate(fragments):
+            for left in fragments[:right_index]:
+                if left[1] < right[0]:
+                    continue
+                overlap_start = max(left[0], right[0])
+                overlap_end = min(left[1], right[1])
+                if overlap_start > overlap_end:
+                    continue
+                pair = tuple(sorted((left[2], right[2])))
+                if pair in validated_timeline_pairs:
+                    continue
+                left_times, _ = left[3].read_series_by_ref(
+                    left[4], left[5], overlap_start, overlap_end
+                )
+                right_times, _ = right[3].read_series_by_ref(
+                    right[4], right[5], overlap_start, overlap_end
+                )
+                duplicate = np.intersect1d(left_times, right_times, assume_unique=True)
+                if len(duplicate):
+                    raise ValueError(
+                        f"Duplicate timestamp {int(duplicate[0])} found across "
+                        "TsFile shards while building the Dataset Index."
+                    )
+                validated_timeline_pairs.add(pair)
+
+
 def _build_runtime_series_stats(refs: List[SeriesRef]) -> dict:
     """Build shared-timeline series stats from native timeline metadata."""
     min_time = None
@@ -318,45 +386,56 @@ def _read_field_by_position(
     refs: List[SeriesRef],
     offset: int,
     limit: int,
+    cached_infos=None,
+    cached_locator_ids=None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Read one logical series by global position without materializing timestamps for non-overlapping shards."""
     if limit <= 0:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
-    infos = []
-    for reader, device_id, field_idx in refs:
-        series_info = reader.get_series_info_by_ref(device_id, field_idx)
-        infos.append(
-            {
-                "length": series_info["timeline_length"],
-                "min_time": series_info["timeline_min_time"],
-                "max_time": series_info["timeline_max_time"],
-                "table_name": series_info["table_name"],
-                "column_name": series_info["column_name"],
-                "device_id": series_info["device_id"],
-                "field_idx": series_info["field_idx"],
-                "tag_columns": series_info["tag_columns"],
-                "tag_values": series_info["tag_values"],
-            }
-        )
+    if cached_infos is None:
+        infos = []
+        for reader, device_id, field_idx in refs:
+            series_info = reader.get_series_info_by_ref(device_id, field_idx)
+            infos.append(
+                {
+                    "length": series_info["timeline_length"],
+                    "min_time": series_info["timeline_min_time"],
+                    "max_time": series_info["timeline_max_time"],
+                }
+            )
+    else:
+        infos = cached_infos
+    if cached_locator_ids is None:
+        locator_ids = [None] * len(refs)
+    else:
+        if len(cached_locator_ids) != len(refs):
+            raise ValueError("cached locator count does not match series refs")
+        locator_ids = cached_locator_ids
     ordered = sorted(
-        zip(refs, infos), key=lambda item: (item[1]["min_time"], item[1]["max_time"])
+        zip(refs, infos, locator_ids),
+        key=lambda item: (item[1]["min_time"], item[1]["max_time"]),
     )
-    if _has_time_range_overlap([info for _, info in ordered]):
+    if _has_time_range_overlap([info for _, info, _ in ordered]):
         return _read_field_by_position_overlap(series_name, ordered, offset, limit)
 
     remaining_offset = offset
     remaining_limit = limit
     time_parts = []
     value_parts = []
-    for (reader, device_id, field_idx), info in ordered:
+    for (reader, device_id, field_idx), info, locator_id in ordered:
         shard_count = info["length"]
         if remaining_offset >= shard_count:
             remaining_offset -= shard_count
             continue
         local_limit = min(remaining_limit, shard_count - remaining_offset)
-        ts_arr, values = reader.read_series_by_row(
-            device_id, field_idx, remaining_offset, local_limit
+        ts_arr, values = _read_shard_by_position(
+            reader,
+            device_id,
+            field_idx,
+            locator_id,
+            remaining_offset,
+            local_limit,
         )
         if len(ts_arr) > 0:
             time_parts.append(ts_arr)
@@ -369,6 +448,16 @@ def _read_field_by_position(
     if not time_parts:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
     return np.concatenate(time_parts), np.concatenate(value_parts)
+
+
+def _read_shard_by_position(
+    reader, device_id, field_idx, locator_id, offset, limit
+) -> Tuple[np.ndarray, np.ndarray]:
+    if locator_id is not None:
+        read_at_locator = getattr(reader, "read_series_by_row_at_locator", None)
+        if read_at_locator is not None:
+            return read_at_locator(locator_id, offset, limit)
+    return reader.read_series_by_row(device_id, field_idx, offset, limit)
 
 
 def _has_time_range_overlap(infos: List[dict]) -> bool:
@@ -388,12 +477,12 @@ def _has_time_range_overlap(infos: List[dict]) -> bool:
 
 def _read_field_by_position_overlap(
     series_name: str,
-    ordered: List[Tuple[SeriesRef, dict]],
+    ordered: List[Tuple[SeriesRef, dict, Optional[int]]],
     offset: int,
     limit: int,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Merge overlapping shard streams lazily until the requested global window is covered."""
-    total_count = sum(info["length"] for _, info in ordered)
+    total_count = sum(info["length"] for _, info, _ in ordered)
     if offset >= total_count:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
@@ -411,8 +500,13 @@ def _read_field_by_position_overlap(
 
             local_limit = min(chunk_size, remaining)
             reader, device_id, field_idx = state["ref"]
-            ts_arr, val_arr = reader.read_series_by_row(
-                device_id, field_idx, state["next_offset"], local_limit
+            ts_arr, val_arr = _read_shard_by_position(
+                reader,
+                device_id,
+                field_idx,
+                state["locator_id"],
+                state["next_offset"],
+                local_limit,
             )
             state["next_offset"] += len(ts_arr)
             state["timestamps"] = ts_arr
@@ -425,11 +519,12 @@ def _read_field_by_position_overlap(
             return False
         return True
 
-    for ref, info in ordered:
+    for ref, info, locator_id in ordered:
         state_idx = len(states)
         states.append(
             {
                 "ref": ref,
+                "locator_id": locator_id,
                 "length": info["length"],
                 "next_offset": 0,
                 "timestamps": np.array([], dtype=np.int64),
@@ -568,9 +663,31 @@ class _LocIndexer:
 
             _, table_entry, _ = self._df._get_series_components(series_ref)
             field_name = table_entry.field_columns[field_idx]
-            for reader, device_id, reader_field_idx in self._df._index.series_shards[
-                series_ref
-            ]:
+            descriptor = self._df._index.series_shards.describe(series_ref)
+            for shard in descriptor.shards:
+                overlap_start = max(start_time, shard.min_time)
+                overlap_end = min(end_time, shard.max_time)
+                if shard.timeline_length <= 0 or overlap_start > overlap_end:
+                    continue
+                if overlap_start <= shard.min_time and overlap_end >= shard.max_time:
+                    estimated_rows = shard.timeline_length
+                elif shard.min_time == shard.max_time:
+                    estimated_rows = 1
+                else:
+                    estimated_rows = max(
+                        1,
+                        min(
+                            shard.timeline_length,
+                            int(
+                                shard.timeline_length
+                                * (overlap_end - overlap_start + 1)
+                                / (shard.max_time - shard.min_time + 1)
+                            ),
+                        ),
+                    )
+                reader = shard.reader
+                device_id = shard.device_id
+                reader_field_idx = shard.column_id
                 groups[(id(reader), device_id)].append(
                     (
                         col_idx,
@@ -579,22 +696,35 @@ class _LocIndexer:
                         series_names[col_idx],
                         reader,
                         device_id,
+                        estimated_rows,
                     )
                 )
 
-        series_time_parts = defaultdict(list)
-        series_value_parts = defaultdict(list)
-        for entries in groups.values():
+        def query_group(entries):
             reader = entries[0][4]
             device_id = entries[0][5]
             field_indices = list(dict.fromkeys(entry[1] for entry in entries))
             ts_arr, field_vals = reader.read_device_fields_by_time_range(
                 device_id, field_indices, start_time, end_time
             )
+            return entries, ts_arr, field_vals
+
+        group_entries = list(groups.values())
+        group_results = self._df._runtime.map_query_groups(
+            query_group,
+            group_entries,
+            estimated_rows=[
+                max(entry[6] for entry in entries) for entries in group_entries
+            ],
+        )
+
+        series_time_parts = defaultdict(list)
+        series_value_parts = defaultdict(list)
+        for entries, ts_arr, field_vals in group_results:
             if len(ts_arr) == 0:
                 continue
             appended_series = set()
-            for _, _, field_name, series_name, _, _ in entries:
+            for _, _, field_name, series_name, _, _, _ in entries:
                 if series_name in appended_series:
                     continue
                 appended_series.add(series_name)
@@ -610,11 +740,12 @@ class _LocIndexer:
         return build_aligned_matrix(series_names, series_data)
 
     def __getitem__(self, key) -> AlignedTimeseries:
-        start_time, end_time, series_refs, series_names = self._parse_key(key)
-        timestamps, values = self._query_aligned(
-            start_time, end_time, series_refs, series_names
-        )
-        return AlignedTimeseries(timestamps, values, series_names)
+        with self._df._query_guard():
+            start_time, end_time, series_refs, series_names = self._parse_key(key)
+            timestamps, values = self._query_aligned(
+                start_time, end_time, series_refs, series_names
+            )
+            return AlignedTimeseries(timestamps, values, series_names)
 
 
 class TsFileDataFrame:
@@ -628,6 +759,8 @@ class TsFileDataFrame:
         self._is_view = False
         self._root = None
         self._closed = False
+        self._runtime = None
+        self._runtime_lease = None
         self._load_metadata()
 
     @classmethod
@@ -641,40 +774,84 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._readers = parent._readers
-        # Reuse the parent's full mapping but restrict the membership scope to
-        # the requested subset.
         subset_refs = list(series_refs)
-        parent_shards = parent._index.series_shards
-        subset_shards = {ref: parent_shards[ref] for ref in subset_refs}
-        obj._index = _DataFrameCatalog(
+        obj._index = SimpleNamespace(
             model=parent._index.model,
             table_entries=parent._index.table_entries,
             devices=parent._index.devices,
             device_index=parent._index.device_index,
             device_time_bounds=parent._index.device_time_bounds,
             series=subset_refs,
-            series_shards=subset_shards,
+            series_shards=parent._index.series_shards,
         )
+        obj._runtime = parent._runtime
+        obj._runtime_lease = (
+            parent._runtime_lease.clone() if parent._runtime_lease is not None else None
+        )
+        obj._readers = parent._readers
         obj._closed = False
         return obj
 
     def _owner(self) -> "TsFileDataFrame":
-        return self._root if self._is_view else self
+        return self
 
     def _assert_open(self):
-        if self._owner()._closed:
+        if self._closed:
             raise RuntimeError("Current TsFileDataFrame is closed.")
 
-    def _load_metadata(self):
-        """Build the logical cross-file index and the derived per-series caches."""
-        from .reader import TsFileSeriesReader
-
-        if len(self._paths) >= 2:
-            self._load_metadata_parallel(TsFileSeriesReader)
+    @contextlib.contextmanager
+    def _query_guard(self):
+        self._assert_open()
+        if self._runtime_lease is None:
+            yield
         else:
-            self._load_metadata_serial(TsFileSeriesReader)
+            with self._runtime_lease.query_lease():
+                yield
 
-        if not self._index.series:
+    def _load_metadata(self):
+        """Map a valid persistent index, or build it once under a file lock."""
+        from .reader import TsFileSeriesReader
+        from .index import (
+            build_index_from_dataframe,
+            index_matches_paths,
+            index_path_for,
+        )
+        from .runtime import DatasetRuntime
+
+        index_path = index_path_for(self._paths)
+        if not index_matches_paths(index_path, self._paths):
+            lock_path = index_path + ".lock"
+            os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+            with open(lock_path, "a+b") as lock_file:
+                try:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                except ImportError:
+                    pass
+                if not index_matches_paths(index_path, self._paths):
+                    if len(self._paths) >= 2:
+                        self._load_metadata_parallel(TsFileSeriesReader)
+                    else:
+                        self._load_metadata_serial(TsFileSeriesReader)
+
+                    if not self._index.series:
+                        raise ValueError(
+                            "No valid time series found in the provided TsFile files"
+                        )
+                    try:
+                        _validate_unique_shard_timestamps(self._index)
+                        build_index_from_dataframe(self, index_path)
+                    finally:
+                        for reader in self._readers.values():
+                            reader.close()
+                        self._readers.clear()
+
+        self._runtime = DatasetRuntime(index_path)
+        self._runtime_lease = self._runtime.lease()
+        self._index = self._runtime.catalog
+        if len(self._index.series) == 0:
+            self._runtime_lease.close()
             raise ValueError("No valid time series found in the provided TsFile files")
 
     def _show_loading_progress(self, done: int, total: int, total_series: int = None):
@@ -748,13 +925,36 @@ class TsFileDataFrame:
         device_key = self._index.devices[device_idx]
         return device_key, self._index.table_entries[device_key[0]], field_idx
 
-    def _build_series_name(self, series_ref: SeriesRefKey) -> SeriesPath:
+    def _build_series_name(
+        self, series_ref: SeriesRefKey, series_id: Optional[int] = None
+    ) -> SeriesPath:
         device_key, table_entry, field_idx = self._get_series_components(series_ref)
         table_name, tag_values = device_key
         field_name = table_entry.field_columns[field_idx]
         return build_logical_series_path(
-            table_name, tag_values, field_name, table_entry.tag_columns
+            table_name,
+            tag_values,
+            field_name,
+            table_entry.tag_columns,
+            index_identity=getattr(self._index, "index_identity", None),
+            series_id=series_id,
         )
+
+    def _descriptor_from_series_path(self, series_path: SeriesPath):
+        identity = getattr(series_path, "_index_identity", None)
+        series_id = getattr(series_path, "_series_id", None)
+        resolver = getattr(self._index, "resolve_series_descriptor_by_id", None)
+        if (
+            identity is None
+            or series_id is None
+            or resolver is None
+            or identity != getattr(self._index, "index_identity", None)
+        ):
+            return None
+        try:
+            return resolver(series_id, series_path.table, series_path.field)
+        except (IndexError, KeyError, ValueError):
+            return None
 
     def _resolve_series_name(self, series_name) -> SeriesRefKey:
         """Resolve a ``SeriesPath`` or path string (``\\N`` = null tag) to a ref.
@@ -763,6 +963,9 @@ class TsFileDataFrame:
         direct lookup -- no sparse/compressed fallback and no ambiguity.
         """
         if isinstance(series_name, SeriesPath):
+            descriptor = self._descriptor_from_series_path(series_name)
+            if descriptor is not None:
+                return descriptor.ref
             table_name, tag_parts, field_name = (
                 series_name.table,
                 list(series_name.tags),
@@ -785,7 +988,15 @@ class TsFileDataFrame:
         except ValueError as exc:
             raise KeyError(_series_lookup_hint(series_name)) from exc
 
-        device_key = (table_name, _normalize_tag_values(tag_parts))
+        normalized_tags = _normalize_tag_values(tag_parts)
+        resolver = getattr(self._index, "resolve_series_descriptor", None)
+        if resolver is not None:
+            try:
+                return resolver(table_name, normalized_tags, field_name).ref
+            except (KeyError, ValueError) as exc:
+                raise KeyError(_series_lookup_hint(series_name)) from exc
+
+        device_key = (table_name, normalized_tags)
         device_idx = self._index.device_index.get(device_key)
         if device_idx is None:
             raise KeyError(_series_lookup_hint(series_name))
@@ -828,8 +1039,14 @@ class TsFileDataFrame:
 
     def list_timeseries(self, path_prefix: str = "") -> List[SeriesPath]:
         if not path_prefix:
+            series = self._index.series
+            series_id_at = getattr(series, "series_id", None)
             return [
-                self._build_series_name(series_ref) for series_ref in self._index.series
+                self._build_series_name(
+                    series[position],
+                    None if series_id_at is None else series_id_at(position),
+                )
+                for position in range(len(series))
             ]
 
         try:
@@ -838,7 +1055,9 @@ class TsFileDataFrame:
             return []
 
         matched = []
-        for series_ref in self._index.series:
+        series = self._index.series
+        series_id_at = getattr(series, "series_id", None)
+        for position, series_ref in enumerate(series):
             device_key, table_entry, field_idx = self._get_series_components(series_ref)
             components = build_logical_series_components(
                 table_entry.table_name,
@@ -847,7 +1066,12 @@ class TsFileDataFrame:
                 table_entry.tag_columns,
             )
             if prefix_parts == components[: len(prefix_parts)]:
-                matched.append(self._build_series_name(series_ref))
+                matched.append(
+                    self._build_series_name(
+                        series_ref,
+                        None if series_id_at is None else series_id_at(position),
+                    )
+                )
         return matched
 
     def list_timeseries_metadata(self, path_prefix: str = ""):
@@ -910,20 +1134,58 @@ class TsFileDataFrame:
                 ordered_columns.append(extra)
         return df.reindex(columns=ordered_columns)
 
-    def _get_timeseries(self, series_ref: SeriesRefKey) -> Timeseries:
+    def _get_timeseries(
+        self,
+        series_ref: SeriesRefKey,
+        descriptor=None,
+        series_name: Optional[SeriesPath] = None,
+    ) -> Timeseries:
         self._assert_open()
-        series_name = self._build_series_name(series_ref)
+        if series_name is None:
+            series_name = self._build_series_name(series_ref)
+        if descriptor is None:
+            describe = getattr(self._index.series_shards, "describe", None)
+            if describe is not None:
+                descriptor = describe(series_ref)
+        if descriptor is None:
+            refs = self._index.series_shards[series_ref]
+            stats = _build_runtime_series_stats(refs)
+            cached_infos = None
+            cached_locator_ids = None
+        else:
+            refs = list(descriptor.refs)
+            stats = {
+                "min_time": descriptor.min_time,
+                "max_time": descriptor.max_time,
+                "count": descriptor.count,
+            }
+            cached_infos = tuple(
+                {
+                    "length": shard.timeline_length,
+                    "min_time": shard.min_time,
+                    "max_time": shard.max_time,
+                }
+                for shard in descriptor.shards
+            )
+            cached_locator_ids = tuple(shard.locator_id for shard in descriptor.shards)
+        runtime_lease = (
+            self._runtime_lease.clone() if self._runtime_lease is not None else None
+        )
         return Timeseries(
             series_name,
-            self._index.series_shards[series_ref],
-            _build_runtime_series_stats(self._index.series_shards[series_ref]),
-            self._assert_open,
-            lambda: _merge_field_timestamps(
-                series_name, self._index.series_shards[series_ref]
-            ),
+            refs,
+            stats,
+            self._assert_open if runtime_lease is None else None,
+            lambda: _merge_field_timestamps(series_name, refs),
             lambda offset, limit: _read_field_by_position(
-                series_name, self._index.series_shards[series_ref], offset, limit
+                series_name,
+                refs,
+                offset,
+                limit,
+                cached_infos,
+                cached_locator_ids,
             ),
+            runtime_lease=runtime_lease,
         )
 
     def __getitem__(self, key):
@@ -944,12 +1206,36 @@ class TsFileDataFrame:
                 raise IndexError(
                     f"Index {idx} out of range [0, {len(self._index.series)})"
                 )
-            return self._get_timeseries(self._index.series[idx])
+            series_ref = self._index.series[idx]
+            descriptor = None
+            series_id_at = getattr(self._index.series, "series_id", None)
+            describe = getattr(self._index.series_shards, "describe", None)
+            if series_id_at is not None and describe is not None:
+                descriptor = describe(series_ref, series_id=series_id_at(idx))
+            return self._get_timeseries(series_ref, descriptor)
+
+        if isinstance(key, SeriesPath):
+            descriptor = self._descriptor_from_series_path(key)
+            if descriptor is not None:
+                return self._get_timeseries(descriptor.ref, descriptor, key)
 
         if isinstance(key, str):
             try:
-                return self._get_timeseries(self._resolve_series_name(key))
-            except KeyError:
+                resolver = getattr(self._index, "resolve_series_descriptor", None)
+                if resolver is None:
+                    return self._get_timeseries(self._resolve_series_name(key))
+
+                parts = split_logical_series_path(key)
+                if len(parts) < 2:
+                    raise KeyError(key)
+                table_name, field_name = parts[0], parts[-1]
+                descriptor = resolver(
+                    table_name,
+                    _normalize_tag_values(parts[1:-1]),
+                    field_name,
+                )
+                return self._get_timeseries(descriptor.ref, descriptor)
+            except (KeyError, ValueError):
                 pass
 
             valid_columns = {"field", "start_time", "end_time", "count"}
@@ -1087,24 +1373,19 @@ class TsFileDataFrame:
         print(self._repr_header() + self._format_table(max_rows=max_rows))
 
     def close(self):
-        if self._is_view:
-            warnings.warn(
-                "close() on a subset TsFileDataFrame is a no-op; only the root dataframe owns the readers.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return
         if self._closed:
             return
-        for reader in self._readers.values():
-            reader.close()
-        self._readers.clear()
         self._closed = True
+        if self._runtime_lease is not None:
+            self._runtime_lease.close()
+        else:
+            for reader in self._readers.values():
+                reader.close()
+            self._readers.clear()
 
     def __del__(self):
         try:
-            if not getattr(self, "_is_view", False):
-                self.close()
+            self.close()
         except Exception:
             pass
 

@@ -20,6 +20,7 @@
 #include "common/tsfile_common.h"
 
 #include <algorithm>
+#include <limits>
 #include <map>
 
 #include "common/logger/elog.h"
@@ -180,37 +181,101 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID>& ret_device_id,
     return ret;
 }
 
-int TsFileMeta::serialize_to(common::ByteStream& out) {
+int TsFileMeta::serialize_to(common::ByteStream& out,
+                             int32_t& serialized_size) {
+    serialized_size = 0;
+    const size_t max_property_size =
+        static_cast<size_t>(std::numeric_limits<int32_t>::max());
+    if (tsfile_properties_.size() > max_property_size) {
+        return common::E_OUT_OF_RANGE;
+    }
+    for (const auto& tsfile_property : tsfile_properties_) {
+        if (tsfile_property.first.size() > max_property_size ||
+            (!tsfile_property.second.is_null &&
+             tsfile_property.second.value.size() > max_property_size)) {
+            return common::E_OUT_OF_RANGE;
+        }
+    }
+
+    int ret = common::E_OK;
     auto start_idx = out.total_size();
-    common::SerializationUtil::write_var_uint(
-        table_metadata_index_node_map_.size(), out);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            table_metadata_index_node_map_.size(), out))) {
+        return ret;
+    }
     for (auto& idx_nodes_iter : table_metadata_index_node_map_) {
-        common::SerializationUtil::write_var_str(idx_nodes_iter.first, out);
-        idx_nodes_iter.second->serialize_to(out);
+        if (RET_FAIL(common::SerializationUtil::write_var_str(
+                idx_nodes_iter.first, out))) {
+            return ret;
+        } else if (RET_FAIL(idx_nodes_iter.second->serialize_to(out))) {
+            return ret;
+        }
     }
 
-    common::SerializationUtil::write_var_uint(table_schemas_.size(), out);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            table_schemas_.size(), out))) {
+        return ret;
+    }
     for (auto& table_schema_iter : table_schemas_) {
-        common::SerializationUtil::write_var_str(table_schema_iter.first, out);
-        table_schema_iter.second->serialize_to(out);
+        if (RET_FAIL(common::SerializationUtil::write_var_str(
+                table_schema_iter.first, out))) {
+            return ret;
+        } else if (RET_FAIL(table_schema_iter.second->serialize_to(out))) {
+            return ret;
+        }
     }
 
-    common::SerializationUtil::write_i64(meta_offset_, out);
+    if (RET_FAIL(common::SerializationUtil::write_i64(meta_offset_, out))) {
+        return ret;
+    }
 
     if (bloom_filter_ != nullptr) {
-        bloom_filter_->serialize_to(out);
+        if (RET_FAIL(bloom_filter_->serialize_to(out))) {
+            return ret;
+        }
     } else {
-        common::SerializationUtil::write_ui8(0, out);
+        if (RET_FAIL(common::SerializationUtil::write_ui8(0, out))) {
+            return ret;
+        }
     }
 
-    common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
+    if (RET_FAIL(common::SerializationUtil::write_var_int(
+            static_cast<int32_t>(tsfile_properties_.size()), out))) {
+        return ret;
+    }
     for (const auto& tsfile_property : tsfile_properties_) {
-        common::SerializationUtil::write_var_str(tsfile_property.first, out);
-        common::SerializationUtil::write_var_char_ptr(tsfile_property.second,
-                                                      out);
+        if (RET_FAIL(common::SerializationUtil::write_var_str(
+                tsfile_property.first, out))) {
+            return ret;
+        }
+        const TsFilePropertyValue& value = tsfile_property.second;
+        if (value.is_null) {
+            if (RET_FAIL(common::SerializationUtil::write_var_int(
+                    NO_STR_TO_READ, out))) {
+                return ret;
+            }
+        } else {
+            if (RET_FAIL(common::SerializationUtil::write_var_int(
+                    static_cast<int32_t>(value.value.size()), out))) {
+                return ret;
+            }
+            if (!value.value.empty()) {
+                if (RET_FAIL(out.write_buf(
+                        value.value.data(),
+                        static_cast<uint32_t>(value.value.size())))) {
+                    return ret;
+                }
+            }
+        }
     }
 
-    return out.total_size() - start_idx;
+    const uint64_t total_size = out.total_size() - start_idx;
+    if (total_size >
+        static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    serialized_size = static_cast<int32_t>(total_size);
+    return common::E_OK;
 }
 
 int TsFileMeta::deserialize_from(common::ByteStream& in) {
@@ -251,15 +316,67 @@ int TsFileMeta::deserialize_from(common::ByteStream& in) {
 
     common::SerializationUtil::read_i64(meta_offset_, in);
 
-    bloom_filter_->deserialize_from(in);
+    if (RET_FAIL(bloom_filter_->deserialize_from(in))) {
+        return ret;
+    }
 
     int32_t tsfile_properties_size = 0;
-    common::SerializationUtil::read_var_int(tsfile_properties_size, in);
+    if (RET_FAIL(common::SerializationUtil::read_var_int(tsfile_properties_size,
+                                                         in))) {
+        return ret;
+    }
+    if (tsfile_properties_size < 0) {
+        return common::E_TSFILE_CORRUPTED;
+    }
     for (int i = 0; i < tsfile_properties_size; i++) {
-        std::string key, *value;
-        common::SerializationUtil::read_var_str(key, in);
-        common::SerializationUtil::read_var_char_ptr(value, in);
-        tsfile_properties_.emplace(key, value);
+        std::string key;
+        int32_t key_len = 0;
+        int32_t value_len = 0;
+        if (RET_FAIL(common::SerializationUtil::read_var_int(key_len, in))) {
+            return ret;
+        } else if (key_len < 0) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        if (static_cast<uint64_t>(key_len) > in.remaining_size()) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        key.resize(static_cast<size_t>(key_len));
+        if (key_len > 0) {
+            uint32_t read_len = 0;
+            if (RET_FAIL(in.read_buf(reinterpret_cast<uint8_t*>(&key[0]),
+                                     static_cast<uint32_t>(key_len),
+                                     read_len))) {
+                return ret;
+            } else if (read_len != static_cast<uint32_t>(key_len)) {
+                return common::E_BUF_NOT_ENOUGH;
+            }
+        }
+        if (RET_FAIL(common::SerializationUtil::read_var_int(value_len, in))) {
+            return ret;
+        }
+
+        TsFilePropertyValue value;
+        if (value_len == NO_STR_TO_READ) {
+            value.is_null = true;
+        } else if (value_len < 0) {
+            return common::E_TSFILE_CORRUPTED;
+        } else {
+            if (static_cast<uint64_t>(value_len) > in.remaining_size()) {
+                return common::E_TSFILE_CORRUPTED;
+            }
+            value.is_null = false;
+            value.value.resize(static_cast<size_t>(value_len));
+            if (value_len > 0) {
+                uint32_t read_len = 0;
+                if (RET_FAIL(
+                        in.read_buf(value.value.data(), value_len, read_len))) {
+                    return ret;
+                } else if (read_len != static_cast<uint32_t>(value_len)) {
+                    return common::E_BUF_NOT_ENOUGH;
+                }
+            }
+        }
+        tsfile_properties_.emplace(key, std::move(value));
     }
     return ret;
 }

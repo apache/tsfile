@@ -20,6 +20,8 @@
 
 #include <utils/storage_utils.h>
 
+#include <cstring>
+
 namespace storage {
 void TableResultSet::init() {
     row_record_ = new RowRecord(column_names_.size() + 1);
@@ -127,14 +129,16 @@ bool TableResultSet::is_null(uint32_t column_index) {
 // the column's physical storage width (DATE is int32, not int64).  On a
 // mismatch it fires in debug instead of silently splicing the adjacent cell's
 // bytes into the result.
-#define TSFILE_FAST_PRIMITIVE_READ(TYPE, DFLT)                         \
-    if (!row_ready_) return DFLT;                                      \
-    common::Vector* vec = row_iterator_->get_vector(column_index - 1); \
-    ASSERT(common::TypeMatch<TYPE>(vec->get_vector_type()));           \
-    if (vec->has_null() && vec->is_null(row_iterator_->get_row_id()))  \
-        return DFLT;                                                   \
-    return *reinterpret_cast<TYPE*>(vec->get_value_data().get_data() + \
-                                    vec->get_offset())
+#define TSFILE_FAST_PRIMITIVE_READ(TYPE, DFLT)                                \
+    if (!row_ready_) return DFLT;                                             \
+    common::Vector* vec = row_iterator_->get_vector(column_index - 1);        \
+    ASSERT(common::TypeMatch<TYPE>(vec->get_vector_type()));                  \
+    if (vec->has_null() && vec->is_null(row_iterator_->get_row_id()))         \
+        return DFLT;                                                          \
+    TYPE value;                                                               \
+    std::memcpy(&value, vec->get_value_data().get_data() + vec->get_offset(), \
+                sizeof(value));                                               \
+    return value
 
 bool TableResultSet::get_bool_at(uint32_t column_index) {
     TSFILE_FAST_PRIMITIVE_READ(bool, false);

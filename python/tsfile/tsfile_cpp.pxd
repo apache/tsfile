@@ -17,9 +17,15 @@
 #
 
 #cython: language_level=3
-from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
+from libc.stdint cimport uint16_t, uint32_t, int32_t, int64_t, uint64_t, uint8_t
 
 ctypedef int32_t ErrorCode
+
+cdef extern from "cwrapper/errno_define_c.h":
+    enum:
+        RET_OK
+        RET_NO_MORE_DATA
+        RET_FILE_WRITE_ERR
 
 # import symbols from tsfile_cwrapper.h
 cdef extern from "cwrapper/tsfile_cwrapper.h":
@@ -32,6 +38,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     ctypedef void * Tablet
     ctypedef void * TsRecord
     ctypedef void * ResultSet
+    ctypedef void * PreparedSeriesHandle
 
     # enum types
     ctypedef enum TSDataType:
@@ -61,6 +68,10 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_ENCODING_GORILLA = 8,
         TS_ENCODING_ZIGZAG = 9,
         TS_ENCODING_FREQ = 10,
+        TS_ENCODING_CHIMP = 11,
+        TS_ENCODING_SPRINTZ = 12,
+        TS_ENCODING_RLBE = 13,
+        TS_ENCODING_CAMEL = 14,
         TS_ENCODING_INVALID = 255
 
     ctypedef enum CompressionType:
@@ -72,6 +83,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_COMPRESSION_PAA = 5,
         TS_COMPRESSION_PLA = 6,
         TS_COMPRESSION_LZ4 = 7,
+        TS_COMPRESSION_ZSTD = 8,
+        TS_COMPRESSION_LZMA2 = 9,
         TS_COMPRESSION_INVALID = 255
 
     ctypedef enum ColumnCategory:
@@ -160,6 +173,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         int32_t chunk_meta_count
         TimeseriesStatistic statistic
         TimeseriesStatistic timeline_statistic
+        uint64_t value_metadata_offset
+        uint32_t value_metadata_length
+        uint64_t time_metadata_offset
+        uint32_t time_metadata_length
+        uint32_t time_chunk_meta_count
+        uint16_t layout
+        uint16_t locator_flags
 
     ctypedef struct DeviceID:
         char * path
@@ -176,10 +196,30 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         DeviceTimeseriesMetadataEntry * entries
         uint32_t device_count
 
+    ctypedef struct TsFileProperty:
+        char * key
+        uint32_t key_len
+        uint8_t * value
+        uint32_t value_len
+        bint is_null
+
     ctypedef struct ResultSetMetaData:
         char** column_names
         TSDataType * data_types
         int column_num
+
+    ctypedef struct TsFilePreparedLocator:
+        uint64_t mapped_index_identity
+        uint32_t file_id
+        uint64_t file_size
+        uint64_t file_fingerprint
+        uint32_t locator_id
+        uint16_t layout
+        uint16_t flags
+        uint64_t value_metadata_offset
+        uint32_t value_metadata_length
+        uint64_t time_metadata_offset
+        uint32_t time_metadata_length
 
     # Function Declarations
 
@@ -196,6 +236,9 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     # writer : flush
     ErrorCode _tsfile_writer_flush(TsFileWriter writer);
+    ErrorCode _tsfile_writer_add_tsfile_property(
+        TsFileWriter writer, const char * key, uint32_t key_len,
+        const uint8_t * value, uint32_t value_len);
 
     # writer : register table, device and timeseries
     ErrorCode _tsfile_writer_register_table(TsFileWriter writer, TableSchema * schema);
@@ -254,6 +297,22 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                  const char** columns, uint32_t column_num,
                                  int64_t start_time, int64_t end_time, ErrorCode *err_code)
 
+    PreparedSeriesHandle tsfile_reader_prepare_series(
+        TsFileReader reader, const TsFilePreparedLocator * locator,
+        ErrorCode * err_code) nogil
+    PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
+        TsFileReader reader, const TsFilePreparedLocator * locator,
+        PreparedSeriesHandle aligned_time_owner, ErrorCode * err_code) nogil
+    void tsfile_prepared_series_free(PreparedSeriesHandle prepared)
+    ResultSet tsfile_reader_query_prepared(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ErrorCode * err_code) nogil
+    ResultSet tsfile_reader_query_prepared_multi(
+        TsFileReader reader, const PreparedSeriesHandle * prepared,
+        uint32_t prepared_count, int64_t start_time, int64_t end_time,
+        int offset, int limit, ErrorCode * err_code) nogil
+
     ResultSet tsfile_query_table_on_tree(TsFileReader reader,
                          char** columns, uint32_t column_num,
                          int64_t start_time, int64_t end_time,
@@ -311,6 +370,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         DeviceTimeseriesMetadataMap * out_map);
     void tsfile_free_device_timeseries_metadata_map(
         DeviceTimeseriesMetadataMap * map);
+    ErrorCode tsfile_reader_get_tsfile_properties(
+        TsFileReader reader, TsFileProperty ** out_properties,
+        uint32_t * out_length);
+    void tsfile_free_tsfile_properties(TsFileProperty * properties,
+                                       uint32_t length);
 
     # Tag filter types and functions
 
@@ -405,7 +469,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     # Arrow batch reading function
     ErrorCode tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
                                                           ArrowArray* out_array,
-                                                          ArrowSchema* out_schema);
+                                                          ArrowSchema* out_schema) nogil
 
     # Arrow batch writing function
     ErrorCode _tsfile_writer_write_arrow_table(TsFileWriter writer,

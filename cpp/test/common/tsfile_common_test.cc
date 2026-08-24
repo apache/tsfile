@@ -449,19 +449,23 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
         table_name, column_schemas, column_categories);
 
     meta_.table_schemas_.insert(std::make_pair(table_name, table_schema));
+    meta_.tsfile_properties_.insert(std::make_pair(
+        "key",
+        TsFilePropertyValue(std::vector<uint8_t>{'v', 'a', 'l', 'u', 'e'})));
     meta_.tsfile_properties_.insert(
-        std::make_pair("key", new std::string("value")));
-    meta_.tsfile_properties_.insert(std::make_pair("null_key", nullptr));
+        std::make_pair("null_key", TsFilePropertyValue()));
 
     meta_.meta_offset_ = 456;
     void* buf = pa_.alloc(sizeof(BloomFilter));
     meta_.bloom_filter_ = new (buf) BloomFilter();
     meta_.bloom_filter_->init(0.1, 100);
 
-    meta_.serialize_to(*out_);
+    int32_t serialized_size = 0;
+    ASSERT_EQ(common::E_OK, meta_.serialize_to(*out_, serialized_size));
+    ASSERT_EQ(serialized_size, out_->total_size());
 
     TsFileMeta new_meta(&pa_);
-    new_meta.deserialize_from(*out_);
+    ASSERT_EQ(common::E_OK, new_meta.deserialize_from(*out_));
 
     ASSERT_EQ(new_meta.meta_offset_, 456);
     ASSERT_EQ(new_meta.table_metadata_index_node_map_.size(), 1);
@@ -471,8 +475,70 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     ASSERT_EQ(new_meta.table_schemas_.size(), 1);
     ASSERT_EQ(
         new_meta.table_schemas_[table_name]->get_column_categories().size(), 1);
-    ASSERT_EQ(*new_meta.tsfile_properties_["key"], std::string("value"));
-    ASSERT_EQ(new_meta.tsfile_properties_["null_key"], nullptr);
+    ASSERT_FALSE(new_meta.tsfile_properties_["key"].is_null);
+    ASSERT_EQ(new_meta.tsfile_properties_["key"].value,
+              (std::vector<uint8_t>{'v', 'a', 'l', 'u', 'e'}));
+    ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].is_null);
+    ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].value.empty());
+}
+
+TEST_F(TsFileMetaTest, DeserializesLegacyEmptyBloomFilterEncoding) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_str("legacy", *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(3, *out_));
+    ASSERT_EQ(common::E_OK, out_->write_buf("old", 3));
+
+    TsFileMeta meta(&pa_);
+    ASSERT_EQ(common::E_OK, meta.deserialize_from(*out_));
+    ASSERT_EQ(1U, meta.tsfile_properties_.size());
+    ASSERT_FALSE(meta.tsfile_properties_["legacy"].is_null);
+    EXPECT_EQ((std::vector<uint8_t>{'o', 'l', 'd'}),
+              meta.tsfile_properties_["legacy"].value);
+    EXPECT_EQ(0U, out_->remaining_size());
+}
+
+TEST_F(TsFileMetaTest, RejectsPropertyKeyLengthBeyondRemainingInput) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_ui8(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_int(1024, *out_));
+
+    TsFileMeta meta(&pa_);
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, meta.deserialize_from(*out_));
+}
+
+TEST_F(TsFileMetaTest, RejectsPropertyValueLengthBeyondRemainingInput) {
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_uint(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_i64(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_ui8(0, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_int(1, *out_));
+    ASSERT_EQ(common::E_OK, out_->write_buf("k", 1));
+    ASSERT_EQ(common::E_OK,
+              common::SerializationUtil::write_var_int(1024, *out_));
+
+    TsFileMeta meta(&pa_);
+    EXPECT_EQ(common::E_TSFILE_CORRUPTED, meta.deserialize_from(*out_));
 }
 
 // Regression: the default-compression configuration must name a compressor
@@ -498,5 +564,38 @@ TEST(DefaultCompressorTest, DefaultIsAllocatable) {
               common::CompressionType::UNCOMPRESSED);
 #endif
     CompressorFactory::free(c);
+}
+
+TEST(CodecEnumAlignmentTest, JavaCodecIdsMapToNames) {
+    EXPECT_STREQ(common::get_encoding_name(common::CHIMP), "CHIMP");
+    EXPECT_STREQ(common::get_encoding_name(common::SPRINTZ), "SPRINTZ");
+    EXPECT_STREQ(common::get_encoding_name(common::RLBE), "RLBE");
+    EXPECT_STREQ(common::get_encoding_name(common::CAMEL), "CAMEL");
+    EXPECT_STREQ(common::get_compression_name(common::ZSTD), "ZSTD");
+    EXPECT_STREQ(common::get_compression_name(common::LZMA2), "LZMA2");
+}
+
+TEST(CodecEnumAlignmentTest, JavaEncodingsAreConfigurableWhenImplemented) {
+    EXPECT_EQ(common::set_datatype_encoding(common::INT32, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int32_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::INT64, common::RLBE),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int64_encoding_type_, common::RLBE);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.float_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::DOUBLE, common::CAMEL),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.double_encoding_type_, common::CAMEL);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CAMEL),
+              common::E_NOT_SUPPORT);
+}
+
+TEST(CodecEnumAlignmentTest, JavaCompressionCodecsAreConfigurable) {
+    EXPECT_EQ(common::set_global_compression(common::ZSTD), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::ZSTD);
+    EXPECT_EQ(common::set_global_compression(common::LZMA2), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::LZMA2);
 }
 }  // namespace storage

@@ -47,6 +47,7 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
     remaining_offset_ = 0;
     remaining_limit_ = -1;
     dense_row_count_ = -1;
+    row_offset_pushed_to_ssi_ = false;
     return init_internal(device_query_task, block_size, time_filter,
                          field_filter);
 }
@@ -58,6 +59,7 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
     remaining_offset_ = row_offset;
     remaining_limit_ = row_limit;
     dense_row_count_ = -1;
+    row_offset_pushed_to_ssi_ = false;
     return init_internal(device_query_task, block_size, time_filter,
                          field_filter);
 }
@@ -162,15 +164,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
     }
     time_column_index_ = 0;
-    if (RET_FAIL(common::TsBlock::create_tsblock(&tuple_desc_, current_block_,
-                                                 block_size))) {
-        return ret;
-    }
-    col_appenders_.resize(tuple_desc_.get_column_count());
-    for (uint32_t i = 0; i < tuple_desc_.get_column_count(); i++) {
-        col_appenders_[i] = new common::ColAppender(i, current_block_);
-    }
-    row_appender_ = new common::RowAppender(current_block_);
     std::vector<ITimeseriesIndex*> time_series_indexs(
         device_query_task_->get_column_mapping()
             ->get_measurement_columns()
@@ -182,6 +175,11 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         return ret;
     }
     dense_row_count_ = compute_dense_row_count(time_series_indexs);
+    if (time_filter == nullptr && field_filter == nullptr &&
+        dense_row_count_ >= 0 && remaining_offset_ >= dense_row_count_) {
+        remaining_offset_ -= dense_row_count_;
+        return common::E_OK;
+    }
     // Early device-level time skip: if time_filter is set and ALL chunks of
     // this device have statistics that fall outside the filter range, skip the
     // entire device.  Chunks without statistics are assumed to satisfy.
@@ -217,8 +215,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
         if (examined_any && all_outside) {
             // No data in this device matches the time filter.
-            delete current_block_;
-            current_block_ = nullptr;
             return common::E_OK;
         }
     }
@@ -278,8 +274,20 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
 
             auto* ctx = new VectorMeasurementColumnContext(tsfile_io_reader_);
+            const int ssi_offset =
+                (time_filter == nullptr && field_filter == nullptr &&
+                 dense_row_count_ >= 0)
+                    ? remaining_offset_
+                    : 0;
             if (common::E_OK == ctx->init(device_query_task_, meas_names,
-                                          time_filter, pos_list, pa_)) {
+                                          time_filter, pos_list, pa_,
+                                          ssi_offset, -1)) {
+                if (ssi_offset > 0) {
+                    row_offset_pushed_to_ssi_ = true;
+                    // init() prefetches the first TsBlock and may consume part
+                    // of the offset by skipping whole chunks/pages.
+                    remaining_offset_ = ctx->get_ssi_row_offset();
+                }
                 // The shared ctx is referenced from N map entries; close()
                 // and the merge loop dedupe by pointer (already in place).
                 for (const auto& name : meas_names) {
@@ -326,8 +334,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
         }
         if (any_value_column_requested) {
-            delete current_block_;
-            current_block_ = nullptr;
             return common::E_OK;
         }
 
@@ -348,8 +354,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             // propagate so the caller sees the actual failure instead of
             // an empty resultset wearing E_OK.
             if (time_only_ret != common::E_NO_MORE_DATA) {
-                delete current_block_;
-                current_block_ = nullptr;
                 return time_only_ret;
             }
         }
@@ -373,10 +377,22 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     if (field_column_contexts_.empty()) {
-        delete current_block_;
-        current_block_ = nullptr;
         return common::E_OK;
     }
+
+    // Metadata and context initialization above can prove that a device has no
+    // rows to return. Delay result-buffer allocation until those early exits
+    // have been ruled out, so skipped devices never create appenders that
+    // briefly point at a deleted TsBlock.
+    if (RET_FAIL(common::TsBlock::create_tsblock(&tuple_desc_, current_block_,
+                                                 block_size))) {
+        return ret;
+    }
+    col_appenders_.resize(tuple_desc_.get_column_count());
+    for (uint32_t i = 0; i < tuple_desc_.get_column_count(); i++) {
+        col_appenders_[i] = new common::ColAppender(i, current_block_);
+    }
+    row_appender_ = new common::RowAppender(current_block_);
 
     for (const auto& id_column :
          device_query_task->get_column_mapping()->get_id_columns()) {
@@ -540,7 +556,11 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
                 int sr = ctx->skip_rows(skip);
                 if (sr != common::E_OK) return sr;
             }
-            remaining_offset_ -= skip;
+            if (row_offset_pushed_to_ssi_ && !aligned_vec_.empty()) {
+                remaining_offset_ = aligned_vec_[0]->get_ssi_row_offset();
+            } else {
+                remaining_offset_ -= skip;
+            }
             continue;
         }
 
@@ -973,6 +993,7 @@ int SingleMeasurementColumnContext::skip_rows(uint32_t count) {
         const uint32_t val_elem_size = common::get_data_type_size(dt);
         value_iter_->advance(to_skip, val_elem_size);
     }
+    consume_ssi_row_offset(static_cast<int>(to_skip));
     if (time_iter_->end()) {
         // Propagate hard errors from the next-tsblock load; E_NO_MORE_DATA
         // is the legitimate end-of-stream signal and gets squashed back to
@@ -1004,7 +1025,8 @@ VectorMeasurementColumnContext::~VectorMeasurementColumnContext() {
 int VectorMeasurementColumnContext::init(
     DeviceQueryTask* device_query_task,
     const std::vector<std::string>& measurement_names, Filter* time_filter,
-    std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa) {
+    std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa,
+    int ssi_offset, int ssi_limit) {
     int ret = common::E_OK;
     pos_in_result_ = pos_in_result;
     column_names_ = measurement_names;
@@ -1013,6 +1035,7 @@ int VectorMeasurementColumnContext::init(
             time_filter))) {
         return ret;
     }
+    ssi_->set_row_range(ssi_offset, ssi_limit);
     if (RET_FAIL(get_next_tsblock(true))) {
         return ret;
     }
@@ -1224,6 +1247,7 @@ int VectorMeasurementColumnContext::skip_rows(uint32_t count) {
             }
         }
     }
+    consume_ssi_row_offset(static_cast<int>(to_skip));
     if (time_iter_->end()) {
         int r = get_next_tsblock(false);
         if (r != common::E_OK && r != common::E_NO_MORE_DATA) return r;

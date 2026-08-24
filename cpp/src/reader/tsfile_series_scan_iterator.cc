@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include "common/global.h"
+#include "reader/prepared_series.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
 #endif
@@ -29,6 +30,123 @@
 using namespace common;
 
 namespace storage {
+
+int TsFileSeriesScanIterator::init_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, ReadFile* read_file,
+    Filter* time_filter, common::PageArena& data_pa) {
+    if (prepared == nullptr || prepared->index() == nullptr ||
+        read_file == nullptr) {
+        return E_INVALID_ARG;
+    }
+    prepared_ = prepared;
+    itimeseries_index_ = prepared->index();
+    if (auto* aligned =
+            dynamic_cast<AlignedTimeseriesIndex*>(itimeseries_index_)) {
+        // Prepared table columns must use the same multi-aligned reader as a
+        // normal table query.  The legacy single-value aligned reader has a
+        // different page state machine and does not implement the table batch
+        // contract.  A one-value MultiAlignedTimeseriesIndex is only a view;
+        // the PreparedSeries continues to own both exact metadata indexes.
+        timeseries_index_pa_.init(512, common::MOD_TSFILE_READER);
+        void* multi_memory =
+            timeseries_index_pa_.alloc(sizeof(MultiAlignedTimeseriesIndex));
+        if (multi_memory == nullptr) {
+            return E_OOM;
+        }
+        auto* multi = new (multi_memory) MultiAlignedTimeseriesIndex;
+        multi->time_ts_idx_ = aligned->time_ts_idx_;
+        multi->value_ts_idxs_.push_back(aligned->value_ts_idx_);
+        itimeseries_index_ = multi;
+    }
+    measurement_name_ =
+        itimeseries_index_->get_measurement_name().to_std_string();
+    read_file_ = read_file;
+    time_filter_ = time_filter;
+    data_pa_ = &data_pa;
+    return E_OK;
+}
+
+int TsFileSeriesScanIterator::init_prepared_multi(
+    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+    ReadFile* read_file, Filter* time_filter, common::PageArena& data_pa) {
+    if (prepared.empty() || prepared.front() == nullptr ||
+        read_file == nullptr) {
+        return E_INVALID_ARG;
+    }
+
+    const FileGeneration& generation = prepared.front()->generation();
+    const PreparedLocator& locator = prepared.front()->locator();
+    if (locator.layout != 1 || locator.time_metadata_length == 0) {
+        return E_NOT_SUPPORT;
+    }
+
+    timeseries_index_pa_.init(512, common::MOD_TSFILE_READER);
+    void* multi_memory =
+        timeseries_index_pa_.alloc(sizeof(MultiAlignedTimeseriesIndex));
+    if (multi_memory == nullptr) {
+        return E_OOM;
+    }
+    auto* multi = new (multi_memory) MultiAlignedTimeseriesIndex;
+    // Publish the placement-new object immediately so destroy() can release
+    // its vector if validation of a later entry fails.
+    itimeseries_index_ = multi;
+    multi->value_ts_idxs_.reserve(prepared.size());
+
+    for (const auto& entry : prepared) {
+        if (entry == nullptr || entry->index() == nullptr) {
+            return E_INVALID_ARG;
+        }
+        const FileGeneration& current_generation = entry->generation();
+        const PreparedLocator& current_locator = entry->locator();
+        if (current_generation.mapped_index_identity !=
+                generation.mapped_index_identity ||
+            current_generation.file_id != generation.file_id ||
+            current_generation.file_size != generation.file_size ||
+            current_generation.file_fingerprint !=
+                generation.file_fingerprint ||
+            current_locator.layout != 1 ||
+            current_locator.time_metadata_offset !=
+                locator.time_metadata_offset ||
+            current_locator.time_metadata_length !=
+                locator.time_metadata_length) {
+            return E_INVALID_ARG;
+        }
+        auto* aligned = dynamic_cast<AlignedTimeseriesIndex*>(entry->index());
+        if (aligned == nullptr || aligned->time_ts_idx_ == nullptr ||
+            aligned->value_ts_idx_ == nullptr) {
+            return E_NOT_SUPPORT;
+        }
+        if (multi->time_ts_idx_ == nullptr) {
+            multi->time_ts_idx_ = aligned->time_ts_idx_;
+        } else if (aligned->time_ts_idx_->get_chunk_meta_list()->size() !=
+                   multi->time_ts_idx_->get_chunk_meta_list()->size()) {
+            return E_NOT_SUPPORT;
+        }
+        multi->value_ts_idxs_.push_back(aligned->value_ts_idx_);
+    }
+
+    prepared_group_ = prepared;
+    measurement_name_ = multi->get_measurement_name().to_std_string();
+    read_file_ = read_file;
+    time_filter_ = time_filter;
+    data_pa_ = &data_pa;
+    return E_OK;
+}
+
+namespace {
+bool chunk_may_satisfy_filter(ChunkMeta* chunk_meta, Filter* filter) {
+    return filter == nullptr || chunk_meta == nullptr ||
+           chunk_meta->statistic_ == nullptr ||
+           filter->satisfy(chunk_meta->statistic_);
+}
+
+bool chunk_fully_satisfies_filter(ChunkMeta* chunk_meta, Filter* filter) {
+    return filter == nullptr ||
+           (chunk_meta != nullptr && chunk_meta->statistic_ != nullptr &&
+            filter->contain_start_end_time(chunk_meta->statistic_->start_time_,
+                                           chunk_meta->statistic_->end_time_));
+}
+}  // namespace
 
 void TsFileSeriesScanIterator::destroy() {
     // MultiAlignedTimeseriesIndex is placement-new'd inside
@@ -42,8 +160,6 @@ void TsFileSeriesScanIterator::destroy() {
             dynamic_cast<MultiAlignedTimeseriesIndex*>(itimeseries_index_)) {
         std::vector<TimeseriesIndex*>().swap(multi->value_ts_idxs_);
     }
-    itimeseries_index_ = nullptr;
-    timeseries_index_pa_.destroy();
     if (chunk_reader_ != nullptr) {
         // destroy() already runs manual destructors on internal members
         // (chunk_header_, decoders, compressor, ...), so calling
@@ -54,6 +170,8 @@ void TsFileSeriesScanIterator::destroy() {
         common::mem_free(chunk_reader_);
         chunk_reader_ = nullptr;
     }
+    itimeseries_index_ = nullptr;
+    timeseries_index_pa_.destroy();
     if (tsblock_ != nullptr) {
         tsblock_->~TsBlock();
         tsblock_ = nullptr;
@@ -67,6 +185,8 @@ void TsFileSeriesScanIterator::destroy() {
     std::vector<common::SimpleList<ChunkMeta*>::Iterator>().swap(
         value_chunk_meta_cursors_);
     device_id_.reset();
+    prepared_.reset();
+    std::vector<std::shared_ptr<PreparedSeries>>().swap(prepared_group_);
     std::string().swap(measurement_name_);
 }
 
@@ -122,6 +242,31 @@ bool TsFileSeriesScanIterator::should_skip_aligned_chunk_by_offset(
     return false;
 }
 
+bool TsFileSeriesScanIterator::should_skip_multi_aligned_chunk_by_offset(
+    ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms) {
+    if (row_offset_ <= 0) {
+        return false;
+    }
+    if (time_cm == nullptr || time_cm->statistic_ == nullptr) {
+        return false;
+    }
+    int32_t time_count = time_cm->statistic_->count_;
+    if (time_count <= 0) {
+        return false;
+    }
+    for (const auto* value_cm : value_cms) {
+        if (value_cm == nullptr || value_cm->statistic_ == nullptr ||
+            value_cm->statistic_->count_ != time_count) {
+            return false;
+        }
+    }
+    if (row_offset_ >= time_count) {
+        row_offset_ -= time_count;
+        return true;
+    }
+    return false;
+}
+
 int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                                        Filter* oneshoot_filter,
                                        int64_t min_time_hint) {
@@ -151,11 +296,15 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     }
                     advance_to_next_chunk();
                     // Skip chunk by time filter using time chunk statistics.
-                    if (filter != nullptr && time_cm->statistic_ != nullptr &&
-                        !filter->satisfy(time_cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(time_cm, filter)) {
                         continue;
                     }
                     if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
+                        continue;
+                    }
+                    if (chunk_fully_satisfies_filter(time_cm, filter) &&
+                        should_skip_multi_aligned_chunk_by_offset(time_cm,
+                                                                  value_cms)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -167,8 +316,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                 } else if (!is_aligned_) {
                     ChunkMeta* cm = get_current_chunk_meta();
                     advance_to_next_chunk();
-                    if (filter != nullptr && cm->statistic_ != nullptr &&
-                        !filter->satisfy(cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(cm, filter)) {
                         continue;
                     }
                     // Skip by min_time_hint (merge cursor).
@@ -176,7 +324,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                         continue;
                     }
                     // Single-path: skip entire chunk by offset using count.
-                    if (should_skip_chunk_by_offset(cm)) {
+                    if (chunk_fully_satisfies_filter(cm, filter) &&
+                        should_skip_chunk_by_offset(cm)) {
                         continue;
                     }
                     chunk_reader_->reset();
@@ -190,14 +339,14 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     // Use time chunk statistics for time-based filtering.
                     ChunkMeta* filter_cm =
                         (time_cm->statistic_ != nullptr) ? time_cm : value_cm;
-                    if (filter != nullptr && filter_cm->statistic_ != nullptr &&
-                        !filter->satisfy(filter_cm->statistic_)) {
+                    if (!chunk_may_satisfy_filter(filter_cm, filter)) {
                         continue;
                     }
                     if (should_skip_chunk_by_time(filter_cm, min_time_hint)) {
                         continue;
                     }
-                    if (should_skip_aligned_chunk_by_offset(time_cm,
+                    if (chunk_fully_satisfies_filter(time_cm, filter) &&
+                        should_skip_aligned_chunk_by_offset(time_cm,
                                                             value_cm)) {
                         continue;
                     }
@@ -394,7 +543,7 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
 
     void* tsblock_buf = data_pa_->alloc(sizeof(TsBlock));
     if (IS_NULL(tsblock_buf)) return nullptr;
-    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_);
+    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_, max_block_rows_);
     if (E_OK != tsblock_->init()) {
         tsblock_->~TsBlock();
         tsblock_ = nullptr;
@@ -426,7 +575,7 @@ TsBlock* TsFileSeriesScanIterator::alloc_tsblock_multi() {
 
     void* tsblock_buf = data_pa_->alloc(sizeof(TsBlock));
     if (IS_NULL(tsblock_buf)) return nullptr;
-    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_);
+    tsblock_ = new (tsblock_buf) TsBlock(&tuple_desc_, max_block_rows_);
     if (E_OK != tsblock_->init()) {
         tsblock_->~TsBlock();
         tsblock_ = nullptr;

@@ -58,8 +58,6 @@ const char* error_code_message(int code) {
             return "table does not exist";
         case common::E_COLUMN_NOT_EXIST:
             return "column does not exist";
-        case common::E_INVALID_QUERY:
-            return "invalid query";
         case common::E_TYPE_NOT_SUPPORTED:
             return "data type not supported";
         case common::E_TYPE_NOT_MATCH:
@@ -147,8 +145,14 @@ const char* tsencoding_name(common::TSEncoding e) {
             return "ZIGZAG";
         case common::FREQ:
             return "FREQ";
+        case common::CHIMP:
+            return "CHIMP";
         case common::SPRINTZ:
             return "SPRINTZ";
+        case common::RLBE:
+            return "RLBE";
+        case common::CAMEL:
+            return "CAMEL";
         case common::INVALID_ENCODING:
         default:
             return "UNKNOWN";
@@ -173,6 +177,10 @@ const char* compression_name(common::CompressionType c) {
             return "PLA";
         case common::LZ4:
             return "LZ4";
+        case common::ZSTD:
+            return "ZSTD";
+        case common::LZMA2:
+            return "LZMA2";
         case common::INVALID_COMPRESSION:
         default:
             return "UNKNOWN";

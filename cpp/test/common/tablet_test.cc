@@ -148,6 +148,29 @@ TEST(TabletTest, StringRepeatedTotalBytesOverflowRejected) {
               common::E_OVERFLOW);
 }
 
+TEST(TabletTest, StringReallocFailureReturnsOomAndPreservesColumn) {
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.push_back(MeasurementSchema(
+        "m_str", common::TSDataType::STRING, common::TSEncoding::PLAIN,
+        common::CompressionType::UNCOMPRESSED));
+    Tablet tablet("dev",
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  1u);
+
+    std::string oversized_value(64, 'x');
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(tablet.add_value(0u, 0u, common::String(oversized_value)),
+              common::E_OOM);
+
+    common::String value("ok", 2);
+    ASSERT_EQ(tablet.add_value(0u, 0u, value), common::E_OK);
+    common::TSDataType type;
+    auto* stored = static_cast<common::String*>(tablet.get_value(0u, 0u, type));
+    ASSERT_NE(stored, nullptr);
+    EXPECT_EQ(stored->len_, 2u);
+    EXPECT_EQ(memcmp(stored->buf_, "ok", 2), 0);
+}
+
 // Regression: set_column_string_values only checked offsets[count] before;
 // non-monotonic / negative / non-zero-start offsets would underflow the
 // downstream `offsets[i+1] - offsets[i]` length calc and trigger wild

@@ -39,8 +39,57 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
 using namespace common;
 namespace storage {
 
+namespace {
+uint64_t generation_hash(uint64_t size, int64_t mtime_ns) {
+    uint64_t hash = 1469598103934665603ULL;
+    const uint64_t values[2] = {size, static_cast<uint64_t>(mtime_ns)};
+    for (size_t word = 0; word < 2; ++word) {
+        for (size_t byte = 0; byte < 8; ++byte) {
+            hash ^= static_cast<uint8_t>(values[word] >> (byte * 8));
+            hash *= 1099511628211ULL;
+        }
+    }
+    return hash;
+}
+}  // namespace
+
+int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
+    if (fd_ < 0) {
+        return E_FILE_READ_ERR;
+    }
+    int64_t mtime_ns = 0;
+#ifdef _WIN32
+    intptr_t handle_value = _get_osfhandle(fd_);
+    if (handle_value == -1) {
+        return E_FILE_READ_ERR;
+    }
+    FILE_BASIC_INFO info;
+    if (!GetFileInformationByHandleEx(reinterpret_cast<HANDLE>(handle_value),
+                                      FileBasicInfo, &info, sizeof(info))) {
+        return E_FILE_READ_ERR;
+    }
+    static const int64_t WINDOWS_TO_UNIX_100NS = 116444736000000000LL;
+    mtime_ns = (info.LastWriteTime.QuadPart - WINDOWS_TO_UNIX_100NS) * 100;
+#else
+    struct stat info;
+    if (::fstat(fd_, &info) != 0) {
+        return E_FILE_READ_ERR;
+    }
+#ifdef __APPLE__
+    mtime_ns = static_cast<int64_t>(info.st_mtimespec.tv_sec) * 1000000000LL +
+               info.st_mtimespec.tv_nsec;
+#else
+    mtime_ns = static_cast<int64_t>(info.st_mtim.tv_sec) * 1000000000LL +
+               info.st_mtim.tv_nsec;
+#endif
+#endif
+    size = static_cast<uint64_t>(file_size_);
+    fingerprint = generation_hash(size, mtime_ns);
+    return E_OK;
+}
+
 void ReadFile::close() {
-    if (fd_ > 0) {
+    if (fd_ >= 0) {
         ::close(fd_);
         fd_ = -1;
     }
@@ -65,7 +114,7 @@ int ReadFile::open(const std::string& file_path) {
     } else if (RET_FAIL(check_file_magic())) {
     }
     if (IS_FAIL(ret)) {
-        ::close(fd_);
+        close();
     }
     return ret;
 }
