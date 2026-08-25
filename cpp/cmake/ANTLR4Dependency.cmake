@@ -19,7 +19,10 @@ under the License.
 
 set(TSFILE_ANTLR4_MIN_VERSION "4.9.3")
 set(TSFILE_ANTLR4_BUNDLED_VERSION "4.9.3")
-set(TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION "5.0.0")
+# The C++ runtime shipped by ANTLR4 4.13 and newer requires C++17. TsFile's
+# public C++ baseline remains C++11, so those system runtimes must not be
+# selected for the generated 4.9.3 parser.
+set(TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION "4.13.0")
 set(TSFILE_ANTLR4_SYSTEM_INCLUDE_DIR "")
 set(_TSFILE_SYSTEM_ANTLR4_FOUND FALSE)
 

@@ -144,6 +144,10 @@ void AlignedChunkReader::destroy() {
         value_compressor_->after_uncompress(value_uncompressed_buf_);
         value_uncompressed_buf_ = nullptr;
     }
+    // Multi-value readers keep the current page's decompressed buffers in
+    // ValueColumnState. Release them while the column compressors are still
+    // alive; the columns are deleted below and cannot release them afterwards.
+    release_current_page_state();
     value_page_col_notnull_bitmap_.clear();
     value_page_col_notnull_bitmap_.shrink_to_fit();
     if (time_decoder_ != nullptr) {
@@ -213,7 +217,6 @@ void AlignedChunkReader::destroy() {
     // vector to actually release the storage, matching the chunk_pages_ /
     // page_all_times_ handling above.
     std::vector<ValueColumnState*>().swap(value_columns_);
-    release_current_page_state();
     std::vector<std::vector<int64_t>>().swap(per_page_times_);
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned

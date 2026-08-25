@@ -1,25 +1,25 @@
-<!--
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
--->
-
 ---
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 name: tsfile-cli
-description: Use when you need to inspect, preview, export, or create an Apache TsFile (.tsfile) from the command line via the project's C++ `tsfile-cli` in cpp/tools.
+description: >-
+  Use specifically for the project's C++ `tsfile-cli` in cpp/tools: inspect,
+  preview, export, or create an Apache TsFile; report metadata or per-series
+  counts; or use its explicit single-table CSV write command.
 ---
 
 # tsfile-cli
@@ -33,6 +33,17 @@ Reference files:
 - `references/commands.md`: command syntax and result fields.
 - `references/errors.md`: exit-code and failure-handling rules.
 - `references/examples.md`: reviewed command recipes.
+
+## Scope
+
+Use this skill only for the C++ `tsfile-cli` binary. Route Java
+`csv2tsfile`/`parquet2tsfile`/`arrow2tsfile` and table point-count metadata
+checks or backfill to the top-level `tsfile` skill when it is installed.
+
+The names overlap but the semantics do not: `tsfile-cli count` is a read-only
+per-series report, not the Java table point-count property tool. `tsfile-cli
+write` is the C++ binary's narrow one-file/stream, one-table CSV import; it
+does not replace the Java batch and format-aware import tools.
 
 ## Binary
 

@@ -24,6 +24,7 @@
 #include "common/tsfile_common.h"
 #include "expression.h"
 #include "file/read_file.h"
+#include "reader/prepared_series.h"
 #include "reader/table_query_executor.h"
 namespace storage {
 class TsFileExecutor;
@@ -128,6 +129,21 @@ class TsFileReader {
      */
     int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
                    ResultSet*& result_set);
+
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+    int prepare_series(
+        const FileGeneration& generation, const PreparedLocator& locator,
+        const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+        std::shared_ptr<PreparedSeries>& prepared);
+    int query_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                       int64_t start_time, int64_t end_time, int offset,
+                       int limit, ResultSet*& result_set);
+    int query_prepared_multi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ResultSet*& result_set);
 
     /**
      * @brief Query table-model data by row with offset/limit pushdown.

@@ -59,6 +59,8 @@ function(_tsfile_run_antlr4_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS ROOT
                     "-DCMAKE_PREFIX_PATH=${ROOT}"
                     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=FALSE
                     -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=FALSE
+                    -DCMAKE_FIND_USE_CMAKE_SYSTEM_PATH=FALSE
+                    -DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH=FALSE
                     -S "${_TSFILE_FIXTURE_SOURCE}"
                     -B "${_TSFILE_CASE_BINARY}"
             RESULT_VARIABLE _TSFILE_RESULT

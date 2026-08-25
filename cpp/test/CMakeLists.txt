@@ -152,6 +152,10 @@ enable_testing()
 # a platform default instead of inheriting the generator used by this build.
 set(_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
         "-DTEST_CMAKE_GENERATOR=${CMAKE_GENERATOR}")
+if (CMAKE_MAKE_PROGRAM)
+    list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
+            "-DTEST_CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}")
+endif ()
 if (CMAKE_GENERATOR_PLATFORM)
     list(APPEND _TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS
             "-DTEST_CMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}")
@@ -224,6 +228,7 @@ file(GLOB_RECURSE TEST_SRCS
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
         "compress/*uncompressed*_test.cc"
+        "dataset/*_test.cc"
 )
 
 # Parser tests depend on the ANTLR4 runtime; only build them when it is enabled.
