@@ -110,6 +110,11 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsInt(ReadWriteIOUtils.readInt(buffer));
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeInt(value.getInt());
     return Integer.BYTES;

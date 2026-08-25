@@ -112,6 +112,11 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsFloat(ReadWriteIOUtils.readFloat(buffer));
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeFloat(value.getFloat());
     return Float.BYTES;

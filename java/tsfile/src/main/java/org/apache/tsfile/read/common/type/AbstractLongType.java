@@ -109,6 +109,11 @@ public abstract class AbstractLongType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsLong(ReadWriteIOUtils.readLong(buffer));
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeLong(value.getLong());
     return Long.BYTES;

@@ -148,6 +148,15 @@ public interface Type {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /** Deserializes one value from {@code buffer} as a {@link TsPrimitiveType}. */
+  TsPrimitiveType deserialize(ByteBuffer buffer);
+
+  /** Deserializes one timestamp-value pair from {@code buffer}. */
+  default TimeValuePair deserializeTVPair(ByteBuffer buffer) {
+    long timestamp = buffer.getLong();
+    return new TimeValuePair(timestamp, deserialize(buffer));
+  }
+
   /** Serializes {@code value} to {@code stream} and returns the serialized size. */
   default int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     throw new IllegalArgumentException(

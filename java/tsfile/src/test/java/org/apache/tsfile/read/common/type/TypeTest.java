@@ -501,11 +501,14 @@ public class TypeTest {
       int serializedSize = type.serialize(timeValuePair, new DataOutputStream(output));
 
       Assert.assertEquals(output.size(), serializedSize);
+      ByteBuffer valueBuffer = ByteBuffer.wrap(output.toByteArray());
+      valueBuffer.getLong();
+      Assert.assertEquals(timeValuePair.getValue(), type.deserialize(valueBuffer));
+      Assert.assertEquals(output.size(), valueBuffer.position());
+
       ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
-      Assert.assertEquals(123L, buffer.getLong());
-      Object[] value = new Object[1];
-      type.deserialize(value, 0, buffer);
-      Assert.assertEquals(timeValuePair.getValue(), type.getTsPrimitiveType(value[0]));
+      TimeValuePair deserialized = type.deserializeTVPair(buffer);
+      Assert.assertEquals(timeValuePair, deserialized);
       Assert.assertEquals(output.size(), buffer.position());
     }
 
@@ -647,6 +650,13 @@ public class TypeTest {
     for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
       try {
         Type.fromTsDataType(dataType).deserialize(new Object[1], 0, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType).deserialize(ByteBuffer.allocate(0));
         Assert.fail("Expected UnsupportedOperationException");
       } catch (UnsupportedOperationException ignored) {
         // Expected.

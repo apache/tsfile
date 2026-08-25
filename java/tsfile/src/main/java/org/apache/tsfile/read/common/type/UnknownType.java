@@ -25,7 +25,9 @@ import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 
@@ -57,6 +59,11 @@ public class UnknownType extends AbstractType {
   @Override
   public Object getCurrentValue(BatchData batchData) {
     return null;
+  }
+
+  @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getDisplayName());
   }
 
   @Override

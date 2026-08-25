@@ -65,6 +65,11 @@ public class DateType extends AbstractIntType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsInt(ReadWriteIOUtils.readInt(buffer), TSDataType.DATE);
+  }
+
+  @Override
   public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
     return new TsInt(getDateInt(array, rowIndex), TSDataType.DATE);
   }

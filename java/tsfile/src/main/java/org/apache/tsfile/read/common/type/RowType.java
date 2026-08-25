@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -83,6 +84,11 @@ public class RowType extends AbstractType {
   @Override
   public TsPrimitiveType getTsPrimitiveType(Object value) {
     return new TsPrimitiveType.TsVector((TsPrimitiveType[]) value);
+  }
+
+  @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getDisplayName());
   }
 
   @Override

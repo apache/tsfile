@@ -224,12 +224,15 @@ public class VectorType extends AbstractLongType {
           continue;
         }
         Type type = Type.fromTsDataType(ReadWriteIOUtils.readDataType(buffer));
-        Object[] value = new Object[1];
-        type.deserialize(value, 0, buffer);
-        values[j] = type.getTsPrimitiveType(value[0]);
+        values[j] = type.deserialize(buffer);
       }
       batchData.putVector(timestamp, values);
     }
+  }
+
+  @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getDisplayName());
   }
 
   @Override

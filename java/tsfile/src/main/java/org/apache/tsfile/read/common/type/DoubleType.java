@@ -113,6 +113,11 @@ public class DoubleType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsDouble(ReadWriteIOUtils.readDouble(buffer));
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeDouble(value.getDouble());
     return Double.BYTES;

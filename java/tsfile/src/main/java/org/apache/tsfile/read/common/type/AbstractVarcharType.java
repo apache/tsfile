@@ -107,6 +107,11 @@ public abstract class AbstractVarcharType extends AbstractType {
   }
 
   @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsBinary(ReadWriteIOUtils.readBinary(buffer));
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     Binary binary = value.getBinary();
     stream.writeInt(binary.getLength());
