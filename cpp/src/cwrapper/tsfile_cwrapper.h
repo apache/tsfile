@@ -77,6 +77,13 @@ typedef enum {
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
+/** Local-file read backend selected for subsequently opened readers. */
+typedef enum {
+    TSFILE_READ_BACKEND_AUTO = 0,
+    TSFILE_READ_BACKEND_MMAP = 1,
+    TSFILE_READ_BACKEND_PREAD = 2
+} TsFileReadBackend;
+
 typedef enum column_category {
     TAG = 0,
     FIELD = 1,
@@ -332,6 +339,22 @@ typedef struct arrow_array {
 
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
+
+/**
+ * @brief Select the backend used by subsequently opened local TsFile readers.
+ *
+ * AUTO prefers memory mapping and falls back to pread, MMAP requires memory
+ * mapping, and PREAD preserves the traditional positioned-read path. Existing
+ * readers are unaffected.
+ *
+ * @param backend One of TSFILE_READ_BACKEND_AUTO, TSFILE_READ_BACKEND_MMAP,
+ * or TSFILE_READ_BACKEND_PREAD.
+ * @return RET_OK on success, or RET_INVALID_ARG for any other value.
+ */
+ERRNO tsfile_set_file_read_backend(int32_t backend);
+
+/** @return The backend configured for subsequently opened readers. */
+TsFileReadBackend tsfile_get_file_read_backend(void);
 
 /**
  * @brief Get the encoding type for global time column

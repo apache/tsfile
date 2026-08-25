@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "common/device_id.h"
+#include "common/global.h"
 #include "common/statistic.h"
 #include "common/tablet.h"
 #include "common/tsfile_common.h"
@@ -90,6 +91,24 @@ int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 
 int set_global_compression(uint8_t compression) {
     return common::set_global_compression(compression);
+}
+
+ERRNO tsfile_set_file_read_backend(int32_t backend) {
+    switch (backend) {
+        case TSFILE_READ_BACKEND_AUTO:
+            return common::set_file_read_backend(common::FileReadBackend::AUTO);
+        case TSFILE_READ_BACKEND_MMAP:
+            return common::set_file_read_backend(common::FileReadBackend::MMAP);
+        case TSFILE_READ_BACKEND_PREAD:
+            return common::set_file_read_backend(
+                common::FileReadBackend::PREAD);
+        default:
+            return common::E_INVALID_ARG;
+    }
+}
+
+TsFileReadBackend tsfile_get_file_read_backend() {
+    return static_cast<TsFileReadBackend>(common::get_file_read_backend());
 }
 
 WriteFile write_file_new(const char* pathname, ERRNO* err_code) {

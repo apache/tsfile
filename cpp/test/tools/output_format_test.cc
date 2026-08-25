@@ -45,6 +45,8 @@ TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
                  "data is out of order");
     EXPECT_STREQ(tsfile_cli::error_code_message(common::E_DECODE_ERR),
                  "failed to decode data");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_FILE_MAP_ERR),
+                 "failed to memory-map file");
 }
 
 TEST(ErrorCodeMessageTest, UnknownCodeFallsBackToInternalError) {

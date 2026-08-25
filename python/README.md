@@ -77,3 +77,24 @@ with TsFileReader("example.tsfile") as reader:
 
 Values do not carry a data type; use an explicit portable encoding when storing
 numbers or structures.
+
+## Local File Read Backend
+
+Python readers inherit the process-wide backend setting when they open a file.
+`AUTO` is the default, `MMAP` requires memory mapping, and `PREAD` restores the
+traditional positioned-read behavior.
+
+```python
+from tsfile import FileReadBackend, TsFileReader, set_file_read_backend
+
+set_file_read_backend(FileReadBackend.MMAP)
+with TsFileReader("example.tsfile") as reader:
+    ...
+
+# The configuration-dictionary API is equivalent.
+from tsfile import set_tsfile_config
+set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
+```
+
+The setting only affects readers opened afterward. Do not modify or truncate a
+file while it is open through the memory-mapped backend.
