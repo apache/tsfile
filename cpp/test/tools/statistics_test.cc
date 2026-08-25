@@ -48,3 +48,11 @@ TEST(StatisticsTest, BooleanStatisticLeavesMinMaxNull) {
     EXPECT_EQ(cells.values[3], "false");
     EXPECT_EQ(cells.values[4], "1");
 }
+
+TEST(StatisticsTest, DoubleStatisticPreservesRoundTripPrecision) {
+    storage::DoubleStatistic st;
+    st.update(1, 1.2345678901234567);
+    tsfile_cli::StatisticCells cells = tsfile_cli::statistic_value_cells(&st);
+    EXPECT_EQ(cells.values[0], "1.2345678901234567");
+    EXPECT_EQ(cells.values[4], "1.2345678901234567");
+}

@@ -84,8 +84,7 @@ void print_command_usage(const std::string& command, std::ostream& os) {
     if (command == "ls") {
         os << "Usage: tsfile-cli ls [-f|--format table|ndjson|csv] "
               "<file.tsfile>\n"
-              "Lists every tree device or table object in a pure-model "
-              "TsFile.\n"
+              "Lists every object in the selected tree or table model.\n"
               "Result fields: model,object\n"
               "Default: --format table\n"
               "Examples:\n"
@@ -99,16 +98,15 @@ void print_command_usage(const std::string& command, std::ostream& os) {
               "settings.\n"
               "Result fields: model,object,column,category,data_type,encoding,"
               "compression\n"
-              "Default: --format table; omitted scope is valid only for a "
-              "single-object pure-model file.\n"
+              "Default: --format table; omitted scope visits every object in "
+              "file order.\n"
               "Examples:\n"
               "  tsfile-cli schema -t sensors -f csv data.tsfile\n"
               "  tsfile-cli schema -d root.sg.d1 -m temperature data.tsfile\n";
     } else if (command == "meta") {
         os << "Usage: tsfile-cli meta [-f|--format table|ndjson|csv] "
               "<file.tsfile>\n"
-              "Shows file-level metadata for a pure tree or pure table "
-              "TsFile.\n"
+              "Shows file-level metadata and the selected data model.\n"
               "Result fields: size_bytes,format_version,model\n"
               "Default: --format table\n"
               "Examples:\n"
@@ -123,8 +121,8 @@ void print_command_usage(const std::string& command, std::ostream& os) {
               "non_null_count,null_count,min_time,max_time,min,max,first,last,"
               "sum,stats_source; table inserts tag.<name> fields after "
               "object.\n"
-              "Default: --format table; omitted scope is valid only for a "
-              "single-object pure-model file.\n"
+              "Default: --format table; omitted scope visits every object in "
+              "file order.\n"
               "Examples:\n"
               "  tsfile-cli stats -t sensors -m temperature -f csv "
               "data.tsfile\n";
@@ -136,8 +134,8 @@ void print_command_usage(const std::string& command, std::ostream& os) {
               "Result fields: model,object,column,category,row_count,"
               "entity_count,non_null_count,null_count,min_time,max_time,"
               "time_source\n"
-              "Default: --format table; omitted scope is valid only for a "
-              "single-object pure-model file.\n"
+              "Default: --format table; omitted scope visits every object in "
+              "file order.\n"
               "Examples:\n"
               "  tsfile-cli count -t sensors -m site -f csv data.tsfile\n";
     } else if (command == "sketch") {

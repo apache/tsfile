@@ -51,7 +51,8 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
-                  long long offset, long long limit);
+                  long long offset, long long limit,
+                  long long* emitted_rows = nullptr);
 
 int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
            OutputFormat fmt, std::ostream& out, std::ostream& err);

@@ -177,7 +177,9 @@ TEST(CliRequirements, FormatVocabularyIsTableNdjsonCsvOnly) {
                                   ndjson_out, ndjson_err),
               0)
         << ndjson_err.str();
-    EXPECT_EQ(ndjson_out.str(), "{\"time\":\"0\",\"s1\":\"0\"}\n");
+    EXPECT_EQ(ndjson_out.str(),
+              "{\"time\":\"0\",\"id1\":\"id1_field_1\",\"id2\":"
+              "\"id2_field_2\",\"s1\":\"0\"}\n");
 
     std::ostringstream json_out;
     std::ostringstream json_err;
@@ -387,7 +389,7 @@ TEST(CliRequirements, WriteUsesExplicitTagAndFieldOptions) {
                                   rout, rerr),
               0)
         << rerr.str();
-    EXPECT_EQ(rout.str(), "time,s1\n0,0\n1,10\n");
+    EXPECT_EQ(rout.str(), "time,id1,s1\n0,dev,0\n1,dev,10\n");
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
@@ -781,6 +783,43 @@ TEST(CliRequirements, ExportWritesSingleObjectAtomically) {
     std::remove(out_path.c_str());
 }
 
+#ifndef _WIN32
+TEST(CliRequirements, ExportForceRejectsSymlinkAndSpecialTargets) {
+    TableFixture f;
+    std::string sentinel =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_export_sentinel", ".txt");
+    std::string symlink_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_export_link", ".csv");
+    {
+        std::ofstream file(sentinel.c_str());
+        file << "sentinel";
+    }
+    ASSERT_EQ(symlink(sentinel.c_str(), symlink_path.c_str()), 0);
+
+    std::ostringstream link_out;
+    std::ostringstream link_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"export", "-t", "table1", "-o", symlink_path,
+                                   "--type", "csv", "--force", f.path},
+                                  link_out, link_err),
+              3);
+    EXPECT_EQ(read_file(sentinel), "sentinel");
+
+    std::string fifo_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_export_fifo", ".csv");
+    ASSERT_EQ(mkfifo(fifo_path.c_str(), 0600), 0);
+    std::ostringstream fifo_out;
+    std::ostringstream fifo_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"export", "-t", "table1", "-o", fifo_path,
+                                   "--type", "csv", "--force", f.path},
+                                  fifo_out, fifo_err),
+              3);
+
+    std::remove(symlink_path.c_str());
+    std::remove(sentinel.c_str());
+    std::remove(fifo_path.c_str());
+}
+#endif
+
 TEST(CliRequirements, ExportWritesMultiObjectManifestAndNumberedFiles) {
     MultiTableFixture f;
     std::string dir =
@@ -794,8 +833,10 @@ TEST(CliRequirements, ExportWritesMultiObjectManifestAndNumberedFiles) {
         out, err);
     EXPECT_EQ(code, 0) << err.str();
     EXPECT_TRUE(out.str().empty());
-    EXPECT_EQ(read_file(dir + "/0001.csv"), "time,s1\n0,10\n");
-    EXPECT_EQ(read_file(dir + "/0002.csv"), "time,s1\n0,20\n");
+    EXPECT_EQ(read_file(dir + "/0001.csv"),
+              "time,id1,s1\n0,sensors_a_tag,10\n");
+    EXPECT_EQ(read_file(dir + "/0002.csv"),
+              "time,id1,s1\n0,sensors_b_tag,20\n");
     std::string manifest = read_file(dir + "/_manifest.json");
     EXPECT_NE(manifest.find("\"complete\": true"), std::string::npos)
         << manifest;
@@ -832,7 +873,7 @@ TEST(CliRequirements, MultipleTagFiltersRequireAndHonorTagMatch) {
                             out, err),
         0)
         << err.str();
-    EXPECT_EQ(out.str(), "time,s1\n0,10\n3,40\n");
+    EXPECT_EQ(out.str(), "time,id1,s1\n0,dev_a,10\n3,dev_c,40\n");
     std::remove(path.c_str());
 }
 

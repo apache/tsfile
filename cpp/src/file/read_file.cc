@@ -45,6 +45,7 @@ void ReadFile::close() {
         fd_ = -1;
     }
     file_size_ = -1;
+    file_version_ = 0;
 }
 
 int ReadFile::open(const std::string& file_path) {
@@ -103,6 +104,20 @@ int ReadFile::check_file_magic() {
         } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
                    0) {
             ret = E_TSFILE_CORRUPTED;
+        }
+        if (IS_FAIL(ret)) {
+            return ret;
+        }
+
+        char version = 0;
+        if (RET_FAIL(read(MAGIC_STRING_TSFILE_LEN, &version, 1, read_len))) {
+        } else if (read_len != 1 || version != VERSION_NUM_BYTE) {
+            ret = E_TSFILE_CORRUPTED;
+        } else {
+            file_version_ = static_cast<unsigned char>(version);
+        }
+        if (IS_FAIL(ret)) {
+            return ret;
         }
 
         // file footer magic

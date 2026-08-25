@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <sstream>
+#include <streambuf>
 #include <vector>
 
 #include "common/db_common.h"
@@ -30,6 +31,21 @@
 using tsfile_cli::OutputFormat;
 using tsfile_cli::ParsedArgs;
 using tsfile_cli::RowWriter;
+
+namespace {
+
+class FailingStreamBuf : public std::streambuf {
+   protected:
+    std::streamsize xsputn(const char*, std::streamsize) override { return 0; }
+    int_type overflow(int_type) override { return traits_type::eof(); }
+};
+
+class FlushFailingStreamBuf : public std::stringbuf {
+   protected:
+    int sync() override { return -1; }
+};
+
+}  // namespace
 
 TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
     EXPECT_STREQ(tsfile_cli::error_code_message(common::E_TABLE_NOT_EXIST),
@@ -168,4 +184,22 @@ TEST(RowWriterTest, TableAlignsColumns) {
               "name      type\n"
               "s1        INT64\n"
               "longname  BOOLEAN\n");
+}
+
+TEST(RowWriterTest, ReportsStreamWriteFailure) {
+    FailingStreamBuf buffer;
+    std::ostream out(&buffer);
+    RowWriter writer(out, OutputFormat::kCsv, {"name"}, {common::STRING},
+                     false);
+    EXPECT_FALSE(writer.write({"value"}, {false}));
+    EXPECT_FALSE(writer.finish());
+}
+
+TEST(RowWriterTest, ReportsFlushFailure) {
+    FlushFailingStreamBuf buffer;
+    std::ostream out(&buffer);
+    RowWriter writer(out, OutputFormat::kCsv, {"name"}, {common::STRING},
+                     false);
+    ASSERT_TRUE(writer.write({"value"}, {false}));
+    EXPECT_FALSE(writer.finish());
 }

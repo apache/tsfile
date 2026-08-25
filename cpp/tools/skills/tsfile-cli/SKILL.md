@@ -58,7 +58,7 @@ Reference files:
 Prefer metadata verbs (`ls/schema/meta/stats/count`) before row verbs so the
 file model, scope, and columns are known.
 
-For `head` and `cat`, omit `-d/-t` only when the pure-model file has exactly one
+For `head` and `cat`, omit `-d/-t` only when the selected model has exactly one
 accessible object. Multi-object files require explicit scope. `export` always
 requires explicit scope.
 

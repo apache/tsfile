@@ -43,6 +43,7 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/write_file.h"
+#include "format/atomic_output.h"
 #include "format/input_format.h"
 #include "format/output_format.h"
 #include "writer/tsfile_table_writer.h"
@@ -118,48 +119,24 @@ bool stat_regular_file(const std::string& path, struct stat& st) {
     return stat(path.c_str(), &st) == 0 && stat_is_regular_file(st);
 }
 
-bool path_exists(const std::string& path) {
-    struct stat st;
-    return lstat(path.c_str(), &st) == 0;
-}
-
-bool same_file_identity(const std::string& input_path, const struct stat& a,
-                        const std::string& output_path, const struct stat& b) {
-#ifdef _WIN32
-    (void)a;
-    (void)b;
-    char input_full[4096];
-    char output_full[4096];
-    const char* input_res =
-        _fullpath(input_full, input_path.c_str(), sizeof(input_full));
-    const char* output_res =
-        _fullpath(output_full, output_path.c_str(), sizeof(output_full));
-    std::string input_norm = input_res == nullptr ? input_path : input_full;
-    std::string output_norm = output_res == nullptr ? output_path : output_full;
-    std::replace(input_norm.begin(), input_norm.end(), '\\', '/');
-    std::replace(output_norm.begin(), output_norm.end(), '\\', '/');
-    std::transform(
-        input_norm.begin(), input_norm.end(), input_norm.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    std::transform(
-        output_norm.begin(), output_norm.end(), output_norm.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return input_norm == output_norm;
-#else
-    return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
-#endif
-}
-
 // Parse a calendar date in strict YYYY-MM-DD form into a std::tm (year offset
 // from 1900, month 0-based) the way storage::Tablet expects for DATE columns.
 // Validates that it is a real date (DateConverter rejects e.g. 2024-13-40),
 // since the writer silently drops an invalid std::tm rather than erroring.
 bool parse_date_cell(const std::string& cell, std::tm& out) {
+    if (cell.size() != 10 || cell[4] != '-' || cell[7] != '-') {
+        return false;
+    }
+    const size_t digits[] = {0, 1, 2, 3, 5, 6, 8, 9};
+    for (size_t i : digits) {
+        if (cell[i] < '0' || cell[i] > '9') {
+            return false;
+        }
+    }
     int y = 0;
     int m = 0;
     int d = 0;
-    char extra = 0;
-    if (std::sscanf(cell.c_str(), "%4d-%2d-%2d%c", &y, &m, &d, &extra) != 3) {
+    if (std::sscanf(cell.c_str(), "%4d-%2d-%2d", &y, &m, &d) != 3) {
         return false;
     }
     out = std::tm();
@@ -173,8 +150,8 @@ bool parse_date_cell(const std::string& cell, std::tm& out) {
 std::string lower_ascii(const std::string& s) {
     std::string out;
     out.reserve(s.size());
-    for (char c : s) {
-        out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (unsigned char c : s) {
+        out += static_cast<char>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
     }
     return out;
 }
@@ -339,7 +316,13 @@ bool build_header_mapping(const std::string& header,
             found_time = true;
             time_index = i;
         } else {
-            header_indexes[fields[i]] = i;
+            std::string name_error;
+            if (!validate_identifier(folded, name_error)) {
+                err << "Error: invalid CSV header name '" << fields[i]
+                    << "': " << name_error << "\n";
+                return false;
+            }
+            header_indexes[folded] = i;
         }
     }
     if (!found_time) {
@@ -351,8 +334,9 @@ bool build_header_mapping(const std::string& header,
     field_indexes.clear();
     field_indexes.reserve(columns.size());
     for (const ColumnDef& c : columns) {
-        declared.insert(c.name);
-        auto it = header_indexes.find(c.name);
+        const std::string folded = lower_ascii(c.name);
+        declared.insert(folded);
+        auto it = header_indexes.find(folded);
         if (it == header_indexes.end()) {
             err << "Error: CSV header is missing required column '" << c.name
                 << "'\n";
@@ -535,6 +519,21 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         err << "Error: " << perr << "\n";
         return kExitUsage;
     }
+    const std::string table_name = lower_ascii(args.table);
+    if (!validate_identifier(table_name, perr)) {
+        err << "Error: invalid table name '" << args.table << "': " << perr
+            << "\n";
+        return kExitUsage;
+    }
+    bool has_field = false;
+    for (const ColumnDef& column : columns) {
+        has_field =
+            has_field || column.category == common::ColumnCategory::FIELD;
+    }
+    if (!has_field) {
+        err << "Error: write requires at least one --field column\n";
+        return kExitUsage;
+    }
     WritePhysicalConfig physical_config;
     if (!build_physical_config(args, columns, physical_config, err)) {
         return kExitUsage;
@@ -570,6 +569,14 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         return kExitFile;
     }
     line_no += record_lines;
+    const std::string bom = "\xEF\xBB\xBF";
+    if (line.compare(0, bom.size(), bom) == 0) {
+        line.erase(0, bom.size());
+    }
+    if (!is_valid_utf8(line) || contains_utf8_bom(line)) {
+        err << "Error: CSV header contains invalid UTF-8 or a misplaced BOM\n";
+        return kExitFile;
+    }
     bool closed_quotes = true;
     split_csv_cells(line, delim, closed_quotes);
     if (!closed_quotes) {
@@ -609,22 +616,12 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         }
     }
 
-    // Creating the output truncates it; refuse to clobber the input we are
-    // still reading from, which would otherwise silently destroy the source
-    // data.
-    if (has_input_stat) {
-        struct stat output_stat;
-        if (stat(args.output.c_str(), &output_stat) == 0 &&
-            same_file_identity(args.file, input_stat, args.output,
-                               output_stat)) {
-            err << "Error: --output is the same as the input file: "
-                << args.output << "\n";
-            return kExitRuntime;
-        }
-    }
-    if (path_exists(args.output)) {
-        err << "Error: output target already exists: " << args.output << "\n";
-        return kExitRuntime;
+    std::string temp_output;
+    int prepare_ret = prepare_atomic_output(
+        args.output, has_input_stat ? args.file : std::string(), false,
+        temp_output, err);
+    if (prepare_ret != kExitOk) {
+        return prepare_ret;
     }
 
     storage::WriteFile file;
@@ -632,13 +629,14 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
-    int cret = file.create(args.output, flags, 0666);
+    int cret = file.create(temp_output, flags, 0600);
     if (cret != 0) {
         err << "Error: cannot create output " << args.output << ": "
             << error_code_message(cret) << " (code " << cret << ")\n";
+        remove_atomic_temp(temp_output, err);
         return kExitRuntime;
     }
-    auto* schema = new storage::TableSchema(args.table, col_schemas);
+    auto* schema = new storage::TableSchema(table_name, col_schemas);
     auto* writer = new storage::TsFileTableWriter(&file, schema);
 
     // Stream rows into fixed-size batches so memory stays bounded regardless of
@@ -658,7 +656,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         if (batch.empty()) {
             return kExitOk;
         }
-        storage::Tablet tablet(args.table, names, types, cats,
+        storage::Tablet tablet(table_name, names, types, cats,
                                static_cast<int>(batch.size()));
         for (size_t i = 0; i < batch.size(); ++i) {
             uint32_t r = static_cast<uint32_t>(i);
@@ -688,6 +686,12 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         line_no += record_lines;
         if (line.empty()) {
             continue;
+        }
+        if (!is_valid_utf8(line) || contains_utf8_bom(line)) {
+            err << "Error: invalid UTF-8 or misplaced BOM (line " << line_no
+                << ")\n";
+            result_code = kExitFile;
+            break;
         }
         std::vector<CsvCell> fields =
             split_csv_cells(line, delim, closed_quotes);
@@ -773,12 +777,23 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
     delete writer;
     delete schema;
 
+    int file_close_ret = file.close();
+    if (result_code == kExitOk && file_close_ret != common::E_OK) {
+        err << "Error: failed to close output: "
+            << error_code_message(file_close_ret) << " (code " << file_close_ret
+            << ")\n";
+        result_code = kExitRuntime;
+    }
+    if (result_code == kExitOk) {
+        result_code =
+            commit_atomic_output(temp_output, args.output, false, err);
+    }
     if (result_code != kExitOk) {
-        // The import failed; do not leave a partial/corrupt .tsfile behind.
-        file.close();
-        std::remove(args.output.c_str());
+        if (!remove_atomic_temp(temp_output, err)) {
+            result_code = kExitRuntime;
+        }
     } else if (args.verbose) {
-        err << "created model=table object=" << args.table
+        err << "created model=table object=" << table_name
             << " rows=" << total_rows << " output=" << args.output << "\n";
         for (const ColumnDef& d : columns) {
             auto enc_it = physical_config.encodings.find(d.type);

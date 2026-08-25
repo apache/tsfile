@@ -31,7 +31,7 @@ namespace storage {
 
 class ReadFile {
    public:
-    ReadFile() : file_path_(), fd_(-1), file_size_(-1) {}
+    ReadFile() : file_path_(), fd_(-1), file_size_(-1), file_version_(0) {}
     ~ReadFile() { destroy(); }
     void destroy() { close(); }
 
@@ -39,6 +39,7 @@ class ReadFile {
     FORCE_INLINE bool is_opened() const { return fd_ > 0; }
     FORCE_INLINE int64_t file_size() const { return file_size_; }
     FORCE_INLINE const std::string& file_path() const { return file_path_; }
+    FORCE_INLINE unsigned char file_version() const { return file_version_; }
 
     /*
      * try to reader @buf_size bytes from @offset of this file
@@ -60,6 +61,7 @@ class ReadFile {
     std::string file_path_;
     int fd_;
     int64_t file_size_;
+    unsigned char file_version_;
 };
 
 }  // end namespace storage

@@ -22,21 +22,22 @@
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
 #include "commands/statistics.h"
-#include "common/tsfile_common.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
 
 int cmd_meta(const ParsedArgs& args, storage::TsFileReader& reader,
-             OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
+             OutputFormat fmt, std::ostream& out, std::ostream& err) {
     FileSummary s = collect_file_summary(args, reader);
     RowWriter w(out, fmt, {"size_bytes", "format_version", "model"},
                 {common::INT64, common::INT64, common::STRING}, false);
-    w.write({std::to_string(s.file_size_bytes),
-             std::to_string(static_cast<int>(storage::VERSION_NUM_BYTE)),
-             s.model},
-            {false, false, false});
-    w.finish();
+    if (!w.write({std::to_string(s.file_size_bytes),
+                  std::to_string(reader.get_file_version()), s.model},
+                 {false, false, false}) ||
+        !w.finish()) {
+        err << "Error: failed to write output\n";
+        return kExitRuntime;
+    }
     return kExitOk;
 }
 

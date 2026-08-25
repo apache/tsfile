@@ -127,6 +127,10 @@ int TsFileReader::open(const std::string& file_path) {
     return ret;
 }
 
+unsigned char TsFileReader::get_file_version() const {
+    return read_file_ == nullptr ? 0 : read_file_->file_version();
+}
+
 int TsFileReader::ensure_table_query_executor(int batch_size) {
     if (table_query_executor_ != nullptr &&
         table_query_executor_batch_size_ == batch_size) {

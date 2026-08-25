@@ -21,6 +21,7 @@
 #include <climits>
 #include <limits>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,93 @@ bool can_push_down_row_window(const ParsedArgs& args, long long offset,
 
 int to_reader_row_bound(long long value) {
     return value < 0 ? -1 : static_cast<int>(value);
+}
+
+int resolve_table_fields(const ParsedArgs& args,
+                         const std::shared_ptr<storage::TableSchema>& schema,
+                         std::vector<std::string>& fields, std::ostream& err) {
+    if (!schema) {
+        err << "Error: table '" << args.table << "' does not exist\n";
+        return kExitUsage;
+    }
+    auto measurements = schema->get_measurement_schemas();
+    auto categories = schema->get_column_categories();
+    for (size_t i = 0; i < measurements.size(); ++i) {
+        if (measurements[i] && i < categories.size() &&
+            categories[i] == common::ColumnCategory::TAG) {
+            fields.push_back(measurements[i]->measurement_name_);
+        }
+    }
+    if (args.measurements.empty()) {
+        for (size_t i = 0; i < measurements.size(); ++i) {
+            if (measurements[i] && i < categories.size() &&
+                categories[i] == common::ColumnCategory::FIELD) {
+                fields.push_back(measurements[i]->measurement_name_);
+            }
+        }
+        return kExitOk;
+    }
+    for (const std::string& requested : args.measurements) {
+        const int index = schema->find_column_index(requested);
+        if (index < 0 || static_cast<size_t>(index) >= measurements.size() ||
+            !measurements[index]) {
+            err << "Error: FIELD '" << requested
+                << "' does not exist in table '" << schema->get_table_name()
+                << "'\n";
+            return kExitUsage;
+        }
+        const common::ColumnCategory category =
+            static_cast<size_t>(index) < categories.size()
+                ? categories[index]
+                : common::ColumnCategory::FIELD;
+        if (category != common::ColumnCategory::FIELD) {
+            err << "Error: column '" << requested
+                << "' is not a FIELD in table '" << schema->get_table_name()
+                << "'\n";
+            return kExitUsage;
+        }
+        fields.push_back(measurements[index]->measurement_name_);
+    }
+    return kExitOk;
+}
+
+int resolve_tree_paths(const ParsedArgs& args, storage::TsFileReader& reader,
+                       std::vector<std::string>& paths, std::ostream& err) {
+    auto devices = reader.get_all_device_ids();
+    std::shared_ptr<storage::IDeviceID> target_device;
+    for (const auto& device : devices) {
+        if (device && device->get_device_name() == args.device) {
+            target_device = device;
+            break;
+        }
+    }
+    if (!target_device) {
+        err << "Error: device '" << args.device << "' does not exist\n";
+        return kExitUsage;
+    }
+    std::vector<storage::MeasurementSchema> schemas;
+    if (reader.get_timeseries_schema(target_device, schemas) != common::E_OK) {
+        err << "Error: failed to read schema for device '" << args.device
+            << "'\n";
+        return kExitFile;
+    }
+    std::set<std::string> known;
+    for (const auto& schema : schemas) {
+        known.insert(schema.measurement_name_);
+    }
+    for (const std::string& requested : args.measurements) {
+        if (known.find(requested) == known.end()) {
+            err << "Error: FIELD '" << requested
+                << "' does not exist in device '" << args.device << "'\n";
+            return kExitUsage;
+        }
+    }
+    paths = collect_tree_query_paths(args, reader);
+    if (paths.empty()) {
+        err << "Error: device '" << args.device << "' has no FIELD columns\n";
+        return kExitUsage;
+    }
+    return kExitOk;
 }
 
 }  // namespace
@@ -151,7 +239,7 @@ std::vector<std::string> collect_tree_query_paths(
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
-                  long long offset, long long limit) {
+                  long long offset, long long limit, long long* emitted_rows) {
     const int64_t start = args.has_start ? static_cast<int64_t>(args.start)
                                          : std::numeric_limits<int64_t>::min();
     const int64_t end = args.has_end ? static_cast<int64_t>(args.end)
@@ -177,22 +265,20 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             }
             table_name = schemas[0]->get_table_name();
         }
-        std::vector<std::string> cols = args.measurements;
-        if (cols.empty()) {
-            auto ts = reader.get_table_schema(table_name);
-            if (ts) {
-                cols = ts->get_measurement_names();
-            }
+        auto table_schema = reader.get_table_schema(table_name);
+        std::vector<std::string> cols;
+        int selection_ret = resolve_table_fields(args, table_schema, cols, err);
+        if (selection_ret != kExitOk) {
+            return selection_ret;
         }
         tag_filter = build_table_tag_filter(args, reader, table_name, err);
         if (args.has_tag_filter && tag_filter == nullptr) {
             return kExitUsage;
         }
         if (push_down) {
-            qret = reader.queryByRow(table_name, cols,
-                                     to_reader_row_bound(offset),
-                                     to_reader_row_bound(limit), rs,
-                                     tag_filter.get());
+            qret = reader.queryByRow(
+                table_name, cols, to_reader_row_bound(offset),
+                to_reader_row_bound(limit), rs, tag_filter.get());
         } else {
             qret = reader.query(table_name, cols, start, end, rs,
                                 tag_filter.get());
@@ -216,11 +302,11 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             }
             effective_args.device = devices[0]->get_device_name();
         }
-        std::vector<std::string> paths =
-            collect_tree_query_paths(effective_args, reader);
-        if (paths.empty()) {
-            err << "Error: no time series found\n";
-            return kExitRuntime;
+        std::vector<std::string> paths;
+        int selection_ret =
+            resolve_tree_paths(effective_args, reader, paths, err);
+        if (selection_ret != kExitOk) {
+            return selection_ret;
         }
         if (push_down) {
             qret = reader.queryByRow(paths, to_reader_row_bound(offset),
@@ -235,18 +321,18 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
-        return kExitRuntime;
+        return kExitFile;
     }
 
-    int wret = push_down
-                   ? emit_result_set(rs, fmt, args.no_header, out)
-                   : emit_result_set(rs, fmt, args.no_header, out, offset,
-                                     limit);
+    int wret = push_down ? emit_result_set(rs, fmt, args.no_header, out, 0, -1,
+                                           emitted_rows)
+                         : emit_result_set(rs, fmt, args.no_header, out, offset,
+                                           limit, emitted_rows);
     reader.destroy_query_data_set(rs);
     if (wret != 0) {
         err << "Error: failed to read rows: " << error_code_message(wret)
             << "\n";
-        return kExitRuntime;
+        return wret == common::E_FILE_WRITE_ERR ? kExitRuntime : kExitFile;
     }
     return kExitOk;
 }

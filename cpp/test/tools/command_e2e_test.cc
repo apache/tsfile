@@ -39,6 +39,31 @@ struct TagFilterFixture {
     ~TagFilterFixture() { std::remove(path.c_str()); }
 };
 
+struct MultiTableFixture {
+    std::string path = tsfile_cli_test::write_multi_table_fixture();
+    ~MultiTableFixture() { std::remove(path.c_str()); }
+};
+
+struct DisjointTableFixture {
+    std::string path = tsfile_cli_test::write_disjoint_table_fixture();
+    ~DisjointTableFixture() { std::remove(path.c_str()); }
+};
+
+struct SparseTreeFixture {
+    std::string path = tsfile_cli_test::write_sparse_tree_fixture();
+    ~SparseTreeFixture() { std::remove(path.c_str()); }
+};
+
+struct DisjointTreeFixture {
+    std::string path = tsfile_cli_test::write_disjoint_tree_fixture();
+    ~DisjointTreeFixture() { std::remove(path.c_str()); }
+};
+
+class FlushFailingStreamBuf : public std::stringbuf {
+   protected:
+    int sync() override { return -1; }
+};
+
 size_t count_lines(const std::string& s) {
     size_t n = 0;
     for (char c : s) {
@@ -106,6 +131,28 @@ TEST(CliE2E, SchemaTableMeasurementFilterOnlyShowsRequestedColumn) {
     EXPECT_EQ(out.str().find("table1,id2"), std::string::npos);
 }
 
+TEST(CliE2E, SchemaTableMeasurementFilterIsCaseInsensitive) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"schema", "-m", "S1", "-f", "csv", f.path},
+                                   out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_NE(out.str().find("table,table1,s1,FIELD,INT64"), std::string::npos)
+        << out.str();
+}
+
+TEST(CliE2E, SchemaRejectsMissingTableBeforeWritingOutput) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"schema", "-t", "missing", "-f", "csv", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("does not exist"), std::string::npos) << err.str();
+}
+
 TEST(CliE2E, StatsReportsCountAndTimeRange) {
     Fixture f;
     std::ostringstream out;
@@ -118,7 +165,7 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
               std::string::npos)
         << out.str();
     EXPECT_NE(out.str().find("table,table1,id1_field_1,id2_field_2,s1,INT64,"
-                             "5,0,0,4,0,40,0,40,\\N,scan"),
+                             "5,\\N,0,4,0,40,0,40,100,statistics"),
               std::string::npos)
         << out.str();
 }
@@ -130,7 +177,9 @@ TEST(CliE2E, HeadProjectsAndLimits) {
     int code = tsfile_cli::run_cli(
         {"head", "-m", "s1", "-n", "2", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "time,s1\n0,0\n1,10\n");
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n0,id1_field_1,id2_field_2,0\n1,id1_field_1,"
+              "id2_field_2,10\n");
 }
 
 TEST(CliE2E, CatReturnsAllRows) {
@@ -141,7 +190,34 @@ TEST(CliE2E, CatReturnsAllRows) {
         tsfile_cli::run_cli({"cat", "-m", "s1", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 0);
     EXPECT_EQ(count_lines(out.str()), 6u);
-    EXPECT_NE(out.str().find("time,s1\n"), std::string::npos);
+    EXPECT_NE(out.str().find("time,id1,id2,s1\n"), std::string::npos);
+}
+
+TEST(CliE2E, CatRejectsMissingOrNonFieldProjectionBeforeQuery) {
+    Fixture f;
+    for (const char* measurement : {"missing", "id1"}) {
+        std::ostringstream out;
+        std::ostringstream err;
+        int code = tsfile_cli::run_cli(
+            {"cat", "-m", measurement, "-f", "csv", f.path}, out, err);
+        EXPECT_EQ(code, 1) << measurement << " " << err.str();
+        EXPECT_TRUE(out.str().empty()) << measurement;
+        EXPECT_NE(err.str().find("FIELD"), std::string::npos)
+            << measurement << " " << err.str();
+    }
+}
+
+TEST(CliE2E, CatTableProjectionIsCaseInsensitive) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"cat", "-m", "S1", "-f", "csv", f.path}, out, err);
+    EXPECT_EQ(code, 0) << err.str();
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n0,id1_field_1,id2_field_2,0\n1,id1_field_1,"
+              "id2_field_2,10\n2,id1_field_1,id2_field_2,20\n3,id1_field_1,"
+              "id2_field_2,30\n4,id1_field_1,id2_field_2,40\n");
 }
 
 TEST(CliE2E, CatPushesDownOffsetAndLimit) {
@@ -152,7 +228,9 @@ TEST(CliE2E, CatPushesDownOffsetAndLimit) {
         {"cat", "-m", "s1", "--offset", "2", "-n", "2", "-f", "csv", f.path},
         out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "time,s1\n2,20\n3,30\n");
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n2,id1_field_1,id2_field_2,20\n3,id1_field_1,"
+              "id2_field_2,30\n");
 }
 
 TEST(CliE2E, HeadPushesDownOffsetAndLimit) {
@@ -163,7 +241,9 @@ TEST(CliE2E, HeadPushesDownOffsetAndLimit) {
         {"head", "-m", "s1", "--offset", "1", "-n", "3", "-f", "csv", f.path},
         out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "time,s1\n1,10\n2,20\n3,30\n");
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n1,id1_field_1,id2_field_2,10\n2,id1_field_1,"
+              "id2_field_2,20\n3,id1_field_1,id2_field_2,30\n");
 }
 
 TEST(CliE2E, CatWithTimeRange) {
@@ -174,7 +254,9 @@ TEST(CliE2E, CatWithTimeRange) {
         {"cat", "-m", "s1", "--start", "2", "--end", "3", "-f", "csv", f.path},
         out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "time,s1\n2,20\n3,30\n");
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n2,id1_field_1,id2_field_2,20\n3,id1_field_1,"
+              "id2_field_2,30\n");
 }
 
 TEST(CliE2E, CatAppliesOffsetAfterTimeRange) {
@@ -186,7 +268,9 @@ TEST(CliE2E, CatAppliesOffsetAfterTimeRange) {
                              "--offset", "1", "-n", "2", "-f", "csv", f.path},
                             out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "time,s1\n2,20\n3,30\n");
+    EXPECT_EQ(out.str(),
+              "time,id1,id2,s1\n2,id1_field_1,id2_field_2,20\n3,id1_field_1,"
+              "id2_field_2,30\n");
 }
 
 TEST(CliE2E, CatFiltersRowsByTagEq) {
@@ -197,7 +281,7 @@ TEST(CliE2E, CatFiltersRowsByTagEq) {
                                     "eq", "dev_b", "-f", "csv", f.path},
                                    out, err);
     EXPECT_EQ(code, 0) << err.str();
-    EXPECT_EQ(out.str(), "time,s1\n1,20\n2,30\n");
+    EXPECT_EQ(out.str(), "time,id1,s1\n1,dev_b,20\n2,dev_b,30\n");
 }
 
 TEST(CliE2E, HeadFiltersRowsByTagRegexp) {
@@ -209,7 +293,7 @@ TEST(CliE2E, HeadFiltersRowsByTagRegexp) {
          "10", "-f", "csv", f.path},
         out, err);
     EXPECT_EQ(code, 0) << err.str();
-    EXPECT_EQ(out.str(), "time,s1\n1,20\n2,30\n3,40\n");
+    EXPECT_EQ(out.str(), "time,id1,s1\n1,dev_b,20\n2,dev_b,30\n3,dev_c,40\n");
 }
 
 TEST(CliE2E, TagFilterRejectsFieldColumn) {
@@ -232,7 +316,19 @@ TEST(CliE2E, CatJsonIsNdjson) {
                                     "0", "-f", "ndjson", f.path},
                                    out, err);
     EXPECT_EQ(code, 0);
-    EXPECT_EQ(out.str(), "{\"time\":\"0\",\"s1\":\"0\"}\n");
+    EXPECT_EQ(out.str(),
+              "{\"time\":\"0\",\"id1\":\"id1_field_1\",\"id2\":"
+              "\"id2_field_2\",\"s1\":\"0\"}\n");
+}
+
+TEST(CliE2E, StdoutFlushFailureReturnsRuntimeError) {
+    Fixture f;
+    FlushFailingStreamBuf buffer;
+    std::ostream out(&buffer);
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-f", "csv", f.path}, out, err), 3);
+    EXPECT_NE(err.str().find("failed to read rows"), std::string::npos)
+        << err.str();
 }
 
 TEST(CliE2E, MetaReportsFileSummary) {
@@ -246,6 +342,21 @@ TEST(CliE2E, MetaReportsFileSummary) {
               std::string::npos)
         << out.str();
     EXPECT_NE(out.str().find(",4,table\n"), std::string::npos) << out.str();
+}
+
+TEST(CliE2E, MetaRejectsUnsupportedFileHeaderVersion) {
+    Fixture f;
+    std::fstream file(f.path.c_str(),
+                      std::ios::in | std::ios::out | std::ios::binary);
+    ASSERT_TRUE(file.good());
+    file.seekp(storage::MAGIC_STRING_TSFILE_LEN);
+    file.put(static_cast<char>(storage::VERSION_NUM_BYTE + 1));
+    file.close();
+
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"meta", "-f", "csv", f.path}, out, err), 2);
+    EXPECT_TRUE(out.str().empty());
 }
 
 TEST(CliE2E, CountReportsColumnCountsWithoutSummaryRows) {
@@ -267,6 +378,124 @@ TEST(CliE2E, CountReportsColumnCountsWithoutSummaryRows) {
               std::string::npos)
         << out.str();
     EXPECT_EQ(out.str().find("total"), std::string::npos) << out.str();
+}
+
+TEST(CliE2E, CountAndStatsDefaultToAllTables) {
+    MultiTableFixture f;
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"count", "-f", "csv", f.path}, count_out,
+                                  count_err),
+              0)
+        << count_err.str();
+    EXPECT_NE(count_out.str().find("table,sensors_a,s1,FIELD,1,1,1,0,0,0,scan"),
+              std::string::npos)
+        << count_out.str();
+    EXPECT_NE(count_out.str().find("table,sensors_b,s1,FIELD,1,1,1,0,0,0,scan"),
+              std::string::npos)
+        << count_out.str();
+
+    std::ostringstream stats_out;
+    std::ostringstream stats_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"stats", "-f", "csv", f.path}, stats_out,
+                                  stats_err),
+              0)
+        << stats_err.str();
+    EXPECT_NE(stats_out.str().find("table,sensors_a,sensors_a_tag,s1,INT64"),
+              std::string::npos)
+        << stats_out.str();
+    EXPECT_NE(stats_out.str().find("table,sensors_b,sensors_b_tag,s1,INT64"),
+              std::string::npos)
+        << stats_out.str();
+}
+
+TEST(CliE2E, CountAndStatsProjectionMayMatchOnlySomeTables) {
+    DisjointTableFixture f;
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"count", "-m", "S1", "-f", "csv", f.path},
+                                  count_out, count_err),
+              0)
+        << count_err.str();
+    EXPECT_NE(count_out.str().find("table,sensors_a,s1,FIELD"),
+              std::string::npos)
+        << count_out.str();
+    EXPECT_EQ(count_out.str().find("table,sensors_b"), std::string::npos)
+        << count_out.str();
+
+    std::ostringstream stats_out;
+    std::ostringstream stats_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-m", "S1", "-f", "csv", f.path},
+                                  stats_out, stats_err),
+              0)
+        << stats_err.str();
+    EXPECT_NE(stats_out.str().find("table,sensors_a,sensors_a_tag,s1,INT64"),
+              std::string::npos)
+        << stats_out.str();
+    EXPECT_EQ(stats_out.str().find("table,sensors_b"), std::string::npos)
+        << stats_out.str();
+}
+
+TEST(CliE2E, CountAndStatsProjectionMayMatchOnlySomeTreeDevices) {
+    DisjointTreeFixture f;
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"count", "-m", "left", "-f", "csv", f.path},
+                                  count_out, count_err),
+              0)
+        << count_err.str();
+    EXPECT_NE(count_out.str().find("tree,root.test.d1,left,FIELD"),
+              std::string::npos)
+        << count_out.str();
+    EXPECT_EQ(count_out.str().find("tree,root.test.d2"), std::string::npos)
+        << count_out.str();
+
+    std::ostringstream stats_out;
+    std::ostringstream stats_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-m", "left", "-f", "csv", f.path},
+                                  stats_out, stats_err),
+              0)
+        << stats_err.str();
+    EXPECT_NE(stats_out.str().find("tree,root.test.d1,left,INT32"),
+              std::string::npos)
+        << stats_out.str();
+    EXPECT_EQ(stats_out.str().find("tree,root.test.d2"), std::string::npos)
+        << stats_out.str();
+}
+
+TEST(CliE2E, TreeCountAndStatsUseDeviceTimestampUnion) {
+    SparseTreeFixture f;
+    std::ostringstream count_out;
+    std::ostringstream count_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"count", "-f", "csv", f.path}, count_out,
+                                  count_err),
+              0)
+        << count_err.str();
+    EXPECT_NE(count_out.str().find(
+                  "tree,root.test.d1,left,FIELD,3,\\N,2,1,0,2,statistics"),
+              std::string::npos)
+        << count_out.str();
+    EXPECT_NE(count_out.str().find(
+                  "tree,root.test.d1,right,FIELD,3,\\N,2,1,1,2,statistics"),
+              std::string::npos)
+        << count_out.str();
+
+    std::ostringstream stats_out;
+    std::ostringstream stats_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-f", "csv", f.path}, stats_out,
+                                  stats_err),
+              0)
+        << stats_err.str();
+    EXPECT_NE(stats_out.str().find(
+                  "tree,root.test.d1,left,INT32,2,1,0,2,10,20,10,20,30,"
+                  "statistics"),
+              std::string::npos)
+        << stats_out.str();
+    EXPECT_NE(stats_out.str().find(
+                  "tree,root.test.d1,right,BOOLEAN,2,1,1,2,\\N,\\N,true,false,"
+                  "1,statistics"),
+              std::string::npos)
+        << stats_out.str();
 }
 
 TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
@@ -299,7 +528,7 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
                             stats_out, stats_err),
         0);
     EXPECT_NE(stats_out.str().find("table,table1,id1_field_1,id2_field_2,s1,"
-                                   "INT64,5,0,0,4,0,40,0,40,\\N,scan"),
+                                   "INT64,5,\\N,0,4,0,40,0,40,100,statistics"),
               std::string::npos)
         << stats_out.str();
 }
@@ -336,7 +565,7 @@ TEST(CliE2E, WriteThenReadRoundTrip) {
     int rc = tsfile_cli::run_cli({"cat", "-m", "s1", "-f", "csv", out_path},
                                  rout, rerr);
     EXPECT_EQ(rc, 0);
-    EXPECT_EQ(rout.str(), "time,s1\n0,0\n1,10\n2,20\n");
+    EXPECT_EQ(rout.str(), "time,id1,s1\n0,dev,0\n1,dev,10\n2,dev,20\n");
 
     std::remove(csv_path.c_str());
     std::remove(out_path.c_str());
@@ -543,6 +772,56 @@ TEST(CliE2E, WriteRejectsDuplicateColumnNames) {
         << err.str();
 }
 
+TEST(CliE2E, WriteRejectsTagOnlySchema) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"write", "--table", "t", "--tag", "id",
+                                    "STRING", "--stdin", "-o", "x.tsfile"},
+                                   out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("--field"), std::string::npos) << err.str();
+}
+
+TEST(CliE2E, WriteRejectsNonStringTag) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli(
+        {"write", "--table", "t", "--tag", "id", "INT64", "--field", "s1",
+         "INT64", "--stdin", "-o", "x.tsfile"},
+        out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("must use STRING"), std::string::npos)
+        << err.str();
+}
+
+TEST(CliE2E, WriteNormalizesNamesAndHeaderCase) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_case", ".csv");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,ID,S1\n0,a,1\n";
+    }
+    std::string output =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_case_out", ".tsfile");
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"write", "--table", "Mixed", "--tag", "Id", "STRING",
+                   "--field", "s1", "INT64", "-i", csv, "-o", output},
+                  out, err),
+              0)
+        << err.str();
+    std::ostringstream schema_out;
+    std::ostringstream schema_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"schema", "-f", "csv", output}, schema_out,
+                                  schema_err),
+              0);
+    EXPECT_NE(schema_out.str().find("table,mixed,id,TAG,STRING"),
+              std::string::npos);
+    std::remove(csv.c_str());
+    std::remove(output.c_str());
+}
+
 TEST(CliE2E, WriteRejectsHeaderMatchWithNoHeader) {
     std::ostringstream out;
     std::ostringstream err;
@@ -639,6 +918,114 @@ TEST(CliE2E, WriteRejectsNonNumericInt64) {
     std::string err;
     EXPECT_EQ(write_one_value("INT64", "12abc", err), 2);
     EXPECT_NE(err.find("bad INT64"), std::string::npos) << err;
+}
+
+TEST(CliE2E, WriteDateRequiresStrictIsoLexicalForm) {
+    std::string err;
+    EXPECT_EQ(write_one_value("DATE", "2024-1-1", err), 2);
+    EXPECT_NE(err.find("want YYYY-MM-DD"), std::string::npos) << err;
+    EXPECT_EQ(write_one_value("DATE", "2024-02-30", err), 2);
+    EXPECT_EQ(write_one_value("DATE", "2024-02-29", err), 0) << err;
+}
+
+TEST(CliE2E, WriteAcceptsOneLeadingUtf8Bom) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_bom", ".csv");
+    {
+        std::ofstream o(csv.c_str(), std::ios::binary);
+        o << "\xEF\xBB\xBFtime,s1\n0,1\n";
+    }
+    std::string output =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_bom_out", ".tsfile");
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                   "INT64", "-i", csv, "-o", output},
+                                  out, err),
+              0)
+        << err.str();
+    std::remove(csv.c_str());
+    std::remove(output.c_str());
+}
+
+TEST(CliE2E, WriteRejectsInvalidUtf8AndMisplacedBomWithoutOutput) {
+    const std::string invalid_utf8 =
+        std::string("time,s1\n0,") + static_cast<char>(0xC3) + "(\n";
+    const std::string misplaced_bom =
+        "time,s1\n0,\xEF\xBB\xBF"
+        "1\n";
+    const std::string inputs[] = {invalid_utf8, misplaced_bom};
+
+    for (size_t i = 0; i < 2; ++i) {
+        std::string csv =
+            tsfile_cli_test::unique_temp_path("tsfile_cli_bad_utf8", ".csv");
+        std::string output = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_bad_utf8_out", ".tsfile");
+        {
+            std::ofstream file(csv.c_str(), std::ios::binary);
+            file.write(inputs[i].data(),
+                       static_cast<std::streamsize>(inputs[i].size()));
+        }
+        std::ostringstream out;
+        std::ostringstream err;
+        EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                       "INT64", "-i", csv, "-o", output},
+                                      out, err),
+                  2)
+            << err.str();
+        std::ifstream target(output.c_str(), std::ios::binary);
+        EXPECT_FALSE(target.good());
+        std::remove(csv.c_str());
+        std::remove(output.c_str());
+    }
+}
+
+TEST(CliE2E, WriteRejectsReservedAndControlCharacterNames) {
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t", "--field", "time",
+                                   "INT64", "--stdin", "-o", "unused.tsfile"},
+                                  out, err),
+              1);
+    EXPECT_NE(err.str().find("reserved"), std::string::npos) << err.str();
+
+    out.str("");
+    out.clear();
+    err.str("");
+    err.clear();
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"write", "--table", "bad\nname", "--field", "s1",
+                             "INT64", "--stdin", "-o", "unused.tsfile"},
+                            out, err),
+        1);
+    EXPECT_NE(err.str().find("control"), std::string::npos) << err.str();
+}
+
+TEST(CliE2E, WriteFailurePreservesExistingTarget) {
+    std::string csv =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_existing", ".csv");
+    std::string output =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_existing_out", ".tsfile");
+    {
+        std::ofstream o(csv.c_str());
+        o << "time,s1\n0,1\n";
+    }
+    {
+        std::ofstream o(output.c_str());
+        o << "sentinel";
+    }
+    std::ostringstream out;
+    std::ostringstream err;
+    EXPECT_EQ(tsfile_cli::run_cli({"write", "--table", "t", "--field", "s1",
+                                   "INT64", "-i", csv, "-o", output},
+                                  out, err),
+              3);
+    std::ifstream existing(output.c_str());
+    std::stringstream content;
+    content << existing.rdbuf();
+    EXPECT_EQ(content.str(), "sentinel");
+    std::remove(csv.c_str());
+    std::remove(output.c_str());
 }
 
 TEST(CliE2E, WriteRejectsOutOfOrderAcrossBatches) {

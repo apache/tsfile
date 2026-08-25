@@ -89,7 +89,7 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 
 | Command | Description |
 |---|---|
-| `ls` | List pure-model objects as `model, object` rows |
+| `ls` | List selected-model objects as `model, object` rows |
 | `schema` | List schema rows for devices or tables |
 | `meta` | File summary: `size_bytes`, `format_version`, and `model` |
 | `stats` | FIELD statistics with counts, null counts, time range, values, and source |
@@ -117,14 +117,15 @@ Shared options:
 `ndjson` output emits one JSON object per line; numbers/booleans are bare, other values are
 quoted, nulls are `null`, and non-finite floats become `null`. CSV output follows RFC 4180.
 CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Timestamps are raw int64
-values. The `table` format buffers all rows in memory to align columns, so prefer
-`csv`/`ndjson` when dumping large files. `sketch` does not accept `--format`.
+values. The `table` format uses a temporary spool to align columns with bounded
+memory; prefer `csv`/`ndjson` when temporary disk use is undesirable. `sketch`
+does not accept `--format`.
 
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli
 $BIN ls -f csv data.tsfile                          # list tables / devices
 $BIN meta data.tsfile                               # quick file overview
-$BIN count -t table1 -f csv data.tsfile             # row counts, no page scan
+$BIN count -t table1 -f csv data.tsfile             # exact row/column counts
 $BIN cat -t table1 --tag-filter device eq dev_1 -m temp -f csv data.tsfile
 $BIN cat -m temp -m humidity --start 1700000000000 -f csv data.tsfile | head
 $BIN export -t table1 --type csv -o table1.csv data.tsfile

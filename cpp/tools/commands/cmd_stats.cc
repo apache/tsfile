@@ -18,11 +18,8 @@
  */
 
 #include <algorithm>
-#include <iomanip>
-#include <limits>
 #include <map>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -43,29 +40,29 @@ struct StatsColumn {
     common::ColumnCategory category;
 };
 
-struct FieldAccumulator {
-    common::TSDataType type = common::INVALID_DATATYPE;
-    long long non_null_count = 0;
-    bool has_value = false;
-    std::string min_value;
-    std::string max_value;
-    std::string first_value;
-    std::string last_value;
-    long double min_numeric = 0;
-    long double max_numeric = 0;
-    long double numeric_sum = 0;
-    long long bool_sum = 0;
+struct FieldStatistic {
+    long long count = 0;
+    long long start_time = 0;
+    long long end_time = 0;
+    bool present = false;
+    StatisticCells values;
 };
 
 struct EntityAccumulator {
     std::vector<std::string> tag_values;
     std::vector<bool> tag_nulls;
-    std::map<std::string, FieldAccumulator> fields;
-    std::vector<std::string> field_order;
+    std::map<std::string, FieldStatistic> fields;
     long long row_count = 0;
-    long long min_time = 0;
-    long long max_time = 0;
-    bool has_time = false;
+    bool has_timeline_statistic = false;
+};
+
+struct TableStatsSummary {
+    std::shared_ptr<storage::TableSchema> schema;
+    std::vector<StatsColumn> columns;
+    std::vector<size_t> tag_indexes;
+    std::vector<size_t> field_indexes;
+    std::map<std::string, EntityAccumulator> entities;
+    std::vector<std::string> entity_order;
 };
 
 const char* stats_column_category_name(common::ColumnCategory category) {
@@ -82,174 +79,100 @@ const char* stats_column_category_name(common::ColumnCategory category) {
     }
 }
 
-bool is_stats_numeric(common::TSDataType type) {
-    return type == common::INT32 || type == common::INT64 ||
-           type == common::FLOAT || type == common::DOUBLE ||
-           type == common::DATE || type == common::TIMESTAMP;
-}
-
-long double numeric_value(storage::ResultSet* rs, uint32_t col,
-                          common::TSDataType type) {
-    switch (type) {
-        case common::INT32:
-            return rs->get_value<int32_t>(col);
-        case common::INT64:
-        case common::TIMESTAMP:
-            return static_cast<long double>(rs->get_value<int64_t>(col));
-        case common::FLOAT:
-            return rs->get_value<float>(col);
-        case common::DOUBLE:
-            return rs->get_value<double>(col);
-        default:
-            return 0;
+bool capture_timeline_statistic(storage::ITimeseriesIndex* index,
+                                EntityAccumulator& entity) {
+    if (index == nullptr) {
+        return false;
     }
+    storage::Statistic* statistic = nullptr;
+    auto* aligned = dynamic_cast<storage::AlignedTimeseriesIndex*>(index);
+    if (aligned != nullptr && aligned->time_ts_idx_ != nullptr) {
+        statistic = aligned->time_ts_idx_->get_statistic();
+    }
+    auto* multi = dynamic_cast<storage::MultiAlignedTimeseriesIndex*>(index);
+    if (multi != nullptr && multi->time_ts_idx_ != nullptr) {
+        statistic = multi->time_ts_idx_->get_statistic();
+    }
+    if (statistic != nullptr) {
+        entity.row_count = statistic->get_count();
+        entity.has_timeline_statistic = true;
+        return true;
+    }
+
+    common::SimpleList<storage::ChunkMeta*>* chunk_metas =
+        index->get_time_chunk_meta_list();
+    if (chunk_metas == nullptr) {
+        return false;
+    }
+    long long row_count = 0;
+    bool found = false;
+    for (auto it = chunk_metas->begin(); it != chunk_metas->end(); it++) {
+        storage::ChunkMeta* chunk_meta = it.get();
+        if (chunk_meta == nullptr || chunk_meta->statistic_ == nullptr) {
+            continue;
+        }
+        row_count += chunk_meta->statistic_->get_count();
+        found = true;
+    }
+    if (found) {
+        entity.row_count = row_count;
+        entity.has_timeline_statistic = true;
+    }
+    return found;
 }
 
-std::string long_double_to_string(long double value) {
-    std::ostringstream ss;
-    ss << std::setprecision(std::numeric_limits<long double>::digits10)
-       << value;
-    return ss.str();
-}
-
-void update_field(FieldAccumulator& field, storage::ResultSet* rs, uint32_t col,
-                  common::TSDataType type) {
-    field.type = type;
-    std::string value = cell_to_string(rs, col, type);
-    ++field.non_null_count;
-    if (!field.has_value) {
-        field.has_value = true;
-        field.min_value = value;
-        field.max_value = value;
-        field.first_value = value;
-        field.last_value = value;
-        if (is_stats_numeric(type)) {
-            field.min_numeric = numeric_value(rs, col, type);
-            field.max_numeric = field.min_numeric;
-            field.numeric_sum = field.min_numeric;
-        }
-        if (type == common::BOOLEAN && rs->get_value<bool>(col)) {
-            field.bool_sum = 1;
-        }
+void capture_field_statistic(storage::TimeseriesIndex* index,
+                             const std::set<std::string>& selected_fields,
+                             EntityAccumulator& entity) {
+    if (index == nullptr) {
         return;
     }
-
-    field.last_value = value;
-    if (is_stats_numeric(type)) {
-        long double numeric = numeric_value(rs, col, type);
-        if (numeric < field.min_numeric) {
-            field.min_numeric = numeric;
-            field.min_value = value;
-        }
-        if (numeric > field.max_numeric) {
-            field.max_numeric = numeric;
-            field.max_value = value;
-        }
-        field.numeric_sum += numeric;
+    const std::string name = index->get_measurement_name().to_std_string();
+    if (selected_fields.find(name) == selected_fields.end()) {
         return;
     }
-    if (type == common::BOOLEAN) {
-        if (rs->get_value<bool>(col)) {
-            ++field.bool_sum;
-        }
+    storage::Statistic* statistic = index->get_statistic();
+    if (statistic == nullptr) {
         return;
     }
-    if ((type == common::STRING || type == common::TEXT) &&
-        value < field.min_value) {
-        field.min_value = value;
-    }
-    if ((type == common::STRING || type == common::TEXT) &&
-        value > field.max_value) {
-        field.max_value = value;
-    }
-}
-
-std::string entity_part(bool is_null, const std::string& value) {
-    std::ostringstream ss;
-    if (is_null) {
-        ss << "N:";
-    } else {
-        ss << "V:" << value.size() << ":" << value;
-    }
-    return ss.str();
-}
-
-std::vector<bool> stats_value_nulls(common::TSDataType type,
-                                    const FieldAccumulator& field) {
-    if (!field.has_value || type == common::BLOB) {
-        return {true, true, true, true, true};
-    }
-    if (type == common::BOOLEAN) {
-        return {true, true, false, false, false};
-    }
-    if (type == common::TEXT) {
-        return {true, true, false, false, true};
-    }
-    if (type == common::INT64 || type == common::DATE ||
-        type == common::TIMESTAMP) {
-        return {false, false, false, false, true};
-    }
-    if (type == common::STRING) {
-        return {false, false, false, false, true};
-    }
-    return {false, false, false, false, false};
-}
-
-std::vector<std::string> stats_value_cells(common::TSDataType type,
-                                           const FieldAccumulator& field) {
-    if (!field.has_value || type == common::BLOB) {
-        return {"", "", "", "", ""};
-    }
-    if (type == common::BOOLEAN) {
-        return {"", "", field.first_value, field.last_value,
-                std::to_string(field.bool_sum)};
-    }
-    if (type == common::TEXT) {
-        return {"", "", field.first_value, field.last_value, ""};
-    }
-    if (type == common::INT64 || type == common::DATE ||
-        type == common::TIMESTAMP || type == common::STRING) {
-        return {field.min_value, field.max_value, field.first_value,
-                field.last_value, ""};
-    }
-    return {field.min_value, field.max_value, field.first_value,
-            field.last_value, long_double_to_string(field.numeric_sum)};
+    FieldStatistic field;
+    field.count = statistic->get_count();
+    field.start_time = statistic->start_time_;
+    field.end_time = statistic->get_end_time();
+    field.present = true;
+    field.values = statistic_value_cells(statistic);
+    entity.fields[name] = field;
 }
 
 bool selected_for_stats(const ParsedArgs& args, const std::string& name) {
-    return args.measurements.empty() ||
-           std::find(args.measurements.begin(), args.measurements.end(),
-                     name) != args.measurements.end();
+    if (args.measurements.empty()) {
+        return true;
+    }
+    for (const std::string& requested : args.measurements) {
+        if (storage::to_lower(requested) == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
-int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
-                    OutputFormat fmt, std::ostream& out, std::ostream& err) {
-    std::string table_name = storage::to_lower(args.table);
-    std::shared_ptr<storage::TableSchema> schema;
-    if (!table_name.empty()) {
-        schema = reader.get_table_schema(table_name);
-    } else {
-        auto schemas = reader.get_all_table_schemas();
-        if (schemas.size() != 1) {
-            err << "Error: stats requires -t/--table when the file contains "
-                   "multiple tables\n";
-            return kExitUsage;
-        }
-        schema = schemas.empty() ? nullptr : schemas[0];
-    }
+int collect_table_stats(const ParsedArgs& args,
+                        const std::shared_ptr<storage::TableSchema>& schema,
+                        storage::TsFileReader& reader,
+                        TableStatsSummary& summary, std::ostream& err,
+                        bool require_all_measurements) {
     if (!schema) {
         err << "Error: table '" << args.table << "' does not exist\n";
         return kExitUsage;
     }
+    summary.schema = schema;
 
     auto categories = schema->get_column_categories();
     auto measurements = schema->get_measurement_schemas();
-    std::vector<StatsColumn> columns;
-    std::vector<size_t> tag_indexes;
-    std::vector<size_t> field_indexes;
+    summary.columns.resize(measurements.size());
     std::set<std::string> known_columns;
     std::set<std::string> field_names;
-    std::vector<std::string> query_columns;
+    std::set<std::string> selected_fields;
     for (size_t i = 0; i < measurements.size(); ++i) {
         if (!measurements[i]) {
             continue;
@@ -259,165 +182,277 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         c.type = measurements[i]->data_type_;
         c.category = i < categories.size() ? categories[i]
                                            : common::ColumnCategory::FIELD;
-        columns.push_back(c);
+        summary.columns[i] = c;
         known_columns.insert(c.name);
-        query_columns.push_back(c.name);
         if (c.category == common::ColumnCategory::TAG) {
-            tag_indexes.push_back(i);
+            summary.tag_indexes.push_back(i);
         } else if (c.category == common::ColumnCategory::FIELD) {
             field_names.insert(c.name);
             if (selected_for_stats(args, c.name)) {
-                field_indexes.push_back(i);
+                summary.field_indexes.push_back(i);
+                selected_fields.insert(c.name);
             }
         }
     }
-    for (const std::string& requested : args.measurements) {
-        if (known_columns.find(requested) == known_columns.end()) {
-            err << "Error: FIELD '" << requested << "' does not exist in table "
-                << schema->get_table_name() << "\n";
-            return kExitUsage;
-        }
-        if (field_names.find(requested) == field_names.end()) {
-            err << "Error: '" << requested
-                << "' is a " << stats_column_category_name(common::ColumnCategory::TAG)
-                << "; stats accepts FIELD columns only\n";
-            return kExitUsage;
-        }
-    }
-
-    storage::ResultSet* rs = nullptr;
-    int qret = reader.query(schema->get_table_name(), query_columns,
-                            std::numeric_limits<int64_t>::min(),
-                            std::numeric_limits<int64_t>::max(), rs);
-    if (qret != 0 || rs == nullptr) {
-        err << "Error: stats query failed: " << error_code_message(qret)
-            << "\n";
-        if (rs != nullptr) {
-            reader.destroy_query_data_set(rs);
-        }
-        return kExitRuntime;
-    }
-    auto meta = rs->get_metadata();
-    std::vector<common::TSDataType> result_types;
-    for (uint32_t i = 1; i <= meta->get_column_count(); ++i) {
-        result_types.push_back(meta->get_column_type(i));
-    }
-
-    std::map<std::string, EntityAccumulator> entities;
-    std::vector<std::string> entity_order;
-    bool has_next = false;
-    int code = common::E_OK;
-    while ((code = rs->next(has_next)) == common::E_OK && has_next) {
-        std::string key;
-        std::vector<std::string> tag_values;
-        std::vector<bool> tag_nulls;
-        for (size_t idx : tag_indexes) {
-            uint32_t col = static_cast<uint32_t>(idx + 2);
-            bool null = rs->is_null(col);
-            std::string value =
-                null ? std::string()
-                     : cell_to_string(rs, col, result_types[col - 1]);
-            key += entity_part(null, value);
-            key += "|";
-            tag_values.push_back(value);
-            tag_nulls.push_back(null);
-        }
-        if (key.empty()) {
-            key = "zero-tag";
-        }
-        if (entities.find(key) == entities.end()) {
-            EntityAccumulator entity;
-            entity.tag_values = tag_values;
-            entity.tag_nulls = tag_nulls;
-            entities[key] = entity;
-            entity_order.push_back(key);
-        }
-        EntityAccumulator& entity = entities[key];
-        int64_t time = rs->get_value<int64_t>(1);
-        if (!entity.has_time) {
-            entity.min_time = time;
-            entity.max_time = time;
-            entity.has_time = true;
-        } else {
-            entity.min_time = std::min<long long>(entity.min_time, time);
-            entity.max_time = std::max<long long>(entity.max_time, time);
-        }
-        ++entity.row_count;
-
-        for (size_t idx : field_indexes) {
-            uint32_t col = static_cast<uint32_t>(idx + 2);
-            const StatsColumn& field = columns[idx];
-            FieldAccumulator& acc = entity.fields[field.name];
-            if (std::find(entity.field_order.begin(), entity.field_order.end(),
-                          field.name) == entity.field_order.end()) {
-                entity.field_order.push_back(field.name);
+    if (require_all_measurements) {
+        for (const std::string& requested : args.measurements) {
+            const std::string canonical = storage::to_lower(requested);
+            if (known_columns.find(canonical) == known_columns.end()) {
+                err << "Error: FIELD '" << requested
+                    << "' does not exist in table " << schema->get_table_name()
+                    << "\n";
+                return kExitUsage;
             }
-            acc.type = field.type;
-            if (!rs->is_null(col)) {
-                update_field(acc, rs, col, field.type);
+            if (field_names.find(canonical) == field_names.end()) {
+                common::ColumnCategory category = common::ColumnCategory::TAG;
+                int index = schema->find_column_index(canonical);
+                if (index >= 0 &&
+                    static_cast<size_t>(index) < categories.size()) {
+                    category = categories[static_cast<size_t>(index)];
+                }
+                err << "Error: '" << requested << "' is a "
+                    << stats_column_category_name(category)
+                    << "; stats accepts FIELD columns only\n";
+                return kExitUsage;
             }
         }
     }
-    reader.destroy_query_data_set(rs);
-    if (code != common::E_OK) {
-        err << "Error: failed to scan stats rows: " << error_code_message(code)
-            << "\n";
-        return kExitRuntime;
+
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices =
+        reader.get_all_devices(schema->get_table_name());
+    storage::DeviceTimeseriesMetadataMap metadata =
+        reader.get_timeseries_metadata(devices);
+    for (const auto& device : devices) {
+        if (!device) {
+            continue;
+        }
+        const std::string key = device->get_device_name();
+        EntityAccumulator entity;
+        const auto& segments = device->get_segments();
+        for (size_t i = 0; i < summary.tag_indexes.size(); ++i) {
+            const size_t segment_index = i + 1;
+            const std::string* segment = segment_index < segments.size()
+                                             ? segments[segment_index]
+                                             : nullptr;
+            entity.tag_values.push_back(segment == nullptr ? "" : *segment);
+            entity.tag_nulls.push_back(segment == nullptr);
+        }
+
+        auto metadata_it = metadata.find(device);
+        if (metadata_it != metadata.end()) {
+            for (const auto& index_ptr : metadata_it->second) {
+                storage::ITimeseriesIndex* index = index_ptr.get();
+                if (!entity.has_timeline_statistic) {
+                    capture_timeline_statistic(index, entity);
+                }
+                auto* multi =
+                    dynamic_cast<storage::MultiAlignedTimeseriesIndex*>(index);
+                if (multi != nullptr) {
+                    for (storage::TimeseriesIndex* value_index :
+                         multi->get_value_indices()) {
+                        capture_field_statistic(value_index, selected_fields,
+                                                entity);
+                    }
+                    continue;
+                }
+                auto* aligned =
+                    dynamic_cast<storage::AlignedTimeseriesIndex*>(index);
+                if (aligned != nullptr) {
+                    capture_field_statistic(aligned->value_ts_idx_,
+                                            selected_fields, entity);
+                } else {
+                    capture_field_statistic(
+                        dynamic_cast<storage::TimeseriesIndex*>(index),
+                        selected_fields, entity);
+                }
+            }
+        }
+        summary.entities[key] = entity;
+        summary.entity_order.push_back(key);
+    }
+
+    return kExitOk;
+}
+
+int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
+                    OutputFormat fmt, std::ostream& out, std::ostream& err) {
+    std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+    if (!args.table.empty()) {
+        schemas.push_back(
+            reader.get_table_schema(storage::to_lower(args.table)));
+    } else {
+        schemas = reader.get_all_table_schemas();
+    }
+    if (schemas.empty() || !schemas[0]) {
+        err << "Error: table '" << args.table << "' does not exist\n";
+        return kExitUsage;
+    }
+
+    if (args.table.empty()) {
+        for (const std::string& requested : args.measurements) {
+            const std::string canonical = storage::to_lower(requested);
+            bool found_field = false;
+            common::ColumnCategory found_category =
+                common::ColumnCategory::FIELD;
+            bool found_other = false;
+            for (const auto& schema : schemas) {
+                if (!schema) {
+                    continue;
+                }
+                const int index = schema->find_column_index(canonical);
+                if (index < 0) {
+                    continue;
+                }
+                const auto categories = schema->get_column_categories();
+                const common::ColumnCategory category =
+                    static_cast<size_t>(index) < categories.size()
+                        ? categories[static_cast<size_t>(index)]
+                        : common::ColumnCategory::FIELD;
+                if (category == common::ColumnCategory::FIELD) {
+                    found_field = true;
+                } else if (!found_other) {
+                    found_category = category;
+                    found_other = true;
+                }
+            }
+            if (!found_field) {
+                if (found_other) {
+                    err << "Error: '" << requested << "' is a "
+                        << stats_column_category_name(found_category)
+                        << "; stats accepts FIELD columns only\n";
+                } else {
+                    err << "Error: FIELD '" << requested
+                        << "' does not exist in the file\n";
+                }
+                return kExitUsage;
+            }
+        }
+    }
+
+    std::vector<TableStatsSummary> summaries(schemas.size());
+    std::vector<std::string> union_tags;
+    std::set<std::string> seen_tags;
+    for (size_t i = 0; i < schemas.size(); ++i) {
+        ParsedArgs scope = args;
+        scope.table = schemas[i] ? schemas[i]->get_table_name() : "";
+        int ret = collect_table_stats(scope, schemas[i], reader, summaries[i],
+                                      err, !args.table.empty());
+        if (ret != kExitOk) {
+            return ret;
+        }
+        for (size_t tag_index : summaries[i].tag_indexes) {
+            const std::string& tag = summaries[i].columns[tag_index].name;
+            if (seen_tags.insert(tag).second) {
+                union_tags.push_back(tag);
+            }
+        }
     }
 
     std::vector<std::string> headers = {"model", "object"};
     std::vector<common::TSDataType> types = {common::STRING, common::STRING};
-    for (size_t idx : tag_indexes) {
-        headers.push_back("tag." + columns[idx].name);
+    for (const std::string& tag : union_tags) {
+        headers.push_back("tag." + tag);
         types.push_back(common::STRING);
     }
-    const char* rest[] = {"field",          "data_type", "non_null_count",
-                          "null_count",     "min_time",  "max_time",
-                          "min",            "max",       "first",
-                          "last",           "sum",       "stats_source"};
+    const char* rest[] = {"field",      "data_type", "non_null_count",
+                          "null_count", "min_time",  "max_time",
+                          "min",        "max",       "first",
+                          "last",       "sum",       "stats_source"};
     for (const char* h : rest) {
         headers.push_back(h);
         types.push_back(common::STRING);
     }
     RowWriter w(out, fmt, headers, types, args.no_header);
-    for (const std::string& key : entity_order) {
-        const EntityAccumulator& entity = entities[key];
-        for (size_t idx : field_indexes) {
-            const StatsColumn& field = columns[idx];
-            auto it = entity.fields.find(field.name);
-            FieldAccumulator acc;
-            if (it != entity.fields.end()) {
-                acc = it->second;
-            }
-            long long null_count = entity.row_count - acc.non_null_count;
-            std::vector<std::string> cells = {"table", schema->get_table_name()};
-            std::vector<bool> nulls = {false, false};
-            cells.insert(cells.end(), entity.tag_values.begin(),
-                         entity.tag_values.end());
-            nulls.insert(nulls.end(), entity.tag_nulls.begin(),
-                         entity.tag_nulls.end());
-            cells.push_back(field.name);
-            cells.push_back(tsdatatype_name(field.type));
-            cells.push_back(std::to_string(acc.non_null_count));
-            cells.push_back(std::to_string(null_count));
-            cells.push_back(entity.has_time ? std::to_string(entity.min_time)
-                                            : "");
-            cells.push_back(entity.has_time ? std::to_string(entity.max_time)
-                                            : "");
-            nulls.insert(nulls.end(),
-                         {false, false, false, false, !entity.has_time,
-                          !entity.has_time});
+    for (const TableStatsSummary& summary : summaries) {
+        std::map<std::string, size_t> local_tag_positions;
+        for (size_t i = 0; i < summary.tag_indexes.size(); ++i) {
+            local_tag_positions[summary.columns[summary.tag_indexes[i]].name] =
+                i;
+        }
+        for (const std::string& key : summary.entity_order) {
+            const EntityAccumulator& entity =
+                summary.entities.find(key)->second;
+            for (size_t idx : summary.field_indexes) {
+                const StatsColumn& field = summary.columns[idx];
+                auto it = entity.fields.find(field.name);
+                FieldStatistic statistic;
+                if (it != entity.fields.end()) {
+                    statistic = it->second;
+                }
+                const bool has_statistic = statistic.present;
+                const bool has_null_count =
+                    has_statistic && entity.has_timeline_statistic;
+                const long long null_count =
+                    has_null_count ? entity.row_count - statistic.count : 0;
+                std::vector<std::string> cells = {
+                    "table", summary.schema->get_table_name()};
+                std::vector<bool> nulls = {false, false};
+                for (const std::string& tag : union_tags) {
+                    auto position = local_tag_positions.find(tag);
+                    if (position == local_tag_positions.end()) {
+                        cells.push_back("");
+                        nulls.push_back(true);
+                    } else {
+                        cells.push_back(entity.tag_values[position->second]);
+                        nulls.push_back(entity.tag_nulls[position->second]);
+                    }
+                }
+                cells.push_back(field.name);
+                cells.push_back(tsdatatype_name(field.type));
+                cells.push_back(has_statistic ? std::to_string(statistic.count)
+                                              : "");
+                cells.push_back(has_null_count ? std::to_string(null_count)
+                                               : "");
+                cells.push_back(
+                    has_statistic ? std::to_string(statistic.start_time) : "");
+                cells.push_back(
+                    has_statistic ? std::to_string(statistic.end_time) : "");
+                nulls.insert(nulls.end(),
+                             {false, false, !has_statistic, !has_null_count,
+                              !has_statistic, !has_statistic});
 
-            std::vector<std::string> values = stats_value_cells(field.type, acc);
-            std::vector<bool> value_nulls = stats_value_nulls(field.type, acc);
-            cells.insert(cells.end(), values.begin(), values.end());
-            nulls.insert(nulls.end(), value_nulls.begin(), value_nulls.end());
-            cells.push_back(entity.has_time ? "scan" : "");
-            nulls.push_back(!entity.has_time);
-            w.write(cells, nulls);
+                StatisticCells values;
+                values.values.assign(5, "");
+                values.is_null.assign(5, true);
+                if (has_statistic) {
+                    values = statistic.values;
+                }
+                cells.insert(cells.end(), values.values.begin(),
+                             values.values.end());
+                nulls.insert(nulls.end(), values.is_null.begin(),
+                             values.is_null.end());
+                cells.push_back(has_statistic ? "statistics" : "");
+                nulls.push_back(!has_statistic);
+                std::vector<common::TSDataType> row_types(types.size(),
+                                                          common::STRING);
+                const size_t fixed = 2 + union_tags.size();
+                row_types[fixed + 2] = common::INT64;
+                row_types[fixed + 3] = common::INT64;
+                row_types[fixed + 4] = common::INT64;
+                row_types[fixed + 5] = common::INT64;
+                for (size_t value = 0; value < 4; ++value) {
+                    row_types[fixed + 6 + value] = field.type;
+                }
+                if (field.type == common::BOOLEAN ||
+                    field.type == common::INT32 || field.type == common::DATE ||
+                    field.type == common::INT64 ||
+                    field.type == common::TIMESTAMP) {
+                    row_types[fixed + 10] = common::INT64;
+                } else if (field.type == common::FLOAT ||
+                           field.type == common::DOUBLE) {
+                    row_types[fixed + 10] = field.type;
+                }
+                if (!w.write(cells, nulls, row_types)) {
+                    err << "Error: failed to write output\n";
+                    return kExitRuntime;
+                }
+            }
         }
     }
-    w.finish();
+    if (!w.finish()) {
+        err << "Error: failed to write output\n";
+        return kExitRuntime;
+    }
     return kExitOk;
 }
 
@@ -435,28 +470,64 @@ int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                  "last", "sum", "stats_source"},
                 {common::STRING, common::STRING, common::STRING, common::STRING,
                  common::INT64, common::INT64, common::INT64, common::INT64,
-                 common::STRING, common::STRING, common::STRING,
+                 common::STRING, common::STRING, common::STRING, common::STRING,
                  common::STRING, common::STRING},
                 args.no_header);
 
-    std::vector<SeriesStatRow> rows = collect_series_stats(args, reader);
+    std::vector<SeriesStatRow> rows;
+    int collect_ret = collect_series_stats(args, reader, rows, err);
+    if (collect_ret != kExitOk) {
+        return collect_ret;
+    }
     for (const SeriesStatRow& row : rows) {
+        const long long null_count = row.row_count - row.count;
         std::vector<std::string> cells = {
-            "tree", row.target, row.measurement, "", std::to_string(row.count),
-            "0", row.count > 0 ? std::to_string(row.start_time) : "",
-            row.count > 0 ? std::to_string(row.end_time) : ""};
+            "tree",
+            row.target,
+            row.measurement,
+            tsdatatype_name(row.data_type),
+            row.has_statistic ? std::to_string(row.count) : "",
+            row.has_statistic ? std::to_string(null_count) : "",
+            row.has_statistic ? std::to_string(row.start_time) : "",
+            row.has_statistic ? std::to_string(row.end_time) : ""};
         cells.insert(cells.end(), row.value_cells.values.begin(),
                      row.value_cells.values.end());
-        cells.push_back(row.count > 0 ? "statistics" : "");
+        cells.push_back(row.has_statistic ? "statistics" : "");
 
-        std::vector<bool> nulls = {false, false, false, true, false, false,
-                                   row.count == 0, row.count == 0};
+        std::vector<bool> nulls = {false,
+                                   false,
+                                   false,
+                                   false,
+                                   !row.has_statistic,
+                                   !row.has_statistic,
+                                   !row.has_statistic,
+                                   !row.has_statistic};
         nulls.insert(nulls.end(), row.value_cells.is_null.begin(),
                      row.value_cells.is_null.end());
-        nulls.push_back(row.count == 0);
-        w.write(cells, nulls);
+        nulls.push_back(!row.has_statistic);
+        std::vector<common::TSDataType> row_types = {
+            common::STRING, common::STRING, common::STRING, common::STRING,
+            common::INT64,  common::INT64,  common::INT64,  common::INT64,
+            row.data_type,  row.data_type,  row.data_type,  row.data_type,
+            common::STRING, common::STRING};
+        if (row.data_type == common::BOOLEAN ||
+            row.data_type == common::INT32 || row.data_type == common::DATE ||
+            row.data_type == common::INT64 ||
+            row.data_type == common::TIMESTAMP) {
+            row_types[12] = common::INT64;
+        } else if (row.data_type == common::FLOAT ||
+                   row.data_type == common::DOUBLE) {
+            row_types[12] = row.data_type;
+        }
+        if (!w.write(cells, nulls, row_types)) {
+            err << "Error: failed to write output\n";
+            return kExitRuntime;
+        }
     }
-    w.finish();
+    if (!w.finish()) {
+        err << "Error: failed to write output\n";
+        return kExitRuntime;
+    }
     return kExitOk;
 }
 

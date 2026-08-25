@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -67,9 +68,15 @@ struct TableCountSummary {
 };
 
 bool selected_for_count(const ParsedArgs& args, const std::string& name) {
-    return args.measurements.empty() ||
-           std::find(args.measurements.begin(), args.measurements.end(),
-                     name) != args.measurements.end();
+    if (args.measurements.empty()) {
+        return true;
+    }
+    for (const std::string& requested : args.measurements) {
+        if (storage::to_lower(requested) == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string entity_part(bool is_null, const std::string& value) {
@@ -83,20 +90,11 @@ std::string entity_part(bool is_null, const std::string& value) {
 }
 
 int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
-                        TableCountSummary& summary, std::ostream& err) {
+                        TableCountSummary& summary, std::ostream& err,
+                        bool require_all_measurements) {
     std::string table_name = storage::to_lower(args.table);
-    std::shared_ptr<storage::TableSchema> schema;
-    if (!table_name.empty()) {
-        schema = reader.get_table_schema(table_name);
-    } else {
-        auto schemas = reader.get_all_table_schemas();
-        if (schemas.size() != 1) {
-            err << "Error: count requires -t/--table when the file contains "
-                   "multiple tables\n";
-            return kExitUsage;
-        }
-        schema = schemas.empty() ? nullptr : schemas[0];
-    }
+    std::shared_ptr<storage::TableSchema> schema =
+        reader.get_table_schema(table_name);
     if (!schema) {
         err << "Error: table '" << args.table << "' does not exist\n";
         return kExitUsage;
@@ -107,7 +105,9 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
     auto measurements = schema->get_measurement_schemas();
     std::vector<std::string> query_columns;
     std::set<std::string> known_columns;
-    std::vector<size_t> tag_indexes;
+    std::set<std::string> count_columns;
+    std::map<std::string, uint32_t> result_column_indexes;
+    std::vector<uint32_t> tag_result_indexes;
     for (size_t i = 0; i < measurements.size(); ++i) {
         if (!measurements[i]) {
             continue;
@@ -118,19 +118,37 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
         c.category = i < categories.size() ? categories[i]
                                            : common::ColumnCategory::FIELD;
         known_columns.insert(c.name);
-        query_columns.push_back(c.name);
-        if (c.category == common::ColumnCategory::TAG) {
-            tag_indexes.push_back(i);
+        if (c.category == common::ColumnCategory::TAG ||
+            c.category == common::ColumnCategory::FIELD) {
+            count_columns.insert(c.name);
+            query_columns.push_back(c.name);
+            const uint32_t result_index =
+                static_cast<uint32_t>(query_columns.size() + 1);
+            result_column_indexes[c.name] = result_index;
+            if (c.category == common::ColumnCategory::TAG) {
+                tag_result_indexes.push_back(result_index);
+            }
         }
-        if (selected_for_count(args, c.name)) {
+        if (count_columns.find(c.name) != count_columns.end() &&
+            selected_for_count(args, c.name)) {
             summary.columns.push_back(c);
         }
     }
-    for (const std::string& requested : args.measurements) {
-        if (known_columns.find(requested) == known_columns.end()) {
-            err << "Error: column '" << requested << "' does not exist in table "
-                << summary.table_name << "\n";
-            return kExitUsage;
+    if (require_all_measurements) {
+        for (const std::string& requested : args.measurements) {
+            if (known_columns.find(storage::to_lower(requested)) ==
+                known_columns.end()) {
+                err << "Error: column '" << requested
+                    << "' does not exist in table " << summary.table_name
+                    << "\n";
+                return kExitUsage;
+            }
+            if (count_columns.find(storage::to_lower(requested)) ==
+                count_columns.end()) {
+                err << "Error: count accepts TAG or FIELD columns only; '"
+                    << requested << "' has another category\n";
+                return kExitUsage;
+            }
         }
     }
 
@@ -144,7 +162,7 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
-        return kExitRuntime;
+        return kExitFile;
     }
 
     auto meta = rs->get_metadata();
@@ -168,29 +186,25 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
         ++summary.row_count;
 
         std::string entity_key;
-        if (tag_indexes.empty()) {
+        if (tag_result_indexes.empty()) {
             entity_key = "zero-tag";
         } else {
-            for (size_t idx : tag_indexes) {
-                uint32_t col = static_cast<uint32_t>(idx + 2);
+            for (uint32_t col : tag_result_indexes) {
                 bool null = rs->is_null(col);
                 entity_key += entity_part(
-                    null, null ? std::string()
-                               : cell_to_string(rs, col, result_types[col - 1]));
+                    null, null
+                              ? std::string()
+                              : cell_to_string(rs, col, result_types[col - 1]));
                 entity_key += "|";
             }
         }
         summary.entity_keys.insert(entity_key);
 
         for (CountColumn& out_col : summary.columns) {
-            for (size_t i = 0; i < measurements.size(); ++i) {
-                if (measurements[i] &&
-                    measurements[i]->measurement_name_ == out_col.name) {
-                    if (!rs->is_null(static_cast<uint32_t>(i + 2))) {
-                        ++out_col.non_null_count;
-                    }
-                    break;
-                }
+            auto result_index = result_column_indexes.find(out_col.name);
+            if (result_index != result_column_indexes.end() &&
+                !rs->is_null(result_index->second)) {
+                ++out_col.non_null_count;
             }
         }
     }
@@ -198,7 +212,7 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
     if (code != common::E_OK) {
         err << "Error: failed to scan count rows: " << error_code_message(code)
             << "\n";
-        return kExitRuntime;
+        return kExitFile;
     }
     return kExitOk;
 }
@@ -207,52 +221,133 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
 
 int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err) {
-    RowWriter w(out, fmt,
-                {"model", "object", "column", "category", "row_count",
-                 "entity_count", "non_null_count", "null_count", "min_time",
-                 "max_time", "time_source"},
-                {common::STRING, common::STRING, common::STRING, common::STRING,
-                 common::INT64, common::INT64, common::INT64, common::INT64,
-                 common::INT64, common::INT64, common::STRING},
-                args.no_header);
+    RowWriter w(
+        out, fmt,
+        {"model", "object", "column", "category", "row_count", "entity_count",
+         "non_null_count", "null_count", "min_time", "max_time", "time_source"},
+        {common::STRING, common::STRING, common::STRING, common::STRING,
+         common::INT64, common::INT64, common::INT64, common::INT64,
+         common::INT64, common::INT64, common::STRING},
+        args.no_header);
 
     if (is_table_model(args, reader)) {
-        TableCountSummary summary;
-        int ret = collect_table_count(args, reader, summary, err);
-        if (ret != kExitOk) {
-            return ret;
+        const std::vector<std::shared_ptr<storage::TableSchema>> all_schemas =
+            reader.get_all_table_schemas();
+        if (args.table.empty()) {
+            for (const std::string& requested : args.measurements) {
+                const std::string canonical = storage::to_lower(requested);
+                bool found = false;
+                bool found_other = false;
+                for (const auto& schema : all_schemas) {
+                    if (!schema) {
+                        continue;
+                    }
+                    const int index = schema->find_column_index(canonical);
+                    if (index < 0) {
+                        continue;
+                    }
+                    const auto categories = schema->get_column_categories();
+                    const common::ColumnCategory category =
+                        static_cast<size_t>(index) < categories.size()
+                            ? categories[static_cast<size_t>(index)]
+                            : common::ColumnCategory::FIELD;
+                    if (category == common::ColumnCategory::TAG ||
+                        category == common::ColumnCategory::FIELD) {
+                        found = true;
+                    } else {
+                        found_other = true;
+                    }
+                }
+                if (!found) {
+                    if (found_other) {
+                        err << "Error: count accepts TAG or FIELD columns "
+                               "only; '"
+                            << requested << "' has another category\n";
+                    } else {
+                        err << "Error: column '" << requested
+                            << "' does not exist in the file\n";
+                    }
+                    return kExitUsage;
+                }
+            }
         }
-        for (const CountColumn& c : summary.columns) {
-            long long null_count = summary.row_count - c.non_null_count;
-            std::vector<std::string> cells = {
-                "table", summary.table_name, c.name,
-                count_column_category_name(c.category),
-                std::to_string(summary.row_count),
-                std::to_string(summary.has_time ? summary.entity_keys.size()
-                                                : 0),
-                std::to_string(c.non_null_count), std::to_string(null_count),
-                summary.has_time ? std::to_string(summary.min_time) : "",
-                summary.has_time ? std::to_string(summary.max_time) : "",
-                summary.has_time ? "scan" : ""};
-            w.write(cells, {false, false, false, false, false, false, false,
-                            false, !summary.has_time, !summary.has_time,
-                            !summary.has_time});
+        std::vector<ParsedArgs> scopes;
+        if (!args.table.empty()) {
+            scopes.push_back(args);
+        } else {
+            for (const auto& schema : all_schemas) {
+                if (schema) {
+                    ParsedArgs scope = args;
+                    scope.table = schema->get_table_name();
+                    scopes.push_back(scope);
+                }
+            }
         }
-        w.finish();
+        std::vector<TableCountSummary> summaries(scopes.size());
+        for (size_t i = 0; i < scopes.size(); ++i) {
+            int ret = collect_table_count(scopes[i], reader, summaries[i], err,
+                                          !args.table.empty());
+            if (ret != kExitOk) {
+                return ret;
+            }
+        }
+        for (const TableCountSummary& summary : summaries) {
+            for (const CountColumn& c : summary.columns) {
+                long long null_count = summary.row_count - c.non_null_count;
+                std::vector<std::string> cells = {
+                    "table",
+                    summary.table_name,
+                    c.name,
+                    count_column_category_name(c.category),
+                    std::to_string(summary.row_count),
+                    std::to_string(summary.has_time ? summary.entity_keys.size()
+                                                    : 0),
+                    std::to_string(c.non_null_count),
+                    std::to_string(null_count),
+                    summary.has_time ? std::to_string(summary.min_time) : "",
+                    summary.has_time ? std::to_string(summary.max_time) : "",
+                    summary.has_time ? "scan" : ""};
+                if (!w.write(cells, {false, false, false, false, false, false,
+                                     false, false, !summary.has_time,
+                                     !summary.has_time, !summary.has_time})) {
+                    err << "Error: failed to write output\n";
+                    return kExitRuntime;
+                }
+            }
+        }
+        if (!w.finish()) {
+            err << "Error: failed to write output\n";
+            return kExitRuntime;
+        }
         return kExitOk;
     }
 
-    std::vector<SeriesStatRow> rows = collect_series_stats(args, reader);
-    for (const SeriesStatRow& row : rows) {
-        w.write({"tree", row.target, row.measurement, "FIELD",
-                 std::to_string(row.count), "", std::to_string(row.count),
-                 "0", row.count > 0 ? std::to_string(row.start_time) : "",
-                 row.count > 0 ? std::to_string(row.end_time) : "",
-                 row.count > 0 ? "statistics" : ""},
-                {false, false, false, false, false, true, false, false,
-                 row.count == 0, row.count == 0, row.count == 0});
+    std::vector<SeriesStatRow> rows;
+    int collect_ret = collect_series_stats(args, reader, rows, err);
+    if (collect_ret != kExitOk) {
+        return collect_ret;
     }
-    w.finish();
+    for (const SeriesStatRow& row : rows) {
+        const long long null_count = row.row_count - row.count;
+        if (!w.write(
+                {"tree", row.target, row.measurement, "FIELD",
+                 std::to_string(row.row_count), "",
+                 row.has_statistic ? std::to_string(row.count) : "",
+                 row.has_statistic ? std::to_string(null_count) : "",
+                 row.has_statistic ? std::to_string(row.start_time) : "",
+                 row.has_statistic ? std::to_string(row.end_time) : "",
+                 row.has_statistic ? "statistics" : ""},
+                {false, false, false, false, false, true, !row.has_statistic,
+                 !row.has_statistic, !row.has_statistic, !row.has_statistic,
+                 !row.has_statistic})) {
+            err << "Error: failed to write output\n";
+            return kExitRuntime;
+        }
+    }
+    if (!w.finish()) {
+        err << "Error: failed to write output\n";
+        return kExitRuntime;
+    }
     return kExitOk;
 }
 

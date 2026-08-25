@@ -4,7 +4,7 @@
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
- * License); you may not use this file except in compliance
+ * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -17,29 +17,22 @@
  * under the License.
  */
 
-#ifndef TSFILE_CLI_RESULT_SET_FORMAT_H
-#define TSFILE_CLI_RESULT_SET_FORMAT_H
+#ifndef TSFILE_CLI_ATOMIC_OUTPUT_H
+#define TSFILE_CLI_ATOMIC_OUTPUT_H
 
 #include <ostream>
 #include <string>
 
-#include "common/db_common.h"
-#include "format/output_format.h"
-#include "reader/result_set.h"
-
 namespace tsfile_cli {
 
-std::string cell_to_string(storage::ResultSet* rs, uint32_t col_index,
-                           common::TSDataType type);
-
-int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
-                    std::ostream& out, long long offset = 0,
-                    long long limit = -1, long long* emitted_rows = nullptr);
-
-int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
-                            bool no_header, std::ostream& out, long long limit,
-                            unsigned long long seed);
+int prepare_atomic_output(const std::string& target_path,
+                          const std::string& source_path, bool force,
+                          std::string& temp_path, std::ostream& err);
+int commit_atomic_output(const std::string& temp_path,
+                         const std::string& target_path, bool force,
+                         std::ostream& err);
+bool remove_atomic_temp(const std::string& temp_path, std::ostream& err);
 
 }  // namespace tsfile_cli
 
-#endif  // TSFILE_CLI_RESULT_SET_FORMAT_H
+#endif  // TSFILE_CLI_ATOMIC_OUTPUT_H

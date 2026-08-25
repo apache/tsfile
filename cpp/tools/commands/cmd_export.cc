@@ -17,12 +17,14 @@
  * under the License.
  */
 
-#include <cstdio>
-#include <set>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <cstdio>
+#include <set>
 #ifdef _WIN32
 #include <direct.h>
+#define lstat stat
 #endif
 #include <fstream>
 #include <memory>
@@ -30,19 +32,15 @@
 #include <string>
 #include <vector>
 
-#include "common/device_id.h"
-#include "common/schema.h"
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
+#include "common/device_id.h"
+#include "common/schema.h"
+#include "format/atomic_output.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
 namespace {
-
-bool path_exists(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-}
 
 bool stat_is_directory(const struct stat& st) {
 #ifdef _WIN32
@@ -65,14 +63,10 @@ int make_directory(const std::string& path) {
 #endif
 }
 
-bool any_path_exists(const std::string& path) {
-    return path_exists(path);
-}
-
 int create_directory_no_replace(const std::string& path, std::ostream& err) {
-    if (any_path_exists(path)) {
-        err << "Error: output directory '" << path
-            << "' already exists\n";
+    struct stat existing;
+    if (lstat(path.c_str(), &existing) == 0) {
+        err << "Error: output directory '" << path << "' already exists\n";
         return kExitRuntime;
     }
     if (make_directory(path) != 0) {
@@ -87,39 +81,40 @@ int create_directory_no_replace(const std::string& path, std::ostream& err) {
 }
 
 int write_atomic_text(const std::string& path, const std::string& content,
-                      bool force, std::ostream& err) {
-    if (!force && path_exists(path)) {
-        err << "Error: output target '" << path
-            << "' already exists; use --force to replace a regular file\n";
-        return kExitRuntime;
+                      const std::string& source, bool force,
+                      std::ostream& err) {
+    std::string tmp;
+    int code = prepare_atomic_output(path, source, force, tmp, err);
+    if (code != kExitOk) {
+        return code;
     }
-    const std::string tmp = path + ".tmp";
     {
         std::ofstream out(tmp.c_str(), std::ios::binary | std::ios::trunc);
         if (!out.is_open()) {
             err << "Error: cannot create output target '" << path << "'\n";
+            remove_atomic_temp(tmp, err);
             return kExitRuntime;
         }
         out << content;
+        out.flush();
         if (!out.good()) {
             err << "Error: failed to write output target '" << path << "'\n";
             out.close();
-            std::remove(tmp.c_str());
+            remove_atomic_temp(tmp, err);
+            return kExitRuntime;
+        }
+        out.close();
+        if (out.fail()) {
+            err << "Error: failed to close output target '" << path << "'\n";
+            remove_atomic_temp(tmp, err);
             return kExitRuntime;
         }
     }
-    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-#ifdef _WIN32
-        if (force && std::remove(path.c_str()) == 0 &&
-            std::rename(tmp.c_str(), path.c_str()) == 0) {
-            return kExitOk;
-        }
-#endif
-        err << "Error: failed to commit output target '" << path << "'\n";
-        std::remove(tmp.c_str());
-        return kExitRuntime;
+    code = commit_atomic_output(tmp, path, force, err);
+    if (code != kExitOk && !remove_atomic_temp(tmp, err)) {
+        code = kExitRuntime;
     }
-    return kExitOk;
+    return code;
 }
 
 std::string extension_for_format(ParsedArgs::Format fmt) {
@@ -174,19 +169,6 @@ std::string json_escape(const std::string& s) {
     return out.str();
 }
 
-long long count_result_rows(const std::string& content, OutputFormat fmt) {
-    long long lines = 0;
-    for (char c : content) {
-        if (c == '\n') {
-            ++lines;
-        }
-    }
-    if (fmt == OutputFormat::kJson) {
-        return lines;
-    }
-    return lines > 0 ? lines - 1 : 0;
-}
-
 struct ManifestEntry {
     std::string file;
     std::string model;
@@ -202,10 +184,9 @@ std::string render_manifest(bool complete,
         << ",\n  \"files\": [\n";
     for (size_t i = 0; i < entries.size(); ++i) {
         const ManifestEntry& e = entries[i];
-        out << "    {\"file\":\"" << json_escape(e.file)
-            << "\",\"model\":\"" << json_escape(e.model)
-            << "\",\"object\":\"" << json_escape(e.object)
-            << "\",\"type\":\"" << json_escape(e.type)
+        out << "    {\"file\":\"" << json_escape(e.file) << "\",\"model\":\""
+            << json_escape(e.model) << "\",\"object\":\""
+            << json_escape(e.object) << "\",\"type\":\"" << json_escape(e.type)
             << "\",\"rows\":\"" << json_escape(e.rows) << "\"}";
         if (i + 1 != entries.size()) {
             out << ",";
@@ -220,13 +201,49 @@ int write_manifest(const std::string& dir, bool complete,
                    const std::vector<ManifestEntry>& entries,
                    std::ostream& err) {
     return write_atomic_text(dir + "/_manifest.json",
-                             render_manifest(complete, entries), true, err);
+                             render_manifest(complete, entries), "", true, err);
+}
+
+int stream_query_to_file(const ParsedArgs& args, storage::TsFileReader& reader,
+                         OutputFormat fmt, const std::string& path, bool force,
+                         long long& rows, std::ostream& err) {
+    std::string temp;
+    int code = prepare_atomic_output(path, args.file, force, temp, err);
+    if (code != kExitOk) {
+        return code;
+    }
+    std::ofstream output(temp.c_str(), std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+        err << "Error: cannot open temporary output for '" << path << "'\n";
+        remove_atomic_temp(temp, err);
+        return kExitRuntime;
+    }
+    code = run_row_query(args, reader, fmt, output, err, args.offset,
+                         args.limit, &rows);
+    output.flush();
+    if (code == kExitOk && !output.good()) {
+        err << "Error: failed to flush output target '" << path << "'\n";
+        code = kExitRuntime;
+    }
+    output.close();
+    if (code == kExitOk && output.fail()) {
+        err << "Error: failed to close output target '" << path << "'\n";
+        code = kExitRuntime;
+    }
+    if (code == kExitOk) {
+        code = commit_atomic_output(temp, path, force, err);
+    }
+    if (code != kExitOk && !remove_atomic_temp(temp, err)) {
+        code = kExitRuntime;
+    }
+    return code;
 }
 
 bool table_exists(storage::TsFileReader& reader, const std::string& table) {
+    const std::string canonical = storage::to_lower(table);
     auto schemas = reader.get_all_table_schemas();
     for (const auto& schema : schemas) {
-        if (schema && schema->get_table_name() == table) {
+        if (schema && schema->get_table_name() == canonical) {
             return true;
         }
     }
@@ -245,7 +262,8 @@ int validate_multi_export_objects(const ParsedArgs& args,
     std::set<std::string> seen;
     if (!args.tables.empty()) {
         for (const std::string& table : args.tables) {
-            if (!seen.insert(table).second) {
+            const std::string canonical = storage::to_lower(table);
+            if (!seen.insert(canonical).second) {
                 err << "Error: table '" << table
                     << "' was specified more than once\n";
                 return kExitUsage;
@@ -305,45 +323,42 @@ int cmd_export(const ParsedArgs& args, storage::TsFileReader& reader,
             one.device.clear();
             one.table.clear();
             if (table_mode) {
-                one.table = objects[i];
-                one.tables.push_back(objects[i]);
+                one.table = storage::to_lower(objects[i]);
+                one.tables.push_back(one.table);
             } else {
                 one.device = objects[i];
                 one.devices.push_back(objects[i]);
             }
-            std::ostringstream content;
             one.command = "cat";
-            code = run_row_query(one, reader, fmt, content, err, one.offset,
-                                 one.limit);
-            if (code != kExitOk) {
-                return code;
-            }
-            code = write_atomic_text(one.output, content.str(), false, err);
+            long long rows = 0;
+            code = stream_query_to_file(one, reader, fmt, one.output, false,
+                                        rows, err);
             if (code != kExitOk) {
                 return code;
             }
             entries.push_back({numbered_file_name(i, args.export_format),
-                               table_mode ? "table" : "tree", objects[i],
+                               table_mode ? "table" : "tree",
+                               table_mode ? one.table : objects[i],
                                type_name_for_format(args.export_format),
-                               std::to_string(count_result_rows(content.str(),
-                                                                fmt))});
+                               std::to_string(rows)});
             code = write_manifest(args.output_dir, false, entries, err);
             if (code != kExitOk) {
+                if (std::remove(one.output.c_str()) != 0) {
+                    err << "Error: failed to clean unrecorded output '"
+                        << one.output << "'\n";
+                    return kExitRuntime;
+                }
                 return code;
             }
         }
         return write_manifest(args.output_dir, true, entries, err);
     }
 
-    std::ostringstream content;
     ParsedArgs query = args;
     query.command = "cat";
-    int code = run_row_query(query, reader, fmt, content, err, query.offset,
-                             query.limit);
-    if (code != kExitOk) {
-        return code;
-    }
-    return write_atomic_text(args.output, content.str(), args.force, err);
+    long long rows = 0;
+    return stream_query_to_file(query, reader, fmt, args.output, args.force,
+                                rows, err);
 }
 
 int cmd_sketch(const ParsedArgs& args, storage::TsFileReader& reader,
@@ -358,9 +373,11 @@ int cmd_sketch(const ParsedArgs& args, storage::TsFileReader& reader,
                "----------------------------------\n";
     if (args.output.empty()) {
         out << content.str();
-        return kExitOk;
+        out.flush();
+        return out.good() ? kExitOk : kExitRuntime;
     }
-    return write_atomic_text(args.output, content.str(), args.force, err);
+    return write_atomic_text(args.output, content.str(), args.file, args.force,
+                             err);
 }
 
 }  // namespace tsfile_cli

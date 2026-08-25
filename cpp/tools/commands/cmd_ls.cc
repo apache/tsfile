@@ -37,7 +37,7 @@ bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader) {
 }
 
 int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
-           OutputFormat fmt, std::ostream& out, std::ostream& /*err*/) {
+           OutputFormat fmt, std::ostream& out, std::ostream& err) {
     std::vector<std::string> names;
     if (is_table_model(args, reader)) {
         for (auto& ts : reader.get_all_table_schemas()) {
@@ -54,12 +54,18 @@ int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
     }
 
     const std::string model = is_table_model(args, reader) ? "table" : "tree";
-    RowWriter w(out, fmt, {"model", "object"},
-                {common::STRING, common::STRING}, false);
+    RowWriter w(out, fmt, {"model", "object"}, {common::STRING, common::STRING},
+                false);
     for (const std::string& n : names) {
-        w.write({model, n}, {false, false});
+        if (!w.write({model, n}, {false, false})) {
+            err << "Error: failed to write output\n";
+            return kExitRuntime;
+        }
     }
-    w.finish();
+    if (!w.finish()) {
+        err << "Error: failed to write output\n";
+        return kExitRuntime;
+    }
     return kExitOk;
 }
 
