@@ -30,6 +30,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.TsBlock;
@@ -151,6 +152,15 @@ public interface Type {
   default int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     throw new IllegalArgumentException(
         Messages.format("error.read.batch_data_unknown_type", value.getDataType()));
+  }
+
+  /**
+   * Serializes {@code timeValuePair} to {@code dataOutputStream} and returns the serialized size.
+   */
+  default int serialize(TimeValuePair timeValuePair, DataOutputStream dataOutputStream)
+      throws IOException {
+    dataOutputStream.writeLong(timeValuePair.getTimestamp());
+    return Math.addExact(Long.BYTES, serialize(timeValuePair.getValue(), dataOutputStream));
   }
 
   /** Serializes {@code value} to {@code buffer} and returns the serialized size. */

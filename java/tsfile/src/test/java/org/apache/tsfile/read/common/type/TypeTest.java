@@ -27,6 +27,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.UnknownColumnTypeException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.block.TsBlock;
@@ -471,6 +472,51 @@ public class TypeTest {
       } catch (UnsupportedOperationException ignored) {
         // Expected.
       }
+    }
+  }
+
+  @Test
+  public void testSerializeTimeValuePair() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260716, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      TimeValuePair timeValuePair = new TimeValuePair(123L, (TsPrimitiveType) testCase[1]);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+      int serializedSize = type.serialize(timeValuePair, new DataOutputStream(output));
+
+      Assert.assertEquals(output.size(), serializedSize);
+      ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+      Assert.assertEquals(123L, buffer.getLong());
+      Object[] value = new Object[1];
+      type.deserialize(value, 0, buffer);
+      Assert.assertEquals(timeValuePair.getValue(), type.getTsPrimitiveType(value[0]));
+      Assert.assertEquals(output.size(), buffer.position());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR)
+          .serialize(
+              new TimeValuePair(123L, new TsPrimitiveType.TsVector(new TsPrimitiveType[0])),
+              new DataOutputStream(new ByteArrayOutputStream()));
+      Assert.fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException ignored) {
+      // Expected.
     }
   }
 
