@@ -28,7 +28,6 @@ import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.utils.LongHeapPriorityQueue;
 import org.apache.tsfile.utils.LongOpenHashSet;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
 import java.util.ArrayList;
