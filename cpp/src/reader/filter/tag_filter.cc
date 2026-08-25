@@ -115,7 +115,7 @@ bool TagRegExp::satisfyRow(std::vector<std::string*> segments) const {
         !is_valid_pattern_)
         return false;
     try {
-        return std::regex_search(*segments[col_idx_], pattern_);
+        return std::regex_match(*segments[col_idx_], pattern_);
     } catch (const std::regex_error&) {
         return false;
     }
@@ -137,7 +137,7 @@ bool TagNotRegExp::satisfyRow(std::vector<std::string*> segments) const {
         !is_valid_pattern_)
         return false;
     try {
-        return !std::regex_search(*segments[col_idx_], pattern_);
+        return !std::regex_match(*segments[col_idx_], pattern_);
     } catch (const std::regex_error&) {
         return true;
     }

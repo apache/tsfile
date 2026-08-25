@@ -30,6 +30,7 @@
 
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
+#include "reader/tsfile_reader.h"
 
 #ifndef TSFILE_CPP_SOURCE_DIR
 #define TSFILE_CPP_SOURCE_DIR "."
@@ -53,7 +54,7 @@ bool file_exists(const std::string& path) {
 }
 
 std::string read_file(const std::string& path) {
-    std::ifstream in(path.c_str());
+    std::ifstream in(path.c_str(), std::ios::binary);
     std::ostringstream buf;
     buf << in.rdbuf();
     return buf.str();
@@ -887,4 +888,90 @@ TEST(CliRequirements, SketchRejectsRegularResultFormat) {
     EXPECT_NE(err.str().find("sketch does not accept --format"),
               std::string::npos)
         << err.str();
+}
+
+TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
+    TableFixture f;
+    std::ostringstream stdout_out;
+    std::ostringstream stdout_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"sketch", f.path}, stdout_out, stdout_err),
+              0)
+        << stdout_err.str();
+    EXPECT_NE(stdout_out.str().find("TsFile Sketch"), std::string::npos)
+        << stdout_out.str();
+    EXPECT_NE(stdout_out.str().find("model: table"), std::string::npos)
+        << stdout_out.str();
+
+    std::string output =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_sketch", ".txt");
+    std::ostringstream file_out;
+    std::ostringstream file_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"sketch", "-o", output, f.path}, file_out,
+                                  file_err),
+              0)
+        << file_err.str();
+    EXPECT_TRUE(file_out.str().empty());
+    EXPECT_EQ(read_file(output), stdout_out.str());
+
+    const std::string sentinel = "do not replace";
+    {
+        std::ofstream existing(output.c_str(), std::ios::binary);
+        existing << sentinel;
+    }
+    std::ostringstream no_force_out;
+    std::ostringstream no_force_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"sketch", "-o", output, f.path},
+                                  no_force_out, no_force_err),
+              3);
+    EXPECT_EQ(read_file(output), sentinel);
+
+    std::ostringstream force_out;
+    std::ostringstream force_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"sketch", "-o", output, "--force", f.path},
+                                  force_out, force_err),
+              0)
+        << force_err.str();
+    EXPECT_EQ(read_file(output), stdout_out.str());
+
+    const std::string source_before = read_file(f.path);
+    std::ostringstream alias_out;
+    std::ostringstream alias_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"sketch", "-o", f.path, "--force", f.path},
+                                  alias_out, alias_err),
+              3);
+    EXPECT_EQ(read_file(f.path), source_before);
+    std::remove(output.c_str());
+}
+
+TEST(CliRequirements, ModelDetectionPrefersTableSchemaAndFallsBackToTree) {
+    TableFixture table;
+    storage::TsFileReader table_reader;
+    ASSERT_EQ(table_reader.open(table.path), common::E_OK);
+    EXPECT_FALSE(table_reader.get_all_table_schemas().empty());
+    EXPECT_FALSE(table_reader.get_all_device_ids().empty());
+    table_reader.close();
+
+    std::ostringstream table_out;
+    std::ostringstream table_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"ls", "-f", "csv", table.path}, table_out,
+                                  table_err),
+              0)
+        << table_err.str();
+    EXPECT_EQ(table_out.str(), "model,object\ntable,table1\n");
+
+    std::string tree_path = tsfile_cli_test::write_sparse_tree_fixture();
+    storage::TsFileReader tree_reader;
+    ASSERT_EQ(tree_reader.open(tree_path), common::E_OK);
+    EXPECT_TRUE(tree_reader.get_all_table_schemas().empty());
+    EXPECT_FALSE(tree_reader.get_all_device_ids().empty());
+    tree_reader.close();
+
+    std::ostringstream tree_out;
+    std::ostringstream tree_err;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"ls", "-f", "csv", tree_path}, tree_out, tree_err),
+        0)
+        << tree_err.str();
+    EXPECT_EQ(tree_out.str(), "model,object\ntree,root.test.d1\n");
+    std::remove(tree_path.c_str());
 }

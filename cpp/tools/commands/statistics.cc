@@ -118,8 +118,8 @@ StatisticCells statistic_value_cells(storage::Statistic* st) {
             cells.values = {
                 date_to_string(s->min_value_), date_to_string(s->max_value_),
                 date_to_string(s->first_value_), date_to_string(s->last_value_),
-                value_to_string(s->sum_value_)};
-            cells.is_null = {false, false, false, false, false};
+                ""};
+            cells.is_null = {false, false, false, false, true};
             break;
         }
         case common::INT64:
@@ -128,9 +128,8 @@ StatisticCells statistic_value_cells(storage::Statistic* st) {
             cells.values = {value_to_string(s->min_value_),
                             value_to_string(s->max_value_),
                             value_to_string(s->first_value_),
-                            value_to_string(s->last_value_),
-                            value_to_string(s->sum_value_)};
-            cells.is_null = {false, false, false, false, false};
+                            value_to_string(s->last_value_), ""};
+            cells.is_null = {false, false, false, false, true};
             break;
         }
         case common::FLOAT: {

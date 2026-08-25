@@ -21,6 +21,7 @@
 #include <climits>
 #include <limits>
 #include <memory>
+#include <regex>
 #include <set>
 #include <string>
 #include <vector>
@@ -38,7 +39,7 @@ namespace {
 
 bool can_push_down_row_window(const ParsedArgs& args, long long offset,
                               long long limit) {
-    return !args.has_start && !args.has_end && offset <= INT_MAX &&
+    return !args.has_start && !args.has_end && offset == 0 &&
            (limit < 0 || limit <= INT_MAX);
 }
 
@@ -159,6 +160,14 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
                 filter = builder.neq(spec.column, spec.value);
                 break;
             case ParsedArgs::TagFilterOp::kRegexp:
+                try {
+                    std::regex pattern(spec.value);
+                    (void)pattern;
+                } catch (const std::regex_error&) {
+                    err << "Error: invalid regular expression for TAG '"
+                        << spec.column << "'\n";
+                    return std::unique_ptr<storage::Filter>();
+                }
                 filter = builder.reg_exp(spec.column, spec.value);
                 break;
             case ParsedArgs::TagFilterOp::kIsNull:
@@ -329,6 +338,10 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                          : emit_result_set(rs, fmt, args.no_header, out, offset,
                                            limit, emitted_rows);
     reader.destroy_query_data_set(rs);
+    if (wret == common::E_OUT_OF_RANGE) {
+        err << "Error: offset exceeds matched row count\n";
+        return kExitUsage;
+    }
     if (wret != 0) {
         err << "Error: failed to read rows: " << error_code_message(wret)
             << "\n";

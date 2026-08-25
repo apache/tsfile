@@ -113,6 +113,9 @@ int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
         }
         ++emitted;
     }
+    if (code == common::E_OK && skipped < offset) {
+        return common::E_OUT_OF_RANGE;
+    }
     if (!writer.finish()) {
         return common::E_FILE_WRITE_ERR;
     }

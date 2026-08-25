@@ -406,9 +406,13 @@ TEST_F(TagFilterTest, TagRegExpEdgeCases) {
         invalid_filter->satisfyRow(0, segments));  // handles gracefully
     cleanupSegments(segments);
 
-    // Empty pattern matches everything
+    // Full-value matching means an empty pattern only matches an empty value.
     auto empty_filter = builder_->reg_exp("name", "");
     segments = createSegments("any", "25", "engineering", "active", "95");
+    EXPECT_FALSE(empty_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
+
+    segments = createSegments("", "25", "engineering", "active", "95");
     EXPECT_TRUE(empty_filter->satisfyRow(0, segments));
     cleanupSegments(segments);
 

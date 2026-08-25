@@ -165,7 +165,7 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
               std::string::npos)
         << out.str();
     EXPECT_NE(out.str().find("table,table1,id1_field_1,id2_field_2,s1,INT64,"
-                             "5,\\N,0,4,0,40,0,40,100,statistics"),
+                             "5,\\N,0,4,0,40,0,40,\\N,statistics"),
               std::string::npos)
         << out.str();
 }
@@ -306,6 +306,168 @@ TEST(CliE2E, TagFilterRejectsFieldColumn) {
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("invalid tag filter column"), std::string::npos)
         << err.str();
+}
+
+TEST(CliE2E, TagFiltersDistinguishNullEmptyAndLiteralNull) {
+    std::string path = tsfile_cli_test::write_nullable_tag_filter_fixture();
+
+    struct Case {
+        std::vector<std::string> filter;
+        std::string expected_row;
+    };
+    const std::vector<Case> cases = {
+        {{"id1", "is-null"}, "0,\\N,10\n"},
+        {{"id1", "eq", ""}, "1,\"\",20\n"},
+        {{"id1", "eq", "null"}, "2,null,30\n"},
+    };
+    for (const Case& test_case : cases) {
+        std::vector<std::string> args = {"cat", "-m", "s1", "--tag-filter"};
+        args.insert(args.end(), test_case.filter.begin(),
+                    test_case.filter.end());
+        args.insert(args.end(), {"-f", "csv", path});
+        std::ostringstream out;
+        std::ostringstream err;
+        ASSERT_EQ(tsfile_cli::run_cli(args, out, err), 0) << err.str();
+        EXPECT_EQ(out.str(), "time,id1,s1\n" + test_case.expected_row);
+    }
+
+    std::ostringstream not_null_out;
+    std::ostringstream not_null_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "not-null", "-f", "csv", path},
+                                  not_null_out, not_null_err),
+              0)
+        << not_null_err.str();
+    EXPECT_EQ(not_null_out.str().find("0,\\N,10"), std::string::npos)
+        << not_null_out.str();
+    EXPECT_NE(not_null_out.str().find("1,\"\",20"), std::string::npos)
+        << not_null_out.str();
+
+    std::ostringstream neq_out;
+    std::ostringstream neq_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "neq", "dev_a", "-f", "csv", path},
+                                  neq_out, neq_err),
+              0)
+        << neq_err.str();
+    EXPECT_EQ(neq_out.str().find("0,\\N,10"), std::string::npos)
+        << neq_out.str();
+    EXPECT_EQ(neq_out.str().find("3,dev_a,40"), std::string::npos)
+        << neq_out.str();
+    EXPECT_NE(neq_out.str().find("4,dev_b,50"), std::string::npos)
+        << neq_out.str();
+
+    std::remove(path.c_str());
+}
+
+TEST(CliE2E, TagRegexpUsesFullValueAndRejectsInvalidPatterns) {
+    std::string path = tsfile_cli_test::write_nullable_tag_filter_fixture();
+
+    std::ostringstream substring_out;
+    std::ostringstream substring_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "regexp", "dev", "-f", "csv", path},
+                                  substring_out, substring_err),
+              0)
+        << substring_err.str();
+    EXPECT_EQ(substring_out.str(), "time,id1,s1\n");
+
+    std::ostringstream full_out;
+    std::ostringstream full_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "regexp", "dev_.*", "-f", "csv", path},
+                                  full_out, full_err),
+              0)
+        << full_err.str();
+    EXPECT_NE(full_out.str().find("3,dev_a,40"), std::string::npos)
+        << full_out.str();
+    EXPECT_NE(full_out.str().find("4,dev_b,50"), std::string::npos)
+        << full_out.str();
+
+    std::ostringstream invalid_out;
+    std::ostringstream invalid_err;
+    EXPECT_EQ(tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1",
+                                   "regexp", "[", "-f", "csv", path},
+                                  invalid_out, invalid_err),
+              1);
+    EXPECT_TRUE(invalid_out.str().empty());
+    EXPECT_NE(invalid_err.str().find("invalid regular expression"),
+              std::string::npos)
+        << invalid_err.str();
+
+    std::remove(path.c_str());
+}
+
+TEST(CliE2E, MultipleTagFiltersHonorAll) {
+    std::string path = tsfile_cli_test::write_nullable_tag_filter_fixture();
+    std::ostringstream out;
+    std::ostringstream err;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"cat", "-m", "s1", "--tag-filter", "id1", "neq",
+                             "dev_a", "--tag-filter", "id1", "regexp", "dev_.*",
+                             "--tag-match", "all", "-f", "csv", path},
+                            out, err),
+        0)
+        << err.str();
+    EXPECT_EQ(out.str(), "time,id1,s1\n4,dev_b,50\n");
+    std::remove(path.c_str());
+}
+
+TEST(CliE2E, RowWindowDistinguishesExactAndExcessiveOffset) {
+    Fixture f;
+    std::ostringstream exact_out;
+    std::ostringstream exact_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"cat", "-m", "s1", "--offset", "5", "-f", "csv", f.path},
+                  exact_out, exact_err),
+              0)
+        << exact_err.str();
+    EXPECT_EQ(exact_out.str(), "time,id1,id2,s1\n");
+
+    std::ostringstream excessive_out;
+    std::ostringstream excessive_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"cat", "-m", "s1", "--offset", "6", "-f", "csv", f.path},
+                  excessive_out, excessive_err),
+              1);
+    EXPECT_TRUE(excessive_out.str().empty());
+    EXPECT_NE(excessive_err.str().find("offset exceeds matched row count"),
+              std::string::npos)
+        << excessive_err.str();
+}
+
+TEST(CliE2E, ZeroLimitUsesEachFormatsZeroRowContract) {
+    Fixture f;
+    std::ostringstream csv_out;
+    std::ostringstream csv_err;
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"cat", "-m", "s1", "-n", "0", "-f", "csv", f.path},
+                            csv_out, csv_err),
+        0)
+        << csv_err.str();
+    EXPECT_EQ(csv_out.str(), "time,id1,id2,s1\n");
+
+    std::ostringstream ndjson_out;
+    std::ostringstream ndjson_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"cat", "-m", "s1", "-n", "0", "-f", "ndjson", f.path},
+                  ndjson_out, ndjson_err),
+              0)
+        << ndjson_err.str();
+    EXPECT_TRUE(ndjson_out.str().empty());
+
+    std::ostringstream table_out;
+    std::ostringstream table_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"cat", "-m", "s1", "-n", "0", "-f", "table", f.path},
+                  table_out, table_err),
+              0)
+        << table_err.str();
+    EXPECT_NE(table_out.str().find("time"), std::string::npos)
+        << table_out.str();
+    EXPECT_NE(table_out.str().find("s1"), std::string::npos) << table_out.str();
+    EXPECT_EQ(table_out.str().find("id1_field_1"), std::string::npos)
+        << table_out.str();
 }
 
 TEST(CliE2E, CatJsonIsNdjson) {
@@ -528,7 +690,7 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
                             stats_out, stats_err),
         0);
     EXPECT_NE(stats_out.str().find("table,table1,id1_field_1,id2_field_2,s1,"
-                                   "INT64,5,\\N,0,4,0,40,0,40,100,statistics"),
+                                   "INT64,5,\\N,0,4,0,40,0,40,\\N,statistics"),
               std::string::npos)
         << stats_out.str();
 }
