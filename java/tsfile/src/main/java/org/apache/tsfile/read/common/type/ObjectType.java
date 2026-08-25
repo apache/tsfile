@@ -108,6 +108,13 @@ public class ObjectType extends AbstractType {
   }
 
   @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      batchData.putBinary(buffer.getLong(), ReadWriteIOUtils.readBinary(buffer));
+    }
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     Binary binary = value.getBinary();
     stream.writeInt(binary.getLength());

@@ -105,6 +105,13 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      batchData.putFloat(buffer.getLong(), buffer.getFloat());
+    }
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeFloat(value.getFloat());
     return Float.BYTES;

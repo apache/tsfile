@@ -101,6 +101,13 @@ public class BooleanType extends AbstractType {
   }
 
   @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      batchData.putBoolean(buffer.getLong(), ReadWriteIOUtils.readBoolean(buffer));
+    }
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeBoolean(value.getBoolean());
     return Byte.BYTES;

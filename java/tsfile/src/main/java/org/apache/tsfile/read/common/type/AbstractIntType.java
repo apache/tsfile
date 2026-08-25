@@ -103,6 +103,13 @@ public abstract class AbstractIntType extends AbstractType {
   }
 
   @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      batchData.putInt(buffer.getLong(), buffer.getInt());
+    }
+  }
+
+  @Override
   public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     stream.writeInt(value.getInt());
     return Integer.BYTES;

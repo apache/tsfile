@@ -39,6 +39,7 @@ import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
@@ -210,6 +211,25 @@ public class VectorType extends AbstractLongType {
       }
     }
     return size;
+  }
+
+  @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      long timestamp = buffer.getLong();
+      int valueCount = buffer.getInt();
+      TsPrimitiveType[] values = new TsPrimitiveType[valueCount];
+      for (int j = 0; j < valueCount; j++) {
+        if (buffer.get() == 0) {
+          continue;
+        }
+        Type type = Type.fromTsDataType(ReadWriteIOUtils.readDataType(buffer));
+        Object[] value = new Object[1];
+        type.deserialize(value, 0, buffer);
+        values[j] = type.getTsPrimitiveType(value[0]);
+      }
+      batchData.putVector(timestamp, values);
+    }
   }
 
   @Override

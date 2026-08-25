@@ -512,6 +512,63 @@ public class TypeTest {
   }
 
   @Test
+  public void testDeserializeBatchData() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260722},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      BatchData source = new BatchData(dataType);
+      source.putAnObject(1L, testCase[1]);
+      source.putAnObject(2L, testCase[1]);
+
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serialize(source, new DataOutputStream(output), false);
+      ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+      BatchData actual = new BatchData(dataType);
+      type.deserialize(buffer, actual, source.length());
+
+      Assert.assertEquals(source.length(), actual.length());
+      for (int i = 0; i < source.length(); i++) {
+        Assert.assertEquals(source.getTimeByIndex(i), actual.getTimeByIndex(i));
+        Assert.assertEquals(
+            source.getValueInTimestamp(source.getTimeByIndex(i)),
+            actual.getValueInTimestamp(actual.getTimeByIndex(i)));
+      }
+      Assert.assertEquals(output.size(), buffer.position());
+    }
+
+    Type vectorType = Type.fromTsDataType(TSDataType.VECTOR);
+    TsPrimitiveType[] vector = {
+      null, new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsBinary(binary)
+    };
+    BatchData vectorSource = new BatchData(TSDataType.VECTOR);
+    vectorSource.putVector(1L, vector);
+    ByteArrayOutputStream vectorOutput = new ByteArrayOutputStream();
+    vectorType.serialize(vectorSource, new DataOutputStream(vectorOutput), false);
+    BatchData vectorActual = new BatchData(TSDataType.VECTOR);
+    ByteBuffer vectorBuffer = ByteBuffer.wrap(vectorOutput.toByteArray());
+    vectorType.deserialize(vectorBuffer, vectorActual, 1);
+    Assert.assertEquals(1, vectorActual.length());
+    Assert.assertEquals(1L, vectorActual.getTimeByIndex(0));
+    Assert.assertArrayEquals(vector, vectorActual.getVectorByIndex(0));
+    Assert.assertEquals(vectorOutput.size(), vectorBuffer.position());
+  }
+
+  @Test
   public void testDeserializeValue() throws IOException {
     Binary binary = new Binary("test", StandardCharsets.UTF_8);
     Object[][] testCases = {

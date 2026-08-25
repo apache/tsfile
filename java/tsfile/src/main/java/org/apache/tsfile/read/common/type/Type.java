@@ -140,6 +140,13 @@ public interface Type {
         Messages.format("error.read.batch_data_unknown_type", batchData.getDataType()));
   }
 
+  /**
+   * Deserializes {@code length} timestamp-value pairs from {@code buffer} into {@code batchData}.
+   */
+  default void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /** Serializes {@code value} to {@code stream} and returns the serialized size. */
   default int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
     throw new IllegalArgumentException(
