@@ -1960,4 +1960,21 @@ int TsFileWriter::close() {
     return io_writer_->end_file();
 }
 
+int TsFileWriter::add_tsfile_property(const std::string& key,
+                                      const uint8_t* value,
+                                      uint32_t value_len) {
+    if (io_writer_ == nullptr) {
+        return E_FILE_WRITE_ERR;
+    }
+    return io_writer_->add_tsfile_property(key, value, value_len);
+}
+
+int TsFileWriter::add_tsfile_property(const std::string& key,
+                                      const std::vector<uint8_t>& value) {
+    if (io_writer_ == nullptr) {
+        return E_FILE_WRITE_ERR;
+    }
+    return io_writer_->add_tsfile_property(key, value);
+}
+
 }  // end namespace storage

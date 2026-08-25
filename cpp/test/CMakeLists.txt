@@ -258,7 +258,7 @@ set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFI
 # On Windows, copy tsfile DLL next to the test exe so it can load at runtime
 # (and when gtest_discover_tests runs the exe). Use TARGET_FILE so the path
 # is correct for the current build config (e.g. Release).
-if (WIN32)
+if (WIN32 AND TSFILE_BUILD_SHARED)
     add_custom_command(TARGET TsFile_Test POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:tsfile>

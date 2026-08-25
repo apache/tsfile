@@ -56,12 +56,16 @@ int LZ4Compressor::compress(char* uncompressed_buf,
                                  uncompressed_buf_len, max_dst_size);
 
         if (compressed_data_size <= 0) {
+            mem_free(compressed_buf_);
+            compressed_buf_ = nullptr;
             ret = E_COMPRESS_ERR;
         } else {
             char* compressed_data = (char*)mem_realloc(
                 compressed_buf_, (size_t)compressed_data_size);
 
             if (compressed_data == nullptr) {
+                mem_free(compressed_buf_);
+                compressed_buf_ = nullptr;
                 ret = E_OOM;
             } else {
                 compressed_buf_ = compressed_data;

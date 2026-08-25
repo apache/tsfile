@@ -80,16 +80,28 @@ class Tablet {
             if (offsets) offsets[0] = 0;
         }
 
-        void append(uint32_t row, const char* data, uint32_t len) {
+        int append(uint32_t row, const char* data, uint32_t len) {
             // Grow buffer if needed
             if (buf_used + len > buf_capacity) {
-                buf_capacity = buf_capacity * 2 + len;
-                buffer = (char*)common::mem_realloc(buffer, buf_capacity);
+                uint64_t new_capacity_64 =
+                    static_cast<uint64_t>(buf_capacity) * 2 + len;
+                if (UNLIKELY(new_capacity_64 > UINT32_MAX)) {
+                    return common::E_OVERFLOW;
+                }
+                uint32_t new_capacity = static_cast<uint32_t>(new_capacity_64);
+                char* new_buffer =
+                    (char*)common::mem_realloc(buffer, new_capacity);
+                if (UNLIKELY(new_buffer == nullptr)) {
+                    return common::E_OOM;
+                }
+                buffer = new_buffer;
+                buf_capacity = new_capacity;
             }
             memcpy(buffer + buf_used, data, len);
             offsets[row] = static_cast<int32_t>(buf_used);
             offsets[row + 1] = static_cast<int32_t>(buf_used + len);
             buf_used += len;
+            return common::E_OK;
         }
 
         const char* get_str(uint32_t row) const {
@@ -393,7 +405,7 @@ class Tablet {
 
    private:
     template <typename T>
-    void process_val(uint32_t row_index, uint32_t schema_index, T val);
+    int process_val(uint32_t row_index, uint32_t schema_index, T val);
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
     std::string insert_target_name_;

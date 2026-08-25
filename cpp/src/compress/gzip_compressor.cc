@@ -23,7 +23,8 @@ using namespace common;
 
 namespace storage {
 
-GzipCompressor::GzipCompressor() : compressed_buf() { zstream_valid_ = false; }
+GzipCompressor::GzipCompressor()
+    : compress_stream_(), compressed_buf(), zstream_valid_(false) {}
 
 GzipCompressor::~GzipCompressor() { end_zstream(); }
 
@@ -140,9 +141,8 @@ int GzipCompressor::compress(char* uncompressed_buf,
     return ret;
 }
 
-GzipDeCompressor::GzipDeCompressor() : decompressed_buf() {
-    zstream_valid_ = false;
-}
+GzipDeCompressor::GzipDeCompressor()
+    : decompress_stream_(), decompressed_buf(), zstream_valid_(false) {}
 
 GzipDeCompressor::~GzipDeCompressor() { end_zstream(); }
 

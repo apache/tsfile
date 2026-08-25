@@ -81,6 +81,12 @@ class TsFileSeriesScanIterator {
      * for single-path. */
     int get_row_offset() const { return row_offset_; }
     int get_row_limit() const { return row_limit_; }
+    void consume_row_offset(int count) {
+        if (count <= 0 || row_offset_ <= 0) {
+            return;
+        }
+        row_offset_ = count >= row_offset_ ? 0 : row_offset_ - count;
+    }
 
     /*
      * If oneshoot filter specified, use it instead of this->time_filter_.
@@ -104,6 +110,19 @@ class TsFileSeriesScanIterator {
     }
 
     bool is_multi_value() const { return is_multi_value_; }
+
+    /**
+     * Data type of the (value) column from the loaded timeseries index.
+     * Available as soon as the SSI is allocated, i.e. independent of whether
+     * any TsBlock has been materialized.  Callers building result-set metadata
+     * should prefer this over deriving the type from a decoded TsBlock, since
+     * offset/limit (e.g. limit==0) may skip all rows and leave no block.
+     */
+    common::TSDataType get_data_type() const {
+        return itimeseries_index_ == nullptr
+                   ? common::INVALID_DATATYPE
+                   : itimeseries_index_->get_data_type();
+    }
 
     friend class TsFileIOReader;
 
@@ -167,6 +186,8 @@ class TsFileSeriesScanIterator {
     bool should_skip_chunk_by_offset(ChunkMeta* cm);
     bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
                                              ChunkMeta* value_cm);
+    bool should_skip_multi_aligned_chunk_by_offset(
+        ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms);
     common::TsBlock* alloc_tsblock();
     common::TsBlock* alloc_tsblock_multi();
 

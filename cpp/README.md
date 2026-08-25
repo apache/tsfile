@@ -132,7 +132,29 @@ mvn clean verify -P with-cpp -Dcpp.toolchain=mingw
 mvn clean verify -P with-cpp -Dcpp.toolchain=msvc
 ```
 
-Then you can find the shared library at `./cpp/target/build/lib`.
+By default, the shared library is written to `./cpp/target/build/lib`.
+
+To build `libtsfile` as a static library instead, disable
+`TSFILE_BUILD_SHARED` through Maven:
+
+```bash
+mvn clean verify -P with-cpp -Dtsfile.build.shared=OFF
+```
+
+The static library is written to the same directory (`libtsfile.a` on
+Linux/macOS and `tsfile.lib` on Windows). When consuming the installed archive
+directly on MSVC rather than linking the CMake `tsfile` target, define
+`TSFILE_STATIC` for the consumer so public headers do not use DLL import
+decorations.
+
+For a direct CMake build, use:
+
+```bash
+cmake -S cpp -B cpp/build/static \
+  -DTSFILE_BUILD_SHARED=OFF \
+  -DBUILD_TEST=OFF
+cmake --build cpp/build/static --target tsfile
+```
 
 Before you submit your code to GitHub, please ensure that the compilation is correct.
 
@@ -181,3 +203,23 @@ By default, parallel write is enabled when the machine has more than one CPU cor
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples` on how to use a C-style API to read and write data in a C environment. The examples will be built automatically when you run the main build command.
+
+### File-level properties
+
+`TsFileWriter` and `TsFileTableWriter` can add or replace binary properties
+while the writer is open. Values are copied immediately and may still be
+changed after `flush()`; a closed file cannot be modified.
+
+```cpp
+std::vector<uint8_t> value = {0x01, 0x00, 0xFF};
+writer.add_tsfile_property("binary-property", value);
+
+// nullptr with length 0 is null; an empty vector is a non-null empty value.
+writer.add_tsfile_property("null-property", nullptr, 0);
+writer.add_tsfile_property("empty-property", std::vector<uint8_t>());
+
+storage::TsFileProperties properties = reader.get_tsfile_properties();
+```
+
+Property values do not store a data type. Applications should define their own
+portable byte encoding for integers, floating-point values, or structures.

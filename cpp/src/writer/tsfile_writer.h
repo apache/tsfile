@@ -84,6 +84,12 @@ class TsFileWriter {
     int write_tree(const TsRecord& record);
     int write_table(Tablet& tablet);
 
+    /** Add or replace a binary file-level property while the writer is open. */
+    int add_tsfile_property(const std::string& key, const uint8_t* value,
+                            uint32_t value_len);
+    int add_tsfile_property(const std::string& key,
+                            const std::vector<uint8_t>& value);
+
     typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup*,
                      IDeviceIDComparator>
         DeviceSchemasMap;

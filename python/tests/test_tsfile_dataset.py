@@ -1507,12 +1507,176 @@ def test_dataset_tree_model_series_access(tmp_path):
         np.testing.assert_array_equal(aligned.timestamps, np.arange(5, dtype=np.int64))
 
 
+def test_dataset_tree_model_reads_uppercase_measurement_names(tmp_path):
+    """Tree-model series with uppercase measurement names must read data.
+
+    Regression: a measurement like ``Temperature``/``STATUS`` must return its
+    values, not an empty array, when read back through TsFileDataFrame.
+    """
+    from tsfile import Field, RowRecord, TimeseriesSchema, TsFileWriter
+
+    path = tmp_path / "tree_upper.tsfile"
+    writer = TsFileWriter(str(path))
+    writer.register_timeseries(
+        "root.ln.wf01.wt01", TimeseriesSchema("Temperature", TSDataType.DOUBLE)
+    )
+    writer.register_timeseries(
+        "root.ln.wf01.wt01", TimeseriesSchema("STATUS", TSDataType.INT32)
+    )
+    for t in range(5):
+        writer.write_row_record(
+            RowRecord(
+                "root.ln.wf01.wt01",
+                t,
+                [
+                    Field("Temperature", float(t) + 0.5, TSDataType.DOUBLE),
+                    Field("STATUS", t * 2, TSDataType.INT32),
+                ],
+            )
+        )
+    writer.close()
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        assert sorted(tsdf.list_timeseries()) == [
+            "root.ln.wf01.wt01.STATUS",
+            "root.ln.wf01.wt01.Temperature",
+        ]
+        np.testing.assert_array_equal(
+            tsdf["root.ln.wf01.wt01.Temperature"][:],
+            np.array([0.5, 1.5, 2.5, 3.5, 4.5]),
+        )
+        np.testing.assert_array_equal(
+            tsdf["root.ln.wf01.wt01.STATUS"][:],
+            np.array([0.0, 2.0, 4.0, 6.0, 8.0]),
+        )
+
+
+def test_dataset_tree_model_case_distinct_measurements_do_not_collide(tmp_path, capsys):
+    """Case-distinct measurements on one device must not be conflated.
+
+    ``temperature`` and ``Temperature`` are two independent series; each must
+    return its own values instead of an empty array or the other's data.
+    """
+    from tsfile import Field, RowRecord, TimeseriesSchema, TsFileWriter
+
+    path = tmp_path / "tree_case.tsfile"
+
+    writer = TsFileWriter(str(path))
+    writer.register_timeseries(
+        "root.case.d1", TimeseriesSchema("temperature", TSDataType.DOUBLE)
+    )
+    writer.register_timeseries(
+        "root.case.d1", TimeseriesSchema("Temperature", TSDataType.DOUBLE)
+    )
+    for t in range(3):
+        writer.write_row_record(
+            RowRecord(
+                "root.case.d1",
+                t,
+                [
+                    Field("temperature", 30.0 + t, TSDataType.DOUBLE),
+                    Field("Temperature", 40.0 + t, TSDataType.DOUBLE),
+                ],
+            )
+        )
+    writer.close()
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        # Two independent tree-model series are discovered (case preserved).
+        assert len(tsdf) == 2
+        assert sorted(tsdf.list_timeseries()) == [
+            "root.case.d1.Temperature",
+            "root.case.d1.temperature",
+        ]
+
+        # Metadata layer keeps both rows distinct with their original casing.
+        meta = tsdf.list_timeseries_metadata()
+        assert sorted(meta.index.tolist()) == [
+            "root.case.d1.Temperature",
+            "root.case.d1.temperature",
+        ]
+        for name in ("root.case.d1.temperature", "root.case.d1.Temperature"):
+            assert meta.loc[name, "_col_1"] == "case"
+            assert meta.loc[name, "_col_2"] == "d1"
+            assert meta.loc[name, "count"] == 3
+        assert set(meta["field"]) == {"temperature", "Temperature"}
+
+        # print(tsdf) renders both case-distinct series verbatim. The timestamp
+        # text is derived from format_timestamp so the whole-string match stays
+        # stable across timezones.
+        t0, t2 = format_timestamp(0), format_timestamp(2)
+        expected_repr = "\n".join(
+            [
+                "TsFileDataFrame(tree model, 2 time series, 1 files)",
+                "   _col_1  _col_2        field           start_time                 end_time  count",
+                f"0    case      d1  Temperature  {t0}  {t2}      3",
+                f"1    case      d1  temperature  {t0}  {t2}      3",
+            ]
+        )
+        assert repr(tsdf) == expected_repr
+        print(tsdf)
+        assert capsys.readouterr().out == expected_repr + "\n"
+
+        # Each series must read back its OWN values -- not empty, not the
+        # other's data. Lower-casing anywhere in the read path breaks this.
+        np.testing.assert_array_equal(
+            tsdf["root.case.d1.temperature"][:],
+            np.array([30.0, 31.0, 32.0]),
+        )
+        np.testing.assert_array_equal(
+            tsdf["root.case.d1.Temperature"][:],
+            np.array([40.0, 41.0, 42.0]),
+        )
+
+        # Aligned read of both case-distinct series keeps them separated.
+        aligned = tsdf.loc[
+            0:2,
+            ["root.case.d1.temperature", "root.case.d1.Temperature"],
+        ]
+        assert aligned.series_names == [
+            "root.case.d1.temperature",
+            "root.case.d1.Temperature",
+        ]
+        np.testing.assert_array_equal(
+            aligned.values,
+            np.array([[30.0, 40.0], [31.0, 41.0], [32.0, 42.0]]),
+        )
+
+
+def test_tree_reader_handles_stale_path_columns_after_reused_queries(tmp_path):
+    """Reusing a reader must not leak prefix path state across queries.
+
+    Reading one device series then another reuses the cached device id; stale
+    prefix segments used to mismatch the device and return empty data.
+    """
+    path = tmp_path / "tree.tsfile"
+    _write_tree_file(path)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        # First read establishes query state on the reader.
+        np.testing.assert_array_equal(
+            tsdf["root.ln.wf01.wt01.temperature"][:],
+            np.array([0.5, 1.5, 2.5, 3.5, 4.5]),
+        )
+        # Second read reuses the same reader for another device.
+        np.testing.assert_array_equal(
+            tsdf["root.ln.wf02.wt02.status"][:],
+            np.array([0.0, 2.0, 4.0, 6.0, 8.0]),
+        )
+        # Read back the first series to confirm alternating reads stay stable.
+        np.testing.assert_array_equal(
+            tsdf["root.ln.wf01.wt01.temperature"][:],
+            np.array([0.5, 1.5, 2.5, 3.5, 4.5]),
+        )
+
+
 def test_dataset_tree_model_list_timeseries_metadata(tmp_path):
     path = tmp_path / "tree.tsfile"
     _write_tree_file(path)
 
     with TsFileDataFrame(str(path), show_progress=False) as tsdf:
         meta = tsdf.list_timeseries_metadata()
+
         assert isinstance(meta, pd.DataFrame)
         assert list(meta.columns) == [
             "field",

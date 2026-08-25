@@ -639,10 +639,14 @@ def test_tsfile_to_df():
             max_row_num=8000,
         )
         assert df3.shape == (4097, 3)
-        with pytest.raises(TableNotExistError):
+        with pytest.raises(TableNotExistError) as table_error:
             to_dataframe("table_write_to_df.tsfile", "test_tb")
-        with pytest.raises(ColumnNotExistError):
+        assert table_error.value.code == 49
+        assert "test_tb" in table_error.value.message
+        with pytest.raises(ColumnNotExistError) as column_error:
             to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
+        assert column_error.value.code == 50
+        assert "device1" in column_error.value.message
     finally:
         os.remove("table_write_to_df.tsfile")
 

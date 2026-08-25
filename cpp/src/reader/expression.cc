@@ -108,8 +108,9 @@ Expression* QueryExpression::merge_second_tree_to_first_tree(
 
 Expression* QueryExpression::push_global_time_filter_to_all_series(
     Expression* time_filter, std::vector<Path>& selected_series) {
-    if (selected_series.size() == 0) {
+    if (selected_series.empty()) {
         std::cout << "size of selectSeries could not be 0" << std::endl;
+        return nullptr;
     }
 
     Expression* expression = new Expression(SERIES_EXPR, selected_series.at(0),
@@ -129,6 +130,9 @@ Expression* QueryExpression::handle_one_global_time_filter(
     Expression* left, Expression* expression,
     std::vector<Path>& selected_series, ExpressionType type) {
     Expression* expr = optimize(expression, selected_series);
+    if (expr == nullptr) {
+        return nullptr;
+    }
 
     if (expr->type_ == GLOBALTIME_EXPR) {
         return combine_two_global_time_filter(left, expr, type);
@@ -140,6 +144,9 @@ Expression* QueryExpression::handle_one_global_time_filter(
     } else if (type == OR_EXPR) {
         Expression* after_transform =
             push_global_time_filter_to_all_series(left, selected_series);
+        if (after_transform == nullptr) {
+            return nullptr;
+        }
         return merge_second_tree_to_first_tree(after_transform, expr);
     }
     std::cout << "unknown relation in Expression:" << type << std::endl;
@@ -168,6 +175,9 @@ Expression* QueryExpression::optimize(Expression* expression,
                    right->type_ != GLOBALTIME_EXPR) {
             Expression* regular_left = optimize(left, series_paths);
             Expression* regular_right = optimize(right, series_paths);
+            if (regular_left == nullptr || regular_right == nullptr) {
+                return nullptr;
+            }
             Expression* mid_ret = nullptr;
             if (type == AND_EXPR) {
                 mid_ret = new Expression(AND_EXPR, regular_left, regular_right);

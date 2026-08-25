@@ -278,19 +278,23 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     return fileWriter.getSchema();
   }
 
+  @Override
+  @TsFileApi
+  public void addTsFileProperty(String key, byte[] value) {
+    fileWriter.addTsFileProperty(key, value);
+  }
+
   /**
    * calling this method to write the last data remaining in memory and close the normal and error
    * OutputStream.
    */
   @Override
   @TsFileApi
-  public void close() {
+  public void close() throws IOException {
     LOG.info(Messages.get("log.write.close_file"));
     try {
       flush();
       fileWriter.endFile();
-    } catch (IOException e) {
-      LOG.warn(Messages.get("log.write.close_file_exception"), e);
     } finally {
       if (secondEncryptParam != null && secondEncryptParam.isTdePageAead()) {
         secondEncryptParam.close();

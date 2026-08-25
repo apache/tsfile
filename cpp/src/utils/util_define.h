@@ -64,17 +64,18 @@ typedef int mode_t;
 #endif
 #endif  // _WIN32
 
-/* ======== shared-library symbol visibility ========
+/* ======== library symbol visibility ========
  *
  * Functions are exported from tsfile.dll automatically via
  * CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS, but global DATA symbols (plain variables,
  * static class members) are not reliably auto-exported, and a consumer must
  * see __declspec(dllimport) to reference them across the DLL boundary. Mark
  * such symbols with TSFILE_API: it expands to dllexport while building the
- * library (TSFILE_BUILDING is defined for its own translation units),
- * dllimport for external consumers, and nothing on non-MSVC toolchains.
+ * shared library (TSFILE_BUILDING is defined for its own translation units),
+ * dllimport for shared-library consumers, and nothing for static builds or
+ * non-MSVC toolchains.
  */
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(TSFILE_STATIC)
 #if defined(TSFILE_BUILDING)
 #define TSFILE_API __declspec(dllexport)
 #else

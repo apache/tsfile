@@ -87,7 +87,8 @@ class ChunkReader : public IChunkReader {
         common::CompressionType compression_type);
     int get_cur_page_header();
     int read_from_file_and_rewrap(int want_size = 0);
-    bool cur_page_statisify_filter(Filter* filter);
+    bool cur_page_may_satisfy_filter(Filter* filter);
+    bool cur_page_fully_satisfies_filter(Filter* filter);
     int skip_cur_page();
     int decode_cur_page_data(common::TsBlock*& ret_tsblock, Filter* filter,
                              common::PageArena& pa);

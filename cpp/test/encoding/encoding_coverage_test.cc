@@ -330,6 +330,41 @@ TEST(EncodingCoverage, TS2DIFFBatchInt64MultipleBlocks) {
     for (int i = 0; i < N; i++) EXPECT_EQ(out[i], values[i]) << "i=" << i;
 }
 
+TEST(EncodingCoverage, TS2DIFFBatchInt64EvenlySpacedNegativeDelta) {
+    TS2DIFFEncoder<int64_t> enc;
+    common::ByteStream s(8192, common::MOD_DEFAULT);
+    // Full encoder blocks contain 127 residuals, so this covers repeated SIMD
+    // groups, the 3-value scalar tail, and a final partial block.
+    const int N = 389;
+    std::vector<int64_t> values(N);
+    for (int i = 0; i < N; i++) {
+        values[i] = INT64_C(9000000000000) - static_cast<int64_t>(i) * 29;
+        ASSERT_EQ(enc.encode(values[i], s), common::E_OK);
+    }
+    ASSERT_EQ(enc.flush(s), common::E_OK);
+
+    uint32_t total = s.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    s.read_buf(buf.data(), total, got);
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    TS2DIFFDecoder<int64_t> dec;
+    std::vector<int64_t> out(N);
+    int total_decoded = 0;
+    while (dec.has_remaining(wrapped) && total_decoded < N) {
+        int actual = 0;
+        ASSERT_EQ(dec.read_batch_int64(out.data() + total_decoded,
+                                       N - total_decoded, actual, wrapped),
+                  common::E_OK);
+        if (actual == 0) break;
+        total_decoded += actual;
+    }
+    EXPECT_EQ(total_decoded, N);
+    for (int i = 0; i < N; i++) EXPECT_EQ(out[i], values[i]) << "i=" << i;
+}
+
 // ── Plain encoder: encode_batch fast paths for each type ───────────────
 TEST(EncodingCoverage, PlainEncoderBatchAllTypes) {
     PlainEncoder enc;

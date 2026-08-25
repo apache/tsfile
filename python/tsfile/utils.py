@@ -142,7 +142,9 @@ def to_dataframe(
                 else:
                     _table_name = _table_name.lower()
                     if _table_name.lower() not in table_schema:
-                        raise TableNotExistError(_table_name)
+                        raise TableNotExistError(
+                            context=f"Table '{_table_name}' does not exist"
+                        )
                     table_schema = table_schema[_table_name]
 
                 column_names_in_file = []
@@ -155,7 +157,9 @@ def to_dataframe(
                 if _column_names is not None:
                     for column in _column_names:
                         if column not in column_names_in_file and column != time_column:
-                            raise ColumnNotExistError(column)
+                            raise ColumnNotExistError(
+                                context=f"Column '{column}' does not exist"
+                            )
                         if (
                             table_schema.get_column(column).get_category()
                             == ColumnCategory.FIELD

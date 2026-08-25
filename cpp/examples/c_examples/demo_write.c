@@ -33,25 +33,69 @@ static char* duplicate_string(const char* src) {
     return dst;
 }
 
+static ERRNO cleanup_write_tsfile_resources(WriteFile* file,
+                                            TsFileWriter writer, Tablet* tablet,
+                                            TableSchema* table_schema,
+                                            ERRNO code) {
+    if (*tablet != NULL) {
+        free_tablet(tablet);
+    }
+
+    if (writer != NULL) {
+        ERRNO close_code = tsfile_writer_close(writer);
+        if (code == RET_OK) {
+            code = close_code;
+        }
+    }
+
+    if (table_schema->table_name != NULL ||
+        table_schema->column_schemas != NULL) {
+        free_table_schema(*table_schema);
+    }
+
+    if (*file != NULL) {
+        free_write_file(file);
+    }
+
+    if (code != RET_OK) {
+        printf("get err no: %d", code);
+    }
+    return code;
+}
+
 // This example shows you how to write tsfile.
 ERRNO write_tsfile() {
     ERRNO code = 0;
+    WriteFile file = NULL;
+    TsFileWriter writer = NULL;
+    Tablet tablet = NULL;
+    TableSchema table_schema = {0};
+
     code = set_global_compression(TS_COMPRESSION_LZ4);
     if (code != RET_OK) {
-        return code;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
     code = set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_TS_2DIFF);
     if (code != RET_OK) {
-        return code;
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
     }
     char* table_name = "table1";
 
     // Create table schema to describe a table in a tsfile.
-    TableSchema table_schema;
     table_schema.table_name = duplicate_string(table_name);
-    table_schema.column_num = 3;
+    if (table_schema.table_name == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
     table_schema.column_schemas =
-        (ColumnSchema*)malloc(sizeof(ColumnSchema) * 3);
+        (ColumnSchema*)calloc(3, sizeof(ColumnSchema));
+    if (table_schema.column_schemas == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
+    table_schema.column_num = 3;
     table_schema.column_schemas[0] =
         (ColumnSchema){.column_name = duplicate_string("id1"),
                        .data_type = TS_DATATYPE_STRING,
@@ -64,22 +108,37 @@ ERRNO write_tsfile() {
         (ColumnSchema){.column_name = duplicate_string("s1"),
                        .data_type = TS_DATATYPE_INT32,
                        .column_category = FIELD};
+    if (table_schema.column_schemas[0].column_name == NULL ||
+        table_schema.column_schemas[1].column_name == NULL ||
+        table_schema.column_schemas[2].column_name == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
 
     remove("test_c.tsfile");
     // Create a file with specify path to write tsfile.
-    WriteFile file = write_file_new("test_c.tsfile", &code);
-    HANDLE_ERROR(code);
+    file = write_file_new("test_c.tsfile", &code);
+    if (code != RET_OK) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
+    }
 
     // Create tsfile writer with specify table schema.
-    TsFileWriter writer = tsfile_writer_new(file, &table_schema, &code);
-    HANDLE_ERROR(code);
+    writer = tsfile_writer_new(file, &table_schema, &code);
+    if (code != RET_OK) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, code);
+    }
 
     // Create tablet to insert data.
-    Tablet tablet =
-        tablet_new((char*[]){"id1", "id2", "s1"},
-                   (TSDataType[]){TS_DATATYPE_STRING, TS_DATATYPE_STRING,
-                                  TS_DATATYPE_INT32},
-                   3, 5);
+    tablet = tablet_new((char*[]){"id1", "id2", "s1"},
+                        (TSDataType[]){TS_DATATYPE_STRING, TS_DATATYPE_STRING,
+                                       TS_DATATYPE_INT32},
+                        3, 5);
+    if (tablet == NULL) {
+        return cleanup_write_tsfile_resources(&file, writer, &tablet,
+                                              &table_schema, RET_OOM);
+    }
 
     for (int row = 0; row < 5; row++) {
         Timestamp timestamp = row;
@@ -92,19 +151,7 @@ ERRNO write_tsfile() {
     }
 
     // Write tablet data.
-    HANDLE_ERROR(tsfile_writer_write(writer, tablet));
-
-    // Free tablet.
-    free_tablet(&tablet);
-
-    // Free table schema we used before.
-    free_table_schema(table_schema);
-
-    // Close writer.
-    HANDLE_ERROR(tsfile_writer_close(writer));
-
-    // Close write file after closing writer.
-    free_write_file(&file);
-
-    return 0;
+    code = tsfile_writer_write(writer, tablet);
+    return cleanup_write_tsfile_resources(&file, writer, &tablet, &table_schema,
+                                          code);
 }

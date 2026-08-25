@@ -78,6 +78,12 @@ public class DeviceTableModelReader implements ITsFileReader {
     return Optional.ofNullable(tableSchemaMap.get(tableName.toLowerCase()));
   }
 
+  @Override
+  @TsFileApi
+  public Map<String, byte[]> getTsFileProperties() throws IOException {
+    return fileReader.getTsFileProperties();
+  }
+
   @TsFileApi
   public ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime)
       throws IOException, NoTableException, NoMeasurementException, ReadProcessException {

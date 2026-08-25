@@ -25,6 +25,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
 import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -35,6 +36,7 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.reader.BufferedTsFileInput;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -128,6 +130,30 @@ public class TDEPageAeadTsFileTest {
     } finally {
       encryptParameter.close();
       config.setMaxNumberOfPointsInPage(previousMaxPointsInPage);
+    }
+  }
+
+  @Test
+  public void testBufferedInputConstructorLoadsEncryptionHeader() throws Exception {
+    byte[] fileCryptoId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    fileCryptoId[0] = 1;
+    EncryptParameter encryptParameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
+
+    try {
+      try (TsFileWriter writer = new TsFileWriter(file, encryptParameter)) {
+        writer.registerTimeseries(
+            new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.RLE));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 1L)));
+      }
+
+      try (TsFileSequenceReader reader =
+          new TsFileSequenceReader(new BufferedTsFileInput(file.toPath()), false, false, null)) {
+        reader.position(reader.getDataStartOffset());
+        assertEquals(MetaMarker.CHUNK_GROUP_HEADER, reader.readMarker());
+      }
+    } finally {
+      encryptParameter.close();
     }
   }
 

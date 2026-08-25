@@ -74,7 +74,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     uint32_t block_size_;
     common::TsBlock* current_block_ = nullptr;
     std::vector<common::ColAppender*> col_appenders_;
-    common::RowAppender* row_appender_;
+    common::RowAppender* row_appender_ = nullptr;
     common::TupleDesc tuple_desc_;
     bool last_block_returned_ = true;
     std::map<std::string, MeasurementColumnContext*> field_column_contexts_;
@@ -86,6 +86,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int remaining_offset_ = 0;
     int remaining_limit_ = -1;
     int32_t dense_row_count_ = -1;
+    bool row_offset_pushed_to_ssi_ = false;
     // Populated in init() when every field column comes from an aligned chunk.
     // Provides cache-friendly vector iteration for has_next_aligned().
     bool all_aligned_ = false;
@@ -114,14 +115,11 @@ class MeasurementColumnContext {
 
     virtual int move_iter() = 0;
 
-    virtual void set_ssi_row_range(int offset, int limit) {
-        if (ssi_) ssi_->set_row_range(offset, limit);
-    }
     virtual int get_ssi_row_offset() const {
         return ssi_ ? ssi_->get_row_offset() : 0;
     }
-    virtual int get_ssi_row_limit() const {
-        return ssi_ ? ssi_->get_row_limit() : -1;
+    virtual void consume_ssi_row_offset(int count) {
+        if (ssi_) ssi_->consume_row_offset(count);
     }
 
     virtual uint32_t available_rows() const = 0;
@@ -195,7 +193,7 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
              const std::vector<std::string>& measurement_names,
              Filter* time_filter,
              std::vector<std::vector<int32_t>>& pos_in_result,
-             common::PageArena& pa);
+             common::PageArena& pa, int ssi_offset = 0, int ssi_limit = -1);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;

@@ -37,7 +37,7 @@ ERRNO read_tsfile() {
     HANDLE_ERROR(code);
 
     if (ret == NULL) {
-        HANDLE_ERROR(RET_INVALID_QUERY);
+        HANDLE_ERROR(RET_INVALID_ARG);
     }
 
     // Get query result metadata: column name and datatype

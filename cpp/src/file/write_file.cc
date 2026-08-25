@@ -52,6 +52,12 @@ int WriteFile::create(const std::string& file_path, int flags, mode_t mode) {
 
 int WriteFile::do_create(int flags, mode_t mode) {
     int ret = E_OK;
+#ifdef _WIN32
+    // TsFile is a binary format. Callers of the C++ API may pass ordinary
+    // POSIX-style flags without O_BINARY; leaving the descriptor in text mode
+    // would translate byte 0x0A to 0x0D 0x0A and corrupt serialized metadata.
+    flags |= O_BINARY;
+#endif
     // TODO make sure no same file exists
     fd_ = ::open(path_.c_str(), flags, mode);
     if (fd_ < 0) {

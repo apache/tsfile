@@ -228,3 +228,29 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
 - Multiple batches: `{source_basename}_1.tsfile`, `{source_basename}_2.tsfile`, ...
 - Table name and output filename are independent — table name comes from schema or `--table_name`, filename comes from source file.
 
+## Table Point Count Tool
+
+`tools/tsfile-table-point-count.sh` (Linux/macOS) and `tools\tsfile-table-point-count.bat` (Windows) check whether a complete TsFile contains table-level
+point-count properties and backfills them when they are missing. For each table, the point count is
+the total number of non-null values in its FIELD columns; TAG and time columns are not counted.
+
+Set `JAVA_HOME`, then run the tool with exactly one TsFile path:
+
+    # Linux/macOS
+    tools/tsfile-table-point-count.sh /data/example.tsfile
+
+    :: Windows
+    tools\tsfile-table-point-count.bat C:\data\example.tsfile
+
+The tool prints one of the following statuses:
+
+| Status | Description |
+|--------|-------------|
+| `UPDATED` | Missing point-count properties were calculated and written to the file. |
+| `ALREADY_PRESENT` | Every table already had a valid point-count property; the file was not modified. |
+| `NO_TABLE` | The file contains no table schema, for example a tree-model-only TsFile; the file was not modified. |
+
+The tool modifies the input file in place only for `UPDATED`. It writes a complete temporary copy
+next to the source file and replaces the source after the rewritten metadata has been flushed. Make
+sure the directory is writable, leave enough free space for a temporary copy, and back up important
+files before running the tool. Missing files and incomplete TsFiles are rejected.

@@ -64,7 +64,7 @@ All `ON` by default unless noted:
 | `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` | Compression libraries |
 | `ENABLE_THREADS` | Multi-threaded read/write via pthreads |
 | `ENABLE_ASAN` | AddressSanitizer (`OFF` by default) |
-| `ENABLE_SIMDE` | SIMD Everywhere (`OFF` by default) |
+| `ENABLE_SIMD` | SIMD acceleration |
 
 ## Source Structure
 

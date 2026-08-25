@@ -26,10 +26,11 @@ from libc.string cimport strlen
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from libc.string cimport memset
 import pyarrow as pa
-from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
+from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
+from tsfile.exceptions import TsFileCorruptedError
 from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
@@ -58,6 +59,7 @@ cdef class ResultSetPy:
     cdef object is_tree
 
     def __init__(self, tsfile_reader : TsFileReaderPy, is_tree: bint = False):
+        self.result = NULL
         self.metadata = None
         self.valid = True
         self.tsfile_reader = weakref.ref(tsfile_reader)
@@ -164,9 +166,9 @@ cdef class ResultSetPy:
 
         code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
 
-        if code == 21:  # E_NO_MORE_DATA
+        if code == RET_NO_MORE_DATA:
             return None
-        if code != 0:
+        if code != RET_OK:
             check_error(code)
 
         if arrow_schema.release == NULL or arrow_array.release == NULL:
@@ -296,7 +298,10 @@ cdef class ResultSetPy:
         self.close()
 
     def __dealloc__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self
@@ -321,8 +326,9 @@ cdef class TsFileReaderPy:
         """
         Initialize a TsFile reader for the specified file path.
         """
-        self.init_reader(pathname)
+        self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
+        self.init_reader(pathname)
 
     cdef init_reader(self, pathname):
         self.reader = tsfile_reader_new_c(pathname)
@@ -513,6 +519,45 @@ cdef class TsFileReaderPy:
         """
         return reader_get_timeseries_metadata_c(self.reader, device_ids)
 
+    def get_tsfile_properties(self) -> Dict[str, Optional[bytes]]:
+        """
+        Return file-level properties as ``dict[str, bytes | None]``.
+
+        Null property values are returned as ``None`` and remain distinct from
+        non-null zero-length byte strings.
+        """
+        cdef TsFileProperty * properties = NULL
+        cdef uint32_t property_count = 0
+        cdef uint32_t i
+        cdef ErrorCode err_code
+        cdef object key
+        cdef dict result = {}
+
+        err_code = tsfile_reader_get_tsfile_properties(
+            self.reader, &properties, &property_count
+        )
+        check_error(err_code)
+        try:
+            for i in range(property_count):
+                try:
+                    key = PyBytes_FromStringAndSize(
+                        properties[i].key, properties[i].key_len
+                    ).decode('utf-8')
+                except UnicodeDecodeError:
+                    raise TsFileCorruptedError(
+                        context="TsFile property key is not valid UTF-8"
+                    ) from None
+                if properties[i].is_null:
+                    result[key] = None
+                else:
+                    result[key] = PyBytes_FromStringAndSize(
+                        <const char *> properties[i].value,
+                        properties[i].value_len,
+                    )
+        finally:
+            tsfile_free_tsfile_properties(properties, property_count)
+        return result
+
     def close(self):
         """
         Close TsFile Reader, if reader has result sets, invalid them.
@@ -533,7 +578,10 @@ cdef class TsFileReaderPy:
         return self.activate_result_set_list
 
     def __dealloc__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self

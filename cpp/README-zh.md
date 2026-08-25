@@ -188,3 +188,22 @@ bash build.sh
 ```
 
 即可在 `./examples/build` 目录下生成可执行文件。
+
+### 文件级 Properties
+
+`TsFileWriter` 和 `TsFileTableWriter` 可以在 writer 打开期间新增或覆盖二进制
+property。传入的数据会立即复制，调用 `flush()` 后仍可继续修改；文件关闭后不能修改。
+
+```cpp
+std::vector<uint8_t> value = {0x01, 0x00, 0xFF};
+writer.add_tsfile_property("binary-property", value);
+
+// nullptr 且长度为 0 表示 null；空 vector 表示非 null 的零长度值。
+writer.add_tsfile_property("null-property", nullptr, 0);
+writer.add_tsfile_property("empty-property", std::vector<uint8_t>());
+
+storage::TsFileProperties properties = reader.get_tsfile_properties();
+```
+
+Property value 本身不保存数据类型。整数、浮点数或结构体应由应用使用明确、可跨语言的
+字节编码进行转换。

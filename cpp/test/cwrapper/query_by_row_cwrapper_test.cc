@@ -193,6 +193,33 @@ TEST_F(CWrapperQueryByRowTest, TreeByRowOffsetLimit) {
     storage::libtsfile_destroy();
 }
 
+TEST_F(CWrapperQueryByRowTest, InvalidTreePathReturnsErrorCode) {
+    storage::libtsfile_init();
+
+    const char* file_name = "cwrapper_invalid_tree_path_test.tsfile";
+    remove(file_name);
+    write_tree_tsfile(file_name, {"root.d1"}, {"s1"}, 1);
+
+    ERRNO code = RET_OK;
+    TsFileReader reader = tsfile_reader_new(file_name, &code);
+    ASSERT_EQ(code, RET_OK);
+    ASSERT_NE(reader, nullptr);
+
+    char device_id[] = "root.d1";
+    char invalid_measurement[] = "a*%";
+    char* device_ids[] = {device_id};
+    char* measurement_ids[] = {invalid_measurement};
+    ResultSet result = tsfile_reader_query_tree_by_row(
+        reader, device_ids, 1, measurement_ids, 1, 0, -1, &code);
+
+    EXPECT_EQ(code, RET_INVALID_PATH);
+    EXPECT_EQ(result, nullptr);
+    EXPECT_EQ(tsfile_reader_close(reader), RET_OK);
+    remove(file_name);
+
+    storage::libtsfile_destroy();
+}
+
 TEST_F(CWrapperQueryByRowTest, TableByRowOffsetLimit) {
     storage::libtsfile_init();
 

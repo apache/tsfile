@@ -67,7 +67,7 @@ int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds) {
     if (query_exprs_->has_filter_) {
         regular_expr = query_exprs_->optimize(origin_expr, paths);
         if (regular_expr == nullptr) {
-            return E_SDK_QUERY_OPTIMIZE_ERR;
+            return E_INVALID_ARG;
         }
         query_exprs_->set_expression(regular_expr);
     }

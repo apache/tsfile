@@ -20,6 +20,7 @@
 # build_type=MinSizeRel
 build_type=Release
 build_test=0
+build_shared=ON
 build_bench=0
 do_install=0
 use_cpp11=1
@@ -52,6 +53,9 @@ Options:
   -t=<type>, -t <type>   Build type: Debug, Release, RelWithDebInfo, MinSizeRel.
   -a=<ON|OFF>            Enable or disable AddressSanitizer.
   -c=<ON|OFF>            Enable or disable code coverage.
+  --build-shared=<ON|OFF>
+                         Build libtsfile as a shared library (default: ON).
+  --build-static         Build libtsfile as a static library.
   --enable-antlr4=<ON|OFF>
   --disable-antlr4
   --enable-snappy=<ON|OFF>
@@ -70,6 +74,7 @@ function print_config()
 {
   echo "build_type=$build_type"
   echo "build_test=$build_test"
+  echo "build_shared=$build_shared"
   echo "do_install=$do_install"
   echo "use_cpp11=$use_cpp11"
   echo "enable_cov=$enable_cov"
@@ -113,6 +118,10 @@ parse_options()
     -c)
       shift
       enable_cov=$(get_key_value "$1");;
+    --build-shared=*)
+      build_shared=$(get_key_value "$1");;
+    --build-static)
+      build_shared=OFF;;
     --enable-antlr4=*)
       enable_antlr4=$(get_key_value "$1");;
     --enable-snappy=*)
@@ -190,6 +199,7 @@ cmake ../../                           \
   -DZLIB=$zlib_project_dir/install     \
   -DLZ4LIB=$lz4lib_project_dir         \
   -DBUILD_TEST=$build_test             \
+  -DTSFILE_BUILD_SHARED=$build_shared  \
   -DCMAKE_BUILD_TYPE=$build_type       \
   -DUSE_CPP11=$use_cpp11               \
   -DENABLE_COV=$enable_cov             \

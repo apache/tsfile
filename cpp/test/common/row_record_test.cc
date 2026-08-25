@@ -104,6 +104,7 @@ TEST(FieldTest, MakeNullLiteral) {
 
 TEST(RowRecordTest, ConstructorWithColNum) {
     RowRecord row_record(5);
+    EXPECT_EQ(row_record.get_timestamp(), 0);
     EXPECT_EQ(row_record.get_fields()->size(), 5);
     for (Field* field : *row_record.get_fields()) {
         EXPECT_EQ(field->type_, common::NULL_TYPE);

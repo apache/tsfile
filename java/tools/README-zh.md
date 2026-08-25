@@ -229,3 +229,24 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
 - 多批次：`{源文件名}_1.tsfile`、`{源文件名}_2.tsfile`、...
 - 表名与输出文件名相互独立——表名来自 schema 或 `--table_name`，文件名来自源文件。
 
+## 表点数统计工具
+
+`tools/tsfile-table-point-count.sh`（Linux/macOS）和 `tools\tsfile-table-point-count.bat`（Windows）用于检查完整 TsFile 是否包含表级点数统计属性，并在属性缺失时补写。每张表的点数是其所有 FIELD 列中非空值的总数，不统计 TAG 列和时间列。
+
+设置 `JAVA_HOME` 后，传入且仅传入一个 TsFile 路径：
+
+    # Linux/macOS
+    tools/tsfile-table-point-count.sh /data/example.tsfile
+
+    :: Windows
+    tools\tsfile-table-point-count.bat C:\data\example.tsfile
+
+工具会输出以下状态之一：
+
+| 状态 | 说明 |
+|------|------|
+| `UPDATED` | 已计算缺失的点数统计属性并写回文件。 |
+| `ALREADY_PRESENT` | 每张表都已有有效的点数统计属性，未修改文件。 |
+| `NO_TABLE` | 文件不包含表 Schema，例如仅含树模型数据的 TsFile，未修改文件。 |
+
+仅当状态为 `UPDATED` 时，工具才会原地修改输入文件。工具先在源文件所在目录生成完整的临时文件，确保重写后的元数据落盘后再替换源文件。运行前请确保目录可写、磁盘空间足以存放临时副本，并备份重要文件。不存在的文件和未写完整的 TsFile 会被拒绝处理。

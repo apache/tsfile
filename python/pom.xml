@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.3.2-SNAPSHOT</version>
+        <version>2.4.1-260806-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-python</artifactId>
     <packaging>pom</packaging>
@@ -142,7 +142,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <skip>${skipTests:-false}</skip>
+                            <skip>${skipTests}</skip>
                             <executable>${python.venv.bin}${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
@@ -159,7 +159,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <skip>${skipTests:-false}</skip>
+                            <skip>${skipTests}</skip>
                             <executable>${python.venv.bin}pytest</executable>
                             <arguments>
                                 <argument>${project.basedir}/tests</argument>

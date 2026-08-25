@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.3.2-SNAPSHOT</version>
+        <version>2.4.1-260806-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-cpp</artifactId>
     <packaging>pom</packaging>
@@ -35,12 +35,13 @@
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
         <build.test>ON</build.test>
+        <tsfile.build.shared>ON</tsfile.build.shared>
         <enable.snappy>ON</enable.snappy>
         <enable.lz4>ON</enable.lz4>
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
         <enable.antlr4>ON</enable.antlr4>
-        <enable.simde>OFF</enable.simde>
+        <enable.simd>ON</enable.simd>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -82,12 +83,13 @@
                                 <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
                                 <option>-DENABLE_ASAN=${enable.asan}</option>
                                 <option>-DBUILD_TEST=${build.test}</option>
+                                <option>-DTSFILE_BUILD_SHARED=${tsfile.build.shared}</option>
                                 <option>-DENABLE_ANTLR4=${enable.antlr4}</option>
                                 <option>-DENABLE_SNAPPY=${enable.snappy}</option>
                                 <option>-DENABLE_LZ4=${enable.lz4}</option>
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
-                                <option>-DENABLE_SIMDE=${enable.simde}</option>
+                                <option>-DENABLE_SIMD=${enable.simd}</option>
                                 <!--
                                     The Visual Studio generator additionally
                                     needs -DCMAKE_GENERATOR_PLATFORM (and
@@ -282,6 +284,32 @@
                                 <configuration>
                                     <options combine.children="append">
                                         <option>-DCMAKE_GENERATOR_TOOLSET=${msvc.toolset}</option>
+                                    </options>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Generate compile_commands.json for the standalone Cppcheck CI job.
+            This profile only changes the CMake configure step; it does not run
+            Cppcheck or add static analysis to normal C++ builds.
+        -->
+        <profile>
+            <id>with-cppcheck</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</option>
                                     </options>
                                 </configuration>
                             </execution>

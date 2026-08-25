@@ -36,7 +36,7 @@ class ThreadPool;
 
 namespace storage {
 
-// Page classification for chunk-level parallel decode.
+// Page classification for chunk-level planned decode.
 enum class PagePassType { SKIP, FULL_PASS, BOUNDARY };
 
 // Metadata collected per page during the chunk scan phase.
@@ -53,8 +53,9 @@ struct ChunkPageInfo {
     std::vector<uint32_t> value_uncompressed_sizes;
 };
 
-// Decoded state for one (column, page) slot.  Populated by chunk-level
-// parallel decode; consumed by the scatter loop.
+// Decoded state for one (column, page) slot. Populated eagerly by parallel
+// decode or lazily by the single-thread page-plan path, then consumed by the
+// scatter loop.
 struct PageDecodedState {
     std::vector<uint8_t> notnull_bitmap;
     std::vector<char> predecoded_values;
@@ -194,7 +195,8 @@ class AlignedChunkReader : public IChunkReader {
                                   uint32_t& chunk_visit_offset,
                                   int32_t& file_data_buf_size,
                                   int want_size = 0, bool may_shrink = true);
-    bool cur_page_statisify_filter(Filter* filter);
+    bool cur_page_may_satisfy_filter(Filter* filter);
+    bool cur_page_fully_satisfies_filter(Filter* filter);
     int skip_cur_page();
     int decode_cur_time_page_data();
     int decode_cur_value_page_data();
@@ -238,11 +240,14 @@ class AlignedChunkReader : public IChunkReader {
     bool has_more_data_multi() const;
     bool prev_any_value_page_not_finish_multi() const;
     int get_next_page_multi(common::TsBlock* ret_tsblock,
-                            Filter* oneshoot_filter, common::PageArena& pa);
+                            Filter* oneshoot_filter, common::PageArena& pa,
+                            int& row_offset);
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
-                                   common::PageArena& pa);
+                                   common::PageArena& pa, int& row_offset);
     int skip_cur_page_multi();
-    bool cur_page_statisify_filter_multi(Filter* filter);
+    bool cur_page_may_satisfy_filter_multi(Filter* filter);
+    bool cur_page_fully_satisfies_filter_multi(Filter* filter);
+    bool should_skip_page_by_offset_multi(int& row_offset);
     int decode_cur_value_pages_multi();
     int decode_cur_value_page_data_for(ValueColumnState& col);
     int ensure_value_page_loaded(ValueColumnState& col);
@@ -255,7 +260,7 @@ class AlignedChunkReader : public IChunkReader {
     int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
-    int build_page_plan(Filter* filter);
+    int build_page_plan(Filter* filter, int& row_offset);
     int decode_time_page_direct(const ChunkPageInfo& page_info,
                                 std::vector<int64_t>& out_times);
     int decode_time_page_with(const ChunkPageInfo& page_info,

@@ -87,6 +87,12 @@ void AlignedChunkReader::reset() {
         time_compressor_->after_uncompress(time_uncompressed_buf_);
         time_uncompressed_buf_ = nullptr;
     }
+    if (value_uncompressed_buf_ != nullptr && value_compressor_ != nullptr) {
+        value_compressor_->after_uncompress(value_uncompressed_buf_);
+        value_uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
 
     // Multi-value reset
     for (auto* col : value_columns_) {
@@ -250,20 +256,23 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(time_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         LOGE("file corrupted, ret=" << ret << ", offset="
                                     << time_chunk_meta_->offset_of_chunk_header_
                                     << "read_len=" << ret_read_len);
         mem_free(time_file_data_buf);
+        return ret;
     }
-    if (IS_SUCC(ret)) {
-        time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
-        if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
-        } else {
-            time_chunk_visit_offset_ = time_in_stream_.read_pos();
-        }
+    time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
+    if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
+        return ret;
     }
+    time_chunk_visit_offset_ = time_in_stream_.read_pos();
     /* ================ deserialize value_chunk_header ================*/
     ret_read_len = 0;
     char* value_file_data_buf =
@@ -274,35 +283,38 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(value_chunk_meta_->offset_of_chunk_header_,
                            value_file_data_buf, file_data_value_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(value_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         LOGE("file corrupted, ret="
              << ret << ", offset=" << value_chunk_meta_->offset_of_chunk_header_
              << "read_len=" << ret_read_len);
         mem_free(value_file_data_buf);
+        return ret;
     }
-    if (IS_SUCC(ret)) {
-        value_in_stream_.wrap_from(value_file_data_buf, ret_read_len);
-        if (RET_FAIL(value_chunk_header_.deserialize_from(value_in_stream_))) {
-        } else if (RET_FAIL(alloc_compressor_and_decoder(
-                       time_decoder_, time_compressor_,
-                       time_chunk_header_.encoding_type_,
-                       time_chunk_header_.data_type_,
-                       time_chunk_header_.compression_type_))) {
-        } else if (RET_FAIL(alloc_compressor_and_decoder(
-                       value_decoder_, value_compressor_,
-                       value_chunk_header_.encoding_type_,
-                       value_chunk_header_.data_type_,
-                       value_chunk_header_.compression_type_))) {
-        } else {
-            value_chunk_visit_offset_ = value_in_stream_.read_pos();
+    value_in_stream_.wrap_from(value_file_data_buf, ret_read_len);
+    if (RET_FAIL(value_chunk_header_.deserialize_from(value_in_stream_))) {
+    } else if (RET_FAIL(alloc_compressor_and_decoder(
+                   time_decoder_, time_compressor_,
+                   time_chunk_header_.encoding_type_,
+                   time_chunk_header_.data_type_,
+                   time_chunk_header_.compression_type_))) {
+    } else if (RET_FAIL(alloc_compressor_and_decoder(
+                   value_decoder_, value_compressor_,
+                   value_chunk_header_.encoding_type_,
+                   value_chunk_header_.data_type_,
+                   value_chunk_header_.compression_type_))) {
+    } else {
+        value_chunk_visit_offset_ = value_in_stream_.read_pos();
 #if DEBUG_SE
-            std::cout << "AlignedChunkReader::load_by_meta, time_chunk_header="
-                      << time_chunk_header_
-                      << ", value_chunk_header=" << value_chunk_header_
-                      << std::endl;
+        std::cout << "AlignedChunkReader::load_by_meta, time_chunk_header="
+                  << time_chunk_header_
+                  << ", value_chunk_header=" << value_chunk_header_
+                  << std::endl;
 #endif
-        }
     }
     return ret;
 }
@@ -333,7 +345,9 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
 int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       Filter* oneshoot_filter, PageArena& pa) {
     if (multi_value_mode_) {
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        int row_offset = 0;
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -353,7 +367,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (cur_page_statisify_filter(filter)) {
+            } else if (cur_page_may_satisfy_filter(filter)) {
                 break;
             } else if (RET_FAIL(skip_cur_page())) {
             }
@@ -443,11 +457,11 @@ int AlignedChunkReader::read_from_file_and_rewrap(
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size < read_size ||
         (may_shrink && read_size < file_data_buf_size / 10)) {
-        file_data_buf = (char*)mem_realloc(file_data_buf, read_size);
-        if (IS_NULL(file_data_buf)) {
-            in_stream_.clear_wrapped_buf();
+        char* resized_buf = (char*)mem_realloc(file_data_buf, read_size);
+        if (IS_NULL(resized_buf)) {
             return E_OOM;
         }
+        file_data_buf = resized_buf;
         file_data_buf_size = read_size;
         // Update stream pointer immediately so it stays valid even if
         // the subsequent read fails and the caller frees via destroy().
@@ -467,7 +481,10 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
+// Page statistics provide two levels of certainty: "may satisfy" means the
+// page cannot be ruled out, while "fully satisfies" means every row is known
+// to match and the page count can safely be used for offset pushdown.
+bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
     bool value_satisfy = filter == nullptr ||
                          cur_value_page_header_.statistic_ == nullptr ||
                          filter->satisfy(cur_value_page_header_.statistic_);
@@ -475,6 +492,16 @@ bool AlignedChunkReader::cur_page_statisify_filter(Filter* filter) {
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy && value_satisfy;
+}
+
+bool AlignedChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr) {
+        stat = cur_value_page_header_.statistic_;
+    }
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
 }
 
 int AlignedChunkReader::skip_cur_page() {
@@ -757,40 +784,39 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
 }
 
 namespace {
-// Type-dispatched value batch read / skip for decode_tv_batch<T>.  Overload
-// resolution on the value pointer type selects the matching Decoder method, so
-// the four fixed-width value types share one decode loop.
-FORCE_INLINE int read_value_batch_typed(Decoder* d, int32_t* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_int32(out, cap, actual, in);
+// Type-dispatched exact read / skip for decode_tv_batch<T>. Overload
+// resolution on the value pointer selects the matching Decoder method.
+FORCE_INLINE int read_value_exact_typed(Decoder* d, int32_t* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_int32(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, int64_t* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_int64(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, int64_t* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_int64(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, float* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_float(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, float* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_float(out, count, in);
 }
-FORCE_INLINE int read_value_batch_typed(Decoder* d, double* out, int cap,
-                                        int& actual, ByteStream& in) {
-    return d->read_batch_double(out, cap, actual, in);
+FORCE_INLINE int read_value_exact_typed(Decoder* d, double* out, int count,
+                                        ByteStream& in) {
+    return d->read_exact_double(out, count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, int32_t*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_int32(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, int32_t*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_int32(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, int64_t*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_int64(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, int64_t*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_int64(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, float*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_float(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, float*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_float(count, in);
 }
-FORCE_INLINE int skip_value_typed(Decoder* d, double*, int n, int& skipped,
-                                  ByteStream& in) {
-    return d->skip_double(n, skipped, in);
+FORCE_INLINE int skip_value_exact_typed(Decoder* d, double*, int count,
+                                        ByteStream& in) {
+    return d->skip_exact_double(count, in);
 }
 }  // namespace
 
@@ -837,17 +863,8 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
                     }
                     cur_value_index += block_count;
                     if (nonnull > 0) {
-                        // skip_* may legitimately fail (truncated page) or
-                        // short-read (corrupt bitmap vs. data); both must abort
-                        // the loop rather than silently desync the value
-                        // decoder.
-                        int sk = 0;
-                        if (RET_FAIL(skip_value_typed(value_decoder_, values,
-                                                      nonnull, sk, value_in))) {
-                            break;
-                        }
-                        if (sk != nonnull) {
-                            ret = E_TSFILE_CORRUPTED;
+                        if (RET_FAIL(skip_value_exact_typed(
+                                value_decoder_, values, nonnull, value_in))) {
                             break;
                         }
                     }
@@ -889,14 +906,8 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
 
         if (pass_count == 0) {
             if (nonnull_count > 0) {
-                int skipped = 0;
-                if (RET_FAIL(skip_value_typed(value_decoder_, values,
-                                              nonnull_count, skipped,
-                                              value_in))) {
-                    break;
-                }
-                if (skipped != nonnull_count) {
-                    ret = E_TSFILE_CORRUPTED;
+                if (RET_FAIL(skip_value_exact_typed(value_decoder_, values,
+                                                    nonnull_count, value_in))) {
                     break;
                 }
             }
@@ -904,13 +915,35 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
             continue;
         }
 
-        int value_count = 0;
         if (nonnull_count > 0) {
-            if (RET_FAIL(read_value_batch_typed(value_decoder_, values,
-                                                nonnull_count, value_count,
-                                                value_in))) {
+            if (RET_FAIL(read_value_exact_typed(value_decoder_, values,
+                                                nonnull_count, value_in))) {
                 break;
             }
+        }
+
+        // Dense fixed-width batches are already laid out exactly as the two
+        // destination vectors expect. Appending them row by row would issue
+        // two tiny memcpy calls per row (time + value), plus virtual dispatch
+        // and bookkeeping. Copy each column once instead. Integral value
+        // filters still need the scalar satisfy(time, value) check unless the
+        // decoder proved the whole block passes, so those batches retain the
+        // fallback below.
+        const bool needs_integral_value_filter =
+            std::is_integral<T>::value && filter != nullptr && !block_all_pass;
+        if (pass_count == time_count && nonnull_count == time_count &&
+            !needs_integral_value_filter &&
+            row_appender.can_bulk_append_fixed(0, sizeof(int64_t)) &&
+            row_appender.can_bulk_append_fixed(1, sizeof(T))) {
+            row_appender.bulk_append_fixed(0,
+                                           reinterpret_cast<const char*>(times),
+                                           static_cast<uint32_t>(time_count));
+            row_appender.bulk_append_fixed(
+                1, reinterpret_cast<const char*>(values),
+                static_cast<uint32_t>(time_count));
+            row_appender.add_rows(static_cast<uint32_t>(time_count));
+            cur_value_index += time_count;
+            continue;
         }
 
         int val_idx = 0;
@@ -1082,17 +1115,19 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       int64_t min_time_hint, int& row_offset,
                                       int& row_limit) {
     if (multi_value_mode_) {
-        // Multi-value aligned path doesn't yet honour row_offset / row_limit
-        // / min_time_hint — they get dropped on the floor, which silently
-        // returns full chunk data when the caller asked for a sub-range.
-        // Refuse the combination so the caller sees an actual error instead
-        // of garbage results.  set_row_range(0, -1) keeps the all-rows
-        // contract intact for normal queries.
-        if (row_offset > 0 || row_limit >= 0 ||
+        if (row_limit == 0) {
+            return E_NO_MORE_DATA;
+        }
+        // The multi-value path can consume offset through chunk/page count
+        // statistics. Limit and min-time pushdown still need separate state
+        // handling, so keep those combinations explicit instead of silently
+        // returning a wider range.
+        if (row_limit >= 0 ||
             min_time_hint != std::numeric_limits<int64_t>::min()) {
             return common::E_NOT_SUPPORT;
         }
-        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                                   row_offset);
     }
     int ret = E_OK;
     Filter* filter =
@@ -1118,13 +1153,14 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                            value_chunk_meta_, value_in_stream_,
                            cur_value_page_header_, value_chunk_visit_offset_,
                            value_chunk_header_))) {
-            } else if (!cur_page_statisify_filter(filter)) {
+            } else if (!cur_page_may_satisfy_filter(filter)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else if (should_skip_page_by_time(min_time_hint)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
-            } else if (should_skip_page_by_offset(row_offset)) {
+            } else if (cur_page_fully_satisfies_filter(filter) &&
+                       should_skip_page_by_offset(row_offset)) {
                 if (RET_FAIL(skip_cur_page())) {
                 }
             } else {
@@ -1172,18 +1208,20 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
-    if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+    if (!IS_SUCC(ret)) {
+        mem_free(time_file_data_buf);
+        return ret;
+    }
+    if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
         ret = E_TSFILE_CORRUPTED;
         mem_free(time_file_data_buf);
         return ret;
     }
-    if (IS_SUCC(ret)) {
-        time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
-        if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
-            return ret;
-        }
-        time_chunk_visit_offset_ = time_in_stream_.read_pos();
+    time_in_stream_.wrap_from(time_file_data_buf, ret_read_len);
+    if (RET_FAIL(time_chunk_header_.deserialize_from(time_in_stream_))) {
+        return ret;
     }
+    time_chunk_visit_offset_ = time_in_stream_.read_pos();
 
     // Alloc time decoder/compressor
     if (IS_SUCC(ret)) {
@@ -1218,24 +1256,25 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
 
         ret = read_file_->read(col->chunk_meta->offset_of_chunk_header_, vbuf,
                                col->file_data_buf_size, ret_read_len);
-        if (IS_SUCC(ret) && ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+        if (!IS_SUCC(ret)) {
+            mem_free(vbuf);
+            return ret;
+        }
+        if (ret_read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
             ret = E_TSFILE_CORRUPTED;
             mem_free(vbuf);
+            return ret;
+        }
+        col->in_stream.wrap_from(vbuf, ret_read_len);
+        if (RET_FAIL(col->chunk_header.deserialize_from(col->in_stream))) {
             break;
         }
-        if (IS_SUCC(ret)) {
-            col->in_stream.wrap_from(vbuf, ret_read_len);
-            if (RET_FAIL(col->chunk_header.deserialize_from(col->in_stream))) {
-                break;
-            }
-            col->chunk_visit_offset = col->in_stream.read_pos();
-            if (RET_FAIL(alloc_compressor_and_decoder(
-                    col->decoder, col->compressor,
-                    col->chunk_header.encoding_type_,
-                    col->chunk_header.data_type_,
-                    col->chunk_header.compression_type_))) {
-                break;
-            }
+        col->chunk_visit_offset = col->in_stream.read_pos();
+        if (RET_FAIL(alloc_compressor_and_decoder(
+                col->decoder, col->compressor, col->chunk_header.encoding_type_,
+                col->chunk_header.data_type_,
+                col->chunk_header.compression_type_))) {
+            break;
         }
     }
 
@@ -1383,7 +1422,7 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     return ret;
 }
 
-int AlignedChunkReader::build_page_plan(Filter* filter) {
+int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     int ret = E_OK;
     chunk_pages_.clear();
     current_page_plan_index_ = 0;
@@ -1459,6 +1498,13 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
             int32_t last = -1;
             for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
                 if (filter->satisfy_start_end_time(times[i], times[i])) {
+                    // Offset is defined on the filtered row stream. Consume
+                    // matching rows only; holes inside a boundary page do not
+                    // count toward it.
+                    if (row_offset > 0) {
+                        row_offset--;
+                        continue;
+                    }
                     if (first < 0) first = i;
                     last = i;
                 }
@@ -1478,6 +1524,18 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
                     break;
                 }
                 page_info.row_end = static_cast<int32_t>(times.size());
+            }
+            if (page_info.pass_type == PagePassType::FULL_PASS &&
+                row_offset > 0) {
+                const int32_t page_row_count =
+                    page_info.row_end - page_info.row_begin;
+                const int32_t rows_to_skip =
+                    std::min(page_row_count, row_offset);
+                page_info.row_begin += rows_to_skip;
+                row_offset -= rows_to_skip;
+                if (page_info.row_begin == page_info.row_end) {
+                    page_info.pass_type = PagePassType::SKIP;
+                }
             }
             if (page_info.row_begin < page_info.row_end) {
                 chunk_pages_.push_back(std::move(page_info));
@@ -1652,7 +1710,6 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     uint32_t elem_size = common::get_data_type_size(dt);
     pps.predecoded_values.resize(static_cast<size_t>(nonnull_total) *
                                  elem_size);
-    int actual = 0;
     switch (dt) {
         case common::BOOLEAN: {
             bool* out = reinterpret_cast<bool*>(pps.predecoded_values.data());
@@ -1662,39 +1719,38 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
                     return ret;
                 }
             }
-            actual = nonnull_total;
             break;
         }
         case common::INT32:
         case common::DATE:
-            if (RET_FAIL(col->decoder->read_batch_int32(
+            if (RET_FAIL(col->decoder->read_exact_int32(
                     reinterpret_cast<int32_t*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::INT64:
         case common::TIMESTAMP:
-            if (RET_FAIL(col->decoder->read_batch_int64(
+            if (RET_FAIL(col->decoder->read_exact_int64(
                     reinterpret_cast<int64_t*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::FLOAT:
-            if (RET_FAIL(col->decoder->read_batch_float(
+            if (RET_FAIL(col->decoder->read_exact_float(
                     reinterpret_cast<float*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::DOUBLE:
-            if (RET_FAIL(col->decoder->read_batch_double(
+            if (RET_FAIL(col->decoder->read_exact_double(
                     reinterpret_cast<double*>(pps.predecoded_values.data()),
-                    nonnull_total, actual, in))) {
+                    nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
@@ -1703,7 +1759,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
             cleanup();
             return E_NOT_SUPPORT;
     }
-    pps.predecoded_count = actual;
+    pps.predecoded_count = nonnull_total;
     cleanup();
     return E_OK;
 }
@@ -1833,34 +1889,36 @@ void AlignedChunkReader::release_page_slot(size_t page_idx) {
 
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
-                                            PageArena& pa) {
+                                            PageArena& pa, int& row_offset) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
     // Dispatch:
-    //   - Multi-column with a thread pool → chunk-level pre-decode: one task
-    //     per value column decodes that column's whole chunk up front, then the
-    //     scatter loop bulk-memcpys.  decode_all_planned_pages() works for any
-    //     column count.  (An earlier cutoff sent >6 columns down the serial
-    //     path because per_page_state — the upfront predecode buffer — grows
-    //     with column count and was feared to thrash cache; it still grows, so
-    //     very wide aligned chunks are the case to watch if reads regress.)
-    //   - Single column, or no thread pool → serial path: decode the current
-    //     page's columns inline (multi_DECODE_TV_BATCH), no thread-pool
-    //     fan-out.
+    //   - Offset pushdown always uses the page plan so fully covered pages and
+    //     the prefix of the first retained page can be removed before value
+    //     decoding, even when no worker pool is available.
+    //   - Multi-column with a thread pool also uses the page plan for
+    //     chunk-level parallel pre-decode.
+    //   - Otherwise decode the current page's columns inline.
 #ifdef ENABLE_THREADS
-    const bool use_chunk_level =
+    const bool use_parallel_page_plan =
         decode_pool_ != nullptr && value_columns_.size() > 1;
 #else
-    const bool use_chunk_level = false;
+    const bool use_parallel_page_plan = false;
 #endif
-    if (!use_chunk_level) {
-        return get_next_page_multi_serial(ret_tsblock, filter, pa);
+    const bool serial_page_in_progress =
+        !page_plan_built_ &&
+        (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi());
+    const bool use_page_plan =
+        page_plan_built_ || (!serial_page_in_progress &&
+                             (row_offset > 0 || use_parallel_page_plan));
+    if (!use_page_plan) {
+        return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
 
     if (!page_plan_built_) {
-        if (RET_FAIL(build_page_plan(filter))) {
+        if (RET_FAIL(build_page_plan(filter, row_offset))) {
             return ret;
         }
         if (RET_FAIL(decode_all_planned_pages())) {
@@ -2044,7 +2102,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
 
 int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                                                    Filter* filter,
-                                                   PageArena& pa) {
+                                                   PageArena& pa,
+                                                   int& row_offset) {
     int ret = E_OK;
     bool pt = prev_time_page_not_finish();
     bool pv = prev_any_value_page_not_finish_multi();
@@ -2069,8 +2128,14 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
-            if (cur_page_statisify_filter_multi(filter)) break;
-            if (RET_FAIL(skip_cur_page_multi())) break;
+            if (!cur_page_may_satisfy_filter_multi(filter)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else if (cur_page_fully_satisfies_filter_multi(filter) &&
+                       should_skip_page_by_offset_multi(row_offset)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else {
+                break;
+            }
             if (!has_more_data()) {
                 ret = E_NO_MORE_DATA;
                 break;
@@ -2088,11 +2153,37 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
     return ret;
 }
 
-bool AlignedChunkReader::cur_page_statisify_filter_multi(Filter* filter) {
+// Keep the same conservative distinction as the single-value path: a page
+// that may satisfy the filter still needs row-level filtering unless its full
+// time range is covered by the filter.
+bool AlignedChunkReader::cur_page_may_satisfy_filter_multi(Filter* filter) {
     bool time_satisfy = filter == nullptr ||
                         cur_time_page_header_.statistic_ == nullptr ||
                         filter->satisfy(cur_time_page_header_.statistic_);
     return time_satisfy;
+}
+
+bool AlignedChunkReader::cur_page_fully_satisfies_filter_multi(Filter* filter) {
+    Statistic* stat = cur_time_page_header_.statistic_;
+    return filter == nullptr ||
+           (stat != nullptr &&
+            filter->contain_start_end_time(stat->start_time_, stat->end_time_));
+}
+
+bool AlignedChunkReader::should_skip_page_by_offset_multi(int& row_offset) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    Statistic* stat = cur_time_page_header_.statistic_;
+    if (stat == nullptr || stat->count_ == 0) {
+        return false;
+    }
+    int32_t count = stat->count_;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
 }
 
 int AlignedChunkReader::skip_cur_page_multi() {
@@ -2285,35 +2376,39 @@ int AlignedChunkReader::decompress_and_parse_value_page(ValueColumnState& col,
                             break;
                         }
                         out[i] = v;
+                        actual++;
                     }
-                    actual = nonnull_total;
                     break;
                 }
                 case common::INT32:
                 case common::DATE:
-                    rret = col.decoder->read_batch_int32(
+                    rret = col.decoder->read_exact_int32(
                         reinterpret_cast<int32_t*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::INT64:
                 case common::TIMESTAMP:
-                    rret = col.decoder->read_batch_int64(
+                    rret = col.decoder->read_exact_int64(
                         reinterpret_cast<int64_t*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::FLOAT:
-                    rret = col.decoder->read_batch_float(
+                    rret = col.decoder->read_exact_float(
                         reinterpret_cast<float*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 case common::DOUBLE:
-                    rret = col.decoder->read_batch_double(
+                    rret = col.decoder->read_exact_double(
                         reinterpret_cast<double*>(
                             col.pending_decoded_values.data()),
-                        nonnull_total, actual, col.in);
+                        nonnull_total, col.in);
+                    if (rret == common::E_OK) actual = nonnull_total;
                     break;
                 default:
                     rret = common::E_OUT_OF_RANGE;
@@ -2437,11 +2532,9 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                 }
             }
 
-            // Skip values if no rows pass time filter.  Skip/read errors and
-            // short reads (decoder returned fewer values than the bitmap
-            // promised) must abort; otherwise the input stream is left
-            // mid-value and later batches would decode garbage from
-            // misaligned bytes.
+            // Skip values if no rows pass time filter.  The aligned bitmap
+            // supplies the exact count, including values equal to a codec's
+            // in-band terminator.
             if (pass_count == 0 && cb.nonnull_count > 0) {
                 int dret = common::E_OK;
                 int sk = 0;
@@ -2456,21 +2549,29 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                     }
                     case common::INT32:
                     case common::DATE:
-                        dret = col->decoder->skip_int32(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<int32_t*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::INT64:
                     case common::TIMESTAMP:
-                        dret = col->decoder->skip_int64(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<int64_t*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::FLOAT:
-                        dret = col->decoder->skip_float(cb.nonnull_count, sk,
-                                                        col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<float*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::DOUBLE:
-                        dret = col->decoder->skip_double(cb.nonnull_count, sk,
-                                                         col->in);
+                        dret = skip_value_exact_typed(
+                            col->decoder, static_cast<double*>(nullptr),
+                            cb.nonnull_count, col->in);
+                        if (dret == common::E_OK) sk = cb.nonnull_count;
                         break;
                     case common::STRING:
                     case common::TEXT:
@@ -2534,25 +2635,33 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                         }
                         case common::INT32:
                         case common::DATE:
-                            dret = col->decoder->read_batch_int32(
+                            dret = col->decoder->read_exact_int32(
                                 reinterpret_cast<int32_t*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::INT64:
                         case common::TIMESTAMP:
-                            dret = col->decoder->read_batch_int64(
+                            dret = col->decoder->read_exact_int64(
                                 reinterpret_cast<int64_t*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::FLOAT:
-                            dret = col->decoder->read_batch_float(
+                            dret = col->decoder->read_exact_float(
                                 reinterpret_cast<float*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::DOUBLE:
-                            dret = col->decoder->read_batch_double(
+                            dret = col->decoder->read_exact_double(
                                 reinterpret_cast<double*>(cb.val_buf),
-                                cb.nonnull_count, cb.val_count, col->in);
+                                cb.nonnull_count, col->in);
+                            if (dret == common::E_OK)
+                                cb.val_count = cb.nonnull_count;
                             break;
                         case common::STRING:
                         case common::TEXT:
