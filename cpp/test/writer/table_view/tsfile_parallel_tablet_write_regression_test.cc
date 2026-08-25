@@ -354,3 +354,123 @@ TEST_F(ParallelTabletWriteRegressionTest, FlushBetweenBatchesRoundTrip) {
     reader.close();
     delete table_schema;
 }
+
+// ===== Adversarial additions =====
+
+// Small page size (8 points) makes every task seal pages repeatedly on the
+// pool threads and drives the initial_page_points continuation logic hard:
+// rows_per_device=50 crosses 6 page boundaries per column, and the
+// batch-to-batch continuation keeps partial pages live across write_table
+// calls.
+TEST_F(ParallelTabletWriteRegressionTest, TinyPageBoundaryRoundTrip) {
+    const int prev_page_point_num =
+        common::g_config_value_.page_writer_max_point_num_;
+    common::g_config_value_.page_writer_max_point_num_ = 8;
+
+    const int device_num = 4;
+    const int rows_per_device = 50;
+    const int field_col_num = 3;
+    auto table_schema = gen_table_schema(field_col_num);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    const int batches = 3;
+    for (int b = 0; b < batches; b++) {
+        Tablet tablet(table_schema->get_measurement_names(),
+                      table_schema->get_data_types(),
+                      static_cast<uint32_t>(device_num * rows_per_device));
+        gen_tablet(tablet, table_schema, 900000 + b * 100000, device_num,
+                   rows_per_device, field_col_num);
+        ASSERT_EQ(E_OK, writer->write_table(tablet));
+    }
+    ASSERT_EQ(E_OK, writer->flush());
+    ASSERT_EQ(E_OK, writer->close());
+
+    // Verify every batch: rows for batch b carry ts in [base, base+total).
+    TsFileReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+    for (int b = 0; b < batches; b++) {
+        const int64_t base = 900000 + b * 100000;
+        // Per-batch duplicate tracking: row_index is batch-relative.
+        std::vector<char> seen(static_cast<size_t>(device_num) *
+                               rows_per_device);
+        ResultSet* tmp_result_set = nullptr;
+        ASSERT_EQ(E_OK,
+                  reader.query(
+                      "test_table", table_schema->get_measurement_names(), base,
+                      base + device_num * rows_per_device - 1, tmp_result_set));
+        auto* result_set = (TableResultSet*)tmp_result_set;
+        bool has_next = false;
+        while (IS_SUCC(result_set->next(has_next)) && has_next) {
+            const int64_t ts = result_set->get_value<int64_t>("time");
+            const int64_t row_index = ts - base;
+            ASSERT_GE(row_index, 0);
+            ASSERT_LT(row_index,
+                      static_cast<int64_t>(device_num) * rows_per_device);
+            ASSERT_EQ(seen[row_index], 0)
+                << "duplicate row at timestamp " << ts;
+            seen[row_index] = 1;
+            const int device_idx =
+                static_cast<int>(row_index / rows_per_device);
+            char literal[32];
+            snprintf(literal, sizeof(literal), "device_%d", device_idx);
+            common::String* tag = result_set->get_value<common::String*>("id0");
+            ASSERT_NE(tag, nullptr);
+            EXPECT_EQ(0, tag->compare(String(literal, strlen(literal))));
+            for (int c = 0; c < field_col_num; c++) {
+                EXPECT_EQ(
+                    result_set->get_value<int64_t>("s" + std::to_string(c)),
+                    row_index * 100 + c)
+                    << "field s" << c << " corrupted at ts " << ts;
+            }
+        }
+        reader.destroy_query_data_set(result_set);
+    }
+    reader.close();
+    delete table_schema;
+
+    common::g_config_value_.page_writer_max_point_num_ = prev_page_point_num;
+}
+
+// Thread-pool boundary configs: a 1-thread pool serializes the tasks on one
+// worker (worst case for the old same-slot aliasing), and a larger pool
+// runs them concurrently. Both must round-trip every row.
+TEST_F(ParallelTabletWriteRegressionTest, ThreadCountBoundariesRoundTrip) {
+    for (int threads : {1, 8}) {
+        ASSERT_EQ(E_OK, set_thread_count(threads));
+        // set_thread_count rebuilds the global pool; TsFileTableWriter is
+        // constructed per iteration so no writer holds state across the
+        // rebuild.
+        WriteFile write_file;
+        std::string file_name =
+            std::string("tsfile_parallel_write_regression_thr") +
+            std::to_string(threads) + "_" + generate_random_string(8) +
+            ".tsfile";
+        remove(file_name.c_str());
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        write_file.create(file_name, flags, 0666);
+
+        const int device_num = 6;
+        const int rows_per_device = 400;
+        const int field_col_num = 4;
+        auto table_schema = gen_table_schema(field_col_num);
+        auto writer =
+            std::make_shared<TsFileTableWriter>(&write_file, table_schema);
+        Tablet tablet(table_schema->get_measurement_names(),
+                      table_schema->get_data_types(),
+                      static_cast<uint32_t>(device_num * rows_per_device));
+        gen_tablet(tablet, table_schema, 0, device_num, rows_per_device,
+                   field_col_num);
+        ASSERT_EQ(E_OK, writer->write_table(tablet));
+        ASSERT_EQ(E_OK, writer->flush());
+        ASSERT_EQ(E_OK, writer->close());
+        VerifyTableRoundTrip(file_name, table_schema, device_num,
+                             rows_per_device, field_col_num);
+        delete table_schema;
+        ASSERT_EQ(0, remove(file_name.c_str()));
+    }
+    // Restore the default pool size for the rest of the suite.
+    ASSERT_EQ(E_OK, set_thread_count(6));
+}

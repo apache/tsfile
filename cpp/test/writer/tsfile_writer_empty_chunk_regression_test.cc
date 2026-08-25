@@ -527,3 +527,156 @@ TEST_F(EmptyChunkRegressionTest, EmptyColumnMixedAlignedAndNonAligned) {
     EXPECT_EQ(plain_list[0]->get_statistic()->count_, rows);
     reader.close();
 }
+
+// ===== Adversarial additions =====
+
+// The memory-threshold auto-flush is a second entry into flush_chunk_group
+// that the tests above never drive (they all flush explicitly). Shrink
+// chunk_group_size_threshold_ so write_tablet() itself triggers the flush,
+// and verify the empty column is still skipped on that path.
+TEST_F(EmptyChunkRegressionTest, EmptyColumnSkippedOnMemoryAutoFlush) {
+    const int64_t prev_threshold =
+        common::g_config_value_.chunk_group_size_threshold_;
+    const int32_t prev_check_interval =
+        common::g_config_value_.record_count_for_next_mem_check_;
+    // Force the next check to fire after the first tablet and flush almost
+    // immediately (threshold below the smallest realistic meta accounting).
+    common::g_config_value_.record_count_for_next_mem_check_ = 1;
+    common::g_config_value_.chunk_group_size_threshold_ = 1;
+
+    std::string device = "root.dev_empty_autoflush";
+    std::vector<MeasurementSchema> schemas;
+    for (int i = 0; i < 3; i++) {
+        schemas.emplace_back("m" + std::to_string(i), TSDataType::INT32,
+                             TSEncoding::PLAIN, CompressionType::UNCOMPRESSED);
+        ASSERT_EQ(
+            tsfile_writer_->register_timeseries(
+                device, MeasurementSchema("m" + std::to_string(i),
+                                          TSDataType::INT32, TSEncoding::PLAIN,
+                                          CompressionType::UNCOMPRESSED)),
+            E_OK);
+    }
+
+    {
+        const int rows = 5;
+        storage::Tablet tablet(
+            device, std::make_shared<std::vector<MeasurementSchema>>(schemas),
+            rows);
+        for (int r = 0; r < rows; r++) {
+            ASSERT_EQ(tablet.add_timestamp(r, 100 + r), E_OK);
+            ASSERT_EQ(tablet.add_value(r, 0u, static_cast<int32_t>(r)), E_OK);
+            // m1/m2 stay empty for this window.
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    }
+
+    common::g_config_value_.chunk_group_size_threshold_ = prev_threshold;
+    common::g_config_value_.record_count_for_next_mem_check_ =
+        prev_check_interval;
+
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    auto meta = CollectMeasurementMeta(reader, device);
+    ASSERT_EQ(meta.size(), 1u);
+    EXPECT_EQ(meta.count("m0"), 1u);
+    EXPECT_EQ(meta.count("m1"), 0u);
+    EXPECT_EQ(meta.count("m2"), 0u);
+    EXPECT_EQ(meta["m0"]->get_statistic()->count_, 5);
+    reader.close();
+}
+
+// Adversarial counter-check for the hasData() guard: a column with *some*
+// nulls (partial data) must still be sealed — the fix must skip only fully
+// empty columns, not partially-null ones. Uses the null-bitmap fallback
+// path in write_column (row 2 of 4 left null).
+TEST_F(EmptyChunkRegressionTest, PartiallyNullColumnIsStillSealed) {
+    std::string device = "root.dev_partial_null";
+    std::vector<MeasurementSchema> schemas;
+    schemas.emplace_back("p0", TSDataType::INT32, TSEncoding::PLAIN,
+                         CompressionType::UNCOMPRESSED);
+    schemas.emplace_back("p1", TSDataType::INT32, TSEncoding::PLAIN,
+                         CompressionType::UNCOMPRESSED);
+    for (const auto& s : schemas) {
+        ASSERT_EQ(
+            tsfile_writer_->register_timeseries(
+                device, MeasurementSchema(s.measurement_name_,
+                                          TSDataType::INT32, TSEncoding::PLAIN,
+                                          CompressionType::UNCOMPRESSED)),
+            E_OK);
+    }
+
+    const int rows = 4;
+    storage::Tablet tablet(
+        device, std::make_shared<std::vector<MeasurementSchema>>(schemas),
+        rows);
+    for (int r = 0; r < rows; r++) {
+        ASSERT_EQ(tablet.add_timestamp(r, 200 + r), E_OK);
+        ASSERT_EQ(tablet.add_value(r, 0u, static_cast<int32_t>(r)), E_OK);
+        if (r != 2) {  // row 2 stays null in p1 -> null-bitmap fallback path
+            ASSERT_EQ(tablet.add_value(r, 1u, static_cast<int32_t>(r * 3)),
+                      E_OK);
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    auto meta = CollectMeasurementMeta(reader, device);
+    // Both columns sealed; p1 counts its 3 non-null rows.
+    ASSERT_EQ(meta.size(), 2u);
+    ASSERT_NE(meta.count("p1"), 0u)
+        << "hasData() guard must not skip partially-null columns";
+    EXPECT_EQ(meta["p1"]->get_statistic()->count_, rows - 1);
+    EXPECT_EQ(meta["p1"]->get_statistic()->start_time_, 200);
+    EXPECT_EQ(meta["p1"]->get_statistic()->end_time_, 203);
+    reader.close();
+}
+
+// TEXT columns take a different write path (write_string_batch) than the
+// fixed-width columns used above; an empty TEXT column must be skipped too.
+TEST_F(EmptyChunkRegressionTest, EmptyTextColumnNotSealed) {
+    std::string device = "root.dev_empty_text";
+    std::vector<MeasurementSchema> schemas;
+    schemas.emplace_back("t0", TSDataType::TEXT, TSEncoding::PLAIN,
+                         CompressionType::UNCOMPRESSED);
+    schemas.emplace_back("t1", TSDataType::TEXT, TSEncoding::PLAIN,
+                         CompressionType::UNCOMPRESSED);
+    for (const auto& s : schemas) {
+        ASSERT_EQ(
+            tsfile_writer_->register_timeseries(
+                device, MeasurementSchema(s.measurement_name_, TSDataType::TEXT,
+                                          TSEncoding::PLAIN,
+                                          CompressionType::UNCOMPRESSED)),
+            E_OK);
+    }
+
+    const int rows = 3;
+    storage::Tablet tablet(
+        device, std::make_shared<std::vector<MeasurementSchema>>(schemas),
+        rows);
+    char buf[] = "v";
+    String s0(buf, 1);
+    for (int r = 0; r < rows; r++) {
+        ASSERT_EQ(tablet.add_timestamp(r, 300 + r), E_OK);
+        ASSERT_EQ(tablet.add_value(r, 0u, s0), E_OK);
+        // t1 never written.
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    auto meta = CollectMeasurementMeta(reader, device);
+    ASSERT_EQ(meta.size(), 1u);
+    EXPECT_EQ(meta.count("t0"), 1u);
+    EXPECT_EQ(meta.count("t1"), 0u)
+        << "empty TEXT column must not be sealed as a chunk";
+    EXPECT_EQ(meta["t0"]->get_statistic()->count_, rows);
+    reader.close();
+}
