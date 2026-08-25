@@ -315,7 +315,7 @@ def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_pa
         },
     )
 
-    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+    with TsFileDataFrame(str(path), show_progress=False, use_index=True) as tsdf:
         aligned = tsdf.loc[
             0:2,
             [
@@ -358,7 +358,7 @@ def test_dataset_loc_batches_aligned_fields_per_device_then_unions_devices(tmp_p
         "weather.device_a.humidity",
         "weather.device_b.humidity",
     ]
-    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+    with TsFileDataFrame(str(path), show_progress=False, use_index=True) as tsdf:
         aligned = tsdf.loc[0:2, requested]
 
         assert aligned.series_names == requested
@@ -407,7 +407,7 @@ def test_dataset_loc_runs_independent_device_groups_concurrently(tmp_path, monke
         observed_read,
     )
 
-    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+    with TsFileDataFrame(str(path), show_progress=False, use_index=True) as tsdf:
         aligned = tsdf.loc[
             0:1,
             [
@@ -452,7 +452,7 @@ def test_dataset_loc_keeps_small_device_groups_inline(tmp_path, monkeypatch):
         observed_read,
     )
 
-    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+    with TsFileDataFrame(str(path), show_progress=False, use_index=True) as tsdf:
         tsdf.loc[
             0:1,
             [
@@ -1009,7 +1009,7 @@ def test_dataset_close_only_releases_current_handle(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
-    tsdf = TsFileDataFrame(str(path), show_progress=False)
+    tsdf = TsFileDataFrame(str(path), show_progress=False, use_index=True)
     series = tsdf[0]
     tsdf.close()
 
@@ -1026,7 +1026,7 @@ def test_subset_close_releases_only_subset_lease(tmp_path):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
-    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+    with TsFileDataFrame(str(path), show_progress=False, use_index=True) as tsdf:
         subset = tsdf[:1]
         subset.close()
 
@@ -1103,7 +1103,7 @@ def test_dataset_close_waits_for_an_active_public_query(tmp_path, monkeypatch):
         blocked_read,
     )
 
-    dataframe = TsFileDataFrame(str(path), show_progress=False)
+    dataframe = TsFileDataFrame(str(path), show_progress=False, use_index=True)
     query_done = threading.Event()
 
     def run_query():
