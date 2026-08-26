@@ -896,9 +896,9 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     }
     ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
 
-    // Byte layout: [FLAG var_uint][n=129][underflow bitmap (17B)]
-    //              [maxPointNumber 0x02][seg1 header][packed]
-    //              [seg2 header starting with 0x00 — no prefix]
+    // Byte layout: [FLAG var_uint][pageValueCount=140][page-wide
+    // underflow bitmap (18B)][maxPointNumber 0x02][block 1 header][packed]
+    //              [block 2 header starting with 0x00 — no prefix]
     std::vector<uint8_t> b = byte_stream_bytes(out);
     size_t pos = 0;
     uint32_t tag = 0;
@@ -906,7 +906,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     EXPECT_EQ(tag, ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW);
     uint32_t n = 0;
     ASSERT_TRUE(parse_var_uint(b, pos, n));
-    EXPECT_EQ(n, 129u);  // segment 1 value count
+    EXPECT_EQ(n, 140u);  // page-wide bitmap covers every value in the page
     size_t bm_len = static_cast<size_t>(n / 8 + 1);
     ASSERT_LE(pos + bm_len, b.size());
     pos += bm_len;

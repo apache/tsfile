@@ -391,8 +391,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
 
   private static boolean isTs2DiffFloatCase(FixtureCase fixtureCase) {
     return fixtureCase.encoding == TSEncoding.TS_2DIFF
-        && (fixtureCase.dataType == TSDataType.FLOAT
-            || fixtureCase.dataType == TSDataType.DOUBLE);
+        && (fixtureCase.dataType == TSDataType.FLOAT || fixtureCase.dataType == TSDataType.DOUBLE);
   }
 
   // Mirror FloatEncoder/FloatDecoder at the Java writer's maxPointNumber:
@@ -402,8 +401,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (!isTs2DiffFloatCase(fixtureCase)) {
       return floatValue(row);
     }
-    float value =
-        Float.intBitsToFloat(TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
+    float value = Float.intBitsToFloat(TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
     if (Float.isNaN(value)) {
       return Float.intBitsToFloat(0x7fc00000);
     }
@@ -424,9 +422,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (!isTs2DiffFloatCase(fixtureCase)) {
       return doubleValue(row);
     }
-    double value =
-        Double.longBitsToDouble(
-            TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
+    double value = Double.longBitsToDouble(TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
     if (Double.isNaN(value)) {
       return Double.longBitsToDouble(0x7ff8000000000000L);
     }
