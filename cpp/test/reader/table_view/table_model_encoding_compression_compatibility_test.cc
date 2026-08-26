@@ -138,9 +138,10 @@ const uint64_t kDoubleBits[] = {
 // writers can produce:
 //  - plain integers (scaled form; at mpn = 0 every finite in-range value
 //    is scaled, so pages written by the Java builder contain no bitmap)
-//  - 1.5e9f / 1e18: the scaled product overflows while round(v) still
-//    fits -> scale-overflow form, single page-wide bitmap (only reachable
-//    at mpn > 0, i.e. the C++ writer)
+//  - 1.5e9f / 1e18: values above the integer range, stored via the raw
+//    bits form (at mpn = 0 the scale-overflow form cannot occur - the
+//    scaled product equals the value itself, so any overflow is a value
+//    overflow; see the wire-format doc)
 //  - NaN and +/-Infinity (stored as raw IEEE bits -> two page-wide
 //    bitmaps; NaN uses the canonical Java floatToIntBits pattern)
 const uint32_t kTs2DiffFloatBits[] = {
@@ -161,9 +162,10 @@ const uint64_t kTs2DiffDoubleBits[] = {
     UINT64_C(0x3ff0000000000000), UINT64_C(0x0000000000000000),
 };
 
-// maxPointNumber used by the C++ FloatTS2DIFFEncoder/DoubleTS2DIFFEncoder.
-constexpr int kTs2DiffMaxPointNumber = 2;
-constexpr double kTs2DiffMaxPointValue = 100.0;
+// maxPointNumber used by the C++ FloatTS2DIFFEncoder/DoubleTS2DIFFEncoder
+// (aligned with the Java Ts2Diff builder default).
+constexpr int kTs2DiffMaxPointNumber = 0;
+constexpr double kTs2DiffMaxPointValue = 1.0;
 
 const int32_t kDateValues[] = {
     19700101, 19991231, 20000229, 20240229,

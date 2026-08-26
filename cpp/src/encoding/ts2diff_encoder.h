@@ -589,8 +589,8 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
    public:
     FloatTS2DIFFEncoder()
-        : max_point_number_(2),
-          max_point_value_(100.0),
+        : max_point_number_(0),  // Java Ts2Diff builder default
+          max_point_value_(1.0),
           page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(float value, common::ByteStream& out_stream) {
         int32_t value_int = convert_float_to_int(value);
@@ -660,8 +660,8 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
    public:
     DoubleTS2DIFFEncoder()
-        : max_point_number_(2),
-          max_point_value_(100.0),
+        : max_point_number_(0),  // Java Ts2Diff builder default
+          max_point_value_(1.0),
           page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(double value, common::ByteStream& out_stream) {
         int64_t value_long = convert_double_to_long(value);

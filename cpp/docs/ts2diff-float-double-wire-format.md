@@ -105,9 +105,15 @@ blocks of 129, 129, 42.
 
 Java `TSEncodingBuilder.Ts2Diff` hard-codes `maxPointNumber = 0` for
 FLOAT/DOUBLE (it does not read `max_point_number` props). Pages produced by
-Java therefore start with `0x00`. The value stored in the stream is
-self-describing, so writers using other `maxPointNumber` values remain
-readable, but byte-level fixture parity with Java requires `mpn = 0`.
+Java therefore start with `0x00`, and the C++ `FloatTS2DIFFEncoder` /
+`DoubleTS2DIFFEncoder` use the same default. The value stored in the
+stream is self-describing, so files written by other `maxPointNumber`
+values remain readable.
+
+Note that at `mpn = 0` the scale-overflow form (Form 2) cannot occur: the
+scaled product equals the value itself, so any overflow is a value
+overflow and takes the raw-bits path (Form 3). Form 2 pages can therefore
+only originate from writers configured with `mpn > 0`.
 
 ## Decoder State Machine
 
