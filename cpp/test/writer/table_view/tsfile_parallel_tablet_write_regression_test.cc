@@ -16,15 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-// Regression tests for PR #909 / issue #908 bug 2: the parallel aligned
-// tablet write path in TsFileWriter::write_table() submits per-device /
-// per-column tasks to the global thread pool. The task lambdas used to
-// capture the loop variables (ctx / vt) by reference; since the pool runs
-// the tasks asynchronously after the submission loop advanced or exited,
-// every task could read the same or out-of-scope state (use-after-scope).
-// The fix captures the per-iteration addresses by value. These tests drive
-// the parallel path (multiple devices x multiple value columns x enough
-// rows to cross page boundaries) and verify every row survives round-trip.
+// Coverage for the parallel aligned tablet write path in
+// TsFileWriter::write_table(), which submits per-device / per-column tasks
+// to the global thread pool. The task lambdas now capture the per-iteration
+// state (ctx / vt) by pointer value rather than by reference. The by-value
+// form is defensive: in the current code shape the vectors backing those
+// references outlive all future.get() calls, so the old by-reference
+// captures were lifetime-safe — but they silently relied on the submission
+// loop's scope and would dangle under a refactor (e.g. moving the get()
+// loop out of that scope). These tests pin the behavior of the parallel
+// path (multiple devices x multiple value columns x enough rows to cross
+// page boundaries) and verify every row survives the round-trip.
 #include <gtest/gtest.h>
 
 #ifdef _WIN32
@@ -195,10 +197,9 @@ void VerifyTableRoundTrip(const std::string& file_name,
 
 }  // namespace
 
-// Core regression for the dangling-reference capture: enough devices and
-// columns that the submission loop enqueues many tasks whose loop variables
-// would alias (the old [&ctx] / [&vt] captures), plus enough rows to cross
-// the 10000-point page boundary so page sealing also runs per task.
+// Enough devices and columns that the submission loop enqueues many tasks
+// over distinct ctx / vt entries, plus enough rows to cross the
+// 10000-point page boundary so page sealing also runs per task.
 TEST_F(ParallelTabletWriteRegressionTest, MultiDeviceMultiColumnRoundTrip) {
     const int device_num = 8;
     const int rows_per_device = 1500;  // > page_writer_max_point_num_ (10000/8)
@@ -220,8 +221,8 @@ TEST_F(ParallelTabletWriteRegressionTest, MultiDeviceMultiColumnRoundTrip) {
 }
 
 // Single device, many columns: the per-column ValueTask loop is the inner
-// one whose [&vt] capture dangled; with enough columns the tasks are queued
-// well past the loop's lifetime.
+// submission loop; with enough columns the queued tasks span many vt
+// entries.
 TEST_F(ParallelTabletWriteRegressionTest, SingleDeviceManyColumnsRoundTrip) {
     const int device_num = 1;
     const int rows_per_device = 12000;  // crosses one page boundary
@@ -243,9 +244,8 @@ TEST_F(ParallelTabletWriteRegressionTest, SingleDeviceManyColumnsRoundTrip) {
 }
 
 // Many devices but few rows each: maximizes the number of DeviceWriteCtx
-// entries whose vector reallocation would move the captured ctx references
-// while queued tasks still hold them (the classic dangling scenario the fix
-// addresses — device_ctxs grows via push_back as the loop progresses).
+// entries (device_ctxs grows via push_back as the loop progresses), the
+// shape most sensitive to how task state is captured.
 TEST_F(ParallelTabletWriteRegressionTest, ManyDevicesVectorReallocation) {
     const int device_num = 64;
     const int rows_per_device = 50;
@@ -267,9 +267,8 @@ TEST_F(ParallelTabletWriteRegressionTest, ManyDevicesVectorReallocation) {
 }
 
 // Repeated write_table() calls on the same writer: each call builds a fresh
-// device_ctxs vector on the stack, so previously-submitted tasks referencing
-// the destroyed vector are exactly the use-after-scope hazard. Several
-// sequential batches must all survive.
+// device_ctxs vector on the stack. Several sequential batches must all
+// survive the round-trip.
 TEST_F(ParallelTabletWriteRegressionTest, SequentialBatchesRoundTrip) {
     const int device_num = 4;
     const int rows_per_device = 300;
@@ -313,9 +312,8 @@ TEST_F(ParallelTabletWriteRegressionTest, SequentialBatchesRoundTrip) {
 
 // Interleaved flushes between batches: the parallel path runs while earlier
 // chunk groups are already sealed, and the value writers reused across
-// batches carry non-zero initial_page_points (partial pages). The dangling
-// capture could make tasks read the wrong ctx.initial_page_points and
-// mis-align page boundaries; the round-trip check catches that.
+// batches carry non-zero initial_page_points (partial pages). The
+// round-trip check catches any mis-aligned page boundaries.
 TEST_F(ParallelTabletWriteRegressionTest, FlushBetweenBatchesRoundTrip) {
     const int device_num = 3;
     const int rows_per_device = 800;
@@ -423,6 +421,14 @@ TEST_F(ParallelTabletWriteRegressionTest, TinyPageBoundaryRoundTrip) {
                     << "field s" << c << " corrupted at ts " << ts;
             }
         }
+        // Completeness: every row of this batch must have been returned —
+        // a dropped row on the page-boundary path must fail the test, not
+        // just go unnoticed (see review on PR #909).
+        for (size_t i = 0; i < seen.size(); i++) {
+            EXPECT_EQ(seen[i], 1)
+                << "row " << i << " of batch " << b
+                << " missing from query results (base ts " << base << ")";
+        }
         reader.destroy_query_data_set(result_set);
     }
     reader.close();
@@ -432,8 +438,8 @@ TEST_F(ParallelTabletWriteRegressionTest, TinyPageBoundaryRoundTrip) {
 }
 
 // Thread-pool boundary configs: a 1-thread pool serializes the tasks on one
-// worker (worst case for the old same-slot aliasing), and a larger pool
-// runs them concurrently. Both must round-trip every row.
+// worker, and a larger pool runs them concurrently. Both must round-trip
+// every row.
 TEST_F(ParallelTabletWriteRegressionTest, ThreadCountBoundariesRoundTrip) {
     for (int threads : {1, 8}) {
         ASSERT_EQ(E_OK, set_thread_count(threads));

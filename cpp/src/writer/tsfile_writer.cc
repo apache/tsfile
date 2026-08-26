@@ -1351,10 +1351,11 @@ int TsFileWriter::write_table(Tablet& tablet) {
             common::g_thread_pool_ != nullptr) {
             std::vector<std::future<int>> futures;
             for (auto& ctx : device_ctxs) {
-                // Capture pointers by value: the submitted tasks run on pool
-                // threads asynchronously (after this loop returns), so
-                // capturing the loop variables by reference would dangle
-                // (all tasks would read the same/out-of-scope ctx).
+                // Capture the per-iteration state by pointer value. The
+                // references stay valid today (device_ctxs outlives all
+                // future.get() calls below), but the by-value form doesn't
+                // rely on that lifetime coincidence and stays safe if the
+                // get() loop is ever moved out of this scope.
                 auto* ctx_ptr = &ctx;
                 futures.push_back(common::g_thread_pool_->submit(
                     [&write_time_segments, ctx_ptr]() {
