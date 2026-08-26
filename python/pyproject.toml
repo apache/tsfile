@@ -21,7 +21,9 @@ requires = [
     "setuptools>=69",
     "wheel", 
     "Cython>=3", 
-    "numpy>=1.26.4,<3"
+    "numpy>=1.26.4; python_version<'3.13'",
+    "numpy>=2.1.0; python_version>='3.13' and python_version<'3.14'",
+    "numpy>=2.3.2; python_version>='3.14'"
     ]
 
 build-backend = "setuptools.build_meta"
@@ -36,9 +38,13 @@ maintainers = [
     {name = "Apache TsFile Developers", email = "dev@tsfile.apache.org"}
 ]
 dependencies = [
-    "numpy>=1.26.4,<3",
-    "pandas>=2.0,<2.3; python_version < '3.13'",
-    "pandas>=2.3.3; python_version >= '3.13'",
+    "numpy>=1.26.4; python_version<'3.13'",
+    "numpy>=2.1.0; python_version>='3.13' and python_version<'3.14'",
+    "numpy>=2.3.2; python_version>='3.14'",
+    "pandas>=2.0.0; python_version<'3.12'",
+    "pandas>=2.1.1; python_version>='3.12' and python_version<'3.13'",
+    "pandas>=2.2.3; python_version>='3.13' and python_version<'3.14'",
+    "pandas>=2.3.3; python_version>='3.14'",
     "pyarrow>=16.0; python_version<'3.13'",
     "pyarrow>=18.0; python_version>='3.13' and python_version<'3.14'",
     "pyarrow>=22.0; python_version>='3.14'"
