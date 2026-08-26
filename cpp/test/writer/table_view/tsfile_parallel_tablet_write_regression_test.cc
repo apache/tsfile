@@ -19,12 +19,13 @@
 // Coverage for the parallel aligned tablet write path in
 // TsFileWriter::write_table(), which submits per-device / per-column tasks
 // to the global thread pool. The task lambdas now capture the per-iteration
-// state (ctx / vt) by pointer value rather than by reference. The by-value
-// form is defensive: in the current code shape the vectors backing those
-// references outlive all future.get() calls, so the old by-reference
-// captures were lifetime-safe — but they silently relied on the submission
-// loop's scope and would dangle under a refactor (e.g. moving the get()
-// loop out of that scope). These tests pin the behavior of the parallel
+// state (ctx / vt) by pointer value rather than by reference. The two forms
+// are equivalent in lifetime — each by-reference capture referred to its own
+// vector element (not a shared loop slot), and the vectors outlive all
+// future.get() calls, so the old captures were lifetime-safe — and the
+// by-value form merely makes the per-task address explicit. Task-owned
+// lifetime would require copying the task inputs. These tests pin the
+// behavior of the parallel
 // path (multiple devices x multiple value columns x enough rows to cross
 // page boundaries) and verify every row survives the round-trip.
 #include <gtest/gtest.h>
