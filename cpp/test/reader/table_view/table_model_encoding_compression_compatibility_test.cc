@@ -21,6 +21,7 @@
 
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -65,7 +66,10 @@ const char* const kTableName = "compat_table";
 const char* const kTagColumn = "device";
 const char* const kValueColumn = "value";
 const char* const kTagValue = "compat_device";
-constexpr int kRowCount = 32;
+// Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
+// page-wide bitmaps must survive block transitions. Applied to every
+// case, per review feedback on apache/tsfile#901.
+constexpr int kRowCount = 300;
 
 const int32_t kIntValues[] = {
     0,
@@ -122,6 +126,44 @@ const uint64_t kDoubleBits[] = {
     UINT64_C(0x0000000000000000), UINT64_C(0x8000000000000000),
     UINT64_C(0x405edd2f1a9fbe77), UINT64_C(0xc05edd2f1a9fbe77),
 };
+
+// FLOAT/DOUBLE + TS_2DIFF converts values to fixed-point with
+// maxPointNumber (10^mpn). The expected value is computed by applying the
+// same tri-state conversion the writer performs and then decoding it back,
+// so expectations reflect the encoding rules rather than the raw input
+// bits. Every chosen value has the same expected value whether the writer
+// used maxPointNumber 0 (the Java Ts2Diff builder default) or 2 (the
+// historical C++ default), so the validating reader never needs to know
+// which writer produced the file. The values cover all page layouts the
+// writers can produce:
+//  - plain integers (scaled form; at mpn = 0 every finite in-range value
+//    is scaled, so pages written by the Java builder contain no bitmap)
+//  - 1.5e9f / 1e18: the scaled product overflows while round(v) still
+//    fits -> scale-overflow form, single page-wide bitmap (only reachable
+//    at mpn > 0, i.e. the C++ writer)
+//  - NaN and +/-Infinity (stored as raw IEEE bits -> two page-wide
+//    bitmaps; NaN uses the canonical Java floatToIntBits pattern)
+const uint32_t kTs2DiffFloatBits[] = {
+    0x00000000U, 0x3f800000U, 0xbf800000U, 0x461c4000U,
+    0xc61c4000U, 0x4eb2d05eU, 0x7f800000U, 0xff800000U,
+    0x7fc00000U, 0x3f800000U, 0x00000000U, 0x4a742400U,
+    0xca742400U, 0x4e6e6b28U, 0x3f800000U, 0x00000000U,
+};
+
+const uint64_t kTs2DiffDoubleBits[] = {
+    UINT64_C(0x0000000000000000), UINT64_C(0x3ff0000000000000),
+    UINT64_C(0xbff0000000000000), UINT64_C(0x40c3880000000000),
+    UINT64_C(0xc0c3880000000000), UINT64_C(0x43abc16d674ec800),
+    UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
+    UINT64_C(0x7ff8000000000000), UINT64_C(0x3ff0000000000000),
+    UINT64_C(0x0000000000000000), UINT64_C(0x41f0000000000000),
+    UINT64_C(0xc1cd6f3458800000), UINT64_C(0x430c6bf526340000),
+    UINT64_C(0x3ff0000000000000), UINT64_C(0x0000000000000000),
+};
+
+// maxPointNumber used by the C++ FloatTS2DIFFEncoder/DoubleTS2DIFFEncoder.
+constexpr int kTs2DiffMaxPointNumber = 2;
+constexpr double kTs2DiffMaxPointValue = 100.0;
 
 const int32_t kDateValues[] = {
     19700101, 19991231, 20000229, 20240229,
@@ -292,9 +334,23 @@ uint32_t FloatBits(float value) {
     return bits;
 }
 
+float BitsToFloat(uint32_t bits) {
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 float FloatValue(int row) {
     uint32_t bits =
         kFloatBits[row % (sizeof(kFloatBits) / sizeof(kFloatBits[0]))];
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+float Ts2DiffFloatValue(int row) {
+    uint32_t bits = kTs2DiffFloatBits[row % (sizeof(kTs2DiffFloatBits) /
+                                             sizeof(kTs2DiffFloatBits[0]))];
     float value;
     std::memcpy(&value, &bits, sizeof(value));
     return value;
@@ -306,12 +362,88 @@ uint64_t DoubleBits(double value) {
     return bits;
 }
 
+double BitsToDouble(uint64_t bits) {
+    double value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 double DoubleValue(int row) {
     uint64_t bits =
         kDoubleBits[row % (sizeof(kDoubleBits) / sizeof(kDoubleBits[0]))];
     double value;
     std::memcpy(&value, &bits, sizeof(value));
     return value;
+}
+
+double Ts2DiffDoubleValue(int row) {
+    uint64_t bits = kTs2DiffDoubleBits[row % (sizeof(kTs2DiffDoubleBits) /
+                                              sizeof(kTs2DiffDoubleBits[0]))];
+    double value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+bool IsTs2DiffFloatCase(const FixtureCase& fixture_case) {
+    return fixture_case.encoding == TS_2DIFF &&
+           (fixture_case.data_type == FLOAT ||
+            fixture_case.data_type == DOUBLE);
+}
+
+float ExpectedFloatValue(const FixtureCase& fixture_case, int row) {
+    if (!IsTs2DiffFloatCase(fixture_case)) {
+        return FloatValue(row);
+    }
+    float value = Ts2DiffFloatValue(row);
+    if (std::isnan(value)) {
+        // Java FloatEncoder normalizes any NaN to the canonical pattern
+        // via floatToIntBits.
+        return BitsToFloat(0x7fc00000U);
+    }
+    // Mirror FloatTS2DIFFEncoder::convert_float_to_int at mpn = 2, then
+    // FloatDecoder::readFloat: scaled -> stored / 100, scale-overflow ->
+    // stored / 1, raw bits -> intBitsToFloat.
+    const double mpv = kTs2DiffMaxPointValue;
+    const double scaled = static_cast<double>(value) * mpv;
+    const bool scaled_overflow =
+        scaled > static_cast<double>(std::numeric_limits<int32_t>::max()) ||
+        scaled < static_cast<double>(std::numeric_limits<int32_t>::min());
+    if (scaled_overflow) {
+        const bool value_overflows =
+            value > static_cast<float>(std::numeric_limits<int32_t>::max()) ||
+            value < static_cast<float>(std::numeric_limits<int32_t>::min());
+        if (value_overflows) {
+            // Raw IEEE bits, restored losslessly (infinite values here).
+            return value;
+        }
+        return static_cast<float>(std::lround(value)) / 1.0f;
+    }
+    return static_cast<float>(std::lround(scaled) / mpv);
+}
+
+double ExpectedDoubleValue(const FixtureCase& fixture_case, int row) {
+    if (!IsTs2DiffFloatCase(fixture_case)) {
+        return DoubleValue(row);
+    }
+    double value = Ts2DiffDoubleValue(row);
+    if (std::isnan(value)) {
+        return BitsToDouble(UINT64_C(0x7ff8000000000000));
+    }
+    const double mpv = kTs2DiffMaxPointValue;
+    const double scaled = value * mpv;
+    const bool scaled_overflow =
+        scaled > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+        scaled < static_cast<double>(std::numeric_limits<int64_t>::min());
+    if (scaled_overflow) {
+        const bool value_overflows =
+            value > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+            value < static_cast<double>(std::numeric_limits<int64_t>::min());
+        if (value_overflows) {
+            return value;
+        }
+        return static_cast<double>(std::llround(value)) / 1.0;
+    }
+    return std::llround(scaled) / mpv;
 }
 
 int32_t DateValue(int row) {
@@ -326,6 +458,12 @@ std::vector<FixtureCase> BuildMatrix() {
         for (TSDataType data_type : data_types) {
             cases.emplace_back(data_type, CHIMP, compression, kRowCount);
             cases.emplace_back(data_type, RLBE, compression, kRowCount);
+            if (data_type == FLOAT || data_type == DOUBLE) {
+                // The value set exercises scaled, scale-overflow, and
+                // raw-bit forms, including the page-wide bitmaps across
+                // the 129-value TS_2DIFF block boundary.
+                cases.emplace_back(data_type, TS_2DIFF, compression, kRowCount);
+            }
         }
         cases.emplace_back(DOUBLE, CAMEL, compression, kRowCount);
     }
@@ -346,8 +484,8 @@ TableSchema* CreateTableSchema(const FixtureCase& fixture_case) {
                            column_categories);
 }
 
-void AddValue(Tablet& tablet, TSDataType data_type, int row) {
-    switch (data_type) {
+void AddValue(Tablet& tablet, const FixtureCase& fixture_case, int row) {
+    switch (fixture_case.data_type) {
         case INT32:
             ASSERT_EQ(E_OK, tablet.add_value(row, kValueColumn, IntValue(row)));
             break;
@@ -362,15 +500,17 @@ void AddValue(Tablet& tablet, TSDataType data_type, int row) {
             break;
         case FLOAT:
             ASSERT_EQ(E_OK,
-                      tablet.add_value(row, kValueColumn, FloatValue(row)));
+                      tablet.add_value(row, kValueColumn,
+                                       ExpectedFloatValue(fixture_case, row)));
             break;
         case DOUBLE:
             ASSERT_EQ(E_OK,
-                      tablet.add_value(row, kValueColumn, DoubleValue(row)));
+                      tablet.add_value(row, kValueColumn,
+                                       ExpectedDoubleValue(fixture_case, row)));
             break;
         default:
             FAIL() << "Unsupported data type: "
-                   << get_data_type_name(data_type);
+                   << get_data_type_name(fixture_case.data_type);
     }
 }
 
@@ -383,7 +523,7 @@ Tablet CreateTablet(TableSchema* table_schema,
     for (int row = 0; row < fixture_case.row_count; ++row) {
         EXPECT_EQ(E_OK, tablet.add_timestamp(row, row));
         EXPECT_EQ(E_OK, tablet.add_value(row, kTagColumn, kTagValue));
-        AddValue(tablet, fixture_case.data_type, row);
+        AddValue(tablet, fixture_case, row);
     }
     return tablet;
 }
@@ -453,11 +593,11 @@ void AssertValue(const FixtureCase& fixture_case, int row,
             ASSERT_EQ(LongValue(row), result_set->get_value<int64_t>(3));
             break;
         case FLOAT:
-            ASSERT_EQ(FloatBits(FloatValue(row)),
+            ASSERT_EQ(FloatBits(ExpectedFloatValue(fixture_case, row)),
                       FloatBits(result_set->get_value<float>(3)));
             break;
         case DOUBLE:
-            ASSERT_EQ(DoubleBits(DoubleValue(row)),
+            ASSERT_EQ(DoubleBits(ExpectedDoubleValue(fixture_case, row)),
                       DoubleBits(result_set->get_value<double>(3)));
             break;
         default:
