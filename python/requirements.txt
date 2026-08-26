@@ -25,4 +25,6 @@ pandas==2.2.2; python_version < "3.13"
 pandas>=2.3.3; python_version >= "3.13"
 setuptools==78.1.1
 wheel==0.46.2
-pyarrow>=8.0.0
+pyarrow>=16.0; python_version < "3.13"
+pyarrow>=18.0; python_version >= "3.13" and python_version < "3.14"
+pyarrow>=22.0; python_version >= "3.14"
