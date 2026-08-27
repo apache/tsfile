@@ -160,7 +160,7 @@ int ReadFile::check_file_magic() {
 
         char version = 0;
         if (RET_FAIL(read(MAGIC_STRING_TSFILE_LEN, &version, 1, read_len))) {
-        } else if (read_len != 1 || version != VERSION_NUM_BYTE) {
+        } else if (read_len != 1) {
             ret = E_TSFILE_CORRUPTED;
         } else {
             file_version_ = static_cast<unsigned char>(version);

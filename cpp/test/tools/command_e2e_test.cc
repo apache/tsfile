@@ -506,19 +506,21 @@ TEST(CliE2E, MetaReportsFileSummary) {
     EXPECT_NE(out.str().find(",4,table\n"), std::string::npos) << out.str();
 }
 
-TEST(CliE2E, MetaRejectsUnsupportedFileHeaderVersion) {
-    Fixture f;
+TEST(CliE2E, MetaReportsFileHeaderVersionWithoutConstrainingReader) {
+    SparseTreeFixture f;
     std::fstream file(f.path.c_str(),
                       std::ios::in | std::ios::out | std::ios::binary);
     ASSERT_TRUE(file.good());
     file.seekp(storage::MAGIC_STRING_TSFILE_LEN);
-    file.put(static_cast<char>(storage::VERSION_NUM_BYTE + 1));
+    file.put(static_cast<char>(3));
     file.close();
 
     std::ostringstream out;
     std::ostringstream err;
-    EXPECT_EQ(tsfile_cli::run_cli({"meta", "-f", "csv", f.path}, out, err), 2);
-    EXPECT_TRUE(out.str().empty());
+    EXPECT_EQ(tsfile_cli::run_cli({"meta", "-f", "csv", f.path}, out, err), 0)
+        << err.str();
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find(",3,tree\n"), std::string::npos) << out.str();
 }
 
 TEST(CliE2E, CountReportsColumnCountsWithoutSummaryRows) {

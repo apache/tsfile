@@ -616,7 +616,7 @@ TEST(CliRequirements, WriteTargetFailuresAreRuntimeErrors) {
     std::string csv =
         tsfile_cli_test::unique_temp_path("tsfile_cli_target", ".csv");
     {
-        std::ofstream o(csv.c_str());
+        std::ofstream o(csv.c_str(), std::ios::binary);
         o << "time,s1\n0,1\n";
     }
 

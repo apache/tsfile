@@ -324,8 +324,8 @@ FileSummary collect_file_summary(const ParsedArgs& args,
 
     storage::DeviceTimeseriesMetadataMap metadata =
         reader.get_timeseries_metadata();
-    long long min_start = std::numeric_limits<long long>::max();
-    long long max_end = std::numeric_limits<long long>::min();
+    int64_t min_start = std::numeric_limits<int64_t>::max();
+    int64_t max_end = std::numeric_limits<int64_t>::min();
     for (const auto& device : metadata) {
         for (const auto& series : device.second) {
             if (!series) {

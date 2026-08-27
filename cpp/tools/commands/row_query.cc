@@ -37,6 +37,22 @@
 namespace tsfile_cli {
 namespace {
 
+class CliFullMatchTagRegExp : public storage::TagFilter {
+   public:
+    CliFullMatchTagRegExp(int col_idx, const std::string& pattern)
+        : storage::TagFilter(col_idx, pattern), pattern_(pattern) {}
+
+    bool satisfyRow(std::vector<std::string*> segments) const override {
+        if (col_idx_ >= segments.size() || segments[col_idx_] == nullptr) {
+            return false;
+        }
+        return std::regex_match(*segments[col_idx_], pattern_);
+    }
+
+   private:
+    std::regex pattern_;
+};
+
 bool can_push_down_row_window(const ParsedArgs& args, long long offset,
                               long long limit) {
     return !args.has_start && !args.has_end && offset == 0 &&
@@ -168,7 +184,13 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
                         << spec.column << "'\n";
                     return std::unique_ptr<storage::Filter>();
                 }
-                filter = builder.reg_exp(spec.column, spec.value);
+                {
+                    int tag_order = schema->find_id_column_order(spec.column);
+                    if (tag_order >= 0) {
+                        filter = new CliFullMatchTagRegExp(tag_order + 1,
+                                                          spec.value);
+                    }
+                }
                 break;
             case ParsedArgs::TagFilterOp::kIsNull:
                 filter = builder.is_null(spec.column);
