@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import contextlib
+import hashlib
 import mmap
 import os
 import struct
@@ -43,7 +44,8 @@ HEADER_SIZE = 64
 DIRECTORY_ENTRY_SIZE = 32
 SECTION_COUNT = 13
 ALIGNMENT = 64
-INDEX_FILE_NAME = ".tsfile_dataframe_index.tsidx"
+INDEX_FILE_PREFIX = ".tsfile_dataframe_index"
+INDEX_FILE_SUFFIX = ".tsidx"
 
 STRING_OFFSETS = 1
 STRING_BYTES = 2
@@ -460,10 +462,18 @@ class MappedDatasetIndex:
 
 
 def index_path_for(paths: Sequence[str]) -> str:
-    common = os.path.commonpath([os.path.abspath(path) for path in paths])
+    canonical_paths = sorted(os.path.abspath(path) for path in paths)
+    common = os.path.commonpath(canonical_paths)
     if not os.path.isdir(common):
         common = os.path.dirname(common)
-    return os.path.join(common, INDEX_FILE_NAME)
+    digest = hashlib.sha256()
+    for path in canonical_paths:
+        digest.update(path.encode("utf-8"))
+        digest.update(b"\0")
+    return os.path.join(
+        common,
+        f"{INDEX_FILE_PREFIX}.{digest.hexdigest()[:32]}{INDEX_FILE_SUFFIX}",
+    )
 
 
 def index_matches_paths(path: str, paths: Sequence[str]) -> bool:
