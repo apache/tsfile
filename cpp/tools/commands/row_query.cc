@@ -73,14 +73,14 @@ int resolve_table_fields(const ParsedArgs& args,
     auto measurements = schema->get_measurement_schemas();
     auto categories = schema->get_column_categories();
     for (size_t i = 0; i < measurements.size(); ++i) {
-        if (measurements[i] && i < categories.size() &&
+        if (i < categories.size() && measurements[i] &&
             categories[i] == common::ColumnCategory::TAG) {
             fields.push_back(measurements[i]->measurement_name_);
         }
     }
     if (args.measurements.empty()) {
         for (size_t i = 0; i < measurements.size(); ++i) {
-            if (measurements[i] && i < categories.size() &&
+            if (i < categories.size() && measurements[i] &&
                 categories[i] == common::ColumnCategory::FIELD) {
                 fields.push_back(measurements[i]->measurement_name_);
             }
