@@ -38,6 +38,7 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
 #include "common/global.h"
 #include "common/logger/elog.h"
 #include "common/tsfile_common.h"
+#include "file/utf8_file_open.h"
 #include "utils/injection.h"
 #include "utils/util_define.h"  // ssize_t and other platform-compat shims
 
@@ -172,7 +173,7 @@ int ReadFile::open(const std::string& file_path) {
         return E_INVALID_PATH;
     }
 #endif
-    fd_ = ::open(file_path_.c_str(), flags);
+    fd_ = file_internal::open_utf8(file_path_, flags);
     if (fd_ < 0) {
         return E_FILE_OPEN_ERR;
     }

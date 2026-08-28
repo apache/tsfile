@@ -26,6 +26,7 @@
 #include "common/tsfile_common.h"
 #include "file/read_file.h"
 #include "file/restorable_tsfile_io_writer.h"
+#include "file/utf8_file_open.h"
 #include "file/write_file.h"
 
 #ifdef _WIN32
@@ -199,3 +200,26 @@ TEST_F(Utf8PathTest, RestorableWriterSelfChecksUtf8Path) {
     EXPECT_FALSE(writer.can_write());
     writer.close();
 }
+
+#ifdef _WIN32
+// Rejection paths of the conversion helper. These are Windows-only: the POSIX
+// branch hands the bytes to ::open() unchanged, where a path holding a NUL
+// would silently be truncated at it rather than rejected.
+TEST_F(Utf8PathTest, OpenUtf8RejectsInvalidPaths) {
+    errno = 0;
+    EXPECT_EQ(storage::file_internal::open_utf8("", O_RDONLY), -1);
+    EXPECT_EQ(errno, ENOENT);
+
+    std::string embedded_nul("a\0b.tsfile", 10);
+    errno = 0;
+    EXPECT_EQ(storage::file_internal::open_utf8(embedded_nul, O_RDONLY), -1);
+    EXPECT_EQ(errno, EINVAL);
+
+    // 0xFF 0xFE is not a valid UTF-8 sequence, so the conversion must fail
+    // rather than fall back to a lossy interpretation.
+    errno = 0;
+    EXPECT_EQ(
+        storage::file_internal::open_utf8("\xFF\xFE_bad.tsfile", O_RDONLY), -1);
+    EXPECT_EQ(errno, EINVAL);
+}
+#endif
