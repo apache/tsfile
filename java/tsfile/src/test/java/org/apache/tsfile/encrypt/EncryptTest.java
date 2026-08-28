@@ -107,6 +107,11 @@ public class EncryptTest {
     assertThrows(EncryptException.class, () -> EncryptUtils.getSecondKeyFromStr(oversizedKey));
   }
 
+  @Test
+  public void GetSecondKeyFromStrRejectsNullKey() {
+    assertThrows(EncryptException.class, () -> EncryptUtils.getSecondKeyFromStr(null));
+  }
+
   public static class NonEncryptClass {
     private static boolean constructorCalled;
 

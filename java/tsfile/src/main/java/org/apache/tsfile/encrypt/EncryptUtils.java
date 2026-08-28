@@ -343,7 +343,10 @@ public class EncryptUtils {
   }
 
   public static byte[] getSecondKeyFromStr(String str) {
-    validateSecondKeyStringLength(str == null ? -1 : str.length());
+    if (str == null) {
+      throw new EncryptException(Messages.get("error.encrypt.key_null"));
+    }
+    validateSecondKeyStringLength(str.length());
     String[] strArray = str.split(",", MAX_SECOND_KEY_LENGTH + 1);
     if (strArray.length > MAX_SECOND_KEY_LENGTH) {
       throw new EncryptException(
