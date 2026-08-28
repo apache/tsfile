@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.compatibility;
 
+import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -49,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -150,17 +152,17 @@ public class TableModelEncodingCompressionCompatibilityTest {
   // same tri-state conversion the writer performs and then decoding it back,
   // so expectations reflect the encoding rules rather than the raw input
   // bits. Every chosen value has the same expected value whether the writer
-  // used maxPointNumber 0 (the Java Ts2Diff builder default) or 2 (the
-  // historical C++ default), so the validating reader never needs to know
-  // which writer produced the file. The values cover all page layouts the
-  // writers can produce:
+  // used maxPointNumber 0 (explicit max_point_number property) or 2 (the
+  // TSFileConfig.floatPrecision default shared with the C++ writer), so the
+  // validating reader never needs to know which writer produced the file.
+  // The values cover all page layouts the writers can produce:
   //  - plain integers (scaled form; at mpn = 0 every finite in-range value
-  //    is scaled, so pages written by the Java builder contain no bitmap)
+  //    is scaled, so pages written at mpn = 0 contain no bitmap)
   //  - 1.5e9f / 1e18: the scaled product overflows while round(v) still
-  //    fits -> scale-overflow form, single page-wide bitmap (only reachable
-  //    at mpn > 0, i.e. the C++ writer)
+  //    fits -> scale-overflow form, single page-wide bitmap (reachable only
+  //    at mpn > 0, i.e. the default writer configuration)
   //  - NaN and +/-Infinity (stored as raw IEEE bits -> two page-wide
-  //    bitmaps; NaN uses the canonical Java floatToIntBits pattern)
+  //    bitmaps; Java floatToIntBits canonicalizes NaN)
   private static final int[] TS_2DIFF_FLOAT_BITS = {
     0x00000000, 0x3f800000, 0xbf800000, 0x461c4000, 0xc61c4000, 0x4eb2d05e,
     0x7f800000, 0xff800000, 0x7fc00000, 0x3f800000, 0x00000000, 0x4a742400,
@@ -176,8 +178,10 @@ public class TableModelEncodingCompressionCompatibilityTest {
     0x0000000000000000L
   };
 
-  // maxPointNumber used by the Java Ts2Diff TSEncodingBuilder.
-  private static final int TS_2DIFF_MAX_POINT_NUMBER = 0;
+  // maxPointNumber used by the standard Java schema write path
+  // (TSEncodingBuilder.Ts2Diff initFromProps -> TSFileConfig.floatPrecision,
+  // current default 2); the C++ FloatTS2DIFFEncoder default matches.
+  private static final int TS_2DIFF_MAX_POINT_NUMBER = 2;
   private static final double TS_2DIFF_MAX_POINT_VALUE =
       TS_2DIFF_MAX_POINT_NUMBER <= 0 ? 1.0 : Math.pow(10, TS_2DIFF_MAX_POINT_NUMBER);
 
@@ -240,6 +244,19 @@ public class TableModelEncodingCompressionCompatibilityTest {
           // forms, including the page-wide bitmaps across the 129-value
           // TS_2DIFF block boundary.
           cases.add(new FixtureCase(dataType, TSEncoding.TS_2DIFF, compression, ROW_COUNT));
+          // Explicit max_point_number=0 fixture: a canonical page starting
+          // with the 0x00 maxPointNumber byte must enter the Form 1
+          // parsing path (apache/tsfile#901 review).
+          cases.add(
+              new FixtureCase(
+                  FixtureCase.fileName(dataType, TSEncoding.TS_2DIFF, compression) + ".mpn0",
+                  TABLE_NAME,
+                  TAG_COLUMN,
+                  VALUE_COLUMN,
+                  dataType,
+                  TSEncoding.TS_2DIFF,
+                  compression,
+                  ROW_COUNT));
         }
       }
       cases.add(new FixtureCase(TSDataType.DOUBLE, TSEncoding.CAMEL, compression, ROW_COUNT));
@@ -288,6 +305,10 @@ public class TableModelEncodingCompressionCompatibilityTest {
   }
 
   private static TableSchema tableSchema(FixtureCase fixtureCase) {
+    Map<String, String> props = null;
+    if (isTs2DiffFloatCase(fixtureCase) && fixtureCase.fileName.endsWith(".mpn0")) {
+      props = Collections.singletonMap(Encoder.MAX_POINT_NUMBER, "0");
+    }
     List<IMeasurementSchema> schemas =
         Arrays.asList(
             new MeasurementSchema(
@@ -299,7 +320,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
                 fixtureCase.valueColumn,
                 fixtureCase.dataType,
                 fixtureCase.encoding,
-                fixtureCase.compression));
+                fixtureCase.compression,
+                props));
     return new TableSchema(
         fixtureCase.tableName, schemas, Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
   }
@@ -394,7 +416,14 @@ public class TableModelEncodingCompressionCompatibilityTest {
         && (fixtureCase.dataType == TSDataType.FLOAT || fixtureCase.dataType == TSDataType.DOUBLE);
   }
 
-  // Mirror FloatEncoder/FloatDecoder at the Java writer's maxPointNumber:
+  // maxPointValue of the writer configuration for this fixture: the
+  // "*.mpn0" fixtures carry an explicit max_point_number=0 property, all
+  // others use the shared default (see TS_2DIFF_MAX_POINT_NUMBER).
+  private static double ts2DiffMaxPointValue(FixtureCase fixtureCase) {
+    return fixtureCase.fileName.endsWith(".mpn0") ? 1.0 : TS_2DIFF_MAX_POINT_VALUE;
+  }
+
+  // Mirror FloatEncoder/FloatDecoder at the writer's maxPointNumber:
   // scaled -> round(v * mpv) / mpv, scale-overflow -> round(v) / 1,
   // raw bits -> intBitsToFloat (NaN is canonicalized by floatToIntBits).
   private static float expectedFloatValue(FixtureCase fixtureCase, int row) {
@@ -405,7 +434,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (Float.isNaN(value)) {
       return Float.intBitsToFloat(0x7fc00000);
     }
-    double mpv = TS_2DIFF_MAX_POINT_VALUE;
+    double mpv = ts2DiffMaxPointValue(fixtureCase);
     double scaled = (double) value * mpv;
     if (scaled > Integer.MAX_VALUE || scaled < Integer.MIN_VALUE) {
       // value itself stays in int range for the values used here
@@ -426,7 +455,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (Double.isNaN(value)) {
       return Double.longBitsToDouble(0x7ff8000000000000L);
     }
-    double mpv = TS_2DIFF_MAX_POINT_VALUE;
+    double mpv = ts2DiffMaxPointValue(fixtureCase);
     double scaled = value * mpv;
     if (scaled > Long.MAX_VALUE || scaled < Long.MIN_VALUE) {
       if (value > Long.MAX_VALUE || value < Long.MIN_VALUE) {

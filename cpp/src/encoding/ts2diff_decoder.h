@@ -253,6 +253,13 @@ inline int read_page_meta(common::ByteStream& in, PageMeta& meta) {
             return common::E_TSFILE_CORRUPTED;
         }
         const int bm_len = static_cast<int>(count) / 8 + 1;
+        // Guard the allocation: a tiny corrupt page must not trigger a
+        // bitmap-sized allocation the stream cannot possibly back.
+        if (static_cast<uint64_t>(bm_len) >
+            (tag == FLAG_ORIGINAL_VALUE_OVERFLOW ? 2 : 1) *
+                static_cast<uint64_t>(in.remaining_size())) {
+            return common::E_TSFILE_CORRUPTED;
+        }
         meta.has_scaled_bm = true;
         meta.scaled_bm.resize(static_cast<size_t>(bm_len), 0);
         uint32_t read_len = 0;
@@ -276,14 +283,12 @@ inline int read_page_meta(common::ByteStream& in, PageMeta& meta) {
         if (RET_FAIL(common::SerializationUtil::read_var_uint(mpn, in))) {
             return ret;
         }
-        if (mpn > 100) {
-            return common::E_TSFILE_CORRUPTED;
-        }
+        // No format-level upper bound: Java accepts any maxPointNumber
+        // the varint carries (Math.pow overflow yields Infinity, i.e.
+        // maxPointValue = +inf, and values decode via the raw-bits form).
         meta.max_point_number = static_cast<int>(mpn);
     } else {
-        if (tag > 100) {
-            return common::E_TSFILE_CORRUPTED;
-        }
+        // No format-level upper bound on maxPointNumber (see above).
         meta.max_point_number = static_cast<int>(tag);
         meta.page_value_count = 0;  // unknown until the blocks are decoded
     }
@@ -327,6 +332,9 @@ class TS2DIFFDecoder : public Decoder {
     // caller loop forever re-emitting a phantom block; the failure is
     // recorded in header_error_ (decode() returns a value, not an error
     // code) and returned for batch entry points.
+    // writeIndex is bounded by availability, not by the encoder's
+    // BLOCK_DEFAULT_SIZE: Java exposes block-size constructors, so blocks
+    // larger than 129 values are valid input (apache/tsfile#901 review).
     int read_header(common::ByteStream& in) {
         int32_t write_index = 0;
         int32_t bit_width = 0;
@@ -337,8 +345,11 @@ class TS2DIFFDecoder : public Decoder {
             header_error_ = true;
             return common::E_TSFILE_CORRUPTED;
         }
-        if (write_index < 0 || write_index > 128 || bit_width < 0 ||
-            bit_width > (int)sizeof(T) * 8) {
+        const int64_t block_bytes_64 =
+            (static_cast<int64_t>(write_index) * bit_width + 7) / 8;
+        if (write_index < 0 || bit_width < 0 ||
+            bit_width > (int)sizeof(T) * 8 ||
+            block_bytes_64 > static_cast<int64_t>(in.remaining_size())) {
             header_error_ = true;
             return common::E_TSFILE_CORRUPTED;
         }
@@ -363,6 +374,14 @@ class TS2DIFFDecoder : public Decoder {
         int64_t value = 0;
         while (bits > 0) {
             read_byte_if_empty(in);
+            // End of input with bits still owed (corrupt or desynced
+            // stream): bail out instead of looping forever on a stale
+            // buffer_ / bits_left_ == 0 pair.  read_header's availability
+            // check grants slack for the delta_min/first_value fields that
+            // follow it, so a truncated page can still reach here.
+            if (bits_left_ == 0 && !in.has_remaining()) {
+                break;
+            }
             if (bits > bits_left_ || bits == 8) {
                 // Take only the bits_left_ "least significant" bits.
                 uint8_t d = (uint8_t)(buffer_ & ((1 << bits_left_) - 1));
@@ -766,11 +785,25 @@ inline int TS2DIFFDecoder<int32_t>::skip_int32(int count, int& skipped,
     }
 
     while (skipped < count && has_remaining(in)) {
-        int32_t wi, bw, dm, fv;
-        common::SerializationUtil::read_i32(wi, in);
-        common::SerializationUtil::read_i32(bw, in);
-        common::SerializationUtil::read_i32(dm, in);
-        common::SerializationUtil::read_i32(fv, in);
+        int32_t wi = 0, bw = 0, dm = 0, fv = 0;
+        // The header reads must succeed as a group: a truncated stream
+        // would otherwise leave stale stack values in wi/bw.
+        if (common::SerializationUtil::read_i32(wi, in) != common::E_OK ||
+            common::SerializationUtil::read_i32(bw, in) != common::E_OK ||
+            common::SerializationUtil::read_i32(dm, in) != common::E_OK ||
+            common::SerializationUtil::read_i32(fv, in) != common::E_OK) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+
+        // Same availability bound as read_header (writeIndex is not
+        // capped by BLOCK_DEFAULT_SIZE); computed in int64 so a corrupt
+        // header cannot overflow the multiply.
+        const int64_t skip_bytes_64 = (static_cast<int64_t>(wi) * bw + 7) / 8;
+        if (wi < 0 || bw < 0 || bw > 32 ||
+            skip_bytes_64 > static_cast<int64_t>(in.remaining_size())) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        const int32_t skip_bytes = static_cast<int32_t>(skip_bytes_64);
 
         int32_t block_vals = wi + 1;
         bits_left_ = 0;
@@ -778,7 +811,6 @@ inline int TS2DIFFDecoder<int32_t>::skip_int32(int count, int& skipped,
 
         if (count - skipped >= block_vals) {
             // Whole-block fast path: jump over packed body.
-            int32_t skip_bytes = (wi * bw + 7) / 8;
             in.wrapped_buf_advance_read_pos(skip_bytes);
             skipped += block_vals;
             current_index_ = 0;
@@ -820,19 +852,32 @@ inline int TS2DIFFDecoder<int64_t>::skip_int64(int count, int& skipped,
     }
 
     while (skipped < count && has_remaining(in)) {
-        int32_t wi, bw;
-        int64_t dm, fv;
-        common::SerializationUtil::read_i32(wi, in);
-        common::SerializationUtil::read_i32(bw, in);
-        common::SerializationUtil::read_i64(dm, in);
-        common::SerializationUtil::read_i64(fv, in);
+        int32_t wi = 0, bw = 0;
+        int64_t dm = 0, fv = 0;
+        // The header reads must succeed as a group: a truncated stream
+        // would otherwise leave stale stack values in wi/bw.
+        if (common::SerializationUtil::read_i32(wi, in) != common::E_OK ||
+            common::SerializationUtil::read_i32(bw, in) != common::E_OK ||
+            common::SerializationUtil::read_i64(dm, in) != common::E_OK ||
+            common::SerializationUtil::read_i64(fv, in) != common::E_OK) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+
+        // Same availability bound as read_header (writeIndex is not
+        // capped by BLOCK_DEFAULT_SIZE); computed in int64 so a corrupt
+        // header cannot overflow the multiply.
+        const int64_t skip_bytes_64 = (static_cast<int64_t>(wi) * bw + 7) / 8;
+        if (wi < 0 || bw < 0 || bw > 64 ||
+            skip_bytes_64 > static_cast<int64_t>(in.remaining_size())) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        const int32_t skip_bytes = static_cast<int32_t>(skip_bytes_64);
 
         int32_t block_vals = wi + 1;
         bits_left_ = 0;
         buffer_ = 0;
 
         if (count - skipped >= block_vals) {
-            int32_t skip_bytes = (wi * bw + 7) / 8;
             in.wrapped_buf_advance_read_pos(skip_bytes);
             skipped += block_vals;
             current_index_ = 0;
@@ -872,7 +917,11 @@ inline bool TS2DIFFDecoder<int64_t>::peek_next_block_range_int64(
     if (current_index_ != 0 || !has_remaining(in)) return false;
 
     if (read_header(in) != common::E_OK) {
-        return common::E_TSFILE_CORRUPTED;
+        // Not "has next block with a usable range": the caller falls
+        // back to the regular per-value path.  (Returning the error
+        // code here would convert to bool true and make callers act on
+        // a stale range.)
+        return false;
     }
     common::SerializationUtil::read_i64(delta_min_, in);
     common::SerializationUtil::read_i64(first_value_, in);
@@ -913,8 +962,12 @@ template <>
 inline int TS2DIFFDecoder<int64_t>::skip_peeked_block_int64(
     common::ByteStream& in, int& skipped) {
     skipped = write_index_ + 1;
-    int32_t skip_bytes = (write_index_ * bit_width_ + 7) / 8;
-    in.wrapped_buf_advance_read_pos(skip_bytes);
+    // int64 arithmetic: read_header admits blocks whose packed size is
+    // only bounded by the stream length, and write_index_ * bit_width_
+    // can exceed INT32_MAX on a huge page.
+    const int64_t skip_bytes_64 =
+        (static_cast<int64_t>(write_index_) * bit_width_ + 7) / 8;
+    in.wrapped_buf_advance_read_pos(static_cast<uint64_t>(skip_bytes_64));
     header_peeked_ = false;
     bits_left_ = 0;
     buffer_ = 0;

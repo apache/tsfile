@@ -132,18 +132,17 @@ const uint64_t kDoubleBits[] = {
 // same tri-state conversion the writer performs and then decoding it back,
 // so expectations reflect the encoding rules rather than the raw input
 // bits. Every chosen value has the same expected value whether the writer
-// used maxPointNumber 0 (the Java Ts2Diff builder default) or 2 (the
-// historical C++ default), so the validating reader never needs to know
-// which writer produced the file. The values cover all page layouts the
-// writers can produce:
+// used maxPointNumber 0 (explicit property; the "*.mpn0" Java fixtures) or
+// 2 (the TSFileConfig.floatPrecision default shared with the C++ writer),
+// so the validating reader never needs to know which writer produced the
+// file. The values cover all page layouts the writers can produce:
 //  - plain integers (scaled form; at mpn = 0 every finite in-range value
-//    is scaled, so pages written by the Java builder contain no bitmap)
-//  - 1.5e9f / 1e18: values above the integer range, stored via the raw
-//    bits form (at mpn = 0 the scale-overflow form cannot occur - the
-//    scaled product equals the value itself, so any overflow is a value
-//    overflow; see the wire-format doc)
+//    is scaled, so pages written at mpn = 0 contain no bitmap)
+//  - 1.5e9f / 1e18: the scaled product overflows while round(v) still
+//    fits -> scale-overflow form, single page-wide bitmap (reachable only
+//    at mpn > 0, i.e. the default writer configuration)
 //  - NaN and +/-Infinity (stored as raw IEEE bits -> two page-wide
-//    bitmaps; NaN uses the canonical Java floatToIntBits pattern)
+//    bitmaps; Java floatToIntBits canonicalizes NaN)
 const uint32_t kTs2DiffFloatBits[] = {
     0x00000000U, 0x3f800000U, 0xbf800000U, 0x461c4000U,
     0xc61c4000U, 0x4eb2d05eU, 0x7f800000U, 0xff800000U,
@@ -162,10 +161,11 @@ const uint64_t kTs2DiffDoubleBits[] = {
     UINT64_C(0x3ff0000000000000), UINT64_C(0x0000000000000000),
 };
 
-// maxPointNumber used by the C++ FloatTS2DIFFEncoder/DoubleTS2DIFFEncoder
-// (aligned with the Java Ts2Diff builder default).
-constexpr int kTs2DiffMaxPointNumber = 0;
-constexpr double kTs2DiffMaxPointValue = 1.0;
+// maxPointNumber used by the C++ FloatTS2DIFFEncoder/DoubleTS2DIFFEncoder,
+// matching the standard Java schema write path (TSEncodingBuilder.Ts2Diff
+// initFromProps -> TSFileConfig.floatPrecision, current default 2).
+constexpr int kTs2DiffMaxPointNumber = 2;
+constexpr double kTs2DiffMaxPointValue = 100.0;
 
 const int32_t kDateValues[] = {
     19700101, 19991231, 20000229, 20240229,
@@ -392,6 +392,24 @@ bool IsTs2DiffFloatCase(const FixtureCase& fixture_case) {
             fixture_case.data_type == DOUBLE);
 }
 
+bool StringEndsWith(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) ==
+               0;
+}
+
+// maxPointValue of the writer configuration for this fixture: the
+// "*.mpn0" Java fixtures carry an explicit max_point_number=0 property,
+// all others use the shared default (see kTs2DiffMaxPointNumber).
+double Ts2DiffMaxPointValue(const FixtureCase& fixture_case) {
+    return StringEndsWith(fixture_case.file_name, ".mpn0")
+               ? 1.0
+               : kTs2DiffMaxPointValue;
+}
+
+// Java Math.round(x) == floor(x + 0.5) (ties towards +infinity).
+static double JavaRound(double x) { return std::floor(x + 0.5); }
+
 float ExpectedFloatValue(const FixtureCase& fixture_case, int row) {
     if (!IsTs2DiffFloatCase(fixture_case)) {
         return FloatValue(row);
@@ -402,10 +420,10 @@ float ExpectedFloatValue(const FixtureCase& fixture_case, int row) {
         // via floatToIntBits.
         return BitsToFloat(0x7fc00000U);
     }
-    // Mirror FloatTS2DIFFEncoder::convert_float_to_int at mpn = 2, then
-    // FloatDecoder::readFloat: scaled -> stored / 100, scale-overflow ->
+    // Mirror FloatTS2DIFFEncoder::convert_float_to_int, then
+    // FloatDecoder::readFloat: scaled -> stored / mpv, scale-overflow ->
     // stored / 1, raw bits -> intBitsToFloat.
-    const double mpv = kTs2DiffMaxPointValue;
+    const double mpv = Ts2DiffMaxPointValue(fixture_case);
     const double scaled = static_cast<double>(value) * mpv;
     const bool scaled_overflow =
         scaled > static_cast<double>(std::numeric_limits<int32_t>::max()) ||
@@ -418,9 +436,9 @@ float ExpectedFloatValue(const FixtureCase& fixture_case, int row) {
             // Raw IEEE bits, restored losslessly (infinite values here).
             return value;
         }
-        return static_cast<float>(std::lround(value)) / 1.0f;
+        return static_cast<float>(JavaRound(value)) / 1.0f;
     }
-    return static_cast<float>(std::lround(scaled) / mpv);
+    return static_cast<float>(JavaRound(scaled) / mpv);
 }
 
 double ExpectedDoubleValue(const FixtureCase& fixture_case, int row) {
@@ -431,7 +449,7 @@ double ExpectedDoubleValue(const FixtureCase& fixture_case, int row) {
     if (std::isnan(value)) {
         return BitsToDouble(UINT64_C(0x7ff8000000000000));
     }
-    const double mpv = kTs2DiffMaxPointValue;
+    const double mpv = Ts2DiffMaxPointValue(fixture_case);
     const double scaled = value * mpv;
     const bool scaled_overflow =
         scaled > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
@@ -443,9 +461,9 @@ double ExpectedDoubleValue(const FixtureCase& fixture_case, int row) {
         if (value_overflows) {
             return value;
         }
-        return static_cast<double>(std::llround(value)) / 1.0;
+        return JavaRound(value) / 1.0;
     }
-    return std::llround(scaled) / mpv;
+    return JavaRound(scaled) / mpv;
 }
 
 int32_t DateValue(int row) {

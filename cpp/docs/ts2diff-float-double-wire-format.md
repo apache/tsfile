@@ -48,6 +48,9 @@ The three forms are tracked per page as a tri-state flag list
 - `false` -> rounded form (scale overflow)
 - `null`  -> raw IEEE 754 bits (value overflow or NaN)
 
+`round` is Java `Math.round` semantics, `floor(x + 0.5)` — ties go towards
+`+infinity` (`-2.5 -> -2`), unlike C `lround`'s ties-away-from-zero.
+
 ## Page Layout
 
 ```text
@@ -83,37 +86,45 @@ Key invariants:
 - Bitmap bit order is LSB-first within each byte: position `p` maps to
   `bits[p / 8] & (1 << (p % 8))`.
 - `pageValueCount` counts all values of the page (across blocks).
-- A first-page byte of `0x00` is the normal encoding of `maxPointNumber = 0`,
-  which is the Java `Ts2Diff` builder default. It is not a legacy marker.
+- A first-page byte of `0x00` is the normal encoding of `maxPointNumber = 0`
+  (an explicit `max_point_number=0` property on the Java side; reachable
+  but not the default — see Encoder Construction below). It is not a
+  legacy marker.
+- NaN handling is writer-dependent: Java `floatToIntBits` /
+  `doubleToLongBits` canonicalize any NaN to `0x7fc00000` /
+  `0x7ff8000000000000`, while the C++ encoder preserves the payload bits.
+  Both are valid raw-bit entries; readers restore the bits as stored.
 
 ## Integer Block Layout
 
 Identical to the integer TS_2DIFF format (`DeltaBinaryEncoder`):
 
 ```text
-[writeIndex int32 BE]   # number of values in this block (<= 129)
+[writeIndex int32 BE]   # number of deltas in this block
 [bitWidth  int32 BE]
 [block-specific header] # first value; min delta
 [packed data]           # writeIndex * bitWidth bits
 ```
 
-`BLOCK_DEFAULT_SIZE = 128`: the encoder buffers the first value plus up to 128
-deltas, then flushes a 129-value block. A 300-value page therefore produces
-blocks of 129, 129, 42.
+A block stores `writeIndex + 1` values (first value + writeIndex deltas).
+`BLOCK_DEFAULT_SIZE = 128` is only `DeltaBinaryEncoder`'s default buffer
+size, not a wire-format limit: Java exposes block-size constructors
+(`IntDeltaEncoder(int)`), so `writeIndex` is bounded only by the declared
+page value count and the packed bytes available. A 300-value page from the
+default encoder produces blocks of 129, 129, 42 values.
 
 ## Encoder Construction
 
-Java `TSEncodingBuilder.Ts2Diff` hard-codes `maxPointNumber = 0` for
-FLOAT/DOUBLE (it does not read `max_point_number` props). Pages produced by
-Java therefore start with `0x00`, and the C++ `FloatTS2DIFFEncoder` /
-`DoubleTS2DIFFEncoder` use the same default. The value stored in the
-stream is self-describing, so files written by other `maxPointNumber`
+The Java `TSEncodingBuilder.Ts2Diff` field initializes `maxPointNumber = 0`,
+but the standard schema write path (`MeasurementSchema.getValueEncoder`)
+always calls `initFromProps()`, which replaces it with the schema's
+`max_point_number` property or, when the property is absent, with
+`TSFileConfig.floatPrecision` (current default `2`). A writer that
+explicitly sets `max_point_number = 0` produces Form 1 pages starting with
+`0x00`. The C++ `FloatTS2DIFFEncoder` / `DoubleTS2DIFFEncoder` default to
+`2`, matching the standard Java schema path. The value stored in the
+stream is self-describing, so files written with other `maxPointNumber`
 values remain readable.
-
-Note that at `mpn = 0` the scale-overflow form (Form 2) cannot occur: the
-scaled product equals the value itself, so any overflow is a value
-overflow and takes the raw-bits path (Form 3). Form 2 pages can therefore
-only originate from writers configured with `mpn > 0`.
 
 ## Decoder State Machine
 

@@ -586,15 +586,47 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
     return Encoder::encode_batch(values, count, out);
 }
 
+// Java Math.round(x) == floor(x + 0.5) (ties go towards +infinity),
+// unlike std::lround's ties-away-from-zero (-2.5 -> -2, not -3).
+// Math.round saturates at the integer limits; a plain static_cast of the
+// boundary value (e.g. INT64_MAX rounding up from below, or 2^63 passing
+// the <= (double)INT64_MAX gate) would be undefined behaviour, so the
+// conversion clamps first.  The 64-bit upper bound is compared against
+// 2^63 rather than (double)INT64_MAX, which rounds up to 2^63 and would
+// let exactly 2^63 through; the lower limits are exactly representable.
+template <typename Int>
+inline Int java_round(double x) {
+    const double r = std::floor(x + 0.5);
+    if (sizeof(Int) < 8) {
+        if (r > static_cast<double>(std::numeric_limits<Int>::max())) {
+            return std::numeric_limits<Int>::max();
+        }
+    } else if (r >= 9223372036854775808.0) {  // 2^63
+        return std::numeric_limits<Int>::max();
+    }
+    if (r < static_cast<double>(std::numeric_limits<Int>::min())) {
+        return std::numeric_limits<Int>::min();
+    }
+    return static_cast<Int>(r);
+}
+
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
    public:
     FloatTS2DIFFEncoder()
-        : max_point_number_(0),  // Java Ts2Diff builder default
-          max_point_value_(1.0),
+        : max_point_number_(2),  // Java Ts2Diff builder default via
+                                 // initFromProps -> TSFileConfig
+                                 // floatPrecision
+          max_point_value_(100.0),
           page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(float value, common::ByteStream& out_stream) {
         int32_t value_int = convert_float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
+    }
+    // The wire value is self-describing; tests use this to exercise
+    // maxPointNumber = 0 pages (Form 1 leading 0x00 byte).
+    void set_max_point_number(int mpn) {
+        max_point_number_ = mpn;
+        max_point_value_ = mpn <= 0 ? 1.0 : std::pow(10.0, mpn);
     }
     // PageWriter resets the encoder between pages without going through a
     // successful flush() (e.g. when the prior page was aborted).  The base
@@ -626,14 +658,14 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
                 return common::float_to_int(value);
             }
             underflow_flags_.push_back(0);
-            return static_cast<int32_t>(std::lround(value));
+            return java_round<int32_t>(value);
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::float_to_int(value);
         }
         underflow_flags_.push_back(1);
-        return static_cast<int32_t>(std::lround(scaled));
+        return java_round<int32_t>(scaled);
     }
     bool has_overflow() const {
         for (int8_t f : underflow_flags_) {
@@ -660,12 +692,19 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
    public:
     DoubleTS2DIFFEncoder()
-        : max_point_number_(0),  // Java Ts2Diff builder default
-          max_point_value_(1.0),
+        : max_point_number_(2),  // Java Ts2Diff builder default via
+                                 // initFromProps -> TSFileConfig
+                                 // floatPrecision
+          max_point_value_(100.0),
           page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(double value, common::ByteStream& out_stream) {
         int64_t value_long = convert_double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
+    }
+    // See FloatTS2DIFFEncoder::set_max_point_number.
+    void set_max_point_number(int mpn) {
+        max_point_number_ = mpn;
+        max_point_value_ = mpn <= 0 ? 1.0 : std::pow(10.0, mpn);
     }
     // See FloatTS2DIFFEncoder::reset for rationale — the prior page's
     // overflow markers and buffered blocks must not bleed into the next.
@@ -695,14 +734,14 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
                 return common::double_to_long(value);
             }
             underflow_flags_.push_back(0);
-            return static_cast<int64_t>(std::llround(value));
+            return java_round<int64_t>(value);
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::double_to_long(value);
         }
         underflow_flags_.push_back(1);
-        return static_cast<int64_t>(std::llround(scaled));
+        return java_round<int64_t>(scaled);
     }
     bool has_overflow() const {
         for (int8_t f : underflow_flags_) {

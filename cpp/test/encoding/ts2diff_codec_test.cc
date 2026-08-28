@@ -97,14 +97,16 @@ class FloatDoubleTS2DIFFCodecTest : public ::testing::Test {
     DoubleTS2DIFFDecoder* decoder_double_{nullptr};
 };
 
+// Reads the whole stream into a hex string.  Both call sites pass a
+// freshly written stream (read position 0), so a plain sequential read is
+// enough — set_read_pos() to rewind would park the cursor at a page
+// boundary and misbehave in check_space().
 static std::string byte_stream_to_hex(common::ByteStream& stream) {
-    uint32_t mark = stream.read_pos();
     uint32_t size = stream.total_size();
     std::vector<uint8_t> buf(size);
     uint32_t read_len = 0;
     EXPECT_EQ(stream.read_buf(buf.data(), size, read_len), common::E_OK);
     EXPECT_EQ(read_len, size);
-    stream.set_read_pos(mark);
 
     std::ostringstream oss;
     for (uint32_t i = 0; i < size; i++) {
@@ -146,8 +148,10 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, TestFloatJavaDefaultHexCompatibility) {
     }
     EXPECT_EQ(encoder_float_->flush(out_stream), common::E_OK);
 
+    // Golden bytes from the Java FloatEncoder + TS_2DIFF writer at the
+    // default maxPointNumber = 2 (TSFileConfig.floatPrecision).
     const std::string expected_hex =
-        "FE FF FF FF 07 02 00 03 00 00 00 00 01 00 00 00 00 1E 38 8A AA 61 87 "
+        "FE FF FF FF 07 02 00 03 02 00 00 00 01 00 00 00 00 1E 38 8A AA 61 87 "
         "75 56";
     EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
 }
@@ -161,8 +165,10 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, TestDoubleJavaDefaultHexCompatibility) {
     }
     EXPECT_EQ(encoder_double_->flush(out_stream), common::E_OK);
 
+    // Golden bytes from the Java DoubleEncoder + TS_2DIFF writer at the
+    // default maxPointNumber = 2 (TSFileConfig.floatPrecision).
     const std::string expected_hex =
-        "FE FF FF FF 07 02 00 03 00 00 00 00 01 00 00 00 00 3B C7 11 55 3D "
+        "FE FF FF FF 07 02 00 03 02 00 00 00 01 00 00 00 00 3B C7 11 55 3D "
         "D4 27 08 44 30 EE AA C2 2B D8 F8";
     EXPECT_EQ(byte_stream_to_hex(out_stream), expected_hex);
 }
@@ -761,10 +767,10 @@ void expect_max_pn_once_per_page(const std::vector<uint8_t>& b,
         }
         uint32_t mpn = 0;
         ASSERT_TRUE(parse_var_uint(b, pos, mpn));
-        EXPECT_EQ(mpn, 0u) << "default encoder writes maxPointNumber = 0";
+        EXPECT_EQ(mpn, 2u) << "default encoder writes maxPointNumber = 2";
     } else {
-        // Form 1: the leading varint IS the maxPointNumber (0x00 = 0).
-        EXPECT_EQ(tag, 0u) << "default encoder writes maxPointNumber = 0";
+        // Form 1: the leading varint IS the maxPointNumber (0x02 = 2).
+        EXPECT_EQ(tag, 2u) << "default encoder writes maxPointNumber = 2";
     }
 
     // Continuous integer block stream with no float metadata between
@@ -797,20 +803,19 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     const int row_num = 400;  // 4 segments: 129 + 129 + 129 + 13
     std::vector<float> data(row_num);
     for (int i = 0; i < row_num; i++) {
-        data[i] = static_cast<float>(i) * 2.0f + 1.0f;
+        data[i] = static_cast<float>(i) * 0.25f + 0.5f;
     }
     for (int i = 0; i < row_num; i++) {
         ASSERT_EQ(encoder_float_->encode(data[i], out), common::E_OK);
     }
     ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
 
-    // The default maxPointNumber is 0, so the page starts with the
-    // single 0x00 mpn byte followed directly by block headers (whose
-    // write_index high byte is also 0x00); the structural scan below
-    // verifies the prefix appears exactly once.
+    // The default maxPointNumber is 2 (TSFileConfig.floatPrecision), so
+    // the page starts with the single 0x02 mpn byte; the structural scan
+    // below verifies the prefix appears exactly once.
     std::vector<uint8_t> b = byte_stream_bytes(out);
     ASSERT_FALSE(b.empty());
-    EXPECT_EQ(b[0], 0x00) << "page must start with the maxPointNumber=0 byte";
+    EXPECT_EQ(b[0], 0x02) << "page must start with the maxPointNumber=2 byte";
     expect_max_pn_once_per_page(b, false);
 
     common::ByteStream dec;
@@ -830,7 +835,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     const int row_num = 400;
     std::vector<double> data(row_num);
     for (int i = 0; i < row_num; i++) {
-        data[i] = static_cast<double>(i) * 2.0 + 1.0;
+        data[i] = static_cast<double>(i) * 0.25 + 0.5;
     }
     for (int i = 0; i < row_num; i++) {
         ASSERT_EQ(encoder_double_->encode(data[i], out), common::E_OK);
@@ -839,7 +844,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
 
     std::vector<uint8_t> b = byte_stream_bytes(out);
     ASSERT_FALSE(b.empty());
-    EXPECT_EQ(b[0], 0x00) << "page must start with the maxPointNumber=0 byte";
+    EXPECT_EQ(b[0], 0x02) << "page must start with the maxPointNumber=2 byte";
     expect_max_pn_once_per_page(b, true);
 
     common::ByteStream dec;
@@ -860,10 +865,10 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 140;  // segment 1 (129 values) + segment 2 (11 values)
     std::vector<float> data(row_num);
-    data[0] = 1.0f;
-    data[1] = 3.0e9f;  // > INT32_MAX at mpn = 0 → raw bits form (flag -1)
+    data[0] = 0.5f;
+    data[1] = 3.0e7f;  // *100 = 3e9 > INT32_MAX → scaled overflow (flag 0)
     for (int i = 2; i < row_num; i++) {
-        data[i] = 2.0f + static_cast<float>(i - 2) * 4.0f;
+        data[i] = 0.75f + static_cast<float>(i - 2) * 0.25f;
     }
     for (int i = 0; i < row_num; i++) {
         ASSERT_EQ(encoder_float_->encode(data[i], out), common::E_OK);
@@ -871,26 +876,25 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
 
     // Byte layout: [FLAG var_uint][pageValueCount=140][page-wide
-    // underflow bitmap (18B)][page-wide raw-bits bitmap (18B)]
-    // [maxPointNumber 0x00][block 1 header][packed]
+    // underflow bitmap (18B)][maxPointNumber 0x02][block 1 header][packed]
     //              [block 2 header starting with 0x00 — no prefix]
     std::vector<uint8_t> b = byte_stream_bytes(out);
     size_t pos = 0;
     uint32_t tag = 0;
     ASSERT_TRUE(parse_var_uint(b, pos, tag));
-    EXPECT_EQ(tag, ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW);
+    EXPECT_EQ(tag, ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW);
     uint32_t n = 0;
     ASSERT_TRUE(parse_var_uint(b, pos, n));
     EXPECT_EQ(n, 140u);  // page-wide bitmap covers every value in the page
     size_t bm_len = static_cast<size_t>(n / 8 + 1);
-    ASSERT_LE(pos + 2 * bm_len, b.size());
-    pos += 2 * bm_len;  // scaled + raw-bits bitmaps
-    // Exactly one maxPointNumber, directly after the bitmaps.
+    ASSERT_LE(pos + bm_len, b.size());
+    pos += bm_len;
+    // Exactly one maxPointNumber, directly after the bitmap.
     ASSERT_LT(pos, b.size());
-    EXPECT_EQ(b[pos], 0x00) << "maxPointNumber = 0 byte";
+    EXPECT_EQ(b[pos], 0x02) << "maxPointNumber = 2 byte";
     uint32_t mpn = 0;
     ASSERT_TRUE(parse_var_uint(b, pos, mpn));
-    EXPECT_EQ(mpn, 0u);
+    EXPECT_EQ(mpn, 2u);
     // Segment 1 header: write_index == 128 (129 values).
     ASSERT_LE(pos + 16, b.size());
     int32_t wi = read_i32_be(b, pos);
@@ -921,10 +925,10 @@ TEST_F(FloatDoubleTS2DIFFCodecTest,
     common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 140;
     std::vector<double> data(row_num);
-    data[0] = 1.0;
-    data[1] = 1.0e300;  // > INT64_MAX at mpn = 0 → raw bits form (flag -1)
+    data[0] = 0.5;
+    data[1] = 1.0e17;  // *100 = 1e19 > INT64_MAX → scaled overflow (flag 0)
     for (int i = 2; i < row_num; i++) {
-        data[i] = 2.0 + static_cast<double>(i - 2) * 4.0;
+        data[i] = 0.75 + static_cast<double>(i - 2) * 0.25;
     }
     for (int i = 0; i < row_num; i++) {
         ASSERT_EQ(encoder_double_->encode(data[i], out), common::E_OK);
@@ -950,7 +954,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
     const int row_num = 130;  // 129 + 1 → two segments per page
     std::vector<float> data(row_num);
     for (int i = 0; i < row_num; i++) {
-        data[i] = static_cast<float>(i) * 2.0f + 1.0f;
+        data[i] = static_cast<float>(i) * 0.25f + 0.5f;
     }
     common::ByteStream page1(1024, common::MOD_TS2DIFF_OBJ, false);
     common::ByteStream page2(1024, common::MOD_TS2DIFF_OBJ, false);
@@ -968,8 +972,8 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
     std::vector<uint8_t> b2 = byte_stream_bytes(page2);
     ASSERT_FALSE(b1.empty());
     ASSERT_FALSE(b2.empty());
-    EXPECT_EQ(b1[0], 0x00) << "page 1 must start with maxPointNumber=0";
-    EXPECT_EQ(b2[0], 0x00) << "page 2 must start with maxPointNumber=0";
+    EXPECT_EQ(b1[0], 0x02) << "page 1 must start with maxPointNumber=2";
+    EXPECT_EQ(b2[0], 0x02) << "page 2 must start with maxPointNumber=2";
     expect_max_pn_once_per_page(b1, false);
     expect_max_pn_once_per_page(b2, false);
 
@@ -991,6 +995,68 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
         EXPECT_FLOAT_EQ(x, data[i]) << "page2 row " << i;
     }
     EXPECT_FALSE(decoder_float_->has_remaining(d2));
+}
+
+// Explicit maxPointNumber = 0 (an explicit max_point_number property on
+// the Java side): a canonical Form 1 page starting with the 0x00 byte.
+// At mpn = 0 every finite in-range value takes the scaled form, so the
+// page has no bitmap; the 0x00 byte is the maxPointNumber varint itself,
+// not a legacy marker (apache/tsfile#901 review).
+TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberZeroPagePrefix) {
+    const int row_num = 140;  // 129 + 11: crosses the block boundary
+    std::vector<float> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = static_cast<float>(i) * 2.0f + 1.0f;
+    }
+    common::ByteStream out(1024, common::MOD_TS2DIFF_OBJ, false);
+    encoder_float_->set_max_point_number(0);
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_float_->encode(data[i], out), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out), common::E_OK);
+
+    std::vector<uint8_t> b = byte_stream_bytes(out);
+    ASSERT_FALSE(b.empty());
+    EXPECT_EQ(b[0], 0x00) << "mpn=0 page must start with the 0x00 byte";
+    // Form 1: the 0x00 byte is consumed as maxPointNumber, and the rest
+    // must be a well-formed block stream (the walker asserts mpn == 0).
+    size_t pos = 0;
+    uint32_t mpn = 999;
+    ASSERT_TRUE(parse_var_uint(b, pos, mpn));
+    EXPECT_EQ(mpn, 0u);
+
+    common::ByteStream dec;
+    wrap_bytes(b, dec);
+    float x = 0.0f;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, dec), common::E_OK);
+        EXPECT_FLOAT_EQ(x, data[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_float_->has_remaining(dec));
+
+    // Same for double.
+    std::vector<double> data_d(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data_d[i] = static_cast<double>(i) * 2.0 + 1.0;
+    }
+    common::ByteStream out_d(1024, common::MOD_TS2DIFF_OBJ, false);
+    encoder_double_->set_max_point_number(0);
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(encoder_double_->encode(data_d[i], out_d), common::E_OK);
+    }
+    ASSERT_EQ(encoder_double_->flush(out_d), common::E_OK);
+
+    std::vector<uint8_t> bd = byte_stream_bytes(out_d);
+    ASSERT_FALSE(bd.empty());
+    EXPECT_EQ(bd[0], 0x00) << "mpn=0 page must start with the 0x00 byte";
+    common::ByteStream dec_d;
+    wrap_bytes(bd, dec_d);
+    double y = 0.0;
+    for (int i = 0; i < row_num; i++) {
+        ASSERT_EQ(decoder_double_->read_double(y, dec_d), common::E_OK);
+        EXPECT_DOUBLE_EQ(y, data_d[i]) << "row " << i;
+    }
+    EXPECT_FALSE(decoder_double_->has_remaining(dec_d));
 }
 
 // The pre-#910 C++ encoder repeated the maxPointNumber at every segment
@@ -1038,6 +1104,191 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNRejected) {
     }
     EXPECT_GE(mismatches, 1)
         << "out-of-format continuation must not decode to the expected values";
+}
+
+// A truncated page whose block header passes the availability check (the
+// check grants slack for the delta_min/first_value fields) but whose
+// packed bits never arrive: the scalar read path must terminate instead
+// of spinning on a stale buffer (apache/tsfile#901 adversarial review).
+TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadTerminatesOnTruncatedBlock) {
+    // [mpn=2][wi=1][bw=8][dm=0][fv=42] - after the header, remaining=8
+    // covers the 1 packed byte, then dm+fv consume it all.
+    const unsigned char page[] = {
+        0x02, 0x00, 0x00, 0x00, 0x01,  // write_index = 1
+        0x00, 0x00, 0x00, 0x08,        // bit_width = 8
+        0x00, 0x00, 0x00, 0x00,        // delta_min
+        0x00, 0x00, 0x00, 0x2a,        // first_value
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    FloatTS2DIFFDecoder decoder;
+    float x = 0.0f;
+    ASSERT_EQ(decoder.read_float(x, dec), common::E_OK);
+    EXPECT_FLOAT_EQ(x, 0.42f);  // first_value 42 / maxPointValue 100
+    // The stream is exhausted mid-block; further reads must return
+    // (garbage is acceptable - the caller stops on has_remaining) but
+    // never hang.
+    for (int i = 0; i < 3; i++) {
+        decoder.read_float(x, dec);
+    }
+    EXPECT_FALSE(decoder.has_remaining(dec));
+    SUCCEED();
+}
+
+// A page whose trailing block header is truncated mid-field: the skip
+// paths must reject it via the grouped header-read check instead of
+// acting on stale stack values.
+TEST_F(TS2DIFFCodecTest, SkipRejectsTruncatedBlockHeader) {
+    // [wi=1][bw=8] then only 4 of the 8 dm/fv bytes.
+    const unsigned char page[] = {
+        0x00, 0x00, 0x00, 0x01,  // write_index = 1
+        0x00, 0x00, 0x00, 0x08,  // bit_width = 8
+        0x00, 0x00, 0x00, 0x00,  // delta_min
+        0x00, 0x00, 0x00,        // first_value truncated to 3 bytes
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    IntTS2DIFFDecoder decoder;
+    int skipped = 0;
+    const int rc = decoder.skip_int32(10, skipped, dec);
+    EXPECT_EQ(rc, common::E_TSFILE_CORRUPTED);
+}
+
+// Java Math.round semantics: floor(x + 0.5), ties towards +infinity.
+// -0.125 * 100 = -12.5 exactly (0.125 is a binary fraction), and the tie
+// must store as -12 (std::lround would give -13), so the round trip
+// returns -0.12 rather than -0.13.
+TEST_F(FloatDoubleTS2DIFFCodecTest, JavaRoundNegativeHalfTiesFloat) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const float data[] = {-0.125f, -0.375f, 0.125f, 0.375f};
+    const float expect[] = {-0.12f, -0.37f, 0.13f, 0.38f};
+    for (float v : data) {
+        ASSERT_EQ(encoder_float_->encode(v, out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out_stream), common::E_OK);
+
+    float x = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, out_stream), common::E_OK);
+        EXPECT_FLOAT_EQ(x, expect[i]) << "value " << i;
+    }
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, JavaRoundNegativeHalfTiesDouble) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const double data[] = {-2.5, -7.5, 2.5, 7.5};  // mpn=0: scaled == value
+    const double expect[] = {-2.0, -7.0, 3.0, 8.0};
+    encoder_double_->set_max_point_number(0);
+    for (double v : data) {
+        ASSERT_EQ(encoder_double_->encode(v, out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_double_->flush(out_stream), common::E_OK);
+
+    double y = 0.0;
+    for (int i = 0; i < 4; i++) {
+        ASSERT_EQ(decoder_double_->read_double(y, out_stream), common::E_OK);
+        EXPECT_DOUBLE_EQ(y, expect[i]) << "value " << i;
+    }
+}
+
+// writeIndex is bounded by availability, not BLOCK_DEFAULT_SIZE
+// (apache/tsfile#901 review): a hand-built block larger than 129 values
+// (Java exposes block-size constructors) must decode through both the
+// scalar and batch paths.
+TEST_F(TS2DIFFCodecTest, LargeBlockBeyondDefaultSizeDecodes) {
+    const int kCount = 200;  // wi = 199 > 128
+    const int32_t first = 1000;
+    const int32_t delta = 3;
+    const int32_t bit_width = 3;
+
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(kCount - 1, out_stream),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(bit_width, out_stream),
+              common::E_OK);
+    // delta_min: constant deltas of 3 rebase to 0 (raw - min), so the
+    // decoder reconstructs value += stored(0) + delta_min(3) per step.
+    ASSERT_EQ(common::SerializationUtil::write_ui32(delta, out_stream),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(first, out_stream),
+              common::E_OK);
+    // 199 * 3 bits, MSB-packed, all-zero bytes == rebased delta 0.  The
+    // packed body is ceil(bits / 8) = 75 bytes.
+    const int packed_bytes = ((kCount - 1) * bit_width + 7) / 8;  // 75
+    for (int i = 0; i < packed_bytes; i++) {
+        ASSERT_EQ(common::SerializationUtil::write_ui8(0, out_stream),
+                  common::E_OK);
+    }
+
+    // Copy the encoded page into a plain buffer; wrap two read streams
+    // over it (get_wrapped_buf is only valid for wrap_from streams).
+    std::vector<uint8_t> page(out_stream.total_size());
+    uint32_t read_len = 0;
+    ASSERT_EQ(
+        out_stream.read_buf(page.data(), out_stream.total_size(), read_len),
+        common::E_OK);
+    ASSERT_EQ(read_len, page.size());
+
+    // Scalar path.
+    common::ByteStream dec1;
+    dec1.wrap_from(reinterpret_cast<const char*>(page.data()),
+                   static_cast<int32_t>(page.size()));
+    IntTS2DIFFDecoder dec_scalar;
+    int32_t v = 0;
+    ASSERT_EQ(dec_scalar.read_int32(v, dec1), common::E_OK);
+    EXPECT_EQ(v, first);
+    for (int i = 1; i < kCount; i++) {
+        ASSERT_EQ(dec_scalar.read_int32(v, dec1), common::E_OK);
+        EXPECT_EQ(v, first + i * delta) << "row " << i;
+    }
+    EXPECT_FALSE(dec_scalar.has_remaining(dec1));
+
+    // Batch path.
+    common::ByteStream dec2;
+    dec2.wrap_from(reinterpret_cast<const char*>(page.data()),
+                   static_cast<int32_t>(page.size()));
+    IntTS2DIFFDecoder dec_batch;
+    std::vector<int32_t> out(kCount);
+    int actual = 0;
+    ASSERT_EQ(dec_batch.read_batch_int32(out.data(), kCount, actual, dec2),
+              common::E_OK);
+    ASSERT_EQ(actual, kCount);
+    for (int i = 0; i < kCount; i++) {
+        EXPECT_EQ(out[i], first + i * delta) << "row " << i;
+    }
+}
+
+// maxPointNumber has no format-level upper bound (apache/tsfile#901
+// review): a page written with mpn = 1000 (Java Math.pow overflows to
+// +inf for the decoder, values then divide by inf) stays readable; the
+// decoder must accept the varint instead of rejecting it as corrupt.
+TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberAboveLegacyBoundDecodes) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    encoder_float_->set_max_point_number(1000);
+    const float data[] = {1.0f, 2.0f, 3.0f};
+    for (float v : data) {
+        ASSERT_EQ(encoder_float_->encode(v, out_stream), common::E_OK);
+    }
+    ASSERT_EQ(encoder_float_->flush(out_stream), common::E_OK);
+
+    // The encoder stores round(v * 10^1000); the double product overflows
+    // to +inf for every value, so every entry takes the raw-bits form
+    // (Form 3).  The decode restores the exact bits.
+    std::vector<uint8_t> page(out_stream.total_size());
+    uint32_t read_len = 0;
+    ASSERT_EQ(
+        out_stream.read_buf(page.data(), out_stream.total_size(), read_len),
+        common::E_OK);
+    ASSERT_EQ(read_len, page.size());
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page.data()),
+                  static_cast<int32_t>(page.size()));
+    float x = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        ASSERT_EQ(decoder_float_->read_float(x, dec), common::E_OK);
+        EXPECT_EQ(common::float_to_int(x), common::float_to_int(data[i]))
+            << "row " << i;
+    }
 }
 
 }  // namespace storage
