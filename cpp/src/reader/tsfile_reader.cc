@@ -19,8 +19,13 @@
 #include "tsfile_reader.h"
 
 #include <stdexcept>
+#include <string>
+#include <vector>
 
+#include "common/allocator/byte_stream.h"
 #include "common/schema.h"
+#include "common/tsfile_common.h"
+#include "file/read_file.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
 
@@ -446,6 +451,49 @@ int TsFileReader::get_all_devices(
     return ret;
 }
 
+namespace {
+
+// Encoding and compression are per-chunk properties that only live in the
+// chunk header on disk: ChunkMeta::deserialize_from() reads nothing but
+// offset_of_chunk_header_, so a ChunkMeta obtained from the metadata index
+// never carries them.  Read the header back from the file instead.
+int read_chunk_header_codec(ReadFile* read_file, int64_t chunk_header_offset,
+                            size_t measurement_name_len,
+                            common::TSEncoding& encoding,
+                            common::CompressionType& compression) {
+    if (read_file == nullptr || chunk_header_offset < 0) {
+        return E_INVALID_ARG;
+    }
+    // A serialized chunk header is chunk_type (1 byte) + the measurement name
+    // as a var_str (varint length + bytes) + data size as a var_uint + the
+    // data type, compressor and encoding (1 byte each).  Size the buffer from
+    // the name we already know so an unusually long measurement name cannot
+    // truncate the header and send us back to the defaults.
+    const size_t kMaxVarIntLen = 5;
+    std::vector<char> buf(1 + kMaxVarIntLen + measurement_name_len +
+                          kMaxVarIntLen + 3);
+    int32_t read_len = 0;
+    int ret = read_file->read(chunk_header_offset, buf.data(),
+                              static_cast<int32_t>(buf.size()), read_len);
+    if (ret != E_OK) {
+        return ret;
+    }
+    if (read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+        return E_TSFILE_CORRUPTED;
+    }
+    common::ByteStream in;
+    in.wrap_from(buf.data(), read_len);
+    ChunkHeader chunk_header;
+    if (RET_FAIL(chunk_header.deserialize_from(in))) {
+        return ret;
+    }
+    encoding = chunk_header.encoding_type_;
+    compression = chunk_header.compression_type_;
+    return E_OK;
+}
+
+}  // namespace
+
 int TsFileReader::get_timeseries_schema(
     std::shared_ptr<IDeviceID> device_id,
     std::vector<MeasurementSchema>& result) {
@@ -471,8 +519,33 @@ int TsFileReader::get_timeseries_schema(
                     dt = aligned->value_ts_idx_->get_data_type();
                 }
             }
-            MeasurementSchema ms(
-                timeseries_index->get_measurement_name().to_std_string(), dt);
+            // Report the codecs the file actually stores.  The 2-arg
+            // MeasurementSchema ctor fills get_value_encoder(dt) /
+            // get_default_compressor() instead, which mislabels e.g. a
+            // PLAIN/UNCOMPRESSED INT32 column as TS_2DIFF/LZ4.
+            const std::string measurement_name =
+                timeseries_index->get_measurement_name().to_std_string();
+            common::TSEncoding enc = common::get_value_encoder(dt);
+            common::CompressionType comp = common::get_default_compressor();
+            auto* chunk_meta_list = timeseries_index->get_chunk_meta_list();
+            if (chunk_meta_list != nullptr && chunk_meta_list->size() > 0 &&
+                chunk_meta_list->front() != nullptr) {
+                common::TSEncoding stored_enc = common::INVALID_ENCODING;
+                common::CompressionType stored_comp =
+                    common::INVALID_COMPRESSION;
+                // Fall back to the defaults above if the header cannot be
+                // read: schema introspection must not fail the whole call.
+                if (read_chunk_header_codec(
+                        tsfile_executor_->get_tsfile_io_reader()
+                            ->get_read_file(),
+                        chunk_meta_list->front()->offset_of_chunk_header_,
+                        measurement_name.size(), stored_enc,
+                        stored_comp) == E_OK) {
+                    enc = stored_enc;
+                    comp = stored_comp;
+                }
+            }
+            MeasurementSchema ms(measurement_name, dt, enc, comp);
             result.push_back(ms);
         }
     }
