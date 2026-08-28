@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.encrypt;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
 import org.junit.After;
@@ -26,9 +27,12 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 
 public class EncryptTest {
   private final String inputString = "AES, a fast encryptor/decryptor.";
@@ -72,6 +76,43 @@ public class EncryptTest {
         IEncryptor.getEncryptor(
             "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
     assertEquals(encryptor2.getEncryptionType(), EncryptionType.UNENCRYPTED);
+  }
+
+  @Test
+  public void GetEncryptorDoesNotLoadExternalClassName() {
+    assertThrows(
+        EncryptException.class,
+        () ->
+            IEncryptor.getEncryptor(
+                "java.io.ByteArrayInputStream", key.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  @Test
+  public void GetEncryptorValidatesEncryptionClassBeforeInstantiation() {
+    NonEncryptClass.constructorCalled = false;
+
+    assertThrows(
+        EncryptException.class,
+        () ->
+            IEncryptor.getEncryptor(
+                NonEncryptClass.class.getName(), key.getBytes(StandardCharsets.UTF_8)));
+
+    assertFalse(NonEncryptClass.constructorCalled);
+  }
+
+  @Test
+  public void GetSecondKeyFromStrLimitsKeyLength() {
+    String oversizedKey = String.join(",", Collections.nCopies(1025, "0"));
+
+    assertThrows(EncryptException.class, () -> EncryptUtils.getSecondKeyFromStr(oversizedKey));
+  }
+
+  public static class NonEncryptClass {
+    private static boolean constructorCalled;
+
+    public NonEncryptClass(byte[] key) {
+      constructorCalled = true;
+    }
   }
 
   @Test

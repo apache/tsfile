@@ -44,6 +44,10 @@ public class EncryptUtils {
 
   private static final String encryptClassPrefix = "org.apache.tsfile.encrypt.";
 
+  private static final int MAX_SECOND_KEY_LENGTH = 1024;
+
+  private static final int MAX_SECOND_KEY_STRING_LENGTH = MAX_SECOND_KEY_LENGTH * 5;
+
   private static volatile String normalKeyStr;
 
   private static volatile EncryptParameter encryptParam;
@@ -69,16 +73,24 @@ public class EncryptUtils {
   }
 
   public static String getEncryptClass(String encryptType) {
-    String classNameRegex = "^(\\p{Alpha}\\w*)(\\.\\p{Alpha}\\w+)+$";
-    if (IEncrypt.encryptTypeToClassMap.containsKey(encryptType)) {
-      return IEncrypt.encryptTypeToClassMap.get(encryptType);
-    } else if (encryptType.matches(classNameRegex)) {
-      IEncrypt.encryptTypeToClassMap.put(encryptType, encryptType);
-      return encryptType;
-    } else {
-      IEncrypt.encryptTypeToClassMap.put(encryptType, encryptClassPrefix + encryptType);
-      return encryptClassPrefix + encryptType;
+    if (encryptType == null || encryptType.isEmpty()) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.type_not_supported", String.valueOf(encryptType)));
     }
+    String className =
+        encryptType.startsWith(encryptClassPrefix) ? encryptType : encryptClassPrefix + encryptType;
+    IEncrypt.encryptTypeToClassMap.putIfAbsent(encryptType, className);
+    return className;
+  }
+
+  static Class<? extends IEncrypt> loadEncryptClass(String encryptType)
+      throws ClassNotFoundException {
+    Class<?> encryptClass =
+        Class.forName(getEncryptClass(encryptType), false, EncryptUtils.class.getClassLoader());
+    if (!IEncrypt.class.isAssignableFrom(encryptClass)) {
+      throw new EncryptException(Messages.format("error.encrypt.type_not_supported", encryptType));
+    }
+    return encryptClass.asSubclass(IEncrypt.class);
   }
 
   public static byte[] getEncryptKeyFromToken(String token, byte[] salt) {
@@ -291,11 +303,11 @@ public class EncryptUtils {
       if (IEncrypt.encryptMap.containsKey(className)) {
         return ((IEncrypt) IEncrypt.encryptMap.get(className).newInstance(dataEncryptKey));
       }
-      Class<?> encryptTypeClass = Class.forName(className);
-      java.lang.reflect.Constructor<?> constructor =
+      Class<? extends IEncrypt> encryptTypeClass = loadEncryptClass(encryptType);
+      java.lang.reflect.Constructor<? extends IEncrypt> constructor =
           encryptTypeClass.getDeclaredConstructor(byte[].class);
       IEncrypt.encryptMap.put(className, constructor);
-      return ((IEncrypt) constructor.newInstance(dataEncryptKey));
+      return constructor.newInstance(dataEncryptKey);
     } catch (ClassNotFoundException e) {
       throw new EncryptException(
           Messages.format("error.encrypt.encrypt_class_not_found", encryptType), e);
@@ -331,11 +343,23 @@ public class EncryptUtils {
   }
 
   public static byte[] getSecondKeyFromStr(String str) {
-    String[] strArray = str.split(",");
+    validateSecondKeyStringLength(str == null ? -1 : str.length());
+    String[] strArray = str.split(",", MAX_SECOND_KEY_LENGTH + 1);
+    if (strArray.length > MAX_SECOND_KEY_LENGTH) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.key_too_long", MAX_SECOND_KEY_LENGTH));
+    }
     byte[] key = new byte[strArray.length];
     for (int i = 0; i < strArray.length; i++) {
       key[i] = Byte.parseByte(strArray[i]);
     }
     return key;
+  }
+
+  public static void validateSecondKeyStringLength(int length) {
+    if (length < 0 || length > MAX_SECOND_KEY_STRING_LENGTH) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.key_too_long", MAX_SECOND_KEY_LENGTH));
+    }
   }
 }

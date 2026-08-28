@@ -39,11 +39,11 @@ public interface IEncryptor {
       if (IEncrypt.encryptMap.containsKey(className)) {
         return ((IEncrypt) IEncrypt.encryptMap.get(className).newInstance(key)).getEncryptor();
       }
-      Class<?> encryptClass = Class.forName(className);
-      java.lang.reflect.Constructor<?> constructor =
+      Class<? extends IEncrypt> encryptClass = EncryptUtils.loadEncryptClass(type);
+      java.lang.reflect.Constructor<? extends IEncrypt> constructor =
           encryptClass.getDeclaredConstructor(byte[].class);
       IEncrypt.encryptMap.put(className, constructor);
-      return ((IEncrypt) constructor.newInstance(key)).getEncryptor();
+      return constructor.newInstance(key).getEncryptor();
     } catch (ClassNotFoundException e) {
       throw new EncryptException(
           Messages.format("error.encrypt.encryptor_class_not_found", type), e);
