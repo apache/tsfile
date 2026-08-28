@@ -1088,22 +1088,20 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNRejected) {
 
     // Segment 1 (a valid single-block Form 1 page) decodes.  The trailing
     // 0x02 of the second segment prefix is then read as a block header and
-    // fails validation.  The decode loop terminates (no end-of-input spin)
-    // and no value beyond segment 1 is ever returned as valid: the
-    // stale-value poison path keeps returning values, but they are the
-    // last valid value repeated, never the expected continuation 2.0/2.25.
+    // fails validation, so the decode loop terminates (no end-of-input
+    // spin).  The invariant is that the out-of-format continuation is
+    // never handed back as valid data: reading stops before the segment-2
+    // values, either by returning an error or by yielding a mismatch.
     float x = 0.0f;
-    int ok = 0;
-    int mismatches = 0;
+    size_t good = 0;
     for (size_t i = 0; i < expected.size(); i++) {
         if (decoder_float_->read_float(x, old_fmt) != common::E_OK) break;
-        ok++;
-        if (std::fabs(x - expected[i]) > 1e-6f) {
-            mismatches++;
-        }
+        if (std::fabs(x - expected[i]) > 1e-6f) break;
+        good++;
     }
-    EXPECT_GE(mismatches, 1)
+    EXPECT_LT(good, expected.size())
         << "out-of-format continuation must not decode to the expected values";
+    EXPECT_GE(good, 1u) << "segment 1 is a valid page and must still decode";
 }
 
 // A truncated page whose block header passes the availability check (the
@@ -1133,6 +1131,36 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadTerminatesOnTruncatedBlock) {
     }
     EXPECT_FALSE(decoder.has_remaining(dec));
     SUCCEED();
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, RejectsBlockBeyondPageValueCount) {
+    // [overflow marker][count=1][bitmap][mpn=0][wi=INT_MAX][bw=0]...
+    // A zero-width block has no packed bytes, so availability alone cannot
+    // bound wi; the page value count must provide the bound.
+    const unsigned char page[] = {
+        0xff, 0xff, 0xff, 0xff, 0x07, 0x01, 0x00, 0x00, 0x7f,
+        0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    FloatTS2DIFFDecoder decoder;
+    float value = 0.0f;
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_TSFILE_CORRUPTED);
+}
+
+TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadRejectsTruncatedFixedFields) {
+    // The page metadata is valid, but the block is missing one byte of its
+    // fixed first-value field.
+    const unsigned char page[] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    FloatTS2DIFFDecoder decoder;
+    float value = 0.0f;
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_TSFILE_CORRUPTED);
 }
 
 // A page whose trailing block header is truncated mid-field: the skip

@@ -241,13 +241,13 @@ inline int read_page_meta(common::ByteStream& in, PageMeta& meta) {
     int ret = common::E_OK;
     uint32_t tag = 0;
     if (RET_FAIL(common::SerializationUtil::read_var_uint(tag, in))) {
-        return ret;
+        return common::E_TSFILE_CORRUPTED;
     }
     if (tag == FLAG_SCALED_VALUE_OVERFLOW ||
         tag == FLAG_ORIGINAL_VALUE_OVERFLOW) {
         uint32_t count = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(count, in))) {
-            return ret;
+            return common::E_TSFILE_CORRUPTED;
         }
         if (count == 0 || count > 0x7FFFFFFFu) {
             return common::E_TSFILE_CORRUPTED;
@@ -281,7 +281,7 @@ inline int read_page_meta(common::ByteStream& in, PageMeta& meta) {
         meta.page_value_count = static_cast<int>(count);
         uint32_t mpn = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(mpn, in))) {
-            return ret;
+            return common::E_TSFILE_CORRUPTED;
         }
         // No format-level upper bound: Java accepts any maxPointNumber
         // the varint carries (Math.pow overflow yields Infinity, i.e.
@@ -318,6 +318,8 @@ class TS2DIFFDecoder : public Decoder {
         current_index_ = 0;
         header_peeked_ = false;
         header_error_ = false;
+        read_error_ = common::E_OK;
+        max_values_ = -1;
     }
 
     FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) override {
@@ -343,14 +345,21 @@ class TS2DIFFDecoder : public Decoder {
             common::SerializationUtil::read_i32(bit_width, in) !=
                 common::E_OK) {
             header_error_ = true;
+            read_error_ = common::E_TSFILE_CORRUPTED;
             return common::E_TSFILE_CORRUPTED;
         }
         const int64_t block_bytes_64 =
             (static_cast<int64_t>(write_index) * bit_width + 7) / 8;
+        // int64 arithmetic for the value-count bound: write_index + 1
+        // overflows for write_index == INT32_MAX, which wraps negative and
+        // silently passes the comparison.
         if (write_index < 0 || bit_width < 0 ||
             bit_width > (int)sizeof(T) * 8 ||
+            (max_values_ >= 0 && static_cast<int64_t>(write_index) + 1 >
+                                     static_cast<int64_t>(max_values_)) ||
             block_bytes_64 > static_cast<int64_t>(in.remaining_size())) {
             header_error_ = true;
+            read_error_ = common::E_TSFILE_CORRUPTED;
             return common::E_TSFILE_CORRUPTED;
         }
         write_index_ = write_index;
@@ -358,6 +367,8 @@ class TS2DIFFDecoder : public Decoder {
         header_error_ = false;
         return common::E_OK;
     }
+
+    void set_max_values(int max_values) { max_values_ = max_values; }
 
     // If empty, cache 8 bits from in_stream to 'buffer_'.
     void read_byte_if_empty(common::ByteStream& in) {
@@ -380,6 +391,9 @@ class TS2DIFFDecoder : public Decoder {
             // check grants slack for the delta_min/first_value fields that
             // follow it, so a truncated page can still reach here.
             if (bits_left_ == 0 && !in.has_remaining()) {
+                read_error_ = common::E_TSFILE_CORRUPTED;
+                current_index_ = 0;
+                write_index_ = 0;
                 break;
             }
             if (bits > bits_left_ || bits == 8) {
@@ -441,6 +455,8 @@ class TS2DIFFDecoder : public Decoder {
     // decode() cannot return an error code, so batch entry points check
     // this flag to stop instead of looping on phantom blocks.
     bool header_error_{false};
+    int read_error_{common::E_OK};
+    int max_values_{-1};
 };
 
 // ============================================================================
@@ -458,8 +474,13 @@ inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream& in) {
             current_index_ = 0;
             return ret_value;
         }
-        common::SerializationUtil::read_i32(delta_min_, in);
-        common::SerializationUtil::read_i32(first_value_, in);
+        if (common::SerializationUtil::read_i32(delta_min_, in) !=
+                common::E_OK ||
+            common::SerializationUtil::read_i32(first_value_, in) !=
+                common::E_OK) {
+            read_error_ = common::E_TSFILE_CORRUPTED;
+            return ret_value;
+        }
         ret_value = first_value_;
         bits_left_ = 0;
         buffer_ = 0;
@@ -491,8 +512,13 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream& in) {
             current_index_ = 0;
             return ret_value;
         }
-        common::SerializationUtil::read_i64(delta_min_, in);
-        common::SerializationUtil::read_i64(first_value_, in);
+        if (common::SerializationUtil::read_i64(delta_min_, in) !=
+                common::E_OK ||
+            common::SerializationUtil::read_i64(first_value_, in) !=
+                common::E_OK) {
+            read_error_ = common::E_TSFILE_CORRUPTED;
+            return ret_value;
+        }
         ret_value = first_value_;
         if (write_index_ == 0) {
             current_index_ = 0;
@@ -536,8 +562,13 @@ inline int TS2DIFFDecoder<int32_t>::read_batch_int32(int32_t* out, int capacity,
         if (read_header(in) != common::E_OK) {
             return common::E_TSFILE_CORRUPTED;
         }
-        common::SerializationUtil::read_i32(delta_min_, in);
-        common::SerializationUtil::read_i32(first_value_, in);
+        if (common::SerializationUtil::read_i32(delta_min_, in) !=
+                common::E_OK ||
+            common::SerializationUtil::read_i32(first_value_, in) !=
+                common::E_OK) {
+            read_error_ = common::E_TSFILE_CORRUPTED;
+            return common::E_TSFILE_CORRUPTED;
+        }
         bits_left_ = 0;
         buffer_ = 0;
 
@@ -654,8 +685,13 @@ inline int TS2DIFFDecoder<int64_t>::read_batch_int64(int64_t* out, int capacity,
             if (read_header(in) != common::E_OK) {
                 return common::E_TSFILE_CORRUPTED;
             }
-            common::SerializationUtil::read_i64(delta_min_, in);
-            common::SerializationUtil::read_i64(first_value_, in);
+            if (common::SerializationUtil::read_i64(delta_min_, in) !=
+                    common::E_OK ||
+                common::SerializationUtil::read_i64(first_value_, in) !=
+                    common::E_OK) {
+                read_error_ = common::E_TSFILE_CORRUPTED;
+                return common::E_TSFILE_CORRUPTED;
+            }
             bits_left_ = 0;
             buffer_ = 0;
         }
@@ -923,8 +959,11 @@ inline bool TS2DIFFDecoder<int64_t>::peek_next_block_range_int64(
         // a stale range.)
         return false;
     }
-    common::SerializationUtil::read_i64(delta_min_, in);
-    common::SerializationUtil::read_i64(first_value_, in);
+    if (common::SerializationUtil::read_i64(delta_min_, in) != common::E_OK ||
+        common::SerializationUtil::read_i64(first_value_, in) != common::E_OK) {
+        read_error_ = common::E_TSFILE_CORRUPTED;
+        return false;
+    }
     bits_left_ = 0;
     buffer_ = 0;
 
@@ -937,8 +976,12 @@ inline bool TS2DIFFDecoder<int64_t>::peek_next_block_range_int64(
     // at offset 16 within the header
     // (write_index_(4)+bit_width_(4)+delta_min_(8)). We read it via raw pointer
     // so the stream position is not consumed.
-    int32_t packed_bytes = (write_index_ * bit_width_ + 7) / 8;
-    if (in.remaining_size() >= (uint32_t)packed_bytes + 24) {
+    // int64 arithmetic, matching skip_peeked_block_int64: read_header bounds
+    // the packed size by the stream length only, so write_index_ * bit_width_
+    // can exceed INT32_MAX on a huge page.
+    const int64_t packed_bytes =
+        (static_cast<int64_t>(write_index_) * bit_width_ + 7) / 8;
+    if (in.remaining_size() >= static_cast<uint64_t>(packed_bytes) + 24) {
         char* next_fv_ptr =
             in.get_wrapped_buf() + in.read_pos() + packed_bytes + 16;
         block_max = (int64_t)common::SerializationUtil::read_ui64(next_fv_ptr);
@@ -1072,6 +1115,9 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
                 ? 1.0
                 : std::pow(10.0, static_cast<double>(meta.max_point_number));
         page_value_count_ = meta.page_value_count;
+        if (page_value_count_ > 0) {
+            TS2DIFFDecoder<int32_t>::set_max_values(page_value_count_);
+        }
         scaled_bm_ = std::move(meta.scaled_bm);
         raw_bm_ = std::move(meta.raw_bm);
         page_pos_ = 0;
@@ -1142,6 +1188,9 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
                 ? 1.0
                 : std::pow(10.0, static_cast<double>(meta.max_point_number));
         page_value_count_ = meta.page_value_count;
+        if (page_value_count_ > 0) {
+            TS2DIFFDecoder<int64_t>::set_max_values(page_value_count_);
+        }
         scaled_bm_ = std::move(meta.scaled_bm);
         raw_bm_ = std::move(meta.raw_bm);
         page_pos_ = 0;
@@ -1183,7 +1232,7 @@ template <>
 FORCE_INLINE int IntTS2DIFFDecoder::read_int32(int32_t& ret_value,
                                                common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_error_;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFDecoder::read_int64(int64_t& ret_value,
@@ -1226,7 +1275,7 @@ template <>
 FORCE_INLINE int LongTS2DIFFDecoder::read_int64(int64_t& ret_value,
                                                 common::ByteStream& in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return read_error_;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFDecoder::read_float(float& ret_value,
@@ -1266,9 +1315,12 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
                                                  common::ByteStream& in) {
     int ret = common::E_OK;
     if (RET_FAIL(ensure_page_meta(in))) {
-        return ret;
+        return common::E_TSFILE_CORRUPTED;
     }
     int32_t value_int = TS2DIFFDecoder<int32_t>::decode(in);
+    if (TS2DIFFDecoder<int32_t>::read_error_ != common::E_OK) {
+        return TS2DIFFDecoder<int32_t>::read_error_;
+    }
     ret_value = value_at(value_int);
     page_pos_++;
     return common::E_OK;
@@ -1287,7 +1339,7 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_batch_float(float* out, int capacity,
     int ret = common::E_OK;
     actual = 0;
     if (RET_FAIL(ensure_page_meta(in))) {
-        return ret;
+        return common::E_TSFILE_CORRUPTED;
     }
     constexpr int kIntsPerBatch = 128;
     int32_t ints[kIntsPerBatch];
@@ -1297,7 +1349,7 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_batch_float(float* out, int capacity,
         const int request = want < kIntsPerBatch ? want : kIntsPerBatch;
         if (RET_FAIL(TS2DIFFDecoder<int32_t>::read_batch_int32(
                 ints, request, block_actual, in))) {
-            return ret;
+            return common::E_TSFILE_CORRUPTED;
         }
         if (block_actual == 0) {
             break;
@@ -1341,9 +1393,12 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
                                                    common::ByteStream& in) {
     int ret = common::E_OK;
     if (RET_FAIL(ensure_page_meta(in))) {
-        return ret;
+        return common::E_TSFILE_CORRUPTED;
     }
     int64_t value_long = TS2DIFFDecoder<int64_t>::decode(in);
+    if (TS2DIFFDecoder<int64_t>::read_error_ != common::E_OK) {
+        return TS2DIFFDecoder<int64_t>::read_error_;
+    }
     ret_value = value_at(value_long);
     page_pos_++;
     return common::E_OK;
@@ -1354,7 +1409,7 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_batch_double(
     int ret = common::E_OK;
     actual = 0;
     if (RET_FAIL(ensure_page_meta(in))) {
-        return ret;
+        return common::E_TSFILE_CORRUPTED;
     }
     constexpr int kIntsPerBatch = 128;
     int64_t ints[kIntsPerBatch];
@@ -1364,7 +1419,7 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_batch_double(
         const int request = want < kIntsPerBatch ? want : kIntsPerBatch;
         if (RET_FAIL(TS2DIFFDecoder<int64_t>::read_batch_int64(
                 ints, request, block_actual, in))) {
-            return ret;
+            return common::E_TSFILE_CORRUPTED;
         }
         if (block_actual == 0) {
             break;
