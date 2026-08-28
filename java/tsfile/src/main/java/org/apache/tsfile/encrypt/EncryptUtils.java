@@ -77,9 +77,21 @@ public class EncryptUtils {
       throw new EncryptException(
           Messages.format("error.encrypt.type_not_supported", String.valueOf(encryptType)));
     }
+    String mappedClassName = IEncrypt.encryptTypeToClassMap.get(encryptType);
+    if (mappedClassName != null) {
+      return validateEncryptClassName(mappedClassName, encryptType);
+    }
     String className =
         encryptType.startsWith(encryptClassPrefix) ? encryptType : encryptClassPrefix + encryptType;
-    IEncrypt.encryptTypeToClassMap.putIfAbsent(encryptType, className);
+    String previousClassName = IEncrypt.encryptTypeToClassMap.putIfAbsent(encryptType, className);
+    return validateEncryptClassName(
+        previousClassName == null ? className : previousClassName, encryptType);
+  }
+
+  private static String validateEncryptClassName(String className, String encryptType) {
+    if (!className.startsWith(encryptClassPrefix)) {
+      throw new EncryptException(Messages.format("error.encrypt.type_not_supported", encryptType));
+    }
     return className;
   }
 

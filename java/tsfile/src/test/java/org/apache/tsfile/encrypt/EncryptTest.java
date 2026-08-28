@@ -88,6 +88,31 @@ public class EncryptTest {
   }
 
   @Test
+  public void GetEncryptorUsesRegisteredClassMapping() {
+    String type = "CUSTOM";
+    IEncrypt.encryptTypeToClassMap.put(type, UNENCRYPTED.class.getName());
+    try {
+      IEncryptor encryptor = IEncryptor.getEncryptor(type, key.getBytes(StandardCharsets.UTF_8));
+      assertEquals(EncryptionType.UNENCRYPTED, encryptor.getEncryptionType());
+    } finally {
+      IEncrypt.encryptTypeToClassMap.remove(type);
+    }
+  }
+
+  @Test
+  public void GetEncryptorRejectsExternalRegisteredClassMapping() {
+    String type = "CUSTOM_EXTERNAL";
+    IEncrypt.encryptTypeToClassMap.put(type, "java.io.ByteArrayInputStream");
+    try {
+      assertThrows(
+          EncryptException.class,
+          () -> IEncryptor.getEncryptor(type, key.getBytes(StandardCharsets.UTF_8)));
+    } finally {
+      IEncrypt.encryptTypeToClassMap.remove(type);
+    }
+  }
+
+  @Test
   public void GetEncryptorValidatesEncryptionClassBeforeInstantiation() {
     NonEncryptClass.constructorCalled = false;
 
