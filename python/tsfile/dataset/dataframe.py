@@ -50,11 +50,32 @@ SeriesRef = Tuple[object, int, int]
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
+_TRUST_INDEX_ENV = "TSFILE_DATAFRAME_TRUST_INDEX"
 # Overlap position reads use chunked k-way merge. Keep the default chunk small
 # enough to avoid large read amplification for `series[i]` / short slices, but
 # large enough to avoid excessive query_by_row round-trips when overlap spans
 # multiple shards.
 _OVERLAP_ROW_CHUNK_SIZE = 256
+
+
+def _resolve_trust_index(value: Optional[bool]) -> bool:
+    """Resolve the explicit trusted-index option or its process default."""
+    if value is not None:
+        if not isinstance(value, bool):
+            raise TypeError("trust_index must be a bool or None")
+        return value
+
+    raw = os.environ.get(_TRUST_INDEX_ENV)
+    if raw is None:
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        f"{_TRUST_INDEX_ENV} must be one of 1/0, true/false, yes/no, or on/off"
+    )
 
 
 @dataclass(**_DATACLASS_SLOTS)
@@ -772,19 +793,34 @@ class _LocIndexer:
 
 
 class TsFileDataFrame:
-    """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
+    """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
+
+    ``trust_index=True`` enables the persistent Dataset Index fast path and
+    skips Dataset Index integrity, path/fingerprint, and reader-session
+    generation validation.  This is intended only for a sealed dataset whose
+    index and source files are trusted.  The underlying TsFile reader still
+    parses file metadata when a query first opens a series.  When
+    ``trust_index`` is ``None`` (the default),
+    :envvar:`TSFILE_DATAFRAME_TRUST_INDEX` is consulted; the safe default is
+    disabled.
+    """
 
     def __init__(
         self,
         paths: Union[str, List[str]],
         show_progress: bool = True,
         use_index: bool = False,
+        trust_index: Optional[bool] = None,
     ):
         if not isinstance(use_index, bool):
             raise TypeError("use_index must be a bool")
+        self._trust_index = _resolve_trust_index(trust_index)
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
-        self._use_index = use_index
+        # A trusted index is meaningful only when the persistent index path is
+        # used.  Make the safe, explicit fast-path convenient for callers by
+        # enabling it automatically instead of requiring two flags.
+        self._use_index = use_index or self._trust_index
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -805,6 +841,7 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._use_index = parent._use_index
+        obj._trust_index = parent._trust_index
         obj._readers = parent._readers
         subset_refs = list(series_refs)
         obj._index = SimpleNamespace(
@@ -866,7 +903,12 @@ class TsFileDataFrame:
         from .runtime import DatasetRuntime
 
         index_path = index_path_for(self._paths)
-        if not index_matches_paths(index_path, self._paths):
+        if self._trust_index:
+            if not os.path.isfile(index_path):
+                raise FileNotFoundError(
+                    f"Trusted Dataset Index not found: {index_path}"
+                )
+        elif not index_matches_paths(index_path, self._paths):
             lock_path = index_path + ".lock"
             os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
             with open(lock_path, "a+b") as lock_file:
@@ -885,7 +927,7 @@ class TsFileDataFrame:
                             reader.close()
                         self._readers.clear()
 
-        self._runtime = DatasetRuntime(index_path)
+        self._runtime = DatasetRuntime(index_path, trust_index=self._trust_index)
         self._runtime_lease = self._runtime.lease()
         self._index = self._runtime.catalog
         if len(self._index.series) == 0:

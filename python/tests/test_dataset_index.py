@@ -311,6 +311,89 @@ def test_persistent_index_path_is_scoped_to_expanded_file_set(tmp_path, monkeypa
         np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0, 10.0, 11.0]))
 
 
+def test_trusted_index_skips_index_and_file_set_validation(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as first:
+        assert len(first) == 1
+
+    def fail_validation(*_args, **_kwargs):
+        raise AssertionError("trusted construction must skip validation")
+
+    monkeypatch.setattr(index_module, "index_matches_paths", fail_validation)
+    monkeypatch.setattr(index_module.MappedDatasetIndex, "_validate", fail_validation)
+
+    with TsFileDataFrame(
+        str(source), show_progress=False, trust_index=True
+    ) as dataframe:
+        assert dataframe._use_index is True
+        assert dataframe._trust_index is True
+        assert len(dataframe) == 1
+
+
+def test_trusted_index_environment_override_enables_index(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as first:
+        assert len(first) == 1
+
+    def fail_validation(*_args, **_kwargs):
+        raise AssertionError("trusted construction must skip validation")
+
+    monkeypatch.setenv("TSFILE_DATAFRAME_TRUST_INDEX", "yes")
+    monkeypatch.setattr(index_module, "index_matches_paths", fail_validation)
+    monkeypatch.setattr(index_module.MappedDatasetIndex, "_validate", fail_validation)
+
+    # The environment-level option also turns on the persistent-index path, so
+    # callers do not need to add both use_index=True and trust_index=True.
+    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+        assert dataframe._use_index is True
+        assert dataframe._trust_index is True
+        assert len(dataframe) == 1
+
+
+def test_explicit_trust_index_false_overrides_environment(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    monkeypatch.setenv("TSFILE_DATAFRAME_TRUST_INDEX", "1")
+
+    with TsFileDataFrame(
+        str(source), show_progress=False, trust_index=False
+    ) as dataframe:
+        assert dataframe._trust_index is False
+        assert dataframe._runtime is None
+        assert len(dataframe) == 1
+
+
+def test_trusted_index_requires_an_existing_index(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with pytest.raises(FileNotFoundError, match="Trusted Dataset Index not found"):
+        TsFileDataFrame(str(source), show_progress=False, trust_index=True)
+
+
+def test_trusted_index_skips_reader_generation_revalidation(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as first:
+        assert len(first) == 1
+
+    with TsFileDataFrame(
+        str(source), show_progress=False, trust_index=True
+    ) as dataframe:
+        pool = dataframe._runtime.readers
+        with pool.acquire(0):
+            pass
+        stat = os.stat(source)
+        os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        with pool.acquire(0):
+            pass
+
+
 def test_named_selection_reuses_bounded_runtime_descriptor(tmp_path, monkeypatch):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)

@@ -225,10 +225,23 @@ def write_index_atomic(path: str, section_payloads: Mapping[int, bytes]) -> None
 
 
 class MappedDatasetIndex:
-    """Validated read-only mmap and typed zero-copy record access."""
+    """Read-only mmap and typed zero-copy record access.
 
-    def __init__(self, path: str, verify_sections: bool = False):
+    By default the complete v1 structural validation is performed once while
+    opening the mapping.  ``trust_index=True`` is an explicit unsafe fast path
+    for callers that already validated the Dataset Index out of band; it only
+    reads the header and directory needed to locate sections and skips all
+    integrity and cross-reference checks.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        verify_sections: bool = False,
+        trust_index: bool = False,
+    ):
         self.path = path
+        self._trusted = bool(trust_index)
         self._file = open(path, "rb")
         try:
             stat = os.fstat(self._file.fileno())
@@ -240,7 +253,11 @@ class MappedDatasetIndex:
             )
             self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
             self._view = memoryview(self._mmap)
-            self._entries = self._validate(verify_sections)
+            self._entries = (
+                self._map_entries_without_validation()
+                if self._trusted
+                else self._validate(verify_sections)
+            )
         except Exception:
             if getattr(self, "_view", None) is not None:
                 self._view.release()
@@ -250,6 +267,27 @@ class MappedDatasetIndex:
                 self._mmap = None
             self._file.close()
             raise
+
+    def _map_entries_without_validation(self):
+        """Read v1 section descriptors without checking their contents.
+
+        Trusted mode still needs the section descriptors to translate a
+        logical record into an mmap address.  Every other header, range,
+        checksum, string-pool, and cross-section consistency check is omitted
+        deliberately; malformed input is outside the trusted-mode contract.
+        """
+        header = HEADER.unpack_from(self._view)
+        directory_offset = header[4]
+        section_count = header[5]
+        directory_entry_size = header[6]
+        entries = {}
+        for index in range(section_count):
+            entry = DIRECTORY.unpack_from(
+                self._view,
+                directory_offset + index * directory_entry_size,
+            )
+            entries[entry[0]] = entry
+        return entries
 
     def _validate(self, verify_sections: bool):
         if len(self._view) < HEADER_SIZE:
@@ -357,7 +395,7 @@ class MappedDatasetIndex:
 
     def record(self, section_type: int, record_id: int) -> tuple:
         entry = self._entries[section_type]
-        if record_id < 0 or record_id >= entry[4]:
+        if not self._trusted and (record_id < 0 or record_id >= entry[4]):
             raise IndexError(record_id)
         return RECORDS[section_type].unpack_from(
             self._view, entry[2] + record_id * entry[1]
@@ -366,7 +404,7 @@ class MappedDatasetIndex:
     def records(self, section_type: int, first: int = 0, count: Optional[int] = None):
         total = self.count(section_type)
         end = total if count is None else first + count
-        if first < 0 or end < first or end > total:
+        if not self._trusted and (first < 0 or end < first or end > total):
             raise IndexError((first, count))
         for record_id in range(first, end):
             yield self.record(section_type, record_id)
@@ -374,7 +412,7 @@ class MappedDatasetIndex:
     def string_bytes(self, sid: int) -> bytes:
         offsets = self._entries[STRING_OFFSETS]
         strings = self._entries[STRING_BYTES]
-        if sid < 0 or sid + 1 >= offsets[4]:
+        if not self._trusted and (sid < 0 or sid + 1 >= offsets[4]):
             raise IndexError(sid)
         start = RECORDS[STRING_OFFSETS].unpack_from(self._view, offsets[2] + sid * 4)[0]
         end = RECORDS[STRING_OFFSETS].unpack_from(
