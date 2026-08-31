@@ -31,7 +31,8 @@ package tsfile
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../cpp/target/build/include
-#cgo LDFLAGS: -L${SRCDIR}/../../cpp/target/build/lib -ltsfile -Wl,-rpath,${SRCDIR}/../../cpp/target/build/lib
+#cgo !windows LDFLAGS: -L${SRCDIR}/../../cpp/target/build/lib -ltsfile -Wl,-rpath,${SRCDIR}/../../cpp/target/build/lib
+#cgo windows LDFLAGS: -L${SRCDIR}/../../cpp/target/build/lib -ltsfile
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
