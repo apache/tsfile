@@ -22,6 +22,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
+#include <string>
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 extern "C" {
 #include "cwrapper/errno_define_c.h"
@@ -31,6 +39,21 @@ extern "C" {
 namespace cwrapper_public_writer {
 
 class CWrapperPublicWriterTest : public testing::Test {};
+
+// CTest runs gtest-discovered cases in parallel processes. Keep writer files
+// unique per process/case so one test cannot remove another test's file while
+// it is being written or read.
+inline std::string unique_writer_path(const char* stem) {
+    static unsigned counter = 0;
+#ifdef _WIN32
+    long pid = static_cast<long>(_getpid());
+#else
+    long pid = static_cast<long>(getpid());
+#endif
+    std::ostringstream path;
+    path << stem << "_" << pid << "_" << counter++ << ".tsfile";
+    return path.str();
+}
 
 // Every public generic writer entry point must reject a null writer handle
 // without dereferencing it: ERRNO-returning calls report RET_INVALID_ARG,
@@ -84,9 +107,10 @@ TEST_F(CWrapperPublicWriterTest, WriterNewInvalidArgs) {
 
     // A null err_code is accepted: the call reports failure only through
     // the NULL return and must not crash.
-    const char* filename = "cwrapper_public_writer_test.tsfile";
-    EXPECT_EQ(tsfile_generic_writer_new(filename, 1 << 20, nullptr), nullptr);
-    remove(filename);
+    const std::string filename = unique_writer_path("cwrapper_public_writer");
+    EXPECT_EQ(tsfile_generic_writer_new(filename.c_str(), 1 << 20, nullptr),
+              nullptr);
+    remove(filename.c_str());
 
     // A path under a non-existent directory fails to open; the error code
     // must be reported and the handle must be NULL.
@@ -156,12 +180,12 @@ TEST_F(CWrapperPublicWriterTest, TabletNewWithTargetNameInvalidArgs) {
 // Invalid arguments on a live writer handle must be reported, not crashed
 // on, and must not close the writer.
 TEST_F(CWrapperPublicWriterTest, InvalidArgsOnLiveWriter) {
-    const char* filename = "cwrapper_public_writer_test.tsfile";
-    remove(filename);
+    const std::string filename = unique_writer_path("cwrapper_public_writer");
+    remove(filename.c_str());
 
     ERRNO err = RET_OK;
     TsFileGenericWriter writer =
-        tsfile_generic_writer_new(filename, 128 * 1024 * 1024, &err);
+        tsfile_generic_writer_new(filename.c_str(), 128 * 1024 * 1024, &err);
     ASSERT_EQ(RET_OK, err);
     ASSERT_NE(nullptr, writer);
 
@@ -217,12 +241,12 @@ TEST_F(CWrapperPublicWriterTest, InvalidArgsOnLiveWriter) {
                                                         &ts_schema),
               RET_OK);
     EXPECT_EQ(tsfile_generic_writer_close(writer), RET_OK);
-    remove(filename);
+    remove(filename.c_str());
 }
 
 TEST_F(CWrapperPublicWriterTest, WriteAndQueryTreeTablet) {
-    const char* filename = "cwrapper_public_writer_test.tsfile";
-    remove(filename);
+    const std::string filename = unique_writer_path("cwrapper_public_writer");
+    remove(filename.c_str());
 
     const char* device_id = "root.d1";
     const char* measurement = "s1";
@@ -230,7 +254,7 @@ TEST_F(CWrapperPublicWriterTest, WriteAndQueryTreeTablet) {
     // Write one INT64/PLAIN/UNCOMPRESSED timeseries with the public API.
     ERRNO err = RET_OK;
     TsFileGenericWriter writer =
-        tsfile_generic_writer_new(filename, 128 * 1024 * 1024, &err);
+        tsfile_generic_writer_new(filename.c_str(), 128 * 1024 * 1024, &err);
     ASSERT_EQ(RET_OK, err);
     ASSERT_NE(nullptr, writer);
 
@@ -265,7 +289,7 @@ TEST_F(CWrapperPublicWriterTest, WriteAndQueryTreeTablet) {
 
     // Read the file back with the public reader/query-by-row API.
     ERRNO code = RET_OK;
-    TsFileReader reader = tsfile_reader_new(filename, &code);
+    TsFileReader reader = tsfile_reader_new(filename.c_str(), &code);
     ASSERT_EQ(RET_OK, code);
     ASSERT_NE(nullptr, reader);
 
@@ -295,7 +319,7 @@ TEST_F(CWrapperPublicWriterTest, WriteAndQueryTreeTablet) {
 
     free_tsfile_result_set(&result_set);
     ASSERT_EQ(tsfile_reader_close(reader), RET_OK);
-    remove(filename);
+    remove(filename.c_str());
 }
 
 }  // namespace cwrapper_public_writer
