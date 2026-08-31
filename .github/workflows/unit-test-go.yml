@@ -60,7 +60,7 @@ jobs:
           go-version: "1.22.x"
           cache-dependency-path: go/go.mod
       - name: Set up MinGW toolchain
-        if: runner.os == 'Windows'
+        if: matrix.toolchain == 'mingw'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -91,7 +91,7 @@ jobs:
             ./mvnw -P with-cpp -DskipTests -Dspotless.skip=true package
           fi
       - name: Expose Windows native libraries
-        if: runner.os == 'Windows'
+        if: matrix.toolchain == 'mingw'
         shell: pwsh
         run: |
           $nativeLib = Join-Path $env:GITHUB_WORKSPACE "cpp\target\build\lib"
@@ -99,8 +99,19 @@ jobs:
           "C:\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "Added native library paths: $nativeLib and C:\mingw64\bin"
       - name: Test Go API
+        if: matrix.toolchain != 'msvc'
         working-directory: go
         run: |
           go vet ./...
           go test ./...
           go test -race ./...
+      - name: Verify MSVC native build
+        if: matrix.toolchain == 'msvc'
+        shell: pwsh
+        run: |
+          $nativeLib = Join-Path $env:GITHUB_WORKSPACE "cpp\target\build\lib"
+          $dll = Get-ChildItem -Path $nativeLib -Filter "tsfile.dll" -Recurse -ErrorAction SilentlyContinue
+          $importLib = Get-ChildItem -Path $nativeLib -Filter "tsfile.lib" -Recurse -ErrorAction SilentlyContinue
+          if (-not $dll) { throw "MSVC tsfile.dll was not produced under $nativeLib" }
+          if (-not $importLib) { throw "MSVC tsfile.lib import library was not produced under $nativeLib" }
+          Write-Host "Verified MSVC outputs: $($dll.FullName) and $($importLib.FullName)"
