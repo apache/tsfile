@@ -171,7 +171,8 @@ int ReadFile::open(const std::string& file_path) {
                 ret = map_ret;
             } else {
                 LOGW("mmap unavailable for " << file_path_.c_str()
-                                             << "; falling back to pread");
+                                             << " (map_ret=" << map_ret
+                                             << "); falling back to pread");
             }
         }
         if (ret == E_OK) {
