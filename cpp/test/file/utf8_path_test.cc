@@ -46,11 +46,34 @@ namespace {
 // The path bytes are spelled with explicit escapes so the test does not depend
 // on how the compiler re-encodes non-ASCII literals from the source charset.
 // UTF-8 for U+6D4B U+8BD5 ("test" in Chinese) followed by U+00E9 ("e-acute").
-const char* kUtf8Name = "\xE6\xB5\x8B\xE8\xAF\x95_\xC3\xA9_utf8.tsfile";
+const char* kUtf8Stem = "\xE6\xB5\x8B\xE8\xAF\x95_\xC3\xA9_";
+
+// Every gtest case runs as its own process (gtest_discover_tests) in a
+// shared working directory, and ctest starts several of them at once
+// (--parallel N).  A fixed file name would let one case's SetUp/TearDown
+// unlink the file another case is mid-test with, so each case gets its
+// own name, suffixed with the gtest case name (which is plain ASCII).
+std::string Utf8Name() {
+    const ::testing::TestInfo* info =
+        ::testing::UnitTest::GetInstance()->current_test_info();
+    return std::string(kUtf8Stem) +
+           (info != nullptr ? info->name() : "unknown") + ".tsfile";
+}
 
 #ifdef _WIN32
-// Same name as kUtf8Name, spelled as UTF-16 code units.
-const wchar_t* kWideName = L"\x6D4B\x8BD5_\x00E9_utf8.tsfile";
+// Same name as Utf8Name(), spelled as UTF-16 code units.  Test names are
+// ASCII, so widening them is a plain char-by-char copy.
+std::wstring WideName() {
+    const ::testing::TestInfo* info =
+        ::testing::UnitTest::GetInstance()->current_test_info();
+    std::wstring wide(L"\x6D4B\x8BD5_\x00E9_");
+    const char* tag = info != nullptr ? info->name() : "unknown";
+    while (*tag != '\0') {
+        wide += static_cast<wchar_t>(*tag++);
+    }
+    wide += L".tsfile";
+    return wide;
+}
 #endif
 
 // Smallest byte sequence that counts as a complete TsFile: head magic, the
@@ -73,10 +96,10 @@ const std::string& MinimalTsFile() {
 // the latter behind would let one test's stray file satisfy the next test.
 void RemoveTestFiles() {
 #ifdef _WIN32
-    ::_wunlink(kWideName);
-    ::_unlink(kUtf8Name);
+    ::_wunlink(WideName().c_str());
+    ::_unlink(Utf8Name().c_str());
 #else
-    ::unlink(kUtf8Name);
+    ::_unlink(Utf8Name().c_str());
 #endif
 }
 
@@ -84,10 +107,10 @@ void RemoveTestFiles() {
 // cannot be fooled by the same encoding bug the test is about.
 bool ExistsByWidePath() {
 #ifdef _WIN32
-    return ::GetFileAttributesW(kWideName) != INVALID_FILE_ATTRIBUTES;
+    return ::GetFileAttributesW(WideName().c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
     struct stat st;
-    return ::stat(kUtf8Name, &st) == 0;
+    return ::stat(Utf8Name().c_str(), &st) == 0;
 #endif
 }
 
@@ -95,11 +118,12 @@ bool ExistsByWidePath() {
 // really carries the non-ASCII name regardless of the active code page.
 bool CreateFixtureByWidePath() {
 #ifdef _WIN32
-    const int fd =
-        ::_wopen(kWideName, _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY,
-                 _S_IREAD | _S_IWRITE);
+    const int fd = ::_wopen(WideName().c_str(),
+                            _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY,
+                            _S_IREAD | _S_IWRITE);
 #else
-    const int fd = ::open(kUtf8Name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    const int fd =
+        ::open(Utf8Name().c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
 #endif
     if (fd < 0) {
         return false;
@@ -128,7 +152,7 @@ class Utf8PathTest : public ::testing::Test {
 // lands under a mojibake name (or not at all) and the wide-path lookup fails.
 TEST_F(Utf8PathTest, WriteFileCreatesUtf8Path) {
     storage::WriteFile write_file;
-    ASSERT_EQ(write_file.create(kUtf8Name, O_WRONLY | O_CREAT | O_TRUNC, 0666),
+    ASSERT_EQ(write_file.create(Utf8Name(), O_WRONLY | O_CREAT | O_TRUNC, 0666),
               E_OK);
     ASSERT_TRUE(write_file.file_opened());
     const std::string& content = MinimalTsFile();
@@ -147,7 +171,7 @@ TEST_F(Utf8PathTest, ReadFileOpensUtf8Path) {
     ASSERT_TRUE(ExistsByWidePath());
 
     storage::ReadFile read_file;
-    EXPECT_EQ(read_file.open(kUtf8Name), E_OK)
+    EXPECT_EQ(read_file.open(Utf8Name()), E_OK)
         << "an existing file with a non-ASCII name could not be opened";
     EXPECT_TRUE(read_file.is_opened());
     read_file.close();
@@ -159,7 +183,7 @@ TEST_F(Utf8PathTest, ReadFileOpensUtf8Path) {
 // round trips, so only the on-disk name proves the bytes were honoured.
 TEST_F(Utf8PathTest, Utf8PathRoundTripsBetweenWriteAndRead) {
     storage::WriteFile write_file;
-    ASSERT_EQ(write_file.create(kUtf8Name, O_WRONLY | O_CREAT | O_TRUNC, 0666),
+    ASSERT_EQ(write_file.create(Utf8Name(), O_WRONLY | O_CREAT | O_TRUNC, 0666),
               E_OK);
     const std::string& content = MinimalTsFile();
     ASSERT_EQ(
@@ -171,7 +195,7 @@ TEST_F(Utf8PathTest, Utf8PathRoundTripsBetweenWriteAndRead) {
         << "the round trip used a name that is not the requested UTF-8 path";
 
     storage::ReadFile read_file;
-    ASSERT_EQ(read_file.open(kUtf8Name), E_OK);
+    ASSERT_EQ(read_file.open(Utf8Name()), E_OK);
     EXPECT_EQ(read_file.file_size(), static_cast<int64_t>(content.size()));
 
     std::string buf(content.size(), '\0');
@@ -193,7 +217,7 @@ TEST_F(Utf8PathTest, RestorableWriterSelfChecksUtf8Path) {
     ASSERT_TRUE(CreateFixtureByWidePath());
 
     storage::RestorableTsFileIOWriter writer;
-    ASSERT_EQ(writer.open(kUtf8Name, true), E_OK);
+    ASSERT_EQ(writer.open(Utf8Name(), true), E_OK);
     EXPECT_EQ(writer.get_truncated_size(), storage::TSFILE_CHECK_COMPLETE)
         << "the self check did not see the existing complete file";
     EXPECT_FALSE(writer.has_crashed());
