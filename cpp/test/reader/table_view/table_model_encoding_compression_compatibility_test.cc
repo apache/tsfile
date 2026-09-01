@@ -67,8 +67,7 @@ const char* const kTagColumn = "device";
 const char* const kValueColumn = "value";
 const char* const kTagValue = "compat_device";
 // Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
-// page-wide bitmaps must survive block transitions. Applied to every
-// case, per review feedback on apache/tsfile#901.
+// page-wide bitmaps must survive block transitions. Applied to every case.
 constexpr int kRowCount = 300;
 
 const int32_t kIntValues[] = {

@@ -534,10 +534,10 @@ TEST(FloatTS2DIFFEncoderResetTest, ResetClearsUnderflowFlags) {
 // prefix, values stored as bit-cast float bits) must stay decodable through
 // Legacy raw TS_2DIFF pages (pre-#796 C++ writer output: plain int delta
 // blocks over bit-cast float bits, no maxPointNumber / bitmap prefix) are
-// outside the cross-language format: the Java reader never supported them
-// (apache/tsfile#901 review).  The decoder now treats such input as a
-// format error instead of guessing the layout: it must fail fast rather
-// than hang at end-of-input or silently return misdecoded values.
+// outside the cross-language format: the Java reader never supported them.
+// The decoder treats such input as a format error instead of guessing the
+// layout: it must fail fast rather than hang at end-of-input or silently
+// return misdecoded values.
 //
 // A raw block starts with the 4-byte big-endian write_index whose high
 // byte is 0x00; to the page-metadata parser that is a valid
@@ -1001,7 +1001,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberPerPageAfterReset) {
 // the Java side): a canonical Form 1 page starting with the 0x00 byte.
 // At mpn = 0 every finite in-range value takes the scaled form, so the
 // page has no bitmap; the 0x00 byte is the maxPointNumber varint itself,
-// not a legacy marker (apache/tsfile#901 review).
+// not a legacy marker.
 TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberZeroPagePrefix) {
     const int row_num = 140;  // 129 + 11: crosses the block boundary
     std::vector<float> data(row_num);
@@ -1061,10 +1061,9 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberZeroPagePrefix) {
 
 // The pre-#910 C++ encoder repeated the maxPointNumber at every segment
 // boundary.  That layout was never produced by the Java writer and is now
-// outside the compatibility boundary (apache/tsfile#901 review): the
-// decoder parses page metadata exactly once, so a hand-built old-format
-// page fails the block-header validation instead of being silently
-// misdecoded.
+// outside the compatibility boundary: the decoder parses page metadata
+// exactly once, so a hand-built old-format page fails the block-header
+// validation instead of being silently misdecoded.
 TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNRejected) {
     // Build an old-format page by hand: 0x02 prefix before BOTH segments.
     const std::vector<float> expected = {0.5f, 0.75f, 1.0f, 1.25f,
@@ -1107,7 +1106,7 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, LegacyPerSegmentMaxPNRejected) {
 // A truncated page whose block header passes the availability check (the
 // check grants slack for the delta_min/first_value fields) but whose
 // packed bits never arrive: the scalar read path must terminate instead
-// of spinning on a stale buffer (apache/tsfile#901 adversarial review).
+// of spinning on a stale buffer.
 TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadTerminatesOnTruncatedBlock) {
     // [mpn=2][wi=1][bw=8][dm=0][fv=42] - after the header, remaining=8
     // covers the 1 packed byte, then dm+fv consume it all.
@@ -1146,7 +1145,9 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, RejectsBlockBeyondPageValueCount) {
     dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
     FloatTS2DIFFDecoder decoder;
     float value = 0.0f;
-    EXPECT_EQ(decoder.read_float(value, dec), common::E_TSFILE_CORRUPTED);
+    // A block header that violates the format is a decode error, matching
+    // the RLE/Sprintz/RLBE convention.
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_DECODE_ERR);
 }
 
 TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadRejectsTruncatedFixedFields) {
@@ -1160,7 +1161,9 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadRejectsTruncatedFixedFields) {
     dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
     FloatTS2DIFFDecoder decoder;
     float value = 0.0f;
-    EXPECT_EQ(decoder.read_float(value, dec), common::E_TSFILE_CORRUPTED);
+    // A short read propagates the stream's own error rather than being
+    // rebranded as a format violation.
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_PARTIAL_READ);
 }
 
 // A page whose trailing block header is truncated mid-field: the skip
@@ -1179,7 +1182,8 @@ TEST_F(TS2DIFFCodecTest, SkipRejectsTruncatedBlockHeader) {
     IntTS2DIFFDecoder decoder;
     int skipped = 0;
     const int rc = decoder.skip_int32(10, skipped, dec);
-    EXPECT_EQ(rc, common::E_TSFILE_CORRUPTED);
+    // Truncated header: the underlying short-read error propagates.
+    EXPECT_EQ(rc, common::E_PARTIAL_READ);
 }
 
 // Java Math.round semantics: floor(x + 0.5), ties towards +infinity.
@@ -1219,10 +1223,9 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, JavaRoundNegativeHalfTiesDouble) {
     }
 }
 
-// writeIndex is bounded by availability, not BLOCK_DEFAULT_SIZE
-// (apache/tsfile#901 review): a hand-built block larger than 129 values
-// (Java exposes block-size constructors) must decode through both the
-// scalar and batch paths.
+// writeIndex is bounded by availability, not BLOCK_DEFAULT_SIZE: a
+// hand-built block larger than 129 values (Java exposes block-size
+// constructors) must decode through both the scalar and batch paths.
 TEST_F(TS2DIFFCodecTest, LargeBlockBeyondDefaultSizeDecodes) {
     const int kCount = 200;  // wi = 199 > 128
     const int32_t first = 1000;
@@ -1286,10 +1289,10 @@ TEST_F(TS2DIFFCodecTest, LargeBlockBeyondDefaultSizeDecodes) {
     }
 }
 
-// maxPointNumber has no format-level upper bound (apache/tsfile#901
-// review): a page written with mpn = 1000 (Java Math.pow overflows to
-// +inf for the decoder, values then divide by inf) stays readable; the
-// decoder must accept the varint instead of rejecting it as corrupt.
+// maxPointNumber has no format-level upper bound: a page written with
+// mpn = 1000 (Java Math.pow overflows to +inf for the decoder, values
+// then divide by inf) stays readable; the decoder must accept the varint
+// instead of rejecting it as corrupt.
 TEST_F(FloatDoubleTS2DIFFCodecTest, MaxPointNumberAboveLegacyBoundDecodes) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     encoder_float_->set_max_point_number(1000);

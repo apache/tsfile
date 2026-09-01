@@ -30,6 +30,7 @@
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
+#include "ts2diff_wire_format.h"
 
 #ifdef ENABLE_SIMD
 #include "simde/x86/avx2.h"
@@ -158,23 +159,13 @@ class TS2DIFFEncoder : public Encoder {
 
     void rebase_arr(int i) { delta_arr_[i] = delta_arr_[i] - delta_arr_min_; }
 
-    int cal_bit_width(T n) {
-        int bit_width = 0;
-        while (n > 0) {
-            bit_width++;
-            n >>= 1;
-        }
-        return bit_width;
-    }
-
     // Java-compatible bit width: the maximum width over the *rebased*
     // deltas, not the width of (max - min).  When the raw deltas wrap
     // (e.g. two adjacent raw IEEE bit patterns whose difference
-    // overflows the integer type), (max - min) itself wraps to a
-    // negative value and cal_bit_width would return 0, silently
-    // discarding every delta in the block.  Mirrors Java
-    // calculateBitWidthsForDeltaBlockBuffer, which widens each rebased
-    // delta individually.
+    // overflows the integer type), (max - min) itself wraps negative and
+    // its width would be 0, silently discarding every delta in the
+    // block.  Mirrors Java calculateBitWidthsForDeltaBlockBuffer, which
+    // widens each rebased delta individually.
     int cal_bit_width_rebased() {
         typedef typename std::make_unsigned<T>::type UT;
         UT max_rebased = 0;
@@ -235,10 +226,9 @@ class TS2DIFFEncoder : public Encoder {
         if (bits_in_accum > 0) {
             buf[pos++] = static_cast<uint8_t>(accum << (8 - bits_in_accum));
         }
-        // Surface write failures.  Previously the return code was dropped on
-        // the floor and flush() returned E_OK, then reset() wiped the
-        // encoder state — the on-disk page ended up missing its delta block
-        // but the caller thought the data was safe.
+        // The write status must reach the caller: a dropped return code
+        // here would let flush() report E_OK for a page whose delta block
+        // never made it to disk.
         return out_stream.write_buf(buf.data(), pos);
     }
 
@@ -685,7 +675,7 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     // continuous sequence of integer TS_2DIFF blocks.  The integer encoder
     // flushes a complete 129-value block on its own whenever it fills, so
     // those blocks are buffered here and emitted, metadata first, when the
-    // page is sealed (apache/tsfile#901 review).
+    // page is sealed.
     common::ByteStream page_blocks_;
 };
 
@@ -868,7 +858,7 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
     return do_encode(value, out);
 }
 
-// Java FloatEncoder page layout (apache/tsfile#901 review):
+// Java FloatEncoder page layout:
 //   no overflow:   [maxPointNumber varint][block 1][block 2]...
 //   overflow:      [overflow marker varint][pageValueCount varint]
 //                  [page-wide bitmap(s)][maxPointNumber varint][blocks...]
@@ -914,13 +904,9 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
-            2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
-            2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_raw_bits ? FLAG_ORIGINAL_VALUE_OVERFLOW
-                             : FLAG_SCALED_VALUE_OVERFLOW,
+                has_raw_bits ? ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW
+                             : ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }
@@ -946,10 +932,10 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     if (RET_FAIL(common::merge_byte_stream(out_stream, page_blocks_))) {
         return ret;
     }
-    // Defer encoder-state wipe until after every write into out_stream has
-    // committed.  An earlier reset() let a mid-flush failure leave
-    // write_index_ at -1, so the next flush() short-circuited at the top
-    // and the data was silently lost.
+    // The encoder state is wiped only after every write into out_stream has
+    // committed: clearing it earlier would leave write_index_ at -1 after a
+    // mid-flush failure, so the retrying flush() would short-circuit at the
+    // top and drop the data.
     underflow_flags_.clear();
     page_blocks_.reset();
     return ret;
@@ -988,13 +974,9 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
-            2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
-            2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_raw_bits ? FLAG_ORIGINAL_VALUE_OVERFLOW
-                             : FLAG_SCALED_VALUE_OVERFLOW,
+                has_raw_bits ? ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW
+                             : ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }

@@ -67,8 +67,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
   private static final String VALUE_COLUMN = "value";
   private static final String TAG_VALUE = "compat_device";
   // Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
-  // page-wide bitmaps must survive block transitions. Applied to every
-  // case, per review feedback on apache/tsfile#901.
+  // page-wide bitmaps must survive block transitions. Applied to every case.
   private static final int ROW_COUNT = 300;
 
   private static final int[] INT_VALUES = {
@@ -246,7 +245,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
           cases.add(new FixtureCase(dataType, TSEncoding.TS_2DIFF, compression, ROW_COUNT));
           // Explicit max_point_number=0 fixture: a canonical page starting
           // with the 0x00 maxPointNumber byte must enter the Form 1
-          // parsing path (apache/tsfile#901 review).
+          // parsing path.
           cases.add(
               new FixtureCase(
                   FixtureCase.fileName(dataType, TSEncoding.TS_2DIFF, compression) + ".mpn0",
