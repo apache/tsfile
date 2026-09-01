@@ -368,6 +368,12 @@ class TS2DIFFDecoder : public Decoder {
 
     void set_max_values(int max_values) { max_values_ = max_values; }
 
+    // Page-header point count: bounds writeIndex even when the stream
+    // carries no page metadata (plain int pages, Form 1 float pages).
+    void set_page_value_count(int page_value_count) override {
+        set_max_values(page_value_count);
+    }
+
     // If empty, cache 8 bits from in_stream to 'buffer_'.
     void read_byte_if_empty(common::ByteStream& in) {
         if (bits_left_ == 0) {
@@ -1118,6 +1124,7 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
         max_point_value_ = 1.0;
         page_pos_ = 0;
         page_value_count_ = 0;
+        page_value_count_bound_ = -1;
         scaled_bm_.clear();
         raw_bm_.clear();
     }
@@ -1136,6 +1143,12 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
                          common::ByteStream& in) override;
     int read_batch_int32(int32_t* out, int capacity, int& actual,
                          common::ByteStream& in) override;
+
+    // Page-header point count.  Stored separately because the inner
+    // reset() clears max_values_; applied in ensure_page_meta.
+    void set_page_value_count(int page_value_count) override {
+        page_value_count_bound_ = page_value_count;
+    }
 
    private:
     // Parses the page metadata on the first value of a page.  Returns
@@ -1156,6 +1169,11 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
         page_value_count_ = meta.page_value_count;
         if (page_value_count_ > 0) {
             TS2DIFFDecoder<int32_t>::set_max_values(page_value_count_);
+        } else if (page_value_count_bound_ >= 0) {
+            // Form 1 metadata carries no value count; fall back to the
+            // page-header count plumbed by the reader.  >= 0: a page
+            // declaring zero points must reject every block.
+            TS2DIFFDecoder<int32_t>::set_max_values(page_value_count_bound_);
         }
         scaled_bm_ = std::move(meta.scaled_bm);
         raw_bm_ = std::move(meta.raw_bm);
@@ -1179,6 +1197,8 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
     double max_point_value_{1.0};
     int page_pos_{0};
     int page_value_count_{0};
+    // Page-header count plumbed by the reader; -1 = not set.
+    int page_value_count_bound_{-1};
     bool page_meta_parsed_{false};
     std::vector<uint8_t> scaled_bm_;
     std::vector<uint8_t> raw_bm_;
@@ -1193,6 +1213,7 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
         max_point_value_ = 1.0;
         page_pos_ = 0;
         page_value_count_ = 0;
+        page_value_count_bound_ = -1;
         scaled_bm_.clear();
         raw_bm_.clear();
     }
@@ -1212,6 +1233,11 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
     int read_batch_int64(int64_t* out, int capacity, int& actual,
                          common::ByteStream& in) override;
 
+    // See FloatTS2DIFFDecoder::set_page_value_count.
+    void set_page_value_count(int page_value_count) override {
+        page_value_count_bound_ = page_value_count;
+    }
+
    private:
     int ensure_page_meta(common::ByteStream& in) {
         if (page_meta_parsed_) {
@@ -1229,6 +1255,10 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
         page_value_count_ = meta.page_value_count;
         if (page_value_count_ > 0) {
             TS2DIFFDecoder<int64_t>::set_max_values(page_value_count_);
+        } else if (page_value_count_bound_ >= 0) {
+            // See the float decoder: a page declaring zero points must
+            // reject every block.
+            TS2DIFFDecoder<int64_t>::set_max_values(page_value_count_bound_);
         }
         scaled_bm_ = std::move(meta.scaled_bm);
         raw_bm_ = std::move(meta.raw_bm);
@@ -1252,6 +1282,8 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
     double max_point_value_{1.0};
     int page_pos_{0};
     int page_value_count_{0};
+    // Page-header count plumbed by the reader; -1 = not set.
+    int page_value_count_bound_{-1};
     bool page_meta_parsed_{false};
     std::vector<uint8_t> scaled_bm_;
     std::vector<uint8_t> raw_bm_;

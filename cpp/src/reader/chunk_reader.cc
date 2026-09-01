@@ -375,6 +375,14 @@ int ChunkReader::decode_cur_page_data(TsBlock*& ret_tsblock, Filter* filter,
     if (IS_SUCC(ret)) {
         time_decoder_->reset();
         value_decoder_->reset();
+        // Structural bound for codecs whose stream carries no page value
+        // count (TS_2DIFF int pages and Form 1 float/double pages).
+        const int page_value_count =
+            cur_page_header_.statistic_ != nullptr
+                ? cur_page_header_.statistic_->get_count()
+                : -1;
+        time_decoder_->set_page_value_count(page_value_count);
+        value_decoder_->set_page_value_count(page_value_count);
         time_in_.wrap_from(time_buf, time_buf_size);
         value_in_.wrap_from(value_buf, value_buf_size);
         // ret = decode_tv_buf_into_tsblock(time_buf, value_buf, time_buf_size,
