@@ -18,13 +18,19 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
@@ -49,16 +55,46 @@ struct CliResult {
 class BothModels : public ::testing::TestWithParam<ModelFile> {
    protected:
     void SetUp() override {
-        path_ = GetParam().tree
-                    ? tsfile_cli_test::write_complex_tree_fixture()
-                    : tsfile_cli_test::write_complex_table_fixture();
-        ASSERT_FALSE(path_.empty());
-        std::ifstream fixture(path_.c_str(), std::ios::binary);
-        ASSERT_TRUE(fixture.good()) << path_;
+        char current_directory[4096];
+#ifdef _WIN32
+        ASSERT_NE(_getcwd(current_directory, sizeof(current_directory)),
+                  nullptr);
+#else
+        ASSERT_NE(getcwd(current_directory, sizeof(current_directory)),
+                  nullptr);
+#endif
+        original_directory_ = current_directory;
+        fixture_directory_ =
+            tsfile_cli_test::unique_temp_path("tsfile_cli_model_work", "");
+#ifdef _WIN32
+        ASSERT_EQ(_mkdir(fixture_directory_.c_str()), 0);
+        ASSERT_EQ(_chdir(fixture_directory_.c_str()), 0);
+#else
+        ASSERT_EQ(mkdir(fixture_directory_.c_str(), 0700), 0);
+        ASSERT_EQ(chdir(fixture_directory_.c_str()), 0);
+#endif
+
+        const std::string generated =
+            GetParam().tree ? tsfile_cli_test::write_complex_tree_fixture()
+                            : tsfile_cli_test::write_complex_table_fixture();
+        path_ = GetParam().tree ? "tsfile_cli_complex_tree_golden.tsfile"
+                                : "tsfile_cli_complex_table_golden.tsfile";
+        ASSERT_EQ(std::rename(generated.c_str(), path_.c_str()), 0);
     }
-    void TearDown() override { std::remove(path_.c_str()); }
+    void TearDown() override {
+        std::remove(path_.c_str());
+#ifdef _WIN32
+        ASSERT_EQ(_chdir(original_directory_.c_str()), 0);
+        ASSERT_EQ(_rmdir(fixture_directory_.c_str()), 0);
+#else
+        ASSERT_EQ(chdir(original_directory_.c_str()), 0);
+        ASSERT_EQ(rmdir(fixture_directory_.c_str()), 0);
+#endif
+    }
 
     std::string path_;
+    std::string original_directory_;
+    std::string fixture_directory_;
 };
 
 std::string run(const std::vector<std::string>& args, int* code,
@@ -93,20 +129,6 @@ std::string read_bytes(const std::string& path) {
     return bytes.str();
 }
 
-std::string normalize_sketch_path(const std::string& sketch,
-                                  const std::string& path,
-                                  const std::string& replacement) {
-    const std::string prefix = "file path: ";
-    const std::string expected_line = prefix + path + "\n";
-    const size_t begin = sketch.find(expected_line);
-    EXPECT_NE(begin, std::string::npos) << path;
-    if (begin == std::string::npos) return sketch;
-    std::string normalized = sketch;
-    normalized.replace(begin, expected_line.size(),
-                       prefix + replacement + "\n");
-    return normalized;
-}
-
 void expect_or_update_golden(const std::string& name,
                              const std::string& actual) {
     const std::string path = std::string(TSFILE_CPP_SOURCE_DIR) +
@@ -130,6 +152,7 @@ void expect_or_update_golden(const std::string& name,
 }  // namespace
 
 TEST_P(BothModels, MetadataCommandsImplementAllPublicFormats) {
+    const std::string model = GetParam().tree ? "tree" : "table";
     const std::vector<std::string> commands = {"ls", "schema", "meta", "stats",
                                                "count"};
     const std::vector<std::string> formats = {"table", "ndjson", "csv"};
@@ -140,21 +163,15 @@ TEST_P(BothModels, MetadataCommandsImplementAllPublicFormats) {
             std::string output =
                 run({command, "-f", format, path_}, &code, &err);
             EXPECT_EQ(code, 0) << command << " " << format << ": " << err;
-            EXPECT_FALSE(output.empty()) << command << " " << format;
-            if (format == "ndjson") {
-                EXPECT_EQ(output.front(), '{') << output;
-                EXPECT_EQ(output.back(), '\n') << output;
-            } else if (format == "csv") {
-                EXPECT_EQ(output.back(), '\n') << output;
-                EXPECT_NE(output.find(','), std::string::npos) << output;
-            } else {
-                EXPECT_EQ(output.back(), '\n') << output;
-            }
+            expect_or_update_golden(model + "_" + command + "_" + format,
+                                    output);
+            EXPECT_EQ(err, "") << command << " " << format;
         }
     }
 }
 
 TEST_P(BothModels, RowCommandsPreserveRowsAcrossFormats) {
+    const std::string model = GetParam().tree ? "tree" : "table";
     const auto& scope = GetParam().scope;
     const std::vector<std::string> formats = {"table", "ndjson", "csv"};
     for (const auto& command : {std::string("head"), std::string("cat")}) {
@@ -165,25 +182,21 @@ TEST_P(BothModels, RowCommandsPreserveRowsAcrossFormats) {
             std::string err;
             std::string output = run(args, &code, &err);
             EXPECT_EQ(code, 0) << command << " " << format << ": " << err;
-            EXPECT_FALSE(output.empty()) << command << " " << format;
-            if (format == "ndjson") {
-                EXPECT_EQ(output.front(), '{') << output;
-                EXPECT_EQ(output.back(), '\n') << output;
-                EXPECT_EQ(std::count(output.begin(), output.end(), '\n'), 2);
-            } else {
-                EXPECT_EQ(std::count(output.begin(), output.end(), '\n'), 3)
-                    << output;
-            }
+            expect_or_update_golden(model + "_" + command + "_" + format,
+                                    output);
+            EXPECT_EQ(err, "") << command << " " << format;
         }
     }
 }
 
 TEST_P(BothModels, SketchAndExportSupportBothModelKinds) {
+    const std::string model = GetParam().tree ? "tree" : "table";
     int sketch_code = -1;
     std::string sketch_err;
     std::string sketch = run({"sketch", path_}, &sketch_code, &sketch_err);
     EXPECT_EQ(sketch_code, 0) << sketch_err;
-    EXPECT_FALSE(sketch.empty());
+    expect_or_update_golden(model + "_sketch", sketch);
+    EXPECT_EQ(sketch_err, "");
 
     const auto& scope = GetParam().scope;
     std::string exported =
@@ -198,6 +211,7 @@ TEST_P(BothModels, SketchAndExportSupportBothModelKinds) {
     std::ifstream exported_file(exported.c_str());
     EXPECT_TRUE(exported_file.good());
     exported_file.close();
+    expect_or_update_golden(model + "_export_csv", read_bytes(exported));
     std::remove(exported.c_str());
 }
 
@@ -231,12 +245,7 @@ TEST_P(BothModels, EverySuccessfulCommandHasExactGoldenOutput) {
 
     CliResult sketch = execute({"sketch", path_});
     EXPECT_EQ(sketch.code, 0);
-    expect_or_update_golden(
-        model + "_sketch",
-        normalize_sketch_path(sketch.out, path_,
-                              model == "tree"
-                                  ? "tsfile_cli_complex_tree_golden.tsfile"
-                                  : "tsfile_cli_complex_table_golden.tsfile"));
+    expect_or_update_golden(model + "_sketch", sketch.out);
     EXPECT_EQ(sketch.err, "");
 
     for (const auto& format :
