@@ -49,13 +49,12 @@ struct CliResult {
 class BothModels : public ::testing::TestWithParam<ModelFile> {
    protected:
     void SetUp() override {
-        const std::string generated =
-            GetParam().tree ? tsfile_cli_test::write_complex_tree_fixture()
-                            : tsfile_cli_test::write_complex_table_fixture();
-        path_ = GetParam().tree ? "tsfile_cli_complex_tree_golden.tsfile"
-                                : "tsfile_cli_complex_table_golden.tsfile";
-        std::remove(path_.c_str());
-        ASSERT_EQ(std::rename(generated.c_str(), path_.c_str()), 0);
+        path_ = GetParam().tree
+                    ? tsfile_cli_test::write_complex_tree_fixture()
+                    : tsfile_cli_test::write_complex_table_fixture();
+        ASSERT_FALSE(path_.empty());
+        std::ifstream fixture(path_.c_str(), std::ios::binary);
+        ASSERT_TRUE(fixture.good()) << path_;
     }
     void TearDown() override { std::remove(path_.c_str()); }
 
@@ -92,6 +91,20 @@ std::string read_bytes(const std::string& path) {
     std::ostringstream bytes;
     bytes << in.rdbuf();
     return bytes.str();
+}
+
+std::string normalize_sketch_path(const std::string& sketch,
+                                  const std::string& path,
+                                  const std::string& replacement) {
+    const std::string prefix = "file path: ";
+    const std::string expected_line = prefix + path + "\n";
+    const size_t begin = sketch.find(expected_line);
+    EXPECT_NE(begin, std::string::npos) << path;
+    if (begin == std::string::npos) return sketch;
+    std::string normalized = sketch;
+    normalized.replace(begin, expected_line.size(),
+                       prefix + replacement + "\n");
+    return normalized;
 }
 
 void expect_or_update_golden(const std::string& name,
@@ -218,14 +231,18 @@ TEST_P(BothModels, EverySuccessfulCommandHasExactGoldenOutput) {
 
     CliResult sketch = execute({"sketch", path_});
     EXPECT_EQ(sketch.code, 0);
-    expect_or_update_golden(model + "_sketch", sketch.out);
+    expect_or_update_golden(
+        model + "_sketch",
+        normalize_sketch_path(sketch.out, path_,
+                              model == "tree"
+                                  ? "tsfile_cli_complex_tree_golden.tsfile"
+                                  : "tsfile_cli_complex_table_golden.tsfile"));
     EXPECT_EQ(sketch.err, "");
 
     for (const auto& format :
          {std::string("table"), std::string("ndjson"), std::string("csv")}) {
-        const std::string target =
-            "tsfile_cli_export_golden_" + model + "_" + format + ".out";
-        std::remove(target.c_str());
+        const std::string target = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_export_golden_" + model + "_" + format, ".out");
         CliResult result = execute({"export", scope[0], scope[1], "--type",
                                     format, "-o", target, path_});
         EXPECT_EQ(result.code, 0) << format;
