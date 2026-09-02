@@ -150,7 +150,7 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
     return t;
   }
 
-  private Field putValueToField(BatchData col) {
+  public static Field putValueToField(BatchData col) {
     TSDataType type = col.getDataType();
     Field field;
     if (type == TSDataType.VECTOR) {
