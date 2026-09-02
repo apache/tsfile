@@ -146,7 +146,8 @@ func (t *Tablet) SetString(row, column int, value string) error {
 	return t.handle.addString(row, column, value)
 }
 
-// Rows returns the number of rows currently present in the tablet.
+// Rows returns the number of rows currently present in the tablet. It returns
+// zero after the tablet has been closed.
 func (t *Tablet) Rows() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()

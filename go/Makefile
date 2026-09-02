@@ -29,4 +29,4 @@ vet:
 	GOCACHE=$(GOCACHE) go vet ./...
 
 fmt:
-	gofmt -w tsfile/*.go examples/tree_read_write/main.go examples/table_read_write/main.go
+	gofmt -w $$(find . -name '*.go' -type f -print)

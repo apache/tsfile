@@ -79,7 +79,7 @@ func validDataType(value DataType) bool {
 	switch value {
 	case DataTypeBoolean, DataTypeInt32, DataTypeInt64, DataTypeFloat,
 		DataTypeDouble, DataTypeText, DataTypeTimestamp, DataTypeDate,
-		DataTypeBlob, DataTypeString:
+		DataTypeString:
 		return true
 	default:
 		return false

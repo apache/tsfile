@@ -20,9 +20,10 @@ under the License.
 # TsFile Go API
 
 This module provides a cgo binding to the Apache TsFile C++ implementation.
-It supports Linux amd64 and macOS arm64 with cgo enabled. The native library
-must be built locally before running Go code; this module does not download or
-install native dependencies.
+It supports Linux and macOS with cgo enabled. Windows MinGW builds are covered
+by CI; MSVC CI verifies the native DLL/import-library artifacts. The native
+library must be built locally before running Go code; this module does not
+download or install native dependencies.
 
 Prerequisites are Go 1.22 or newer, a C/C++ toolchain, CMake, Maven, a JDK,
 and `CGO_ENABLED=1`.
@@ -51,6 +52,8 @@ The public package is `github.com/apache/tsfile/go/tsfile`. Result-set columns
 use idiomatic Go zero-based indexes; the underlying C ABI remains one-based.
 Readers own their active result sets, so closing a reader also closes every
 result set created from it. All native `Close` methods are idempotent.
+`Writer.AddProperty` rejects empty values because the native ABI reserves a nil
+value for a NULL property.
 
 Runnable tree and table examples are under `examples/tree_read_write` and
 `examples/table_read_write`:

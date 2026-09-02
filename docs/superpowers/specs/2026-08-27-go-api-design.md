@@ -11,17 +11,19 @@ implementation plan.
 Add a Go module at `go/` with module path `github.com/apache/tsfile/go` and a
 public package imported as `github.com/apache/tsfile/go/tsfile`.
 
-The first release supports:
+The initial implementation supports:
 
-- Linux and macOS with cgo enabled;
+- Linux and macOS with cgo enabled, plus Windows MinGW cgo builds and MSVC
+  native artifact verification in CI;
 - single-file tree-model and table-model read, write, and query operations;
 - schemas, tablets, readers, writers, and result sets;
 - the same C++ core and C wrapper used by the Python binding; and
-- deterministic ownership, error handling, and cross-language tests.
+- deterministic ownership and error handling.
 
 The first release does not include Arrow, pandas/dataframe-style APIs, dataset
-or multi-file merging, Windows, automatic native dependency installation, or a
-pure-Go TsFile implementation.
+or multi-file merging, automatic native dependency installation, or a pure-Go
+TsFile implementation. Cross-language fixtures, broader data-type coverage,
+multi-device integration tests, and MSVC cgo execution remain follow-up work.
 
 ## Architecture
 
@@ -280,7 +282,10 @@ Unit tests cover validation, enum pinning, error mapping, typed tablet access,
 idempotent close, use-after-close, null values, and clean-end versus iteration
 failure.
 
-Integration tests cover all supported data types and:
+The current integration tests cover representative Int64, String, Double, and
+Boolean tree/table round trips, bounded queries, offset/limit behavior, flush,
+and reader/result-set lifetime. The following acceptance items remain planned
+follow-up coverage rather than claims of completion in this PR:
 
 - tree and table write/read round trips;
 - multiple devices and columns;
@@ -289,18 +294,20 @@ Integration tests cover all supported data types and:
 - flush followed by close; and
 - reader/result-set parent-child lifetime behavior.
 
-Cross-language tests read Python or Java fixtures from Go and read Go-written
-files with an existing Python or C++ reader. C wrapper lifetime tests run under
-ASan on supported CI jobs, with valgrind as an optional Linux supplement.
+Cross-language tests with Python or Java fixtures, all data types, multiple
+devices, and empty time ranges are follow-up work. C wrapper lifetime tests run
+under ASan on supported CI jobs, with valgrind as an optional Linux supplement.
 `go test -race` exercises concurrent method and close calls to verify internal
 serialization.
 
 Acceptance requires:
 
-- clean builds and tests on Linux amd64 and macOS arm64;
+- clean builds and tests on Linux amd64 and macOS arm64, with Windows MinGW
+  Go tests and MSVC native artifact verification;
 - no references from Go to underscore-prefixed C symbols;
 - no C leaks or use-after-free in the exercised wrapper paths;
-- value-identical tree and table cross-language round trips;
+- representative tree and table round trips (cross-language round trips are a
+  follow-up);
 - clean `gofmt`, `go vet`, and `go test -race`; and
 - runnable tree and table examples plus reproducible build instructions.
 

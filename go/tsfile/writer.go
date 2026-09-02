@@ -24,6 +24,10 @@ import (
 
 const defaultMemoryThreshold = 128 * 1024 * 1024
 
+// nativeWriterConfigMu serializes construction because the current native
+// writer ABI applies the memory threshold to process-global configuration.
+var nativeWriterConfigMu sync.Mutex
+
 type writerOptions struct{ memoryThreshold uint64 }
 
 // WriterOption customizes a writer constructor.
@@ -57,6 +61,8 @@ func NewWriter(path string, options ...WriterOption) (*Writer, error) {
 			return nil, err
 		}
 	}
+	nativeWriterConfigMu.Lock()
+	defer nativeWriterConfigMu.Unlock()
 	handle, err := newWriterHandle(path, settings.memoryThreshold)
 	if err != nil {
 		return nil, err
@@ -145,10 +151,15 @@ func (w *Writer) WriteTreeTablet(tablet *Tablet) error { return w.writeTablet(ta
 // WriteTableTablet writes a table-model tablet without consuming it.
 func (w *Writer) WriteTableTablet(tablet *Tablet) error { return w.writeTablet(tablet, true) }
 
-// AddProperty adds a binary TsFile property.
+// AddProperty adds a binary TsFile property. Empty values are rejected because
+// the native ABI represents a nil pointer as a NULL property, not an empty
+// byte string.
 func (w *Writer) AddProperty(key string, value []byte) error {
 	if key == "" {
 		return fmt.Errorf("%w: property key must not be empty", ErrInvalidArgument)
+	}
+	if len(value) == 0 {
+		return fmt.Errorf("%w: property value must not be empty", ErrInvalidArgument)
 	}
 	return w.withHandle(func(h *writerHandle) error { return h.addProperty(key, value) })
 }

@@ -132,6 +132,9 @@ func TestTableRoundTripAndNull(t *testing.T) {
 	if err := writer.AddProperty("source", []byte("go-integration")); err != nil {
 		t.Fatal(err)
 	}
+	if err := writer.AddProperty("empty", []byte{}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("empty property value error = %v, want ErrInvalidArgument", err)
+	}
 	tablet, err := NewTablet("metrics", []TabletColumn{
 		{Name: "device", DataType: DataTypeString},
 		{Name: "value", DataType: DataTypeDouble},

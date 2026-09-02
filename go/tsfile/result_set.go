@@ -64,6 +64,7 @@ func (rs *ResultSet) Next() (bool, error) {
 }
 
 // Metadata returns a copy of the result columns, including timestamp at zero.
+// It returns nil after the result set has been closed.
 func (rs *ResultSet) Metadata() []ColumnMetadata {
 	reader := rs.reader
 	if reader == nil {
