@@ -99,7 +99,7 @@ void RemoveTestFiles() {
     ::_wunlink(WideName().c_str());
     ::_unlink(Utf8Name().c_str());
 #else
-    ::_unlink(Utf8Name().c_str());
+    ::unlink(Utf8Name().c_str());
 #endif
 }
 
