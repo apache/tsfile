@@ -66,6 +66,8 @@ const char* error_code_message(int code) {
             return "failed to encode data";
         case common::E_DECODE_ERR:
             return "failed to decode data";
+        case common::E_UNSUPPORTED_VERSION:
+            return "unsupported TsFile format version";
         default:
             return "internal error";
     }

@@ -1,0 +1,3 @@
+{"model":"table","object":"sensors","column":"site","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"sensors","column":"room","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"sensors","column":"temp","category":"FIELD","data_type":"DOUBLE","encoding":"PLAIN","compression":"UNCOMPRESSED"}

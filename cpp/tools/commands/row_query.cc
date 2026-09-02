@@ -23,6 +23,7 @@
 #include <memory>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -52,7 +53,12 @@ class CliFullMatchTagRegExp : public storage::TagFilter {
    private:
     std::regex pattern_;
 };
-
+/// COMMENT: 这里应该即使是有offset 也能推下去。
+// Answer: Reader 的 queryByRow 确实支持 offset；这里限制 offset == 0 是有意的
+// 保守处理。offset 非零时若直接下推，Reader 通常会返回空结果而不是让
+// emit_result_set 统一报告“offset exceeds matched row count”，并且带时间范围时
+// 还必须走按时间查询以保持 CLI 的筛选语义。若要下推非零 offset，需要同时补齐
+// 越界错误和时间过滤的等价测试后再放宽这个条件。
 bool can_push_down_row_window(const ParsedArgs& args, long long offset,
                               long long limit) {
     return !args.has_start && !args.has_end && offset == 0 &&
@@ -188,7 +194,7 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
                     int tag_order = schema->find_id_column_order(spec.column);
                     if (tag_order >= 0) {
                         filter = new CliFullMatchTagRegExp(tag_order + 1,
-                                                          spec.value);
+                                                           spec.value);
                     }
                 }
                 break;
@@ -355,11 +361,25 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
         return kExitFile;
     }
 
-    int wret = push_down ? emit_result_set(rs, fmt, args.no_header, out, 0, -1,
-                                           emitted_rows)
-                         : emit_result_set(rs, fmt, args.no_header, out, offset,
-                                           limit, emitted_rows);
+    // Stage the complete result before publishing it.  A decode/read failure
+    // can occur after the result header or earlier rows have been rendered;
+    // input failures must not leave a partial machine-readable stdout stream
+    // that callers could mistake for a complete result.  The final write is
+    // still checked separately so stdout errors remain runtime failures.
+    std::ostringstream staged;
+    int wret = push_down ? emit_result_set(rs, fmt, args.no_header, staged, 0,
+                                           -1, emitted_rows)
+                         : emit_result_set(rs, fmt, args.no_header, staged,
+                                           offset, limit, emitted_rows);
     reader.destroy_query_data_set(rs);
+    if (wret == common::E_OK) {
+        const std::string bytes = staged.str();
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        out.flush();
+        if (!out.good()) {
+            wret = common::E_FILE_WRITE_ERR;
+        }
+    }
     if (wret == common::E_OUT_OF_RANGE) {
         err << "Error: offset exceeds matched row count\n";
         return kExitUsage;

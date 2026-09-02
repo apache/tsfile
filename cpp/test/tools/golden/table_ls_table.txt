@@ -1,0 +1,3 @@
+model  object
+table  table1
+table  table2

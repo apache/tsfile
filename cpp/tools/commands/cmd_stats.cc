@@ -53,6 +53,8 @@ struct EntityAccumulator {
     std::vector<bool> tag_nulls;
     std::map<std::string, FieldStatistic> fields;
     long long row_count = 0;
+    long long start_time = 0;
+    long long end_time = 0;
     bool has_timeline_statistic = false;
 };
 
@@ -95,6 +97,8 @@ bool capture_timeline_statistic(storage::ITimeseriesIndex* index,
     }
     if (statistic != nullptr) {
         entity.row_count = statistic->get_count();
+        entity.start_time = statistic->start_time_;
+        entity.end_time = statistic->end_time_;
         entity.has_timeline_statistic = true;
         return true;
     }
@@ -112,6 +116,12 @@ bool capture_timeline_statistic(storage::ITimeseriesIndex* index,
             continue;
         }
         row_count += chunk_meta->statistic_->get_count();
+        if (!found || chunk_meta->statistic_->start_time_ < entity.start_time) {
+            entity.start_time = chunk_meta->statistic_->start_time_;
+        }
+        if (!found || chunk_meta->statistic_->end_time_ > entity.end_time) {
+            entity.end_time = chunk_meta->statistic_->end_time_;
+        }
         found = true;
     }
     if (found) {
@@ -132,7 +142,10 @@ void capture_field_statistic(storage::TimeseriesIndex* index,
         return;
     }
     storage::Statistic* statistic = index->get_statistic();
-    if (statistic == nullptr) {
+    // A value index is still emitted for an all-NULL FIELD, but its statistic
+    // has count=0 and no meaningful value/time range.  Treat that as absent so
+    // the caller can derive the entity timeline by scanning rows.
+    if (statistic == nullptr || statistic->get_count() == 0) {
         return;
     }
     FieldStatistic field;
@@ -142,6 +155,92 @@ void capture_field_statistic(storage::TimeseriesIndex* index,
     field.present = true;
     field.values = statistic_value_cells(statistic);
     entity.fields[name] = field;
+}
+
+bool same_entity(const EntityAccumulator& entity,
+                 const std::vector<std::string>& tag_values,
+                 const std::vector<bool>& tag_nulls) {
+    return entity.tag_values == tag_values && entity.tag_nulls == tag_nulls;
+}
+
+int scan_table_timelines(const std::string& table_name,
+                         const std::vector<std::string>& query_columns,
+                         const std::vector<uint32_t>& tag_result_indexes,
+                         storage::TsFileReader& reader,
+                         TableStatsSummary& summary) {
+    storage::ResultSet* rs = nullptr;
+    int ret = reader.query(table_name, query_columns,
+                           std::numeric_limits<int64_t>::min(),
+                           std::numeric_limits<int64_t>::max(), rs);
+    if (ret != common::E_OK || rs == nullptr) {
+        if (rs != nullptr) reader.destroy_query_data_set(rs);
+        return ret == common::E_OK ? common::E_FILE_READ_ERR : ret;
+    }
+
+    // Replace metadata-only timeline values.  This is needed for a FIELD
+    // whose value statistic has count=0: the time chunk remains authoritative
+    // for row_count/min_time/max_time, but some older readers expose it as a
+    // zero-valued statistic.
+    for (const std::string& key : summary.entity_order) {
+        auto it = summary.entities.find(key);
+        if (it != summary.entities.end()) {
+            it->second.row_count = 0;
+            it->second.start_time = 0;
+            it->second.end_time = 0;
+            it->second.has_timeline_statistic = false;
+        }
+    }
+
+    auto metadata = rs->get_metadata();
+    std::vector<common::TSDataType> result_types;
+    for (uint32_t i = 1; i <= metadata->get_column_count(); ++i) {
+        result_types.push_back(metadata->get_column_type(i));
+    }
+    bool has_next = false;
+    while ((ret = rs->next(has_next)) == common::E_OK && has_next) {
+        const int64_t timestamp = rs->get_int64_at(1);
+        std::vector<std::string> tag_values;
+        std::vector<bool> tag_nulls;
+        for (uint32_t index : tag_result_indexes) {
+            const bool is_null = rs->is_null(index);
+            tag_nulls.push_back(is_null);
+            tag_values.push_back(is_null
+                                     ? std::string()
+                                     : cell_to_string(rs, index,
+                                                      result_types[index - 1]));
+        }
+
+        EntityAccumulator* entity = nullptr;
+        for (const std::string& key : summary.entity_order) {
+            auto it = summary.entities.find(key);
+            if (it != summary.entities.end() &&
+                same_entity(it->second, tag_values, tag_nulls)) {
+                entity = &it->second;
+                break;
+            }
+        }
+        if (entity == nullptr) {
+            const std::string synthetic_key =
+                table_name + "#scan#" + std::to_string(summary.entity_order.size());
+            EntityAccumulator created;
+            created.tag_values = tag_values;
+            created.tag_nulls = tag_nulls;
+            summary.entity_order.push_back(synthetic_key);
+            auto inserted = summary.entities.emplace(synthetic_key, created);
+            entity = &inserted.first->second;
+        }
+        if (!entity->has_timeline_statistic) {
+            entity->start_time = timestamp;
+            entity->end_time = timestamp;
+            entity->has_timeline_statistic = true;
+        } else {
+            entity->start_time = std::min(entity->start_time, timestamp);
+            entity->end_time = std::max(entity->end_time, timestamp);
+        }
+        ++entity->row_count;
+    }
+    reader.destroy_query_data_set(rs);
+    return ret;
 }
 
 bool selected_for_stats(const ParsedArgs& args, const std::string& name) {
@@ -271,6 +370,43 @@ int collect_table_stats(const ParsedArgs& args,
         summary.entity_order.push_back(key);
     }
 
+    bool missing_value_statistics = false;
+    for (const std::string& key : summary.entity_order) {
+        const auto it = summary.entities.find(key);
+        if (it == summary.entities.end()) continue;
+        for (size_t index : summary.field_indexes) {
+            const std::string& field = summary.columns[index].name;
+            if (it->second.fields.find(field) == it->second.fields.end()) {
+                missing_value_statistics = true;
+                break;
+            }
+        }
+        if (missing_value_statistics) break;
+    }
+    if (missing_value_statistics && !devices.empty()) {
+        std::vector<std::string> query_columns;
+        std::vector<uint32_t> tag_result_indexes;
+        for (size_t i = 0; i < measurements.size(); ++i) {
+            if (i >= categories.size() || !measurements[i]) continue;
+            if (categories[i] == common::ColumnCategory::TAG ||
+                categories[i] == common::ColumnCategory::FIELD) {
+                query_columns.push_back(measurements[i]->measurement_name_);
+                if (categories[i] == common::ColumnCategory::TAG) {
+                    tag_result_indexes.push_back(
+                        static_cast<uint32_t>(query_columns.size() + 1));
+                }
+            }
+        }
+        const int scan_ret = scan_table_timelines(
+            schema->get_table_name(), query_columns, tag_result_indexes, reader,
+            summary);
+        if (scan_ret != common::E_OK) {
+            err << "Error: failed to scan statistics rows: "
+                << error_code_message(scan_ret) << "\n";
+            return kExitFile;
+        }
+    }
+
     return kExitOk;
 }
 
@@ -379,11 +515,20 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                 if (it != entity.fields.end()) {
                     statistic = it->second;
                 }
-                const bool has_statistic = statistic.present;
+                const bool has_value_statistic = statistic.present;
+                // A timeline can exist even when every value in this FIELD is
+                // NULL, so retain a concrete row/null count and time range.
+                // Value aggregates remain NULL and are marked as scan-derived.
+                const bool has_timeline = entity.has_timeline_statistic;
+                const bool has_statistic =
+                    has_value_statistic || has_timeline;
                 const bool has_null_count =
-                    has_statistic && entity.has_timeline_statistic;
+                    has_timeline;
                 const long long null_count =
-                    has_null_count ? entity.row_count - statistic.count : 0;
+                    has_null_count
+                        ? entity.row_count -
+                              (has_value_statistic ? statistic.count : 0)
+                        : 0;
                 std::vector<std::string> cells = {
                     "table", summary.schema->get_table_name()};
                 std::vector<bool> nulls = {false, false};
@@ -399,29 +544,42 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                 }
                 cells.push_back(field.name);
                 cells.push_back(tsdatatype_name(field.type));
-                cells.push_back(has_statistic ? std::to_string(statistic.count)
-                                              : "");
+                // A value statistic always carries an exact non-null count,
+                // even when the file does not expose a separate timeline
+                // statistic.  The null count, however, is only knowable when
+                // the entity timeline is available (or has been scanned).
+                cells.push_back(
+                    has_value_statistic
+                        ? std::to_string(statistic.count)
+                        : (has_timeline ? "0" : ""));
                 cells.push_back(has_null_count ? std::to_string(null_count)
-                                               : "");
+                                              : "");
                 cells.push_back(
-                    has_statistic ? std::to_string(statistic.start_time) : "");
+                    has_value_statistic
+                        ? std::to_string(statistic.start_time)
+                        : (has_timeline ? std::to_string(entity.start_time)
+                                        : ""));
                 cells.push_back(
-                    has_statistic ? std::to_string(statistic.end_time) : "");
-                nulls.insert(nulls.end(),
-                             {false, false, !has_statistic, !has_null_count,
-                              !has_statistic, !has_statistic});
+                    has_value_statistic
+                        ? std::to_string(statistic.end_time)
+                        : (has_timeline ? std::to_string(entity.end_time) : ""));
+                nulls.insert(nulls.end(), {false, false, !has_statistic,
+                                           !has_null_count, !has_statistic,
+                                           !has_statistic});
 
                 StatisticCells values;
                 values.values.assign(5, "");
                 values.is_null.assign(5, true);
-                if (has_statistic) {
+                if (has_value_statistic) {
                     values = statistic.values;
                 }
                 cells.insert(cells.end(), values.values.begin(),
                              values.values.end());
                 nulls.insert(nulls.end(), values.is_null.begin(),
                              values.is_null.end());
-                cells.push_back(has_statistic ? "statistics" : "");
+                cells.push_back(has_value_statistic
+                                    ? "statistics"
+                                    : (has_timeline ? "scan" : ""));
                 nulls.push_back(!has_statistic);
                 std::vector<common::TSDataType> row_types(types.size(),
                                                           common::STRING);

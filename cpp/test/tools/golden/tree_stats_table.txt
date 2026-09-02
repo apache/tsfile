@@ -1,0 +1,12 @@
+model  object            field      data_type  non_null_count  null_count  min_time  max_time  min    max    first    last      sum   stats_source
+tree   root.t3           xx         BOOLEAN    20              0           0         19                      true     false     10    statistics
+tree   root.t3           xx_double  DOUBLE     20              0           0         19        10.5   29.5   10.5     29.5      400   statistics
+tree   root.t3           xx_text    TEXT       20              0           0         19                      xx_0     xx_19           statistics
+tree   root.test.d1      m1         INT32      20              0           0         19        0      19     0        19        190   statistics
+tree   root.test.d1      m2         DOUBLE     20              0           0         19        0.5    19.5   0.5      19.5      200   statistics
+tree   root.test.d1      m3         TEXT       20              0           0         19                      value_0  value_19        statistics
+tree   root.test.d1      m4         INT32      20              0           0         19        0      38     0        38        380   statistics
+tree   root.test.d1      m5         DOUBLE     20              0           0         19        100.5  119.5  100.5    119.5     2200  statistics
+tree   root.test2.d2.t2  xxx        FLOAT      20              0           0         19        0.25   19.25  0.25     19.25     195   statistics
+tree   root.test2.d2.t2  xxx_int    INT64      20              0           0         19        0      190    0        190             statistics
+tree   root.test2.d2.t2  xxx_text   TEXT       20              0           0         19                      xxx_0    xxx_19          statistics

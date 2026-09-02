@@ -157,6 +157,13 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
                             std::numeric_limits<int64_t>::min(),
                             std::numeric_limits<int64_t>::max(), rs);
     if (qret != 0 || rs == nullptr) {
+        // A schema-only table has no device index yet.  It is still a valid
+        // empty table and its count is defined as zero rows/entities; do not
+        // turn that state into a misleading "table does not exist" error.
+        if (qret == common::E_TABLE_NOT_EXIST &&
+            reader.get_all_devices(summary.table_name).empty()) {
+            return kExitOk;
+        }
         err << "Error: count query failed: " << error_code_message(qret)
             << "\n";
         if (rs != nullptr) {

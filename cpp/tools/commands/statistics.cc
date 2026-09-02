@@ -236,6 +236,12 @@ int collect_series_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         }
 
         long long row_count = 0;
+        // 所以这里其实没有比较好的计算device 总行数的方法吗？
+        // Answer: 目前没有可直接复用的 device-level row-count 元数据。各序列
+        // statistic 的 count 只代表该序列的点数；非对齐序列合并后，device 行数
+        // 是所有时间戳的并集，不能简单取某一列或各列 count。因此这里通过一次
+        // 全时间范围 query 遍历 ResultSet，得到与 CLI 行语义一致的行数。后续若
+        // 在 reader 中增加按 device 聚合的元数据计数，才可以替换为 O(1) 查询。
         if (!paths.empty()) {
             storage::ResultSet* result = nullptr;
             int query_ret =

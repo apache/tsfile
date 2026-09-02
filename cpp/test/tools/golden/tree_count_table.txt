@@ -1,0 +1,12 @@
+model  object            column     category  row_count  entity_count  non_null_count  null_count  min_time  max_time  time_source
+tree   root.t3           xx         FIELD     20                       20              0           0         19        statistics
+tree   root.t3           xx_double  FIELD     20                       20              0           0         19        statistics
+tree   root.t3           xx_text    FIELD     20                       20              0           0         19        statistics
+tree   root.test.d1      m1         FIELD     20                       20              0           0         19        statistics
+tree   root.test.d1      m2         FIELD     20                       20              0           0         19        statistics
+tree   root.test.d1      m3         FIELD     20                       20              0           0         19        statistics
+tree   root.test.d1      m4         FIELD     20                       20              0           0         19        statistics
+tree   root.test.d1      m5         FIELD     20                       20              0           0         19        statistics
+tree   root.test2.d2.t2  xxx        FIELD     20                       20              0           0         19        statistics
+tree   root.test2.d2.t2  xxx_int    FIELD     20                       20              0           0         19        statistics
+tree   root.test2.d2.t2  xxx_text   FIELD     20                       20              0           0         19        statistics

@@ -325,6 +325,11 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
 int AlignedChunkReader::alloc_compressor_and_decoder(
     storage::Decoder*& decoder, storage::Compressor*& compressor,
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
+    // Invalid enum bytes indicate corrupted chunk metadata, not an allocator
+    // failure.  Reject them before asking the factory for a decoder.
+    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+        return E_TSFILE_CORRUPTED;
+    }
     if (decoder != nullptr) {
         decoder->reset();
     } else {

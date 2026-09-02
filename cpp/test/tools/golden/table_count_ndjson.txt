@@ -1,0 +1,5 @@
+{"model":"table","object":"table1","column":"value","category":"FIELD","row_count":"20","entity_count":"1","non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"scan"}
+{"model":"table","object":"table2","column":"site","category":"TAG","row_count":"20","entity_count":"20","non_null_count":"19","null_count":"1","min_time":"0","max_time":"19","time_source":"scan"}
+{"model":"table","object":"table2","column":"rack","category":"TAG","row_count":"20","entity_count":"20","non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"scan"}
+{"model":"table","object":"table2","column":"sensor","category":"TAG","row_count":"20","entity_count":"20","non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"scan"}
+{"model":"table","object":"table2","column":"reading","category":"FIELD","row_count":"20","entity_count":"20","non_null_count":"15","null_count":"5","min_time":"0","max_time":"19","time_source":"scan"}

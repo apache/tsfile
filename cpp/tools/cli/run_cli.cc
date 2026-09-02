@@ -210,6 +210,34 @@ void print_command_usage(const std::string& command, std::ostream& os) {
     }
 }
 
+bool has_mixed_model_metadata(storage::TsFileReader& reader) {
+    const auto schemas = reader.get_all_table_schemas();
+    if (schemas.empty()) {
+        return false;
+    }
+
+    std::set<std::string> table_names;
+    for (const auto& schema : schemas) {
+        if (schema != nullptr) {
+            table_names.insert(storage::to_lower(schema->get_table_name()));
+        }
+    }
+    for (const auto& device : reader.get_all_device_ids()) {
+        if (device == nullptr) {
+            continue;
+        }
+        // In a pure table file every device ID belongs to one of the table
+        // schemas.  A tree device can coexist in the same footer only when a
+        // file was assembled from both model kinds, which is unsupported by
+        // the CLI and must be reported as an input error.
+        if (table_names.find(storage::to_lower(device->get_table_name())) ==
+            table_names.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool is_known_command(const std::string& c) {
     static const std::set<std::string> kCmds = {
         "ls",     "schema", "meta", "stats",  "count",
@@ -572,6 +600,13 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     if (open_ret != 0) {
         err << "Error: cannot open " << p.file << ": "
             << error_code_message(open_ret) << " (code " << open_ret << ")\n";
+        return kExitFile;
+    }
+
+    if (has_mixed_model_metadata(reader)) {
+        err << "Error: input TsFile must be a pure tree-model or pure "
+               "table-model file\n";
+        reader.close();
         return kExitFile;
     }
 

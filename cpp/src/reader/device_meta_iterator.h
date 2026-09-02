@@ -38,7 +38,11 @@ class DeviceMetaIterator {
           id_filter_(id_filter),
           should_split_device_name(false),
           direct_lookup_done_(false) {
-        meta_index_nodes_.push(meat_index_node);
+        // A valid schema-only table has no device index.  Treat a null root as
+        // an empty iterator instead of dereferencing it during has_next().
+        if (meat_index_node != nullptr) {
+            meta_index_nodes_.push(meat_index_node);
+        }
         pa_.init(512, common::MOD_DEVICE_META_ITER);
         try_setup_direct_lookup(meat_index_node);
     }
