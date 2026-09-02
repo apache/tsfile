@@ -207,6 +207,26 @@ def _write_weather_boolean_status_file(path, start):
         )
 
 
+def _write_weather_timestamp_field_file(path, start):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("observed_at", TSDataType.TIMESTAMP, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(
+            pd.DataFrame(
+                {
+                    "time": [start, start + 1],
+                    "device": ["device_a", "device_a"],
+                    "observed_at": [1_700_000_000_000, 1_700_000_000_001],
+                }
+            )
+        )
+
+
 def _write_multi_tag_file(path):
     schema = TableSchema(
         "weather",
@@ -1152,10 +1172,12 @@ def test_dataset_rejects_nonnumeric_declared_schema_difference(
         )
 
 
-def test_dataset_table_model_omits_boolean_fields(tmp_path, dataframe_use_index):
-    # The numeric dataset surface must drop BOOLEAN fields (they are not
-    # numeric) rather than surfacing them as a series that crashes the runtime
-    # read path. Regression for the reader/runtime field-type whitelist drift.
+def test_dataset_table_model_exposes_boolean_fields_as_float64(
+    tmp_path, dataframe_use_index
+):
+    # The original TsFileDataFrame numeric surface includes BOOLEAN fields and
+    # represents them as float64 values (1.0/0.0), just like the other exposed
+    # field types. Regression for the reader/runtime field-type whitelist drift.
     path = tmp_path / "weather_boolean.tsfile"
     _write_weather_boolean_status_file(path, 0)
 
@@ -1163,11 +1185,34 @@ def test_dataset_table_model_omits_boolean_fields(tmp_path, dataframe_use_index)
         str(path), show_progress=False, use_index=dataframe_use_index
     ) as tsdf:
         assert tsdf.model == "table"
-        assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
-        with pytest.raises(KeyError):
-            tsdf["weather.device_a.status"]
+        assert tsdf.list_timeseries() == [
+            "weather.device_a.temperature",
+            "weather.device_a.status",
+        ]
         np.testing.assert_array_equal(
             tsdf["weather.device_a.temperature"][:], np.array([20.0, 21.0])
+        )
+        np.testing.assert_array_equal(
+            tsdf["weather.device_a.status"][:], np.array([1.0, 0.0])
+        )
+        assert tsdf["weather.device_a.status"][0] == 1.0
+        assert isinstance(tsdf["weather.device_a.status"][0], float)
+
+
+def test_dataset_table_model_exposes_timestamp_fields_as_float64(
+    tmp_path, dataframe_use_index
+):
+    path = tmp_path / "weather_timestamp.tsfile"
+    _write_weather_timestamp_field_file(path, 0)
+
+    with TsFileDataFrame(
+        str(path), show_progress=False, use_index=dataframe_use_index
+    ) as tsdf:
+        assert tsdf.list_timeseries() == ["weather.device_a.observed_at"]
+        values = tsdf["weather.device_a.observed_at"][:]
+        assert values.dtype == np.float64
+        np.testing.assert_array_equal(
+            values, np.array([1_700_000_000_000.0, 1_700_000_000_001.0])
         )
 
 
@@ -2204,6 +2249,9 @@ def test_dataset_tree_model_omits_non_numeric_measurements(
     writer = TsFileWriter(str(path))
     writer.register_timeseries("root.a.b", TimeseriesSchema("temp", TSDataType.DOUBLE))
     writer.register_timeseries(
+        "root.a.b", TimeseriesSchema("online", TSDataType.BOOLEAN)
+    )
+    writer.register_timeseries(
         "root.a.b", TimeseriesSchema("status", TSDataType.STRING)
     )
     for t in range(3):
@@ -2213,6 +2261,7 @@ def test_dataset_tree_model_omits_non_numeric_measurements(
                 t,
                 [
                     Field("temp", float(t) + 0.5, TSDataType.DOUBLE),
+                    Field("online", t % 2 == 0, TSDataType.BOOLEAN),
                     Field("status", "ok", TSDataType.STRING),
                 ],
             )
@@ -2222,12 +2271,15 @@ def test_dataset_tree_model_omits_non_numeric_measurements(
     with TsFileDataFrame(
         str(path), show_progress=False, use_index=dataframe_use_index
     ) as tsdf:
-        # Only the numeric measurement is exposed; the STRING one is dropped.
-        assert tsdf.list_timeseries() == ["root.a.b.temp"]
+        # Numeric-compatible fields are exposed as float64; STRING is dropped.
+        assert sorted(tsdf.list_timeseries()) == ["root.a.b.online", "root.a.b.temp"]
         with pytest.raises(KeyError):
             tsdf["root.a.b.status"]
         np.testing.assert_array_equal(
             tsdf["root.a.b.temp"][:], np.array([0.5, 1.5, 2.5])
+        )
+        np.testing.assert_array_equal(
+            tsdf["root.a.b.online"][:], np.array([1.0, 0.0, 1.0])
         )
 
 
