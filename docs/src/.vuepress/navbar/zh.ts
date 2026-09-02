@@ -41,6 +41,7 @@ export const zhNavbar = navbar([
     text: '开发',
     children: [
       { text: '成为开发者', link: '/zh/Development/Community-Project-Committers' },
+      { text: '开发指南', link: '/zh/Development/Development-Guide' },
       { text: 'Power by', link: '/zh/Development/Powered-By' },
     ],
   },
