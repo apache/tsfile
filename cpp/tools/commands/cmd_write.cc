@@ -515,7 +515,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
               std::ostream& err) {
     std::vector<ColumnDef> columns;
     std::string perr;
-    if (!parse_columns_spec(args.columns, columns, perr)) {
+    if (!normalize_write_columns(args.columns, columns, perr)) {
         err << "Error: " << perr << "\n";
         return kExitUsage;
     }

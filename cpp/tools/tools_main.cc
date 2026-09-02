@@ -30,11 +30,6 @@
 
 int main(int argc, char** argv) {
 #ifndef _WIN32
-    // comment : 这里是注册了一个信号来处理什么呢？
-    // Answer: 这里不是注册自定义处理函数，而是忽略 SIGPIPE。Unix 下当输出被
-    // 管道连接到 `head` 等程序、下游提前关闭管道时，默认 SIGPIPE 会直接终止
-    // 进程；忽略后 write/iostream 会以 EPIPE/失败状态返回，使 run_cli 能走统一的
-    // 输出错误处理和退出码逻辑，而不是被信号异步杀死。Windows 没有该信号语义。
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     std::vector<std::string> args(argv + 1, argv + argc);

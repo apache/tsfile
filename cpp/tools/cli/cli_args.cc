@@ -148,11 +148,8 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
         return true;
     };
     auto append_column = [&](const std::string& name, const std::string& type,
-                             const std::string& category) {
-        if (!p.columns.empty()) {
-            p.columns += ",";
-        }
-        p.columns += name + ":" + type + ":" + category;
+                             bool is_tag) {
+        p.columns.emplace_back(name, type, is_tag);
     };
     bool positional_file_set = false;
     bool limit_set = false;
@@ -324,7 +321,7 @@ ParsedArgs parse_args(const std::vector<std::string>& args) {
             }
             std::string name = args[++i];
             std::string type = args[++i];
-            append_column(name, type, a == "--tag" ? "tag" : "field");
+            append_column(name, type, a == "--tag");
         } else if (a == "-i" || a == "--input") {
             if (p.input_set) {
                 p.error = "choose exactly one of --input or --stdin";

@@ -53,8 +53,8 @@ generating a schema or relying on time-column, tag-column, null, delimiter,
 type-inference, file-naming, or failure-handling behavior.
 
 Use the C++ `tsfile-cli write` command only when the requested operation is its
-narrow pipe-friendly case: one CSV/TSV stream or file, one new table-model
-TsFile, and an explicit inline `--columns` schema.
+narrow pipe-friendly case: one CSV stream or file, one new table-model TsFile,
+and an explicit `--tag`/`--field` schema.
 
 ## Check or Backfill Table Point Count
 

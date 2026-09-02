@@ -1007,6 +1007,18 @@ TEST(CliE2E, ReadRejectsWriteOnlyFlag) {
         << err.str();
 }
 
+TEST(CliE2E, ReadRejectsWriteColumnFlags) {
+    Fixture f;
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"ls", "--field", "s1", "INT64", f.path}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_NE(err.str().find("--tag/--field are only valid for write"),
+              std::string::npos)
+        << err.str();
+}
+
 TEST(CliE2E, MetaRejectsDeviceScopeFlag) {
     Fixture f;
     std::ostringstream out;

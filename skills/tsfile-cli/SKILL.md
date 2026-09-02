@@ -19,13 +19,13 @@ name: tsfile-cli
 description: >-
   Use specifically for the project's C++ `tsfile-cli` in cpp/tools: inspect,
   preview, export, or sample an Apache TsFile; report metadata or per-series
-  counts; or use its explicit single-table CSV/TSV write command.
+  counts; or use its explicit single-table CSV write command.
 ---
 
 # tsfile-cli
 
 Single pipe-friendly C++ binary to inspect `.tsfile` files and create a new
-table-model TsFile from CSV/TSV (TsFile's analogue of `parquet-cli`/`pqrs`).
+table-model TsFile from CSV (TsFile's analogue of `parquet-cli`/`pqrs`).
 Source `cpp/tools/`. Read data → stdout, diagnostics → stderr.
 
 ## Scope
@@ -37,7 +37,7 @@ load the sibling `tsfile` skill at `../tsfile/SKILL.md`.
 
 The names overlap but the semantics do not: `tsfile-cli count` is a read-only
 per-series report, not the Java table point-count property tool. `tsfile-cli
-write` is the C++ binary's narrow one-file/stream, one-table CSV/TSV import; it
+write` is the C++ binary's narrow one-file/stream, one-table CSV import; it
 does not replace the Java batch and format-aware import tools.
 
 ## Binary
@@ -89,30 +89,32 @@ $B cat -m temp --start 1700000000000 -f csv data.tsfile 2>/dev/null | head
 
 ## Write
 
-`tsfile-cli write --table <name> --columns <spec> -o <out> [-f csv|tsv] [--no-header] [--header-match] [-v] [<input> | -]`
+`tsfile-cli write --table <name> (--tag <name> STRING)* (--field <name> <TYPE>)+ (-i <input.csv>|--stdin) -o <out.tsfile> [-v]`
 
-Imports rows into a **new table-model** file (overwritten). Input col 0 = timestamp
-(epoch ms, int); remaining cols declared by `--columns` — **no type inference**.
+Imports rows into a **new table-model** file. The target must not already exist.
+Input is strict CSV with a required `time` header; all other columns are declared
+explicitly by `--tag` and `--field` — **no type inference**.
 
 ```
-spec  := col (',' col)*
-col   := name ':' TYPE ':' ('tag' | 'field')          # TYPE + category case-insensitive
 TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE, BLOB }
-input := file | '-' | omitted                          # '-' or omitted = stdin
 ```
 
-- `-o` required (overwritten, must differ from input); `-f` default csv (json/table → usage error).
-- header: first line skipped by default · `--no-header` if none · `--header-match` validates
-  header names vs `--columns` (mutually exclusive with `--no-header`).
-- empty cell = null · `--table` is lower-cased · `DATE` cells are `YYYY-MM-DD`, `TIMESTAMP` epoch ms · each column stored with the engine default encoding/compression for its type · success **silent**, `-v` → echoes the resolved config + `wrote N rows to <out>` on stderr.
+- `--tag` declarations must use `STRING`; at least one `--field` is required.
+- The CSV header must contain `time` and exactly the declared TAG/FIELD names.
+- `--encoding` and `--compression` may override the bound defaults by data type.
+- `--stdin` or `-i <input.csv>` is required; TSV, `--columns`, `--no-header`, and
+  `--header-match` are not supported.
+- Empty cells use the CSV null spelling; `DATE` cells are `YYYY-MM-DD`, and
+  `TIMESTAMP`/`time` use strict decimal int64 values.
+- A failed import leaves no partial output; success is silent unless `-v` is used.
 - **timestamps must be strictly increasing per device** (device = tag-column values); rows for
   different tags may interleave/reuse timestamps. Out-of-order input → error with line number.
 - a failed import deletes its partial output (no half-written `.tsfile` left behind).
-- exit: `1` usage (missing `--table`/`--columns`/`-o`, bad spec, dup column, read-only flag) · `2` IO open · `3` row (field-count / type / overflow / timestamp-order / header mismatch).
+- exit: `1` usage/parameter error · `2` CSV/input problem · `3` target/write/commit failure.
 
 ```sh
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
-  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
+  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 --stdin -o out.tsfile
 tsfile-cli count -f tsv out.tsfile        # -> t1.dev  s1  2
 ```
 

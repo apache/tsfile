@@ -53,12 +53,6 @@ class CliFullMatchTagRegExp : public storage::TagFilter {
    private:
     std::regex pattern_;
 };
-/// COMMENT: 这里应该即使是有offset 也能推下去。
-// Answer: Reader 的 queryByRow 确实支持 offset；这里限制 offset == 0 是有意的
-// 保守处理。offset 非零时若直接下推，Reader 通常会返回空结果而不是让
-// emit_result_set 统一报告“offset exceeds matched row count”，并且带时间范围时
-// 还必须走按时间查询以保持 CLI 的筛选语义。若要下推非零 offset，需要同时补齐
-// 越界错误和时间过滤的等价测试后再放宽这个条件。
 bool can_push_down_row_window(const ParsedArgs& args, long long offset,
                               long long limit) {
     return !args.has_start && !args.has_end && offset == 0 &&

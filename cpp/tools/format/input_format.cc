@@ -23,6 +23,7 @@
 #include <istream>
 
 #include "common/csv_utils.h"
+#include "utils/storage_utils.h"
 
 namespace tsfile_cli {
 
@@ -32,15 +33,6 @@ void strip_cr(std::string& s) {
     if (!s.empty() && s.back() == '\r') {
         s.pop_back();
     }
-}
-
-std::string lower_ascii(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (unsigned char c : s) {
-        out += static_cast<char>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
-    }
-    return out;
 }
 
 }  // namespace
@@ -74,23 +66,12 @@ bool read_record(std::istream& in, bool csv_quotes, std::string& record,
 }
 
 bool parse_datatype_name(const std::string& s, common::TSDataType& out) {
-    return common::parse_data_type_name(s, out);
-}
-
-bool parse_category(const std::string& s, common::ColumnCategory& out) {
-    std::string l;
-    l.reserve(s.size());
-    for (char c : s) {
-        l += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    if (l == "tag") {
-        out = common::ColumnCategory::TAG;
-    } else if (l == "field") {
-        out = common::ColumnCategory::FIELD;
-    } else {
+    if (!common::parse_data_type_name(s, out)) {
         return false;
     }
-    return true;
+    // Write schema types are part of the CLI contract and must use the
+    // canonical uppercase spelling, unlike case-insensitive reader lookups.
+    return s == common::get_data_type_name(out);
 }
 
 std::vector<std::string> split_line(const std::string& line, char delim,
@@ -98,34 +79,27 @@ std::vector<std::string> split_line(const std::string& line, char delim,
     return common::split_csv_line(line, delim, csv_quotes);
 }
 
-bool parse_columns_spec(const std::string& spec, std::vector<ColumnDef>& out,
-                        std::string& error) {
+bool normalize_write_columns(const std::vector<WriteColumnSpec>& specs,
+                             std::vector<ColumnDef>& out,
+                             std::string& error) {
     out.clear();
-    if (spec.empty()) {
-        error = "empty --columns";
+    if (specs.empty()) {
+        error = "empty write column declarations";
         return false;
     }
-    std::vector<std::string> items = split_line(spec, ',', false);
-    for (const std::string& item : items) {
-        std::vector<std::string> parts = split_line(item, ':', false);
-        if (parts.size() != 3) {
-            error = "bad column '" + item + "' (want name:TYPE:category)";
-            return false;
-        }
+    for (const WriteColumnSpec& spec : specs) {
         ColumnDef def;
-        def.name = lower_ascii(parts[0]);
+        def.name = storage::to_lower(spec.name);
         if (def.name.empty()) {
-            error = "empty column name in '" + item + "'";
+            error = "empty column name";
             return false;
         }
-        if (!parse_datatype_name(parts[1], def.type)) {
-            error = "unknown type '" + parts[1] + "'";
+        if (!parse_datatype_name(spec.type_name, def.type)) {
+            error = "unknown type '" + spec.type_name + "'";
             return false;
         }
-        if (!parse_category(parts[2], def.category)) {
-            error = "bad category '" + parts[2] + "' (want tag|field)";
-            return false;
-        }
+        def.category = spec.is_tag ? common::ColumnCategory::TAG
+                                   : common::ColumnCategory::FIELD;
         if (!validate_identifier(def.name, error)) {
             return false;
         }
@@ -211,7 +185,7 @@ bool validate_identifier(const std::string& name, std::string& error) {
             }
         }
     }
-    if (lower_ascii(name) == "time") {
+    if (storage::to_lower(name) == "time") {
         error = "name '" + name + "' is reserved";
         return false;
     }

@@ -726,10 +726,9 @@ TEST(CliRequirements, WriteRejectsUnterminatedQuotedCsvField) {
 TEST(CliRequirements, LegacyColumnsOptionIsRejected) {
     std::ostringstream out;
     std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"write", "--table", "t1", "--columns",
-                             "s1:INT64:field", "-o", "x.tsfile", "--stdin"},
-                            out, err);
+    int code = tsfile_cli::run_cli({"write", "--table", "t1", "--columns",
+                                    "legacy", "-o", "x.tsfile", "--stdin"},
+                                   out, err);
     EXPECT_EQ(code, 1);
     EXPECT_TRUE(out.str().empty());
     EXPECT_NE(err.str().find("Unknown flag: --columns"), std::string::npos)

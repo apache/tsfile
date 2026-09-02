@@ -431,27 +431,28 @@ inline std::string write_complex_tree_fixture() {
     for (int row = 0; row < 20; ++row) {
         {
             storage::TsRecord record(first_device, row);
+            std::string m3_value = "value_" + std::to_string(row);
             record.add_point("m1", static_cast<int32_t>(row));
             record.add_point("m2", static_cast<double>(row) + 0.5);
-            record.add_point("m3", std::string("value_") + std::to_string(row));
+            record.add_point("m3", common::String(m3_value));
             record.add_point("m4", static_cast<int32_t>(row * 2));
             record.add_point("m5", static_cast<double>(row) + 100.5);
             writer.write(record);
         }
         {
             storage::TsRecord record(second_device, row);
+            std::string xxx_text_value = "xxx_" + std::to_string(row);
             record.add_point("xxx", static_cast<float>(row) + 0.25f);
             record.add_point("xxx_int", static_cast<int64_t>(row * 10));
-            record.add_point("xxx_text",
-                             std::string("xxx_") + std::to_string(row));
+            record.add_point("xxx_text", common::String(xxx_text_value));
             writer.write(record);
         }
         {
             storage::TsRecord record(third_device, row);
+            std::string xx_text_value = "xx_" + std::to_string(row);
             record.add_point("xx", row % 2 == 0);
             record.add_point("xx_double", static_cast<double>(row) + 10.5);
-            record.add_point("xx_text",
-                             std::string("xx_") + std::to_string(row));
+            record.add_point("xx_text", common::String(xx_text_value));
             writer.write(record);
         }
     }

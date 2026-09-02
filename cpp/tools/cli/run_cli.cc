@@ -446,7 +446,7 @@ bool validate_read_flag_applicability(const ParsedArgs& p, std::ostream& err) {
         return false;
     }
     if (!p.columns.empty()) {
-        err << "Error: --columns is only valid for write\n";
+        err << "Error: --tag/--field are only valid for write\n";
         return false;
     }
     if (p.header_match) {

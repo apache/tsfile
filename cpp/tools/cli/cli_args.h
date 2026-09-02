@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "cli/write_columns.h"
+
 namespace tsfile_cli {
 
 struct ParsedArgs {
@@ -71,7 +73,7 @@ struct ParsedArgs {
     bool no_header = false;       // parsed only to reject obsolete --no-header
     std::string model;            // reserved; model is always auto-detected
     std::string output;           // -o/--output; write destination .tsfile
-    std::string columns;          // normalized --tag/--field spec
+    std::vector<WriteColumnSpec> columns;  // --tag/--field declarations
     bool verbose = false;         // -v/--verbose; write progress to stderr
     bool header_match = false;    // --header-match; validate write header row
     bool input_set = false;       // write input was explicitly set

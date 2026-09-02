@@ -102,6 +102,16 @@ int ReadFile::open(const std::string& file_path) {
     int flags = O_RDONLY;
 #ifdef _WIN32
     flags |= O_BINARY;
+    // Windows cannot open a directory with _open(), whereas POSIX permits
+    // opening one and lets fstat() identify it.  Preflight existing
+    // non-regular paths so both platforms report the same stable error code.
+    // If stat itself fails, keep the normal open() path so missing or
+    // inaccessible files continue to report E_FILE_OPEN_ERR.
+    struct __stat64 preopen_stat;
+    if (_stat64(file_path_.c_str(), &preopen_stat) == 0 &&
+        (preopen_stat.st_mode & _S_IFMT) != _S_IFREG) {
+        return E_INVALID_PATH;
+    }
 #endif
     fd_ = ::open(file_path_.c_str(), flags);
     if (fd_ < 0) {

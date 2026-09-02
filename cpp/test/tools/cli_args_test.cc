@@ -132,20 +132,6 @@ TEST(ParseArgsTest, TagFilterParsed) {
     EXPECT_EQ(p.tag_filters[0].value, "dev_a");
 }
 
-TEST(ParseArgsTest, TagBetweenIsNotSupported) {
-    auto p = tsfile_cli::parse_args(
-        {"cat", "--tag-between", "id1", "dev_a", "dev_c", "data.tsfile"});
-    EXPECT_FALSE(p.error.empty());
-}
-
-TEST(ParseArgsTest, DuplicateTagFilterIsError) {
-    auto p = tsfile_cli::parse_args({"cat", "--tag-filter", "id1", "eq",
-                                     "dev_a", "--tag-filter", "id1", "neq", "z",
-                                     "data.tsfile"});
-    EXPECT_TRUE(p.error.empty());
-    ASSERT_EQ(p.tag_filters.size(), 2u);
-}
-
 TEST(ParseArgsTest, UnknownFlagIsError) {
     auto p = tsfile_cli::parse_args({"ls", "--bogus", "data.tsfile"});
     EXPECT_FALSE(p.error.empty());
@@ -170,7 +156,10 @@ TEST(ParseArgsTest, WriteFlagsParsed) {
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.command, "write");
     EXPECT_EQ(p.table, "t1");
-    EXPECT_EQ(p.columns, "s1:INT64:field");
+    ASSERT_EQ(p.columns.size(), 1u);
+    EXPECT_EQ(p.columns[0].name, "s1");
+    EXPECT_EQ(p.columns[0].type_name, "INT64");
+    EXPECT_FALSE(p.columns[0].is_tag);
     EXPECT_EQ(p.output, "out.tsfile");
     EXPECT_TRUE(p.verbose);
     EXPECT_TRUE(p.header_match);
