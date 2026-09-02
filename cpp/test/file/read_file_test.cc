@@ -102,6 +102,10 @@ class ReadFileBackendTest : public ::testing::Test {
     std::string content_;
 };
 
+TEST_F(ReadFileBackendTest, PreadIsTheDefaultBackend) {
+    EXPECT_EQ(common::get_file_read_backend(), common::FileReadBackend::PREAD);
+}
+
 TEST_F(ReadFileBackendTest, PreadPreservesPositionedReadBehavior) {
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::PREAD),
               common::E_OK);
@@ -146,6 +150,8 @@ TEST_F(ReadFileBackendTest, MmapReadsBoundedRangesAndReleasesResources) {
 
     uint64_t size = 0;
     uint64_t fingerprint = 0;
+    // MMAP releases the descriptor before open() returns, so generation()
+    // must use the snapshot captured while the mapping was established.
     EXPECT_EQ(file.generation(size, fingerprint), common::E_OK);
     EXPECT_EQ(size, content_.size());
     EXPECT_NE(fingerprint, 0u);

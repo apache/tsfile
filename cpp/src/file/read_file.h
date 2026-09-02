@@ -51,6 +51,8 @@ class ReadFile {
     }
 
     /** Return size and the Dataset Index v1 FNV fingerprint of size+mtime_ns.
+     * MMAP readers return the generation captured before closing the file
+     * descriptor.
      */
     int generation(uint64_t& size, uint64_t& fingerprint) const;
 
@@ -66,6 +68,8 @@ class ReadFile {
 
    private:
     int get_file_size(int64_t& file_size);
+    int get_file_generation_from_descriptor(uint64_t& size,
+                                            uint64_t& fingerprint) const;
     int check_file_magic();
     int map_file();
     void unmap_file();
@@ -78,6 +82,7 @@ class ReadFile {
     std::string file_path_;
     int fd_;
     int64_t file_size_;
+    uint64_t mapped_file_fingerprint_;
     const char* mapped_data_;
     size_t mapped_size_;
     common::FileReadBackend active_backend_;

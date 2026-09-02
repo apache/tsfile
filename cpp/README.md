@@ -357,17 +357,20 @@ does not affect readers that are already open.
 ```cpp
 #include "common/global.h"
 
-common::set_file_read_backend(common::FileReadBackend::AUTO);   // default
+common::set_file_read_backend(common::FileReadBackend::PREAD);  // default
+common::set_file_read_backend(common::FileReadBackend::AUTO);   // prefer mmap, fall back
 common::set_file_read_backend(common::FileReadBackend::MMAP);   // require mmap
-common::set_file_read_backend(common::FileReadBackend::PREAD);  // legacy path
 ```
 
 The C API exposes the same setting through
-`tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)`. `AUTO` prefers memory
-mapping for supported regular files and falls back to `pread` if mapping is not
-available. `MMAP` does not fall back: unsupported inputs return
+`tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)`. `PREAD` is the default
+to preserve the historical reader behavior. `AUTO` prefers memory mapping for
+supported regular files and falls back to `pread` if mapping is not available.
+`MMAP` does not fall back: unsupported inputs return
 `RET_NOT_SUPPORT`, while mapping failures return `RET_FILE_MAP_ERR`. Files must
-not be modified or truncated while a mapped reader is open.
+not be modified or truncated while a mapped reader is open. After a mapping is
+created successfully, the original file descriptor is closed; the mapping
+itself remains valid until the reader closes.
 
 ## Use TsFile
 

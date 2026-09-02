@@ -181,15 +181,17 @@ reader 打开文件时确定，因此修改配置不会影响已经打开的 rea
 ```cpp
 #include "common/global.h"
 
-common::set_file_read_backend(common::FileReadBackend::AUTO);   // 默认值
+common::set_file_read_backend(common::FileReadBackend::PREAD);  // 默认值
+common::set_file_read_backend(common::FileReadBackend::AUTO);   // 优先 mmap，失败时回退
 common::set_file_read_backend(common::FileReadBackend::MMAP);   // 必须使用 mmap
-common::set_file_read_backend(common::FileReadBackend::PREAD);  // 兼容旧读取路径
 ```
 
 C API 可通过 `tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)` 设置相同
-选项。`AUTO` 会优先映射受支持的普通文件，映射不可用时自动回退到 `pread`；
-`MMAP` 不回退：输入不受支持时返回 `RET_NOT_SUPPORT`，映射失败时返回
-`RET_FILE_MAP_ERR`。映射 reader 打开期间不得修改或截断文件。
+选项。默认使用 `PREAD`，以保持历史读取行为不变。`AUTO` 会优先映射受支持
+的普通文件，映射不可用时自动回退到 `pread`；`MMAP` 不回退：输入不受
+支持时返回 `RET_NOT_SUPPORT`，映射失败时返回 `RET_FILE_MAP_ERR`。映射建立
+成功后会关闭原始文件描述符，映射本身会保持有效直至 reader 关闭。映射
+reader 打开期间不得修改或截断文件。
 
 ---
 

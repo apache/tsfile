@@ -81,8 +81,9 @@ numbers or structures.
 ## Local File Read Backend
 
 Python readers inherit the process-wide backend setting when they open a file.
-`AUTO` is the default, `MMAP` requires memory mapping, and `PREAD` restores the
-traditional positioned-read behavior.
+`PREAD` is the default to preserve the traditional positioned-read behavior,
+`MMAP` requires memory mapping, and `AUTO` prefers mapping with a fallback to
+`PREAD`.
 
 ```python
 from tsfile import FileReadBackend, TsFileReader, set_file_read_backend

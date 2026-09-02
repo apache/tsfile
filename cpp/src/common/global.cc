@@ -41,7 +41,7 @@ namespace {
 // Kept outside ConfigValue for ABI compatibility. It is also intentionally not
 // reset by init_common(), so callers may configure the first reader before
 // libtsfile_init().
-std::atomic<FileReadBackend> g_file_read_backend(FileReadBackend::AUTO);
+std::atomic<FileReadBackend> g_file_read_backend(FileReadBackend::PREAD);
 }  // namespace
 
 ColumnSchema g_time_column_schema;

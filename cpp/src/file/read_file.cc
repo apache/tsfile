@@ -63,6 +63,7 @@ ReadFile::ReadFile()
     : file_path_(),
       fd_(-1),
       file_size_(-1),
+      mapped_file_fingerprint_(0),
       mapped_data_(nullptr),
       mapped_size_(0),
       active_backend_(common::FileReadBackend::PREAD)
@@ -81,6 +82,18 @@ int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
     if (!is_opened()) {
         return E_FILE_READ_ERR;
     }
+
+    if (active_backend_ == common::FileReadBackend::MMAP) {
+        size = static_cast<uint64_t>(file_size_);
+        fingerprint = mapped_file_fingerprint_;
+        return E_OK;
+    }
+
+    return get_file_generation_from_descriptor(size, fingerprint);
+}
+
+int ReadFile::get_file_generation_from_descriptor(uint64_t& size,
+                                                  uint64_t& fingerprint) const {
     int64_t mtime_ns = 0;
 #ifdef _WIN32
     if (fd_ < 0) {
@@ -132,6 +145,7 @@ void ReadFile::close() {
         fd_ = -1;
     }
     file_size_ = -1;
+    mapped_file_fingerprint_ = 0;
     active_backend_ = common::FileReadBackend::PREAD;
 #ifndef _WIN32
     file_device_ = 0;
@@ -278,6 +292,26 @@ int ReadFile::map_file() {
     mapped_data_ = static_cast<const char*>(view);
 #endif
     mapped_size_ = static_cast<size_t>(file_size_);
+
+    uint64_t mapped_file_size = 0;
+    uint64_t mapped_file_fingerprint = 0;
+    const int generation_ret = get_file_generation_from_descriptor(
+        mapped_file_size, mapped_file_fingerprint);
+    if (generation_ret != E_OK ||
+        mapped_file_size != static_cast<uint64_t>(file_size_)) {
+        unmap_file();
+        return generation_ret == E_OK ? E_FILE_STAT_ERR : generation_ret;
+    }
+    mapped_file_fingerprint_ = mapped_file_fingerprint;
+
+    // The mapping remains valid after the descriptor is closed. Keep only the
+    // mapping (and, on Windows, its mapping handle) for the reader lifetime.
+    const int mapped_fd = fd_;
+    fd_ = -1;
+    if (::close(mapped_fd) != 0) {
+        LOGW("failed to close mapped file descriptor for "
+             << file_path_.c_str() << ", errno=" << errno);
+    }
     return E_OK;
 }
 
