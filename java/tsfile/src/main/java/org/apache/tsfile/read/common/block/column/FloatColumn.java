@@ -20,13 +20,18 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -94,6 +99,24 @@ public class FloatColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.FLOAT) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.FLOAT, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else {
+        builder.writeFloat(getFloat(position));
+      }
+    }
+    return builder.build();
+  }
+
+  @Override
   public float getFloat(int position) {
     return values[position + arrayOffset];
   }
@@ -139,6 +162,34 @@ public class FloatColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsFloat(getFloat(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putFloat(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeFloat(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        output.writeInt(Float.floatToIntBits(values[i + arrayOffset]));
+      }
+    }
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
+    }
+    return !that.isNull(thatPos) && getFloat(thisPos) == that.getFloat(thatPos);
   }
 
   @Override

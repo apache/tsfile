@@ -29,11 +29,11 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.read.reader.chunk.TableChunkReader;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -257,51 +257,8 @@ public class Chunk {
                   chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
         }
         long timestamp = point.getTimestamp();
-        switch (newType) {
-          case BOOLEAN:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? true : (boolean) convertedValue,
-                convertedValue == null);
-            break;
-          case DATE:
-          case INT32:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? Integer.MAX_VALUE : (int) convertedValue,
-                convertedValue == null);
-            break;
-          case TIMESTAMP:
-          case INT64:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? (long) Integer.MAX_VALUE : (long) convertedValue,
-                convertedValue == null);
-            break;
-          case FLOAT:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? (float) Integer.MAX_VALUE : (float) convertedValue,
-                convertedValue == null);
-            break;
-          case DOUBLE:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? (double) Integer.MAX_VALUE : (double) convertedValue,
-                convertedValue == null);
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-          case OBJECT:
-            chunkWriter.write(
-                timestamp,
-                convertedValue == null ? Binary.EMPTY_VALUE : (Binary) convertedValue,
-                convertedValue == null);
-            break;
-          default:
-            throw new IOException(Messages.format("error.read.chunk_unsupported_type", newType));
-        }
+        Type.fromTsDataType(newType)
+            .write(chunkWriter, timestamp, convertedValue, convertedValue == null);
       }
       chunkWriter.sealCurrentPage();
     }
@@ -346,33 +303,7 @@ public class Chunk {
         if (convertedValue == null) {
           throw new IOException(Messages.format("error.read.chunk_non_aligned_null", timestamp));
         }
-        switch (newType) {
-          case BOOLEAN:
-            chunkWriter.write(timestamp, (boolean) convertedValue);
-            break;
-          case DATE:
-          case INT32:
-            chunkWriter.write(timestamp, (int) convertedValue);
-            break;
-          case TIMESTAMP:
-          case INT64:
-            chunkWriter.write(timestamp, (long) convertedValue);
-            break;
-          case FLOAT:
-            chunkWriter.write(timestamp, (float) convertedValue);
-            break;
-          case DOUBLE:
-            chunkWriter.write(timestamp, (double) convertedValue);
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-          case OBJECT:
-            chunkWriter.write(timestamp, (Binary) convertedValue);
-            break;
-          default:
-            throw new IOException(Messages.format("error.read.chunk_unsupported_type", newType));
-        }
+        Type.fromTsDataType(newType).write(chunkWriter, timestamp, convertedValue);
       }
       chunkWriter.sealCurrentPage();
     }

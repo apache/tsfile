@@ -18,9 +18,16 @@
  */
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
 
+import org.junit.Assert;
 import org.junit.Test;
+
+import java.nio.charset.StandardCharsets;
 
 public class FieldTest {
 
@@ -28,5 +35,30 @@ public class FieldTest {
   public void construct() {
     Field field = new Field(null);
     field.getIntV();
+  }
+
+  @Test
+  public void copy() {
+    Object[][] values = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260716},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, new Binary("text", StandardCharsets.UTF_8)},
+      {TSDataType.STRING, new Binary("string", StandardCharsets.UTF_8)},
+      {TSDataType.BLOB, new Binary(new byte[] {1, 2})},
+      {TSDataType.OBJECT, new Binary(BytesUtils.longToBytes(2L))}
+    };
+
+    for (Object[] value : values) {
+      TSDataType dataType = (TSDataType) value[0];
+      Field source = Type.fromTsDataType(dataType).getField(value[1]);
+      Field copy = Field.copy(source);
+      Assert.assertEquals(source.getDataType(), copy.getDataType());
+      Assert.assertEquals(source.getObjectValue(dataType), copy.getObjectValue(dataType));
+    }
   }
 }

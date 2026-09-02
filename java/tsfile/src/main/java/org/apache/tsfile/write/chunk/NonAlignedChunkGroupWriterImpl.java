@@ -22,13 +22,10 @@ import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.ColumnCategory;
-import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.i18n.Messages;
-import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.DateUtils;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -38,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -118,7 +114,8 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         continue;
       }
       String measurementId = timeseries.get(column).getMeasurementName();
-      TSDataType tsDataType = timeseries.get(column).getType();
+      Type type = Type.fromTsDataType(timeseries.get(column).getType());
+      ChunkWriterImpl chunkWriter = chunkWriters.get(measurementId);
       pointCount = 0;
       for (int row = startRowIndex; row < endRowIndex; row++) {
         // check isNull in tablet
@@ -130,49 +127,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         long time = tablet.getTimestamps()[row];
         checkIsHistoryData(measurementId, time);
         pointCount++;
-        switch (tsDataType) {
-          case INT32:
-            chunkWriters.get(measurementId).write(time, ((int[]) tablet.getValues()[column])[row]);
-            break;
-          case DATE:
-            chunkWriters
-                .get(measurementId)
-                .write(
-                    time,
-                    DateUtils.parseDateExpressionToInt(
-                        ((LocalDate[]) tablet.getValues()[column])[row]));
-            break;
-          case INT64:
-          case TIMESTAMP:
-            chunkWriters.get(measurementId).write(time, ((long[]) tablet.getValues()[column])[row]);
-            break;
-          case FLOAT:
-            chunkWriters
-                .get(measurementId)
-                .write(time, ((float[]) tablet.getValues()[column])[row]);
-            break;
-          case DOUBLE:
-            chunkWriters
-                .get(measurementId)
-                .write(time, ((double[]) tablet.getValues()[column])[row]);
-            break;
-          case BOOLEAN:
-            chunkWriters
-                .get(measurementId)
-                .write(time, ((boolean[]) tablet.getValues()[column])[row]);
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-          case OBJECT:
-            chunkWriters
-                .get(measurementId)
-                .write(time, ((Binary[]) tablet.getValues()[column])[row]);
-            break;
-          default:
-            throw new UnSupportedDataTypeException(
-                Messages.format("error.write.type_not_supported", tsDataType));
-        }
+        type.write(chunkWriter, time, tablet.getValues()[column], row);
         lastTimeMap.put(measurementId, time);
       }
       maxPointCount = Math.max(pointCount, maxPointCount);

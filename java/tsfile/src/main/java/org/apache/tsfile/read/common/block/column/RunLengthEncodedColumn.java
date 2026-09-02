@@ -27,6 +27,9 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
@@ -74,6 +77,17 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.RLE;
+  }
+
+  @Override
+  public Column convertTo(TSDataType type) {
+    TSDataType sourceType = getDataType();
+    if (type == sourceType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(sourceType, type);
+    // Transform the single stored value and keep the run-length representation.
+    return new RunLengthEncodedColumn(value.convertTo(type), positionCount);
   }
 
   @Override
@@ -163,6 +177,21 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return value.getTsPrimitiveType(0);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    value.writeTo(0, buffer);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    value.writeTo(0, stream);
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return value.arePositionsEqual(0, that, thatPos);
   }
 
   @Override

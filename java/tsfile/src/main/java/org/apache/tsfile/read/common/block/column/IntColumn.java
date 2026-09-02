@@ -20,13 +20,18 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -72,7 +77,7 @@ public class IntColumn implements Column {
     this.dataType = dataType;
   }
 
-  IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
+  public IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
@@ -111,13 +116,36 @@ public class IntColumn implements Column {
     return dataType;
   }
 
-  public void modifyDataType(TSDataType dataType) {
+  public IntColumn modifyDataType(TSDataType dataType) {
     this.dataType = dataType;
+    return this;
   }
 
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.INT32_ARRAY;
+  }
+
+  @Override
+  public Column convertTo(TSDataType type) {
+    if (type == dataType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(dataType, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else if (dataType == TSDataType.DATE) {
+        // DATE has an int physical representation but a formatted text cast.
+        builder.writeBinary(
+            new Binary(TSDataType.getDateStringValue(getInt(position)), StandardCharsets.UTF_8));
+      } else {
+        builder.writeInt(getInt(position));
+      }
+    }
+    return builder.build();
   }
 
   @Override
@@ -194,6 +222,34 @@ public class IntColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsInt(getInt(position), dataType);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putInt(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeInt(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        output.writeInt(values[i + arrayOffset]);
+      }
+    }
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
+    }
+    return !that.isNull(thatPos) && getInt(thisPos) == that.getInt(thatPos);
   }
 
   @Override

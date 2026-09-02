@@ -24,6 +24,8 @@ import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.IntTypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.utils.Binary;
@@ -41,6 +43,21 @@ public class TsBlockFilterTest {
 
   private static final int COL_NUM = 3;
   private static final int ROW_NUM = 7;
+  private static final IntTypeService GET_MEASUREMENT_ID_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> 0;
+            case INT32 -> 1;
+            case INT64 -> 2;
+            case FLOAT -> 3;
+            case DOUBLE -> 4;
+            case TEXT -> 5;
+            case BLOB, DATE, OBJECT, ROW, STRING, TIMESTAMP, UNKNOWN, VECTOR -> -1;
+          };
+
+  static {
+    GET_MEASUREMENT_ID_SERVICE.check();
+  }
 
   private TsBlock tsBlock;
 
@@ -49,22 +66,7 @@ public class TsBlockFilterTest {
   private boolean[] selection = new boolean[COL_NUM];
 
   public int getMeasurementId(TSDataType type) {
-    switch (type) {
-      case BOOLEAN:
-        return 0;
-      case INT32:
-        return 1;
-      case INT64:
-        return 2;
-      case FLOAT:
-        return 3;
-      case DOUBLE:
-        return 4;
-      case TEXT:
-        return 5;
-      default:
-        return -1;
-    }
+    return GET_MEASUREMENT_ID_SERVICE.call(Type.fromTsDataType(type));
   }
 
   @Before

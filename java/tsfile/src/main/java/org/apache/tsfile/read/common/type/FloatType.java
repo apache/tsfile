@@ -21,16 +21,317 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.block.column.ColumnBuilderStatus;
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.FloatDecoder;
+import org.apache.tsfile.encoding.decoder.FloatRLBEDecoder;
+import org.apache.tsfile.encoding.decoder.FloatSprintzDecoder;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionChimpDecoder;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionDecoderV1;
+import org.apache.tsfile.encoding.decoder.SinglePrecisionDecoderV2;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.FloatStatistics;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
+import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class FloatType extends AbstractType {
 
   public static final FloatType FLOAT = new FloatType();
 
   private FloatType() {}
+
+  @Override
+  public void toBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    BytesUtils.floatToBytes(value.getFloat(), valueBytes, offset);
+  }
+
+  @Override
+  public int calcTypeSize(TsPrimitiveType value) {
+    return Float.BYTES;
+  }
+
+  @Override
+  public int calcTypeSize(Object value) {
+    return Float.BYTES;
+  }
+
+  @Override
+  public void init(BatchData batchData) {
+    batchData.initFloatValues();
+  }
+
+  @Override
+  public void put(BatchData batchData, long timestamp, Object value) {
+    batchData.putFloat(timestamp, (float) value);
+  }
+
+  @Override
+  public int serialize(BatchData batchData, DataOutputStream outputStream, boolean isDesc)
+      throws IOException {
+    for (int i = 0; i < batchData.length(); i++) {
+      int index = isDesc ? batchData.length() - 1 - i : i;
+      outputStream.writeLong(batchData.getTimeByIndex(index));
+      outputStream.writeFloat(batchData.getFloatByIndex(index));
+    }
+    return Math.multiplyExact(Long.BYTES + Float.BYTES, batchData.length());
+  }
+
+  @Override
+  public void deserialize(ByteBuffer buffer, BatchData batchData, int length) {
+    for (int i = 0; i < length; i++) {
+      batchData.putFloat(buffer.getLong(), buffer.getFloat());
+    }
+  }
+
+  @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    return new TsPrimitiveType.TsFloat(ReadWriteIOUtils.readFloat(buffer));
+  }
+
+  @Override
+  public int serialize(TsPrimitiveType value, DataOutputStream stream) throws IOException {
+    stream.writeFloat(value.getFloat());
+    return Float.BYTES;
+  }
+
+  @Override
+  public int serializeValue(Object value, ByteBuffer buffer) {
+    buffer.putFloat((float) value);
+    return Float.BYTES;
+  }
+
+  @Override
+  public int serializeValue(Object value, DataOutputStream stream) throws IOException {
+    stream.writeFloat((float) value);
+    return Float.BYTES;
+  }
+
+  @Override
+  public TSEncoding getDefaultEncoding(TSFileConfig config) {
+    return TSEncoding.valueOf(config.getFloatEncoding());
+  }
+
+  @Override
+  public CompressionType getDefaultCompressor(TSFileConfig config) {
+    return config.getFloatCompressor();
+  }
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN, DICTIONARY -> super.getDecoder(encoding);
+      case RLE, TS_2DIFF -> new FloatDecoder(encoding, TSDataType.FLOAT);
+      case GORILLA_V1 -> new SinglePrecisionDecoderV1();
+      case GORILLA -> new SinglePrecisionDecoderV2();
+      case CHIMP -> new SinglePrecisionChimpDecoder();
+      case SPRINTZ -> new FloatSprintzDecoder();
+      case RLBE -> new FloatRLBEDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
+  }
+
+  @Override
+  public int getOneItemMaxSize(int valveLength) {
+    return Float.BYTES;
+  }
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new FloatStatistics();
+  }
+
+  @Override
+  public long getStatisticsInstanceSize() {
+    return FloatStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
+  public void update(Statistics<?> stats, long timestamp, TsPrimitiveType value) {
+    stats.update(timestamp, value.getFloat());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, BatchData batchData) {
+    stats.update(batchData.currentTime(), batchData.getFloat());
+  }
+
+  @Override
+  public void update(Statistics<?> stats, TsBlock block, int columnIndex, int rowIndex) {
+    stats.update(block.getTimeByIndex(rowIndex), block.getColumn(columnIndex).getFloat(rowIndex));
+  }
+
+  @Override
+  public Object getCurrentValue(BatchData batchData) {
+    return batchData.getFloat();
+  }
+
+  @Override
+  public String toString(Field field) {
+    return String.valueOf(field.getFloatV());
+  }
+
+  @Override
+  public Object getValue(Field field) {
+    return field.getFloatV();
+  }
+
+  @Override
+  public void setTo(TsPrimitiveType from, Field to) {
+    to.setFloatV(from.getFloat());
+  }
+
+  @Override
+  public void setTo(TsPrimitiveType from, Column to, int index) {
+    to.getFloats()[index] = from.getFloat();
+  }
+
+  @Override
+  public void setTo(Object value, Column to, int startIndex, int endIndex) {
+    Arrays.fill(to.getFloats(), startIndex, endIndex, (float) value);
+  }
+
+  @Override
+  public void setTo(Field from, Field to) {
+    to.setFloatV(from.getFloatV());
+  }
+
+  @Override
+  public void setTo(BatchData from, Field to) {
+    to.setFloatV(from.getFloat());
+  }
+
+  @Override
+  public void setTo(BatchData from, Column to, int index) {
+    to.getFloats()[index] = from.getFloat();
+  }
+
+  @Override
+  public void setTo(Column from, int fromIndex, Column to, int toIndex) {
+    to.getFloats()[toIndex] = from.getFloat(fromIndex);
+  }
+
+  @Override
+  public void setTo(Column from, int fromIndex, Object toArray, int toIndex) {
+    ((float[]) toArray)[toIndex] = from.getFloat(fromIndex);
+  }
+
+  @Override
+  public void addPoint(TSRecord record, String columnName, Field field) {
+    record.addPoint(columnName, field.getFloatV());
+  }
+
+  @Override
+  public void addPoint(TSRecord record, String columnName, ResultSet resultSet) {
+    record.addPoint(columnName, resultSet.getFloat(columnName));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, String value) {
+    return new FloatDataPoint(measurementId, Float.parseFloat(value));
+  }
+
+  @Override
+  public DataPoint getDataPoint(String measurementId, long value) {
+    return new FloatDataPoint(measurementId, (float) value);
+  }
+
+  @Override
+  public void write(ValueChunkWriter writer, long time, Object value, boolean isNull) {
+    writer.write(time, isNull ? 0.0F : (float) value, isNull);
+  }
+
+  @Override
+  public void write(ValueChunkWriter writer, long time, TsPrimitiveType value) {
+    writer.write(time, value != null ? value.getFloat() : Float.MAX_VALUE, value == null);
+  }
+
+  @Override
+  public void write(
+      ValueChunkWriter writer, long time, Object array, int rowIndex, boolean isNull) {
+    writer.write(time, ((float[]) array)[rowIndex], isNull);
+  }
+
+  @Override
+  public void write(
+      ValueChunkWriter writer, long time, Column column, int rowIndex, boolean isNull) {
+    writer.write(time, isNull ? 0 : column.getFloat(rowIndex), isNull);
+  }
+
+  @Override
+  public void write(
+      ValueChunkWriter writer, long[] times, Column column, int batchSize, int arrayOffset) {
+    writer.write(times, column.getFloats(), column.isNull(), batchSize, arrayOffset);
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, Object column, int rowIndex) {
+    writer.write(time, ((float[]) column)[rowIndex]);
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, TsPrimitiveType value) {
+    writer.write(time, value.getFloat());
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, BatchData data) {
+    writer.write(time, data.getFloat());
+  }
+
+  @Override
+  public void write(ChunkWriterImpl writer, long time, Object value) {
+    writer.write(time, (float) value);
+  }
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.FLOAT);
+    field.setFloatV((float) value);
+    return field;
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsFloat();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsFloat((float) value);
+  }
+
+  @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsFloat(((float[]) array)[rowIndex]);
+  }
 
   @Override
   public int getInt(Column c, int position) {
@@ -50,6 +351,31 @@ public class FloatType extends AbstractType {
   @Override
   public double getDouble(Column c, int position) {
     return c.getFloat(position);
+  }
+
+  @Override
+  public void write(ColumnBuilder builder, TsPrimitiveType value) {
+    builder.writeFloat(value.getFloat());
+  }
+
+  @Override
+  public void write(ColumnBuilder builder, byte[] bytes, int offset) {
+    builder.writeFloat(BytesUtils.bytesToFloat(bytes, offset));
+  }
+
+  @Override
+  public void write(ColumnBuilder builder, Column column, int index) {
+    builder.writeFloat(column.getFloat(index));
+  }
+
+  @Override
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((float[]) toArray)[index] = from.getFloat();
+  }
+
+  @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((float[]) toArray)[index] = from.getFloat();
   }
 
   @Override
@@ -73,8 +399,139 @@ public class FloatType extends AbstractType {
   }
 
   @Override
+  public void addValue(int rowIndex, Object value, Object array) {
+    checkValueType(value, Float.class, "Float");
+    ((float[]) array)[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
+  }
+
+  @Override
+  public void copyArrayElement(Object source, int sourceIndex, Object target, int targetIndex) {
+    ((float[]) target)[targetIndex] = ((float[]) source)[sourceIndex];
+  }
+
+  @Override
+  public Object arrayCopyOf(Object array, int newLength) {
+    return Arrays.copyOf((float[]) array, newLength);
+  }
+
+  @Override
+  public Object createArray(int capacity) {
+    return new float[capacity];
+  }
+
+  @Override
+  public long estimateArraySize(int size) {
+    return RamUsageEstimator.sizeOfFloatArray(size);
+  }
+
+  @Override
+  public long estimateValueSize() {
+    return Float.BYTES;
+  }
+
+  @Override
+  public int serializedSize(Object array, int rowSize) {
+    return Math.multiplyExact(Float.BYTES, rowSize);
+  }
+
+  @Override
+  public void serializeArray(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    float[] values = (float[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(values[i], stream);
+    }
+  }
+
+  @Override
+  public void serializeArray(Object array, int length, ByteBuffer buffer) {
+    float[] values = (float[]) array;
+    for (int i = 0; i < length; i++) {
+      buffer.putFloat(values[i]);
+    }
+  }
+
+  @Override
+  public Object deserializeArray(ByteBuffer buffer, int rowSize) {
+    float[] values = new float[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readFloat(buffer);
+    }
+    return values;
+  }
+
+  @Override
+  public Object deserializeArray(DataInputStream stream, int rowSize) throws IOException {
+    float[] values = new float[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = ReadWriteIOUtils.readFloat(stream);
+    }
+    return values;
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, ByteBuffer buffer) {
+    array[index] = ReadWriteIOUtils.readFloat(buffer);
+  }
+
+  @Override
+  public void deserialize(Object[] array, int index, InputStream stream) throws IOException {
+    array[index] = ReadWriteIOUtils.readFloat(stream);
+  }
+
+  @Override
+  public Object deserializeColumn(ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    float[] values = new float[rowSize];
+    if (nullIndicators == null) {
+      for (int i = 0; i < rowSize; i++) {
+        values[i] = Float.intBitsToFloat(buffer.getInt());
+      }
+    } else {
+      for (int i = 0; i < rowSize; i++) {
+        if (!nullIndicators[i]) {
+          values[i] = Float.intBitsToFloat(buffer.getInt());
+        }
+      }
+    }
+    return new FloatColumn(rowSize, Optional.ofNullable(nullIndicators), values);
+  }
+
+  @Override
+  public boolean arrayEquals(Object left, Object right, int rowSize) {
+    return hasEnoughLength(left, right, rowSize)
+        && Arrays.equals((float[]) left, 0, rowSize, (float[]) right, 0, rowSize);
+  }
+
+  @Override
+  public long estimateArraySize(Object array) {
+    return RamUsageEstimator.sizeOf((float[]) array);
+  }
+
+  @Override
+  public Column createColumnWithMaxPosition(int positionCount) {
+    return new FloatColumn(
+        positionCount, Optional.of(new boolean[positionCount]), new float[positionCount]);
+  }
+
+  @Override
+  public Column createColumnWithZeroPosition(int positionCount) {
+    return new FloatColumn(positionCount);
+  }
+
+  @Override
+  public Column createNullColumn(int positionCount) {
+    return new RunLengthEncodedColumn(FloatColumnBuilder.NULL_VALUE_BLOCK, positionCount);
+  }
+
+  @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
     return new FloatColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public ColumnBuilder createColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
+    return new FloatColumnBuilder(columnBuilderStatus, expectedEntries);
   }
 
   @Override

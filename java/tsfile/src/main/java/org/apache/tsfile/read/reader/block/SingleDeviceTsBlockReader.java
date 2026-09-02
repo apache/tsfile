@@ -25,6 +25,7 @@ import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
 import org.apache.tsfile.read.expression.ExpressionTree;
@@ -32,16 +33,13 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.executor.task.DeviceQueryTask;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -232,69 +230,12 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   }
 
   private void fillIdColumn(Column column, Object val, int startPos, int endPos) {
-    switch (column.getDataType()) {
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        if (val instanceof String) {
-          val = new Binary(((String) val), StandardCharsets.UTF_8);
-        }
-        Arrays.fill(column.getBinaries(), startPos, endPos, val);
-        break;
-      case BOOLEAN:
-        Arrays.fill(column.getBooleans(), startPos, endPos, ((boolean) val));
-        break;
-      case INT32:
-      case DATE:
-        Arrays.fill(column.getInts(), startPos, endPos, ((int) val));
-        break;
-      case INT64:
-      case TIMESTAMP:
-        Arrays.fill(column.getLongs(), startPos, endPos, ((long) val));
-        break;
-      case FLOAT:
-        Arrays.fill(column.getFloats(), startPos, endPos, ((float) val));
-        break;
-      case DOUBLE:
-        Arrays.fill(column.getDoubles(), startPos, endPos, ((double) val));
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.block_reader_unsupported_type", column.getDataType()));
-    }
+    Type.fromTsDataType(column.getDataType()).setTo(val, column, startPos, endPos);
     column.setPositionCount(endPos);
   }
 
   private static void fillSingleMeasurementColumn(Column column, BatchData batchData, int pos) {
-    switch (batchData.getDataType()) {
-      case BOOLEAN:
-        column.getBooleans()[pos] = batchData.getBoolean();
-        break;
-      case DOUBLE:
-        column.getDoubles()[pos] = batchData.getDouble();
-        break;
-      case FLOAT:
-        column.getFloats()[pos] = batchData.getFloat();
-        break;
-      case INT32:
-      case DATE:
-        column.getInts()[pos] = batchData.getInt();
-        break;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        column.getBinaries()[pos] = batchData.getBinary();
-        break;
-      case INT64:
-      case TIMESTAMP:
-        column.getLongs()[pos] = batchData.getLong();
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.block_reader_unsupported_type", batchData.getDataType()));
-    }
+    Type.fromTsDataType(batchData.getDataType()).setTo(batchData, column, pos);
     column.setPositionCount(pos + 1);
   }
 
@@ -383,35 +324,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         final List<Integer> columnPositions = posInResult.get(i);
         for (Integer pos : columnPositions) {
           if (value != null) {
-            switch (value.getDataType()) {
-              case TEXT:
-              case STRING:
-              case BLOB:
-              case OBJECT:
-                block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
-                break;
-              case INT32:
-              case DATE:
-                block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
-                break;
-              case INT64:
-              case TIMESTAMP:
-                block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
-                break;
-              case BOOLEAN:
-                block.getColumn(pos).getBooleans()[blockRowNum] = value.getBoolean();
-                break;
-              case FLOAT:
-                block.getColumn(pos).getFloats()[blockRowNum] = value.getFloat();
-                break;
-              case DOUBLE:
-                block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
-                break;
-              default:
-                throw new IllegalArgumentException(
-                    Messages.format(
-                        "error.read.block_reader_unsupported_type", value.getDataType()));
-            }
+            Type.fromTsDataType(value.getDataType())
+                .setTo(value, block.getColumn(pos), blockRowNum);
           } else {
             block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);
           }

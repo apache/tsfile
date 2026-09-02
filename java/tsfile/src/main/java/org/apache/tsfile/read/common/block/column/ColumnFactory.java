@@ -21,32 +21,11 @@ package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 
 public class ColumnFactory {
   public static Column create(TSDataType dataType, int initialCapacity) {
-    switch (dataType) {
-      case INT64:
-      case TIMESTAMP:
-        return new LongColumn(initialCapacity);
-      case DOUBLE:
-        return new DoubleColumn(initialCapacity);
-      case FLOAT:
-        return new FloatColumn(initialCapacity);
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        return new BinaryColumn(initialCapacity);
-      case INT32:
-        return new IntColumn(initialCapacity, TSDataType.INT32);
-      case DATE:
-        return new IntColumn(initialCapacity, TSDataType.DATE);
-      case BOOLEAN:
-        return new BooleanColumn(initialCapacity);
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.column_factory_unsupported_type", dataType));
-    }
+    Type type = Type.fromTsDataType(dataType);
+    return type.createColumnWithZeroPosition(initialCapacity);
   }
 }

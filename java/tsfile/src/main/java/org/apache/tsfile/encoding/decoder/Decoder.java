@@ -23,6 +23,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 
 import java.io.IOException;
@@ -30,8 +31,6 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 
 public abstract class Decoder {
-
-  private static final String ERROR_MSG_KEY = "error.encoding.decoder_not_found";
 
   private TSEncoding type;
 
@@ -48,146 +47,7 @@ public abstract class Decoder {
   }
 
   public static Decoder getDecoderByType(TSEncoding encoding, TSDataType dataType) {
-    switch (encoding) {
-      case PLAIN:
-        return new PlainDecoder();
-      case RLE:
-        switch (dataType) {
-          case BOOLEAN:
-          case INT32:
-          case DATE:
-            return new IntRleDecoder();
-          case INT64:
-          case VECTOR:
-          case TIMESTAMP:
-            return new LongRleDecoder();
-          case FLOAT:
-          case DOUBLE:
-            return new FloatDecoder(TSEncoding.valueOf(encoding.toString()), dataType);
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case TS_2DIFF:
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            return new DeltaBinaryDecoder.IntDeltaDecoder();
-          case INT64:
-          case VECTOR:
-          case TIMESTAMP:
-            return new DeltaBinaryDecoder.LongDeltaDecoder();
-          case FLOAT:
-          case DOUBLE:
-            return new FloatDecoder(TSEncoding.valueOf(encoding.toString()), dataType);
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case GORILLA_V1:
-        switch (dataType) {
-          case FLOAT:
-            return new SinglePrecisionDecoderV1();
-          case DOUBLE:
-            return new DoublePrecisionDecoderV1();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case REGULAR:
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            return new RegularDataDecoder.IntRegularDecoder();
-          case INT64:
-          case VECTOR:
-          case TIMESTAMP:
-            return new RegularDataDecoder.LongRegularDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case GORILLA:
-        switch (dataType) {
-          case FLOAT:
-            return new SinglePrecisionDecoderV2();
-          case DOUBLE:
-            return new DoublePrecisionDecoderV2();
-          case INT32:
-          case DATE:
-            return new IntGorillaDecoder();
-          case INT64:
-          case VECTOR:
-          case TIMESTAMP:
-            return new LongGorillaDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case DICTIONARY:
-        return new DictionaryDecoder();
-      case ZIGZAG:
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            return new IntZigzagDecoder();
-          case INT64:
-          case TIMESTAMP:
-            return new LongZigzagDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case CHIMP:
-        switch (dataType) {
-          case FLOAT:
-            return new SinglePrecisionChimpDecoder();
-          case DOUBLE:
-            return new DoublePrecisionChimpDecoder();
-          case INT32:
-          case DATE:
-            return new IntChimpDecoder();
-          case INT64:
-          case VECTOR:
-          case TIMESTAMP:
-            return new LongChimpDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case SPRINTZ:
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            return new IntSprintzDecoder();
-          case INT64:
-          case TIMESTAMP:
-            return new LongSprintzDecoder();
-          case FLOAT:
-            return new FloatSprintzDecoder();
-          case DOUBLE:
-            return new DoubleSprintzDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case RLBE:
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            return new IntRLBEDecoder();
-          case INT64:
-          case TIMESTAMP:
-            return new LongRLBEDecoder();
-          case FLOAT:
-            return new FloatRLBEDecoder();
-          case DOUBLE:
-            return new DoubleRLBEDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      case CAMEL:
-        switch (dataType) {
-          case DOUBLE:
-            return new CamelDecoder();
-          default:
-            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-        }
-      default:
-        throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
-    }
+    return Type.fromTsDataType(dataType).getDecoder(encoding);
   }
 
   public int readInt(ByteBuffer buffer) {

@@ -20,9 +20,9 @@
 package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -49,43 +49,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
     timeRet.add(new long[capacity]);
     count = 0;
 
-    switch (dataType) {
-      case BOOLEAN:
-        booleanRet = new LinkedList<>();
-        booleanRet.add(new boolean[capacity]);
-        break;
-      case INT32:
-      case DATE:
-        intRet = new LinkedList<>();
-        intRet.add(new int[capacity]);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        longRet = new LinkedList<>();
-        longRet.add(new long[capacity]);
-        break;
-      case FLOAT:
-        floatRet = new LinkedList<>();
-        floatRet.add(new float[capacity]);
-        break;
-      case DOUBLE:
-        doubleRet = new LinkedList<>();
-        doubleRet.add(new double[capacity]);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        binaryRet = new LinkedList<>();
-        binaryRet.add(new Binary[capacity]);
-        break;
-      case VECTOR:
-        vectorRet = new LinkedList<>();
-        vectorRet.add(new TsPrimitiveType[capacity][]);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
+    Type.fromTsDataType(dataType).init(this);
   }
 
   /**
@@ -419,97 +383,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
 
   @Override
   public void serializeData(DataOutputStream outputStream) throws IOException {
-    switch (dataType) {
-      case BOOLEAN:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          outputStream.writeBoolean(getBooleanByIndex(i));
-        }
-        break;
-      case DOUBLE:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          outputStream.writeDouble(getDoubleByIndex(i));
-        }
-        break;
-      case FLOAT:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          outputStream.writeFloat(getFloatByIndex(i));
-        }
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          Binary binary = getBinaryByIndex(i);
-          outputStream.writeInt(binary.getLength());
-          outputStream.write(binary.getValues());
-        }
-        break;
-      case INT64:
-      case TIMESTAMP:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          outputStream.writeLong(getLongByIndex(i));
-        }
-        break;
-      case INT32:
-      case DATE:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          outputStream.writeInt(getIntByIndex(i));
-        }
-        break;
-      case VECTOR:
-        for (int i = length() - 1; i >= 0; i--) {
-          outputStream.writeLong(getTimeByIndex(i));
-          TsPrimitiveType[] values = getVectorByIndex(i);
-          outputStream.writeInt(values.length);
-          for (TsPrimitiveType value : values) {
-            if (value == null) {
-              outputStream.write(0);
-            } else {
-              outputStream.write(1);
-              outputStream.write(value.getDataType().serialize());
-              switch (value.getDataType()) {
-                case BOOLEAN:
-                  outputStream.writeBoolean(value.getBoolean());
-                  break;
-                case DOUBLE:
-                  outputStream.writeDouble(value.getDouble());
-                  break;
-                case FLOAT:
-                  outputStream.writeFloat(value.getFloat());
-                  break;
-                case TEXT:
-                case BLOB:
-                case STRING:
-                case OBJECT:
-                  Binary binary = value.getBinary();
-                  outputStream.writeInt(binary.getLength());
-                  outputStream.write(binary.getValues());
-                  break;
-                case INT64:
-                case TIMESTAMP:
-                  outputStream.writeLong(value.getLong());
-                  break;
-                case INT32:
-                case DATE:
-                  outputStream.writeInt(value.getInt());
-                  break;
-                default:
-                  throw new UnSupportedDataTypeException(String.valueOf(dataType));
-              }
-            }
-          }
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
-    }
+    Type.fromTsDataType(dataType).serialize(this, outputStream, true);
   }
 
   /**

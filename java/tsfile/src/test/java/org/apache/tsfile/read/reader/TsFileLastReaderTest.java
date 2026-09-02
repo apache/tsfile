@@ -24,6 +24,8 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -61,6 +63,34 @@ public class TsFileLastReaderTest {
       Arrays.asList(TSDataType.INT64, TSDataType.BLOB);
   private static final Map<TSDataType, TabletAddValueFunction> typeAddValueFunctions =
       new HashMap<>();
+  private static final TypeService<OffsetTabletAddValueFunction> ADD_OFFSET_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT64 ->
+                (tablet, row, column, offset) -> tablet.addValue(row, column, (long) row + offset);
+            case BLOB ->
+                (tablet, row, column, offset) ->
+                    tablet.addValue(
+                        row,
+                        column,
+                        Long.toBinaryString(row + offset).getBytes(StandardCharsets.UTF_8));
+            case BOOLEAN,
+                DATE,
+                DOUBLE,
+                FLOAT,
+                INT32,
+                OBJECT,
+                ROW,
+                STRING,
+                TEXT,
+                TIMESTAMP,
+                UNKNOWN,
+                VECTOR ->
+                (tablet, row, column, offset) -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported TSDataType " + type.getTypeEnum());
+                };
+          };
 
   static {
     typeAddValueFunctions.put(
@@ -70,6 +100,7 @@ public class TsFileLastReaderTest {
         ((tablet, row, column) ->
             tablet.addValue(
                 row, column, Long.toBinaryString(row).getBytes(StandardCharsets.UTF_8))));
+    ADD_OFFSET_VALUE_SERVICE.check();
   }
 
   private final String filePath = "target/test.tsfile";
@@ -142,25 +173,21 @@ public class TsFileLastReaderTest {
         }
         for (int j = 0; j < measurementNum / 2; j++) {
           TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
+          OffsetTabletAddValueFunction addValueFunction =
+              ADD_OFFSET_VALUE_SERVICE.call(Type.fromTsDataType(tsDataType));
           for (int k = 0; k < seriesPointNum; k++) {
-            switch (tsDataType) {
-              case INT64:
-                tablet.addValue(k, j, (long) k + seriesPointNum / 2);
-                break;
-              case BLOB:
-                tablet.addValue(
-                    k,
-                    j,
-                    Long.toBinaryString(k + seriesPointNum / 2).getBytes(StandardCharsets.UTF_8));
-                break;
-              default:
-                throw new IllegalArgumentException("Unsupported TSDataType " + tsDataType);
-            }
+            addValueFunction.addValue(tablet, k, j, seriesPointNum / 2);
           }
         }
         writer.writeTree(tablet);
       }
     }
+  }
+
+  @FunctionalInterface
+  private interface OffsetTabletAddValueFunction {
+
+    void addValue(Tablet tablet, int row, int column, int offset);
   }
 
   private void createAlignedFileWithObject(int seriesPointNum)
@@ -332,13 +359,16 @@ public class TsFileLastReaderTest {
       alignedChunkWriter.write(
           0,
           new TsPrimitiveType[] {
-            TsPrimitiveType.getByType(TSDataType.INT64, 0L),
-            TsPrimitiveType.getByType(
-                TSDataType.BLOB, new Binary("0".getBytes(StandardCharsets.UTF_8)))
+            Type.fromTsDataType(TSDataType.INT64).getTsPrimitiveType(0L),
+            Type.fromTsDataType(TSDataType.BLOB)
+                .getTsPrimitiveType(new Binary("0".getBytes(StandardCharsets.UTF_8)))
           });
       alignedChunkWriter.sealCurrentPage();
       alignedChunkWriter.write(
-          1, new TsPrimitiveType[] {TsPrimitiveType.getByType(TSDataType.INT64, 1L), null});
+          1,
+          new TsPrimitiveType[] {
+            Type.fromTsDataType(TSDataType.INT64).getTsPrimitiveType(1L), null
+          });
       alignedChunkWriter.writeToFileWriter(ioWriter);
       ioWriter.endChunkGroup();
 

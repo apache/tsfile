@@ -20,13 +20,18 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -92,6 +97,24 @@ public class BooleanColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.BOOLEAN) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.BOOLEAN, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else {
+        builder.writeBoolean(getBoolean(position));
+      }
+    }
+    return builder.build();
+  }
+
+  @Override
   public boolean getBoolean(int position) {
     return values[position + arrayOffset];
   }
@@ -123,6 +146,48 @@ public class BooleanColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBoolean(getBoolean(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.put(values[index + arrayOffset] ? (byte) 1 : (byte) 0);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeBoolean(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    int nonNullCount = 0;
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        nonNullCount++;
+      }
+    }
+
+    byte[] packedValues = new byte[(nonNullCount + 7) / 8];
+    int nonNullIndex = 0;
+    for (int i = 0; i < positionCount; i++) {
+      if (isNull(i)) {
+        continue;
+      }
+      if (values[i + arrayOffset]) {
+        packedValues[nonNullIndex / 8] |= (byte) (0b1000_0000 >>> (nonNullIndex % 8));
+      }
+      nonNullIndex++;
+    }
+    output.write(packedValues);
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
+    }
+    return !that.isNull(thatPos) && getBoolean(thisPos) == that.getBoolean(thatPos);
   }
 
   @Override

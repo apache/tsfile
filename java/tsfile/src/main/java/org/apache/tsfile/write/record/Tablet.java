@@ -28,15 +28,14 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
-import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -67,7 +66,6 @@ import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
 public class Tablet implements Accountable {
   private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
-  private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
   private String insertTargetName;
@@ -310,120 +308,7 @@ public class Tablet implements Accountable {
 
     // Mark the null value position
     updateBitMap(rowIndex, indexOfSchema, value == null);
-    switch (dataType) {
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        {
-          if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Binary or String",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final Binary[] sensor = (Binary[]) values[indexOfSchema];
-          if (value instanceof Binary) {
-            sensor[rowIndex] = (Binary) value;
-          } else {
-            sensor[rowIndex] =
-                value != null
-                    ? new Binary(((String) value).getBytes(TSFileConfig.STRING_CHARSET))
-                    : Binary.EMPTY_VALUE;
-          }
-          break;
-        }
-      case FLOAT:
-        {
-          if (value != null && !(value instanceof Float)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Float",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final float[] sensor = (float[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
-          break;
-        }
-      case INT32:
-        {
-          if (value != null && !(value instanceof Integer)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Integer",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final int[] sensor = (int[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
-          break;
-        }
-      case DATE:
-        {
-          if (value != null && !(value instanceof LocalDate)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "LocalDate",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
-          break;
-        }
-      case INT64:
-      case TIMESTAMP:
-        {
-          if (value != null && !(value instanceof Long)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Long",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final long[] sensor = (long[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
-          break;
-        }
-      case DOUBLE:
-        {
-          if (value != null && !(value instanceof Double)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Double",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final double[] sensor = (double[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
-          break;
-        }
-      case BOOLEAN:
-        {
-          if (value != null && !(value instanceof Boolean)) {
-            throw new IllegalArgumentException(
-                Messages.format(
-                    "error.write.tablet_expected_type",
-                    "Boolean",
-                    dataType,
-                    value.getClass().getName()));
-          }
-          final boolean[] sensor = (boolean[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null && (boolean) value;
-          break;
-        }
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
+    Type.fromTsDataType(dataType).addValue(rowIndex, value, values[indexOfSchema]);
   }
 
   @TsFileApi
@@ -711,39 +596,7 @@ public class Tablet implements Accountable {
   }
 
   private Object createValueColumnOfDataType(TSDataType dataType, int capacity) {
-
-    Object valueColumn;
-    switch (dataType) {
-      case INT32:
-        valueColumn = new int[capacity];
-        break;
-      case INT64:
-      case TIMESTAMP:
-        valueColumn = new long[capacity];
-        break;
-      case FLOAT:
-        valueColumn = new float[capacity];
-        break;
-      case DOUBLE:
-        valueColumn = new double[capacity];
-        break;
-      case BOOLEAN:
-        valueColumn = new boolean[capacity];
-        break;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        valueColumn = new Binary[capacity];
-        break;
-      case DATE:
-        valueColumn = new LocalDate[capacity];
-        break;
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
-    return valueColumn;
+    return Type.fromTsDataType(dataType).createArray(capacity);
   }
 
   /** Serialize {@link Tablet} */
@@ -824,55 +677,21 @@ public class Tablet implements Accountable {
     if (values != null) {
       final int columnCount = schemas == null ? 0 : schemas.size();
       for (int i = 0; i < columnCount; i++) {
-        size = Math.addExact(size, serializedSizeOfColumn(schemas.get(i).getType(), values[i]));
+        size =
+            Math.addExact(
+                size,
+                serializedSizeOfColumn(Type.fromTsDataType(schemas.get(i).getType()), values[i]));
       }
     }
     return size;
   }
 
-  private int serializedSizeOfColumn(final TSDataType dataType, final Object column) {
+  private int serializedSizeOfColumn(final Type type, final Object column) {
     int size = Byte.BYTES;
     if (column == null) {
       return size;
     }
-    switch (dataType) {
-      case INT32:
-        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
-      case DATE:
-        return Math.addExact(size, Math.multiplyExact(Integer.BYTES, rowSize));
-      case INT64:
-      case TIMESTAMP:
-        return Math.addExact(size, Math.multiplyExact(Long.BYTES, rowSize));
-      case FLOAT:
-        return Math.addExact(size, Math.multiplyExact(Float.BYTES, rowSize));
-      case DOUBLE:
-        return Math.addExact(size, Math.multiplyExact(Double.BYTES, rowSize));
-      case BOOLEAN:
-        return Math.addExact(size, rowSize);
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        return Math.addExact(size, serializedSizeOfBinaryValues((Binary[]) column));
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.write.type_not_supported", dataType));
-    }
-  }
-
-  private static int serializedSizeOfBinaryValues(final Binary[] binaryValues, final int rowSize) {
-    int size = 0;
-    for (int j = 0; j < rowSize; j++) {
-      size = Math.addExact(size, Byte.BYTES);
-      if (binaryValues[j] != null) {
-        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[j]));
-      }
-    }
-    return size;
-  }
-
-  private int serializedSizeOfBinaryValues(final Binary[] binaryValues) {
-    return serializedSizeOfBinaryValues(binaryValues, rowSize);
+    return Math.addExact(size, type.serializedSize(column, rowSize));
   }
 
   /** Serialize {@link MeasurementSchema}s */
@@ -926,75 +745,17 @@ public class Tablet implements Accountable {
     if (values != null) {
       int size = (schemas == null ? 0 : schemas.size());
       for (int i = 0; i < size; i++) {
-        serializeColumn(schemas.get(i).getType(), values[i], stream, columnCategories.get(i));
+        serializeColumn(Type.fromTsDataType(schemas.get(i).getType()), values[i], stream);
       }
     }
   }
 
-  private void serializeColumn(
-      TSDataType dataType, Object column, DataOutputStream stream, ColumnCategory columnCategory)
+  private void serializeColumn(Type type, Object column, DataOutputStream stream)
       throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(column != null), stream);
 
     if (column != null) {
-      switch (dataType) {
-        case INT32:
-          int[] intValues = (int[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(intValues[j], stream);
-          }
-          break;
-        case DATE:
-          LocalDate[] dateValues = (LocalDate[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(
-                dateValues[j] == null
-                    ? DateUtils.EMPTY_DATE_INT
-                    : DateUtils.parseDateExpressionToInt(dateValues[j]),
-                stream);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long[] longValues = (long[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(longValues[j], stream);
-          }
-          break;
-        case FLOAT:
-          float[] floatValues = (float[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(floatValues[j], stream);
-          }
-          break;
-        case DOUBLE:
-          double[] doubleValues = (double[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(doubleValues[j], stream);
-          }
-          break;
-        case BOOLEAN:
-          boolean[] boolValues = (boolean[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(BytesUtils.boolToByte(boolValues[j]), stream);
-          }
-          break;
-        case TEXT:
-        case STRING:
-        case BLOB:
-        case OBJECT:
-          Binary[] binaryValues = (Binary[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
-            if (binaryValues[j] != null) {
-              ReadWriteIOUtils.write(binaryValues[j], stream);
-            }
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", dataType));
-      }
+      type.serializeArray(column, rowSize, stream);
     }
   }
 
@@ -1081,70 +842,7 @@ public class Tablet implements Accountable {
       boolean isValueColumnsNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
 
       if (isValueColumnsNotNull) {
-        switch (types[i]) {
-          case BOOLEAN:
-            boolean[] boolValues = new boolean[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              boolValues[index] = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
-            }
-            values[i] = boolValues;
-            break;
-          case INT32:
-            int[] intValues = new int[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              intValues[index] = ReadWriteIOUtils.readInt(byteBuffer);
-            }
-            values[i] = intValues;
-            break;
-          case DATE:
-            LocalDate[] dateValues = new LocalDate[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              dateValues[index] =
-                  DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(byteBuffer));
-            }
-            values[i] = dateValues;
-            break;
-          case INT64:
-          case TIMESTAMP:
-            long[] longValues = new long[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              longValues[index] = ReadWriteIOUtils.readLong(byteBuffer);
-            }
-            values[i] = longValues;
-            break;
-          case FLOAT:
-            float[] floatValues = new float[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              floatValues[index] = ReadWriteIOUtils.readFloat(byteBuffer);
-            }
-            values[i] = floatValues;
-            break;
-          case DOUBLE:
-            double[] doubleValues = new double[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              doubleValues[index] = ReadWriteIOUtils.readDouble(byteBuffer);
-            }
-            values[i] = doubleValues;
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-          case OBJECT:
-            Binary[] binaryValues = new Binary[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
-              if (isNotNull) {
-                binaryValues[index] = ReadWriteIOUtils.readBinary(byteBuffer);
-              } else {
-                binaryValues[index] = Binary.EMPTY_VALUE;
-              }
-            }
-            values[i] = binaryValues;
-            break;
-          default:
-            throw new UnSupportedDataTypeException(
-                Messages.format("error.write.tablet_client_type_not_supported", types[i]));
-        }
+        values[i] = Type.fromTsDataType(types[i]).deserializeArray(byteBuffer, rowSize);
       }
     }
     return values;
@@ -1209,98 +907,9 @@ public class Tablet implements Accountable {
         return false;
       }
 
-      switch (schemas.get(i).getType()) {
-        case INT32:
-          int[] thisIntValues = (int[]) values[i];
-          int[] thatIntValues = (int[]) thatValues[i];
-          if (thisIntValues.length < rowSize || thatIntValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisIntValues[j] != thatIntValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case DATE:
-          LocalDate[] thisDateValues = (LocalDate[]) values[i];
-          LocalDate[] thatDateValues = (LocalDate[]) thatValues[i];
-          if (thisDateValues.length < rowSize || thatDateValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (!thisDateValues[j].equals(thatDateValues[j])) {
-              return false;
-            }
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long[] thisLongValues = (long[]) values[i];
-          long[] thatLongValues = (long[]) thatValues[i];
-          if (thisLongValues.length < rowSize || thatLongValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisLongValues[j] != thatLongValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case FLOAT:
-          float[] thisFloatValues = (float[]) values[i];
-          float[] thatFloatValues = (float[]) thatValues[i];
-          if (thisFloatValues.length < rowSize || thatFloatValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisFloatValues[j] != thatFloatValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case DOUBLE:
-          double[] thisDoubleValues = (double[]) values[i];
-          double[] thatDoubleValues = (double[]) thatValues[i];
-          if (thisDoubleValues.length < rowSize || thatDoubleValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisDoubleValues[j] != thatDoubleValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case BOOLEAN:
-          boolean[] thisBooleanValues = (boolean[]) values[i];
-          boolean[] thatBooleanValues = (boolean[]) thatValues[i];
-          if (thisBooleanValues.length < rowSize || thatBooleanValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (thisBooleanValues[j] != thatBooleanValues[j]) {
-              return false;
-            }
-          }
-          break;
-        case TEXT:
-        case STRING:
-        case BLOB:
-        case OBJECT:
-          Binary[] thisBinaryValues = (Binary[]) values[i];
-          Binary[] thatBinaryValues = (Binary[]) thatValues[i];
-          if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (!thisBinaryValues[j].equals(thatBinaryValues[j])) {
-              return false;
-            }
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", schemas.get(i).getType()));
+      if (!Type.fromTsDataType(schemas.get(i).getType())
+          .arrayEquals(values[i], thatValues[i], rowSize)) {
+        return false;
       }
     }
 
@@ -1378,29 +987,7 @@ public class Tablet implements Accountable {
     if (isNull(i, j)) {
       return null;
     }
-    switch (schemas.get(j).getType()) {
-      case BLOB:
-      case TEXT:
-      case STRING:
-      case OBJECT:
-        return ((Binary[]) values[j])[i];
-      case INT32:
-        return ((int[]) values[j])[i];
-      case FLOAT:
-        return ((float[]) values[j])[i];
-      case DOUBLE:
-        return ((double[]) values[j])[i];
-      case BOOLEAN:
-        return ((boolean[]) values[j])[i];
-      case INT64:
-      case TIMESTAMP:
-        return ((long[]) values[j])[i];
-      case DATE:
-        return ((LocalDate[]) values[j])[i];
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.write.tablet_unsupported_type", schemas.get(j).getType()));
-    }
+    return Type.fromTsDataType(schemas.get(j).getType()).getValue(values[j], i);
   }
 
   /**
@@ -1700,33 +1287,7 @@ public class Tablet implements Accountable {
         if (values == null || values.length <= column) {
           continue;
         }
-        switch (tsDataType) {
-          case INT64:
-          case TIMESTAMP:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((long[]) values[column]);
-            break;
-          case DATE:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((LocalDate[]) values[column]);
-            break;
-          case INT32:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((int[]) values[column]);
-            break;
-          case DOUBLE:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((double[]) values[column]);
-            break;
-          case FLOAT:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((float[]) values[column]);
-            break;
-          case BOOLEAN:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((boolean[]) values[column]);
-            break;
-          case STRING:
-          case TEXT:
-          case BLOB:
-          case OBJECT:
-            totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
-            break;
-        }
+        totalSizeInBytes += Type.fromTsDataType(tsDataType).estimateArraySize(values[column]);
       }
     }
 

@@ -20,7 +20,10 @@
 package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -71,6 +74,36 @@ public class RowType extends AbstractType {
   // Only RowParametricType.createType should call this method
   public static RowType createWithTypeSignature(List<Field> fields) {
     return new RowType(fields);
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType() {
+    return new TsPrimitiveType.TsVector();
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(Object value) {
+    return new TsPrimitiveType.TsVector((TsPrimitiveType[]) value);
+  }
+
+  @Override
+  public TsPrimitiveType deserialize(ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getDisplayName());
+  }
+
+  @Override
+  public TsPrimitiveType getValueAsTsPrimitiveType(Object array, int rowIndex) {
+    return new TsPrimitiveType.TsVector(((TsPrimitiveType[][]) array)[rowIndex]);
+  }
+
+  @Override
+  public void write(TsPrimitiveType from, Object toArray, int index) {
+    ((TsPrimitiveType[][]) toArray)[index] = from.getVector();
+  }
+
+  @Override
+  public void write(BatchData from, Object toArray, int index) {
+    ((TsPrimitiveType[][]) toArray)[index] = from.getVector();
   }
 
   public static Field field(String name, Type type) {

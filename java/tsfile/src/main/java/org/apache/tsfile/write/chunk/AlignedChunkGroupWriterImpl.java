@@ -31,9 +31,9 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
-import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.DateUtils;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.EmptyValueChunkWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -43,7 +43,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -171,34 +170,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       if (valueChunkWriter == null) {
         valueChunkWriter = tryToAddSeriesWriterInternal(point.getMeasurementSchema());
       }
-      switch (point.getType()) {
-        case BOOLEAN:
-          valueChunkWriter.write(time, (boolean) point.getValue(), isNull);
-          break;
-        case INT32:
-        case DATE:
-          valueChunkWriter.write(time, isNull ? 0 : (int) point.getValue(), isNull);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueChunkWriter.write(time, (long) point.getValue(), isNull);
-          break;
-        case FLOAT:
-          valueChunkWriter.write(time, (float) point.getValue(), isNull);
-          break;
-        case DOUBLE:
-          valueChunkWriter.write(time, (double) point.getValue(), isNull);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueChunkWriter.write(time, (Binary) point.getValue(), isNull);
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", point.getType()));
-      }
+      Type.fromTsDataType(point.getType()).write(valueChunkWriter, time, point.getValue(), isNull);
     }
     if (!emptyValueChunkWriters.isEmpty()) {
       writeEmptyDataInOneRow(emptyValueChunkWriters);
@@ -255,45 +227,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         // check isNull by bitMap in tablet
         ValueChunkWriter valueChunkWriter =
             tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
-        switch (measurementSchemas.get(columnIndex).getType()) {
-          case BOOLEAN:
-            valueChunkWriter.write(
-                time, ((boolean[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case INT32:
-            valueChunkWriter.write(time, ((int[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case DATE:
-            valueChunkWriter.write(
-                time,
-                isNull
-                    ? 0
-                    : DateUtils.parseDateExpressionToInt(
-                        ((LocalDate[]) tablet.getValues()[columnIndex])[row]),
-                isNull);
-            break;
-          case INT64:
-          case TIMESTAMP:
-            valueChunkWriter.write(time, ((long[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case FLOAT:
-            valueChunkWriter.write(time, ((float[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case DOUBLE:
-            valueChunkWriter.write(time, ((double[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-          case OBJECT:
-            valueChunkWriter.write(time, ((Binary[]) tablet.getValues()[columnIndex])[row], isNull);
-            break;
-          default:
-            throw new UnSupportedDataTypeException(
-                Messages.format(
-                    "error.write.type_not_supported",
-                    measurementSchemas.get(columnIndex).getType()));
-        }
+        Type.fromTsDataType(measurementSchemas.get(columnIndex).getType())
+            .write(valueChunkWriter, time, tablet.getValues()[columnIndex], row, isNull);
       }
       // TODO: we can write the null columns after whole insertion, according to the point number
       //  in the time chunk before and after, no need to do it in a row-by-row manner
@@ -357,35 +292,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private void writeEmptyDataInOneRow(List<ValueChunkWriter> valueChunkWriterList) {
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
-      TSDataType dataType = valueChunkWriter.getDataType();
-      switch (dataType) {
-        case BOOLEAN:
-          valueChunkWriter.write(-1, false, true);
-          break;
-        case INT32:
-        case DATE:
-          valueChunkWriter.write(-1, 0, true);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueChunkWriter.write(-1, 0L, true);
-          break;
-        case FLOAT:
-          valueChunkWriter.write(-1, 0.0f, true);
-          break;
-        case DOUBLE:
-          valueChunkWriter.write(-1, 0.0d, true);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueChunkWriter.write(-1, null, true);
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", dataType));
-      }
+      EmptyValueChunkWriter emptyValueWriter =
+          TypeServices.WRITE_EMPTY_VALUE_TO_CHUNK_SERVICE.call(
+              Type.fromTsDataType(valueChunkWriter.getDataType()));
+      emptyValueWriter.write(valueChunkWriter);
     }
   }
 
