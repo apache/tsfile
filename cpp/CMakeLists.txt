@@ -229,6 +229,25 @@ endif ()
 option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
 message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 
+option(BUILD_SQLITE_EXTENSION
+        "Build the experimental SQLite + TsFile loadable extension"
+        OFF)
+message("cmake using: BUILD_SQLITE_EXTENSION=${BUILD_SQLITE_EXTENSION}")
+
+if (BUILD_SQLITE_EXTENSION AND WIN32)
+    message(FATAL_ERROR
+            "BUILD_SQLITE_EXTENSION currently supports Linux and macOS only")
+endif ()
+
+if (BUILD_SQLITE_EXTENSION AND NOT TSFILE_BUILD_SHARED)
+    message(FATAL_ERROR
+            "BUILD_SQLITE_EXTENSION requires TSFILE_BUILD_SHARED=ON")
+endif ()
+
+if (BUILD_SQLITE_EXTENSION)
+    find_package(SQLite3 3.31 REQUIRED)
+endif ()
+
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
