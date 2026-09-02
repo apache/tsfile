@@ -18,6 +18,7 @@
  */
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>
@@ -42,8 +43,8 @@ struct StatsColumn {
 
 struct FieldStatistic {
     long long count = 0;
-    long long start_time = 0;
-    long long end_time = 0;
+    int64_t start_time = 0;
+    int64_t end_time = 0;
     bool present = false;
     StatisticCells values;
 };
@@ -53,8 +54,8 @@ struct EntityAccumulator {
     std::vector<bool> tag_nulls;
     std::map<std::string, FieldStatistic> fields;
     long long row_count = 0;
-    long long start_time = 0;
-    long long end_time = 0;
+    int64_t start_time = 0;
+    int64_t end_time = 0;
     bool has_timeline_statistic = false;
 };
 
