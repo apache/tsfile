@@ -2272,7 +2272,7 @@ def test_dataset_tree_model_omits_non_numeric_measurements(
         str(path), show_progress=False, use_index=dataframe_use_index
     ) as tsdf:
         # Numeric-compatible fields are exposed as float64; STRING is dropped.
-        assert tsdf.list_timeseries() == ["root.a.b.online", "root.a.b.temp"]
+        assert sorted(tsdf.list_timeseries()) == ["root.a.b.online", "root.a.b.temp"]
         with pytest.raises(KeyError):
             tsdf["root.a.b.status"]
         np.testing.assert_array_equal(
