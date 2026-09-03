@@ -25,7 +25,7 @@
 namespace storage {
 class BinaryFilter : public Filter {
    public:
-    BinaryFilter() : Filter() {}
+    BinaryFilter() : Filter(), left_(nullptr), right_(nullptr) {}
     BinaryFilter(Filter* left, Filter* right)
         : Filter(), left_(left), right_(right) {}
     virtual ~BinaryFilter() {}

@@ -83,7 +83,12 @@ class DictionaryEncoder : public Encoder {
         if (entry_index_.count(value) == 0) {
             index_entry_.push_back(value);
             map_size_ = map_size_ + value.length();
-            entry_index_[value] = static_cast<int>(index_entry_.size()) - 1;
+            // Compute the index before the insert: LHS/RHS evaluation order of
+            // `m[k] = m.size()` is unspecified before C++17, so a compiler
+            // that evaluates the LHS first would store size()+1 and corrupt
+            // the dictionary.
+            const int new_idx = static_cast<int>(index_entry_.size()) - 1;
+            entry_index_[value] = new_idx;
         }
         values_encoder_.encode(entry_index_[value], out);
         return common::E_OK;

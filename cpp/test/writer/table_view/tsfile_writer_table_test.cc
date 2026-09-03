@@ -20,7 +20,6 @@
 
 #include <random>
 
-#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -32,11 +31,10 @@
 using namespace storage;
 using namespace common;
 
-class TsFileWriterTableTest : public ::testing::TestWithParam<bool> {
+class TsFileWriterTableTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        set_parallel_write_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_table_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -135,7 +133,7 @@ class TsFileWriterTableTest : public ::testing::TestWithParam<bool> {
     }
 };
 
-TEST_P(TsFileWriterTableTest, WriteTableTest) {
+TEST_F(TsFileWriterTableTest, WriteTableTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -146,7 +144,31 @@ TEST_P(TsFileWriterTableTest, WriteTableTest) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WithoutTagAndMultiPage) {
+TEST_F(TsFileWriterTableTest, AddTsFilePropertyDelegatesToWriter) {
+    auto table_schema = gen_table_schema(0);
+    TsFileTableWriter writer(&write_file_, table_schema);
+    const std::vector<uint8_t> before_flush = {'b', 'e', 'f', 'o', 'r', 'e'};
+    const std::vector<uint8_t> after_flush = {0x00, 0xFF, 0x01};
+
+    ASSERT_EQ(common::E_OK,
+              writer.add_tsfile_property("table-property", before_flush));
+    ASSERT_EQ(common::E_OK, writer.flush());
+    ASSERT_EQ(common::E_OK,
+              writer.add_tsfile_property("table-property", after_flush));
+    ASSERT_EQ(common::E_OK, writer.close());
+    ASSERT_EQ(common::E_FILE_WRITE_ERR,
+              writer.add_tsfile_property("closed", after_flush));
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    TsFileProperties properties = reader.get_tsfile_properties();
+    ASSERT_FALSE(properties.at("table-property").is_null);
+    EXPECT_EQ(after_flush, properties.at("table-property").value);
+    EXPECT_EQ(common::E_OK, reader.close());
+    delete table_schema;
+}
+
+TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(1);
@@ -194,7 +216,7 @@ TEST_P(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteDisorderTest) {
+TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -239,12 +261,13 @@ TEST_P(TsFileWriterTableTest, WriteDisorderTest) {
 
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
               common::E_OUT_OF_ORDER);
-    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
-    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_DATA_INCONSISTENCY);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_DATA_INCONSISTENCY);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_DATA_INCONSISTENCY);
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteTableTestMultiFlush) {
+TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 2 * 1024);
@@ -257,7 +280,7 @@ TEST_P(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteNonExistColumnTest) {
+TEST_F(TsFileWriterTableTest, WriteNonExistColumnTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -285,7 +308,7 @@ TEST_P(TsFileWriterTableTest, WriteNonExistColumnTest) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteNonExistTableTest) {
+TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -297,7 +320,7 @@ TEST_P(TsFileWriterTableTest, WriteNonExistTableTest) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriterWithMemoryThreshold) {
+TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 256 * 1024 * 1024);
@@ -307,7 +330,7 @@ TEST_P(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, EmptyTagWrite) {
+TEST_F(TsFileWriterTableTest, EmptyTagWrite) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(3);
@@ -363,7 +386,7 @@ TEST_P(TsFileWriterTableTest, EmptyTagWrite) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WritehDataTypeMisMatch) {
+TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema, 256 * 1024 * 1024);
@@ -414,7 +437,7 @@ TEST_P(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     tsfile_table_writer_->close();
 }
 
-TEST_P(TsFileWriterTableTest, WriteAndReadSimple) {
+TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(2);
@@ -469,7 +492,7 @@ TEST_P(TsFileWriterTableTest, WriteAndReadSimple) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, DuplicateColumnName) {
+TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(3);
@@ -507,7 +530,7 @@ TEST_P(TsFileWriterTableTest, DuplicateColumnName) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
+TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     for (int i = 0; i < 3; i++) {
@@ -639,7 +662,7 @@ TEST_P(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_P(TsFileWriterTableTest, MultiDeviceMultiFields) {
+TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     common::config_set_max_degree_of_index_node(5);
     auto table_schema = gen_table_schema(0, 1, 100);
     auto tsfile_table_writer_ =
@@ -698,7 +721,7 @@ TEST_P(TsFileWriterTableTest, MultiDeviceMultiFields) {
     delete table_schema;
 }
 
-TEST_P(TsFileWriterTableTest, WriteDataWithEmptyField) {
+TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     for (int i = 0; i < 3; i++) {
@@ -775,7 +798,7 @@ TEST_P(TsFileWriterTableTest, WriteDataWithEmptyField) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_P(TsFileWriterTableTest, MultiDatatypes) {
+TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -879,7 +902,7 @@ TEST_P(TsFileWriterTableTest, MultiDatatypes) {
     delete[] literal;
 }
 
-TEST_P(TsFileWriterTableTest, DiffCodecTypes) {
+TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -987,7 +1010,7 @@ TEST_P(TsFileWriterTableTest, DiffCodecTypes) {
     delete[] literal;
 }
 
-TEST_P(TsFileWriterTableTest, EncodingConfigIntegration) {
+TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     // 1. Test setting global compression type
     ASSERT_EQ(E_OK, set_global_compression(SNAPPY));
 
@@ -1100,7 +1123,7 @@ TEST_P(TsFileWriterTableTest, EncodingConfigIntegration) {
 }
 
 #ifdef ENABLE_MEM_STAT
-TEST_P(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
+TEST_F(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
     TableSchema* table_schema = gen_table_schema(0, 2, 3);
     auto tsfile_table_writer =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -1175,8 +1198,3 @@ TEST_P(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
     delete table_schema;
 }
 #endif
-
-INSTANTIATE_TEST_SUITE_P(Serial, TsFileWriterTableTest,
-                         ::testing::Values(false));
-INSTANTIATE_TEST_SUITE_P(Parallel, TsFileWriterTableTest,
-                         ::testing::Values(true));

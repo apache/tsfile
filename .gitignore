@@ -21,6 +21,8 @@ docs/src/.vuepress/dist/
 docs/pnpm-lock.yaml
 
 # python files
+skills/**/__pycache__/
+skills/**/*.py[cod]
 python/build
 python/dist
 python/__pycache__
@@ -32,6 +34,8 @@ python/tsfile/*dll*
 python/tsfile/*dylib*
 python/tsfile/*.h
 python/tsfile/*.cpp
+python/tsfile/**/*.cpp
+python/tsfile/**/*so*
 python/data
 python/venv/*
 python/tests/__pycache__/*

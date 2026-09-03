@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include "common/config/config.h"
@@ -47,7 +46,6 @@ class TabletColIterator;
  * with their associated metadata such as column names and types.
  */
 class Tablet {
-   public:
     // Arrow-style string column: offsets + contiguous buffer.
     // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
     struct StringColumn {
@@ -61,11 +59,10 @@ class Tablet {
 
         void init(uint32_t max_rows, uint32_t init_buf_capacity) {
             offsets = (int32_t*)common::mem_alloc(
-                sizeof(int32_t) * (max_rows + 1), common::MOD_DEFAULT);
+                sizeof(int32_t) * (max_rows + 1), common::MOD_TABLET);
             offsets[0] = 0;
             buf_capacity = init_buf_capacity;
-            buffer =
-                (char*)common::mem_alloc(buf_capacity, common::MOD_DEFAULT);
+            buffer = (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
             buf_used = 0;
         }
 
@@ -75,6 +72,7 @@ class Tablet {
             if (buffer) common::mem_free(buffer);
             buffer = nullptr;
             buf_capacity = buf_used = 0;
+            this->~StringColumn();
         }
 
         void reset() {
@@ -82,30 +80,41 @@ class Tablet {
             if (offsets) offsets[0] = 0;
         }
 
-        void append(uint32_t row, const char* data, uint32_t len) {
+        int append(uint32_t row, const char* data, uint32_t len) {
             // Grow buffer if needed
             if (buf_used + len > buf_capacity) {
-                buf_capacity = buf_capacity * 2 + len;
-                buffer = (char*)common::mem_realloc(buffer, buf_capacity);
+                uint64_t new_capacity_64 =
+                    static_cast<uint64_t>(buf_capacity) * 2 + len;
+                if (UNLIKELY(new_capacity_64 > UINT32_MAX)) {
+                    return common::E_OVERFLOW;
+                }
+                uint32_t new_capacity = static_cast<uint32_t>(new_capacity_64);
+                char* new_buffer =
+                    (char*)common::mem_realloc(buffer, new_capacity);
+                if (UNLIKELY(new_buffer == nullptr)) {
+                    return common::E_OOM;
+                }
+                buffer = new_buffer;
+                buf_capacity = new_capacity;
             }
             memcpy(buffer + buf_used, data, len);
             offsets[row] = static_cast<int32_t>(buf_used);
             offsets[row + 1] = static_cast<int32_t>(buf_used + len);
             buf_used += len;
+            return common::E_OK;
         }
 
         const char* get_str(uint32_t row) const {
             return buffer + offsets[row];
         }
         uint32_t get_len(uint32_t row) const {
-            return static_cast<uint32_t>(offsets[row + 1] - offsets[row]);
+            return offsets[row + 1] - offsets[row];
         }
         // Return a String view for a given row. The returned reference is
         // valid until the next call to get_string_view on this column.
         common::String& get_string_view(uint32_t row) {
             view_cache_.buf_ = buffer + offsets[row];
-            view_cache_.len_ =
-                static_cast<uint32_t>(offsets[row + 1] - offsets[row]);
+            view_cache_.len_ = offsets[row + 1] - offsets[row];
             return view_cache_;
         }
 
@@ -231,11 +240,14 @@ class Tablet {
 
     ~Tablet() { destroy(); }
 
-    // Tablet owns raw heap buffers (timestamps_, value_matrix_, bitmaps_) that
-    // destroy() frees. The implicitly generated copy operations would shallow-
-    // copy those pointers, causing double-free / use-after-free, so copying is
-    // disabled. Move transfers ownership and leaves the source empty (its
-    // pointers nulled) so the moved-from object destructs harmlessly.
+    // Tablet owns several heap buffers (timestamps_, value_matrix_ with its
+    // StringColumn::buffer/offsets, bitmaps_) that ~Tablet frees. The default
+    // copy ctor / copy-assign shallow-copies the raw pointers, so any copy
+    // path (e.g. `return tablet;` without NRVO under MSVC Debug) leaves the
+    // source Tablet's destructor freeing buffers the copy still points at,
+    // triggering heap-use-after-free in code like
+    // Tablet::find_all_device_boundaries. Make Tablet move-only with a
+    // pointer-stealing move ctor / move-assign so return-by-value is safe.
     Tablet(const Tablet&) = delete;
     Tablet& operator=(const Tablet&) = delete;
 
@@ -250,10 +262,14 @@ class Tablet {
           value_matrix_(other.value_matrix_),
           bitmaps_(other.bitmaps_),
           column_categories_(std::move(other.column_categories_)),
-          id_column_indexes_(std::move(other.id_column_indexes_)) {
+          id_column_indexes_(std::move(other.id_column_indexes_)),
+          single_device_(other.single_device_) {
         other.timestamps_ = nullptr;
         other.value_matrix_ = nullptr;
         other.bitmaps_ = nullptr;
+        other.cur_row_size_ = 0;
+        // Leaving other.schema_vec_ moved-from is fine; destroy() only
+        // touches the heap buffers above, which we've now nulled out.
     }
 
     Tablet& operator=(Tablet&& other) noexcept {
@@ -270,9 +286,11 @@ class Tablet {
             bitmaps_ = other.bitmaps_;
             column_categories_ = std::move(other.column_categories_);
             id_column_indexes_ = std::move(other.id_column_indexes_);
+            single_device_ = other.single_device_;
             other.timestamps_ = nullptr;
             other.value_matrix_ = nullptr;
             other.bitmaps_ = nullptr;
+            other.cur_row_size_ = 0;
         }
         return *this;
     }
@@ -283,12 +301,6 @@ class Tablet {
     }
     size_t get_column_count() const { return schema_vec_->size(); }
     uint32_t get_cur_row_size() const { return cur_row_size_; }
-    int64_t get_timestamp(uint32_t row_index) const {
-        return timestamps_[row_index];
-    }
-    bool is_null(uint32_t row_index, uint32_t col_index) const {
-        return bitmaps_[col_index].test(row_index);
-    }
 
     /**
      * @brief Adds a timestamp to the specified row.
@@ -300,24 +312,26 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
-    /**
-     * @brief Bulk copy timestamps into the tablet.
-     *
-     * @param timestamps Pointer to an array of timestamp values.
-     * @param count Number of timestamps to copy. Must be <= max_row_num.
-     *        If count > cur_row_size_, cur_row_size_ is updated to count,
-     *        so that subsequent operations know how many rows are populated.
-     * @return Returns 0 on success, or a non-zero error code on failure
-     *         (E_OUT_OF_RANGE if count > max_row_num).
-     */
     int set_timestamps(const int64_t* timestamps, uint32_t count);
 
-    // Bulk copy fixed-length column data. If bitmap is nullptr, all rows are
-    // non-null. Otherwise bit=1 means null, bit=0 means valid (same as TsFile
-    // BitMap convention). Callers using other conventions (e.g. Arrow, where
-    // 1=valid) must invert before calling.
+    // Bulk copy fixed-length column data. bitmap=nullptr means all non-null.
+    // bitmap uses TsFile convention: bit=1 is null, bit=0 is valid.
     int set_column_values(uint32_t schema_index, const void* data,
                           const uint8_t* bitmap, uint32_t count);
+
+    // Bulk copy a STRING column from Arrow-style offsets + flat data buffer.
+    // bitmap=nullptr means all non-null; same convention as set_column_values.
+    int set_column_string_values(uint32_t schema_index, const int32_t* offsets,
+                                 const char* data, const uint8_t* bitmap,
+                                 uint32_t count);
+
+    // Bulk fill a STRING column with the same value for all rows.
+    int set_column_string_repeated(uint32_t schema_index, const char* str,
+                                   uint32_t str_len, uint32_t count);
+
+    // Reset per-batch state so the tablet can be reused without reallocating
+    // its backing buffers. row_count is typically 0 before refilling.
+    void reset(uint32_t row_count = 0);
 
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
@@ -341,14 +355,10 @@ class Tablet {
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
 
-    // Bulk copy string column data (offsets + data buffer).
-    // offsets has count+1 entries and must start from 0 (offsets[0] == 0).
-    // bitmap follows TsFile convention (bit=1 means null, nullptr means all
-    // valid). Callers using Arrow convention (bit=1 means valid) must invert
-    // before calling.
-    int set_column_string_values(uint32_t schema_index, const int32_t* offsets,
-                                 const char* data, const uint8_t* bitmap,
-                                 uint32_t count);
+    // When the caller guarantees that all rows belong to a single device,
+    // set this flag to skip the O(n*m) boundary detection in the write path.
+    void set_single_device(bool v) { single_device_ = v; }
+    bool is_single_device() const { return single_device_; }
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column by name.
@@ -395,7 +405,7 @@ class Tablet {
 
    private:
     template <typename T>
-    void process_val(uint32_t row_index, uint32_t schema_index, T val);
+    int process_val(uint32_t row_index, uint32_t schema_index, T val);
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
     std::string insert_target_name_;
@@ -406,6 +416,7 @@ class Tablet {
     common::BitMap* bitmaps_;
     std::vector<common::ColumnCategory> column_categories_;
     std::vector<int> id_column_indexes_;
+    bool single_device_ = false;
 };
 
 }  // end namespace storage

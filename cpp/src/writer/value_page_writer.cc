@@ -59,6 +59,10 @@ int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
                                           uncompressed_buf_ + sizeof(size) +
                                               col_notnull_bitmap_buf_size_,
                                           value_buf_size_))) {
+        // value_buf_size_ == 0 is a fully-null value page: only the bitmap is
+        // written, value_out_stream_ is empty. Skip the copy — feeding an
+        // empty stream to copy_bs_to_buf trips ASSERT(b.len_ > 0) in the
+        // buffer iterator. (Restores the #734 aligned-page-seal fix.)
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
@@ -119,6 +123,8 @@ void ValuePageWriter::reset() {
     }
     col_notnull_bitmap_out_stream_.reset();
     value_out_stream_.reset();
+    col_notnull_bitmap_.clear();
+    size_ = 0;
 }
 
 void ValuePageWriter::destroy() {

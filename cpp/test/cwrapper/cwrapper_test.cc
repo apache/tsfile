@@ -52,6 +52,51 @@ class CWrapperTest : public testing::Test {
     }
 };
 
+TEST_F(CWrapperTest, FileReadBackendConfigurationRoundTripsAndValidates) {
+    const TsFileReadBackend original = tsfile_get_file_read_backend();
+
+    EXPECT_EQ(tsfile_set_file_read_backend(TSFILE_READ_BACKEND_MMAP), RET_OK);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_MMAP);
+    EXPECT_EQ(tsfile_set_file_read_backend(TSFILE_READ_BACKEND_PREAD), RET_OK);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_PREAD);
+    EXPECT_EQ(tsfile_set_file_read_backend(99), RET_INVALID_ARG);
+    EXPECT_EQ(tsfile_set_file_read_backend(256), RET_INVALID_ARG);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_PREAD);
+
+    EXPECT_EQ(tsfile_set_file_read_backend(original), RET_OK);
+}
+
+TEST_F(CWrapperTest, CodecAndCompressionConfigIncludesJavaIds) {
+    uint8_t old_int32_encoding = get_datatype_encoding(TS_DATATYPE_INT32);
+    uint8_t old_int64_encoding = get_datatype_encoding(TS_DATATYPE_INT64);
+    uint8_t old_float_encoding = get_datatype_encoding(TS_DATATYPE_FLOAT);
+    uint8_t old_double_encoding = get_datatype_encoding(TS_DATATYPE_DOUBLE);
+    uint8_t old_compression = get_global_compression();
+
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_CHIMP),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT64, TS_ENCODING_RLBE),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, TS_ENCODING_CHIMP),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_DOUBLE, TS_ENCODING_CAMEL),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, TS_ENCODING_CAMEL),
+              common::E_NOT_SUPPORT);
+    EXPECT_EQ(set_global_compression(TS_COMPRESSION_ZSTD), common::E_OK);
+    EXPECT_EQ(set_global_compression(TS_COMPRESSION_LZMA2), common::E_OK);
+
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT32, old_int32_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT64, old_int64_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_FLOAT, old_float_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_DOUBLE, old_double_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_global_compression(old_compression), common::E_OK);
+}
+
 TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     ERRNO code = 0;
     const char* filename = "cwrapper_for_python.tsfile";
@@ -314,4 +359,155 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free(data_types);
     free_write_file(&file);
 }
+
+// Regression: tsfile_writer_new_with_memory_threshold() had its duplicate-
+// column check inverted (`==` instead of `!=`), so the very first column
+// always looked like a duplicate and the constructor returned
+// E_INVALID_SCHEMA before any legitimate schema could be used.  Compare to
+// tsfile_writer_new() in the same file which had the correct check.
+TEST(TsFileWriterCApiTest, NewWithMemoryThresholdAcceptsValidSchema) {
+    const char* path = "cwrapper_writer_with_threshold_smoke.tsfile";
+    remove(path);
+    ERRNO code = 0;
+    WriteFile file = write_file_new(path, &code);
+    ASSERT_EQ(code, RET_OK);
+
+    const int column_num = 3;
+    TableSchema schema;
+    schema.table_name = strdup("t");
+    schema.column_num = column_num;
+    schema.column_schemas =
+        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * column_num));
+    schema.column_schemas[0] =
+        ColumnSchema{strdup("id1"), TS_DATATYPE_STRING, TAG};
+    schema.column_schemas[1] =
+        ColumnSchema{strdup("s1"), TS_DATATYPE_INT64, FIELD};
+    schema.column_schemas[2] =
+        ColumnSchema{strdup("s2"), TS_DATATYPE_DOUBLE, FIELD};
+
+    TsFileWriter writer = tsfile_writer_new_with_memory_threshold(
+        file, &schema, 1024 * 1024, &code);
+    EXPECT_NE(writer, nullptr) << "constructor refused a valid 3-column schema";
+    EXPECT_EQ(code, RET_OK);
+
+    // Duplicate column triggers the now-correct path.
+    TableSchema dup;
+    dup.table_name = strdup("t");
+    dup.column_num = 2;
+    dup.column_schemas =
+        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 2));
+    dup.column_schemas[0] =
+        ColumnSchema{strdup("s1"), TS_DATATYPE_INT64, FIELD};
+    dup.column_schemas[1] =
+        ColumnSchema{strdup("s1"), TS_DATATYPE_INT64, FIELD};
+    ERRNO dup_code = 0;
+    TsFileWriter dup_writer = tsfile_writer_new_with_memory_threshold(
+        file, &dup, 1024 * 1024, &dup_code);
+    EXPECT_EQ(dup_writer, nullptr);
+    EXPECT_EQ(dup_code, common::E_INVALID_SCHEMA);
+
+    if (writer != nullptr) {
+        tsfile_writer_close(writer);
+    }
+    free_table_schema(schema);
+    free_table_schema(dup);
+    free_write_file(&file);
+    remove(path);
+}
+
+// Regression: tsfile_writer_new / tsfile_writer_new_with_memory_threshold /
+// _tsfile_writer_register_table used to dereference null inputs directly,
+// crashing the host process.  Each now reports E_INVALID_ARG (or returns
+// nullptr when err_code itself is null) instead of segfaulting.
+TEST(TsFileWriterCApiTest, RejectsNullInputs) {
+    ERRNO err = 0;
+
+    // tsfile_writer_new: null file
+    EXPECT_EQ(
+        tsfile_writer_new(nullptr, reinterpret_cast<TableSchema*>(1), &err),
+        nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    // tsfile_writer_new: null schema
+    err = 0;
+    EXPECT_EQ(tsfile_writer_new(reinterpret_cast<WriteFile>(1), nullptr, &err),
+              nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    // tsfile_writer_new: null err_code
+    EXPECT_EQ(tsfile_writer_new(nullptr, nullptr, nullptr), nullptr);
+
+    // tsfile_writer_new_with_memory_threshold: same checks
+    err = 0;
+    EXPECT_EQ(tsfile_writer_new_with_memory_threshold(
+                  nullptr, reinterpret_cast<TableSchema*>(1), 1024, &err),
+              nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    // _tsfile_writer_register_table: nulls
+    EXPECT_EQ(_tsfile_writer_register_table(nullptr,
+                                            reinterpret_cast<TableSchema*>(1)),
+              common::E_INVALID_ARG);
+    EXPECT_EQ(_tsfile_writer_register_table(reinterpret_cast<TsFileWriter>(1),
+                                            nullptr),
+              common::E_INVALID_ARG);
+}
+
+// Regression: the tag-filter C API used to dereference a null reader and
+// pass null char pointers straight to std::string(), crashing the host
+// process.  Each entry point must now return nullptr / E_INVALID_ARG on
+// missing inputs instead of segfaulting.  This test only checks the guards
+// are in place — it deliberately never touches a real reader.
+TEST(TagFilterCApiTest, RejectsNullInputs) {
+    const char* table = "t";
+    const char* col = "c";
+    const char* val = "v";
+
+    EXPECT_EQ(tsfile_tag_filter_eq(nullptr, table, col, val), nullptr);
+    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), nullptr,
+                                   col, val),
+              nullptr);
+    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), table,
+                                   nullptr, val),
+              nullptr);
+    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), table,
+                                   col, nullptr),
+              nullptr);
+
+    EXPECT_EQ(tsfile_tag_filter_neq(nullptr, table, col, val), nullptr);
+    EXPECT_EQ(tsfile_tag_filter_lt(nullptr, table, col, val), nullptr);
+    EXPECT_EQ(tsfile_tag_filter_lteq(nullptr, table, col, val), nullptr);
+    EXPECT_EQ(tsfile_tag_filter_gt(nullptr, table, col, val), nullptr);
+    EXPECT_EQ(tsfile_tag_filter_gteq(nullptr, table, col, val), nullptr);
+
+    ERRNO err = common::E_OK;
+    EXPECT_EQ(
+        tsfile_tag_filter_create(nullptr, table, col, val, TAG_FILTER_EQ, &err),
+        nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    err = common::E_OK;
+    EXPECT_EQ(tsfile_tag_filter_create(reinterpret_cast<TsFileReader>(1),
+                                       nullptr, col, val, TAG_FILTER_EQ, &err),
+              nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    err = common::E_OK;
+    EXPECT_EQ(tsfile_tag_filter_create(reinterpret_cast<TsFileReader>(1), table,
+                                       nullptr, val, TAG_FILTER_EQ, &err),
+              nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    err = common::E_OK;
+    EXPECT_EQ(tsfile_tag_filter_create(reinterpret_cast<TsFileReader>(1), table,
+                                       col, nullptr, TAG_FILTER_EQ, &err),
+              nullptr);
+    EXPECT_EQ(err, common::E_INVALID_ARG);
+
+    // err_code itself is null — must not crash, must return null.
+    EXPECT_EQ(tsfile_tag_filter_create(reinterpret_cast<TsFileReader>(1), table,
+                                       col, val, TAG_FILTER_EQ, nullptr),
+              nullptr);
+}
+
 }  // namespace cwrapper

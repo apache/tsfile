@@ -22,6 +22,7 @@
 #endif
 #include <string.h>
 
+#include <atomic>
 #include <iomanip>
 #include <iostream>
 
@@ -32,6 +33,16 @@
 #include "utils/util_define.h"
 
 namespace common {
+
+#ifdef ENABLE_TEST
+namespace {
+std::atomic<bool> g_fail_next_mem_realloc(false);
+}
+
+void TEST_fail_next_mem_realloc() {
+    g_fail_next_mem_realloc.store(true, std::memory_order_release);
+}
+#endif
 
 const char* g_mod_names[__LAST_MOD_ID] = {
     /*  0 */ "DEFAULT",
@@ -95,7 +106,7 @@ void* mem_alloc(uint32_t size, AllocModID mid) {
     auto high4b = static_cast<uint32_t>(header >> 32);
     *reinterpret_cast<uint32_t*>(raw) = high4b;
     *reinterpret_cast<uint32_t*>(raw + 4) = low4b;
-    ModStat::get_instance().update_alloc(mid, static_cast<int32_t>(size));
+    ModStat::get_instance().update_alloc(mid, static_cast<int64_t>(size));
     return raw + header_size;
 }
 
@@ -139,6 +150,11 @@ void mem_free(void* ptr) {
 }
 
 void* mem_realloc(void* ptr, uint32_t size) {
+#ifdef ENABLE_TEST
+    if (g_fail_next_mem_realloc.exchange(false, std::memory_order_acq_rel)) {
+        return nullptr;
+    }
+#endif
     char* p = static_cast<char*>(ptr);
     char* raw_ptr = p - ALIGNMENT;
     const uint64_t header =
@@ -158,7 +174,7 @@ void* mem_realloc(void* ptr, uint32_t size) {
     *reinterpret_cast<uint32_t*>(p) = high4b;
     *reinterpret_cast<uint32_t*>(p + 4) = low4b;
     ModStat::get_instance().update_alloc(
-        mid, int32_t(size) - int32_t(original_size));
+        mid, int64_t(size) - int64_t(original_size));
     return p + ALIGNMENT;
 }
 
@@ -166,9 +182,9 @@ void ModStat::init() {
     if (stat_arr_ != NULL) {
         return;
     }
-    stat_arr_ = (int32_t*)(::malloc(ITEM_SIZE * ITEM_COUNT));
+    stat_arr_ = (int64_t*)(::malloc(ITEM_SIZE * ITEM_COUNT));
     for (int8_t i = 0; i < __LAST_MOD_ID; i++) {
-        int32_t* item = get_item(i);
+        int64_t* item = get_item(i);
         *item = 0;
     }
 }
@@ -183,14 +199,14 @@ void ModStat::print_stat() {
 
     struct Entry {
         const char* name;
-        int32_t val;
+        int64_t val;
     };
     Entry entries[__LAST_MOD_ID];
     int count = 0;
     int64_t total = 0;
 
     for (int i = 0; i < __LAST_MOD_ID; i++) {
-        int32_t val = ATOMIC_FAA(get_item(i), 0);
+        int64_t val = ATOMIC_FAA(get_item(i), 0LL);
         total += val;
         if (val != 0) {
             entries[count++] = {g_mod_names[i], val};

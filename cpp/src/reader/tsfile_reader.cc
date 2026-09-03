@@ -18,6 +18,8 @@
  */
 #include "tsfile_reader.h"
 
+#include <stdexcept>
+
 #include "common/schema.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
@@ -32,6 +34,19 @@ struct DeviceMetaEntry {
     int64_t start_offset;
     int64_t end_offset;
 };
+
+int parse_paths(const std::vector<std::string>& path_list,
+                std::vector<Path>& parsed_paths) {
+    try {
+        parsed_paths.reserve(path_list.size());
+        for (const auto& path : path_list) {
+            parsed_paths.emplace_back(path, true);
+        }
+    } catch (const std::runtime_error&) {
+        return E_INVALID_PATH;
+    }
+    return E_OK;
+}
 
 int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
                            std::shared_ptr<MetaIndexNode> index_node,
@@ -94,8 +109,7 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr),
-      table_query_executor_batch_size_(0) {
+      table_query_executor_(nullptr) {
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 }
 
@@ -105,31 +119,17 @@ int TsFileReader::open(const std::string& file_path) {
     int ret = E_OK;
     read_file_ = new storage::ReadFile;
     tsfile_executor_ = new storage::TsFileExecutor();
+    // Keep reader diagnostics in the caller's error channel.  Printing here
+    // would leak an unstructured line to process stdout/stderr before the CLI
+    // can attach its stable error text and exit code.
     if (RET_FAIL(read_file_->open(file_path))) {
-        std::cout << "filed to open file " << ret << std::endl;
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
-        std::cout << "filed to init " << ret << std::endl;
     }
     return ret;
 }
 
-int TsFileReader::close() {
-    int ret = E_OK;
-    if (tsfile_executor_ != nullptr) {
-        delete tsfile_executor_;
-        tsfile_executor_ = nullptr;
-    }
-    if (table_query_executor_ != nullptr) {
-        delete table_query_executor_;
-        table_query_executor_ = nullptr;
-    }
-    table_query_executor_batch_size_ = 0;
-    if (read_file_ != nullptr) {
-        read_file_->close();
-        delete read_file_;
-        read_file_ = nullptr;
-    }
-    return ret;
+unsigned char TsFileReader::get_file_version() const {
+    return read_file_ == nullptr ? 0 : read_file_->file_version();
 }
 
 int TsFileReader::ensure_table_query_executor(int batch_size) {
@@ -148,20 +148,39 @@ int TsFileReader::ensure_table_query_executor(int batch_size) {
     return E_OK;
 }
 
+int TsFileReader::close() {
+    int ret = E_OK;
+    if (tsfile_executor_ != nullptr) {
+        delete tsfile_executor_;
+        tsfile_executor_ = nullptr;
+    }
+    if (table_query_executor_ != nullptr) {
+        delete table_query_executor_;
+        table_query_executor_ = nullptr;
+    }
+    if (read_file_ != nullptr) {
+        read_file_->close();
+        delete read_file_;
+        read_file_ = nullptr;
+    }
+    return ret;
+}
+
 int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
     return tsfile_executor_->execute(qe, ret_qds);
 }
 
 int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
                         int64_t end_time, ResultSet*& result_set) {
-    int ret = E_OK;
+    std::vector<Path> path_list_vec;
+    int ret = parse_paths(path_list, path_list_vec);
+    if (ret != E_OK) {
+        return ret;
+    }
+
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
     Expression* exp =
         new storage::Expression(storage::GLOBALTIME_EXPR, time_filter);
-    std::vector<Path> path_list_vec;
-    for (const auto& path : path_list) {
-        path_list_vec.emplace_back(Path(path, true));
-    }
     QueryExpression* query_expression =
         QueryExpression::create(path_list_vec, exp);
     ret = tsfile_executor_->execute(query_expression, result_set);
@@ -202,16 +221,49 @@ int TsFileReader::query(const std::string& table_name,
 
 int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
                              int limit, ResultSet*& result_set) {
-    int ret = E_OK;
     std::vector<Path> path_list_vec;
-    for (const auto& path : path_list) {
-        path_list_vec.emplace_back(Path(path, true));
+    int ret = parse_paths(path_list, path_list_vec);
+    if (ret != E_OK) {
+        return ret;
     }
     QueryExpression* query_expression =
         QueryExpression::create(path_list_vec, nullptr);
     ret =
         tsfile_executor_->execute(query_expression, result_set, offset, limit);
     return ret;
+}
+
+int TsFileReader::prepare_series(const FileGeneration& generation,
+                                 const PreparedLocator& locator,
+                                 std::shared_ptr<PreparedSeries>& prepared) {
+    return tsfile_executor_->prepare_series(generation, locator, prepared);
+}
+
+int TsFileReader::prepare_series(
+    const FileGeneration& generation, const PreparedLocator& locator,
+    const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+    std::shared_ptr<PreparedSeries>& prepared) {
+    return tsfile_executor_->prepare_series(generation, locator,
+                                            aligned_time_owner, prepared);
+}
+
+int TsFileReader::query_prepared(
+    const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit, ResultSet*& result_set) {
+    if (prepared == nullptr || prepared->index() == nullptr) {
+        return E_INVALID_ARG;
+    }
+    return tsfile_executor_->execute_prepared(
+        prepared, start_time, end_time, offset, limit,
+        prepared->index()->get_measurement_name().to_std_string(), result_set);
+}
+
+int TsFileReader::query_prepared_multi(
+    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+    int64_t start_time, int64_t end_time, int offset, int limit,
+    ResultSet*& result_set) {
+    return tsfile_executor_->execute_prepared_multi(
+        prepared, start_time, end_time, offset, limit, result_set);
 }
 
 int TsFileReader::queryByRow(const std::string& table_name,
@@ -411,16 +463,21 @@ int TsFileReader::get_timeseries_schema(
                          device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
-            auto* aligned_timeseries_index =
-                dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
-            auto data_type =
-                aligned_timeseries_index != nullptr &&
-                        aligned_timeseries_index->value_ts_idx_ != nullptr
-                    ? aligned_timeseries_index->value_ts_idx_->get_data_type()
-                    : timeseries_index->get_data_type();
+            // AlignedTimeseriesIndex::get_data_type() returns the time
+            // column type (VECTOR) so the aligned/non-aligned dispatch in
+            // SSI can keep using the existing accessor.  For schema
+            // exposure we need the actual value column type — without this
+            // unwrap, INT32/FLOAT/... would all surface as VECTOR.
+            common::TSDataType dt = timeseries_index->get_data_type();
+            if (dt == common::VECTOR) {
+                auto* aligned =
+                    dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
+                if (aligned != nullptr && aligned->value_ts_idx_ != nullptr) {
+                    dt = aligned->value_ts_idx_->get_data_type();
+                }
+            }
             MeasurementSchema ms(
-                timeseries_index->get_measurement_name().to_std_string(),
-                data_type);
+                timeseries_index->get_measurement_name().to_std_string(), dt);
             result.push_back(ms);
         }
     }
@@ -448,6 +505,15 @@ int TsFileReader::get_timeseries_metadata_impl(
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    // Reset the shared meta arena up front: every call writes fresh
+    // timeseries-index metadata into it via _impl(), and the previous
+    // implementation only ever appended.  A long-lived reader that repeats
+    // this query would grow tsfile_reader_meta_pa_ without bound (each call
+    // duplicates the per-device payload).  Callers that need to retain prior
+    // results past this call must copy them out before invoking again — the
+    // shared_ptrs handed back use a noop deleter pointing into this arena.
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
     DeviceTimeseriesMetadataMap result;
     for (const auto& device_id : device_ids) {
         std::vector<std::shared_ptr<ITimeseriesIndex>> list;
@@ -465,6 +531,10 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     if (tsfile_meta == nullptr) {
         return result;
     }
+
+    // Same arena-reset rationale as the device_ids overload above.
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 
     PageArena pa;
     pa.init(512, MOD_TSFILE_READER);
@@ -495,6 +565,15 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     return result;
 }
 
+TsFileProperties TsFileReader::get_tsfile_properties() {
+    if (tsfile_executor_ == nullptr) {
+        return TsFileProperties();
+    }
+    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
+    return file_metadata == nullptr ? TsFileProperties()
+                                    : file_metadata->tsfile_properties_;
+}
+
 ResultSet* TsFileReader::read_timeseries(
     const std::shared_ptr<IDeviceID>& device_id,
     const std::vector<std::string>& measurement_name) {
@@ -504,13 +583,12 @@ ResultSet* TsFileReader::read_timeseries(
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
     const std::string& table_name) {
     TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
-    MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
-                                                        table_root))) {
-    } else if (IS_FAIL(file_metadata->get_table_schema(to_lower(table_name),
-                                                       table_schema))) {
-    }
+    // A schema-only table has no device-level metadata index.  Schema lookup
+    // must therefore be independent of the presence of data pages; callers
+    // can still construct an empty result set from the returned schema.
+    if (file_metadata == nullptr) return table_schema;
+    file_metadata->get_table_schema(to_lower(table_name), table_schema);
     return table_schema;
 }
 

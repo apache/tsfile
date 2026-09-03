@@ -843,7 +843,12 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
         const ArrowArray* ts_arr = in_array->children[time_col_index];
         const int64_t* ts_buf =
             static_cast<const int64_t*>(ts_arr->buffers[1]) + ts_arr->offset;
-        tablet->set_timestamps(ts_buf, static_cast<uint32_t>(n_rows));
+        int sret =
+            tablet->set_timestamps(ts_buf, static_cast<uint32_t>(n_rows));
+        if (sret != common::E_OK) {
+            delete tablet;
+            return sret;
+        }
     }
 
     // Fill data columns from Arrow children (use read_modes to decode buffers)
@@ -892,10 +897,14 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                     delete tablet;
                     return common::E_OOM;
                 }
-                tablet->set_column_values(tcol, data, null_bm,
-                                          static_cast<uint32_t>(n_rows));
+                int sret = tablet->set_column_values(
+                    tcol, data, null_bm, static_cast<uint32_t>(n_rows));
                 if (null_bm != nullptr) {
                     common::mem_free(null_bm);
+                }
+                if (sret != common::E_OK) {
+                    delete tablet;
+                    return sret;
                 }
                 break;
             }
@@ -948,13 +957,17 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                     delete tablet;
                     return common::E_OOM;
                 }
-                tablet->set_column_string_values(tcol, offsets, data, null_bm,
-                                                 nrows);
+                int sret = tablet->set_column_string_values(tcol, offsets, data,
+                                                            null_bm, nrows);
                 if (null_bm != nullptr) {
                     common::mem_free(null_bm);
                 }
                 if (norm_offsets != nullptr) {
                     common::mem_free(norm_offsets);
+                }
+                if (sret != common::E_OK) {
+                    delete tablet;
+                    return sret;
                 }
                 break;
             }

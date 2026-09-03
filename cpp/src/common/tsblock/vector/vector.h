@@ -73,6 +73,9 @@ class Vector {
     FORCE_INLINE uint32_t get_row_num() { return row_num_; }
 
     FORCE_INLINE void add_row_num() { row_num_++; }
+    FORCE_INLINE void add_row_nums(uint32_t n) { row_num_ += n; }
+    FORCE_INLINE uint32_t get_offset() const { return offset_; }
+    FORCE_INLINE void advance_offset(uint32_t bytes) { offset_ += bytes; }
 
     FORCE_INLINE common::TsBlock* get_tsblock() { return tsblock_; }
 

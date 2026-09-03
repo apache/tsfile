@@ -42,10 +42,17 @@ class ComparisonTagFilter(TagFilter):
     GTEQ = 5
     REGEXP = 6
     NOT_REGEXP = 7
+    IS_NULL = 8
+    IS_NOT_NULL = 9
+
+    # Operators that take no comparison value.
+    _NO_VALUE_OPS = (IS_NULL, IS_NOT_NULL)
 
     def __init__(self, column_name: str, value: str, op: int):
         self.column_name = column_name
-        self.value = value
+        # IS NULL / IS NOT NULL carry no value; the native layer ignores it but
+        # still expects a (possibly empty) string.
+        self.value = "" if value is None else value
         self.op = op
 
     def __repr__(self):
@@ -58,7 +65,11 @@ class ComparisonTagFilter(TagFilter):
             5: ">=",
             6: "=~",
             7: "!~",
+            8: "IS NULL",
+            9: "IS NOT NULL",
         }
+        if self.op in self._NO_VALUE_OPS:
+            return f"TagFilter({self.column_name} {op_names.get(self.op, '?')})"
         return (
             f"TagFilter({self.column_name} {op_names.get(self.op, '?')} {self.value!r})"
         )
@@ -149,6 +160,16 @@ def tag_regexp(column_name: str, pattern: str) -> TagFilter:
 def tag_not_regexp(column_name: str, pattern: str) -> TagFilter:
     """Create a tag regex not-match filter."""
     return ComparisonTagFilter(column_name, pattern, ComparisonTagFilter.NOT_REGEXP)
+
+
+def tag_is_null(column_name: str) -> TagFilter:
+    """Create a tag IS NULL filter: the device has no value for this tag column."""
+    return ComparisonTagFilter(column_name, "", ComparisonTagFilter.IS_NULL)
+
+
+def tag_is_not_null(column_name: str) -> TagFilter:
+    """Create a tag IS NOT NULL filter: the device has a value for this tag column."""
+    return ComparisonTagFilter(column_name, "", ComparisonTagFilter.IS_NOT_NULL)
 
 
 def tag_between(column_name: str, lower: str, upper: str) -> TagFilter:

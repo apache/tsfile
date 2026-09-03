@@ -37,6 +37,9 @@ int DeviceTaskIterator::next(DeviceQueryTask*& task) {
         task = DeviceQueryTask::create_device_query_task(
             device_meta_pair.first, column_names_, column_mapping_,
             device_meta_pair.second, table_schema_, pa_);
+        if (task != nullptr) {
+            created_tasks_.push_back(task);
+        }
     }
     return ret;
 }

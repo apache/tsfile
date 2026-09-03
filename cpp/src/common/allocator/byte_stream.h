@@ -23,7 +23,11 @@
 #include <common/constant/tsfile_constant.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef _MSC_VER
+#include <intrin.h>  // _BitScanReverse
+#endif
 
+#include <atomic>
 #include <iostream>
 #include <string>
 
@@ -33,51 +37,51 @@
 
 namespace common {
 
+// std::atomic<T> as the actual storage so the MSVC fallback no longer needs
+// `reinterpret_cast<atomic<T>*>(T*)` — that cast is UB because the underlying
+// object was never constructed as a std::atomic<T>.  When the caller asks for
+// non-atomic mode we still go through the atomic interface but with
+// memory_order_relaxed, which on x86/ARM compiles to a plain load/store.
+// std::atomic<T> is non-copyable, so neither is OptionalAtomic; existing
+// callers either construct in place or use store.
 template <typename T>
 class OptionalAtomic {
    public:
     OptionalAtomic(T t, bool enable_atomic = false)
         : val_(t), enable_atomic_(enable_atomic) {}
 
+    OptionalAtomic(const OptionalAtomic&) = delete;
+    OptionalAtomic& operator=(const OptionalAtomic&) = delete;
+    OptionalAtomic(OptionalAtomic&&) = delete;
+    OptionalAtomic& operator=(OptionalAtomic&&) = delete;
+
     FORCE_INLINE T load() const {
-        if (UNLIKELY(enable_atomic_)) {
-            return ATOMIC_LOAD(&val_);
-        } else {
-            return val_;
-        }
+        return val_.load(UNLIKELY(enable_atomic_) ? std::memory_order_seq_cst
+                                                  : std::memory_order_relaxed);
     }
 
     FORCE_INLINE void store(const T t) {
-        if (UNLIKELY(enable_atomic_)) {
-            ATOMIC_STORE(&val_, t);
-        } else {
-            val_ = t;
-        }
+        val_.store(t, UNLIKELY(enable_atomic_) ? std::memory_order_seq_cst
+                                               : std::memory_order_relaxed);
     }
 
     FORCE_INLINE T atomic_faa(const T increment) {
-        if (UNLIKELY(enable_atomic_)) {
-            return ATOMIC_FAA(&val_, increment);
-        } else {
-            T old_val = val_;
-            val_ = val_ + increment;
-            return old_val;
-        }
+        return val_.fetch_add(increment, UNLIKELY(enable_atomic_)
+                                             ? std::memory_order_seq_cst
+                                             : std::memory_order_relaxed);
     }
 
     FORCE_INLINE T atomic_aaf(const T increment) {
-        if (UNLIKELY(enable_atomic_)) {
-            return ATOMIC_AAF(&val_, increment);
-        } else {
-            val_ = val_ + increment;
-            return val_;
-        }
+        return val_.fetch_add(increment, UNLIKELY(enable_atomic_)
+                                             ? std::memory_order_seq_cst
+                                             : std::memory_order_relaxed) +
+               increment;
     }
 
     FORCE_INLINE bool enable_atomic() const { return enable_atomic_; }
 
    private:
-    T val_;
+    std::atomic<T> val_;
     bool enable_atomic_;
 };
 
@@ -231,6 +235,28 @@ FORCE_INLINE double bytes_to_double(uint8_t bytes[8]) {
 
 // TODO define a WrappedByteStream class
 
+// Round n up to the next power of two (>=1). Used to normalize ByteStream
+// page sizes so that `& page_mask_` is equivalent to `% page_size_`.
+// Values above the largest power-of-two that fits in uint32_t are clamped to
+// 0x80000000 — a naive `while (ps < n) ps <<= 1` would shift past 2^31 and
+// overflow to 0, looping forever.
+//
+// Derived from the index of the highest set bit of (n-1): the next power of
+// two >= n is 1 << (bits needed to represent n-1).  The two guards keep the
+// bit-scan input in [1, 2^31-1] where it is well-defined (clz(0) is UB), so
+// the shift amount stays in [1, 31] and never hits the `1u << 32` UB.
+FORCE_INLINE uint32_t round_up_pow2(uint32_t n) {
+    if (n <= 1) return 1;
+    if (n > 0x80000000u) return 0x80000000u;
+#if defined(_MSC_VER)
+    unsigned long idx;
+    _BitScanReverse(&idx, n - 1);
+    return 1u << (idx + 1);
+#else
+    return 1u << (32 - __builtin_clz(n - 1));
+#endif
+}
+
 // auto extend buffer for serialization
 class ByteStream {
    private:
@@ -253,6 +279,8 @@ class ByteStream {
     };
 
    public:
+    static const uint32_t DEFAULT_PAGE_SIZE = 1024;
+
     ByteStream(uint32_t page_size, AllocModID mid, bool enable_atomic = false,
                BaseAllocator& allocator = g_base_allocator)
         : allocator_(allocator),
@@ -262,11 +290,16 @@ class ByteStream {
           total_size_(0, enable_atomic),
           read_pos_(0),
           marked_read_pos_(0),
-          page_size_(page_size),
+          // page_mask_ is used as a bitmask in the hot read/write paths
+          // (`x & page_mask_` instead of `x % page_size_`), which only
+          // matches modulo arithmetic when page_size_ is a power of two.
+          // Round up so callers passing non-power-of-2 sizes still get a
+          // correctly-sized page, at the cost of <2x memory in the worst
+          // case (e.g. 1000 → 1024).
+          page_size_(round_up_pow2(page_size)),
+          page_mask_(round_up_pow2(page_size) - 1),
           mid_(mid),
-          wrapped_page_(false, nullptr) {
-        // assert(page_size >= 16);  // commented out by gxh on 2023.03.09
-    }
+          wrapped_page_(false, nullptr) {}
 
     // for wrap plain buffer to ByteStream
     ByteStream(AllocModID mid = MOD_DEFAULT)
@@ -278,6 +311,7 @@ class ByteStream {
           read_pos_(0),
           marked_read_pos_(0),
           page_size_(0),
+          page_mask_(0),
           mid_(mid),
           wrapped_page_(false, nullptr) {}
 
@@ -290,7 +324,10 @@ class ByteStream {
         wrapped_page_.next_.store(nullptr);
         wrapped_page_.buf_ = (uint8_t*)buf;
 
-        page_size_ = buf_len;
+        // page_mask_ is used as a bitmask; only correct for power-of-2
+        // page sizes (see ByteStream ctor comment).
+        page_size_ = round_up_pow2(static_cast<uint32_t>(buf_len));
+        page_mask_ = page_size_ - 1;
         head_.store(&wrapped_page_);
         tail_.store(&wrapped_page_);
         total_size_.store(buf_len);
@@ -305,14 +342,14 @@ class ByteStream {
     void clear_wrapped_buf() { wrapped_page_.buf_ = nullptr; }
 
     /* ================ Part 1: basic ================ */
-    FORCE_INLINE uint32_t remaining_size() const {
+    FORCE_INLINE uint64_t remaining_size() const {
         ASSERT(total_size_.load() >= read_pos_);
         return total_size_.load() - read_pos_;
     }
     FORCE_INLINE bool has_remaining() const { return remaining_size() > 0; }
 
     FORCE_INLINE void mark_read_pos() { marked_read_pos_ = read_pos_; }
-    FORCE_INLINE uint32_t get_mark_len() const {
+    FORCE_INLINE uint64_t get_mark_len() const {
         ASSERT(marked_read_pos_ <= read_pos_);
         return read_pos_ - marked_read_pos_;
     }
@@ -336,33 +373,39 @@ class ByteStream {
         read_pos_ = 0;
     }
 
-    // never used TODO
-    void shallow_clone_from(ByteStream& other) {
-        this->page_size_ = other.page_size_;
-        this->mid_ = other.mid_;
-        this->head_.store(other.head_.load());
-        this->tail_.store(other.tail_.load());
-        this->total_size_.store(other.total_size_.load());
+    FORCE_INLINE uint64_t total_size() const { return total_size_.load(); }
+    FORCE_INLINE uint64_t read_pos() const { return read_pos_; };
+    // Sum of bytes physically allocated for this stream's pages.  For a
+    // wrapped stream this just reports total_size(); for an owning stream
+    // it counts page_size_ per backing page so callers doing memory-pressure
+    // accounting see the real footprint, not the few bytes that happen to
+    // have been written into the latest 64 KiB page.
+    FORCE_INLINE uint64_t allocated_bytes() const {
+        if (is_wrapped()) return total_size_.load();
+        uint64_t total = 0;
+        Page* p = head_.load();
+        while (p != nullptr) {
+            total += page_size_;
+            p = p->next_.load();
+        }
+        return total;
     }
-
-    FORCE_INLINE uint32_t total_size() const { return total_size_.load(); }
-    FORCE_INLINE uint32_t read_pos() const { return read_pos_; };
     /**
      * Seek the read cursor to an absolute offset. Re-anchors read_page_ for
      * multi-page streams.
      */
-    void set_read_pos(uint32_t pos) {
+    void set_read_pos(uint64_t pos) {
         ASSERT(pos <= total_size());
         read_pos_ = pos;
         Page* p = head_.load();
-        uint32_t skipped = 0;
+        uint64_t skipped = 0;
         while (p != nullptr && skipped + page_size_ <= pos) {
             skipped += page_size_;
             p = p->next_.load();
         }
         read_page_ = p;
     }
-    FORCE_INLINE void wrapped_buf_advance_read_pos(uint32_t size) {
+    FORCE_INLINE void wrapped_buf_advance_read_pos(uint64_t size) {
         if (size + read_pos_ > total_size_.load()) {
             read_pos_ = total_size_.load();
         } else {
@@ -380,10 +423,10 @@ class ByteStream {
                 std::cout << "write_buf error " << ret << std::endl;
                 return ret;
             }
-            uint32_t remainder = page_size_ - (total_size_.load() % page_size_);
+            uint32_t remainder = page_size_ - (total_size_.load() & page_mask_);
             uint32_t copy_len =
                 remainder < (len - write_len) ? remainder : (len - write_len);
-            memcpy(tail_.load()->buf_ + total_size_.load() % page_size_,
+            memcpy(tail_.load()->buf_ + (total_size_.load() & page_mask_),
                    buf + write_len, copy_len);
             total_size_.atomic_aaf(copy_len);
             write_len += copy_len;
@@ -404,11 +447,11 @@ class ByteStream {
             if (RET_FAIL(check_space())) {
                 return ret;
             }
-            uint32_t remainder = page_size_ - (read_pos_ % page_size_);
+            uint32_t remainder = page_size_ - (read_pos_ & page_mask_);
             uint32_t copy_len = remainder < want_len_limited - read_len
                                     ? remainder
                                     : want_len_limited - read_len;
-            memcpy(buf + read_len, read_page_->buf_ + (read_pos_ % page_size_),
+            memcpy(buf + read_len, read_page_->buf_ + (read_pos_ & page_mask_),
                    copy_len);
             read_len += copy_len;
             read_pos_ += copy_len;
@@ -460,16 +503,17 @@ class ByteStream {
             return b;
         }
         b.buf_ =
-            (char*)(tail_.load()->buf_ + (total_size_.load() % page_size_));
-        b.len_ = page_size_ - (total_size_.load() % page_size_);
+            (char*)(tail_.load()->buf_ + (total_size_.load() & page_mask_));
+        b.len_ = page_size_ - (total_size_.load() & page_mask_);
         return b;
     }
 
     void buffer_used(uint32_t used_bytes) {
         ASSERT(used_bytes >= 1);
         // would not span page
-        ASSERT((total_size_.load() / page_size_) ==
-               ((total_size_.load() + used_bytes - 1) / page_size_));
+        ASSERT(page_size_ == 0 ||
+               (total_size_.load() / page_size_) ==
+                   ((total_size_.load() + used_bytes - 1) / page_size_));
         total_size_.atomic_aaf(used_bytes);
     }
 
@@ -485,7 +529,7 @@ class ByteStream {
             if (RET_FAIL(prepare_space())) {
                 return ret;
             }
-            uint32_t remainder = page_size_ - (total_size_.load() % page_size_);
+            uint32_t remainder = page_size_ - (total_size_.load() & page_mask_);
             uint32_t step =
                 remainder < (len - advanced) ? remainder : (len - advanced);
             total_size_.atomic_aaf(step);
@@ -504,6 +548,7 @@ class ByteStream {
         Page* cur_;
         Page* end_;
         int64_t total_size_;
+        int64_t consumed_ = 0;
         BufferIterator(const ByteStream& bs) : host_(bs) {
             cur_ = bs.head_.load();
             end_ = bs.tail_.load();
@@ -514,13 +559,17 @@ class ByteStream {
             Buffer b;
             if (cur_ != nullptr) {
                 b.buf_ = (char*)cur_->buf_;
-                if (cur_ == end_ &&
-                    host_.total_size_.load() % host_.page_size_ != 0) {
-                    b.len_ = host_.total_size_.load() % host_.page_size_;
+                if (cur_ == end_) {
+                    // Last page: clamp to remaining total_size_. For wrapped
+                    // streams page_size_ may have been rounded up past the
+                    // user buffer (see wrap_from), so we must not return
+                    // page_size_ as the length here.
+                    b.len_ = static_cast<uint32_t>(total_size_ - consumed_);
                 } else {
                     b.len_ = host_.page_size_;
                 }
                 ASSERT(b.len_ > 0);
+                consumed_ += b.len_;
                 cur_ = cur_->next_.load();
             }
             return b;
@@ -543,6 +592,10 @@ class ByteStream {
 
         Consumer(const ByteStream& bs) : host_(bs) {
             ASSERT(bs.head_.enable_atomic());
+            reset();
+        }
+
+        void reset() {
             cur_ = nullptr;
             read_offset_within_cur_page_ = 0;
             total_end_offset_ = 0;
@@ -562,7 +615,7 @@ class ByteStream {
 
             // get tail position <tail_, total_size_> atomically
             Page* host_end = nullptr;
-            uint32_t host_total_size = 0;
+            uint64_t host_total_size = 0;
             while (true) {
                 host_end = host_.tail_.load();
                 host_total_size = host_.total_size_.load();
@@ -573,7 +626,7 @@ class ByteStream {
 
             while (true) {
                 if (cur_ == host_end) {
-                    if (host_total_size % host_.page_size_ == 0) {
+                    if ((host_total_size & host_.page_mask_) == 0) {
                         if (read_offset_within_cur_page_ == host_.page_size_) {
                             return b;
                         } else {
@@ -587,15 +640,15 @@ class ByteStream {
                         }
                     } else {
                         if (read_offset_within_cur_page_ ==
-                            (host_total_size % host_.page_size_)) {
+                            (host_total_size & host_.page_mask_)) {
                             return b;
                         } else {
                             b.buf_ = ((char*)(cur_->buf_)) +
                                      read_offset_within_cur_page_;
-                            b.len_ = (host_total_size % host_.page_size_) -
+                            b.len_ = (host_total_size & host_.page_mask_) -
                                      read_offset_within_cur_page_;
                             read_offset_within_cur_page_ =
-                                (host_total_size % host_.page_size_);
+                                (host_total_size & host_.page_mask_);
                             total_end_offset_ += b.len_;
                             return b;
                         }
@@ -625,7 +678,7 @@ class ByteStream {
     FORCE_INLINE int prepare_space() {
         int ret = common::E_OK;
         if (UNLIKELY(tail_.load() == nullptr ||
-                     total_size_.load() % page_size_ == 0)) {
+                     (total_size_.load() & page_mask_) == 0)) {
             Page* p = nullptr;
             if (RET_FAIL(alloc_page(p))) {
                 return ret;
@@ -642,7 +695,7 @@ class ByteStream {
         }
         if (UNLIKELY(read_page_ == nullptr)) {
             read_page_ = head_.load();
-        } else if (UNLIKELY(read_pos_ % page_size_ == 0)) {
+        } else if (UNLIKELY((read_pos_ & page_mask_) == 0)) {
             read_page_ = read_page_->next_.load();
         }
         if (UNLIKELY(read_page_ == nullptr)) {
@@ -678,10 +731,14 @@ class ByteStream {
     OptionalAtomic<Page*> head_;
     OptionalAtomic<Page*> tail_;
     Page* read_page_;  // only one thread is allow to reader this ByteStream
-    OptionalAtomic<uint32_t> total_size_;  // total size in byte
-    uint32_t read_pos_;                    // current reader position
-    uint32_t marked_read_pos_;             // current reader position
+    OptionalAtomic<uint64_t> total_size_;  // total size in byte
+    // 64-bit so streams that legitimately grow past 4 GiB don't truncate
+    // the read cursor (e.g. concatenated chunk buffers in the writer's
+    // write_stream_ before the next flush).
+    uint64_t read_pos_;         // current reader position
+    uint64_t marked_read_pos_;  // current reader position
     uint32_t page_size_;
+    uint32_t page_mask_;  // page_size_ - 1, for bitwise AND instead of modulo
     AllocModID mid_;
 
    public:
@@ -1181,6 +1238,7 @@ class SerializationUtil {
     // indicates that memory has been allocated and must be freed.
     FORCE_INLINE static int read_var_char_ptr(std::string*& str,
                                               ByteStream& in) {
+        str = nullptr;
         int ret = common::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
@@ -1188,7 +1246,6 @@ class SerializationUtil {
             return ret;
         } else {
             if (len == storage::NO_STR_TO_READ) {
-                str = nullptr;
                 return ret;
             } else {
                 char* tmp_buf =

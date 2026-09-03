@@ -314,6 +314,11 @@ class ITimeseriesIndex {
     virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const {
         return nullptr;
     }
+    virtual uint32_t get_value_column_count() const { return 1; }
+    virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const {
+        return col_index == 0 ? get_value_chunk_meta_list() : nullptr;
+    }
 
     virtual common::String get_measurement_name() const {
         return common::String();
@@ -346,6 +351,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
     TimeseriesIndex()
         : timeseries_meta_type_((char)255),
           chunk_meta_list_data_size_(0),
+          metadata_offset_(-1),
+          metadata_length_(0),
           measurement_name_(),
           data_type_(common::INVALID_DATATYPE),
           statistic_(nullptr),
@@ -364,6 +371,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
     {
         timeseries_meta_type_ = 0;
         chunk_meta_list_data_size_ = 0;
+        metadata_offset_ = -1;
+        metadata_length_ = 0;
         measurement_name_.reset();
         data_type_ = common::VECTOR;
         chunk_meta_list_serialized_buf_.reset();
@@ -395,6 +404,16 @@ class TimeseriesIndex : public ITimeseriesIndex {
     }
     FORCE_INLINE virtual common::TSDataType get_data_type() const {
         return data_type_;
+    }
+    FORCE_INLINE void set_metadata_range(int64_t offset, uint32_t length) {
+        metadata_offset_ = offset;
+        metadata_length_ = length;
+    }
+    FORCE_INLINE int64_t get_metadata_offset() const {
+        return metadata_offset_;
+    }
+    FORCE_INLINE uint32_t get_metadata_length() const {
+        return metadata_length_;
     }
     int init_statistic(common::TSDataType data_type) {
         if (statistic_ != nullptr &&
@@ -457,7 +476,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
                 (timeseries_meta_type_ & 0x3F);  // TODO
             chunk_meta_list_ =
                 new (chunk_meta_list_buf) common::SimpleList<ChunkMeta*>(pa);
-            uint32_t start_pos = in.read_pos();
+            uint64_t start_pos = in.read_pos();
             while (IS_SUCC(ret) &&
                    in.read_pos() < start_pos + chunk_meta_list_data_size_) {
                 void* cm_buf = pa->alloc(sizeof(ChunkMeta));
@@ -483,6 +502,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
         int ret = common::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
+        metadata_offset_ = that.metadata_offset_;
+        metadata_length_ = that.metadata_length_;
         data_type_ = that.data_type_;
 
         statistic_ = StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
@@ -555,6 +576,12 @@ class TimeseriesIndex : public ITimeseriesIndex {
     // Sum of chunk meta serialized size in List<ChunkMeta> of this timeseries.
     uint32_t chunk_meta_list_data_size_;
 
+    // Exact byte range of this TimeseriesMetadata in the source TsFile.
+    // It is assigned by TsFileIOReader after deserialization and is not part
+    // of the on-wire TimeseriesMetadata encoding.
+    int64_t metadata_offset_;
+    uint32_t metadata_length_;
+
     // std::string measurement_name_;
     common::String measurement_name_;
     common::TSDataType data_type_;
@@ -589,11 +616,17 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
     virtual common::String get_measurement_name() const {
         return value_ts_idx_->get_measurement_name();
     }
+    // Return the VALUE column's data type — that's what consumers like
+    // TsFileReader::get_timeseries_schema and metadata APIs expect for an
+    // aligned measurement.  Returning time_ts_idx_->get_data_type() would
+    // surface the time chunk's on-wire VECTOR marker (or INT64 depending
+    // on how the marker is interpreted) for every aligned timeseries,
+    // breaking schema introspection.
     virtual common::TSDataType get_data_type() const {
         return value_ts_idx_ == nullptr ? common::INVALID_DATATYPE
                                         : value_ts_idx_->get_data_type();
     }
-    virtual bool is_aligned() const { return true; }
+    bool is_aligned() const override { return true; }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
@@ -606,6 +639,52 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return os;
     }
 #endif
+};
+
+class MultiAlignedTimeseriesIndex : public ITimeseriesIndex {
+   public:
+    TimeseriesIndex* time_ts_idx_ = nullptr;
+    std::vector<TimeseriesIndex*> value_ts_idxs_;
+
+    MultiAlignedTimeseriesIndex() {}
+    ~MultiAlignedTimeseriesIndex() {}
+
+    common::SimpleList<ChunkMeta*>* get_time_chunk_meta_list() const override {
+        return time_ts_idx_ ? time_ts_idx_->get_chunk_meta_list() : nullptr;
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const override {
+        return value_ts_idxs_.empty()
+                   ? nullptr
+                   : value_ts_idxs_[0]->get_chunk_meta_list();
+    }
+    uint32_t get_value_column_count() const override {
+        return value_ts_idxs_.size();
+    }
+    common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list(
+        uint32_t col_index) const override {
+        return col_index < value_ts_idxs_.size()
+                   ? value_ts_idxs_[col_index]->get_chunk_meta_list()
+                   : nullptr;
+    }
+    common::String get_measurement_name() const override {
+        return value_ts_idxs_.empty()
+                   ? common::String()
+                   : value_ts_idxs_[0]->get_measurement_name();
+    }
+    // Same fix as AlignedTimeseriesIndex: report the first value column's
+    // type rather than the time chunk's VECTOR marker.  Consumers walking
+    // a multi-aligned device for schema info expect the measurement type.
+    common::TSDataType get_data_type() const override {
+        return value_ts_idxs_.empty() || value_ts_idxs_[0] == nullptr
+                   ? common::INVALID_DATATYPE
+                   : value_ts_idxs_[0]->get_data_type();
+    }
+    bool is_aligned() const override { return true; }
+    Statistic* get_statistic() const override { return nullptr; }
+
+    const std::vector<TimeseriesIndex*>& get_value_indices() const {
+        return value_ts_idxs_;
+    }
 };
 
 class TSMIterator {
@@ -629,7 +708,6 @@ class TSMIterator {
     common::SimpleList<ChunkMeta*>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
-    // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
              std::map<common::String, std::vector<ChunkMeta*>>,
              IDeviceIDComparator>
@@ -1070,13 +1148,35 @@ struct MetaIndexNode {
 
 class TableSchema;
 
+struct TsFilePropertyValue {
+    /** A default-constructed property represents a null value. */
+    TsFilePropertyValue() : is_null(true), value() {}
+
+    /** A vector, including an empty vector, represents a non-null value. */
+    explicit TsFilePropertyValue(const std::vector<uint8_t>& value)
+        : is_null(false), value(value) {}
+
+    /** nullptr represents null; a non-null pointer with length 0 is empty. */
+    TsFilePropertyValue(const uint8_t* data, uint32_t value_len)
+        : is_null(data == nullptr), value() {
+        if (data != nullptr && value_len > 0) {
+            value.assign(data, data + value_len);
+        }
+    }
+
+    bool is_null;
+    std::vector<uint8_t> value;
+};
+
+using TsFileProperties = std::unordered_map<std::string, TsFilePropertyValue>;
+
 struct TsFileMeta {
     typedef std::map<std::shared_ptr<IDeviceID>, std::shared_ptr<MetaIndexNode>,
                      IDeviceIDComparator>
         DeviceNodeMap;
     std::map<std::string, std::shared_ptr<MetaIndexNode>>
         table_metadata_index_node_map_;
-    std::unordered_map<std::string, std::string*> tsfile_properties_;
+    TsFileProperties tsfile_properties_;
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
         TableSchemasMap;
     TableSchemasMap table_schemas_;
@@ -1114,18 +1214,12 @@ struct TsFileMeta {
         if (bloom_filter_ != nullptr) {
             bloom_filter_->destroy();
         }
-        for (auto properties : tsfile_properties_) {
-            if (properties.second != nullptr) {
-                delete properties.second;
-                properties.second = nullptr;
-            }
-        }
         tsfile_properties_.clear();
         table_metadata_index_node_map_.clear();
         table_schemas_.clear();
     }
 
-    int serialize_to(common::ByteStream& out);
+    int serialize_to(common::ByteStream& out, int32_t& serialized_size);
 
     int deserialize_from(common::ByteStream& in);
 

@@ -173,6 +173,26 @@ storage::set_write_thread_count(4);
 
 默认情况下，当机器 CPU 核数大于 1 时自动启用并行写入，线程数设为硬件核数（上限 64）。
 
+### 本地文件读取后端
+
+Reader 可以为本地文件选择内存映射 I/O 或传统的定位读取路径。配置会在
+reader 打开文件时确定，因此修改配置不会影响已经打开的 reader。
+
+```cpp
+#include "common/global.h"
+
+common::set_file_read_backend(common::FileReadBackend::PREAD);  // 默认值
+common::set_file_read_backend(common::FileReadBackend::AUTO);   // 优先 mmap，失败时回退
+common::set_file_read_backend(common::FileReadBackend::MMAP);   // 必须使用 mmap
+```
+
+C API 可通过 `tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)` 设置相同
+选项。默认使用 `PREAD`，以保持历史读取行为不变。`AUTO` 会优先映射受支持
+的普通文件，映射不可用时自动回退到 `pread`；`MMAP` 不回退：输入不受
+支持时返回 `RET_NOT_SUPPORT`，映射失败时返回 `RET_FILE_MAP_ERR`。映射建立
+成功后会关闭原始文件描述符，映射本身会保持有效直至 reader 关闭。映射
+reader 打开期间不得修改或截断文件。
+
 ---
 
 ## 使用 TsFile
@@ -188,3 +208,22 @@ bash build.sh
 ```
 
 即可在 `./examples/build` 目录下生成可执行文件。
+
+### 文件级 Properties
+
+`TsFileWriter` 和 `TsFileTableWriter` 可以在 writer 打开期间新增或覆盖二进制
+property。传入的数据会立即复制，调用 `flush()` 后仍可继续修改；文件关闭后不能修改。
+
+```cpp
+std::vector<uint8_t> value = {0x01, 0x00, 0xFF};
+writer.add_tsfile_property("binary-property", value);
+
+// nullptr 且长度为 0 表示 null；空 vector 表示非 null 的零长度值。
+writer.add_tsfile_property("null-property", nullptr, 0);
+writer.add_tsfile_property("empty-property", std::vector<uint8_t>());
+
+storage::TsFileProperties properties = reader.get_tsfile_properties();
+```
+
+Property value 本身不保存数据类型。整数、浮点数或结构体应由应用使用明确、可跨语言的
+字节编码进行转换。

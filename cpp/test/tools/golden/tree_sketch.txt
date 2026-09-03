@@ -1,0 +1,150 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_complex_tree_golden.tsfile
+file length: 1785
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of root.t3, num of Chunks:3
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] root.t3 size=9
+                  17|	[Chunk] of root.t3.xx, startTime: 0 endTime: 19 count: 20 [firstValue=true, lastValue=false, sumValue=10]
+                  17|		[Chunk Header] marker=5, measurementID=xx, dataSize=25, dataType=BOOLEAN, compressionType=LZ4, encodingType=PLAIN, size=8
+                  25|			[Page Header]  HeaderSize:2, UncompressedSize:45, CompressedSize:23
+                  27|			[Page Data]  Size:23
+                  50|	[Chunk] of root.t3.xx_double, startTime: 0 endTime: 19 count: 20 [minValue:10.5,maxValue:29.5,firstValue:10.5,lastValue:29.5,sumValue:400.0]
+                  50|		[Chunk Header] marker=5, measurementID=xx_double, dataSize=48, dataType=DOUBLE, compressionType=LZ4, encodingType=GORILLA, size=15
+                  65|			[Page Header]  HeaderSize:2, UncompressedSize:59, CompressedSize:46
+                  67|			[Page Data]  Size:46
+                 113|	[Chunk] of root.t3.xx_text, startTime: 0 endTime: 19 count: 20 [firstValue:xx_0,lastValue:xx_19]
+                 113|		[Chunk Header] marker=5, measurementID=xx_text, dataSize=102, dataType=TEXT, compressionType=LZ4, encodingType=PLAIN, size=13
+                 126|			[Page Header]  HeaderSize:4, UncompressedSize:135, CompressedSize:99
+                 130|			[Page Data]  Size:99
+||||||||||||||||||||| [ChunkGroup] of root.t3 ends
+||||||||||||||||||||| [ChunkGroup] of root.test.d1, num of Chunks:5
+                 228|	[ChunkGroup Header]
+                 228|		[marker] 0
+                 229|		[deviceID] root.test.d1 size=14
+                 243|	[Chunk] of root.test.d1.m1, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:19,firstValue:0,lastValue:19,sumValue:190]
+                 243|		[Chunk Header] marker=5, measurementID=m1, dataSize=24, dataType=INT32, compressionType=LZ4, encodingType=TS_2DIFF, size=8
+                 251|			[Page Header]  HeaderSize:2, UncompressedSize:41, CompressedSize:22
+                 253|			[Page Data]  Size:22
+                 275|	[Chunk] of root.test.d1.m2, startTime: 0 endTime: 19 count: 20 [minValue:0.5,maxValue:19.5,firstValue:0.5,lastValue:19.5,sumValue:200.0]
+                 275|		[Chunk Header] marker=5, measurementID=m2, dataSize=53, dataType=DOUBLE, compressionType=LZ4, encodingType=GORILLA, size=8
+                 283|			[Page Header]  HeaderSize:3, UncompressedSize:64, CompressedSize:51
+                 286|			[Page Data]  Size:51
+                 336|	[Chunk] of root.test.d1.m3, startTime: 0 endTime: 19 count: 20 [firstValue:value_0,lastValue:value_19]
+                 336|		[Chunk Header] marker=5, measurementID=m3, dataSize=108, dataType=TEXT, compressionType=LZ4, encodingType=PLAIN, size=8
+                 344|			[Page Header]  HeaderSize:4, UncompressedSize:195, CompressedSize:105
+                 348|			[Page Data]  Size:105
+                 452|	[Chunk] of root.test.d1.m4, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:38,firstValue:0,lastValue:38,sumValue:380]
+                 452|		[Chunk Header] marker=5, measurementID=m4, dataSize=24, dataType=INT32, compressionType=LZ4, encodingType=TS_2DIFF, size=8
+                 460|			[Page Header]  HeaderSize:2, UncompressedSize:41, CompressedSize:22
+                 462|			[Page Data]  Size:22
+                 484|	[Chunk] of root.test.d1.m5, startTime: 0 endTime: 19 count: 20 [minValue:100.5,maxValue:119.5,firstValue:100.5,lastValue:119.5,sumValue:2200.0]
+                 484|		[Chunk Header] marker=5, measurementID=m5, dataSize=48, dataType=DOUBLE, compressionType=LZ4, encodingType=GORILLA, size=8
+                 492|			[Page Header]  HeaderSize:2, UncompressedSize:58, CompressedSize:46
+                 494|			[Page Data]  Size:46
+||||||||||||||||||||| [ChunkGroup] of root.test.d1 ends
+||||||||||||||||||||| [ChunkGroup] of root.test2.d2.t2, num of Chunks:3
+                 540|	[ChunkGroup Header]
+                 540|		[marker] 0
+                 541|		[deviceID] root.test2.d2.t2 size=18
+                 559|	[Chunk] of root.test2.d2.t2.xxx, startTime: 0 endTime: 19 count: 20 [minValue:0.25,maxValue:19.25,firstValue:0.25,lastValue:19.25,sumValue:195.0]
+                 559|		[Chunk Header] marker=5, measurementID=xxx, dataSize=52, dataType=FLOAT, compressionType=LZ4, encodingType=GORILLA, size=9
+                 568|			[Page Header]  HeaderSize:2, UncompressedSize:60, CompressedSize:50
+                 570|			[Page Data]  Size:50
+                 620|	[Chunk] of root.test2.d2.t2.xxx_int, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:190,firstValue:0,lastValue:190,sumValue:1900.0]
+                 620|		[Chunk Header] marker=5, measurementID=xxx_int, dataSize=28, dataType=INT64, compressionType=LZ4, encodingType=TS_2DIFF, size=13
+                 633|			[Page Header]  HeaderSize:2, UncompressedSize:49, CompressedSize:26
+                 635|			[Page Data]  Size:26
+                 661|	[Chunk] of root.test2.d2.t2.xxx_text, startTime: 0 endTime: 19 count: 20 [firstValue:xxx_0,lastValue:xxx_19]
+                 661|		[Chunk Header] marker=5, measurementID=xxx_text, dataSize=104, dataType=TEXT, compressionType=LZ4, encodingType=PLAIN, size=14
+                 675|			[Page Header]  HeaderSize:4, UncompressedSize:155, CompressedSize:101
+                 679|			[Page Data]  Size:101
+||||||||||||||||||||| [ChunkGroup] of root.test2.d2.t2 ends
+                 796|	[marker] 2
+                 797|	[TimeseriesMetadata] of root.t3.xx, tsDataType:BOOLEAN, sizeWithoutChunkMetadata:33, startTime: 0 endTime: 19 count: 20 [firstValue=true, lastValue=false, sumValue=10]
+                 830|		[ChunkMetadata] offset=17, size=8
+                 838|	[TimeseriesMetadata] of root.t3.xx_double, tsDataType:DOUBLE, sizeWithoutChunkMetadata:70, startTime: 0 endTime: 19 count: 20 [minValue:10.5,maxValue:29.5,firstValue:10.5,lastValue:29.5,sumValue:400.0]
+                 908|		[ChunkMetadata] offset=50, size=8
+                 916|	[TimeseriesMetadata] of root.t3.xx_text, tsDataType:TEXT, sizeWithoutChunkMetadata:45, startTime: 0 endTime: 19 count: 20 [firstValue:xx_0,lastValue:xx_19]
+                 961|		[ChunkMetadata] offset=113, size=8
+                 969|	[TimeseriesMetadata] of root.test.d1.m1, tsDataType:INT32, sizeWithoutChunkMetadata:47, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:19,firstValue:0,lastValue:19,sumValue:190]
+                1016|		[ChunkMetadata] offset=243, size=8
+                1024|	[TimeseriesMetadata] of root.test.d1.m2, tsDataType:DOUBLE, sizeWithoutChunkMetadata:63, startTime: 0 endTime: 19 count: 20 [minValue:0.5,maxValue:19.5,firstValue:0.5,lastValue:19.5,sumValue:200.0]
+                1087|		[ChunkMetadata] offset=275, size=8
+                1095|	[TimeseriesMetadata] of root.test.d1.m3, tsDataType:TEXT, sizeWithoutChunkMetadata:46, startTime: 0 endTime: 19 count: 20 [firstValue:value_0,lastValue:value_19]
+                1141|		[ChunkMetadata] offset=336, size=8
+                1149|	[TimeseriesMetadata] of root.test.d1.m4, tsDataType:INT32, sizeWithoutChunkMetadata:47, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:38,firstValue:0,lastValue:38,sumValue:380]
+                1196|		[ChunkMetadata] offset=452, size=8
+                1204|	[TimeseriesMetadata] of root.test.d1.m5, tsDataType:DOUBLE, sizeWithoutChunkMetadata:63, startTime: 0 endTime: 19 count: 20 [minValue:100.5,maxValue:119.5,firstValue:100.5,lastValue:119.5,sumValue:2200.0]
+                1267|		[ChunkMetadata] offset=484, size=8
+                1275|	[TimeseriesMetadata] of root.test2.d2.t2.xxx, tsDataType:FLOAT, sizeWithoutChunkMetadata:48, startTime: 0 endTime: 19 count: 20 [minValue:0.25,maxValue:19.25,firstValue:0.25,lastValue:19.25,sumValue:195.0]
+                1323|		[ChunkMetadata] offset=559, size=8
+                1331|	[TimeseriesMetadata] of root.test2.d2.t2.xxx_int, tsDataType:INT64, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:190,firstValue:0,lastValue:190,sumValue:1900.0]
+                1399|		[ChunkMetadata] offset=620, size=8
+                1407|	[TimeseriesMetadata] of root.test2.d2.t2.xxx_text, tsDataType:TEXT, sizeWithoutChunkMetadata:48, startTime: 0 endTime: 19 count: 20 [firstValue:xxx_0,lastValue:xxx_19]
+                1455|		[ChunkMetadata] offset=661, size=8
+                1463|	[MetadataIndexNode]
+                1463|		 childrenCnt=1
+                1464|		<xx, 797>
+                1475|		endOffset=969
+                1483|		nodeType=LEAF_MEASUREMENT
+                1484|	[MetadataIndexNode]
+                1484|		 childrenCnt=1
+                1485|		<m1, 969>
+                1496|		endOffset=1275
+                1504|		nodeType=LEAF_MEASUREMENT
+                1505|	[MetadataIndexNode]
+                1505|		 childrenCnt=1
+                1506|		<xxx, 1275>
+                1518|		endOffset=1463
+                1526|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                1527|	TableIndexRootCnt=3
+                1531|	[Table Name] root, size=8
+                1539|	[MetadataIndexNode]
+                1539|		 childrenCnt=1
+                1540|		<root.t3, 1463>
+                1557|		endOffset=1484
+                1565|		nodeType=LEAF_DEVICE
+                1566|	[Table Name] root.test, size=13
+                1579|	[MetadataIndexNode]
+                1579|		 childrenCnt=1
+                1580|		<root.test.d1, 1484>
+                1602|		endOffset=1505
+                1610|		nodeType=LEAF_DEVICE
+                1611|	[Table Name] root.test2.d2, size=17
+                1628|	[MetadataIndexNode]
+                1628|		 childrenCnt=1
+                1629|		<root.test2.d2.t2, 1505>
+                1655|		endOffset=1527
+                1663|		nodeType=LEAF_DEVICE
+                1664|	TableSchemaCnt=0
+                1668|	[Meta Offset] 796
+                1676|	[Bloom Filter Size] bit vector byte array length=325
+                1680|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                1775|	[TsFileMetadataSize] 248
+                1779|	[magic tail] TsFile
+                1785|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+root
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[root.t3,1463]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[xx,797]
+root.test
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[root.test.d1,1484]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[m1,969]
+root.test2.d2
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[root.test2.d2.t2,1505]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[xxx,1275]
+---------------------------------- TsFile Sketch End ----------------------------------

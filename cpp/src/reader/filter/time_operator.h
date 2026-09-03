@@ -47,6 +47,9 @@ class TimeBetween : public Filter {
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange*>* get_time_ranges();
+
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -99,6 +102,8 @@ class TimeEq : public Filter {
 
     std::vector<TimeRange*>* get_time_ranges();
 
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -122,6 +127,9 @@ class TimeNotEq : public Filter {
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange*>* get_time_ranges();
+
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -146,6 +154,8 @@ class TimeGt : public Filter {
 
     std::vector<TimeRange*>* get_time_ranges();
 
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -169,6 +179,9 @@ class TimeGtEq : public Filter {
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange*>* get_time_ranges();
+
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     void reset_value(int64_t val) { value_ = val; }
     FilterType get_filter_type() { return type_; }
 
@@ -194,6 +207,8 @@ class TimeLt : public Filter {
 
     std::vector<TimeRange*>* get_time_ranges();
 
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -217,6 +232,9 @@ class TimeLtEq : public Filter {
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange*>* get_time_ranges();
+
+    int satisfy_batch_time(const int64_t* times, int count, bool* mask);
+
     FilterType get_filter_type() { return type_; }
 
    private:

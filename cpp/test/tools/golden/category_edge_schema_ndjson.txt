@@ -1,0 +1,4 @@
+{"model":"table","object":"category_edge","column":"event_time","category":"TIME","data_type":"TIMESTAMP","encoding":null,"compression":null}
+{"model":"table","object":"category_edge","column":"owner","category":"ATTRIBUTE","data_type":"STRING","encoding":null,"compression":null}
+{"model":"table","object":"category_edge","column":"site","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"category_edge","column":"temp","category":"FIELD","data_type":"DOUBLE","encoding":"PLAIN","compression":"UNCOMPRESSED"}

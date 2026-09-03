@@ -36,7 +36,11 @@ bash build.sh -a=ON              # Enable AddressSanitizer
 bash build.sh -c=ON              # Enable code coverage
 
 # Disable optional compression libraries
-bash build.sh --disable-snappy --disable-lz4 --disable-lzokay --disable-zlib
+bash build.sh --disable-snappy --disable-lz4 --disable-lzokay --disable-zlib \
+  --disable-zstd --disable-lzma2
+
+# LZMA2 is opt-in; its bundled XZ build requires CMake 3.20+
+bash build.sh --enable-lzma2=ON
 
 # Or use CMake directly
 mkdir -p build/Release && cd build/Release
@@ -61,10 +65,11 @@ All `ON` by default unless noted:
 |--------|---------|
 | `BUILD_TEST` | Compile tests (GTest 1.12.1, auto-downloaded) |
 | `ENABLE_ANTLR4` | ANTLR4 parser runtime |
-| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` | Compression libraries |
+| `ENABLE_SNAPPY` / `ENABLE_LZ4` / `ENABLE_LZOKAY` / `ENABLE_ZLIB` / `ENABLE_ZSTD` | Compression libraries |
+| `ENABLE_LZMA2` | LZMA2 compression (`OFF` by default; bundled XZ requires CMake 3.20+) |
 | `ENABLE_THREADS` | Multi-threaded read/write via pthreads |
 | `ENABLE_ASAN` | AddressSanitizer (`OFF` by default) |
-| `ENABLE_SIMDE` | SIMD Everywhere (`OFF` by default) |
+| `ENABLE_SIMD` | SIMD acceleration |
 
 ## Source Structure
 
@@ -83,10 +88,13 @@ cpp/src/
 
 ## Architecture Notes
 
-- **C++11** standard, targets CMake 3.11+
+- **C++11** standard, targets CMake 3.11+; bundled XZ/LZMA2 requires CMake
+  3.20+, while older CMake can enable LZMA2 with a compatible system liblzma
 - Dual data model: **tree-view** (`TsFileTreeWriter/Reader`) and **table-view** (`TsFileTableWriter`, `TableQueryExecutor`)
 - Parallel column encoding in table write path, controlled by `ENABLE_THREADS`
-- Third-party libraries are bundled under `third_party/` (ANTLR4, Snappy, LZ4, LZOKAY, Zlib, SIMDe)
+- Third-party dependencies are either retained under `third_party/` or resolved
+  from compatible system packages and verified source archives; see
+  `third_party/README.md`.
 - `cwrapper/` provides the C API that the Python module binds to via Cython
 
 ## Code Style

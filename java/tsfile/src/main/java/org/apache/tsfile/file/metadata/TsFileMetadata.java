@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.encrypt.EncryptException;
@@ -45,7 +46,7 @@ public class TsFileMetadata {
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
   private Map<String, TableSchema> tableSchemaMap;
   private boolean hasTableSchemaMapCache;
-  private Map<String, String> tsFileProperties;
+  private Map<String, byte[]> tsFileProperties;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
@@ -117,21 +118,30 @@ public class TsFileMetadata {
 
     if (buffer.hasRemaining()) {
       int propertiesSize = ReadWriteForEncodingUtils.readVarInt(buffer);
-      Map<String, String> propertiesMap = new HashMap<>();
+      Map<String, byte[]> propertiesMap = new HashMap<>();
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
-        String value = ReadWriteIOUtils.readVarIntString(buffer);
+        int valueSize = ReadWriteForEncodingUtils.readVarInt(buffer);
+        if ("encryptKey".equals(key) && valueSize >= 0) {
+          EncryptUtils.validateSecondKeyStringLength(valueSize);
+        }
+        byte[] value = null;
+        if (valueSize >= 0) {
+          value = new byte[valueSize];
+          buffer.get(value);
+        }
         propertiesMap.put(key, value);
       }
+      String encryptLevel = getPropertyAsString(propertiesMap, "encryptLevel");
       // if the file is not encrypted, set the default value(for compatible reason)
-      if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
-        propertiesMap.put("encryptLevel", "0");
-        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
-        propertiesMap.put("encryptKey", "");
-      } else if (propertiesMap.get("encryptLevel").equals("0")) {
-        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
-        propertiesMap.put("encryptKey", "");
-      } else if (propertiesMap.get("encryptLevel").equals("1")) {
+      if (!propertiesMap.containsKey("encryptLevel") || encryptLevel == null) {
+        propertiesMap.put("encryptLevel", stringToBytes("0"));
+        propertiesMap.put("encryptType", stringToBytes("org.apache.tsfile.encrypt.UNENCRYPTED"));
+        propertiesMap.put("encryptKey", stringToBytes(""));
+      } else if (encryptLevel.equals("0")) {
+        propertiesMap.put("encryptType", stringToBytes("org.apache.tsfile.encrypt.UNENCRYPTED"));
+        propertiesMap.put("encryptKey", stringToBytes(""));
+      } else if (encryptLevel.equals("1")) {
         if (!propertiesMap.containsKey("encryptType")) {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_no_encrypt_type", 1));
@@ -140,15 +150,15 @@ public class TsFileMetadata {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_no_encrypt_key", 1));
         }
-        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+        String encryptKey = getPropertyAsString(propertiesMap, "encryptKey");
+        if (encryptKey == null || encryptKey.isEmpty()) {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_null_encrypt_key", 1));
         }
-        String str = propertiesMap.get("encryptKey");
         fileMetaData.encryptLevel = 1;
-        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(str);
-        fileMetaData.encryptType = propertiesMap.get("encryptType");
-      } else if (propertiesMap.get("encryptLevel").equals("2")) {
+        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(encryptKey);
+        fileMetaData.encryptType = getPropertyAsString(propertiesMap, "encryptType");
+      } else if (encryptLevel.equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_no_encrypt_type", 2));
@@ -157,19 +167,17 @@ public class TsFileMetadata {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_no_encrypt_key", 2));
         }
-        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+        String encryptKey = getPropertyAsString(propertiesMap, "encryptKey");
+        if (encryptKey == null || encryptKey.isEmpty()) {
           throw new EncryptException(
               Messages.format("error.file.tsfile_metadata_null_encrypt_key", 2));
         }
         fileMetaData.encryptLevel = 2;
-        String str = propertiesMap.get("encryptKey");
-        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(str);
-        fileMetaData.encryptType = propertiesMap.get("encryptType");
+        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(encryptKey);
+        fileMetaData.encryptType = getPropertyAsString(propertiesMap, "encryptType");
       } else {
         throw new EncryptException(
-            Messages.format(
-                "error.file.tsfile_metadata_unsupported_encrypt_level",
-                propertiesMap.get("encryptLevel")));
+            Messages.format("error.file.tsfile_metadata_unsupported_encrypt_level", encryptLevel));
       }
       fileMetaData.tsFileProperties = propertiesMap;
     }
@@ -177,7 +185,7 @@ public class TsFileMetadata {
     return fileMetaData;
   }
 
-  public void addProperty(String key, String value) {
+  public void addProperty(String key, byte[] value) {
     if (tsFileProperties == null) {
       tsFileProperties = new HashMap<>();
     }
@@ -248,9 +256,15 @@ public class TsFileMetadata {
         ReadWriteForEncodingUtils.writeVarInt(
             tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
     if (tsFileProperties != null) {
-      for (Entry<String, String> entry : tsFileProperties.entrySet()) {
+      for (Entry<String, byte[]> entry : tsFileProperties.entrySet()) {
         byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
-        byteLen += ReadWriteIOUtils.writeVar(entry.getValue(), outputStream);
+        byte[] value = entry.getValue();
+        byteLen +=
+            ReadWriteForEncodingUtils.writeVarInt(value == null ? -1 : value.length, outputStream);
+        if (value != null) {
+          outputStream.write(value);
+          byteLen += value.length;
+        }
       }
     }
 
@@ -295,7 +309,16 @@ public class TsFileMetadata {
     return tableSchemaMap;
   }
 
-  public Map<String, String> getTsFileProperties() {
+  public Map<String, byte[]> getTsFileProperties() {
     return tsFileProperties;
+  }
+
+  private static String getPropertyAsString(Map<String, byte[]> properties, String key) {
+    byte[] value = properties.get(key);
+    return value == null ? null : new String(value, TSFileConfig.STRING_CHARSET);
+  }
+
+  private static byte[] stringToBytes(String value) {
+    return value.getBytes(TSFileConfig.STRING_CHARSET);
   }
 }

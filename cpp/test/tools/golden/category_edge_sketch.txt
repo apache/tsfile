@@ -1,0 +1,20 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_category_edge_golden.tsfile
+file length: 222
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+                  24|	[marker] 2
+||||||||||||||||||||| [TsFileMetadata] begins
+                  25|	TableIndexRootCnt=0
+                  29|	TableSchemaCnt=1
+                  33|	[TableSchema] TableSchema{tableName='category_edge', columnSchemas=[[event_time,TIMESTAMP,PLAIN,,UNCOMPRESSED], [owner,STRING,PLAIN,,UNCOMPRESSED], [site,STRING,PLAIN,,UNCOMPRESSED], [temp,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TIME, ATTRIBUTE, TAG, FIELD]}, size=84
+                 134|	[Meta Offset] 24
+||||||||||||||||||||| [TsFileMetadata] ends
+                 212|	[TsFileMetadataSize] 187
+                 216|	[magic tail] TsFile
+                 222|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+---------------------------------- TsFile Sketch End ----------------------------------

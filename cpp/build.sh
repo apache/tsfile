@@ -20,6 +20,7 @@
 # build_type=MinSizeRel
 build_type=Release
 build_test=0
+build_shared=ON
 build_bench=0
 do_install=0
 use_cpp11=1
@@ -32,6 +33,10 @@ enable_snappy=ON
 enable_lz4=ON
 enable_lzokay=ON
 enable_zlib=ON
+enable_zstd=ON
+# Keep the default build compatible with CMake 3.11-era industrial toolchains.
+# Bundled XZ Utils requires CMake 3.20+, so LZMA2 must be enabled explicitly.
+enable_lzma2=OFF
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
 
@@ -52,6 +57,9 @@ Options:
   -t=<type>, -t <type>   Build type: Debug, Release, RelWithDebInfo, MinSizeRel.
   -a=<ON|OFF>            Enable or disable AddressSanitizer.
   -c=<ON|OFF>            Enable or disable code coverage.
+  --build-shared=<ON|OFF>
+                         Build libtsfile as a shared library (default: ON).
+  --build-static         Build libtsfile as a static library.
   --enable-antlr4=<ON|OFF>
   --disable-antlr4
   --enable-snappy=<ON|OFF>
@@ -62,6 +70,12 @@ Options:
   --disable-lzokay
   --enable-zlib=<ON|OFF>
   --disable-zlib
+  --enable-zstd=<ON|OFF>
+  --disable-zstd
+  --enable-lzma2=<ON|OFF>
+                         Enable LZMA2 explicitly (default: OFF; bundled XZ
+                         requires CMake 3.20 or newer).
+  --disable-lzma2
   -h, --help             Show this help message.
 EOF
 }
@@ -70,6 +84,7 @@ function print_config()
 {
   echo "build_type=$build_type"
   echo "build_test=$build_test"
+  echo "build_shared=$build_shared"
   echo "do_install=$do_install"
   echo "use_cpp11=$use_cpp11"
   echo "enable_cov=$enable_cov"
@@ -79,6 +94,8 @@ function print_config()
   echo "enable_lz4=$enable_lz4"
   echo "enable_lzokay=$enable_lzokay"
   echo "enable_zlib=$enable_zlib"
+  echo "enable_zstd=$enable_zstd"
+  echo "enable_lzma2=$enable_lzma2"
 }
 
 function run_test_for_cov()
@@ -113,6 +130,10 @@ parse_options()
     -c)
       shift
       enable_cov=$(get_key_value "$1");;
+    --build-shared=*)
+      build_shared=$(get_key_value "$1");;
+    --build-static)
+      build_shared=OFF;;
     --enable-antlr4=*)
       enable_antlr4=$(get_key_value "$1");;
     --enable-snappy=*)
@@ -123,6 +144,10 @@ parse_options()
       enable_lzokay=$(get_key_value "$1");;
     --enable-zlib=*)
       enable_zlib=$(get_key_value "$1");;
+    --enable-zstd=*)
+      enable_zstd=$(get_key_value "$1");;
+    --enable-lzma2=*)
+      enable_lzma2=$(get_key_value "$1");;
     --disable-antlr4)
       enable_antlr4=OFF;;
     --disable-snappy)
@@ -133,6 +158,10 @@ parse_options()
       enable_lzokay=OFF;;
     --disable-zlib)
       enable_zlib=OFF;;
+    --disable-zstd)
+      enable_zstd=OFF;;
+    --disable-lzma2)
+      enable_lzma2=OFF;;
     -h | --help)
       usage
       exit 0;;
@@ -190,6 +219,7 @@ cmake ../../                           \
   -DZLIB=$zlib_project_dir/install     \
   -DLZ4LIB=$lz4lib_project_dir         \
   -DBUILD_TEST=$build_test             \
+  -DTSFILE_BUILD_SHARED=$build_shared  \
   -DCMAKE_BUILD_TYPE=$build_type       \
   -DUSE_CPP11=$use_cpp11               \
   -DENABLE_COV=$enable_cov             \
@@ -199,7 +229,9 @@ cmake ../../                           \
   -DENABLE_SNAPPY=$enable_snappy       \
   -DENABLE_LZ4=$enable_lz4             \
   -DENABLE_LZOKAY=$enable_lzokay       \
-  -DENABLE_ZLIB=$enable_zlib
+  -DENABLE_ZLIB=$enable_zlib           \
+  -DENABLE_ZSTD=$enable_zstd           \
+  -DENABLE_LZMA2=$enable_lzma2
 
 VERBOSE=1 make
 if [ ${do_install} -eq 1 ]

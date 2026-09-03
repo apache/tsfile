@@ -143,7 +143,7 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
 }
 
 void DeviceMetaIterator::try_setup_direct_lookup(MetaIndexNode* root_node) {
-    if (id_filter_ == nullptr) return;
+    if (id_filter_ == nullptr || root_node == nullptr) return;
 
     const auto* eq = dynamic_cast<const TagEq*>(id_filter_);
     if (eq == nullptr) return;
@@ -186,7 +186,17 @@ int DeviceMetaIterator::load_results_direct() {
     ret = io_reader_->load_device_index_entry(device_comparable,
                                               device_index_entry, end_offset);
 
-    if (ret != common::E_OK || device_index_entry == nullptr) {
+    // "Device not present in this file" is the only ret value we should
+    // suppress.  Read failures and corrupt index entries used to be folded
+    // into "no matches"; the caller then couldn't distinguish a clean miss
+    // from a partial read that silently dropped real data.  Surface them.
+    if (ret == common::E_DEVICE_NOT_EXIST || ret == common::E_NOT_EXIST) {
+        return common::E_OK;
+    }
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    if (device_index_entry == nullptr) {
         return common::E_OK;
     }
 

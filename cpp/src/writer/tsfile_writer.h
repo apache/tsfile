@@ -33,7 +33,6 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
-#include "utils/util_define.h"  // mode_t and other platform-compat shims
 
 namespace storage {
 class WriteFile;
@@ -46,9 +45,12 @@ namespace storage {
 
 extern int libtsfile_init();
 extern void libtsfile_destroy();
-extern void set_page_max_point_count(uint32_t page_max_ponint_count);
-extern void set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
-extern void set_strict_page_size(bool strict_page_size);
+// Returns common::E_INVALID_ARG when count would freeze the chunk writers
+// (i.e. less than 1); leaves the field untouched on rejection.
+extern int set_page_max_point_count(uint32_t page_max_ponint_count);
+// Returns common::E_INVALID_ARG when degree < 2 (which collapses the index
+// tree); leaves the field untouched on rejection.
+extern int set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
 
 class TsFileWriter {
    public:
@@ -82,6 +84,12 @@ class TsFileWriter {
     int write_tree(const TsRecord& record);
     int write_table(Tablet& tablet);
 
+    /** Add or replace a binary file-level property while the writer is open. */
+    int add_tsfile_property(const std::string& key, const uint8_t* value,
+                            uint32_t value_len);
+    int add_tsfile_property(const std::string& key,
+                            const std::vector<uint8_t>& value);
+
     typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup*,
                      IDeviceIDComparator>
         DeviceSchemasMap;
@@ -98,6 +106,7 @@ class TsFileWriter {
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name) const;
     int64_t calculate_mem_size_for_all_group();
+    int64_t calculate_meta_mem_size() const;
     int check_memory_size_and_may_flush_chunks();
     /*
      * Flush buffer to disk file, but do not writer file index part.
@@ -125,25 +134,15 @@ class TsFileWriter {
         int32_t time_pages_before,
         const std::vector<int32_t>& value_pages_before);
     int flush_chunk_group(MeasurementSchemaGroup* chunk_group, bool is_aligned);
+    int flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
+                                  bool is_aligned);
 
+    // Numeric columns (bool/int32/int64/float/double) share one body:
+    // non-aligned ChunkWriter skips null rows entirely.  Defined in the .cc;
+    // every instantiation lives in that translation unit.
+    template <typename T>
     int write_typed_column(storage::ChunkWriter* chunk_writer,
-                           int64_t* timestamps, bool* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter* chunk_writer,
-                           int64_t* timestamps, int32_t* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter* chunk_writer,
-                           int64_t* timestamps, int64_t* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter* chunk_writer,
-                           int64_t* timestamps, float* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter* chunk_writer,
-                           int64_t* timestamps, double* col_values,
+                           int64_t* timestamps, T* col_values,
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ChunkWriter* chunk_writer, int64_t* timestamps,
@@ -196,41 +195,33 @@ class TsFileWriter {
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
-    bool enforce_recovered_last_time_order_;
+    // Only the recovery init path sets this true: subsequent writes must
+    // refuse timestamps <= the recovered per-device last_time_ so the chunk
+    // ordering invariants preserved by RestorableTsFileIOWriter are not
+    // broken by appending older data.
+    bool enforce_recovered_last_time_order_ = false;
+    bool table_aligned_ = true;
+    // Set once a partial-write failure leaves the per-column chunk writers
+    // out of sync (e.g. parallel aligned tablet write where one task fails
+    // mid-way while others succeed).  Subsequent write/flush/close calls
+    // refuse to operate so that the on-disk file isn't sealed with row
+    // counts that disagree between time and value columns.
+    bool unrecoverable_ = false;
+    // Test-only accessor for the unrecoverable contract: real triggers
+    // (parallel task failure, out-of-order timestamps across multiple chunk
+    // writers) are hard to drive deterministically, but the contract —
+    // flush/close refuse — can be unit-tested directly.
+    friend class TsFileWriterUnrecoverableTest;
 
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, bool* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, double* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps,
-                           Tablet::StringColumn* string_col,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, float* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, int32_t* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, int64_t* col_values,
-                           common::BitMap& col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int value_write_column(ValueChunkWriter* value_chunk_writer,
+    int write_column_batch(storage::ChunkWriter* chunk_writer,
                            const Tablet& tablet, int col_idx,
                            uint32_t start_idx, uint32_t end_idx);
+    int time_write_column_batch(TimeChunkWriter* time_chunk_writer,
+                                const Tablet& tablet, uint32_t start_idx,
+                                uint32_t end_idx);
+    int value_write_column_batch(ValueChunkWriter* value_chunk_writer,
+                                 const Tablet& tablet, int col_idx,
+                                 uint32_t start_idx, uint32_t end_idx);
 };
 
 }  // end namespace storage

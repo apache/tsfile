@@ -35,12 +35,23 @@
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
         <build.test>ON</build.test>
+        <tsfile.build.shared>ON</tsfile.build.shared>
+        <tsfile.dependency.source>AUTO</tsfile.dependency.source>
+        <tsfile.dependency.offline>OFF</tsfile.dependency.offline>
+        <tsfile.dependency.cache>${project.build.directory}/dependency-cache</tsfile.dependency.cache>
         <enable.snappy>ON</enable.snappy>
         <enable.lz4>ON</enable.lz4>
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
+        <enable.zstd>ON</enable.zstd>
+        <!--
+            Keep Maven's default build compatible with CMake 3.11-era
+            industrial toolchains. Bundled XZ Utils requires CMake 3.20+;
+            explicitly pass -Denable.lzma2=ON on a compatible build host.
+        -->
+        <enable.lzma2>OFF</enable.lzma2>
         <enable.antlr4>ON</enable.antlr4>
-        <enable.simde>OFF</enable.simde>
+        <enable.simd>ON</enable.simd>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -82,12 +93,18 @@
                                 <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
                                 <option>-DENABLE_ASAN=${enable.asan}</option>
                                 <option>-DBUILD_TEST=${build.test}</option>
+                                <option>-DTSFILE_BUILD_SHARED=${tsfile.build.shared}</option>
+                                <option>-DTSFILE_DEPENDENCY_SOURCE=${tsfile.dependency.source}</option>
+                                <option>-DTSFILE_DEPENDENCY_OFFLINE=${tsfile.dependency.offline}</option>
+                                <option>-DTSFILE_DEPENDENCY_CACHE=${tsfile.dependency.cache}</option>
                                 <option>-DENABLE_ANTLR4=${enable.antlr4}</option>
                                 <option>-DENABLE_SNAPPY=${enable.snappy}</option>
                                 <option>-DENABLE_LZ4=${enable.lz4}</option>
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
-                                <option>-DENABLE_SIMDE=${enable.simde}</option>
+                                <option>-DENABLE_ZSTD=${enable.zstd}</option>
+                                <option>-DENABLE_LZMA2=${enable.lzma2}</option>
+                                <option>-DENABLE_SIMD=${enable.simd}</option>
                                 <!--
                                     The Visual Studio generator additionally
                                     needs -DCMAKE_GENERATOR_PLATFORM (and
@@ -99,8 +116,8 @@
                                     plugin's generate goal throw an NPE.
                                 -->
                             </options>
-                            <sourcePath />
-                            <targetPath />
+                            <sourcePath/>
+                            <targetPath/>
                         </configuration>
                     </execution>
                     <!-- Compile the test code -->
@@ -282,6 +299,32 @@
                                 <configuration>
                                     <options combine.children="append">
                                         <option>-DCMAKE_GENERATOR_TOOLSET=${msvc.toolset}</option>
+                                    </options>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Generate compile_commands.json for the standalone Cppcheck CI job.
+            This profile only changes the CMake configure step; it does not run
+            Cppcheck or add static analysis to normal C++ builds.
+        -->
+        <profile>
+            <id>with-cppcheck</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</option>
                                     </options>
                                 </configuration>
                             </execution>

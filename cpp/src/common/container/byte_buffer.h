@@ -52,13 +52,18 @@ class ByteBuffer {
 
     FORCE_INLINE void reset() { real_data_size_ = 0; }
 
-    FORCE_INLINE void extend_memory(uint32_t new_size) {
+    FORCE_INLINE int extend_memory(uint32_t new_size) {
         ASSERT(new_size > reserved_size_);
-        data_ = static_cast<char*>(mem_realloc(data_, new_size));
+        char* new_data = static_cast<char*>(mem_realloc(data_, new_size));
+        if (UNLIKELY(new_data == nullptr)) {
+            return E_OOM;
+        }
+        data_ = new_data;
         reserved_size_ = new_size;
+        return E_OK;
     }
 
-    FORCE_INLINE void append_variable_value(const char* value, uint32_t len) {
+    FORCE_INLINE int append_variable_value(const char* value, uint32_t len) {
         // dynamic growth
         if (UNLIKELY((real_data_size_ + len + variable_type_len_) >
                      reserved_size_)) {
@@ -67,7 +72,9 @@ class ByteBuffer {
                 g_config_value_.tsblock_mem_inc_step_size_ > len
                     ? g_config_value_.tsblock_mem_inc_step_size_
                     : (len + 1);
-            extend_memory(reserved_size_ + growth_size);
+            if (UNLIKELY(extend_memory(reserved_size_ + growth_size) != E_OK)) {
+                return E_OOM;
+            }
         }
 
         ASSERT(data_);
@@ -80,9 +87,10 @@ class ByteBuffer {
             memcpy(&data_[real_data_size_], value, len);
             real_data_size_ += len;
         }
+        return E_OK;
     }
 
-    FORCE_INLINE void append_fixed_value(const char* value, uint32_t len) {
+    FORCE_INLINE int append_fixed_value(const char* value, uint32_t len) {
         // dynamic growth
         if (UNLIKELY(real_data_size_ + len > reserved_size_)) {
             // extreme scenarios, when encountering very long string
@@ -90,12 +98,15 @@ class ByteBuffer {
                 g_config_value_.tsblock_mem_inc_step_size_ > len
                     ? g_config_value_.tsblock_mem_inc_step_size_
                     : (len + 1);
-            extend_memory(reserved_size_ + growth_size);
+            if (UNLIKELY(extend_memory(reserved_size_ + growth_size) != E_OK)) {
+                return E_OOM;
+            }
         }
 
         ASSERT(data_);
         memcpy(&data_[real_data_size_], value, len);
         real_data_size_ += len;
+        return E_OK;
     }
 
     // for fixed len value
@@ -107,11 +118,11 @@ class ByteBuffer {
 
     // for variable len value
     FORCE_INLINE char* read(uint32_t offset, uint32_t* len) {
+        ASSERT(offset + variable_type_len_ <= real_data_size_);
         uint32_t tmp;
-        // Directly memcpy to avoid potential alignment issues when casting
-        // int32_t array pointer
         std::memcpy(&tmp, data_ + offset, sizeof(tmp));
         *len = tmp;
+        ASSERT(offset + variable_type_len_ + *len <= real_data_size_);
         char* p = &data_[offset + variable_type_len_];
         return p;
     }

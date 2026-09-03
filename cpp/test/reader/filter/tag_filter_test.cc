@@ -415,3 +415,86 @@ TEST_F(TagFilterTest, TagRegExpEdgeCases) {
     delete invalid_filter;
     delete empty_filter;
 }
+
+// A null tag segment must not crash comparison filters; a null value never
+// satisfies a concrete-value predicate (SQL UNKNOWN -> not matched).
+TEST_F(TagFilterTest, ComparisonFiltersTreatNullSegmentAsNoMatch) {
+    // "name" (col 1) is an explicit null pointer.
+    std::vector<std::string*> segments = {nullptr, nullptr,
+                                          new std::string("25"),
+                                          new std::string("engineering")};
+
+    auto eq = builder_->eq("name", "john");
+    auto neq = builder_->neq("name", "john");
+    auto lt = builder_->lt("name", "z");
+    auto gt = builder_->gt("name", "a");
+    auto between = builder_->between_and("name", "a", "z");
+    auto reg = builder_->reg_exp("name", ".*");
+
+    EXPECT_FALSE(eq->satisfyRow(0, segments));
+    EXPECT_FALSE(neq->satisfyRow(0, segments));
+    EXPECT_FALSE(lt->satisfyRow(0, segments));
+    EXPECT_FALSE(gt->satisfyRow(0, segments));
+    EXPECT_FALSE(between->satisfyRow(0, segments));
+    EXPECT_FALSE(reg->satisfyRow(0, segments));
+
+    delete eq;
+    delete neq;
+    delete lt;
+    delete gt;
+    delete between;
+    delete reg;
+    delete segments[2];
+    delete segments[3];
+}
+
+// IS NULL filter
+TEST_F(TagFilterTest, TagIsNullFilter) {
+    auto filter = builder_->is_null("name");
+    ASSERT_NE(filter, nullptr);
+
+    // "name" is an explicit null pointer.
+    std::vector<std::string*> null_seg = {nullptr, nullptr,
+                                          new std::string("25"),
+                                          new std::string("engineering")};
+    EXPECT_TRUE(filter->satisfyRow(0, null_seg));
+    delete null_seg[2];
+    delete null_seg[3];
+
+    // "name" has a concrete value.
+    auto present = createSegments("john", "25", "engineering");
+    EXPECT_FALSE(filter->satisfyRow(0, present));
+    cleanupSegments(present);
+
+    // A trailing tag column omitted from the device id (segment count too
+    // small) is also treated as null.
+    auto trailing = builder_->is_null("score");  // col_idx 5
+    std::vector<std::string*> short_seg = {nullptr, new std::string("john")};
+    EXPECT_TRUE(trailing->satisfyRow(0, short_seg));
+    delete short_seg[1];
+
+    delete filter;
+    delete trailing;
+}
+
+// IS NOT NULL filter
+TEST_F(TagFilterTest, TagIsNotNullFilter) {
+    auto filter = builder_->is_not_null("name");
+    ASSERT_NE(filter, nullptr);
+
+    auto present = createSegments("john", "25", "engineering");
+    EXPECT_TRUE(filter->satisfyRow(0, present));
+    cleanupSegments(present);
+
+    std::vector<std::string*> null_seg = {nullptr, nullptr};
+    EXPECT_FALSE(filter->satisfyRow(0, null_seg));
+
+    // An omitted trailing tag is null, so IS NOT NULL is false.
+    auto trailing = builder_->is_not_null("score");
+    std::vector<std::string*> short_seg = {nullptr, new std::string("john")};
+    EXPECT_FALSE(trailing->satisfyRow(0, short_seg));
+    delete short_seg[1];
+
+    delete filter;
+    delete trailing;
+}

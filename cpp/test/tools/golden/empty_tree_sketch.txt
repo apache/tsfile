@@ -1,0 +1,19 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_empty_tree_golden.tsfile
+file length: 124
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+                  24|	[marker] 2
+||||||||||||||||||||| [TsFileMetadata] begins
+                  25|	TableIndexRootCnt=0
+                  29|	TableSchemaCnt=0
+                  33|	[Meta Offset] 24
+||||||||||||||||||||| [TsFileMetadata] ends
+                 114|	[TsFileMetadataSize] 89
+                 118|	[magic tail] TsFile
+                 124|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+---------------------------------- TsFile Sketch End ----------------------------------

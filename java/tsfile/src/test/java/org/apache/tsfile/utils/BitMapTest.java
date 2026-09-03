@@ -26,6 +26,8 @@ import java.util.Random;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class BitMapTest {
@@ -70,6 +72,133 @@ public class BitMapTest {
   }
 
   @Test
+  public void testImplementationSelectionAndExtension() {
+    assertTrue(new BitMap(0).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(new BitMap(64).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(
+        new BitMap(64, new byte[BitMap.getSizeOfBytes(64)]).getImplementation()
+            instanceof BitMapArrayImpl);
+    assertTrue(new BitMap(65).getImplementation() instanceof BitMapArrayImpl);
+    assertTrue(BitMap.createBitMapDynamically(0).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(BitMap.createBitMapDynamically(64).getImplementation() instanceof BitMapLongImpl);
+    assertTrue(BitMap.createBitMapDynamically(65).getImplementation() instanceof BitMapArrayImpl);
+
+    BitMap bitMap = BitMap.createBitMapDynamically(64);
+    bitMap.mark(0);
+    bitMap.mark(63);
+    bitMap.extend(65);
+
+    assertTrue(bitMap.getImplementation() instanceof BitMapArrayImpl);
+    assertEquals(65, bitMap.getSize());
+    assertTrue(bitMap.isMarked(0));
+    assertTrue(bitMap.isMarked(63));
+    assertFalse(bitMap.isMarked(64));
+  }
+
+  @Test
+  public void testLongImplementationByteArrayCompatibility() {
+    byte[] bytes = {
+      (byte) 0b10101010,
+      (byte) 0b01010101,
+      (byte) 0b11110000,
+      (byte) 0b00001111,
+      (byte) 0b11001100,
+      (byte) 0b00110011,
+      (byte) 0b10000001,
+      (byte) 0b01111110,
+      0
+    };
+    BitMap bitMap = new BitMap(new BitMapLongImpl(64, bytes));
+
+    assertArrayEquals(bytes, bitMap.getByteArray());
+    assertEquals(bitMap, bitMap.clone());
+    assertEquals(bitMap.hashCode(), bitMap.clone().hashCode());
+  }
+
+  @Test
+  public void testEqualsAcrossImplementations() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+    for (int i = 0; i < 64; i += 2) {
+      arrayBitMap.mark(i);
+      longBitMap.mark(i);
+    }
+
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(longBitMap, arrayBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+
+    longBitMap.mark(63);
+    assertNotEquals(arrayBitMap, longBitMap);
+    assertTrue(arrayBitMap.equalsInRange(longBitMap, 63));
+
+    arrayBitMap.mark(63);
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+  }
+
+  @Test
+  public void testLongImplementationFullRange() {
+    BitMap rangeBitMap = BitMap.createBitMapDynamically(64);
+    BitMap singleBitMap = BitMap.createBitMapDynamically(64);
+
+    rangeBitMap.markRange(0, 64);
+    for (int i = 0; i < 64; i++) {
+      singleBitMap.mark(i);
+    }
+    assertTrue(rangeBitMap.isAllMarked());
+    assertArrayEquals(singleBitMap.getByteArray(), rangeBitMap.getByteArray());
+
+    rangeBitMap.unmarkRange(0, 64);
+    assertTrue(rangeBitMap.isAllUnmarked());
+  }
+
+  @Test
+  public void testLongImplementationMarkAllByteCompatibility() {
+    BitMap bitMap = BitMap.createBitMapDynamically(32);
+    bitMap.markAll();
+
+    assertArrayEquals(
+        new byte[] {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF},
+        bitMap.getByteArray());
+
+    bitMap.extend(64);
+    for (int i = 0; i < 64; i++) {
+      assertTrue(bitMap.isMarked(i));
+    }
+  }
+
+  @Test
+  public void testLongImplementationMarkAllAt64Bits() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+
+    arrayBitMap.markAll();
+    longBitMap.markAll();
+
+    assertArrayEquals(arrayBitMap.getByteArray(), longBitMap.getByteArray());
+    assertEquals(arrayBitMap, longBitMap);
+    assertEquals(arrayBitMap.hashCode(), longBitMap.hashCode());
+    assertEquals(arrayBitMap, longBitMap.clone());
+  }
+
+  @Test
+  public void testRamBytesUsed() {
+    BitMap arrayBitMap = new BitMap(64);
+    BitMap longBitMap = BitMap.createBitMapDynamically(64);
+
+    assertEquals(
+        RamUsageEstimator.BIT_MAP_SIZE + arrayBitMap.getImplementation().getRetainedSizeInBytes(),
+        arrayBitMap.ramBytesUsed());
+    assertEquals(
+        RamUsageEstimator.BIT_MAP_SIZE + longBitMap.getImplementation().getRetainedSizeInBytes(),
+        longBitMap.ramBytesUsed());
+    assertEquals(arrayBitMap.ramBytesUsed(), RamUsageEstimator.sizeOfObject(arrayBitMap));
+    assertEquals(longBitMap.ramBytesUsed(), RamUsageEstimator.sizeOfObject(longBitMap));
+    assertTrue(longBitMap.ramBytesUsed() < arrayBitMap.ramBytesUsed());
+  }
+
+  @Test
   public void testIsAllUnmarkedInRange() {
     BitMap bitMap = new BitMap(16);
     assertTrue(bitMap.isAllUnmarked(6));
@@ -87,6 +216,54 @@ public class BitMapTest {
     bitMap.mark(9);
     assertTrue(bitMap.isAllUnmarked(9));
     assertFalse(bitMap.isAllUnmarked(10));
+  }
+
+  @Test
+  public void testRangeMarkedQueries() {
+    assertRangeMarkedQueries(new BitMap(0));
+    assertRangeMarkedQueries(new BitMap(64));
+    assertRangeMarkedQueries(BitMap.createBitMapDynamically(64));
+    assertRangeMarkedQueries(new BitMap(100));
+
+    BitMap fullLongRange = BitMap.createBitMapDynamically(Long.SIZE);
+    fullLongRange.markAll();
+    assertTrue(fullLongRange.isRangeAllMarked(0, Long.SIZE));
+
+    BitMap crossingArrayRange = new BitMap(128);
+    crossingArrayRange.markRange(32, Long.SIZE);
+    assertTrue(crossingArrayRange.isRangeAllMarked(32, Long.SIZE));
+    assertFalse(crossingArrayRange.isRangeAllMarked(31, Long.SIZE));
+  }
+
+  private void assertRangeMarkedQueries(BitMap bitMap) {
+    for (int i = 0; i < bitMap.getSize(); i++) {
+      if (i % 4 != 2) {
+        bitMap.mark(i);
+      }
+    }
+
+    for (int start = 0; start <= bitMap.getSize(); start++) {
+      for (int length = 0; length <= bitMap.getSize() - start; length++) {
+        boolean anyMarked = false;
+        boolean allMarked = true;
+        for (int i = start; i < start + length; i++) {
+          anyMarked |= bitMap.isMarked(i);
+          allMarked &= bitMap.isMarked(i);
+        }
+        assertEquals(anyMarked, bitMap.isRangeAnyMarked(start, length));
+        assertEquals(allMarked, bitMap.isRangeAllMarked(start, length));
+        assertEquals(!anyMarked, bitMap.isRangeNoneMarked(start, length));
+      }
+    }
+
+    assertThrows(IndexOutOfBoundsException.class, () -> bitMap.isRangeAnyMarked(-1, 0));
+    assertThrows(IndexOutOfBoundsException.class, () -> bitMap.isRangeAllMarked(0, -1));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeNoneMarked(bitMap.getSize() + 1, 0));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeAnyMarked(bitMap.getSize(), 1));
+    assertThrows(
+        IndexOutOfBoundsException.class, () -> bitMap.isRangeAllMarked(1, Integer.MAX_VALUE));
   }
 
   @Test
@@ -141,7 +318,7 @@ public class BitMapTest {
     }
 
     BitMap copy =
-        new BitMap(src.getSize(), Arrays.copyOf(dst.getByteArray(), dst.getByteArray().length));
+        new BitMap(destSize, Arrays.copyOf(dst.getByteArray(), dst.getByteArray().length));
 
     for (int i = 0; i < len; i++) {
       if (src.isMarked(srcStart + i)) {

@@ -141,3 +141,47 @@ TEST_F(WriteFileTest, TruncateFile) {
     EXPECT_EQ(file_content, "Hello, ");
     remove(file_name.c_str());
 }
+
+#include "file/tsfile_io_writer.h"
+
+// Regression: TsFileIOWriter::init() used to leave destroyed_=true after a
+// previous destroy(), so the second destroy() (during ~TsFileIOWriter())
+// short-circuited and skipped meta_allocator_.destroy() /
+// write_stream_.destroy() / file_ cleanup, leaking everything from the
+// new lifecycle.  Verify init() rearms the lifecycle by checking destroy()
+// runs again cleanly.
+TEST(TsFileIOWriterLifecycle, DestroyInitDestroyIsClean) {
+    std::string fn = "tsfile_iowriter_lifecycle.dat";
+    remove(fn.c_str());
+
+    WriteFile wf1;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    ASSERT_EQ(wf1.create(fn, flags, 0666), E_OK);
+
+    TsFileIOWriter w;
+    ASSERT_EQ(w.init(&wf1), E_OK);
+    w.destroy();
+
+    // Re-init against a fresh WriteFile (same writer object).  Under the
+    // old bug, destroyed_ stays true here.
+    remove(fn.c_str());
+    WriteFile wf2;
+    ASSERT_EQ(wf2.create(fn, flags, 0666), E_OK);
+    ASSERT_EQ(w.init(&wf2), E_OK);
+
+    // get_meta_size() reads meta_allocator_.get_total_used_bytes(); on a
+    // fresh init() this should be 0 (the allocator was reinitialised).
+    // If destroyed_ had been left true the allocator pages from before
+    // would still be there.
+    EXPECT_EQ(w.get_meta_size(), 0);
+
+    // Trigger second destroy() — must not crash on the re-initialised
+    // resources.
+    w.destroy();
+
+    wf2.close();
+    remove(fn.c_str());
+}

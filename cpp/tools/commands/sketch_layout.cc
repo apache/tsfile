@@ -524,15 +524,20 @@ int SketchLayout::trace_footer_layout() {
     }
     bs.wrapped_buf_advance_read_pos(footer_.bloom_filter_data_size);
     java_pos += footer_.bloom_filter_data_size;
-    if (RET_FAIL(common::SerializationUtil::read_var_uint(
-            footer_.bloom_filter_size, bs))) {
-        return ret;
+    if (footer_.bloom_filter_data_size > 0) {
+        if (RET_FAIL(common::SerializationUtil::read_var_uint(
+                footer_.bloom_filter_size, bs))) {
+            return ret;
+        }
+        if (RET_FAIL(common::SerializationUtil::read_var_uint(
+                footer_.bloom_filter_hash_count, bs))) {
+            return ret;
+        }
     }
-    if (RET_FAIL(common::SerializationUtil::read_var_uint(
-            footer_.bloom_filter_hash_count, bs))) {
-        return ret;
-    }
-    footer_.bloom_filter_serialized_size = footer_.bloom_filter_data_size + 4;
+    footer_.bloom_filter_serialized_size =
+        footer_.bloom_filter_data_size == 0
+            ? 1
+            : footer_.bloom_filter_data_size + 4;
 
     footer_.properties_offset = file_metadata_pos_ + bs.read_pos();
     if (RET_FAIL(common::SerializationUtil::read_var_int(

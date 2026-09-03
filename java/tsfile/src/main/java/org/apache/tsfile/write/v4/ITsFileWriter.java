@@ -32,8 +32,11 @@ public interface ITsFileWriter extends AutoCloseable {
   void write(Tablet tablet) throws IOException, WriteProcessException;
 
   @TsFileApi
-  void close();
+  void close() throws IOException;
 
   @TsFileApi
   void write(TSRecord record) throws IOException, WriteProcessException;
+
+  @TsFileApi
+  void addTsFileProperty(String key, byte[] value);
 }

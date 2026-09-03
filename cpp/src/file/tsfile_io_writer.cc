@@ -21,6 +21,9 @@
 
 #include <fcntl.h>
 
+#include <chrono>
+#include <iomanip>
+#include <limits>
 #include <memory>
 
 #include "common/device_id.h"
@@ -40,14 +43,20 @@ namespace storage {
 #define OFFSET_DEBUG(msg) void(msg)
 #endif
 
+int64_t TsFileIOWriter::get_meta_size() const {
+    return meta_allocator_.get_total_used_bytes();
+}
+
 int TsFileIOWriter::init(WriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;
     meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
     chunk_meta_count_ = 0;
-    recovery_chunk_meta_prefix_.clear();
-    destroyed_ = false;
     file_ = write_file;
+    // Re-arm destroy() for the new lifecycle.  Without this, a writer that
+    // was destroy()'d and then init()'d again would leak the fresh
+    // meta_allocator_/write_stream_/file_ on its next destroy().
+    destroyed_ = false;
     return ret;
 }
 
@@ -55,48 +64,38 @@ void TsFileIOWriter::destroy() {
     if (destroyed_) {
         return;
     }
-    // Recovery attaches a prefix of ChunkGroupMeta; device_id and chunk stats
-    // in that snapshot live in reader/recovery memory. After open, new chunks
-    // may be pushed into the same ChunkGroupMeta (same device); only those
-    // appended ChunkMeta need statistic_->destroy() (see
-    // recovery_chunk_meta_prefix_).
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        ChunkGroupMeta* cgm = iter.get();
-        auto prefix_it = recovery_chunk_meta_prefix_.find(cgm);
-        const bool is_recovery_cgm =
-            chunk_group_meta_from_recovery_ && cgm != nullptr &&
-            prefix_it != recovery_chunk_meta_prefix_.end();
-        uint32_t recovered_cm_count = is_recovery_cgm ? prefix_it->second : 0;
-
-        if (!is_recovery_cgm) {
-            if (cgm != nullptr && cgm->device_id_) {
-                cgm->device_id_.reset();
-            }
-        }
-
-        if (cgm == nullptr) {
-            continue;
-        }
-        uint32_t cm_idx = 0;
-        for (auto chunk_meta = cgm->chunk_meta_list_.begin();
-             chunk_meta != cgm->chunk_meta_list_.end();
-             chunk_meta++, cm_idx++) {
-            if (chunk_meta.get() == nullptr ||
-                chunk_meta.get()->statistic_ == nullptr) {
-                continue;
-            }
-            if (is_recovery_cgm && cm_idx < recovered_cm_count) {
-                continue;
-            }
-            chunk_meta.get()->statistic_->destroy();
+    // Free heap-allocated PageArenas held by each appended statistic and
+    // drop shared_ptr refs on each appended CGM's device_id_.  Recovered
+    // entries from RestorableTsFileIOWriter live in self_check_arena_ and
+    // are not tracked here; the restorable writer cleans those up itself.
+    for (ChunkMeta* cm : appended_chunk_metas_) {
+        if (cm != nullptr && cm->statistic_ != nullptr) {
+            cm->statistic_->destroy();
         }
     }
-
-    if (cur_chunk_meta_ != nullptr && cur_chunk_meta_->statistic_ != nullptr) {
-        cur_chunk_meta_->statistic_->destroy();
-        cur_chunk_meta_ = nullptr;
+    appended_chunk_metas_.clear();
+    for (ChunkGroupMeta* cgm : appended_chunk_group_metas_) {
+        if (cgm != nullptr && cgm->device_id_) {
+            cgm->device_id_.reset();
+        }
     }
+    appended_chunk_group_metas_.clear();
+    // Drop every pointer that referenced meta_allocator_-owned memory before
+    // destroying the arena.  Without this, a reused writer (destroy() + a new
+    // init()) would still see the dangling CGM list/index/cur_* slots from
+    // the previous lifecycle and dereference freed nodes the next time
+    // start_flush_chunk_group() linear-scans the list.
+    chunk_group_meta_list_.clear();
+    chunk_group_meta_index_.clear();
+    cur_chunk_meta_ = nullptr;
+    cur_chunk_group_meta_ = nullptr;
+    cur_device_name_.reset();
+    chunk_meta_count_ = 0;
+    use_prev_alloc_cgm_ = false;
+    is_aligned_ = false;
+    file_base_offset_ = 0;
+    tsfile_properties_.clear();
+    destroyed_ = true;
 
     meta_allocator_.destroy();
     write_stream_.destroy();
@@ -104,7 +103,38 @@ void TsFileIOWriter::destroy() {
         delete file_;
         file_ = nullptr;
     }
-    destroyed_ = true;
+}
+
+int TsFileIOWriter::add_tsfile_property(const std::string& key,
+                                        const uint8_t* value,
+                                        uint32_t value_len) {
+    if (file_ == nullptr || file_->get_fd() < 0) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    if (value_len > 0 && value == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+        value_len >
+            static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    tsfile_properties_[key] = TsFilePropertyValue(value, value_len);
+    return common::E_OK;
+}
+
+int TsFileIOWriter::add_tsfile_property(const std::string& key,
+                                        const std::vector<uint8_t>& value) {
+    if (file_ == nullptr || file_->get_fd() < 0) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+        value.size() >
+            static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    tsfile_properties_[key] = TsFilePropertyValue(value);
+    return common::E_OK;
 }
 
 int TsFileIOWriter::start_file() {
@@ -130,13 +160,10 @@ int TsFileIOWriter::start_flush_chunk_group(
     cur_device_name_ = device_name;
     ASSERT(cur_chunk_group_meta_ == nullptr);
     use_prev_alloc_cgm_ = false;
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        if (*iter.get()->device_id_ == *cur_device_name_) {
-            use_prev_alloc_cgm_ = true;
-            cur_chunk_group_meta_ = iter.get();
-            break;
-        }
+    auto idx_it = chunk_group_meta_index_.find(cur_device_name_);
+    if (idx_it != chunk_group_meta_index_.end()) {
+        use_prev_alloc_cgm_ = true;
+        cur_chunk_group_meta_ = idx_it->second;
     }
     if (!use_prev_alloc_cgm_) {
         void* buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
@@ -145,6 +172,7 @@ int TsFileIOWriter::start_flush_chunk_group(
         } else {
             cur_chunk_group_meta_ = new (buf) ChunkGroupMeta(&meta_allocator_);
             cur_chunk_group_meta_->init(device_name);
+            appended_chunk_group_metas_.push_back(cur_chunk_group_meta_);
         }
     }
     return ret;
@@ -183,6 +211,7 @@ int TsFileIOWriter::start_flush_chunk(common::ByteStream& chunk_data,
         ret = cur_chunk_meta_->init(mname, data_type, cur_file_position(),
                                     chunk_statistic_copy, mask, encoding,
                                     compression, meta_allocator_);
+        appended_chunk_metas_.push_back(cur_chunk_meta_);
     }
 
     // Step 2. serialize chunk header to write_stream_
@@ -258,6 +287,9 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
         cur_chunk_group_meta_ = nullptr;
         return common::E_OK;
     }
+    // First CGM per device wins (emplace, no overwrite); reached only when the
+    // device was not already present, so this records its first CGM.
+    chunk_group_meta_index_.emplace(cur_device_name_, cur_chunk_group_meta_);
     int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;
     return ret;
@@ -269,17 +301,19 @@ int TsFileIOWriter::end_file() {
         return E_OK;
     }
     OFFSET_DEBUG("before end file");
+
     if (RET_FAIL(write_log_index_range())) {
         std::cout << "writer range index error, ret =" << ret << std::endl;
     } else if (RET_FAIL(write_file_index())) {
         std::cout << "writer file index error, ret = " << ret << std::endl;
     } else if (RET_FAIL(write_file_footer())) {
         std::cout << "writer file footer error, ret = " << ret << std::endl;
-    } else if (RET_FAIL(sync_file())) {
+    } else if (g_config_value_.sync_on_close_ && RET_FAIL(sync_file())) {
         std::cout << "sync file error, ret = " << ret << std::endl;
     } else if (RET_FAIL(close_file())) {
         std::cout << "close file error, ret = " << ret << std::endl;
     }
+
     return ret;
 }
 
@@ -472,18 +506,23 @@ int TsFileIOWriter::write_file_index() {
         }
         tsfile_meta.table_metadata_index_node_map_ = table_nodes_map;
         tsfile_meta.table_schemas_ = schema_->table_schema_map_;
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptLevel", new std::string(encrypt_level_)));
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptType", new std::string(encrypt_type_)));
-        tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptKey", nullptr));
+        tsfile_meta.tsfile_properties_ = tsfile_properties_;
+        tsfile_meta.tsfile_properties_["encryptLevel"] = TsFilePropertyValue(
+            reinterpret_cast<const uint8_t*>(encrypt_level_.data()),
+            static_cast<uint32_t>(encrypt_level_.size()));
+        tsfile_meta.tsfile_properties_["encryptType"] = TsFilePropertyValue(
+            reinterpret_cast<const uint8_t*>(encrypt_type_.data()),
+            static_cast<uint32_t>(encrypt_type_.size()));
+        tsfile_meta.tsfile_properties_["encryptKey"] = TsFilePropertyValue();
 #if DEBUG_SE
         auto tsfile_meta_offset = write_stream_.total_size();
 #endif
-        auto total_write_size = tsfile_meta.serialize_to(write_stream_);
-        if (RET_FAIL(common::SerializationUtil::write_i32(total_write_size,
-                                                          write_stream_))) {
+        int32_t total_write_size = 0;
+        if (RET_FAIL(
+                tsfile_meta.serialize_to(write_stream_, total_write_size))) {
+            return ret;
+        } else if (RET_FAIL(common::SerializationUtil::write_i32(
+                       total_write_size, write_stream_))) {
             return ret;
         }
         tsfile_meta.bloom_filter_ = nullptr;
@@ -891,7 +930,11 @@ int TsFileIOWriter::flush_stream_to_file() {
         }
     }
 
-    write_stream_.purge_prev_pages();
+    if (IS_SUCC(ret)) {
+        file_base_offset_ = file_->get_position();
+        write_stream_.reset();
+        write_stream_consumer_.reset();
+    }
 
     return ret;
 }

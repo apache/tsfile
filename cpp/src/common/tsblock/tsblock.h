@@ -21,6 +21,8 @@
 
 #include <stdint.h>
 
+#include <cstring>
+
 #include "common/allocator/byte_stream.h"
 #include "common/container/byte_buffer.h"
 #include "common/global.h"
@@ -144,6 +146,12 @@ class RowAppender {
         ASSERT(tsblock_->row_count_ > 0);
         tsblock_->row_count_--;
     }
+    FORCE_INLINE uint32_t remaining() const {
+        return tsblock_->max_row_count_ - tsblock_->row_count_;
+    }
+    FORCE_INLINE void add_rows(uint32_t count) {
+        tsblock_->row_count_ += count;
+    }
 
     FORCE_INLINE void append(uint32_t slot_index, const char* value,
                              uint32_t len) {
@@ -152,16 +160,40 @@ class RowAppender {
         // TODO(Colin): Refine this.
         TSDataType datatype = vec->get_vector_type();
         if (len == 4 && datatype == INT64) {
-            int32_t int32_val = *reinterpret_cast<const int32_t*>(value);
+            int32_t int32_val;
+            std::memcpy(&int32_val, value, sizeof(int32_val));
             int64_t int64_val = static_cast<int64_t>(int32_val);
             vec->append(reinterpret_cast<const char*>(&int64_val), 8);
         } else if (len == 4 && datatype == DOUBLE) {
-            float float_val = *reinterpret_cast<const float*>(value);
+            float float_val;
+            std::memcpy(&float_val, value, sizeof(float_val));
             double double_val = static_cast<double>(float_val);
             vec->append(reinterpret_cast<const char*>(&double_val), 8);
         } else {
             vec->append(value, len);
         }
+    }
+
+    FORCE_INLINE bool can_bulk_append_fixed(uint32_t slot_index,
+                                            uint32_t elem_size) const {
+        ASSERT(slot_index < tsblock_->tuple_desc_->get_column_count());
+        Vector* vec = tsblock_->vectors_[slot_index];
+        TSDataType datatype = vec->get_vector_type();
+        if (datatype == STRING || datatype == TEXT || datatype == BLOB) {
+            return false;
+        }
+        return static_cast<FixedLengthVector*>(vec)->get_type_len() ==
+               elem_size;
+    }
+
+    FORCE_INLINE void bulk_append_fixed(uint32_t slot_index, const char* values,
+                                        uint32_t count) {
+        ASSERT(slot_index < tsblock_->tuple_desc_->get_column_count());
+        Vector* vec = tsblock_->vectors_[slot_index];
+        ASSERT(vec->get_vector_type() != STRING &&
+               vec->get_vector_type() != TEXT &&
+               vec->get_vector_type() != BLOB);
+        static_cast<FixedLengthVector*>(vec)->append_batch(values, count);
     }
 
     FORCE_INLINE void append_null(uint32_t slot_index) {
@@ -222,6 +254,19 @@ class ColAppender {
     }
     FORCE_INLINE void reset() { column_row_count_ = 0; }
 
+    FORCE_INLINE void bulk_append_fixed(const char* data, uint32_t count,
+                                        uint32_t elem_size) {
+        vec_->get_value_data().append_fixed_value(data, count * elem_size);
+        vec_->add_row_nums(count);
+        column_row_count_ += count;
+    }
+
+    FORCE_INLINE uint32_t get_column_row_count() const {
+        return column_row_count_;
+    }
+
+    FORCE_INLINE Vector* get_vector() { return vec_; }
+
    private:
     uint32_t column_index_;
     uint32_t column_row_count_;
@@ -242,6 +287,8 @@ class RowIterator {
 
     FORCE_INLINE bool has_next() { return row_id_ < tsblock_->row_count_; }
 
+    FORCE_INLINE uint32_t get_row_id() const { return row_id_; }
+
     FORCE_INLINE uint32_t get_column_count() { return column_count_; }
 
     FORCE_INLINE TSDataType get_data_type(uint32_t column_index) {
@@ -251,15 +298,12 @@ class RowIterator {
 
     FORCE_INLINE void next() {
         ASSERT(row_id_ < tsblock_->row_count_);
-        ++row_id_;
+        const uint32_t current_row_id = row_id_++;
         for (uint32_t i = 0; i < column_count_; ++i) {
-            tsblock_->vectors_[i]->update_offset();
+            if (!tsblock_->vectors_[i]->is_null(current_row_id)) {
+                tsblock_->vectors_[i]->update_offset();
+            }
         }
-    }
-
-    FORCE_INLINE void next(size_t ind) const {
-        ASSERT(row_id_ < tsblock_->row_count_);
-        tsblock_->vectors_[ind]->update_offset();
     }
 
     FORCE_INLINE void update_row_id() { row_id_++; }
@@ -269,6 +313,22 @@ class RowIterator {
         ASSERT(column_index < column_count_);
         Vector* vec = tsblock_->vectors_[column_index];
         return vec->read(len, null, row_id_);
+    }
+
+    // Cheap null check at the current row that avoids the value-read path.
+    FORCE_INLINE bool is_null_at(uint32_t column_index) {
+        ASSERT(column_index < column_count_);
+        return tsblock_->vectors_[column_index]->is_null(row_id_);
+    }
+
+    // Direct access to the underlying Vector for the column. Caller is
+    // responsible for type-correct interpretation of the buffer; intended
+    // for the fast typed-read path that wants to bypass Vector::read's
+    // virtual dispatch (read into the raw buffer at the vector's current
+    // offset_).
+    FORCE_INLINE Vector* get_vector(uint32_t column_index) {
+        ASSERT(column_index < column_count_);
+        return tsblock_->vectors_[column_index];
     }
 
     std::string debug_string();  // for debug
@@ -310,6 +370,23 @@ class ColIterator {
     FORCE_INLINE char* read(uint32_t* len) { return vec_->read(len); }
 
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+
+    FORCE_INLINE uint32_t remaining() const {
+        return tsblock_->row_count_ - row_id_;
+    }
+    FORCE_INLINE char* data_ptr() {
+        return vec_->get_value_data().get_data() + vec_->get_offset();
+    }
+    FORCE_INLINE void advance(uint32_t n, uint32_t elem_size) {
+        row_id_ += n;
+        vec_->advance_offset(n * elem_size);
+    }
+
+    FORCE_INLINE void advance_row_only(uint32_t n) { row_id_ += n; }
+
+    FORCE_INLINE uint32_t get_row_id() const { return row_id_; }
+
+    FORCE_INLINE Vector* get_vector() { return vec_; }
 
    private:
     uint32_t column_index_;

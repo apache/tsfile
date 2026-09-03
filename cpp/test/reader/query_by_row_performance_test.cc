@@ -60,6 +60,7 @@
 #include "file/write_file.h"
 #include "reader/tsfile_reader.h"
 #include "reader/tsfile_tree_reader.h"
+#include "utils/util_define.h"
 #include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_tree_writer.h"
 
@@ -86,7 +87,8 @@ static int query_by_row_perf_iters() {
     return n;
 }
 
-static int compute_offset_with_env(int num_rows, int default_offset) {
+MAYBE_UNUSED static int compute_offset_with_env(int num_rows,
+                                                int default_offset) {
     int offset = default_offset;
     int abs = 0;
     if (get_env_int("QUERY_BY_ROW_PERF_OFFSET", abs)) {

@@ -20,6 +20,7 @@
 #define READER_TSFILE_EXECUTOR_H
 
 #include <map>
+#include <memory>
 
 #include "file/read_file.h"
 #include "query_executor.h"
@@ -37,6 +38,21 @@ class TsFileExecutor  // : public QueryExecutor
     int execute(QueryExpression* query_expr, ResultSet*& ret_qds);
     int execute(QueryExpression* query_expr, ResultSet*& ret_qds, int offset,
                 int limit);
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+    int prepare_series(
+        const FileGeneration& generation, const PreparedLocator& locator,
+        const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+        std::shared_ptr<PreparedSeries>& prepared);
+    int execute_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                         int64_t start_time, int64_t end_time, int offset,
+                         int limit, const std::string& column_name,
+                         ResultSet*& ret_qds);
+    int execute_prepared_multi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ResultSet*& ret_qds);
     void destroy_query_data_set(ResultSet* qds);
     TsFileMeta* get_tsfile_meta() { return io_reader_.get_tsfile_meta(); }
     TsFileIOReader* get_tsfile_io_reader() { return &io_reader_; }

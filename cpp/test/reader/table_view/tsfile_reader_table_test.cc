@@ -209,6 +209,43 @@ class TsFileTableReaderTest : public ::testing::Test {
 
 TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
 
+// Regression: single_device_tsblock_reader used to initialise all_outside
+// to true, then bail out when the per-device chunk-list loop didn't
+// execute (e.g. time-only query where time_series_indexs is empty).  The
+// result was an empty resultset whenever a time filter was present, even
+// though there might be rows that satisfy it.  Verify that querying only
+// the time column with a tight filter still returns the matching rows.
+TEST_F(TsFileTableReaderTest, TimeOnlyQueryWithTimeFilterStillReturnsRows) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    auto tablet = gen_tablet(table_schema, /*start_ts=*/0, /*device_num=*/1,
+                             /*per_device=*/10);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+    ResultSet* tmp = nullptr;
+    // Query with an empty measurement list and a time window covering all
+    // 10 timestamps.  Under the bug this returned 0 rows.
+    std::vector<std::string> empty_cols;
+    ASSERT_EQ(reader.query(table_schema->get_table_name(), empty_cols,
+                           /*start_time=*/0, /*end_time=*/9, tmp),
+              common::E_OK);
+    auto* rs = (TableResultSet*)tmp;
+    int rows = 0;
+    bool hn = false;
+    while (IS_SUCC(rs->next(hn)) && hn) {
+        rows++;
+    }
+    EXPECT_EQ(rows, 10);
+    reader.destroy_query_data_set(rs);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+}
+
 TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 5;
@@ -216,11 +253,13 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
-// Triggers memory-based seal in aligned table: time page seals by size while
-// value pages may not; ensure value pages are sealed together with time (no
-// time-page-sealed / value-page-not-sealed inconsistency).
-// Use 512 bytes so time seals by size before point count; 128 was too small
-// and could produce misaligned time/value pages on some encodings.
+TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    test_table_model_query(g_config_value_.page_writer_max_point_num_);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
 TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
     uint32_t prev_point_num = g_config_value_.page_writer_max_point_num_;
     uint32_t prev_mem_bytes = g_config_value_.page_writer_max_memory_bytes_;
@@ -229,13 +268,6 @@ TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
     test_table_model_query(50, 1);
     g_config_value_.page_writer_max_point_num_ = prev_point_num;
     g_config_value_.page_writer_max_memory_bytes_ = prev_mem_bytes;
-}
-
-TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
-    int prev_config = g_config_value_.page_writer_max_point_num_;
-    g_config_value_.page_writer_max_point_num_ = 10000;
-    test_table_model_query(g_config_value_.page_writer_max_point_num_);
-    g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelQueryMultiLargePage) {

@@ -127,3 +127,79 @@ more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding
 [C++](./cpp/README.md)
 
 [Python](./python/README.md)
+
+## Command-Line Tool (tsfile-cli)
+
+Apache TsFile ships `tsfile-cli`, a single, pipe-friendly command-line tool for inspecting
+**and** importing `.tsfile` files directly from the shell. Read commands (`ls`, `meta`,
+`schema`, `stats`, `count`, `head`, `cat`, `sample`) print to stdout and diagnostics to
+stderr, so they compose with `awk`, `jq`, `sort`, and friends; the `write` command imports
+CSV into a new `.tsfile`. Output formats: `csv`, `tsv`, `json` (NDJSON), and `table`.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `ls`     | List the tables (table model) or devices (tree model), one name per line |
+| `meta`   | File summary: data model, table/device/series counts, time range, and file size |
+| `schema` | Per-series data type, encoding, and compression |
+| `stats`  | Per-series statistics: count, time range, min/max, first/last, and sum |
+| `count`  | Per-series row counts plus a total — read from statistics, without scanning pages |
+| `head`   | Print the first N rows (default 10; `-n` to change) |
+| `cat`    | Stream every matching row |
+| `sample` | Take a reproducible reservoir sample of rows (`-n`, `--seed`) |
+| `write`  | Import CSV into a new table-model `.tsfile` |
+
+The metadata commands (`ls`, `meta`, `schema`, `stats`, `count`) answer most questions
+without decoding data pages, while `head`, `cat`, and `sample` read the actual rows.
+
+### Examples
+
+```bash
+tsfile-cli ls data.tsfile                          # list tables / devices
+tsfile-cli meta data.tsfile                        # file overview (model, counts, time range, size)
+tsfile-cli head -n 20 data.tsfile                  # first 20 rows
+tsfile-cli cat -m temp -m humidity -f csv data.tsfile # stream selected columns as CSV
+
+# import CSV into a new table-model .tsfile
+printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
+  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 \
+      --stdin -o out.tsfile
+```
+
+### Building
+
+> **Platform support.** Building `tsfile-cli` from source is currently supported on **Linux
+> and macOS** only. Standalone, pre-built releases of the tool are planned for a later date.
+
+`tsfile-cli` is built together with the C++ module, so building that module with Maven from
+the repository root includes it in the build output:
+
+```bash
+./mvnw clean package -P with-cpp
+```
+
+This produces the executable at `cpp/target/build/bin/tsfile-cli`, alongside the shared
+library it depends on, `libtsfile`, under `cpp/target/build/lib/` (`libtsfile.so` on Linux,
+`libtsfile.dylib` on macOS). `tsfile-cli` loads `libtsfile` at runtime, so to use it the
+library must sit where the dynamic linker can find it — keep it under `cpp/target/build/lib`
+and put that directory on the library search path, or copy `libtsfile` next to the binary
+(or into a system library directory):
+
+```bash
+# Linux
+export LD_LIBRARY_PATH=cpp/target/build/lib:$LD_LIBRARY_PATH
+# macOS
+export DYLD_LIBRARY_PATH=cpp/target/build/lib:$DYLD_LIBRARY_PATH
+
+cpp/target/build/bin/tsfile-cli --version
+cpp/target/build/bin/tsfile-cli --help
+```
+
+See [`cpp/tools/README.md`](./cpp/tools/README.md) for the full command and option reference.
+
+## Website Contributions
+
+For changes to the [Apache TsFile website](https://tsfile.apache.org/), open a pull request
+with the [`docs/dev`](https://github.com/apache/tsfile/tree/docs/dev) branch as the base
+branch.

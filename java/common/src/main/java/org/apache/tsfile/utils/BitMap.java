@@ -22,224 +22,126 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.i18n.Messages;
 
 import java.util.Arrays;
-import java.util.Objects;
 
-public class BitMap {
-  private static final byte[] BIT_UTIL = new byte[] {1, 2, 4, 8, 16, 32, 64, -128};
-  private static final byte[] UNMARK_BIT_UTIL =
-      new byte[] {
-        (byte) 0XFE, // 11111110
-        (byte) 0XFD, // 11111101
-        (byte) 0XFB, // 11111011
-        (byte) 0XF7, // 11110111
-        (byte) 0XEF, // 11101111
-        (byte) 0XDF, // 11011111
-        (byte) 0XBF, // 10111111
-        (byte) 0X7F // 01111111
-      };
+public class BitMap implements Accountable {
 
-  private byte[] bits;
-  private int size;
+  private BitMapImpl implementation;
 
-  /** Initialize a BitMap with given size. */
+  /** Initialize an array-backed BitMap with the given size. */
   public BitMap(int size) {
-    this.size = size;
-    bits = new byte[getSizeOfBytes(size)];
+    implementation = new BitMapArrayImpl(size);
   }
 
-  /** Initialize a BitMap with given size and bytes. */
+  /** Initialize an array-backed BitMap with the given size and bytes. */
   public BitMap(int size, byte[] bits) {
-    this.size = size;
-    this.bits = bits;
+    implementation = new BitMapArrayImpl(size, bits);
+  }
+
+  BitMap(BitMapImpl implementation) {
+    this.implementation = implementation;
   }
 
   public byte[] getByteArray() {
-    return this.bits;
+    return implementation.getByteArray();
   }
 
   public int getSize() {
-    return this.size;
+    return implementation.getSize();
   }
 
   /** returns the value of the bit with the specified index. */
   public boolean isMarked(int position) {
-    return (bits[position / Byte.SIZE] & BIT_UTIL[position % Byte.SIZE]) != 0;
+    return implementation.isMarked(position);
+  }
+
+  /**
+   * Returns whether at least one bit in the specified range is marked. An empty range returns
+   * {@code false}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeAnyMarked(int start, int length) {
+    return implementation.isRangeAnyMarked(start, length);
+  }
+
+  /**
+   * Returns whether every bit in the specified range is marked. An empty range returns {@code
+   * true}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeAllMarked(int start, int length) {
+    return implementation.isRangeAllMarked(start, length);
+  }
+
+  /**
+   * Returns whether no bit in the specified range is marked. An empty range returns {@code true}.
+   *
+   * @throws IndexOutOfBoundsException if the range is outside this bitmap
+   */
+  public boolean isRangeNoneMarked(int start, int length) {
+    return implementation.isRangeNoneMarked(start, length);
   }
 
   /** mark as 1 at all positions. */
   public void markAll() {
-    Arrays.fill(bits, (byte) 0XFF);
+    implementation.markAll();
   }
 
   /** mark as 1 at the given bit position. */
   public void mark(int position) {
-    bits[position / Byte.SIZE] |= BIT_UTIL[position % Byte.SIZE];
+    implementation.mark(position);
   }
 
   public void markRange(int startPosition, int length) {
-    if (length <= 0) {
-      return;
-    }
-
-    if (startPosition < 0 || startPosition + length > size) {
-      throw new IndexOutOfBoundsException(
-          Messages.format(
-              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
-    }
-
-    int bitEnd = startPosition + length - 1;
-    int byte0 = startPosition >>> 3;
-    int byte1 = bitEnd >>> 3;
-
-    if (byte0 == byte1) {
-      bits[byte0] |= (byte) (((1 << length) - 1) << (startPosition & 7));
-      return;
-    }
-
-    bits[byte0++] |= (byte) (0xFF << (startPosition & 7));
-
-    while (byte0 < byte1) {
-      bits[byte0++] = (byte) 0xFF;
-    }
-
-    bits[byte1] |= (byte) (0xFF >>> (7 - (bitEnd & 7)));
+    implementation.markRange(startPosition, length);
   }
 
   /** mark as 0 at all positions. */
   public void reset() {
-    Arrays.fill(bits, (byte) 0);
+    implementation.reset();
   }
 
   public void unmark(int position) {
-    bits[position / Byte.SIZE] &= UNMARK_BIT_UTIL[position % Byte.SIZE];
+    implementation.unmark(position);
   }
 
   public void unmarkRange(int startPosition, int length) {
-    if (length <= 0) {
-      return;
-    }
-
-    if (startPosition < 0 || startPosition + length > size) {
-      throw new IndexOutOfBoundsException(
-          Messages.format(
-              "error.common.bitmap_start_length_out_of_range", startPosition, length, size));
-    }
-
-    int bitEnd = startPosition + length - 1;
-    int byte0 = startPosition >>> 3;
-    int byte1 = bitEnd >>> 3;
-
-    if (byte0 == byte1) {
-      bits[byte0] &= (byte) ~(((1 << length) - 1) << (startPosition & 7));
-      return;
-    }
-
-    bits[byte0++] &= (byte) ~(0xFF << (startPosition & 7));
-
-    while (byte0 < byte1) {
-      bits[byte0++] = 0;
-    }
-
-    bits[byte1] &= (byte) (0xFF << ((bitEnd & 7) + 1));
+    implementation.unmarkRange(startPosition, length);
   }
 
   public void merge(BitMap src, int srcStart, int destStart, int len) {
-    if (len <= 0) return;
-    if (srcStart < 0 || destStart < 0 || srcStart + len > src.size || destStart + len > this.size) {
-      throw new IndexOutOfBoundsException();
-    }
-
-    int done = 0;
-    int dstBit = destStart & 7;
-    while (done < len) {
-      int size = Math.min(len - done, 64);
-      long bits = extractBits(src.bits, srcStart + done, size);
-      int destStartByte = (destStart + done) >>> 3;
-      this.bits[destStartByte++] |= (byte) ((bits << dstBit) & 255L);
-      bits = bits >>> (8 - dstBit);
-      while (bits > 0L) {
-        this.bits[destStartByte++] |= (byte) (bits & 255L);
-        bits = bits >>> 8;
-      }
-      done += size;
-    }
-  }
-
-  private long extractBits(byte[] buf, int off, int len) {
-    int start = off >>> 3;
-    int size = 8 - (off & 7);
-    long val = (buf[start++] & 0xFFL) >>> (off & 7);
-    while (size < len) {
-      val |= ((buf[start++] & 0xFFL) << size);
-      size += 8;
-    }
-
-    return val & (0xffff_ffff_ffff_ffffL >>> (64 - len));
+    implementation.merge(src.implementation, srcStart, destStart, len);
   }
 
   /** whether all bits are zero, i.e., no Null value */
   public boolean isAllUnmarked() {
-    int j;
-    for (j = 0; j < size / Byte.SIZE; j++) {
-      if (bits[j] != (byte) 0) {
-        return false;
-      }
-    }
-    for (j = 0; j < size % Byte.SIZE; j++) {
-      if ((bits[size / Byte.SIZE] & BIT_UTIL[j]) != 0) {
-        return false;
-      }
-    }
-    return true;
+    return implementation.isAllUnmarked();
   }
 
   // whether all bits in the range are unmarked
   public boolean isAllUnmarked(int rangeSize) {
-    int j;
-    for (j = 0; j < rangeSize / Byte.SIZE; j++) {
-      if (bits[j] != (byte) 0) {
-        return false;
-      }
-    }
-    int remainingBits = rangeSize % Byte.SIZE;
-    if (remainingBits > 0) {
-      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
-      if ((bits[rangeSize / Byte.SIZE] & mask) != 0) {
-        return false;
-      }
-    }
-    return true;
+    return implementation.isAllUnmarked(rangeSize);
   }
 
   /** whether all bits are one, i.e., all are Null */
   public boolean isAllMarked() {
-    int j;
-    for (j = 0; j < size / Byte.SIZE; j++) {
-      if (bits[j] != (byte) 0XFF) {
-        return false;
-      }
-    }
-    for (j = 0; j < size % Byte.SIZE; j++) {
-      if ((bits[size / Byte.SIZE] & BIT_UTIL[j]) == 0) {
-        return false;
-      }
-    }
-    return true;
+    return implementation.isAllMarked();
   }
 
   @Override
   public String toString() {
-    StringBuilder res = new StringBuilder();
-    for (int i = 0; i < size; i++) {
-      res.append(isMarked(i) ? 1 : 0);
+    StringBuilder result = new StringBuilder();
+    for (int i = 0; i < getSize(); i++) {
+      result.append(isMarked(i) ? 1 : 0);
     }
-    return res.toString();
+    return result.toString();
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(size);
-    result = 31 * result + Arrays.hashCode(bits);
+    int result = 31 + getSize();
+    result = 31 * result + implementation.contentHashCode();
     return result;
   }
 
@@ -248,56 +150,35 @@ public class BitMap {
     if (obj == this) {
       return true;
     }
-    if (obj == null) {
-      return false;
-    }
     if (!(obj instanceof BitMap)) {
       return false;
     }
     BitMap other = (BitMap) obj;
-    return this.size == other.size && Arrays.equals(this.bits, other.bits);
+    return getSize() == other.getSize() && implementation.contentEquals(other.implementation);
   }
 
   public boolean equalsInRange(Object obj, int rangeSize) {
     if (obj == this) {
       return true;
     }
-    if (obj == null) {
-      return false;
-    }
     if (!(obj instanceof BitMap)) {
       return false;
     }
     BitMap other = (BitMap) obj;
-    if (rangeSize > size || rangeSize > other.size) {
+    if (rangeSize > getSize() || rangeSize > other.getSize()) {
       throw new IllegalArgumentException(
           Messages.format(
               "error.common.bitmap_range_size_exceeds",
               rangeSize,
-              Math.min(this.size, other.size)));
+              Math.min(getSize(), other.getSize())));
     }
 
-    int byteSize = rangeSize / Byte.SIZE;
-    for (int i = 0; i < byteSize; i++) {
-      if (this.bits[i] != other.bits[i]) {
-        return false;
-      }
-    }
-    int remainingBits = rangeSize % Byte.SIZE;
-    if (remainingBits > 0) {
-      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
-      if ((this.bits[byteSize] & mask) != (other.bits[byteSize] & mask)) {
-        return false;
-      }
-    }
-    return true;
+    return implementation.contentEqualsInRange(other.implementation, rangeSize);
   }
 
   @Override
   public BitMap clone() {
-    byte[] cloneBytes = new byte[this.bits.length];
-    System.arraycopy(this.bits, 0, cloneBytes, 0, this.bits.length);
-    return new BitMap(this.size, cloneBytes);
+    return new BitMap(implementation.copy());
   }
 
   /**
@@ -316,13 +197,14 @@ public class BitMap {
    * @throws IndexOutOfBoundsException if copying would cause access of data outside bitmap bounds.
    */
   public static void copyOfRange(BitMap src, int srcPos, BitMap dest, int destPos, int length) {
-    if (srcPos + length > src.size) {
-      throw new IndexOutOfBoundsException(
-          Messages.format("error.common.bitmap_out_of_src_range", (srcPos + length - 1), src.size));
-    } else if (destPos + length > dest.size) {
+    if (srcPos + length > src.getSize()) {
       throw new IndexOutOfBoundsException(
           Messages.format(
-              "error.common.bitmap_out_of_dest_range", (destPos + length - 1), dest.size));
+              "error.common.bitmap_out_of_src_range", (srcPos + length - 1), src.getSize()));
+    } else if (destPos + length > dest.getSize()) {
+      throw new IndexOutOfBoundsException(
+          Messages.format(
+              "error.common.bitmap_out_of_dest_range", (destPos + length - 1), dest.getSize()));
     }
     for (int i = 0; i < length; ++i) {
       if (src.isMarked(srcPos + i)) {
@@ -350,7 +232,7 @@ public class BitMap {
   }
 
   public byte[] getTruncatedByteArray(int size) {
-    return Arrays.copyOf(this.bits, getSizeOfBytes(size));
+    return Arrays.copyOf(getByteArray(), getSizeOfBytes(size));
   }
 
   public void append(BitMap another, int position, int length) {
@@ -364,10 +246,24 @@ public class BitMap {
   }
 
   public void extend(int newSize) {
-    if (size >= newSize) {
-      return;
-    }
-    bits = Arrays.copyOf(bits, getSizeOfBytes(newSize));
-    size = newSize;
+    implementation = implementation.extend(newSize);
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return RamUsageEstimator.BIT_MAP_SIZE + implementation.getRetainedSizeInBytes();
+  }
+
+  BitMapImpl getImplementation() {
+    return implementation;
+  }
+
+  private static BitMapImpl createImplementation(int size) {
+    return size >= 0 && size <= Long.SIZE ? new BitMapLongImpl(size) : new BitMapArrayImpl(size);
+  }
+
+  /** Initialize a BitMap whose implementation is selected according to the given size. */
+  public static BitMap createBitMapDynamically(int size) {
+    return new BitMap(createImplementation(size));
   }
 }

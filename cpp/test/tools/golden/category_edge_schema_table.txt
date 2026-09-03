@@ -1,0 +1,5 @@
+model  object         column      category   data_type  encoding  compression
+table  category_edge  event_time  TIME       TIMESTAMP            
+table  category_edge  owner       ATTRIBUTE  STRING               
+table  category_edge  site        TAG        STRING     PLAIN     UNCOMPRESSED
+table  category_edge  temp        FIELD      DOUBLE     PLAIN     UNCOMPRESSED

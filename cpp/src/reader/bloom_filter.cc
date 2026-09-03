@@ -208,6 +208,26 @@ int BloomFilter::add_path_entry(const String& device_name,
     return E_OK;
 }
 
+bool BloomFilter::contains(const String& device_name,
+                           const String& measurement_name) {
+    if (size_ == 0) {
+        return true;  // empty filter — assume present
+    }
+    String entry = get_entry_string(device_name, measurement_name);
+    if (IS_NULL(entry.buf_)) {
+        return true;  // OOM — conservatively assume present
+    }
+    for (uint32_t i = 0; i < hash_func_count_; i++) {
+        int32_t hv = hash_func_arr_[i].hash(entry);
+        if (!bitset_.get(hv)) {
+            free_entry_buf(entry.buf_);
+            return false;  // definitely not present
+        }
+    }
+    free_entry_buf(entry.buf_);
+    return true;  // probably present
+}
+
 int BloomFilter::serialize_to(ByteStream& out) {
     int ret = E_OK;
     uint8_t* filter_data_bytes = nullptr;
@@ -215,11 +235,12 @@ int BloomFilter::serialize_to(ByteStream& out) {
     bitset_.to_bytes(filter_data_bytes, filter_data_bytes_len);
     if (RET_FAIL(
             SerializationUtil::write_var_uint(filter_data_bytes_len, out))) {
-    } else if (RET_FAIL(
-                   out.write_buf(filter_data_bytes, filter_data_bytes_len))) {
-    } else if (RET_FAIL(SerializationUtil::write_var_uint(size_, out))) {
-    } else if (RET_FAIL(
-                   SerializationUtil::write_var_uint(hash_func_count_, out))) {
+    } else if (filter_data_bytes_len > 0) {
+        if (RET_FAIL(out.write_buf(filter_data_bytes, filter_data_bytes_len))) {
+        } else if (RET_FAIL(SerializationUtil::write_var_uint(size_, out))) {
+        } else if (RET_FAIL(SerializationUtil::write_var_uint(hash_func_count_,
+                                                              out))) {
+        }
     }
     if (filter_data_bytes_len > 0) {
         bitset_.revert_bytes(filter_data_bytes);
@@ -233,6 +254,31 @@ int BloomFilter::deserialize_from(ByteStream& in) {
     uint32_t ret_read_len = 0;
     uint8_t* filter_data = nullptr;
     if (RET_FAIL(SerializationUtil::read_var_uint(filter_data_bytes_len, in))) {
+    } else if (filter_data_bytes_len == 0) {
+        // Older C++ writers serialized an empty filter as three zero varints:
+        // byte length, bit count, and hash-function count. The Java-compatible
+        // encoding contains only the byte length. Probe the two legacy fields
+        // and restore the cursor when the following data is instead the
+        // TsFile property count from the current encoding.
+        const uint64_t legacy_fields_pos = in.read_pos();
+        if (in.remaining_size() >= 2) {
+            uint32_t legacy_size = 0;
+            uint32_t legacy_hash_func_count = 0;
+            int probe_ret = SerializationUtil::read_var_uint(legacy_size, in);
+            if (probe_ret == E_OK && legacy_size == 0) {
+                probe_ret = SerializationUtil::read_var_uint(
+                    legacy_hash_func_count, in);
+            }
+            if (probe_ret != E_OK || legacy_size != 0 ||
+                legacy_hash_func_count != 0) {
+                in.set_read_pos(legacy_fields_pos);
+            }
+        }
+        size_ = 0;
+        hash_func_count_ = 0;
+        return E_OK;
+    } else if (filter_data_bytes_len > in.remaining_size()) {
+        ret = E_TSFILE_CORRUPTED;
     } else if (UNLIKELY(nullptr ==
                         (filter_data = (uint8_t*)mem_alloc(
                              filter_data_bytes_len, MOD_BLOOM_FILTER)))) {
@@ -244,6 +290,9 @@ int BloomFilter::deserialize_from(ByteStream& in) {
     } else if (RET_FAIL(SerializationUtil::read_var_uint(size_, in))) {
     } else if (RET_FAIL(
                    SerializationUtil::read_var_uint(hash_func_count_, in))) {
+    } else if (size_ == 0 || hash_func_count_ == 0 ||
+               hash_func_count_ > MAX_HASH_FUNC_COUNT) {
+        ret = E_TSFILE_CORRUPTED;
     } else {
         for (uint32_t i = 0; i < hash_func_count_; i++) {
             hash_func_arr_[i].init(size_, SEEDS[i]);

@@ -24,6 +24,7 @@
 #include "common/tsfile_common.h"
 #include "expression.h"
 #include "file/read_file.h"
+#include "reader/prepared_series.h"
 #include "reader/table_query_executor.h"
 namespace storage {
 class TsFileExecutor;
@@ -62,6 +63,7 @@ class TsFileReader {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
+    unsigned char get_file_version() const;
     /**
      * @brief query the tsfile by the query expression,Users can construct
      * their own query expressions to query tsfile
@@ -128,6 +130,21 @@ class TsFileReader {
     int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
                    ResultSet*& result_set);
 
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+    int prepare_series(
+        const FileGeneration& generation, const PreparedLocator& locator,
+        const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+        std::shared_ptr<PreparedSeries>& prepared);
+    int query_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                       int64_t start_time, int64_t end_time, int offset,
+                       int limit, ResultSet*& result_set);
+    int query_prepared_multi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ResultSet*& result_set);
+
     /**
      * @brief Query table-model data by row with offset/limit pushdown.
      *
@@ -143,7 +160,6 @@ class TsFileReader {
      * @param offset         Number of leading rows to skip (>= 0).
      * @param limit          Maximum rows to return. < 0 means unlimited.
      * @param[out] result_set  The result set containing query results.
-     * @param tag_filter     Optional tag filter for filtering by tag columns.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int queryByRow(const std::string& table_name,
@@ -217,6 +233,9 @@ class TsFileReader {
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata();
 
+    /** Return a copy of all file-level properties, preserving null values. */
+    TsFileProperties get_tsfile_properties();
+
     /**
      * @brief get the table schema by the table name
      *
@@ -243,8 +262,10 @@ class TsFileReader {
     storage::ReadFile* read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
-    int table_query_executor_batch_size_;
+    int table_query_executor_batch_size_ = -1;
     common::PageArena tsfile_reader_meta_pa_;
+    // Test-only hook for the unbounded-arena-growth regression check.
+    friend class TsFileReaderMetaArenaTest;
 };
 
 }  // namespace storage

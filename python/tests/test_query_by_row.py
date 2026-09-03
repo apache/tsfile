@@ -172,6 +172,71 @@ def test_query_table_by_row_offset_limit():
             os.remove(file_path)
 
 
+def test_query_tree_by_row_limit_zero():
+    """limit=0 must return an empty result set with valid column metadata.
+
+    Regression: single-path queries push limit down to the scan iterator, so
+    the first TsBlock is never materialized and the column type used to fall
+    back to NULL_TYPE (254), which broke metadata mapping on the Python side
+    (`ValueError: 254 is not a valid TSDataType`).
+    """
+    file_path = "python_tree_query_by_row_limit_zero.tsfile"
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    try:
+        device_id = "root.d1"
+        specs = [
+            ("s1", TSDataType.INT64),
+            ("s2", TSDataType.DOUBLE),
+            ("s3", TSDataType.BOOLEAN),
+            ("s4", TSDataType.STRING),
+        ]
+        num_rows = 10
+
+        writer = TsFileWriter(file_path)
+        for name, dtype in specs:
+            writer.register_timeseries(device_id, TimeseriesSchema(name, dtype))
+        for t in range(num_rows):
+            fields = [
+                Field("s1", t, TSDataType.INT64),
+                Field("s2", float(t), TSDataType.DOUBLE),
+                Field("s3", t % 2 == 0, TSDataType.BOOLEAN),
+                Field("s4", f"v{t}", TSDataType.STRING),
+            ]
+            writer.write_row_record(RowRecord(device_id, t, fields))
+        writer.close()
+
+        reader = TsFileReader(file_path)
+
+        # Single-path limit=0 for each data type: metadata type must be exact
+        # and no rows must be returned.
+        for name, dtype in specs:
+            with reader.query_tree_by_row([device_id], [name], 0, 0) as result:
+                info = result.get_result_column_info()
+                assert info[f"{device_id}.{name}"] == dtype
+                assert not result.next()
+
+        # Multi-path limit=0: every column keeps its declared type, zero rows.
+        names = [name for name, _ in specs]
+        with reader.query_tree_by_row([device_id], names, 0, 0) as result:
+            info = result.get_result_column_info()
+            for name, dtype in specs:
+                assert info[f"{device_id}.{name}"] == dtype
+            assert not result.next()
+
+        # An offset past the end of the data hits the same no-TsBlock path.
+        with reader.query_tree_by_row([device_id], ["s1"], num_rows + 5, -1) as result:
+            info = result.get_result_column_info()
+            assert info[f"{device_id}.s1"] == TSDataType.INT64
+            assert not result.next()
+
+        reader.close()
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
 def test_query_tree_by_row_skips_missing_device_and_measurement():
     """Tree queryByRow: missing device or measurement paths are skipped (Java-aligned)."""
     file_path = "python_tree_query_by_row_skip_missing.tsfile"

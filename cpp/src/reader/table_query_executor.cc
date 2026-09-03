@@ -33,17 +33,16 @@ int TableQueryExecutor::query(const std::string& table_name,
     pa.init(512, common::MOD_TSFILE_READER);
     MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (RET_FAIL(
-            file_metadata->get_table_metaindex_node(table_name, table_root))) {
-    } else if (RET_FAIL(
-                   file_metadata->get_table_schema(table_name, table_schema))) {
-    }
-
-    if (IS_FAIL(ret)) {
+    // A schema-only table has no device-level index.  Resolve the schema
+    // first, then leave table_root null so DeviceMetaIterator yields an empty
+    // result set with the correct columns instead of reporting "table does
+    // not exist".
+    if (RET_FAIL(file_metadata->get_table_schema(table_name, table_schema))) {
         ret_qds = nullptr;
         delete time_filter;
         return ret;
     }
+    file_metadata->get_table_metaindex_node(table_name, table_root);
     std::vector<std::string> lower_case_column_names(columns);
     for (auto& column : lower_case_column_names) {
         to_lowercase_inplace(column);
@@ -104,17 +103,12 @@ int TableQueryExecutor::query(const std::string& table_name,
     pa.init(512, common::MOD_TSFILE_READER);
     MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (RET_FAIL(
-            file_metadata->get_table_metaindex_node(table_name, table_root))) {
-    } else if (RET_FAIL(
-                   file_metadata->get_table_schema(table_name, table_schema))) {
-    }
-
-    if (IS_FAIL(ret)) {
+    if (RET_FAIL(file_metadata->get_table_schema(table_name, table_schema))) {
         ret_qds = nullptr;
         delete time_filter;
         return ret;
     }
+    file_metadata->get_table_metaindex_node(table_name, table_root);
     std::vector<std::string> lower_case_column_names(columns);
     for (auto& column : lower_case_column_names) {
         to_lowercase_inplace(column);
@@ -233,8 +227,12 @@ int TableQueryExecutor::query_on_tree(
         }
     }
 
-    auto schema = std::make_shared<TableSchema>("default", col_schema);
-    schema->set_virtual_table();
+    // Tree-derived (virtual) tables are case-sensitive: keep the original
+    // casing of device path segments and measurement names so that
+    // case-distinct series (e.g. "temperature" vs "Temperature") map to
+    // separate columns instead of colliding.
+    auto schema = std::make_shared<TableSchema>("default", col_schema,
+                                                /*virtual_table=*/true);
     std::shared_ptr<ColumnMapping> column_mapping =
         std::make_shared<ColumnMapping>();
     for (size_t i = 0; i < col_schema.size(); ++i) {

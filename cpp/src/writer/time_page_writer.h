@@ -84,15 +84,40 @@ class TimePageWriter {
         return ret;
     }
 
+    int write_batch(const int64_t* timestamps, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        // Check order: first timestamp vs existing end_time
+        if (statistic_->count_ != 0 && is_inited_ &&
+            timestamps[0] <= statistic_->end_time_) {
+            return common::E_OUT_OF_ORDER;
+        }
+        // Check monotonicity within batch
+        for (uint32_t i = 1; i < count; i++) {
+            if (timestamps[i] <= timestamps[i - 1]) {
+                return common::E_OUT_OF_ORDER;
+            }
+        }
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                 time_out_stream_))) {
+        } else {
+            statistic_->update_time_batch(timestamps, count);
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_time_out_stream_size() const {
         return time_out_stream_.total_size();
     }
+    // Logical bytes written — used by the page-seal-when-full heuristic.
     FORCE_INLINE uint32_t get_page_memory_size() const {
         return time_out_stream_.total_size();
     }
+    // Allocated 64 KiB-page footprint — used by chunk-group memory pressure
+    // accounting.  See PageWriter::estimate_max_mem_size.
     FORCE_INLINE uint32_t estimate_max_mem_size() const {
-        return time_out_stream_.total_size() +
+        return static_cast<uint32_t>(time_out_stream_.allocated_bytes()) +
                time_encoder_->get_max_byte_size();
     }
     int write_to_chunk(common::ByteStream& pages_data, bool write_header,
@@ -102,6 +127,11 @@ class TimePageWriter {
     }
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     TimePageData get_cur_page_data() { return cur_page_data_; }
+    // See ValuePageWriter::release_cur_page_data for rationale.
+    void release_cur_page_data() {
+        cur_page_data_.uncompressed_buf_ = nullptr;
+        cur_page_data_.compressed_buf_ = nullptr;
+    }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
    private:

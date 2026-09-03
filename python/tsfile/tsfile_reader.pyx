@@ -23,13 +23,15 @@ from typing import List, Optional, Dict
 
 import pandas as pd
 from libc.string cimport strlen
+from libc.stdlib cimport free, malloc
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from libc.string cimport memset
 import pyarrow as pa
-from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
+from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
+from tsfile.exceptions import TsFileCorruptedError
 from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
@@ -58,6 +60,7 @@ cdef class ResultSetPy:
     cdef object is_tree
 
     def __init__(self, tsfile_reader : TsFileReaderPy, is_tree: bint = False):
+        self.result = NULL
         self.metadata = None
         self.valid = True
         self.tsfile_reader = weakref.ref(tsfile_reader)
@@ -151,7 +154,8 @@ cdef class ResultSetPy:
         df = df.astype(data_type_dict)
         return df
 
-    def read_arrow_batch(self):
+    def read_arrow_record_batch(self):
+        """Read one native TsBlock as an Arrow RecordBatch."""
         self.check_result_set_invalid()
         
         cdef ArrowArray arrow_array
@@ -162,11 +166,13 @@ cdef class ResultSetPy:
         memset(&arrow_array, 0, sizeof(ArrowArray))
         memset(&arrow_schema, 0, sizeof(ArrowSchema))
 
-        code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
+        with nogil:
+            code = tsfile_result_set_get_next_tsblock_as_arrow(
+                self.result, &arrow_array, &arrow_schema)
 
-        if code == 21:  # E_NO_MORE_DATA
+        if code == RET_NO_MORE_DATA:
             return None
-        if code != 0:
+        if code != RET_OK:
             check_error(code)
 
         if arrow_schema.release == NULL or arrow_array.release == NULL:
@@ -175,15 +181,20 @@ cdef class ResultSetPy:
         try:
             schema_ptr = <uintptr_t>&arrow_schema
             array_ptr = <uintptr_t>&arrow_array
-            batch = pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
-            table = pa.Table.from_batches([batch])
-            return table
+            return pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
         except Exception as e:
             if arrow_array.release != NULL:
                 arrow_array.release(&arrow_array)
             if arrow_schema.release != NULL:
                 arrow_schema.release(&arrow_schema)
             raise e
+
+    def read_arrow_batch(self):
+        """Read one native TsBlock as an Arrow Table."""
+        batch = self.read_arrow_record_batch()
+        if batch is None:
+            return None
+        return pa.Table.from_batches([batch])
 
     def get_value_by_index(self, index : int):
         """
@@ -199,7 +210,9 @@ cdef class ResultSetPy:
         if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
         elif data_type == TSDataTypePy.DATE:
-            return parse_int_to_date(tsfile_result_set_get_value_by_index_int64_t(self.result, index))
+            # DATE is physically stored as int32 (yyyymmdd), so read it through
+            # the int32 accessor that matches the underlying storage width.
+            return parse_int_to_date(tsfile_result_set_get_value_by_index_int32_t(self.result, index))
         elif data_type == TSDataTypePy.INT64 or data_type == TSDataTypePy.TIMESTAMP:
             return tsfile_result_set_get_value_by_index_int64_t(self.result, index)
         elif data_type == TSDataTypePy.FLOAT:
@@ -294,6 +307,33 @@ cdef class ResultSetPy:
         self.close()
 
     def __dealloc__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+cdef class PreparedSeriesPy:
+    """Reusable native metadata parsed from one exact Dataset Index locator."""
+    cdef PreparedSeriesHandle prepared
+
+    def __cinit__(self):
+        self.prepared = NULL
+
+    cdef init_c(self, PreparedSeriesHandle prepared):
+        self.prepared = prepared
+
+    def close(self):
+        if self.prepared != NULL:
+            tsfile_prepared_series_free(self.prepared)
+            self.prepared = NULL
+
+    def __dealloc__(self):
         self.close()
 
     def __enter__(self):
@@ -319,8 +359,9 @@ cdef class TsFileReaderPy:
         """
         Initialize a TsFile reader for the specified file path.
         """
-        self.init_reader(pathname)
+        self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
+        self.init_reader(pathname)
 
     cdef init_reader(self, pathname):
         self.reader = tsfile_reader_new_c(pathname)
@@ -462,6 +503,74 @@ cdef class TsFileReaderPy:
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
+    def prepare_series(self, locator, PreparedSeriesPy time_owner=None) -> PreparedSeriesPy:
+        """Prepare an 11-field native locator tuple for repeated queries."""
+        if len(locator) != 11:
+            raise ValueError("prepared locator must contain exactly 11 fields")
+        cdef PreparedSeriesHandle prepared = NULL
+        if time_owner is None:
+            prepared = tsfile_reader_prepare_series_c(self.reader, locator)
+        else:
+            if time_owner.prepared == NULL:
+                raise RuntimeError("PreparedSeries time owner is closed")
+            prepared = tsfile_reader_prepare_series_with_time_owner_c(
+                self.reader, locator, time_owner.prepared)
+        py_prepared = PreparedSeriesPy()
+        py_prepared.init_c(prepared)
+        return py_prepared
+
+    def query_prepared(self, PreparedSeriesPy prepared,
+                       start_time : int = INT64_MIN,
+                       end_time : int = INT64_MAX,
+                       offset : int = 0, limit : int = -1) -> ResultSetPy:
+        if prepared.prepared == NULL:
+            raise RuntimeError("PreparedSeries is closed")
+        cdef ResultSet result = tsfile_reader_query_prepared_c(
+            self.reader, prepared.prepared, start_time, end_time, offset, limit)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, "prepared")
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_prepared_multi(self, prepared_list,
+                             start_time : int = INT64_MIN,
+                             end_time : int = INT64_MAX,
+                             offset : int = 0, limit : int = -1) -> ResultSetPy:
+        """Query aligned prepared value columns through one shared time reader."""
+        cdef Py_ssize_t count = len(prepared_list)
+        cdef Py_ssize_t i
+        cdef PreparedSeriesPy prepared
+        cdef PreparedSeriesHandle* handles = NULL
+        cdef ResultSet result = NULL
+        cdef ErrorCode code = 0
+        cdef int64_t c_start_time = start_time
+        cdef int64_t c_end_time = end_time
+        cdef int c_offset = offset
+        cdef int c_limit = limit
+        if count <= 0:
+            raise ValueError("prepared_list must not be empty")
+        handles = <PreparedSeriesHandle*>malloc(
+            count * sizeof(PreparedSeriesHandle))
+        if handles == NULL:
+            raise MemoryError()
+        try:
+            for i in range(count):
+                prepared = prepared_list[i]
+                if prepared.prepared == NULL:
+                    raise RuntimeError("PreparedSeries is closed")
+                handles[i] = prepared.prepared
+            with nogil:
+                result = tsfile_reader_query_prepared_multi(
+                    self.reader, handles, <uint32_t>count,
+                    c_start_time, c_end_time, c_offset, c_limit, &code)
+            check_error(code, b"Failed to query aligned prepared series")
+        finally:
+            free(handles)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, "prepared")
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
     def notify_result_set_discard(self, result_set: ResultSetPy):
         """
         Remove activate result set from activate_result_set_list, called when a result set close.
@@ -497,15 +606,58 @@ cdef class TsFileReaderPy:
 
     def get_timeseries_metadata(
             self, device_ids: Optional[List] = None
-    ) -> Dict[str, DeviceTimeseriesMetadataGroup]:
+    ) -> Dict[tuple, DeviceTimeseriesMetadataGroup]:
         """
-        Return map device path -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
+        Return map device-segments-tuple -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
         (table name, segments, and list of :class:`tsfile.schema.TimeseriesMetadata`).
+
+        The key is the device's full segment tuple (a null tag is ``None``), not
+        the dotted path string, so a real null tag and the literal string
+        ``"null"`` map to distinct entries instead of colliding.
 
         ``device_ids is None``: all devices. ``device_ids == []``: empty map.
         Non-empty list restricts to those devices (only existing devices appear).
         """
         return reader_get_timeseries_metadata_c(self.reader, device_ids)
+
+    def get_tsfile_properties(self) -> Dict[str, Optional[bytes]]:
+        """
+        Return file-level properties as ``dict[str, bytes | None]``.
+
+        Null property values are returned as ``None`` and remain distinct from
+        non-null zero-length byte strings.
+        """
+        cdef TsFileProperty * properties = NULL
+        cdef uint32_t property_count = 0
+        cdef uint32_t i
+        cdef ErrorCode err_code
+        cdef object key
+        cdef dict result = {}
+
+        err_code = tsfile_reader_get_tsfile_properties(
+            self.reader, &properties, &property_count
+        )
+        check_error(err_code)
+        try:
+            for i in range(property_count):
+                try:
+                    key = PyBytes_FromStringAndSize(
+                        properties[i].key, properties[i].key_len
+                    ).decode('utf-8')
+                except UnicodeDecodeError:
+                    raise TsFileCorruptedError(
+                        context="TsFile property key is not valid UTF-8"
+                    ) from None
+                if properties[i].is_null:
+                    result[key] = None
+                else:
+                    result[key] = PyBytes_FromStringAndSize(
+                        <const char *> properties[i].value,
+                        properties[i].value_len,
+                    )
+        finally:
+            tsfile_free_tsfile_properties(properties, property_count)
+        return result
 
     def close(self):
         """
@@ -527,7 +679,10 @@ cdef class TsFileReaderPy:
         return self.activate_result_set_list
 
     def __dealloc__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self

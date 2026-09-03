@@ -29,6 +29,15 @@ namespace common {
 extern TSFILE_API ConfigValue g_config_value_;
 extern TSFILE_API ColumnSchema g_time_column_schema;
 
+#ifdef ENABLE_THREADS
+class ThreadPool;
+// The single process-wide worker pool shared by every parallel code path
+// (write column encoding, read column decoding).  Created in init_common()
+// and torn down in libtsfile_destroy(); null until libtsfile_init() runs, so
+// every caller must fall back to the serial path when it is null.
+extern TSFILE_API ThreadPool* g_thread_pool_;
+#endif
+
 FORCE_INLINE int set_global_time_data_type(uint8_t data_type) {
     ASSERT(data_type >= BOOLEAN && data_type <= STRING);
     if (data_type != INT64) {
@@ -39,9 +48,8 @@ FORCE_INLINE int set_global_time_data_type(uint8_t data_type) {
 }
 
 FORCE_INLINE int set_global_time_encoding(uint8_t encoding) {
-    ASSERT(encoding >= PLAIN && encoding <= FREQ);
-    if (encoding != TS_2DIFF && encoding != PLAIN && encoding != GORILLA &&
-        encoding != ZIGZAG && encoding != RLE && encoding != SPRINTZ) {
+    ASSERT(encoding >= PLAIN && encoding <= CAMEL);
+    if (encoding != TS_2DIFF && encoding != PLAIN) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.time_encoding_type_ = static_cast<TSEncoding>(encoding);
@@ -49,9 +57,10 @@ FORCE_INLINE int set_global_time_encoding(uint8_t encoding) {
 }
 
 FORCE_INLINE int set_global_time_compression(uint8_t compression) {
-    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZMA2);
     if (compression != UNCOMPRESSED && compression != SNAPPY &&
-        compression != GZIP && compression != LZO && compression != LZ4) {
+        compression != GZIP && compression != LZO && compression != LZ4 &&
+        compression != ZSTD && compression != LZMA2) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.time_compress_type_ =
@@ -65,7 +74,7 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 
     // Validate input parameters
     ASSERT(dtype >= BOOLEAN && dtype <= STRING);
-    ASSERT(encoding >= PLAIN && encoding <= SPRINTZ);
+    ASSERT(encoding >= PLAIN && encoding <= CAMEL);
 
     // Check encoding support for each data type
     switch (dtype) {
@@ -77,25 +86,35 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
         case INT32:
         case DATE:
         case INT64:
+        case TIMESTAMP:
             if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
                 encoding_type != GORILLA && encoding_type != ZIGZAG &&
-                encoding_type != RLE && encoding_type != SPRINTZ) {
+                encoding_type != RLE && encoding_type != SPRINTZ &&
+                encoding_type != CHIMP && encoding_type != RLBE) {
                 return E_NOT_SUPPORT;
             }
-            dtype == INT32
+            (dtype == INT32 || dtype == DATE)
                 ? g_config_value_.int32_encoding_type_ = encoding_type
                 : g_config_value_.int64_encoding_type_ = encoding_type;
             break;
 
         case FLOAT:
-        case DOUBLE:
             if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
-                encoding_type != GORILLA && encoding_type != SPRINTZ) {
+                encoding_type != GORILLA && encoding_type != SPRINTZ &&
+                encoding_type != CHIMP && encoding_type != RLBE) {
                 return E_NOT_SUPPORT;
             }
-            dtype == FLOAT
-                ? g_config_value_.float_encoding_type_ = encoding_type
-                : g_config_value_.double_encoding_type_ = encoding_type;
+            g_config_value_.float_encoding_type_ = encoding_type;
+            break;
+
+        case DOUBLE:
+            if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
+                encoding_type != GORILLA && encoding_type != SPRINTZ &&
+                encoding_type != CHIMP && encoding_type != RLBE &&
+                encoding_type != CAMEL) {
+                return E_NOT_SUPPORT;
+            }
+            g_config_value_.double_encoding_type_ = encoding_type;
             break;
 
         case STRING:
@@ -113,9 +132,10 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 }
 
 FORCE_INLINE int set_global_compression(uint8_t compression) {
-    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZMA2);
     if (compression != UNCOMPRESSED && compression != SNAPPY &&
-        compression != GZIP && compression != LZO && compression != LZ4) {
+        compression != GZIP && compression != LZO && compression != LZ4 &&
+        compression != ZSTD && compression != LZMA2) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.default_compression_type_ =
@@ -152,7 +172,7 @@ FORCE_INLINE uint8_t get_datatype_encoding(uint8_t data_type) {
         case TEXT:
             return static_cast<uint8_t>(g_config_value_.string_encoding_type_);
         case DATE:
-            return static_cast<uint8_t>(g_config_value_.int64_encoding_type_);
+            return static_cast<uint8_t>(g_config_value_.int32_encoding_type_);
         default:
             return static_cast<uint8_t>(
                 PLAIN);  // Return default encoding for unknown types
@@ -163,29 +183,35 @@ FORCE_INLINE uint8_t get_global_compression() {
     return static_cast<uint8_t>(g_config_value_.default_compression_type_);
 }
 
+FORCE_INLINE void set_parallel_read_enabled(bool enabled) {
+    g_config_value_.parallel_read_enabled_ = enabled;
+}
+
+FORCE_INLINE bool get_parallel_read_enabled() {
+    return g_config_value_.parallel_read_enabled_;
+}
+
 FORCE_INLINE void set_parallel_write_enabled(bool enabled) {
     g_config_value_.parallel_write_enabled_ = enabled;
 }
 
 FORCE_INLINE bool get_parallel_write_enabled() {
-    return g_config_value_.parallel_write_enabled_ &&
-           g_config_value_.write_thread_count_ > 1;
+    return g_config_value_.parallel_write_enabled_;
 }
 
-// Set the number of threads for parallel writes.  Must be called before
-// init_common() / libtsfile_init() — the global thread pool is created
-// during initialization and is not resized at runtime.
-FORCE_INLINE int set_write_thread_count(int32_t count) {
-    if (count < 1 || count > 64) return E_INVALID_ARG;
-    g_config_value_.write_thread_count_ = count;
-    return E_OK;
-}
+// Select the backend used by subsequently opened local files. Existing
+// ReadFile instances retain the backend selected when they were opened. This
+// setting deliberately lives outside exported ConfigValue so adding it does
+// not change that public data structure's ABI.
+extern int set_file_read_backend(FileReadBackend backend);
+extern FileReadBackend get_file_read_backend();
 
-#ifdef ENABLE_THREADS
-class ThreadPool;
-// Global write thread pool, created by init_common().
-extern ThreadPool* g_write_thread_pool_;
-#endif
+// Size of the single global worker pool.  Rejects values outside [1, 64] with
+// E_INVALID_ARG, leaving the field untouched.  If the pool already exists
+// (libtsfile_init has run) it is rebuilt at the new size immediately; the
+// caller must ensure no read/write is concurrently using the pool.  Defined in
+// global.cc (needs the full ThreadPool type).
+extern int set_thread_count(int32_t count);
 
 extern int init_common();
 extern bool is_timestamp_column_name(const char* time_col_name);

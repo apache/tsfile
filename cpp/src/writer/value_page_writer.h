@@ -59,19 +59,6 @@ struct ValuePageData {
             compressor_->after_compress(compressed_buf_);
             compressed_buf_ = nullptr;
         }
-        compressor_ = nullptr;
-    }
-
-    /** Clear pointers without freeing (transfer ownership to another holder).
-     */
-    void clear() {
-        col_notnull_bitmap_buf_size_ = 0;
-        value_buf_size_ = 0;
-        uncompressed_size_ = 0;
-        compressed_size_ = 0;
-        uncompressed_buf_ = nullptr;
-        compressed_buf_ = nullptr;
-        compressor_ = nullptr;
     }
 };
 
@@ -163,11 +150,170 @@ class ValuePageWriter {
         VPW_DO_WRITE_FOR_TYPE(isnull);
     }
 
-    FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
-    FORCE_INLINE uint32_t get_total_write_count() const { return size_; }
+    // Batch write for aligned/table model.
+    // In the tablet bitmap: bit=1 means null, bit=0 means not null.
+    // In VPW_DO_WRITE_FOR_TYPE: ISNULL=true skips encoding.
+    // So: tablet bitmap.test(r)=true -> isnull=true (null value)
+    //     tablet bitmap.test(r)=false -> isnull=false (valid value)
+    template <typename T>
+    int write_batch(const int64_t* timestamps, const T* values,
+                    const common::BitMap& col_notnull_bitmap,
+                    uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        // Count the not-null rows but defer mutating size_ /
+        // col_notnull_bitmap_ until the value encode finishes successfully.
+        // Previously the bitmap and size_ were bumped first, so a half-failed
+        // encode_batch left the page claiming `count` rows had been written
+        // when only a prefix made it into value_out_stream_ — a subsequent
+        // re-encode would interleave with the stale stream and produce a
+        // misaligned page on disk.
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            // bit=1 in tablet bitmap means null; bit=0 means not null
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                valid_count++;
+            }
+        }
+
+        if (valid_count == 0) {
+            // Still need to advance size_ so trailing null rows are tracked.
+            for (uint32_t i = 0; i < count; i++) {
+                if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                    col_notnull_bitmap_.push_back(0);
+                }
+                size_++;
+            }
+            return ret;
+        }
+
+        // If all values are valid, we can encode the batch directly
+        if (valid_count == count) {
+            if (RET_FAIL(value_encoder_->encode_batch(values + start_idx, count,
+                                                      value_out_stream_))) {
+                // Don't bump size_/bitmap on encode failure.
+                return ret;
+            }
+            statistic_->update_batch(timestamps + start_idx, values + start_idx,
+                                     count);
+        } else {
+            // Encode only non-null values one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    if (RET_FAIL(value_encoder_->encode(values[row],
+                                                        value_out_stream_))) {
+                        return ret;
+                    }
+                    statistic_->update(timestamps[row], values[row]);
+                }
+            }
+        }
+
+        // Commit size_ + page bitmap now that all encoding succeeded.
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+            }
+            size_++;
+        }
+        return ret;
+    }
+
+    // Batch write strings from Arrow-style offset+buffer layout with null
+    // bitmap.  See write_batch above for the encode-before-commit rationale.
+    int write_string_batch(const int64_t* timestamps, const char* buffer,
+                           const uint32_t* offsets,
+                           const common::BitMap& col_notnull_bitmap,
+                           uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        // Count valid rows up-front without mutating size_ / page bitmap.
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                valid_count++;
+            }
+        }
+
+        if (valid_count == 0) {
+            // Advance size_ so the trailing null rows still count.
+            for (uint32_t i = 0; i < count; i++) {
+                if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                    col_notnull_bitmap_.push_back(0);
+                }
+                size_++;
+            }
+            return ret;
+        }
+
+        // Phase 2: encode non-null strings (no page-state mutation yet).
+        if (valid_count == count) {
+            // All valid — batch encode directly
+            if (RET_FAIL(value_encoder_->encode_string_batch(
+                    buffer, offsets, start_idx, count, value_out_stream_))) {
+                return ret;
+            }
+        } else {
+            // Mixed — encode only non-null strings one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    uint32_t len = offsets[row + 1] - offsets[row];
+                    common::String val(buffer + offsets[row], len);
+                    if (RET_FAIL(
+                            value_encoder_->encode(val, value_out_stream_))) {
+                        return ret;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: update statistics for non-null rows.
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                uint32_t len = offsets[row + 1] - offsets[row];
+                common::String val(buffer + offsets[row], len);
+                statistic_->update(timestamps[row], val);
+            }
+        }
+
+        // Phase 4: commit page-level state (bitmap + size_) only after the
+        // encoder calls all succeeded.
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+            }
+            size_++;
+        }
+        return ret;
+    }
+
+    // Rows in the current page including NULLs (NULLs advance size_ but not
+    // statistic_->count_).  This is the count the page-seal logic uses so
+    // value-column page boundaries stay aligned with the time column.
+    FORCE_INLINE uint32_t get_point_numer() const { return size_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
         return col_notnull_bitmap_out_stream_.total_size();
     }
+    // Logical bytes written — used by the page-seal-when-full heuristic.
+    // Memory-pressure accounting uses estimate_max_mem_size() below, which
+    // counts the real 64 KiB-page footprint.
     FORCE_INLINE uint32_t get_page_memory_size() const {
         return col_notnull_bitmap_out_stream_.total_size() +
                value_out_stream_.total_size();
@@ -177,12 +323,16 @@ class ValuePageWriter {
      * outputStream and value outputStream, because size outputStream is never
      * used until flushing.
      *
+     * Reports the *allocated* stream footprint — see PageWriter::
+     * estimate_max_mem_size for rationale.
+     *
      * @return allocated size in time, value and outputStream
      */
     FORCE_INLINE uint32_t estimate_max_mem_size() const {
         return sizeof(int32_t) + 1 +
-               col_notnull_bitmap_out_stream_.total_size() +
-               value_out_stream_.total_size() +
+               static_cast<uint32_t>(
+                   col_notnull_bitmap_out_stream_.allocated_bytes() +
+                   value_out_stream_.allocated_bytes()) +
                value_encoder_->get_max_byte_size();
     }
     int write_to_chunk(common::ByteStream& pages_data, bool write_header,
@@ -195,9 +345,16 @@ class ValuePageWriter {
     }
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     ValuePageData get_cur_page_data() { return cur_page_data_; }
+    // Transfer ownership of cur_page_data_'s heap buffers (uncompressed_buf_
+    // and compressed_buf_) out of this writer. Callers use this together with
+    // get_cur_page_data() to keep a long-lived copy of the data (e.g. as the
+    // first-page snapshot) without leaving an alias here that would cause a
+    // double free on destroy.
+    void release_cur_page_data() {
+        cur_page_data_.uncompressed_buf_ = nullptr;
+        cur_page_data_.compressed_buf_ = nullptr;
+    }
     void destroy_page_data() { cur_page_data_.destroy(); }
-    /** Clear cur_page_data_ without freeing (after ownership transferred). */
-    void clear_page_data() { cur_page_data_.clear(); }
 
    private:
     FORCE_INLINE int prepare_end_page() {

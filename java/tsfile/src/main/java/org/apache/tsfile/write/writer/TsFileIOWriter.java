@@ -126,6 +126,7 @@ public class TsFileIOWriter implements AutoCloseable {
   protected LinkedList<Long> endPosInCMTForDevice = new LinkedList<>();
   private volatile int chunkMetadataCount = 0;
   public static final String CHUNK_METADATA_TEMP_FILE_SUFFIX = ".meta";
+  public static final String TABLE_POINT_COUNT_PROPERTY_PREFIX = "tablePointCount.";
 
   private boolean generateTableSchema = false;
 
@@ -142,6 +143,10 @@ public class TsFileIOWriter implements AutoCloseable {
   protected long currentTableStartOffset;
 
   protected Map<String, Long> tableSizeMap = new HashMap<>();
+
+  private final Map<String, byte[]> tsFileProperties = new HashMap<>();
+  private final Map<String, Long> tablePointCountMap = new HashMap<>();
+  private boolean recordTablePointCount;
 
   /** empty construct function. */
   protected TsFileIOWriter() {
@@ -161,6 +166,15 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(File file) throws IOException {
     this(file, TS_FILE_CONFIG);
+  }
+
+  /**
+   * Creates a writer and optionally records the number of non-null field points for each table in
+   * the TsFile properties.
+   */
+  public TsFileIOWriter(File file, boolean recordTablePointCount) throws IOException {
+    this(file);
+    this.recordTablePointCount = recordTablePointCount;
   }
 
   public TsFileIOWriter(File file, EncryptParameter param) throws IOException {
@@ -244,6 +258,11 @@ public class TsFileIOWriter implements AutoCloseable {
         setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
       }
     }
+  }
+
+  /** Add a custom property to the TsFile metadata. */
+  public void addTsFileProperty(String key, byte[] value) {
+    tsFileProperties.put(key, value);
   }
 
   public void addFlushListener(FlushChunkMetadataListener listener) {
@@ -361,6 +380,7 @@ public class TsFileIOWriter implements AutoCloseable {
             chunkHeader.getCompressionType(),
             out.getPosition(),
             chunkMetadata.getStatistics());
+    currentChunkMetadata.setMask(chunkMetadata.getMask());
     chunkHeader.serializeTo(out.wrapAsStream());
     out.write(chunk.getData());
     endCurrentChunk();
@@ -412,6 +432,10 @@ public class TsFileIOWriter implements AutoCloseable {
             chunkHeader.getCompressionType(),
             out.getPosition(),
             chunk.getChunkStatistic());
+    currentChunkMetadata.setMask(
+        (byte)
+            (chunkHeader.getChunkType()
+                & (TsFileConstant.TIME_COLUMN_MASK | TsFileConstant.VALUE_COLUMN_MASK)));
     chunkHeader.serializeTo(out.wrapAsStream());
     out.write(chunk.getData());
     endCurrentChunk();
@@ -421,6 +445,15 @@ public class TsFileIOWriter implements AutoCloseable {
   public void endCurrentChunk() {
     this.currentChunkMetadataSize += currentChunkMetadata.getRetainedSizeInBytes();
     chunkMetadataCount++;
+    if (recordTablePointCount
+        && currentChunkGroupDeviceId != null
+        && currentChunkGroupDeviceId.isTableModel()
+        && (currentChunkMetadata.getMask() & TsFileConstant.TIME_COLUMN_MASK) == 0) {
+      tablePointCountMap.merge(
+          currentChunkGroupDeviceId.getTableName(),
+          currentChunkMetadata.getNumOfPoints(),
+          Long::sum);
+    }
     chunkMetadataList.add(currentChunkMetadata);
     currentChunkMetadata = null;
   }
@@ -507,6 +540,10 @@ public class TsFileIOWriter implements AutoCloseable {
       // construct the index tree node for the series
       currentDevice = currentPath.getIDeviceID();
       boolean isTableModel = schema.getTableSchemaMap().containsKey(currentDevice.getTableName());
+      String currentTableName = isTableModel ? currentDevice.getTableName() : null;
+      if (prevDevice == null && currentTableName != null) {
+        prevTableName = currentTableName;
+      }
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {
           addCurrentIndexNodeToQueue(currentIndexNode, measurementMetadataIndexQueue, out);
@@ -515,7 +552,6 @@ public class TsFileIOWriter implements AutoCloseable {
               generateRootNode(
                   measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
           currentIndexNode = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
-          String currentTableName = isTableModel ? currentDevice.getTableName() : null;
           if (!Objects.equals(currentTableName, prevTableName)) {
             if (prevTableName != null) {
               long currentTableSize = out.getPosition() - prevTableMetadataStartOffset;
@@ -587,9 +623,18 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
-    tsFileMetadata.addProperty("encryptLevel", encryptLevel);
-    tsFileMetadata.addProperty("encryptType", encryptType);
-    tsFileMetadata.addProperty("encryptKey", encryptKey);
+    tsFileProperties.forEach(tsFileMetadata::addProperty);
+    if (recordTablePointCount) {
+      tablePointCountMap.forEach(
+          (tableName, pointCount) ->
+              tsFileMetadata.addProperty(
+                  TABLE_POINT_COUNT_PROPERTY_PREFIX + tableName,
+                  BytesUtils.longToBytes(pointCount)));
+    }
+    tsFileMetadata.addProperty("encryptLevel", encryptLevel.getBytes(TSFileConfig.STRING_CHARSET));
+    tsFileMetadata.addProperty("encryptType", encryptType.getBytes(TSFileConfig.STRING_CHARSET));
+    tsFileMetadata.addProperty(
+        "encryptKey", encryptKey == null ? null : encryptKey.getBytes(TSFileConfig.STRING_CHARSET));
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 

@@ -1,0 +1,1 @@
+{"model":"table","object":"sensors","tag.site":"beijing","tag.room":"r1","field":"temp","data_type":"DOUBLE","non_null_count":"0","null_count":"2","min_time":"1000","max_time":"2000","min":null,"max":null,"first":null,"last":null,"sum":null,"stats_source":"scan"}

@@ -154,4 +154,17 @@ TEST(SortedArrayTest, ShrinkArray) {
     array.destroy();
 }
 
+TEST(SortedArrayTest, ReallocFailurePreservesAllocation) {
+    SortedArray<int> array(1);
+    ASSERT_EQ(array.init(), E_OK);
+    ASSERT_EQ(array.insert(7), E_OK);
+
+    common::TEST_fail_next_mem_realloc();
+    EXPECT_EQ(array.insert(8), E_OOM);
+    EXPECT_EQ(array.size(), 1);
+    EXPECT_EQ(array.capacity(), 1);
+    EXPECT_EQ(array[0], 7);
+    array.destroy();
+}
+
 }  // namespace common

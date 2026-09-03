@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <map>
 #include <memory>
@@ -30,6 +31,7 @@
 #include "commands/commands.h"
 #include "commands/sketch_layout.h"
 #include "common/allocator/byte_stream.h"
+#include "format/atomic_output.h"
 #include "format/output_format.h"
 #include "utils/errno_define.h"
 
@@ -115,6 +117,44 @@ bool is_one_page_chunk(char chunk_type) {
     return (static_cast<unsigned char>(chunk_type) & 0x3F) ==
            static_cast<unsigned char>(
                storage::ONLY_ONE_PAGE_CHUNK_HEADER_MARKER);
+}
+
+int write_atomic_text(const std::string& path, const std::string& content,
+                      const std::string& source, bool force,
+                      std::ostream& err) {
+    std::string tmp;
+    int code = prepare_atomic_output(path, source, force, tmp, err);
+    if (code != kExitOk) {
+        return code;
+    }
+    {
+        std::ofstream output(tmp.c_str(),
+                             std::ios::binary | std::ios::trunc);
+        if (!output.is_open()) {
+            err << "Error: cannot create output target '" << path << "'\n";
+            remove_atomic_temp(tmp, err);
+            return kExitRuntime;
+        }
+        output << content;
+        output.flush();
+        if (!output.good()) {
+            err << "Error: failed to write output target '" << path << "'\n";
+            output.close();
+            remove_atomic_temp(tmp, err);
+            return kExitRuntime;
+        }
+        output.close();
+        if (output.fail()) {
+            err << "Error: failed to close output target '" << path << "'\n";
+            remove_atomic_temp(tmp, err);
+            return kExitRuntime;
+        }
+    }
+    code = commit_atomic_output(tmp, path, force, err);
+    if (code != kExitOk && !remove_atomic_temp(tmp, err)) {
+        code = kExitRuntime;
+    }
+    return code;
 }
 
 class SketchPrinter {
@@ -412,15 +452,19 @@ class SketchPrinter {
         print_line(out, layout_.footer_.meta_offset_offset,
                    "[Meta Offset] " +
                        to_string_i64(layout_.footer_.meta_offset_value));
-        print_line(out, layout_.footer_.bloom_filter_size_offset,
-                   "[Bloom Filter Size] bit vector byte array length=" +
-                       to_string_u32(layout_.footer_.bloom_filter_data_size) +
-                       to_string_u32(layout_.footer_.bloom_filter_hash_count));
-        std::ostringstream bloom;
-        bloom << "[Bloom Filter] , filterCapacity="
-              << layout_.footer_.bloom_filter_size << ", hashFunctionSize="
-              << layout_.footer_.bloom_filter_hash_count;
-        print_line(out, layout_.footer_.bloom_filter_offset, bloom.str());
+        if (layout_.footer_.bloom_filter_data_size > 0) {
+            print_line(
+                out, layout_.footer_.bloom_filter_size_offset,
+                "[Bloom Filter Size] bit vector byte array length=" +
+                    to_string_u32(layout_.footer_.bloom_filter_data_size) +
+                    to_string_u32(layout_.footer_.bloom_filter_hash_count));
+            std::ostringstream bloom;
+            bloom << "[Bloom Filter] , filterCapacity="
+                  << layout_.footer_.bloom_filter_size
+                  << ", hashFunctionSize="
+                  << layout_.footer_.bloom_filter_hash_count;
+            print_line(out, layout_.footer_.bloom_filter_offset, bloom.str());
+        }
 
         print_split(out, "[TsFileMetadata] ends");
         print_line(out, layout_.file_size_ - kSketchFileTailSize,
@@ -541,7 +585,23 @@ class SketchPrinter {
 
 int cmd_sketch(const ParsedArgs& args, std::ostream& out, std::ostream& err) {
     SketchPrinter printer;
-    return printer.run(args, out, err);
+    std::ostringstream content;
+    int code = printer.run(args, content, err);
+    if (code != kExitOk) {
+        if (args.output.empty()) {
+            out << content.str();
+            out.flush();
+            return out.good() ? code : kExitRuntime;
+        }
+        return code;
+    }
+    if (!args.output.empty()) {
+        return write_atomic_text(args.output, content.str(), args.file,
+                                 args.force, err);
+    }
+    out << content.str();
+    out.flush();
+    return out.good() ? kExitOk : kExitRuntime;
 }
 
 }  // namespace tsfile_cli

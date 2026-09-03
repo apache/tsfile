@@ -71,4 +71,52 @@ TEST(DeviceIdTest, TabletDeviceId) {
     ASSERT_EQ("test_device0.null.t2.t3",
               tablet.get_device_id(2)->get_device_name());
 }
+
+// Regression: a device whose first tag is a real null and a device whose first
+// tag is the literal string "null" render to the SAME get_device_name()
+// ("t.null.b"), so anything that keys a per-device map/cache by the device name
+// aliases the two — the second device silently reads the first device's chunks.
+// The device-node cache in TsFileIOReader hit exactly this, conflating the two
+// devices' data on a reused reader.  The reliable discriminator is the segment
+// vector (operator==), which keeps nullptr distinct from the string "null".
+TEST(DeviceIdTest, NullTagVsLiteralNullAreDistinct) {
+    // Real null first tag: segment pointer is nullptr.
+    std::vector<std::string*> null_first_segs{new std::string("t"), nullptr,
+                                              new std::string("b")};
+    StringArrayDeviceID null_first(null_first_segs);
+    for (auto* s : null_first_segs) delete s;
+
+    // Literal string "null" as the first tag value.
+    StringArrayDeviceID literal_null(
+        std::vector<std::string>({"t", "null", "b"}));
+
+    // The names collide — this is the trap the cache used to fall into.
+    ASSERT_EQ(null_first.get_device_name(), literal_null.get_device_name());
+    ASSERT_EQ("t.null.b", null_first.get_device_name());
+
+    // But the devices are genuinely different, and the segment-based equality
+    // used by DeviceIDComparable / the cache key must reflect that.
+    ASSERT_FALSE(null_first == literal_null);
+    ASSERT_TRUE(null_first != literal_null);
+}
+
+// Regression: cached device IDs are reused across queries, so
+// split_table_name() must be idempotent and not accumulate prefix segments.
+TEST(DeviceIdTest, SplitTableNameIsIdempotent) {
+    StringArrayDeviceID device_id("root.ln.wf01.wt01");
+
+    const std::vector<std::string> expected = {"root", "ln", "wf01", "wt01"};
+
+    for (int round = 0; round < 3; ++round) {
+        device_id.split_table_name();
+
+        ASSERT_EQ(static_cast<int>(expected.size()),
+                  device_id.get_split_seg_num());
+        for (int i = 0; i < device_id.get_split_seg_num(); ++i) {
+            std::string* seg = device_id.get_split_segname_at(i);
+            ASSERT_NE(nullptr, seg);
+            ASSERT_EQ(expected[static_cast<size_t>(i)], *seg);
+        }
+    }
+}
 }  // namespace storage
