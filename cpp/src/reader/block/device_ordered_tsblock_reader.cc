@@ -29,11 +29,14 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
         return common::E_OK;
     }
 
-    if (current_reader_ != nullptr &&
-        IS_SUCC(current_reader_->has_next(has_next)) && has_next) {
-        return common::E_OK;
-    }
     if (current_reader_ != nullptr) {
+        ret = current_reader_->has_next(has_next);
+        if (IS_FAIL(ret)) {
+            return ret;
+        }
+        if (has_next) {
+            return common::E_OK;
+        }
         remaining_offset_ = current_reader_->get_remaining_offset();
         remaining_limit_ = current_reader_->get_remaining_limit();
         delete current_reader_;
@@ -52,7 +55,8 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
             break;
         }
         DeviceQueryTask* task = nullptr;
-        if (IS_FAIL(device_task_iterator_->next(task))) {
+        ret = device_task_iterator_->next(task);
+        if (IS_FAIL(ret)) {
             return ret;
         }
         if (current_reader_) {

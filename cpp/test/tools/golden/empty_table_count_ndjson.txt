@@ -1,0 +1,3 @@
+{"model":"table","object":"sensors","column":"site","category":"TAG","row_count":"0","entity_count":"0","non_null_count":"0","null_count":"0","min_time":null,"max_time":null,"time_source":null}
+{"model":"table","object":"sensors","column":"room","category":"TAG","row_count":"0","entity_count":"0","non_null_count":"0","null_count":"0","min_time":null,"max_time":null,"time_source":null}
+{"model":"table","object":"sensors","column":"temp","category":"FIELD","row_count":"0","entity_count":"0","non_null_count":"0","null_count":"0","min_time":null,"max_time":null,"time_source":null}

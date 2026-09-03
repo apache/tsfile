@@ -46,6 +46,7 @@ class ReadFile {
     }
     FORCE_INLINE int64_t file_size() const { return file_size_; }
     FORCE_INLINE const std::string& file_path() const { return file_path_; }
+    FORCE_INLINE unsigned char file_version() const { return file_version_; }
     FORCE_INLINE common::FileReadBackend active_backend() const {
         return active_backend_;
     }
@@ -82,6 +83,7 @@ class ReadFile {
     std::string file_path_;
     int fd_;
     int64_t file_size_;
+    unsigned char file_version_;
     uint64_t mapped_file_fingerprint_;
     const char* mapped_data_;
     size_t mapped_size_;

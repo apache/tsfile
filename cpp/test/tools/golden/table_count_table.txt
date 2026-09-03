@@ -1,0 +1,6 @@
+model  object  column   category  row_count  entity_count  non_null_count  null_count  min_time  max_time  time_source
+table  table1  value    FIELD     20         1             20              0           0         19        scan
+table  table2  site     TAG       20         20            19              1           0         19        scan
+table  table2  rack     TAG       20         20            20              0           0         19        scan
+table  table2  sensor   TAG       20         20            20              0           0         19        scan
+table  table2  reading  FIELD     20         20            15              5           0         19        scan

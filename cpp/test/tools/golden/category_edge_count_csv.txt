@@ -1,0 +1,3 @@
+model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+table,category_edge,site,TAG,0,0,0,0,\N,\N,\N
+table,category_edge,temp,FIELD,0,0,0,0,\N,\N,\N

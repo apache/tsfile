@@ -24,7 +24,6 @@
 
 #include <cerrno>
 #include <cstring>
-#include <iostream>
 #include <limits>
 #ifdef _WIN32
 #include <io.h>
@@ -63,6 +62,7 @@ ReadFile::ReadFile()
     : file_path_(),
       fd_(-1),
       file_size_(-1),
+      file_version_(0),
       mapped_file_fingerprint_(0),
       mapped_data_(nullptr),
       mapped_size_(0),
@@ -145,6 +145,7 @@ void ReadFile::close() {
         fd_ = -1;
     }
     file_size_ = -1;
+    file_version_ = 0;
     mapped_file_fingerprint_ = 0;
     active_backend_ = common::FileReadBackend::PREAD;
 #ifndef _WIN32
@@ -160,13 +161,48 @@ int ReadFile::open(const std::string& file_path) {
     int flags = O_RDONLY;
 #ifdef _WIN32
     flags |= O_BINARY;
+    // Windows cannot open a directory with _open(), whereas POSIX permits
+    // opening one and lets fstat() identify it.  Preflight existing
+    // non-regular paths so both platforms report the same stable error code.
+    // If stat itself fails, keep the normal open() path so missing or
+    // inaccessible files continue to report E_FILE_OPEN_ERR.
+    struct __stat64 preopen_stat;
+    if (_stat64(file_path_.c_str(), &preopen_stat) == 0 &&
+        (preopen_stat.st_mode & _S_IFMT) != _S_IFREG) {
+        return E_INVALID_PATH;
+    }
 #endif
     fd_ = ::open(file_path_.c_str(), flags);
     if (fd_ < 0) {
-        std::cerr << "open file " << file_path << " error: " << strerror(errno)
-                  << " (errno " << errno << ")" << std::endl;
         return E_FILE_OPEN_ERR;
     }
+
+    // The CLI accepts regular files (and links to regular files) only.  Do
+    // this check while the descriptor is open so a directory, FIFO, device,
+    // or socket cannot reach the TsFile parser and produce a misleading
+    // format/read error.  The descriptor is deliberately closed before
+    // returning so callers never retain a special-file handle.
+#ifdef _WIN32
+    struct __stat64 path_stat;
+    if (_fstat64(fd_, &path_stat) != 0) {
+        close();
+        return E_FILE_STAT_ERR;
+    }
+    if ((path_stat.st_mode & _S_IFMT) != _S_IFREG) {
+        close();
+        return E_INVALID_PATH;
+    }
+#else
+    struct stat path_stat;
+    if (::fstat(fd_, &path_stat) != 0) {
+        close();
+        return E_FILE_STAT_ERR;
+    }
+    if (!S_ISREG(path_stat.st_mode)) {
+        close();
+        return E_INVALID_PATH;
+    }
+#endif
 
     if (RET_FAIL(get_file_size(file_size_))) {
     } else if (file_size_ < MIN_FILE_SIZE) {
@@ -350,6 +386,28 @@ int ReadFile::check_file_magic() {
         } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
                    0) {
             ret = E_TSFILE_CORRUPTED;
+        }
+        if (IS_FAIL(ret)) {
+            return ret;
+        }
+
+        char version = 0;
+        if (RET_FAIL(read(MAGIC_STRING_TSFILE_LEN, &version, 1, read_len))) {
+        } else if (read_len != 1) {
+            ret = E_TSFILE_CORRUPTED;
+        } else {
+            file_version_ = static_cast<unsigned char>(version);
+            // Version 3 remains readable for backward compatibility; version
+            // 4 is the current writer format.  Other values are not safely
+            // interpretable and must be reported as an input failure before
+            // metadata parsing begins.
+            if (file_version_ != 3 &&
+                file_version_ != static_cast<unsigned char>(VERSION_NUM_BYTE)) {
+                ret = E_UNSUPPORTED_VERSION;
+            }
+        }
+        if (IS_FAIL(ret)) {
+            return ret;
         }
 
         // file footer magic

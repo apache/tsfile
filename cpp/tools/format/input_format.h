@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "cli/write_columns.h"
 #include "common/db_common.h"
 #include "utils/db_utils.h"
 
@@ -36,12 +37,15 @@ struct ColumnDef {
 };
 
 bool parse_datatype_name(const std::string& s, common::TSDataType& out);
-bool parse_category(const std::string& s, common::ColumnCategory& out);
-bool parse_columns_spec(const std::string& spec, std::vector<ColumnDef>& out,
-                        std::string& error);
+bool normalize_write_columns(const std::vector<WriteColumnSpec>& specs,
+                             std::vector<ColumnDef>& out,
+                             std::string& error);
 std::vector<std::string> split_line(const std::string& line, char delim,
                                     bool csv_quotes);
 bool parse_bool_cell(const std::string& s, bool& out);
+bool is_valid_utf8(const std::string& s);
+bool contains_utf8_bom(const std::string& s);
+bool validate_identifier(const std::string& name, std::string& error);
 
 // Read one logical record from `in`. When `csv_quotes` is true a field may span
 // multiple physical lines if it opens a double-quote that is not yet closed, so

@@ -34,6 +34,34 @@ TEST(RunCliTest, VersionFlagPrintsVersionAndReturnsOk) {
     EXPECT_TRUE(err.str().empty());
 }
 
+TEST(RunCliTest, VersionMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code =
+        tsfile_cli::run_cli({"cat", "--version", "data.tsfile"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--version"), std::string::npos) << err.str();
+}
+
+TEST(RunCliTest, TopLevelHelpMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"--help", "cat"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
+}
+
+TEST(RunCliTest, CommandHelpMustAppearByItself) {
+    std::ostringstream out;
+    std::ostringstream err;
+    int code = tsfile_cli::run_cli({"cat", "--help", "data.tsfile"}, out, err);
+    EXPECT_EQ(code, 1);
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
+}
+
 TEST(RunCliTest, NoArgsPrintsUsageToErrAndReturnsUsageError) {
     std::ostringstream out;
     std::ostringstream err;
@@ -54,7 +82,7 @@ TEST(RunCliTest, LeadingOptionBeforeCommandIsClearError) {
     std::ostringstream out;
     std::ostringstream err;
     int code =
-        tsfile_cli::run_cli({"-f", "json", "meta", "data.tsfile"}, out, err);
+        tsfile_cli::run_cli({"-f", "ndjson", "meta", "data.tsfile"}, out, err);
     EXPECT_EQ(code, 1);
     EXPECT_NE(err.str().find("command must come before options"),
               std::string::npos)
@@ -69,14 +97,15 @@ TEST(ParseArgsTest, CommandAndFilePositional) {
 }
 
 TEST(ParseArgsTest, FormatFlagParsed) {
-    auto p = tsfile_cli::parse_args({"cat", "-f", "json", "data.tsfile"});
+    auto p = tsfile_cli::parse_args({"cat", "-f", "ndjson", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.format, tsfile_cli::ParsedArgs::Format::kJson);
 }
 
-TEST(ParseArgsTest, MeasurementsSplitOnComma) {
-    auto p = tsfile_cli::parse_args({"cat", "-m", "s1,s2,s3", "data.tsfile"});
-    ASSERT_EQ(p.measurements.size(), 3u);
+TEST(ParseArgsTest, MeasurementsRepeatOneNamePerOption) {
+    auto p =
+        tsfile_cli::parse_args({"cat", "-m", "s1", "-m", "s2", "data.tsfile"});
+    ASSERT_EQ(p.measurements.size(), 2u);
     EXPECT_EQ(p.measurements[1], "s2");
 }
 
@@ -97,27 +126,10 @@ TEST(ParseArgsTest, TagFilterParsed) {
         {"cat", "--tag-filter", "id1", "eq", "dev_a", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_TRUE(p.has_tag_filter);
-    EXPECT_EQ(p.tag_filter_op, tsfile_cli::ParsedArgs::TagFilterOp::kEq);
-    EXPECT_EQ(p.tag_filter_column, "id1");
-    EXPECT_EQ(p.tag_filter_value, "dev_a");
-}
-
-TEST(ParseArgsTest, TagBetweenParsed) {
-    auto p = tsfile_cli::parse_args(
-        {"cat", "--tag-between", "id1", "dev_a", "dev_c", "data.tsfile"});
-    EXPECT_TRUE(p.error.empty());
-    EXPECT_TRUE(p.has_tag_filter);
-    EXPECT_EQ(p.tag_filter_op, tsfile_cli::ParsedArgs::TagFilterOp::kBetween);
-    EXPECT_EQ(p.tag_filter_column, "id1");
-    EXPECT_EQ(p.tag_filter_value, "dev_a");
-    EXPECT_EQ(p.tag_filter_value2, "dev_c");
-}
-
-TEST(ParseArgsTest, DuplicateTagFilterIsError) {
-    auto p = tsfile_cli::parse_args({"cat", "--tag-filter", "id1", "eq",
-                                     "dev_a", "--tag-between", "id1", "a", "z",
-                                     "data.tsfile"});
-    EXPECT_FALSE(p.error.empty());
+    ASSERT_EQ(p.tag_filters.size(), 1u);
+    EXPECT_EQ(p.tag_filters[0].op, tsfile_cli::ParsedArgs::TagFilterOp::kEq);
+    EXPECT_EQ(p.tag_filters[0].column, "id1");
+    EXPECT_EQ(p.tag_filters[0].value, "dev_a");
 }
 
 TEST(ParseArgsTest, UnknownFlagIsError) {
@@ -138,17 +150,21 @@ TEST(ParseArgsTest, MissingFileIsAllowedAtParseTime) {
 }
 
 TEST(ParseArgsTest, WriteFlagsParsed) {
-    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
-                                     "s1:INT64:field", "-o", "out.tsfile", "-v",
-                                     "--header-match", "in.csv"});
+    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--field", "s1",
+                                     "INT64", "-i", "in.csv", "-o",
+                                     "out.tsfile", "-v", "--header-match"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.command, "write");
     EXPECT_EQ(p.table, "t1");
-    EXPECT_EQ(p.columns, "s1:INT64:field");
+    ASSERT_EQ(p.columns.size(), 1u);
+    EXPECT_EQ(p.columns[0].name, "s1");
+    EXPECT_EQ(p.columns[0].type_name, "INT64");
+    EXPECT_FALSE(p.columns[0].is_tag);
     EXPECT_EQ(p.output, "out.tsfile");
     EXPECT_TRUE(p.verbose);
     EXPECT_TRUE(p.header_match);
     EXPECT_EQ(p.file, "in.csv");
+    EXPECT_TRUE(p.input_set);
 }
 
 TEST(ParseArgsTest, OutputFlagNeedsValue) {
@@ -156,29 +172,12 @@ TEST(ParseArgsTest, OutputFlagNeedsValue) {
     EXPECT_FALSE(p.error.empty());
 }
 
-TEST(ParseArgsTest, DashIsStdinPositional) {
-    auto p =
-        tsfile_cli::parse_args({"write", "--table", "t1", "--columns",
-                                "s1:INT64:field", "-o", "out.tsfile", "-"});
+TEST(ParseArgsTest, StdinFlagParsed) {
+    auto p = tsfile_cli::parse_args({"write", "--table", "t1", "--field", "s1",
+                                     "INT64", "--stdin", "-o", "out.tsfile"});
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.file, "-");
-}
-
-TEST(ParseArgsTest, SeedFlagParsed) {
-    auto p = tsfile_cli::parse_args(
-        {"sample", "-m", "s1", "-n", "3", "--seed", "42", "data.tsfile"});
-    EXPECT_TRUE(p.error.empty());
-    EXPECT_EQ(p.command, "sample");
-    EXPECT_EQ(p.limit, 3);
-    EXPECT_TRUE(p.has_seed);
-    EXPECT_EQ(p.seed, 42);
-}
-
-TEST(ParseArgsTest, BadSeedValueIsError) {
-    auto p = tsfile_cli::parse_args(
-        {"sample", "--seed", "not_a_number", "data.tsfile"});
-    EXPECT_FALSE(p.error.empty());
-    EXPECT_NE(p.error.find("Invalid --seed"), std::string::npos);
+    EXPECT_TRUE(p.input_set);
 }
 
 TEST(RunCliTest, SelectIsNoLongerKnownCommand) {
@@ -195,16 +194,14 @@ TEST(RunCliTest, SeedOnCatIsUsageError) {
     int code =
         tsfile_cli::run_cli({"cat", "--seed", "7", "x.tsfile"}, out, err);
     EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("--seed is only valid for sample"),
-              std::string::npos);
+    EXPECT_NE(err.str().find("--seed is not supported"), std::string::npos);
 }
 
-TEST(RunCliTest, OffsetOnSampleIsUsageError) {
+TEST(RunCliTest, SampleIsUnknownCommand) {
     std::ostringstream out;
     std::ostringstream err;
     int code =
         tsfile_cli::run_cli({"sample", "--offset", "2", "x.tsfile"}, out, err);
     EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("--offset is not valid for sample"),
-              std::string::npos);
+    EXPECT_NE(err.str().find("Unknown command"), std::string::npos);
 }

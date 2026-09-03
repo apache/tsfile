@@ -33,7 +33,7 @@ description: >-
 Use this skill for SDK code, Java import and point-count tools, Tree/Table model
 decisions, schema design, compatibility, and cross-language integration. Use
 the sibling `../tsfile-cli/SKILL.md` for the C++ `tsfile-cli` binary: file
-inspection, preview, export, sampling, and its explicit single-table CSV/TSV
+inspection, preview, export, sampling, and its explicit single-table CSV
 `write` operation.
 
 ## Operating Rules

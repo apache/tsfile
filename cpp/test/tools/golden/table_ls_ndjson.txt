@@ -1,0 +1,2 @@
+{"model":"table","object":"table1"}
+{"model":"table","object":"table2"}

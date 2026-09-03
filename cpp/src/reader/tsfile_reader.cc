@@ -119,12 +119,17 @@ int TsFileReader::open(const std::string& file_path) {
     int ret = E_OK;
     read_file_ = new storage::ReadFile;
     tsfile_executor_ = new storage::TsFileExecutor();
+    // Keep reader diagnostics in the caller's error channel.  Printing here
+    // would leak an unstructured line to process stdout/stderr before the CLI
+    // can attach its stable error text and exit code.
     if (RET_FAIL(read_file_->open(file_path))) {
-        std::cout << "filed to open file " << ret << std::endl;
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
-        std::cout << "filed to init " << ret << std::endl;
     }
     return ret;
+}
+
+unsigned char TsFileReader::get_file_version() const {
+    return read_file_ == nullptr ? 0 : read_file_->file_version();
 }
 
 int TsFileReader::ensure_table_query_executor(int batch_size) {
@@ -578,13 +583,12 @@ ResultSet* TsFileReader::read_timeseries(
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
     const std::string& table_name) {
     TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
-    MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
-                                                        table_root))) {
-    } else if (IS_FAIL(file_metadata->get_table_schema(to_lower(table_name),
-                                                       table_schema))) {
-    }
+    // A schema-only table has no device-level metadata index.  Schema lookup
+    // must therefore be independent of the presence of data pages; callers
+    // can still construct an empty result set from the returned schema.
+    if (file_metadata == nullptr) return table_schema;
+    file_metadata->get_table_schema(to_lower(table_name), table_schema);
     return table_schema;
 }
 

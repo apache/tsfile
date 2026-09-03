@@ -1,0 +1,4 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_empty_table_golden.tsfile
+model: table
+---------------------------------- TsFile Sketch End ----------------------------------
