@@ -474,7 +474,7 @@ TEST(IndependentFixtures, EmptyTreeAndInputFailuresHaveExactDiagnostics) {
         std::remove("tsfile_cli_input_error.csv");
         expect_cli_exact(input_args(command, unsupported), 2, "",
                          "Error: cannot open " + unsupported +
-                             ": unsupported TsFile format version (code 55)\n");
+                             ": unsupported TsFile format version (code 56)\n");
     }
     std::remove(unsupported.c_str());
 

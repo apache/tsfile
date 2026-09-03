@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.compatibility;
 
+import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -49,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -64,7 +66,9 @@ public class TableModelEncodingCompressionCompatibilityTest {
   private static final String TAG_COLUMN = "device";
   private static final String VALUE_COLUMN = "value";
   private static final String TAG_VALUE = "compat_device";
-  private static final int ROW_COUNT = 32;
+  // Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
+  // page-wide bitmaps must survive block transitions. Applied to every case.
+  private static final int ROW_COUNT = 300;
 
   private static final int[] INT_VALUES = {
     0,
@@ -142,6 +146,44 @@ public class TableModelEncodingCompressionCompatibilityTest {
     0xc05edd2f1a9fbe77L
   };
 
+  // FLOAT/DOUBLE + TS_2DIFF converts values to fixed-point with
+  // maxPointNumber (10^mpn). The expected value is computed by applying the
+  // same tri-state conversion the writer performs and then decoding it back,
+  // so expectations reflect the encoding rules rather than the raw input
+  // bits. Every chosen value has the same expected value whether the writer
+  // used maxPointNumber 0 (explicit max_point_number property) or 2 (the
+  // TSFileConfig.floatPrecision default shared with the C++ writer), so the
+  // validating reader never needs to know which writer produced the file.
+  // The values cover all page layouts the writers can produce:
+  //  - plain integers (scaled form; at mpn = 0 every finite in-range value
+  //    is scaled, so pages written at mpn = 0 contain no bitmap)
+  //  - 1.5e9f / 1e18: the scaled product overflows while round(v) still
+  //    fits -> scale-overflow form, single page-wide bitmap (reachable only
+  //    at mpn > 0, i.e. the default writer configuration)
+  //  - NaN and +/-Infinity (stored as raw IEEE bits -> two page-wide
+  //    bitmaps; Java floatToIntBits canonicalizes NaN)
+  private static final int[] TS_2DIFF_FLOAT_BITS = {
+    0x00000000, 0x3f800000, 0xbf800000, 0x461c4000, 0xc61c4000, 0x4eb2d05e,
+    0x7f800000, 0xff800000, 0x7fc00000, 0x3f800000, 0x00000000, 0x4a742400,
+    0xca742400, 0x4e6e6b28, 0x3f800000, 0x00000000
+  };
+
+  private static final long[] TS_2DIFF_DOUBLE_BITS = {
+    0x0000000000000000L, 0x3ff0000000000000L, 0xbff0000000000000L,
+    0x40c3880000000000L, 0xc0c3880000000000L, 0x43abc16d674ec800L,
+    0x7ff0000000000000L, 0xfff0000000000000L, 0x7ff8000000000000L,
+    0x3ff0000000000000L, 0x0000000000000000L, 0x41f0000000000000L,
+    0xc1cd6f3458800000L, 0x430c6bf526340000L, 0x3ff0000000000000L,
+    0x0000000000000000L
+  };
+
+  // maxPointNumber used by the standard Java schema write path
+  // (TSEncodingBuilder.Ts2Diff initFromProps -> TSFileConfig.floatPrecision,
+  // current default 2); the C++ FloatTS2DIFFEncoder default matches.
+  private static final int TS_2DIFF_MAX_POINT_NUMBER = 2;
+  private static final double TS_2DIFF_MAX_POINT_VALUE =
+      TS_2DIFF_MAX_POINT_NUMBER <= 0 ? 1.0 : Math.pow(10, TS_2DIFF_MAX_POINT_NUMBER);
+
   private static final LocalDate[] DATE_VALUES = {
     LocalDate.of(1970, 1, 1),
     LocalDate.of(1999, 12, 31),
@@ -196,6 +238,25 @@ public class TableModelEncodingCompressionCompatibilityTest {
               TSDataType.DOUBLE)) {
         cases.add(new FixtureCase(dataType, TSEncoding.CHIMP, compression, ROW_COUNT));
         cases.add(new FixtureCase(dataType, TSEncoding.RLBE, compression, ROW_COUNT));
+        if (dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE) {
+          // The value set exercises scaled, scale-overflow, and raw-bit
+          // forms, including the page-wide bitmaps across the 129-value
+          // TS_2DIFF block boundary.
+          cases.add(new FixtureCase(dataType, TSEncoding.TS_2DIFF, compression, ROW_COUNT));
+          // Explicit max_point_number=0 fixture: a canonical page starting
+          // with the 0x00 maxPointNumber byte must enter the Form 1
+          // parsing path.
+          cases.add(
+              new FixtureCase(
+                  FixtureCase.fileName(dataType, TSEncoding.TS_2DIFF, compression) + ".mpn0",
+                  TABLE_NAME,
+                  TAG_COLUMN,
+                  VALUE_COLUMN,
+                  dataType,
+                  TSEncoding.TS_2DIFF,
+                  compression,
+                  ROW_COUNT));
+        }
       }
       cases.add(new FixtureCase(TSDataType.DOUBLE, TSEncoding.CAMEL, compression, ROW_COUNT));
     }
@@ -243,6 +304,10 @@ public class TableModelEncodingCompressionCompatibilityTest {
   }
 
   private static TableSchema tableSchema(FixtureCase fixtureCase) {
+    Map<String, String> props = null;
+    if (isTs2DiffFloatCase(fixtureCase) && fixtureCase.fileName.endsWith(".mpn0")) {
+      props = Collections.singletonMap(Encoder.MAX_POINT_NUMBER, "0");
+    }
     List<IMeasurementSchema> schemas =
         Arrays.asList(
             new MeasurementSchema(
@@ -254,7 +319,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
                 fixtureCase.valueColumn,
                 fixtureCase.dataType,
                 fixtureCase.encoding,
-                fixtureCase.compression));
+                fixtureCase.compression,
+                props));
     return new TableSchema(
         fixtureCase.tableName, schemas, Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
   }
@@ -270,12 +336,13 @@ public class TableModelEncodingCompressionCompatibilityTest {
     for (int row = 0; row < fixtureCase.rowCount; row++) {
       tablet.addTimestamp(row, row);
       tablet.addValue(TAG_COLUMN, row, TAG_VALUE);
-      addValue(tablet, fixtureCase.dataType, row);
+      addValue(tablet, fixtureCase, row);
     }
     return tablet;
   }
 
-  private static void addValue(Tablet tablet, TSDataType dataType, int row) {
+  private static void addValue(Tablet tablet, FixtureCase fixtureCase, int row) {
+    TSDataType dataType = fixtureCase.dataType;
     switch (dataType) {
       case INT32:
         tablet.addValue(row, VALUE_COLUMN, intValue(row));
@@ -288,10 +355,10 @@ public class TableModelEncodingCompressionCompatibilityTest {
         tablet.addValue(row, VALUE_COLUMN, longValue(row));
         break;
       case FLOAT:
-        tablet.addValue(row, VALUE_COLUMN, floatValue(row));
+        tablet.addValue(row, VALUE_COLUMN, expectedFloatValue(fixtureCase, row));
         break;
       case DOUBLE:
-        tablet.addValue(row, VALUE_COLUMN, doubleValue(row));
+        tablet.addValue(row, VALUE_COLUMN, expectedDoubleValue(fixtureCase, row));
         break;
       default:
         throw new IllegalArgumentException("Unsupported data type: " + dataType);
@@ -313,13 +380,13 @@ public class TableModelEncodingCompressionCompatibilityTest {
       case FLOAT:
         assertEquals(
             "FLOAT bits at row " + row,
-            Float.floatToIntBits(floatValue(row)),
+            Float.floatToIntBits(expectedFloatValue(fixtureCase, row)),
             Float.floatToIntBits(resultSet.getFloat(3)));
         break;
       case DOUBLE:
         assertEquals(
             "DOUBLE bits at row " + row,
-            Double.doubleToLongBits(doubleValue(row)),
+            Double.doubleToLongBits(expectedDoubleValue(fixtureCase, row)),
             Double.doubleToLongBits(resultSet.getDouble(3)));
         break;
       default:
@@ -341,6 +408,61 @@ public class TableModelEncodingCompressionCompatibilityTest {
 
   private static double doubleValue(int row) {
     return Double.longBitsToDouble(DOUBLE_BITS[row % DOUBLE_BITS.length]);
+  }
+
+  private static boolean isTs2DiffFloatCase(FixtureCase fixtureCase) {
+    return fixtureCase.encoding == TSEncoding.TS_2DIFF
+        && (fixtureCase.dataType == TSDataType.FLOAT || fixtureCase.dataType == TSDataType.DOUBLE);
+  }
+
+  // maxPointValue of the writer configuration for this fixture: the
+  // "*.mpn0" fixtures carry an explicit max_point_number=0 property, all
+  // others use the shared default (see TS_2DIFF_MAX_POINT_NUMBER).
+  private static double ts2DiffMaxPointValue(FixtureCase fixtureCase) {
+    return fixtureCase.fileName.endsWith(".mpn0") ? 1.0 : TS_2DIFF_MAX_POINT_VALUE;
+  }
+
+  // Mirror FloatEncoder/FloatDecoder at the writer's maxPointNumber:
+  // scaled -> round(v * mpv) / mpv, scale-overflow -> round(v) / 1,
+  // raw bits -> intBitsToFloat (NaN is canonicalized by floatToIntBits).
+  private static float expectedFloatValue(FixtureCase fixtureCase, int row) {
+    if (!isTs2DiffFloatCase(fixtureCase)) {
+      return floatValue(row);
+    }
+    float value = Float.intBitsToFloat(TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
+    if (Float.isNaN(value)) {
+      return Float.intBitsToFloat(0x7fc00000);
+    }
+    double mpv = ts2DiffMaxPointValue(fixtureCase);
+    double scaled = (double) value * mpv;
+    if (scaled > Integer.MAX_VALUE || scaled < Integer.MIN_VALUE) {
+      // value itself stays in int range for the values used here
+      // (Infinity is caught below), so this is the scale-overflow form.
+      if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+        return Float.intBitsToFloat(Float.floatToIntBits(value));
+      }
+      return (float) ((double) Math.round(value) / 1.0);
+    }
+    return (float) ((double) Math.round(scaled) / mpv);
+  }
+
+  private static double expectedDoubleValue(FixtureCase fixtureCase, int row) {
+    if (!isTs2DiffFloatCase(fixtureCase)) {
+      return doubleValue(row);
+    }
+    double value = Double.longBitsToDouble(TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
+    if (Double.isNaN(value)) {
+      return Double.longBitsToDouble(0x7ff8000000000000L);
+    }
+    double mpv = ts2DiffMaxPointValue(fixtureCase);
+    double scaled = value * mpv;
+    if (scaled > Long.MAX_VALUE || scaled < Long.MIN_VALUE) {
+      if (value > Long.MAX_VALUE || value < Long.MIN_VALUE) {
+        return Double.longBitsToDouble(Double.doubleToLongBits(value));
+      }
+      return (double) Math.round(value) / 1.0;
+    }
+    return (double) Math.round(scaled) / mpv;
   }
 
   private static LocalDate dateValue(int row) {
