@@ -30,12 +30,16 @@
 
 namespace storage {
 class Filter;
+class TableSchema;
 class TsFileReader;
 }  // namespace storage
 
 namespace tsfile_cli {
 
 bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader);
+
+std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
+    storage::TsFileReader& reader);
 
 // Build the list of "device.measurement" paths to query for the tree model.
 // When args.device is set only that device is resolved (one targeted metadata

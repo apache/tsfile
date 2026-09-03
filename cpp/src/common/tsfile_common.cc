@@ -216,11 +216,18 @@ int TsFileMeta::serialize_to(common::ByteStream& out,
             table_schemas_.size(), out))) {
         return ret;
     }
-    for (auto& table_schema_iter : table_schemas_) {
-        if (RET_FAIL(common::SerializationUtil::write_var_str(
-                table_schema_iter.first, out))) {
+    std::vector<std::string> table_names;
+    table_names.reserve(table_schemas_.size());
+    for (const auto& table_schema_iter : table_schemas_) {
+        table_names.push_back(table_schema_iter.first);
+    }
+    std::sort(table_names.begin(), table_names.end());
+    for (const auto& table_name : table_names) {
+        const auto& table_schema = table_schemas_.at(table_name);
+        if (RET_FAIL(
+                common::SerializationUtil::write_var_str(table_name, out))) {
             return ret;
-        } else if (RET_FAIL(table_schema_iter.second->serialize_to(out))) {
+        } else if (RET_FAIL(table_schema->serialize_to(out))) {
             return ret;
         }
     }

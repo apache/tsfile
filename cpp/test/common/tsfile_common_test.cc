@@ -482,6 +482,44 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     ASSERT_TRUE(new_meta.tsfile_properties_["null_key"].value.empty());
 }
 
+TEST_F(TsFileMetaTest, SerializesTableSchemasDeterministically) {
+    auto table1 = std::make_shared<TableSchema>(
+        "table1", std::vector<common::ColumnSchema>{common::ColumnSchema(
+                      "value", common::INT64, common::UNCOMPRESSED,
+                      common::PLAIN, common::ColumnCategory::FIELD)});
+    auto table2 = std::make_shared<TableSchema>(
+        "table2", std::vector<common::ColumnSchema>{common::ColumnSchema(
+                      "reading", common::DOUBLE, common::UNCOMPRESSED,
+                      common::PLAIN, common::ColumnCategory::FIELD)});
+
+    TsFileMeta forward;
+    forward.table_schemas_.emplace("table1", table1);
+    forward.table_schemas_.emplace("table2", table2);
+    TsFileMeta reverse;
+    reverse.table_schemas_.emplace("table2", table2);
+    reverse.table_schemas_.emplace("table1", table1);
+
+    common::ByteStream forward_out(1024, common::MOD_DEFAULT);
+    common::ByteStream reverse_out(1024, common::MOD_DEFAULT);
+    int32_t forward_size = 0;
+    int32_t reverse_size = 0;
+    ASSERT_EQ(common::E_OK, forward.serialize_to(forward_out, forward_size));
+    ASSERT_EQ(common::E_OK, reverse.serialize_to(reverse_out, reverse_size));
+    ASSERT_EQ(forward_size, reverse_size);
+
+    std::vector<uint8_t> forward_bytes(forward_size);
+    std::vector<uint8_t> reverse_bytes(reverse_size);
+    uint32_t forward_read = 0;
+    uint32_t reverse_read = 0;
+    ASSERT_EQ(common::E_OK, forward_out.read_buf(forward_bytes.data(),
+                                                 forward_size, forward_read));
+    ASSERT_EQ(common::E_OK, reverse_out.read_buf(reverse_bytes.data(),
+                                                 reverse_size, reverse_read));
+    ASSERT_EQ(static_cast<uint32_t>(forward_size), forward_read);
+    ASSERT_EQ(static_cast<uint32_t>(reverse_size), reverse_read);
+    EXPECT_EQ(forward_bytes, reverse_bytes);
+}
+
 TEST_F(TsFileMetaTest, DeserializesLegacyEmptyBloomFilterEncoding) {
     ASSERT_EQ(common::E_OK,
               common::SerializationUtil::write_var_uint(0, *out_));
