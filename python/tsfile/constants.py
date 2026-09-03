@@ -217,6 +217,15 @@ class Compressor(IntEnum):
 
 
 @unique
+class FileReadBackend(IntEnum):
+    """Backend used by TsFile readers opened after configuration."""
+
+    AUTO = 0
+    MMAP = 1
+    PREAD = 2
+
+
+@unique
 class ColumnCategory(IntEnum):
     TAG = 0
     FIELD = 1

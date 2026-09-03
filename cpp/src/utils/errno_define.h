@@ -57,6 +57,7 @@ const int E_UNSUPPORTED_ORDER = 51;
 const int E_INVALID_NODE_TYPE = 52;
 const int E_ENCODE_ERR = 53;
 const int E_DECODE_ERR = 54;
+const int E_FILE_MAP_ERR = 55;
 
 }  // end namespace common
 

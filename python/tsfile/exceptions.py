@@ -57,6 +57,7 @@ class ErrorCode(IntEnum):
     INVALID_NODE_TYPE = 52
     ENCODE_ERROR = 53
     DECODE_ERROR = 54
+    FILE_MAP_ERROR = 55
 
 
 class LibraryError(Exception):
@@ -237,6 +238,11 @@ class DecodeError(LibraryError):
     _default_code = 54
 
 
+class FileMapError(LibraryError):
+    _default_message = "Failed to memory-map file"
+    _default_code = 55
+
+
 ERROR_MAPPING = {
     1: OOMError,
     2: NotExistsError,
@@ -271,6 +277,7 @@ ERROR_MAPPING = {
     52: InvalidNodeTypeError,
     53: EncodeError,
     54: DecodeError,
+    55: FileMapError,
 }
 
 

@@ -173,6 +173,26 @@ storage::set_write_thread_count(4);
 
 默认情况下，当机器 CPU 核数大于 1 时自动启用并行写入，线程数设为硬件核数（上限 64）。
 
+### 本地文件读取后端
+
+Reader 可以为本地文件选择内存映射 I/O 或传统的定位读取路径。配置会在
+reader 打开文件时确定，因此修改配置不会影响已经打开的 reader。
+
+```cpp
+#include "common/global.h"
+
+common::set_file_read_backend(common::FileReadBackend::PREAD);  // 默认值
+common::set_file_read_backend(common::FileReadBackend::AUTO);   // 优先 mmap，失败时回退
+common::set_file_read_backend(common::FileReadBackend::MMAP);   // 必须使用 mmap
+```
+
+C API 可通过 `tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)` 设置相同
+选项。默认使用 `PREAD`，以保持历史读取行为不变。`AUTO` 会优先映射受支持
+的普通文件，映射不可用时自动回退到 `pread`；`MMAP` 不回退：输入不受
+支持时返回 `RET_NOT_SUPPORT`，映射失败时返回 `RET_FILE_MAP_ERR`。映射建立
+成功后会关闭原始文件描述符，映射本身会保持有效直至 reader 关闭。映射
+reader 打开期间不得修改或截断文件。
+
 ---
 
 ## 使用 TsFile

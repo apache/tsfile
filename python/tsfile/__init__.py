@@ -87,7 +87,12 @@ from .tag_filter import (
     tag_not_between,
 )
 from .tsfile_writer import TsFileWriterPy as TsFileWriter
-from .tsfile_py_cpp import get_tsfile_config, set_tsfile_config
+from .tsfile_py_cpp import (
+    get_file_read_backend,
+    get_tsfile_config,
+    set_file_read_backend,
+    set_tsfile_config,
+)
 from .tsfile_table_writer import TsFileTableWriter
 from .utils import to_dataframe, dataframe_to_tsfile
 from .dataset import TsFileDataFrame, Timeseries, AlignedTimeseries, SeriesPath
