@@ -975,9 +975,9 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
                                   alias_out, alias_err),
               3);
     EXPECT_EQ(alias_out.str(), "");
-    EXPECT_EQ(alias_err.str(),
-              "Error: output target '" + f.path +
-                  "' is the same as the input file '" + f.path + "'\n");
+    EXPECT_EQ(alias_err.str(), "Error: output target '" + f.path +
+                                   "' is the same as the input file '" +
+                                   f.path + "'\n");
     EXPECT_EQ(read_file(f.path), source_before);
     std::remove(output.c_str());
 }
