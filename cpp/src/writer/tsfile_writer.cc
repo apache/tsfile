@@ -213,13 +213,22 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
             if (mname.empty()) {
                 continue;
             }
-            if (group->measurement_schema_map_.find(mname) !=
-                group->measurement_schema_map_.end()) {
-                continue;
+            auto schema_it = group->measurement_schema_map_.find(mname);
+            if (schema_it == group->measurement_schema_map_.end()) {
+                MeasurementSchema* ms =
+                    new MeasurementSchema(mname, cm->data_type_, cm->encoding_,
+                                          cm->compression_type_);
+                group->measurement_schema_map_.insert(
+                    std::make_pair(mname, ms));
+            } else {
+                // A series may have different codecs in different chunks.
+                // Appends must use the latest chunk's codec, not the first
+                // recovered chunk's stale settings.
+                MeasurementSchema* ms = schema_it->second;
+                ms->data_type_ = cm->data_type_;
+                ms->encoding_ = cm->encoding_;
+                ms->compression_type_ = cm->compression_type_;
             }
-            MeasurementSchema* ms = new MeasurementSchema(
-                mname, cm->data_type_, cm->encoding_, cm->compression_type_);
-            group->measurement_schema_map_.insert(std::make_pair(mname, ms));
         }
     }
 
