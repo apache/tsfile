@@ -69,10 +69,10 @@ pointers or violating an API's ownership and lifetime requirements is outside th
 
 ### Reading Untrusted Files
 
-A malformed or unsupported file may be rejected at any point. Parsing an untrusted file should not
-result in arbitrary code execution, memory corruption, access to memory outside the supplied
-buffers, disclosure of unrelated process data, or reads or writes outside resources selected by the
-caller.
+Processing an attacker-controlled file is security-relevant when it results in arbitrary code
+execution, exploitable memory corruption, disclosure of unrelated process data, or access outside
+resources selected by the caller. A malformed or unsupported file may otherwise be rejected at any
+point.
 
 TsFile is optimized for large time-series datasets and supports compression. A valid or maliciously
 crafted file may require substantial CPU time, memory, or output space. Applications that accept
@@ -80,10 +80,12 @@ files from untrusted sources should impose limits appropriate to their environme
 size, decompressed size, memory, processing time, concurrency, and result size. Applications with a
 strong isolation requirement should parse untrusted files in a suitably restricted process.
 
-Resource consumption proportional to the input or its declared decompressed size, or a clean error
-while parsing malformed input, is normally a robustness issue rather than a vulnerability. Reports
-that demonstrate disproportionate resource amplification or a meaningful availability impact
-across an actual untrusted boundary may be security issues and will be evaluated case by case.
+A clean error while parsing malformed input, or a crash, assertion failure, out-of-memory condition,
+or sanitizer finding without a demonstrated security-boundary impact, is normally a robustness
+issue rather than a vulnerability. The same applies to resource consumption proportional to the
+input or its declared decompressed size. Reports that demonstrate disproportionate resource
+amplification or a meaningful availability impact across an actual untrusted boundary may be
+security issues and will be evaluated case by case.
 
 ### Configuration and Optional Implementations
 
@@ -106,8 +108,8 @@ the responsibility of the embedding application and its deployment environment.
 
 Examples of findings that should be reported privately include:
 
-* arbitrary code execution or memory corruption while processing attacker-controlled input;
-* out-of-bounds access that exposes unrelated process data;
+* arbitrary code execution while processing attacker-controlled input;
+* exploitable memory corruption or out-of-bounds access that exposes unrelated process data;
 * reads or writes outside caller-designated resources caused by serialized file contents;
 * bypass of a documented security guarantee; and
 * remotely triggerable denial of service with significant, disproportionate impact.
