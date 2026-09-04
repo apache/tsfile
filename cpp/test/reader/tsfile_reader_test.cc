@@ -39,6 +39,7 @@
 #include "reader/filter/time_operator.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_series_scan_iterator.h"
+#include "writer/chunk_writer.h"
 #include "writer/tsfile_writer.h"
 
 using namespace storage;
@@ -288,6 +289,73 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
               1622505600000);
     ASSERT_EQ(device_timeseries_1[0]->get_statistic()->count_, 1);
     reader.close();
+}
+
+TEST_F(TsFileReaderTest, GetTimeseriesSchemaUsesLastChunkCodec) {
+    const std::string path = std::string("tsfile_last_chunk_codec_") +
+                             generate_random_string(10) + ".tsfile";
+    remove(path.c_str());
+
+    WriteFile write_file;
+    const int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    ASSERT_EQ(write_file.create(path, flags, 0666), E_OK);
+
+    TsFileIOWriter io_writer;
+    ASSERT_EQ(io_writer.init(&write_file), E_OK);
+    ASSERT_EQ(io_writer.start_file(), E_OK);
+
+    const std::string device_name = "root.codec.last_chunk";
+    const std::string measurement_name = "value";
+    auto device_id = std::make_shared<StringArrayDeviceID>(device_name);
+
+    ASSERT_EQ(io_writer.start_flush_chunk_group(device_id, false), E_OK);
+    ChunkWriter first_chunk;
+    ASSERT_EQ(first_chunk.init(measurement_name, INT32, PLAIN, UNCOMPRESSED),
+              E_OK);
+    ASSERT_EQ(first_chunk.write(1, static_cast<int32_t>(1)), E_OK);
+    ASSERT_EQ(first_chunk.end_encode_chunk(), E_OK);
+    std::string first_name = measurement_name;
+    ASSERT_EQ(io_writer.start_flush_chunk(
+                  first_chunk.get_chunk_data(), first_name, INT32, PLAIN,
+                  UNCOMPRESSED, first_chunk.num_of_pages()),
+              E_OK);
+    ASSERT_EQ(io_writer.flush_chunk(first_chunk.get_chunk_data()), E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk(first_chunk.get_chunk_statistic()),
+              E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk_group(false), E_OK);
+
+    // The second chunk deliberately uses a different encoding. The reader
+    // must report this final chunk's codec, matching Java's implementation.
+    ASSERT_EQ(io_writer.start_flush_chunk_group(device_id, false), E_OK);
+    ChunkWriter last_chunk;
+    ASSERT_EQ(last_chunk.init(measurement_name, INT32, TS_2DIFF, UNCOMPRESSED),
+              E_OK);
+    ASSERT_EQ(last_chunk.write(2, static_cast<int32_t>(2)), E_OK);
+    ASSERT_EQ(last_chunk.end_encode_chunk(), E_OK);
+    std::string last_name = measurement_name;
+    ASSERT_EQ(io_writer.start_flush_chunk(
+                  last_chunk.get_chunk_data(), last_name, INT32, TS_2DIFF,
+                  UNCOMPRESSED, last_chunk.num_of_pages()),
+              E_OK);
+    ASSERT_EQ(io_writer.flush_chunk(last_chunk.get_chunk_data()), E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk(last_chunk.get_chunk_statistic()),
+              E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk_group(false), E_OK);
+    ASSERT_EQ(io_writer.end_file(), E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(path), E_OK);
+    std::vector<MeasurementSchema> schemas;
+    ASSERT_EQ(reader.get_timeseries_schema(
+                  std::make_shared<StringArrayDeviceID>(device_name), schemas),
+              E_OK);
+    ASSERT_EQ(schemas.size(), 1u);
+    ASSERT_EQ(schemas[0].measurement_name_, measurement_name);
+    EXPECT_EQ(schemas[0].data_type_, INT32);
+    EXPECT_EQ(schemas[0].encoding_, TS_2DIFF);
+    EXPECT_EQ(schemas[0].compression_type_, UNCOMPRESSED);
+    reader.close();
+    remove(path.c_str());
 }
 
 TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
@@ -1509,6 +1577,10 @@ TEST_F(TsFileReaderTest, AlignedSchemaReportsValueDataType) {
     }
     EXPECT_EQ(i32_type, INT32);
     EXPECT_EQ(dbl_type, DOUBLE);
+    for (const auto& s : schemas) {
+        EXPECT_EQ(s.encoding_, PLAIN);
+        EXPECT_EQ(s.compression_type_, UNCOMPRESSED);
+    }
     reader.close();
 }
 
