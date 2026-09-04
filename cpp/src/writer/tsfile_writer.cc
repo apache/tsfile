@@ -468,10 +468,48 @@ int TsFileWriter::do_check_schema(
     }
     MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
     uint32_t measurement_count = measurement_names.get_count();
-    // chunk_writers.reserve(measurement_count);
+    // The getter is single-pass (next() advances an index), so buffer the
+    // name sequence up front. next() returns a reference, so this buffers
+    // pointers rather than copies, which lets the cache check below compare
+    // the real names and still fall through to the full lookup on mismatch.
+    static thread_local std::vector<const std::string*> names;
+    names.clear();
+    names.reserve(measurement_count);
     for (uint32_t i = 0; i < measurement_count; i++) {
-        auto ms_iter = msm.find(measurement_names.next());
+        names.push_back(&measurement_names.next());
+    }
+    // Column count alone is not a safe cache key: entries are reused by
+    // position, so the same count with a different name order (or one column
+    // swapped) would silently write values into the wrong column with the
+    // wrong data type.
+    if (device_schema->schema_check_cached_ &&
+        device_schema->cached_measurement_names_.size() == measurement_count) {
+        bool same_schema = true;
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            if (device_schema->cached_measurement_names_[i] != *names[i]) {
+                same_schema = false;
+                break;
+            }
+        }
+        if (same_schema) {
+            for (uint32_t i = 0; i < measurement_count; i++) {
+                chunk_writers.push_back(
+                    device_schema->cached_chunk_writers_[i]);
+                data_types.push_back(device_schema->cached_data_types_[i]);
+            }
+            return E_OK;
+        }
+        // Schema changed for this device: drop the stale cache and re-resolve.
+        device_schema->cached_chunk_writers_.clear();
+        device_schema->cached_data_types_.clear();
+        device_schema->cached_measurement_names_.clear();
+        device_schema->schema_check_cached_ = false;
+    }
+    bool all_resolved = true;
+    for (uint32_t i = 0; i < measurement_count; i++) {
+        auto ms_iter = msm.find(*names[i]);
         if (UNLIKELY(ms_iter == msm.end())) {
+            all_resolved = false;
             chunk_writers.push_back(NULL);
             data_types.push_back(common::NULL_TYPE);
         } else {
@@ -502,6 +540,22 @@ int TsFileWriter::do_check_schema(
             data_types.push_back(ms->data_type_);
         }
     }
+    // Cache only fully-resolved results: a NULL entry for a measurement that
+    // is not registered yet would keep masking the column even after it is
+    // registered later.
+    if (IS_SUCC(ret) && all_resolved) {
+        device_schema->cached_chunk_writers_.reserve(measurement_count);
+        device_schema->cached_data_types_.reserve(measurement_count);
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            device_schema->cached_chunk_writers_.push_back(chunk_writers[i]);
+            device_schema->cached_data_types_.push_back(data_types[i]);
+        }
+        device_schema->cached_measurement_names_.reserve(measurement_count);
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            device_schema->cached_measurement_names_.push_back(*names[i]);
+        }
+        device_schema->schema_check_cached_ = true;
+    }
     return ret;
 }
 
@@ -528,9 +582,46 @@ int TsFileWriter::do_check_schema_aligned(
     time_chunk_writer = device_schema->time_chunk_writer_;
     MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
     uint32_t measurement_count = measurement_names.get_count();
+    // Same single-pass buffering + name-sequence guard as do_check_schema;
+    // see the comment there and on MeasurementSchemaGroup. This path keeps
+    // its own cache because sharing one flag with the plain path locked
+    // whichever ran second out.
+    static thread_local std::vector<const std::string*> names;
+    names.clear();
+    names.reserve(measurement_count);
     for (uint32_t i = 0; i < measurement_count; i++) {
-        auto ms_iter = msm.find(measurement_names.next());
+        names.push_back(&measurement_names.next());
+    }
+    if (device_schema->schema_check_aligned_cached_ &&
+        device_schema->cached_aligned_measurement_names_.size() ==
+            measurement_count) {
+        bool same_schema = true;
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            if (device_schema->cached_aligned_measurement_names_[i] !=
+                *names[i]) {
+                same_schema = false;
+                break;
+            }
+        }
+        if (same_schema) {
+            for (uint32_t i = 0; i < measurement_count; i++) {
+                value_chunk_writers.push_back(
+                    device_schema->cached_value_chunk_writers_[i]);
+                data_types.push_back(
+                    device_schema->cached_aligned_data_types_[i]);
+            }
+            return E_OK;
+        }
+        device_schema->cached_value_chunk_writers_.clear();
+        device_schema->cached_aligned_data_types_.clear();
+        device_schema->cached_aligned_measurement_names_.clear();
+        device_schema->schema_check_aligned_cached_ = false;
+    }
+    bool all_resolved = true;
+    for (uint32_t i = 0; i < measurement_count; i++) {
+        auto ms_iter = msm.find(*names[i]);
         if (UNLIKELY(ms_iter == msm.end())) {
+            all_resolved = false;
             value_chunk_writers.push_back(NULL);
             data_types.push_back(common::NULL_TYPE);
         } else {
@@ -561,6 +652,23 @@ int TsFileWriter::do_check_schema_aligned(
             }
             data_types.push_back(ms->data_type_);
         }
+    }
+    // See do_check_schema: never cache a result with unresolved columns.
+    if (IS_SUCC(ret) && all_resolved) {
+        device_schema->cached_value_chunk_writers_.reserve(measurement_count);
+        device_schema->cached_aligned_data_types_.reserve(measurement_count);
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            device_schema->cached_value_chunk_writers_.push_back(
+                value_chunk_writers[i]);
+            device_schema->cached_aligned_data_types_.push_back(data_types[i]);
+        }
+        device_schema->cached_aligned_measurement_names_.reserve(
+            measurement_count);
+        for (uint32_t i = 0; i < measurement_count; i++) {
+            device_schema->cached_aligned_measurement_names_.push_back(
+                *names[i]);
+        }
+        device_schema->schema_check_aligned_cached_ = true;
     }
     return ret;
 }
