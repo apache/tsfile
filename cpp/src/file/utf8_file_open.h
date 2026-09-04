@@ -35,28 +35,38 @@
 namespace storage {
 namespace file_internal {
 
-inline int open_utf8(const std::string& path, int flags, int mode = 0) {
 #ifdef _WIN32
+inline bool utf8_to_wide(const std::string& path, std::wstring& wide_path) {
     if (path.find('\0') != std::string::npos || path.size() > INT_MAX) {
         errno = EINVAL;
-        return -1;
+        return false;
     }
     if (path.empty()) {
         errno = ENOENT;
-        return -1;
+        return false;
     }
     const int size =
         MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.data(),
                             static_cast<int>(path.size()), nullptr, 0);
     if (size <= 0) {
         errno = EINVAL;
-        return -1;
+        return false;
     }
-    std::wstring wide_path(static_cast<size_t>(size), L'\0');
+    wide_path.resize(static_cast<size_t>(size));
     if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.data(),
                             static_cast<int>(path.size()), &wide_path[0],
                             size) != size) {
         errno = EINVAL;
+        return false;
+    }
+    return true;
+}
+#endif
+
+inline int open_utf8(const std::string& path, int flags, int mode = 0) {
+#ifdef _WIN32
+    std::wstring wide_path;
+    if (!utf8_to_wide(path, wide_path)) {
         return -1;
     }
     return ::_wopen(wide_path.c_str(), flags, mode);

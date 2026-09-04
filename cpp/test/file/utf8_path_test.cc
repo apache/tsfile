@@ -28,6 +28,7 @@
 #include "file/restorable_tsfile_io_writer.h"
 #include "file/utf8_file_open.h"
 #include "file/write_file.h"
+#include "writer/tsfile_writer.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -35,6 +36,12 @@
 #else
 #include <unistd.h>
 #endif
+
+extern "C" {
+typedef void* CWriteFile;
+CWriteFile write_file_new(const char* pathname, int32_t* err_code);
+void free_write_file(CWriteFile* write_file);
+}
 
 // Note: storage::WriteFile / storage::ReadFile are named after Win32 API
 // functions that <windows.h> declares at global scope, so the class names are
@@ -139,6 +146,21 @@ bool CreateFixtureByWidePath() {
     return written == static_cast<int>(content.size());
 }
 
+bool MinimalTsFileIsUnchanged() {
+    storage::ReadFile read_file;
+    std::string buf(MinimalTsFile().size(), '\0');
+    int32_t read_len = 0;
+    const bool opened = read_file.open(Utf8Name()) == E_OK;
+    const bool read_ok =
+        opened &&
+        read_file.file_size() == static_cast<int64_t>(MinimalTsFile().size()) &&
+        read_file.read(0, &buf[0], static_cast<int32_t>(buf.size()),
+                       read_len) == E_OK &&
+        read_len == static_cast<int32_t>(buf.size()) && buf == MinimalTsFile();
+    read_file.close();
+    return read_ok;
+}
+
 class Utf8PathTest : public ::testing::Test {
    protected:
     void SetUp() override { RemoveTestFiles(); }
@@ -163,6 +185,31 @@ TEST_F(Utf8PathTest, WriteFileCreatesUtf8Path) {
 
     EXPECT_TRUE(ExistsByWidePath())
         << "the file was not created under the UTF-8 path that was requested";
+}
+
+TEST_F(Utf8PathTest, ExistingUtf8PathIsRejectedByTsFileWriter) {
+    ASSERT_TRUE(CreateFixtureByWidePath());
+
+    storage::TsFileWriter writer;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    EXPECT_EQ(writer.open(Utf8Name(), flags, 0666), E_ALREADY_EXIST);
+    EXPECT_TRUE(MinimalTsFileIsUnchanged());
+}
+
+TEST_F(Utf8PathTest, ExistingUtf8PathIsRejectedByCWrapper) {
+    ASSERT_TRUE(CreateFixtureByWidePath());
+
+    int32_t error_code = E_OK;
+    CWriteFile file = write_file_new(Utf8Name().c_str(), &error_code);
+    EXPECT_EQ(file, nullptr);
+    EXPECT_EQ(error_code, E_ALREADY_EXIST);
+    if (file != nullptr) {
+        free_write_file(&file);
+    }
+    EXPECT_TRUE(MinimalTsFileIsUnchanged());
 }
 
 // ReadFile must find a file that exists on disk under a non-ASCII name.

@@ -19,12 +19,6 @@
 
 #include "tsfile_writer.h"
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 #include <chrono>
 #include <iomanip>
 
@@ -264,14 +258,8 @@ int TsFileWriter::register_table(
     return E_OK;
 }
 
-bool check_file_exist(const std::string& file_path) {
-    return access(file_path.c_str(), F_OK) == 0;
-}
-
 int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
-    if (check_file_exist(file_path)) {
-        return E_ALREADY_EXIST;
-    }
+    flags |= O_CREAT | O_EXCL;
     write_file_ = new WriteFile;
     write_file_created_ = true;
     io_writer_ = new TsFileIOWriter;
