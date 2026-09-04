@@ -259,16 +259,30 @@ int TsFileWriter::register_table(
 }
 
 int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
-    flags |= O_CREAT | O_EXCL;
-    write_file_ = new WriteFile;
-    write_file_created_ = true;
-    io_writer_ = new TsFileIOWriter;
-    int ret = E_OK;
-    if (RET_FAIL(write_file_->create(file_path, flags, mode))) {
-    } else {
-        io_writer_->init(write_file_);
+    if (write_file_ != nullptr || io_writer_ != nullptr) {
+        return E_ALREADY_EXIST;
     }
-    return ret;
+
+    flags |= O_CREAT | O_EXCL;
+    auto* write_file = new WriteFile;
+    int ret = write_file->create(file_path, flags, mode);
+    if (ret != E_OK) {
+        delete write_file;
+        return ret;
+    }
+
+    auto* io_writer = new TsFileIOWriter;
+    ret = io_writer->init(write_file);
+    if (ret != E_OK) {
+        delete io_writer;
+        delete write_file;
+        return ret;
+    }
+
+    write_file_ = write_file;
+    write_file_created_ = true;
+    io_writer_ = io_writer;
+    return E_OK;
 }
 
 int TsFileWriter::open(const std::string& file_path) {
