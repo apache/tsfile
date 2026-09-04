@@ -435,7 +435,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                   ErrorCode* err_code)
 
     # resultSet : get data from resultSet
-    bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);
+    bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code) nogil;
     bint tsfile_result_set_is_null_by_index(ResultSet result_set, uint32_t column_index);
     bint tsfile_result_set_is_null_by_name(ResultSet result_set, const char * column_name);
     void free_tsfile_result_set(ResultSet * result_set);

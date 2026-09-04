@@ -22,7 +22,10 @@
 #include <sys/stat.h>
 
 #include <cmath>
+#include <cstring>
+#include <fstream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <random>
 #include <unordered_map>
@@ -32,6 +35,7 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
+#include "file/random_access_file.h"
 #include "file/tsfile_io_reader.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
@@ -138,6 +142,131 @@ class TsFileReaderTest : public ::testing::Test {
         }
     }
 };
+
+namespace {
+
+class InMemoryRandomAccessFile : public RandomAccessFile {
+   public:
+    explicit InMemoryRandomAccessFile(std::vector<char> bytes)
+        : bytes_(std::move(bytes)), opened_(true), name_("memory://test") {}
+
+    bool is_opened() const override { return opened_; }
+
+    int64_t file_size() const override {
+        return static_cast<int64_t>(bytes_.size());
+    }
+
+    const std::string& file_path() const override { return name_; }
+
+    int generation(uint64_t& size, uint64_t& fingerprint) const override {
+        if (!opened_) {
+            return E_FILE_READ_ERR;
+        }
+        size = bytes_.size();
+        fingerprint = 0;
+        return E_OK;
+    }
+
+    int read(int64_t offset, char* buffer, int32_t size,
+             int32_t& read_size) override {
+        read_size = 0;
+        if (!opened_ || offset < 0 || size < 0 ||
+            (buffer == nullptr && size > 0)) {
+            return E_INVALID_ARG;
+        }
+        if (size == 0 || static_cast<size_t>(offset) >= bytes_.size()) {
+            return E_OK;
+        }
+        const size_t available = bytes_.size() - static_cast<size_t>(offset);
+        read_size = static_cast<int32_t>(
+            std::min(available, static_cast<size_t>(size)));
+        std::memcpy(buffer, bytes_.data() + offset,
+                    static_cast<size_t>(read_size));
+        return E_OK;
+    }
+
+    void close() override { opened_ = false; }
+
+   private:
+    std::vector<char> bytes_;
+    bool opened_;
+    std::string name_;
+};
+
+}  // namespace
+
+TEST_F(TsFileReaderTest, ReadsThroughRandomAccessFile) {
+    const std::string device = "root.sg.device";
+    const std::string measurement = "temperature";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device, MeasurementSchema(measurement, TSDataType::INT32,
+                                            TSEncoding::PLAIN,
+                                            CompressionType::UNCOMPRESSED)),
+              E_OK);
+    TsRecord record(100, device);
+    record.add_point(measurement, static_cast<int32_t>(42));
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::ifstream input(file_name_, std::ios::binary);
+    ASSERT_TRUE(input.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+    ASSERT_FALSE(bytes.empty());
+
+    std::unique_ptr<RandomAccessFile> source(
+        new InMemoryRandomAccessFile(std::move(bytes)));
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(std::move(source)), E_OK);
+    EXPECT_EQ(reader.get_file_version(),
+              static_cast<unsigned char>(VERSION_NUM_BYTE));
+
+    std::vector<std::string> paths = {device + "." + measurement};
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 0, 200, result), E_OK);
+    ASSERT_NE(result, nullptr);
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(result->get_value<int32_t>(2), 42);
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileReaderTest, MoveTransfersAnOpenReader) {
+    const std::string device = "root.sg.move_device";
+    const std::string measurement = "temperature";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device, MeasurementSchema(measurement, TSDataType::INT32,
+                                            TSEncoding::PLAIN,
+                                            CompressionType::UNCOMPRESSED)),
+              E_OK);
+    TsRecord record(100, device);
+    record.add_point(measurement, static_cast<int32_t>(42));
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileReader original;
+    ASSERT_EQ(original.open(file_name_), E_OK);
+    TsFileReader moved = std::move(original);
+    TsFileReader reader;
+    reader = std::move(moved);
+
+    std::vector<std::string> paths = {device + "." + measurement};
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 0, 200, result), E_OK);
+    ASSERT_NE(result, nullptr);
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(result->get_value<int32_t>(2), 42);
+    reader.destroy_query_data_set(result);
+}
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
     std::string device_path = "device1";
@@ -1607,7 +1736,7 @@ namespace storage {
 class TsFileReaderMetaArenaTest {
    public:
     static int64_t arena_used(const storage::TsFileReader& r) {
-        return r.tsfile_reader_meta_pa_.get_total_used_bytes();
+        return r.tsfile_reader_meta_pa_->get_total_used_bytes();
     }
 };
 }  // namespace storage

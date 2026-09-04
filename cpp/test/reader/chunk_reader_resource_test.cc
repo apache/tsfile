@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
+#include "file/read_file.h"
 #include "reader/aligned_chunk_reader.h"
 
 namespace storage {

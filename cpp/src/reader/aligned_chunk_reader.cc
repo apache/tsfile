@@ -33,7 +33,7 @@
 using namespace common;
 namespace storage {
 
-int AlignedChunkReader::init(ReadFile* read_file, String m_name,
+int AlignedChunkReader::init(RandomAccessFile* read_file, String m_name,
                              TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
@@ -1384,7 +1384,8 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
         if (heap) common::mem_free(compressed_buf);
         return ret;
     }
-    // ReadFile::read() returns E_OK + short read_len on EOF; uncompressing
+    // RandomAccessFile::read() returns E_OK + short read_len on EOF;
+    // uncompressing
     // page_info.time_compressed_size from a buffer with uninitialised tail
     // bytes would feed garbage to the decompressor.
     if (read_len != static_cast<int32_t>(page_info.time_compressed_size)) {

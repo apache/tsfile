@@ -46,6 +46,7 @@
 #include "common/db_common.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "file/read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "file/write_file.h"
 #include "reader/table_result_set.h"
