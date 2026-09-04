@@ -503,8 +503,8 @@ file length: 5364
                 5114|		endOffset=4324
                 5122|		nodeType=LEAF_DEVICE
                 5123|	TableSchemaCnt=2
-                5127|	[TableSchema] TableSchema{tableName='table1', columnSchemas=[[value,INT64,PLAIN,,UNCOMPRESSED]], columnTypes=[FIELD]}, size=21
-                5158|	[TableSchema] TableSchema{tableName='table2', columnSchemas=[[site,STRING,PLAIN,,UNCOMPRESSED], [rack,STRING,PLAIN,,UNCOMPRESSED], [sensor,STRING,PLAIN,,UNCOMPRESSED], [reading,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, TAG, FIELD]}, size=82
+                5127|	[TableSchema] TableSchema{tableName='table2', columnSchemas=[[site,STRING,PLAIN,,UNCOMPRESSED], [rack,STRING,PLAIN,,UNCOMPRESSED], [sensor,STRING,PLAIN,,UNCOMPRESSED], [reading,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, TAG, FIELD]}, size=82
+                5219|	[TableSchema] TableSchema{tableName='table1', columnSchemas=[[value,INT64,PLAIN,,UNCOMPRESSED]], columnTypes=[FIELD]}, size=21
                 5250|	[Meta Offset] 1721
                 5258|	[Bloom Filter Size] bit vector byte array length=325
                 5262|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
