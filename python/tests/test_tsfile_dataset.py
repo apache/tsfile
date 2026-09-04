@@ -227,6 +227,31 @@ def _write_weather_timestamp_field_file(path, start):
         )
 
 
+def _write_weather_nullable_boolean_timestamp_file(path, start):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("online", TSDataType.BOOLEAN, ColumnCategory.FIELD),
+            ColumnSchema("observed_at", TSDataType.TIMESTAMP, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(
+            pd.DataFrame(
+                {
+                    "time": [start, start + 1, start + 2],
+                    "device": ["device_a", "device_a", "device_a"],
+                    "online": pd.array([True, pd.NA, False], dtype="boolean"),
+                    "observed_at": pd.array(
+                        [1_700_000_000_000, pd.NA, 1_700_000_000_002],
+                        dtype="Int64",
+                    ),
+                }
+            )
+        )
+
+
 def _write_multi_tag_file(path):
     schema = TableSchema(
         "weather",
@@ -1214,6 +1239,30 @@ def test_dataset_table_model_exposes_timestamp_fields_as_float64(
         np.testing.assert_array_equal(
             values, np.array([1_700_000_000_000.0, 1_700_000_000_001.0])
         )
+
+
+def test_dataset_nullable_numeric_compatible_fields_use_nan(
+    tmp_path, dataframe_use_index
+):
+    path = tmp_path / "weather_nullable.tsfile"
+    _write_weather_nullable_boolean_timestamp_file(path, 0)
+    expected = {
+        "weather.device_a.online": np.array([1.0, np.nan, 0.0]),
+        "weather.device_a.observed_at": np.array(
+            [1_700_000_000_000.0, np.nan, 1_700_000_000_002.0]
+        ),
+    }
+
+    with TsFileDataFrame(
+        str(path), show_progress=False, use_index=dataframe_use_index
+    ) as tsdf:
+        for series_name, values in expected.items():
+            np.testing.assert_equal(tsdf[series_name][:], values)
+
+        aligned = tsdf.loc[:, list(expected)]
+        by_name = dict(zip(aligned.series_names, aligned.values.T))
+        for series_name, values in expected.items():
+            np.testing.assert_equal(by_name[series_name], values)
 
 
 def test_dataset_close_waits_for_an_active_public_query(tmp_path, monkeypatch):
