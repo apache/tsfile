@@ -1654,6 +1654,31 @@ void WriteOneAlignedRow(TsFileWriter& w, const std::string& device, int64_t ts,
 
 }  // namespace
 
+TEST(TsFileWriterOpenTest, FailedOpenDoesNotPoisonWriter) {
+    libtsfile_init();
+    const std::string path = std::string("tsfile_writer_failed_open_") +
+                             TsFileWriterTest::generate_random_string(10) +
+                             ".tsfile";
+    remove(path.c_str());
+
+    {
+        WriteFile existing;
+        ASSERT_EQ(existing.create(path, O_WRONLY | O_CREAT | O_TRUNC, 0666),
+                  E_OK);
+    }
+
+    TsFileWriter writer;
+    EXPECT_EQ(writer.open(path, O_RDWR | O_CREAT | O_TRUNC, 0666),
+              E_ALREADY_EXIST);
+
+    remove(path.c_str());
+    EXPECT_EQ(writer.open(path, O_RDWR | O_CREAT | O_TRUNC, 0666), E_OK);
+    EXPECT_EQ(writer.close(), E_OK);
+
+    remove(path.c_str());
+    libtsfile_destroy();
+}
+
 // Writing speed up: TsFileWriter must be reusable across a
 // destroy() + init() cycle.
 //   - 1: TsFileIOWriter::destroy() left chunk_group_meta_list_ and

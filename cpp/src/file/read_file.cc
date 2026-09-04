@@ -38,6 +38,7 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
 #include "common/global.h"
 #include "common/logger/elog.h"
 #include "common/tsfile_common.h"
+#include "file/utf8_file_open.h"
 #include "utils/injection.h"
 #include "utils/util_define.h"  // ssize_t and other platform-compat shims
 
@@ -166,13 +167,15 @@ int ReadFile::open(const std::string& file_path) {
     // non-regular paths so both platforms report the same stable error code.
     // If stat itself fails, keep the normal open() path so missing or
     // inaccessible files continue to report E_FILE_OPEN_ERR.
+    std::wstring wide_path;
     struct __stat64 preopen_stat;
-    if (_stat64(file_path_.c_str(), &preopen_stat) == 0 &&
+    if (file_internal::utf8_to_wide(file_path_, wide_path) &&
+        _wstat64(wide_path.c_str(), &preopen_stat) == 0 &&
         (preopen_stat.st_mode & _S_IFMT) != _S_IFREG) {
         return E_INVALID_PATH;
     }
 #endif
-    fd_ = ::open(file_path_.c_str(), flags);
+    fd_ = file_internal::open_utf8(file_path_, flags);
     if (fd_ < 0) {
         return E_FILE_OPEN_ERR;
     }
