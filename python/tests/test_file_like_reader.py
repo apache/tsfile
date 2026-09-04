@@ -127,6 +127,45 @@ assert source.tell() == 11
     assert completed.returncode == 0, completed.stderr
 
 
+def test_file_like_multi_field_row_query_does_not_deadlock():
+    path = RESOURCES / "simple_table_t1.tsfile"
+    script = """
+import io
+import sys
+from pathlib import Path
+
+from tsfile import TsFileReader
+
+source = io.BytesIO(Path(sys.argv[1]).read_bytes())
+source.seek(19)
+with TsFileReader(source) as reader:
+    result = reader.query_table("test", ["s2", "s3"])
+    try:
+        assert result.next()
+        assert result.get_value_by_index(1) == 1760106020000
+        assert result.get_value_by_index(2) == 1010
+        assert result.get_value_by_index(3) == 2.0
+    finally:
+        result.close()
+assert source.tell() == 19
+"""
+
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", script, str(path)],
+            cwd=Path(__file__).parents[1],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            "multi-field row query deadlocked while native workers waited for the GIL"
+        )
+
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_reader_keeps_source_alive_until_close_without_closing_it():
     path = RESOURCES / "simple_table_t1.tsfile"
     source = TrackingBytesIO(path.read_bytes())

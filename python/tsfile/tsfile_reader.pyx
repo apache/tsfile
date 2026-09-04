@@ -89,8 +89,10 @@ cdef class ResultSetPy:
         :return: boolean, true means get next rows.
         """
         cdef ErrorCode code = 0
+        cdef bint has_next
         self.check_result_set_invalid()
-        has_next = tsfile_result_set_next(self.result, &code)
+        with nogil:
+            has_next = tsfile_result_set_next(self.result, &code)
         check_error(code)
         return has_next
 
