@@ -40,42 +40,6 @@ struct DeviceMetaEntry {
     int64_t end_offset;
 };
 
-int read_chunk_header_codec(ReadFile* read_file, int64_t chunk_header_offset,
-                            size_t measurement_name_len,
-                            common::TSEncoding& encoding,
-                            common::CompressionType& compression) {
-    if (read_file == nullptr || chunk_header_offset < 0) {
-        return E_INVALID_ARG;
-    }
-
-    // A chunk header contains the measurement name before its codec fields.
-    // Read enough bytes for the known name instead of relying on a fixed-size
-    // header buffer.
-    constexpr size_t kMaxVarIntLen = 5;
-    std::vector<char> buffer(1 + kMaxVarIntLen + measurement_name_len +
-                             kMaxVarIntLen + 3);
-    int32_t read_len = 0;
-    int ret = read_file->read(chunk_header_offset, buffer.data(),
-                              static_cast<int32_t>(buffer.size()), read_len);
-    if (ret != E_OK) {
-        return ret;
-    }
-    if (read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
-        return E_TSFILE_CORRUPTED;
-    }
-
-    common::ByteStream input;
-    input.wrap_from(buffer.data(), read_len);
-    ChunkHeader chunk_header;
-    ret = chunk_header.deserialize_from(input);
-    if (ret != E_OK) {
-        return ret;
-    }
-    encoding = chunk_header.encoding_type_;
-    compression = chunk_header.compression_type_;
-    return E_OK;
-}
-
 int parse_paths(const std::vector<std::string>& path_list,
                 std::vector<Path>& parsed_paths) {
     try {
