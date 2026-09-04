@@ -29,6 +29,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
 
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -415,9 +417,10 @@ public class VectorMeasurementSchema
     vectorMeasurementSchema.unifiedCompressor = ReadWriteIOUtils.readByte(inputStream);
     if (vectorMeasurementSchema.unifiedCompressor == NO_UNIFIED_COMPRESSOR) {
       byte[] compressors = new byte[measurementSize + 1];
-      int read = inputStream.read(compressors);
-      if (read != measurementSize) {
-        throw new IOException("Unexpected end of stream when reading compressors");
+      try {
+        new DataInputStream(inputStream).readFully(compressors);
+      } catch (EOFException e) {
+        throw new IOException("Unexpected end of stream when reading compressors", e);
       }
       vectorMeasurementSchema.compressors = compressors;
     }
