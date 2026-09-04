@@ -24,7 +24,7 @@
 #include "common/tsfile_common.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
-#include "file/read_file.h"
+#include "file/random_access_file.h"
 #include "reader/filter/filter.h"
 #include "reader/ichunk_reader.h"
 
@@ -120,7 +120,7 @@ class AlignedChunkReader : public IChunkReader {
           time_uncompressed_buf_(nullptr),
           value_uncompressed_buf_(nullptr),
           cur_value_index(-1) {}
-    int init(ReadFile* read_file, common::String m_name,
+    int init(RandomAccessFile* read_file, common::String m_name,
              common::TSDataType data_type, Filter* time_filter) override;
     void reset() override;
     void destroy() override;
@@ -276,7 +276,7 @@ class AlignedChunkReader : public IChunkReader {
                               int32_t row_limit) const;
 
    private:
-    ReadFile* read_file_;
+    RandomAccessFile* read_file_;
     // ── Single-value mode fields (kept for backward compat) ──────────────
     ChunkMeta* time_chunk_meta_;
     ChunkMeta* value_chunk_meta_;

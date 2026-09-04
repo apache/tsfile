@@ -26,7 +26,7 @@
 
 #include "aligned_chunk_reader.h"
 #include "common/tsblock/tsblock.h"
-#include "file/read_file.h"
+#include "file/random_access_file.h"
 #include "file/tsfile_io_reader.h"
 #include "reader/chunk_reader.h"
 #include "reader/filter/filter.h"
@@ -59,7 +59,7 @@ class TsFileSeriesScanIterator {
           row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
-             const std::string& measurement_name, ReadFile* read_file,
+             const std::string& measurement_name, RandomAccessFile* read_file,
              Filter* time_filter, common::PageArena& data_pa) {
         ASSERT(read_file != nullptr);
         device_id_ = device_id;
@@ -70,11 +70,12 @@ class TsFileSeriesScanIterator {
         return common::E_OK;
     }
     int init_prepared(const std::shared_ptr<PreparedSeries>& prepared,
-                      ReadFile* read_file, Filter* time_filter,
+                      RandomAccessFile* read_file, Filter* time_filter,
                       common::PageArena& data_pa);
     int init_prepared_multi(
         const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
-        ReadFile* read_file, Filter* time_filter, common::PageArena& data_pa);
+        RandomAccessFile* read_file, Filter* time_filter,
+        common::PageArena& data_pa);
     void destroy();
 
     /**
@@ -205,7 +206,7 @@ class TsFileSeriesScanIterator {
     common::TsBlock* alloc_tsblock_multi();
 
    private:
-    ReadFile* read_file_;
+    RandomAccessFile* read_file_;
     std::shared_ptr<IDeviceID> device_id_;
     std::string measurement_name_;
 

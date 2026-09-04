@@ -33,6 +33,7 @@ python/tsfile/*so*
 python/tsfile/*dll*
 python/tsfile/*dylib*
 python/tsfile/*.h
+!python/tsfile/python_random_access_file.h
 python/tsfile/*.cpp
 python/tsfile/**/*.cpp
 python/tsfile/**/*so*

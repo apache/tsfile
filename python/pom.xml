@@ -196,6 +196,9 @@
                                 <include>*.h</include>
                                 <include>*.cpp</include>
                             </includes>
+                            <excludes>
+                                <exclude>python_random_access_file.h</exclude>
+                            </excludes>
                         </fileset>
                         <fileset>
                             <directory>tsfile.egg-info</directory>

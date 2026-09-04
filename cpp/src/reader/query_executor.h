@@ -23,7 +23,7 @@
 
 #include "common/row_record.h"
 #include "expression.h"
-#include "file/read_file.h"
+#include "file/random_access_file.h"
 #include "reader/tsfile_series_scan_iterator.h"
 
 namespace storage {
@@ -40,7 +40,8 @@ class QueryExecutor {
         }
     }
 
-    // virtual int init(QueryExpression *query_expr, ReadFile *read_file) {
+    // virtual int init(QueryExpression *query_expr,
+    //                  RandomAccessFile *read_file) {
     // ASSERT(false); return 0; };
 
     virtual RowRecord* execute() {

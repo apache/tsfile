@@ -22,6 +22,7 @@
 #include <limits>
 
 #include "common/allocator/alloc_base.h"
+#include "file/read_file.h"
 #include "reader/prepared_series.h"
 
 using namespace common;
@@ -29,14 +30,15 @@ using namespace common;
 namespace storage {
 int TsFileIOReader::init(const std::string& file_path) {
     int ret = E_OK;
-    read_file_ = new ReadFile;
+    ReadFile* local_file = new ReadFile;
+    read_file_ = local_file;
     read_file_created_ = true;
-    if (RET_FAIL(read_file_->open(file_path))) {
+    if (RET_FAIL(local_file->open(file_path))) {
     }
     return ret;
 }
 
-int TsFileIOReader::init(ReadFile* read_file) {
+int TsFileIOReader::init(RandomAccessFile* read_file) {
     if (IS_NULL(read_file)) {
         ASSERT(false);
         return E_INVALID_ARG;
@@ -49,7 +51,7 @@ int TsFileIOReader::init(ReadFile* read_file) {
 void TsFileIOReader::reset() {
     if (read_file_ != nullptr) {
         if (read_file_created_) {
-            read_file_->destroy();
+            read_file_->close();
             delete read_file_;
         }
         read_file_ = nullptr;
@@ -92,7 +94,7 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
 }
 
 namespace {
-int load_exact_timeseries_index(ReadFile* read_file, uint64_t offset,
+int load_exact_timeseries_index(RandomAccessFile* read_file, uint64_t offset,
                                 uint32_t length, PageArena& arena,
                                 TimeseriesIndex*& index) {
     if (read_file == nullptr || length == 0 ||
@@ -1344,7 +1346,7 @@ int TsFileIOReader::get_next_page(TsBlock *ret_tsblock)
 }
 
 int TsFileIOReader::init_first_chunk_reader(ChunkMeta *cm,
-                                            ReadFile *read_file,
+                                            RandomAccessFile *read_file,
                                             const ColumnDesc &col_desc)
 {
   ASSERT(!chunk_reader_.has_more_data());

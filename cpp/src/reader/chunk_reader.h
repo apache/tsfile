@@ -24,7 +24,7 @@
 #include "common/tsfile_common.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
-#include "file/read_file.h"
+#include "file/random_access_file.h"
 #include "reader/filter/filter.h"
 #include "reader/ichunk_reader.h"
 
@@ -48,7 +48,7 @@ class ChunkReader : public IChunkReader {
           time_in_(),
           value_in_(),
           uncompressed_buf_(nullptr) {}
-    int init(ReadFile* read_file, common::String m_name,
+    int init(RandomAccessFile* read_file, common::String m_name,
              common::TSDataType data_type, Filter* time_filter) override;
     void reset() override;
     void destroy() override;
@@ -127,7 +127,7 @@ class ChunkReader : public IChunkReader {
                                             Filter* filter);
 
    private:
-    ReadFile* read_file_;
+    RandomAccessFile* read_file_;
     ChunkMeta* chunk_meta_;
     common::String measurement_name_;
     ChunkHeader chunk_header_;
