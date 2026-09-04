@@ -99,3 +99,23 @@ set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
 
 The setting only affects readers opened afterward. Do not modify or truncate a
 file while it is open through the memory-mapped backend.
+
+## Seekable binary file objects
+
+`TsFileReader` also accepts a seekable binary file object. This allows remote
+files opened by libraries such as `fsspec` to be read without first copying the
+whole file to local storage.
+
+```python
+import fsspec
+from tsfile import TsFileReader
+
+with fsspec.open("s3://bucket/example.tsfile", "rb") as source:
+    with TsFileReader(source) as reader:
+        result = reader.query_table("table_name", ["column_name"])
+```
+
+The object must provide `seek()`, `tell()`, and explicitly sized binary
+`read(size)` operations. The caller owns the object: `TsFileReader` keeps it
+alive while in use, preserves its cursor position, and does not close it.
+The local `FileReadBackend` setting does not apply to file objects.

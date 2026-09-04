@@ -65,6 +65,7 @@ include = ["tsfile*"]
 
 [tool.setuptools.package-data]
 tsfile = [
+    "python_random_access_file.h",
     "*.pxd",
     "*.pxi",
     "*.so",

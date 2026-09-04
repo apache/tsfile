@@ -27,8 +27,8 @@
 using namespace common;
 namespace storage {
 
-int ChunkReader::init(ReadFile* read_file, String m_name, TSDataType data_type,
-                      Filter* time_filter) {
+int ChunkReader::init(RandomAccessFile* read_file, String m_name,
+                      TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
     time_decoder_ = DecoderFactory::alloc_time_decoder();

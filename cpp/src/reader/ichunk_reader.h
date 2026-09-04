@@ -23,7 +23,7 @@
 #include "common/allocator/my_string.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
-#include "file/read_file.h"
+#include "file/random_access_file.h"
 #include "reader/filter/filter.h"
 
 namespace storage {
@@ -31,7 +31,7 @@ namespace storage {
 class IChunkReader {
    public:
     IChunkReader() {}
-    virtual int init(ReadFile* read_file, common::String m_name,
+    virtual int init(RandomAccessFile* read_file, common::String m_name,
                      common::TSDataType data_type, Filter* time_filter) {
         return common::E_OK;
     }

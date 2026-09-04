@@ -274,7 +274,12 @@ merge_common.update(
 exts = [
     Extension("tsfile.dataset._merge", ["tsfile/dataset/_merge.pyx"], **merge_common),
     Extension("tsfile.tsfile_py_cpp", ["tsfile/tsfile_py_cpp.pyx"], **common),
-    Extension("tsfile.tsfile_reader", ["tsfile/tsfile_reader.pyx"], **common),
+    Extension(
+        "tsfile.tsfile_reader",
+        ["tsfile/tsfile_reader.pyx", "tsfile/python_random_access_file.cc"],
+        depends=["tsfile/python_random_access_file.h"],
+        **common,
+    ),
     Extension("tsfile.tsfile_writer", ["tsfile/tsfile_writer.pyx"], **common),
 ]
 

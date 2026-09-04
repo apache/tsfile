@@ -370,58 +370,7 @@ void ReadFile::unmap_file() {
 }
 
 int ReadFile::check_file_magic() {
-    int ret = E_OK;
-    if (file_size_ < MIN_FILE_SIZE) {
-        ret = E_TSFILE_CORRUPTED;
-        LOGE("tsfile" << file_path_.c_str()
-                      << "is corrupted, file_size=" << file_size_);
-    } else {
-        char buf[MAGIC_STRING_TSFILE_LEN];
-        int32_t read_len = 0;
-        // file header magic
-        memset(buf, 0, MAGIC_STRING_TSFILE_LEN);
-        if (RET_FAIL(read(0, buf, MAGIC_STRING_TSFILE_LEN, read_len))) {
-        } else if (read_len != MAGIC_STRING_TSFILE_LEN) {
-            ret = E_TSFILE_CORRUPTED;
-        } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
-                   0) {
-            ret = E_TSFILE_CORRUPTED;
-        }
-        if (IS_FAIL(ret)) {
-            return ret;
-        }
-
-        char version = 0;
-        if (RET_FAIL(read(MAGIC_STRING_TSFILE_LEN, &version, 1, read_len))) {
-        } else if (read_len != 1) {
-            ret = E_TSFILE_CORRUPTED;
-        } else {
-            file_version_ = static_cast<unsigned char>(version);
-            // Version 3 remains readable for backward compatibility; version
-            // 4 is the current writer format.  Other values are not safely
-            // interpretable and must be reported as an input failure before
-            // metadata parsing begins.
-            if (file_version_ != 3 &&
-                file_version_ != static_cast<unsigned char>(VERSION_NUM_BYTE)) {
-                ret = E_UNSUPPORTED_VERSION;
-            }
-        }
-        if (IS_FAIL(ret)) {
-            return ret;
-        }
-
-        // file footer magic
-        memset(buf, 0, MAGIC_STRING_TSFILE_LEN);
-        if (RET_FAIL(read(file_size_ - MAGIC_STRING_TSFILE_LEN, buf,
-                          MAGIC_STRING_TSFILE_LEN, read_len))) {
-        } else if (read_len != MAGIC_STRING_TSFILE_LEN) {
-            ret = E_TSFILE_CORRUPTED;
-        } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
-                   0) {
-            ret = E_TSFILE_CORRUPTED;
-        }
-    }
-    return ret;
+    return validate_tsfile(*this, &file_version_);
 }
 
 int ReadFile::read(int64_t offset, char* buf, int32_t buf_size,

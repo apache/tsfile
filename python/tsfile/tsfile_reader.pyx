@@ -25,6 +25,7 @@ import pandas as pd
 from libc.string cimport strlen
 from libc.stdlib cimport free, malloc
 from cpython.bytes cimport PyBytes_FromStringAndSize
+from cpython.ref cimport PyObject
 from libc.string cimport memset
 import pyarrow as pa
 from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
@@ -36,6 +37,10 @@ from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilte
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
+
+cdef extern from "python_random_access_file.h":
+    TsFileReader create_tsfile_reader_from_python_file(
+        PyObject* source, int32_t* error_code) except? NULL
 
 cdef class ResultSetPy:
     """
@@ -344,7 +349,7 @@ cdef class PreparedSeriesPy:
 
 cdef class TsFileReaderPy:
     """
-    Cython wrapper class for interacting with TsFileReader C implementation.
+    Cython wrapper class for interacting with the native TsFileReader.
 
     Provides a Pythonic interface to read and query time series data from TsFiles.
     """
@@ -355,16 +360,22 @@ cdef class TsFileReaderPy:
     cdef TsFileReader reader
     cdef object activate_result_set_list
 
-    def __init__(self, pathname):
+    def __init__(self, source):
         """
-        Initialize a TsFile reader for the specified file path.
+        Initialize a TsFile reader from a path or seekable binary file object.
         """
         self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
-        self.init_reader(pathname)
+        self.init_reader(source)
 
-    cdef init_reader(self, pathname):
-        self.reader = tsfile_reader_new_c(pathname)
+    cdef init_reader(self, source):
+        cdef ErrorCode error_code = 0
+        if isinstance(source, str):
+            self.reader = tsfile_reader_new_c(source)
+            return
+        self.reader = create_tsfile_reader_from_python_file(
+            <PyObject*>source, &error_code)
+        check_error(error_code)
 
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = INT64_MIN, end_time : int = INT64_MAX,
