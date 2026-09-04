@@ -1169,6 +1169,99 @@ TEST_F(FloatDoubleTS2DIFFCodecTest, ScalarReadRejectsTruncatedFixedFields) {
 // A page whose trailing block header is truncated mid-field: the skip
 // paths must reject it via the grouped header-read check instead of
 // acting on stale stack values.
+// A zero-bit-width block consumes no packed bytes, so byte availability
+// cannot bound its writeIndex.  The page-header point count can: a block
+// claiming more values than the page holds is a format error.  Covers
+// plain INT32 pages, whose stream carries no page metadata at all.
+TEST_F(TS2DIFFCodecTest, ZeroWidthBlockBoundedByPageValueCount) {
+    const unsigned char page[] = {
+        0x7f, 0xff, 0xff, 0xff,  // write_index = INT32_MAX
+        0x00, 0x00, 0x00, 0x00,  // bit_width = 0
+        0x00, 0x00, 0x00, 0x00,  // delta_min
+        0x00, 0x00, 0x00, 0x2a,  // first_value
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    IntTS2DIFFDecoder decoder;
+    decoder.set_page_value_count(3);
+    int32_t value = 0;
+    EXPECT_EQ(decoder.read_int32(value, dec), common::E_DECODE_ERR);
+}
+
+// Same class of attack against a Form 1 float page: the metadata carries
+// no page value count, so the decoder falls back to the page-header count
+// plumbed by the reader.
+TEST_F(FloatDoubleTS2DIFFCodecTest,
+       Form1ZeroWidthBlockBoundedByPageValueCount) {
+    // [mpn=2][wi=INT32_MAX][bw=0][delta_min=0][first_value=0]
+    const unsigned char page[] = {
+        0x02,                    // maxPointNumber = 2
+        0x7f, 0xff, 0xff, 0xff,  // write_index = INT32_MAX
+        0x00, 0x00, 0x00, 0x00,  // bit_width = 0
+        0x00, 0x00, 0x00, 0x00,  // delta_min
+        0x00, 0x00, 0x00, 0x00,  // first_value
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    FloatTS2DIFFDecoder decoder;
+    decoder.set_page_value_count(3);
+    float value = 0.0f;
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_DECODE_ERR);
+}
+
+// A page header declaring zero points must reject every block, including
+// zero-width ones — the bound must not silently disable itself at 0.
+TEST_F(FloatDoubleTS2DIFFCodecTest, ZeroCountPageRejectsAnyBlock) {
+    // [mpn=2][wi=1][bw=8][dm=0][fv=42] — a perfectly valid little block,
+    // but the page claims 0 points.
+    const unsigned char page[] = {
+        0x02,                    // maxPointNumber = 2
+        0x00, 0x00, 0x00, 0x01,  // write_index = 1
+        0x00, 0x00, 0x00, 0x08,  // bit_width = 8
+        0x00, 0x00, 0x00, 0x00,  // delta_min
+        0x00, 0x00, 0x00, 0x2a,  // first_value
+        0x2a,                    // 1 packed byte for wi=1/bw=8
+    };
+    common::ByteStream dec;
+    dec.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    FloatTS2DIFFDecoder decoder;
+    decoder.set_page_value_count(0);
+    float value = 0.0f;
+    EXPECT_EQ(decoder.read_float(value, dec), common::E_DECODE_ERR);
+}
+
+// Mirrors what ChunkReader/AlignedChunkReader do per page: reset(), then
+// hand the decoder the page-header point count.  reset() must clear the
+// bound (a reused decoder must not inherit the previous page's count) and
+// the count must survive until the first block header is validated.
+TEST_F(TS2DIFFCodecTest, PageValueCountSurvivesResetSequence) {
+    // [wi=INT32_MAX][bw=0][dm=0][fv=42]: a zero-width block claiming 2^31
+    // values.
+    const unsigned char page[] = {
+        0x7f, 0xff, 0xff, 0xff,  // write_index = INT32_MAX
+        0x00, 0x00, 0x00, 0x00,  // bit_width = 0
+        0x00, 0x00, 0x00, 0x00,  // delta_min
+        0x00, 0x00, 0x00, 0x2a,  // first_value
+    };
+    IntTS2DIFFDecoder decoder;
+    int32_t value = 0;
+
+    // Page 1: reader order is reset() then set_page_value_count().
+    common::ByteStream page1;
+    page1.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    decoder.reset();
+    decoder.set_page_value_count(4);
+    EXPECT_EQ(decoder.read_int32(value, page1), common::E_DECODE_ERR);
+
+    // Page 2: the decoder is reused.  Without a count the bound is off, so
+    // reset() must not leave the previous page's count behind either.
+    common::ByteStream page2;
+    page2.wrap_from(reinterpret_cast<const char*>(page), sizeof(page));
+    decoder.reset();
+    decoder.set_page_value_count(4);
+    EXPECT_EQ(decoder.read_int32(value, page2), common::E_DECODE_ERR);
+}
+
 TEST_F(TS2DIFFCodecTest, SkipRejectsTruncatedBlockHeader) {
     // [wi=1][bw=8] then only 4 of the 8 dm/fv bytes.
     const unsigned char page[] = {

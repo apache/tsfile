@@ -579,6 +579,12 @@ int AlignedChunkReader::decode_cur_time_page_data() {
     }
 
     time_decoder_->reset();
+    // See ChunkReader::decode_cur_page_data: page-header point count as
+    // the structural bound for metadata-less TS_2DIFF pages.
+    time_decoder_->set_page_value_count(
+        cur_time_page_header_.statistic_ != nullptr
+            ? cur_time_page_header_.statistic_->get_count()
+            : -1);
 #ifdef DEBUG_SE
     DEBUG_hex_dump_buf("AlignedChunkReader reader, time_buf = ", time_buf,
                        time_buf_size);
@@ -658,6 +664,10 @@ int AlignedChunkReader::decode_cur_value_page_data() {
             value_uncompressed_buf_size - value_uncompressed_buf_offset;
     }
     value_decoder_->reset();
+    value_decoder_->set_page_value_count(
+        cur_value_page_header_.statistic_ != nullptr
+            ? cur_value_page_header_.statistic_->get_count()
+            : -1);
 #ifdef DEBUG_SE
     DEBUG_hex_dump_buf("AlignedChunkReader reader, value_buf = ", value_buf,
                        value_buf_size);
@@ -1413,6 +1423,10 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     common::ByteStream in;
     in.wrap_from(uncompressed_buf, uncompressed_size);
     decoder->reset();
+    // Structural bound: a time-page block cannot hold more values than
+    // the page's point count.  Without it a zero-bit-width block header
+    // makes this loop unbounded.
+    decoder->set_page_value_count(page_info.time_page_value_count);
     const int batch_size = 1024;
     int64_t batch[batch_size];
     while (decoder->has_remaining(in)) {
@@ -1485,6 +1499,7 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
         }
 
         Statistic* stat = cur_time_page_header_.statistic_;
+        page_info.time_page_value_count = stat != nullptr ? stat->count_ : -1;
         if (filter == nullptr) {
             page_info.pass_type = PagePassType::FULL_PASS;
             page_info.row_begin = 0;
