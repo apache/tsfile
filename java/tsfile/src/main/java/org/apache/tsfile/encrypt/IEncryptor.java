@@ -57,6 +57,12 @@ public interface IEncryptor {
   }
 
   static IEncryptor getEncryptor(EncryptParameter encryptParam) {
+    if (encryptParam == null) {
+      return getEncryptor("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    if (encryptParam.isTdePageAead()) {
+      return EncryptUtils.getEncrypt(encryptParam).getEncryptor();
+    }
     String type = encryptParam.getType();
     byte[] key = encryptParam.getKey();
     return getEncryptor(type, key);
@@ -65,6 +71,11 @@ public interface IEncryptor {
   byte[] encrypt(byte[] data);
 
   byte[] encrypt(byte[] data, int offset, int size);
+
+  default byte[] encryptPage(
+      byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
+    return encrypt(data, offset, size);
+  }
 
   EncryptionType getEncryptionType();
 }

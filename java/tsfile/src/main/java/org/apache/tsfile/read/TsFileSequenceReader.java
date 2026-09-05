@@ -30,6 +30,7 @@ import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
+import org.apache.tsfile.encrypt.PageCryptoContext;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
@@ -40,6 +41,7 @@ import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.header.FileEncryptionHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.AbstractAlignedTimeSeriesMetadata;
@@ -113,6 +115,9 @@ import java.util.stream.Collectors;
 
 public class TsFileSequenceReader implements AutoCloseable {
 
+  private static final int BASE_FILE_HEADER_SIZE =
+      TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length + Byte.BYTES;
+
   private static final Logger logger = LoggerFactory.getLogger(TsFileSequenceReader.class);
   private static final Logger resourceLogger = LoggerFactory.getLogger("FileMonitor");
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
@@ -146,6 +151,10 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   private EncryptParameter dataEncryptParam = null;
 
+  private EncryptParameter fileEncryptionParam;
+
+  private long dataStartOffset = BASE_FILE_HEADER_SIZE;
+
   /**
    * Create a file reader of the given file. The reader will read the tail of the file to get the
    * file metadata size.Then the reader will skip the first
@@ -167,7 +176,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       return result;
     }
 
-    int headerLength = TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES;
+    long headerLength = getDataStartOffset();
     if (checkFile.length() < headerLength) {
       return result;
     }
@@ -314,6 +323,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
     try {
       loadFileVersion(ioSizeRecorder);
+      loadFileEncryptionHeader(ioSizeRecorder);
       if (loadMetadataSize) {
         loadMetadataSize(ioSizeRecorder);
       }
@@ -378,6 +388,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     this.tsFileInput = input;
     this.file = input.getFilePath();
     try {
+      loadFileEncryptionHeader(null);
       if (loadMetadataSize) { // NOTE no autoRepair here
         loadMetadataSize();
       }
@@ -402,6 +413,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
     try {
       loadFileVersion(ioSizeRecorder);
+      loadFileEncryptionHeader(ioSizeRecorder);
       if (loadMetadataSize) {
         loadMetadataSize(ioSizeRecorder);
       }
@@ -462,6 +474,38 @@ public class TsFileSequenceReader implements AutoCloseable {
       tsFileInput.close();
       throw new NotCompatibleTsFileException(e);
     }
+  }
+
+  private void loadFileEncryptionHeader(LongConsumer ioSizeRecorder) throws IOException {
+    long savedPosition = tsFileInput.position();
+    dataStartOffset = BASE_FILE_HEADER_SIZE;
+    fileEncryptionParam = null;
+    try {
+      if (tsFileInput.size() <= BASE_FILE_HEADER_SIZE) {
+        return;
+      }
+      ByteBuffer marker = ByteBuffer.allocate(Byte.BYTES);
+      if (tsFileInput.read(marker, BASE_FILE_HEADER_SIZE) != Byte.BYTES) {
+        return;
+      }
+      marker.flip();
+      if (marker.get() != MetaMarker.ENCRYPTION_HEADER) {
+        return;
+      }
+
+      tsFileInput.position(BASE_FILE_HEADER_SIZE + Byte.BYTES);
+      fileEncryptionParam = FileEncryptionHeader.deserialize(tsFileInput.wrapAsInputStream());
+      dataStartOffset = tsFileInput.position();
+      if (ioSizeRecorder != null) {
+        ioSizeRecorder.accept(dataStartOffset - BASE_FILE_HEADER_SIZE);
+      }
+    } finally {
+      tsFileInput.position(savedPosition);
+    }
+  }
+
+  public long getDataStartOffset() {
+    return dataStartOffset;
   }
 
   private void configDeserializer() {
@@ -670,6 +714,9 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public EncryptParameter getEncryptParam(LongConsumer ioSizeRecorder) throws IOException {
     if (dataEncryptParam != null) {
+      return dataEncryptParam;
+    } else if (fileEncryptionParam != null) {
+      dataEncryptParam = fileEncryptionParam;
       return dataEncryptParam;
     } else {
       if (fileMetadataSize != 0) {
@@ -2234,17 +2281,48 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public ByteBuffer readPage(PageHeader header, CompressionType type) throws IOException {
+    return readPage(header, type, 0);
+  }
+
+  public ByteBuffer readPage(PageHeader header, CompressionType type, int pageIndex)
+      throws IOException {
     ByteBuffer buffer = readData(-1, header.getCompressedSize());
-    IDecryptor decryptor = IDecryptor.getDecryptor(getEncryptParam());
+    EncryptParameter encryptParameter = getEncryptParam();
+    IDecryptor decryptor = IDecryptor.getDecryptor(encryptParameter);
     if (header.getUncompressedSize() == 0) {
       return buffer;
     }
-    ByteBuffer finalBuffer = decrypt(decryptor, buffer);
+    ByteBuffer finalBuffer = decrypt(decryptor, encryptParameter, buffer, header, pageIndex);
     finalBuffer = uncompress(type, finalBuffer, header.getUncompressedSize());
     return finalBuffer;
   }
 
-  private static ByteBuffer decrypt(IDecryptor decryptor, ByteBuffer buffer) {
+  private static ByteBuffer decrypt(
+      IDecryptor decryptor,
+      EncryptParameter encryptParameter,
+      ByteBuffer buffer,
+      PageHeader header,
+      int pageIndex)
+      throws IOException {
+    if (encryptParameter != null && encryptParameter.isTdePageAead()) {
+      PageCryptoContext pageCryptoContext =
+          PageCryptoContext.forDecryption(
+              encryptParameter, header.getUncompressedSize(), buffer.remaining(), pageIndex);
+      byte[] plaintext =
+          decryptor.decryptPage(
+              buffer.array(),
+              buffer.arrayOffset() + buffer.position(),
+              buffer.remaining(),
+              pageCryptoContext);
+      if (plaintext.length != pageCryptoContext.getCompressedPlaintextSize()) {
+        throw new IOException(
+            Messages.format(
+                "error.encrypt.page_plaintext_size_mismatch",
+                pageCryptoContext.getCompressedPlaintextSize(),
+                plaintext.length));
+      }
+      return ByteBuffer.wrap(plaintext);
+    }
     if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
       return buffer;
     }
@@ -2295,7 +2373,13 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} reader is closed.", file);
     }
-    this.tsFileInput.close();
+    try {
+      this.tsFileInput.close();
+    } finally {
+      if (dataEncryptParam != null && dataEncryptParam.isTdePageAead()) {
+        dataEncryptParam.close();
+      }
+    }
   }
 
   public String getFileName() {
@@ -2436,7 +2520,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     // ChunkMetadata of current ChunkGroup
     List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
 
-    int headerLength = TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES;
+    long headerLength = getDataStartOffset();
     if (fileSize < headerLength) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }
@@ -2751,7 +2835,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     long fileSize = checkFile.length();
     logger.info(Messages.get("log.read.sequence_reader_file_length"), fileSize);
 
-    int headerLength = TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES;
+    long headerLength = getDataStartOffset();
     if (fileSize < headerLength) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }

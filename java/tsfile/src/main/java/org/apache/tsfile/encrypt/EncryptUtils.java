@@ -272,6 +272,12 @@ public class EncryptUtils {
 
   /** Get the second EncryptParameter object according to the given type and first key. */
   public static EncryptParameter getEncryptParameter(EncryptParameter param) {
+    if (param == null) {
+      return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    if (param.isTdePageAead()) {
+      return param;
+    }
     return encryptParamCache.computeIfAbsent(param, EncryptUtils::generateEncryptParameter);
   }
 
@@ -307,6 +313,16 @@ public class EncryptUtils {
 
   public static IEncrypt getEncrypt() {
     return getEncrypt(TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public static IEncrypt getEncrypt(EncryptParameter encryptParameter) {
+    if (encryptParameter == null) {
+      return getEncrypt("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    if (encryptParameter.isTdePageAead()) {
+      return encryptParameter.getOrCreateFileEncrypt();
+    }
+    return getEncrypt(encryptParameter.getType(), encryptParameter.getKey());
   }
 
   public static IEncrypt getEncrypt(String encryptType, byte[] dataEncryptKey) {

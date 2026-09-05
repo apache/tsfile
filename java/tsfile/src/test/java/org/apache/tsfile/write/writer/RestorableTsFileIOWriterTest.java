@@ -20,6 +20,9 @@
 package org.apache.tsfile.write.writer;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
+import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.MetaMarker;
@@ -44,8 +47,10 @@ import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
@@ -66,6 +71,16 @@ public class RestorableTsFileIOWriterTest {
       TsFileGeneratorForTest.getTestTsFilePath("root.sg1", 0, 0, 1);
   private static final FSFactory fsFactory = FSFactoryProducer.getFSFactory();
   File file = fsFactory.getFile(FILE_NAME);
+
+  @BeforeClass
+  public static void setUpEncryptionProvider() {
+    EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+  }
+
+  @AfterClass
+  public static void tearDownEncryptionProvider() {
+    EncryptionProviderRegistry.unregisterProvider(TestAeadEncryptionProvider.PROVIDER_ID);
+  }
 
   @Before
   public void setUp() throws IOException {
@@ -103,6 +118,55 @@ public class RestorableTsFileIOWriterTest {
     assertEquals(TsFileCheckStatus.COMPLETE_FILE, rWriter.getTruncatedSize());
     assertFalse(rWriter.canWrite());
     rWriter.close();
+  }
+
+  @Test
+  public void testEncryptedHeaderSurvivesUnclosedFile() throws Exception {
+    byte[] fileCryptoId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    for (int i = 0; i < fileCryptoId.length; i++) {
+      fileCryptoId[i] = (byte) (i + 1);
+    }
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
+    TsFileWriter writer = new TsFileWriter(file, parameter);
+    long expectedDataStartOffset;
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+      expectedDataStartOffset = reader.getDataStartOffset();
+      assertNotEquals(
+          TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES, expectedDataStartOffset);
+      assertEquals("test-key", reader.getEncryptParam().getKeyId());
+      Assert.assertArrayEquals(fileCryptoId, reader.getEncryptParam().getFileCryptoId());
+    }
+    writer.getIOWriter().close();
+    writer.getIOWriter().getEncryptParameter().close();
+
+    RestorableTsFileIOWriter restorableWriter = new RestorableTsFileIOWriter(file, parameter);
+    assertEquals(expectedDataStartOffset, restorableWriter.getTruncatedSize());
+    assertEquals("test-key", restorableWriter.getEncryptParameter().getKeyId());
+    EncryptParameter ownedParameter = restorableWriter.getEncryptParameter();
+    Assert.assertNotSame(parameter, ownedParameter);
+    try (TsFileWriter recoveredWriter = new TsFileWriter(restorableWriter, parameter)) {
+      // Closing writes a valid footer without replacing the file encryption header.
+    }
+    Assert.assertTrue(ownedParameter.isDestroyed());
+    Assert.assertFalse(parameter.isDestroyed());
+    parameter.close();
+  }
+
+  @Test
+  public void testCloseDestroysOwnedTdeParameter() throws Exception {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    RestorableTsFileIOWriter writer = new RestorableTsFileIOWriter(file, parameter);
+    EncryptParameter ownedParameter = writer.getEncryptParameter();
+
+    writer.close();
+
+    Assert.assertNotSame(parameter, ownedParameter);
+    Assert.assertTrue(ownedParameter.isDestroyed());
+    Assert.assertFalse(parameter.isDestroyed());
+    parameter.close();
   }
 
   @Test
