@@ -418,7 +418,7 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         schemas.push_back(
             reader.get_table_schema(storage::to_lower(args.table)));
     } else {
-        schemas = reader.get_all_table_schemas();
+        schemas = sorted_table_schemas(reader);
     }
     if (schemas.empty() || !schemas[0]) {
         err << "Error: table '" << args.table << "' does not exist\n";

@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -36,11 +37,24 @@ bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader) {
     return !reader.get_all_table_schemas().empty();
 }
 
+std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
+    storage::TsFileReader& reader) {
+    auto schemas = reader.get_all_table_schemas();
+    std::sort(schemas.begin(), schemas.end(),
+              [](const std::shared_ptr<storage::TableSchema>& lhs,
+                 const std::shared_ptr<storage::TableSchema>& rhs) {
+                  if (!lhs) return false;
+                  if (!rhs) return true;
+                  return lhs->get_table_name() < rhs->get_table_name();
+              });
+    return schemas;
+}
+
 int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
            OutputFormat fmt, std::ostream& out, std::ostream& err) {
     std::vector<std::string> names;
     if (is_table_model(args, reader)) {
-        for (auto& ts : reader.get_all_table_schemas()) {
+        for (auto& ts : sorted_table_schemas(reader)) {
             if (ts) {
                 names.push_back(ts->get_table_name());
             }

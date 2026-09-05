@@ -70,7 +70,7 @@ int collect_table_schema_rows(const ParsedArgs& args,
                               storage::TsFileReader& reader,
                               std::vector<SchemaRow>& rows, std::ostream& err) {
     const std::string target_table_name = storage::to_lower(args.table);
-    auto schemas = reader.get_all_table_schemas();
+    auto schemas = sorted_table_schemas(reader);
     bool matched_table = target_table_name.empty();
     std::set<std::string> matched_measurements;
     for (auto& schema : schemas) {
