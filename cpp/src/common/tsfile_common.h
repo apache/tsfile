@@ -78,6 +78,10 @@ struct PageHeader {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
                 uncompressed_size_, in))) {
+        } else if (uncompressed_size_ == 0) {
+            // An empty aligned value page contains only this zero varint.
+            compressed_size_ = 0;
+            return common::E_OK;
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(
                        compressed_size_, in))) {
         } else if (deserialize_stat) {

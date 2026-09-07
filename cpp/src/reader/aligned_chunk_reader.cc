@@ -611,6 +611,9 @@ int AlignedChunkReader::decode_cur_value_page_data() {
     uint32_t value_buf_size = 0;
 
     if (cur_value_page_header_.compressed_size_ == 0) {
+        value_page_col_notnull_bitmap_.clear();
+        cur_value_index = -1;
+        value_decoder_->reset();
         value_in_.wrap_from(value_buf, 0);
         return E_OK;
     }

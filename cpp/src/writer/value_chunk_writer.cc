@@ -159,6 +159,10 @@ void ValueChunkWriter::save_first_page_data(
 int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
                                             bool with_statistic) {
     int ret = E_OK;
+    // An empty page consists only of the zero-size header already written.
+    if (first_page_statistic_ == nullptr) {
+        return ret;
+    }
     if (with_statistic &&
         RET_FAIL(first_page_statistic_->serialize_to(pages_data))) {
     } else if (RET_FAIL(
@@ -168,21 +172,51 @@ int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
     return ret;
 }
 
+int ValueChunkWriter::write_nulls(uint32_t count) {
+    int ret = E_OK;
+    const uint32_t page_cap =
+        std::max<uint32_t>(1, g_config_value_.page_writer_max_point_num_);
+    while (count > 0) {
+        uint32_t points = get_point_numer();
+        if (points >= page_cap) {
+            if (RET_FAIL(seal_cur_page(false))) return ret;
+            points = 0;
+        }
+        const uint32_t batch = std::min(count, page_cap - points);
+        value_page_writer_.write_nulls(batch);
+        count -= batch;
+        if (RET_FAIL(seal_cur_page_if_full())) return ret;
+    }
+    return ret;
+}
+
+int ValueChunkWriter::write_empty_page() {
+    int ret = E_OK;
+    if (has_current_page_data()) return E_INVALID_ARG;
+    if (num_of_pages_ == 1 && RET_FAIL(write_first_page_data(chunk_data_))) {
+        return ret;
+    }
+    free_first_writer_data();
+    if (RET_FAIL(SerializationUtil::write_var_uint(0, chunk_data_))) {
+        return ret;
+    }
+    ++num_of_pages_;
+    return ret;
+}
+
 int ValueChunkWriter::end_encode_chunk() {
     int ret = E_OK;
     if (has_current_page_data()) {
         ret = seal_cur_page(/*end_chunk*/ true);
-        if (E_OK == ret) {
-            chunk_header_.data_size_ = chunk_data_.total_size();
-            chunk_header_.num_of_pages_ = num_of_pages_;
-        }
     } else if (first_page_statistic_ != nullptr) {
         ret = write_first_page_data(chunk_data_, false);
         if (E_OK == ret) {
             free_first_writer_data();
-            chunk_header_.data_size_ = chunk_data_.total_size();
-            chunk_header_.num_of_pages_ = num_of_pages_;
         }
+    }
+    if (IS_SUCC(ret)) {
+        chunk_header_.data_size_ = chunk_data_.total_size();
+        chunk_header_.num_of_pages_ = num_of_pages_;
     }
 #if DEBUG_SE
     std::cout << "end_encode_chunk: num_of_pages_=" << num_of_pages_

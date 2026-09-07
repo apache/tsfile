@@ -263,6 +263,16 @@ static int recover_chunk_statistic(
                                  kTimeChunkTypeMask) != 0;
     PageHeader ph;
     int ret = ph.deserialize_from(bs, false, chdr.data_type_);
+    const unsigned char column_type =
+        static_cast<unsigned char>(chdr.chunk_type_) &
+        (kTimeChunkTypeMask | VALUE_COLUMN_MASK);
+    if (ret == common::E_OK && column_type == VALUE_COLUMN_MASK &&
+        ph.uncompressed_size_ == 0 && bs.remaining_size() == 0) {
+        // A late-registered aligned field can contain one empty page encoded
+        // as a single zero varint. It contributes no values to the statistic,
+        // but its metadata and the following chunks must survive recovery.
+        return common::E_OK;
+    }
     if (ret != common::E_OK || ph.compressed_size_ == 0 ||
         bs.remaining_size() < ph.compressed_size_) {
         // Align with Java selfCheck behavior: malformed/incomplete page in this

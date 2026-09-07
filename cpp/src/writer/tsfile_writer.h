@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "common/cache/lru_cache.h"
 #include "common/container/simple_vector.h"
 #include "common/device_id.h"
 #include "common/record.h"
@@ -69,6 +70,9 @@ class TsFileWriter {
     int register_timeseries(
         const std::string& device_path,
         const std::vector<MeasurementSchema*>& measurement_schema_vec);
+    // New aligned fields may be added before the device's first flush.
+    // Adding one afterwards returns E_NOT_SUPPORT: historical chunk positions
+    // cannot be backfilled. Existing fields can still be omitted on writes.
     int register_aligned_timeseries(
         const std::string& device_id,
         const MeasurementSchema& measurement_schema);
@@ -150,6 +154,15 @@ class TsFileWriter {
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
+    void prepare_schema_cache(MeasurementSchemaGroup* device_schema,
+                              uint32_t measurement_count);
+    MeasurementSchema* get_cached_measurement_schema(
+        const std::string& measurement_name, uint32_t column_index);
+    int init_aligned_value_writer(MeasurementSchema* schema,
+                                  TimeChunkWriter* time_writer);
+    int append_omitted_aligned_writers(
+        common::SimpleVector<ValueChunkWriter*>& value_writers);
+
     template <typename MeasurementNamesGetter>
     int do_check_schema(
         std::shared_ptr<IDeviceID> device_id,
@@ -188,6 +201,24 @@ class TsFileWriter {
     storage::TsFileIOWriter* io_writer_;
     // device_id -> MeasurementSchemaGroup
     DeviceSchemasMap schemas_;
+    // One bounded LRU cache per writer, shared by tree records/tablets and
+    // table FIELD columns. Cache schemas rather than chunk writers so the
+    // plain and aligned paths can reuse the same entries. At most 64 devices
+    // retain positional arrays; capacity within each array follows its widest
+    // write. Entries borrow schemas_ storage, which survives flush().
+    struct CachedMeasurementSchemas {
+        std::vector<MeasurementSchema*> supplied;
+        std::vector<MeasurementSchema*> omitted;
+        size_t registered_count = 0;
+        bool changed = true;
+    };
+    common::Cache<MeasurementSchemaGroup*,
+                  std::shared_ptr<CachedMeasurementSchemas>>
+        schema_cache_{64, 0};
+    // The most recent entry avoids even an LRU lookup for repeated writes to
+    // one device. It is released together with the LRU before schemas_.
+    MeasurementSchemaGroup* cached_device_schema_ = nullptr;
+    std::shared_ptr<CachedMeasurementSchemas> cached_measurement_schemas_;
     bool start_file_done_;
     // record count since last flush
     int64_t record_count_since_last_flush_;

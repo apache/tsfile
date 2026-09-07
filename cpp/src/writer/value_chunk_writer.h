@@ -174,6 +174,14 @@ class ValueChunkWriter {
         return ret;
     }
 
+    // Match scalar value writes: append first, then check the page boundary.
+    int write_null() {
+        value_page_writer_.write_nulls(1);
+        return seal_cur_page_if_full();
+    }
+    int write_nulls(uint32_t count);
+    // Backfill a sealed time page when a field is registered mid-chunk.
+    int write_empty_page();
     int end_encode_chunk();
     common::ByteStream& get_chunk_data() { return chunk_data_; }
     Statistic* get_chunk_statistic() { return chunk_statistic_; }

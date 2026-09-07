@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "common/db_common.h"
 #include "writer/time_chunk_writer.h"
@@ -173,6 +174,8 @@ struct MeasurementSchemaGroup {
     // measurement_name -> MeasurementSchema
     MeasurementSchemaMap measurement_schema_map_;
     bool is_aligned_ = false;
+    // New aligned fields cannot be inserted into already flushed chunks.
+    bool has_flushed_ = false;
     TimeChunkWriter* time_chunk_writer_ = nullptr;
     int64_t last_time_ = INT64_MIN;
 

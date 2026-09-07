@@ -150,6 +150,13 @@ class ValuePageWriter {
         VPW_DO_WRITE_FOR_TYPE(isnull);
     }
 
+    // Nulls occupy time positions but do not update the value statistics.
+    void write_nulls(uint32_t count) {
+        col_notnull_bitmap_.resize((static_cast<size_t>(size_) + count + 7) / 8,
+                                   0);
+        size_ += count;
+    }
+
     // Batch write for aligned/table model.
     // In the tablet bitmap: bit=1 means null, bit=0 means not null.
     // In VPW_DO_WRITE_FOR_TYPE: ISNULL=true skips encoding.
