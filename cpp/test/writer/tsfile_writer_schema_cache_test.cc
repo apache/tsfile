@@ -17,18 +17,6 @@
  * under the License.
  */
 
-// Tests for the per-device schema-check cache in do_check_schema /
-// do_check_schema_aligned (issue #885). The cache resolves chunk writers and
-// data types once per device and reuses them while the tablet's measurement
-// NAME SEQUENCE is unchanged. These tests pin the behaviors the cache must
-// preserve:
-//  1. repeated same-schema writes round-trip every row (cache hit path);
-//  2. a same-column-count tablet with different names/order re-resolves and
-//     writes each value into the right column (cache invalidation);
-//  3. a column that was unregistered at first write is NOT masked by a cached
-//     NULL after it is registered (only fully-resolved results are cached);
-//  4. the aligned path keeps its own cache with the same guarantees;
-//  5. per-device caches never cross-wire two devices.
 #include <gtest/gtest.h>
 
 #include "writer/tsfile_writer.h"
@@ -40,6 +28,7 @@
 #endif
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -50,387 +39,388 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
-#include "common/tsfile_common.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_reader.h"
 
-using namespace storage;
 using namespace common;
+using namespace storage;
 
 namespace {
 
 class SchemaCheckCacheTest : public ::testing::Test {
    protected:
     void SetUp() override {
-        libtsfile_init();
-        tsfile_writer_ = new TsFileWriter();
-        file_name_ = std::string("tsfile_schema_cache_test_") +
-                     generate_random_string(10) + std::string(".tsfile");
+        ASSERT_EQ(libtsfile_init(), E_OK);
+        writer_ = new TsFileWriter();
+        file_name_ = "tsfile_schema_cache_test_" + unique_suffix() + ".tsfile";
         remove(file_name_.c_str());
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
         flags |= O_BINARY;
 #endif
-        ASSERT_EQ(tsfile_writer_->open(file_name_, flags, 0666), common::E_OK);
+        ASSERT_EQ(writer_->open(file_name_, flags, 0666), E_OK);
     }
+
     void TearDown() override {
-        delete tsfile_writer_;
-        ASSERT_EQ(0, remove(file_name_.c_str()));
+        delete writer_;
+        ASSERT_EQ(remove(file_name_.c_str()), 0);
         libtsfile_destroy();
     }
 
-    std::string file_name_;
-    TsFileWriter* tsfile_writer_ = nullptr;
-
-   public:
-    static std::string generate_random_string(int length) {
+    static std::string unique_suffix() {
         static std::atomic<uint64_t> counter{0};
-        std::mt19937 gen(static_cast<unsigned int>(
-            std::chrono::system_clock::now().time_since_epoch().count()));
-        std::uniform_int_distribution<> dis(0, 61);
-        const std::string chars =
-            "0123456789"
-            "abcdefghijklmnopqrstuvwxyz"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        std::string random_string;
-        for (int i = 0; i < length; ++i) {
-            random_string += chars[dis(gen)];
-        }
 #ifdef _WIN32
         const auto process_id = static_cast<uint64_t>(_getpid());
 #else
         const auto process_id = static_cast<uint64_t>(getpid());
 #endif
-        random_string += "_" + std::to_string(process_id) + "_" +
-                         std::to_string(counter.fetch_add(1));
-        return random_string;
+        return std::to_string(process_id) + "_" +
+               std::to_string(counter.fetch_add(1));
     }
 
-    // Reads back (device, measurement) pairs and returns one row per
-    // timestamp: {timestamp, value-string per series}. Row count is asserted
-    // by the caller so dropped rows cannot pass silently.
-    std::vector<std::vector<std::string>> query_all(
-        const std::vector<Path>& select_list) {
-        storage::TsFileReader reader;
+    static MeasurementSchema schema(const std::string& name) {
+        return MeasurementSchema(name, TSDataType::INT32, TSEncoding::PLAIN,
+                                 CompressionType::UNCOMPRESSED);
+    }
+
+    static std::vector<MeasurementSchema> schemas(
+        const std::vector<std::string>& names) {
+        std::vector<MeasurementSchema> result;
+        for (const auto& name : names) {
+            result.push_back(schema(name));
+        }
+        return result;
+    }
+
+    static std::string field_to_string(Field* field) {
+        if (field->type_ == TEXT || field->type_ == STRING ||
+            field->type_ == BLOB) {
+            return std::string(field->value_.sval_);
+        }
+        std::stringstream stream;
+        switch (field->type_) {
+            case BOOLEAN:
+                stream << (field->value_.bval_ ? "true" : "false");
+                break;
+            case INT32:
+            case DATE:
+                stream << field->value_.ival_;
+                break;
+            case INT64:
+            case TIMESTAMP:
+                stream << field->value_.lval_;
+                break;
+            case FLOAT:
+                stream << field->value_.fval_;
+                break;
+            case DOUBLE:
+                stream << field->value_.dval_;
+                break;
+            case NULL_TYPE:
+                stream << "NULL";
+                break;
+            default:
+                ADD_FAILURE() << "Unexpected field type: " << field->type_;
+        }
+        return stream.str();
+    }
+
+    std::vector<std::vector<std::string>> read_rows(
+        const std::vector<Path>& paths) const {
+        TsFileReader reader;
         EXPECT_EQ(reader.open(file_name_), E_OK);
-        QueryExpression* query_expr =
-            QueryExpression::create(select_list, nullptr);
-        ResultSet* tmp_qds = nullptr;
-        EXPECT_EQ(reader.query(query_expr, tmp_qds), E_OK);
-        auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+        QueryExpression* expression = QueryExpression::create(paths, nullptr);
+        ResultSet* result = nullptr;
+        EXPECT_EQ(reader.query(expression, result), E_OK);
+        auto* query = static_cast<QDSWithoutTimeGenerator*>(result);
 
         std::vector<std::vector<std::string>> rows;
         bool has_next = false;
-        while (IS_SUCC(qds->next(has_next)) && has_next) {
-            RowRecord* record = qds->get_row_record();
+        while (IS_SUCC(query->next(has_next)) && has_next) {
+            RowRecord* record = query->get_row_record();
             std::vector<std::string> row;
             row.push_back(std::to_string(record->get_timestamp()));
-            // field(0) is the timestamp; value fields start at 1.
             for (size_t i = 1; i < record->get_fields()->size(); ++i) {
                 row.push_back(field_to_string(record->get_field(i)));
             }
             rows.push_back(row);
         }
-        reader.destroy_query_data_set(qds);
+        reader.destroy_query_data_set(query);
+        reader.close();
         return rows;
     }
 
-    MeasurementSchema int32_schema(const std::string& name) {
-        return MeasurementSchema(name, TSDataType::INT32, TSEncoding::PLAIN,
-                                 CompressionType::UNCOMPRESSED);
+    static Path path(const std::string& device,
+                     const std::string& measurement) {
+        std::string device_copy = device;
+        std::string measurement_copy = measurement;
+        return Path(device_copy, measurement_copy);
     }
 
-    static std::string field_to_string(storage::Field* value) {
-        if (value->type_ == common::TEXT || value->type_ == STRING ||
-            value->type_ == BLOB) {
-            return std::string(value->value_.sval_);
-        }
-        std::stringstream ss;
-        switch (value->type_) {
-            case common::BOOLEAN:
-                ss << (value->value_.bval_ ? "true" : "false");
-                break;
-            case common::INT32:
-                ss << value->value_.ival_;
-                break;
-            case common::INT64:
-            case common::TIMESTAMP:
-                ss << value->value_.lval_;
-                break;
-            case common::FLOAT:
-                ss << value->value_.fval_;
-                break;
-            case common::DOUBLE:
-                ss << value->value_.dval_;
-                break;
-            case common::NULL_TYPE:
-                ss << "NULL";
-                break;
-            default:
-                ASSERT(false);
-                break;
-        }
-        return ss.str();
-    }
-
-    // Path's two-part ctor takes non-const std::string&, so route every
-    // construction through copies.
-    Path make_path(const std::string& device, const std::string& measurement) {
-        std::string dev = device;
-        std::string meas = measurement;
-        return Path(dev, meas);
-    }
+    TsFileWriter* writer_ = nullptr;
+    std::string file_name_;
 };
 
-// 1. Cache hit: the same tablet schema written repeatedly (with a flush in
-// between, so chunk writers survive a seal and are re-resolved from the
-// cache) must round-trip every row of every column.
-TEST_F(SchemaCheckCacheTest, RepeatedSameSchemaRoundTrip) {
+TEST_F(SchemaCheckCacheTest, RepeatedSameSchemaSurvivesFlush) {
     const std::string device = "root.cache_hit";
     const std::vector<std::string> names = {"s0", "s1", "s2"};
     for (const auto& name : names) {
-        ASSERT_EQ(
-            tsfile_writer_->register_timeseries(device, int32_schema(name)),
-            E_OK);
+        ASSERT_EQ(writer_->register_timeseries(device, schema(name)), E_OK);
     }
 
-    const int num_tablets = 5;
-    for (int t = 0; t < num_tablets; t++) {
-        std::vector<MeasurementSchema> schema_vec;
-        for (const auto& name : names) schema_vec.push_back(int32_schema(name));
+    for (int row = 0; row < 5; ++row) {
+        auto tablet_schema = schemas(names);
         Tablet tablet(
             device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
-        ASSERT_EQ(tablet.add_timestamp(0, 1000 + t), E_OK);
-        for (uint32_t j = 0; j < names.size(); j++) {
-            ASSERT_EQ(tablet.add_value(0, j, t * 100 + (int32_t)j), E_OK);
+            std::make_shared<std::vector<MeasurementSchema>>(tablet_schema), 1);
+        ASSERT_EQ(tablet.add_timestamp(0, 1000 + row), E_OK);
+        for (uint32_t column = 0; column < names.size(); ++column) {
+            ASSERT_EQ(tablet.add_value(
+                          0, column, static_cast<int32_t>(row * 100 + column)),
+                      E_OK);
         }
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
-        if (t == 2) {
-            ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        ASSERT_EQ(writer_->write_tablet(tablet), E_OK);
+        if (row == 2) {
+            ASSERT_EQ(writer_->flush(), E_OK);
         }
     }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
 
-    std::vector<Path> select_list;
-    for (const auto& name : names)
-        select_list.push_back(make_path(device, name));
-    auto rows = query_all(select_list);
-    ASSERT_EQ(rows.size(), (size_t)num_tablets);
-    for (int t = 0; t < num_tablets; t++) {
-        ASSERT_EQ(rows[t][0], std::to_string(1000 + t));
-        for (uint32_t j = 0; j < names.size(); j++) {
-            ASSERT_EQ(rows[t][j + 1], std::to_string(t * 100 + j))
-                << "row " << t << " column " << j;
+    auto rows =
+        read_rows({path(device, "s0"), path(device, "s1"), path(device, "s2")});
+    ASSERT_EQ(rows.size(), 5u);
+    for (int row = 0; row < 5; ++row) {
+        EXPECT_EQ(rows[row][0], std::to_string(1000 + row));
+        for (int column = 0; column < 3; ++column) {
+            EXPECT_EQ(rows[row][column + 1],
+                      std::to_string(row * 100 + column));
         }
     }
 }
 
-// 2. Invalidation by name sequence: same column count, different names and
-// order. Values must land in the column their NAME says, not the position
-// the previous tablet used.
-TEST_F(SchemaCheckCacheTest, SameCountDifferentNamesAndOrder) {
-    const std::string device = "root.cache_inval";
+TEST_F(SchemaCheckCacheTest, SameCountDifferentNameOrderDoesNotCrossWire) {
+    const std::string device = "root.cache_reorder";
     for (const auto& name : {"s0", "s1", "s2"}) {
-        ASSERT_EQ(
-            tsfile_writer_->register_timeseries(device, int32_schema(name)),
-            E_OK);
+        ASSERT_EQ(writer_->register_timeseries(device, schema(name)), E_OK);
     }
 
-    // Tablet 1: [s0, s1] at t=0.
     {
-        std::vector<MeasurementSchema> schema_vec = {int32_schema("s0"),
-                                                     int32_schema("s1")};
+        auto tablet_schema = schemas({"s0", "s1"});
         Tablet tablet(
             device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
+            std::make_shared<std::vector<MeasurementSchema>>(tablet_schema), 1);
         ASSERT_EQ(tablet.add_timestamp(0, 0), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 0, 10), E_OK);  // s0 = 10
-        ASSERT_EQ(tablet.add_value(0, 1, 11), E_OK);  // s1 = 11
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 0, static_cast<int32_t>(10)), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 1, static_cast<int32_t>(11)), E_OK);
+        ASSERT_EQ(writer_->write_tablet(tablet), E_OK);
     }
-    // Tablet 2: same count, REVERSED order, at t=1.
     {
-        std::vector<MeasurementSchema> schema_vec = {int32_schema("s1"),
-                                                     int32_schema("s0")};
+        auto tablet_schema = schemas({"s1", "s0"});
         Tablet tablet(
             device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
+            std::make_shared<std::vector<MeasurementSchema>>(tablet_schema), 1);
         ASSERT_EQ(tablet.add_timestamp(0, 1), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 0, 21), E_OK);  // s1 = 21
-        ASSERT_EQ(tablet.add_value(0, 1, 20), E_OK);  // s0 = 20
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 0, static_cast<int32_t>(21)), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 1, static_cast<int32_t>(20)), E_OK);
+        ASSERT_EQ(writer_->write_tablet(tablet), E_OK);
     }
-    // Tablet 3: same count, one column swapped for an unseen name, at t=2.
     {
-        std::vector<MeasurementSchema> schema_vec = {int32_schema("s0"),
-                                                     int32_schema("s2")};
+        auto tablet_schema = schemas({"s0", "s2"});
         Tablet tablet(
             device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
+            std::make_shared<std::vector<MeasurementSchema>>(tablet_schema), 1);
         ASSERT_EQ(tablet.add_timestamp(0, 2), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 0, 30), E_OK);  // s0 = 30
-        ASSERT_EQ(tablet.add_value(0, 1, 32), E_OK);  // s2 = 32
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 0, static_cast<int32_t>(30)), E_OK);
+        ASSERT_EQ(tablet.add_value(0, 1, static_cast<int32_t>(32)), E_OK);
+        ASSERT_EQ(writer_->write_tablet(tablet), E_OK);
     }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
 
-    std::vector<Path> select_list;
-    for (const auto& name : {"s0", "s1", "s2"}) {
-        select_list.push_back(make_path(device, name));
-    }
-    auto rows = query_all(select_list);
-    ASSERT_EQ(rows.size(), (size_t)3);
-    // t=0
-    EXPECT_EQ(rows[0][0], "0");
+    auto rows =
+        read_rows({path(device, "s0"), path(device, "s1"), path(device, "s2")});
+    ASSERT_EQ(rows.size(), 3u);
     EXPECT_EQ(rows[0][1], "10");
     EXPECT_EQ(rows[0][2], "11");
-    // t=1: swapped order must not swap values
-    EXPECT_EQ(rows[1][0], "1");
     EXPECT_EQ(rows[1][1], "20");
     EXPECT_EQ(rows[1][2], "21");
-    // t=2: s1 has no point at t=2
-    EXPECT_EQ(rows[2][0], "2");
     EXPECT_EQ(rows[2][1], "30");
     EXPECT_EQ(rows[2][3], "32");
 }
 
-// 3. A measurement missing at first write resolves to a NULL chunk writer
-// (column skipped). After it is registered, the same tablet schema must
-// write that column: the cache must not pin the stale NULL.
-TEST_F(SchemaCheckCacheTest, ColumnRegisteredAfterFirstWriteIsNotMasked) {
+TEST_F(SchemaCheckCacheTest, LateRegistrationIsNotMaskedByCache) {
     const std::string device = "root.cache_late_register";
-    ASSERT_EQ(tsfile_writer_->register_timeseries(device, int32_schema("s0")),
-              E_OK);
-    // Deliberately NOT registering s1 yet.
+    ASSERT_EQ(writer_->register_timeseries(device, schema("s0")), E_OK);
 
-    // First write: s1 unresolved -> NULL chunk writer, column skipped.
-    {
-        std::vector<MeasurementSchema> schema_vec = {int32_schema("s0"),
-                                                     int32_schema("s1")};
-        Tablet tablet(
-            device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
-        ASSERT_EQ(tablet.add_timestamp(0, 0), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 0, 100), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 1, 101), E_OK);
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
-    }
-    // Now register s1 and write the same schema again.
-    ASSERT_EQ(tsfile_writer_->register_timeseries(device, int32_schema("s1")),
-              E_OK);
-    {
-        std::vector<MeasurementSchema> schema_vec = {int32_schema("s0"),
-                                                     int32_schema("s1")};
-        Tablet tablet(
-            device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
-        ASSERT_EQ(tablet.add_timestamp(0, 1), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 0, 200), E_OK);
-        ASSERT_EQ(tablet.add_value(0, 1, 201), E_OK);
-        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
-    }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    auto first_schema = schemas({"s0", "s1"});
+    Tablet first(device,
+                 std::make_shared<std::vector<MeasurementSchema>>(first_schema),
+                 1);
+    ASSERT_EQ(first.add_timestamp(0, 0), E_OK);
+    ASSERT_EQ(first.add_value(0, 0, static_cast<int32_t>(100)), E_OK);
+    ASSERT_EQ(first.add_value(0, 1, static_cast<int32_t>(101)), E_OK);
+    ASSERT_EQ(writer_->write_tablet(first), E_OK);
 
-    auto rows = query_all({make_path(device, "s1")});
-    // Without the fully-resolved guard the cached NULL would drop this
-    // column forever and this query would return zero rows.
-    ASSERT_EQ(rows.size(), (size_t)1);
+    ASSERT_EQ(writer_->register_timeseries(device, schema("s1")), E_OK);
+    auto second_schema = schemas({"s0", "s1"});
+    Tablet second(
+        device, std::make_shared<std::vector<MeasurementSchema>>(second_schema),
+        1);
+    ASSERT_EQ(second.add_timestamp(0, 1), E_OK);
+    ASSERT_EQ(second.add_value(0, 0, static_cast<int32_t>(200)), E_OK);
+    ASSERT_EQ(second.add_value(0, 1, static_cast<int32_t>(201)), E_OK);
+    ASSERT_EQ(writer_->write_tablet(second), E_OK);
+
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
+    auto rows = read_rows({path(device, "s1")});
+    ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0][0], "1");
     EXPECT_EQ(rows[0][1], "201");
 }
 
-// 4. Aligned path: same-schema repeated writes round-trip, and a reordered
-// tablet re-resolves instead of reusing positions.
-TEST_F(SchemaCheckCacheTest, AlignedRepeatedAndReordered) {
+TEST_F(SchemaCheckCacheTest, AlignedCacheIsIndependentAndHandlesReorder) {
     const std::string device = "root.cache_aligned";
     for (const auto& name : {"a0", "a1"}) {
-        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(
-                      device, int32_schema(name)),
+        ASSERT_EQ(writer_->register_aligned_timeseries(device, schema(name)),
                   E_OK);
     }
 
-    const int num_tablets = 4;
-    for (int t = 0; t < num_tablets; t++) {
-        // Last tablet reverses the column order.
-        std::vector<MeasurementSchema> schema_vec;
-        if (t < num_tablets - 1) {
-            schema_vec = {int32_schema("a0"), int32_schema("a1")};
-        } else {
-            schema_vec = {int32_schema("a1"), int32_schema("a0")};
-        }
+    for (int row = 0; row < 4; ++row) {
+        const std::vector<std::string> names =
+            row == 3 ? std::vector<std::string>{"a1", "a0"}
+                     : std::vector<std::string>{"a0", "a1"};
+        auto tablet_schema = schemas(names);
         Tablet tablet(
             device,
-            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 1);
-        ASSERT_EQ(tablet.add_timestamp(0, 500 + t), E_OK);
-        if (t < num_tablets - 1) {
-            ASSERT_EQ(tablet.add_value(0, 0, t), E_OK);       // a0
-            ASSERT_EQ(tablet.add_value(0, 1, 10 + t), E_OK);  // a1
+            std::make_shared<std::vector<MeasurementSchema>>(tablet_schema), 1);
+        ASSERT_EQ(tablet.add_timestamp(0, 500 + row), E_OK);
+        if (row == 3) {
+            ASSERT_EQ(tablet.add_value(0, 0, static_cast<int32_t>(19)), E_OK);
+            ASSERT_EQ(tablet.add_value(0, 1, static_cast<int32_t>(9)), E_OK);
         } else {
-            ASSERT_EQ(tablet.add_value(0, 0, 19), E_OK);  // a1
-            ASSERT_EQ(tablet.add_value(0, 1, 9), E_OK);   // a0
+            ASSERT_EQ(tablet.add_value(0, 0, row), E_OK);
+            ASSERT_EQ(tablet.add_value(0, 1, 10 + row), E_OK);
         }
-        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+        ASSERT_EQ(writer_->write_tablet_aligned(tablet), E_OK);
     }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
 
-    std::vector<Path> select_list;
-    for (const auto& name : {"a0", "a1"}) {
-        select_list.push_back(make_path(device, name));
+    auto rows = read_rows({path(device, "a0"), path(device, "a1")});
+    ASSERT_EQ(rows.size(), 4u);
+    for (int row = 0; row < 3; ++row) {
+        EXPECT_EQ(rows[row][1], std::to_string(row));
+        EXPECT_EQ(rows[row][2], std::to_string(10 + row));
     }
-    auto rows = query_all(select_list);
-    ASSERT_EQ(rows.size(), (size_t)num_tablets);
-    for (int t = 0; t < num_tablets - 1; t++) {
-        EXPECT_EQ(rows[t][1], std::to_string(t));
-        EXPECT_EQ(rows[t][2], std::to_string(10 + t));
-    }
-    // Reordered final tablet: a0=9, a1=19.
-    EXPECT_EQ(rows[num_tablets - 1][1], "9");
-    EXPECT_EQ(rows[num_tablets - 1][2], "19");
+    EXPECT_EQ(rows[3][1], "9");
+    EXPECT_EQ(rows[3][2], "19");
 }
 
-// 5. Per-device caches are independent: two devices with identical
-// measurement names, interleaved writes, different values.
-TEST_F(SchemaCheckCacheTest, MultiDeviceCachesIndependent) {
-    const std::string devices[2] = {"root.cache_dev0", "root.cache_dev1"};
-    for (const auto& device : devices) {
-        for (const auto& name : {"m0", "m1"}) {
-            ASSERT_EQ(
-                tsfile_writer_->register_timeseries(device, int32_schema(name)),
-                E_OK);
-        }
+TEST_F(SchemaCheckCacheTest, InterleavedDevicesDoNotCrossWire) {
+    const std::string plain_device0 = "root.cache_plain0";
+    const std::string plain_device1 = "root.cache_plain1";
+    const std::string aligned_device = "root.cache_aligned_interleaved";
+    for (const auto& name : {"m0", "m1"}) {
+        ASSERT_EQ(writer_->register_timeseries(plain_device0, schema(name)),
+                  E_OK);
+        ASSERT_EQ(writer_->register_timeseries(plain_device1, schema(name)),
+                  E_OK);
+        ASSERT_EQ(
+            writer_->register_aligned_timeseries(aligned_device, schema(name)),
+            E_OK);
     }
 
-    for (int t = 0; t < 3; t++) {
-        for (int d = 0; d < 2; d++) {
-            std::vector<MeasurementSchema> schema_vec = {int32_schema("m0"),
-                                                         int32_schema("m1")};
-            Tablet tablet(
-                devices[d],
-                std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+    for (int row = 0; row < 3; ++row) {
+        for (const auto& device : {plain_device0, plain_device1}) {
+            auto plain_schema = schemas({"m0", "m1"});
+            Tablet plain_tablet(
+                device,
+                std::make_shared<std::vector<MeasurementSchema>>(plain_schema),
                 1);
-            ASSERT_EQ(tablet.add_timestamp(0, 700 + t), E_OK);
-            // d*1000 separates the two devices' value spaces.
-            ASSERT_EQ(tablet.add_value(0, 0, d * 1000 + t), E_OK);
-            ASSERT_EQ(tablet.add_value(0, 1, d * 1000 + 10 + t), E_OK);
-            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+            ASSERT_EQ(plain_tablet.add_timestamp(0, 700 + row), E_OK);
+            const int device_offset = device == plain_device0 ? 0 : 100;
+            ASSERT_EQ(plain_tablet.add_value(
+                          0, 0, static_cast<int32_t>(device_offset + row)),
+                      E_OK);
+            ASSERT_EQ(plain_tablet.add_value(
+                          0, 1, static_cast<int32_t>(device_offset + 10 + row)),
+                      E_OK);
+            ASSERT_EQ(writer_->write_tablet(plain_tablet), E_OK);
+        }
+
+        auto aligned_schema = schemas({"m0", "m1"});
+        Tablet aligned_tablet(
+            aligned_device,
+            std::make_shared<std::vector<MeasurementSchema>>(aligned_schema),
+            1);
+        ASSERT_EQ(aligned_tablet.add_timestamp(0, 700 + row), E_OK);
+        ASSERT_EQ(
+            aligned_tablet.add_value(0, 0, static_cast<int32_t>(1000 + row)),
+            E_OK);
+        ASSERT_EQ(
+            aligned_tablet.add_value(0, 1, static_cast<int32_t>(1010 + row)),
+            E_OK);
+        ASSERT_EQ(writer_->write_tablet_aligned(aligned_tablet), E_OK);
+    }
+
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
+    for (const auto& device : {plain_device0, plain_device1}) {
+        auto rows = read_rows({path(device, "m0"), path(device, "m1")});
+        ASSERT_EQ(rows.size(), 3u);
+        const int device_offset = device == plain_device0 ? 0 : 100;
+        for (int row = 0; row < 3; ++row) {
+            EXPECT_EQ(rows[row][1], std::to_string(device_offset + row));
+            EXPECT_EQ(rows[row][2], std::to_string(device_offset + 10 + row));
         }
     }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    auto aligned_rows =
+        read_rows({path(aligned_device, "m0"), path(aligned_device, "m1")});
+    ASSERT_EQ(aligned_rows.size(), 3u);
+    for (int row = 0; row < 3; ++row) {
+        EXPECT_EQ(aligned_rows[row][1], std::to_string(1000 + row));
+        EXPECT_EQ(aligned_rows[row][2], std::to_string(1010 + row));
+    }
+}
 
-    for (int d = 0; d < 2; d++) {
-        auto rows = query_all(
-            {make_path(devices[d], "m0"), make_path(devices[d], "m1")});
-        ASSERT_EQ(rows.size(), (size_t)3);
-        for (int t = 0; t < 3; t++) {
-            EXPECT_EQ(rows[t][1], std::to_string(d * 1000 + t));
-            EXPECT_EQ(rows[t][2], std::to_string(d * 1000 + 10 + t));
-        }
+TEST_F(SchemaCheckCacheTest, RecordPathsUseIndependentCaches) {
+    const std::string plain_device = "root.cache_record_plain";
+    const std::string aligned_device = "root.cache_record_aligned";
+    for (const auto& name : {"m0", "m1"}) {
+        ASSERT_EQ(writer_->register_timeseries(plain_device, schema(name)),
+                  E_OK);
+        ASSERT_EQ(
+            writer_->register_aligned_timeseries(aligned_device, schema(name)),
+            E_OK);
+    }
+
+    for (int row = 0; row < 4; ++row) {
+        TsRecord plain_record(800 + row, plain_device);
+        plain_record.add_point("m0", static_cast<int32_t>(row));
+        plain_record.add_point("m1", static_cast<int32_t>(10 + row));
+        ASSERT_EQ(writer_->write_record(plain_record), E_OK);
+
+        TsRecord aligned_record(800 + row, aligned_device);
+        aligned_record.add_point("m0", static_cast<int32_t>(100 + row));
+        aligned_record.add_point("m1", static_cast<int32_t>(110 + row));
+        ASSERT_EQ(writer_->write_record_aligned(aligned_record), E_OK);
+    }
+
+    ASSERT_EQ(writer_->flush(), E_OK);
+    ASSERT_EQ(writer_->close(), E_OK);
+    auto plain_rows =
+        read_rows({path(plain_device, "m0"), path(plain_device, "m1")});
+    auto aligned_rows =
+        read_rows({path(aligned_device, "m0"), path(aligned_device, "m1")});
+    ASSERT_EQ(plain_rows.size(), 4u);
+    ASSERT_EQ(aligned_rows.size(), 4u);
+    for (int row = 0; row < 4; ++row) {
+        EXPECT_EQ(plain_rows[row][1], std::to_string(row));
+        EXPECT_EQ(plain_rows[row][2], std::to_string(10 + row));
+        EXPECT_EQ(aligned_rows[row][1], std::to_string(100 + row));
+        EXPECT_EQ(aligned_rows[row][2], std::to_string(110 + row));
     }
 }
 
