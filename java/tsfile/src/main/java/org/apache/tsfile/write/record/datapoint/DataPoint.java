@@ -19,11 +19,10 @@
 
 package org.apache.tsfile.write.record.datapoint;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
@@ -67,46 +66,13 @@ public abstract class DataPoint {
    * @return data point class according to data type
    */
   public static DataPoint getDataPoint(TSDataType dataType, String measurementId, String value) {
-    DataPoint dataPoint = null;
     try {
-      switch (dataType) {
-        case INT32:
-          dataPoint = new IntDataPoint(measurementId, Integer.parseInt(value));
-          break;
-        case DATE:
-          dataPoint = new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
-          break;
-        case INT64:
-        case TIMESTAMP:
-          dataPoint = new LongDataPoint(measurementId, Long.parseLong(value));
-          break;
-        case FLOAT:
-          dataPoint = new FloatDataPoint(measurementId, Float.parseFloat(value));
-          break;
-        case DOUBLE:
-          dataPoint = new DoubleDataPoint(measurementId, Double.parseDouble(value));
-          break;
-        case BOOLEAN:
-          dataPoint = new BooleanDataPoint(measurementId, Boolean.parseBoolean(value));
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          dataPoint =
-              new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format("error.write.type_not_supported", dataType));
-      }
+      return Type.fromTsDataType(dataType).getDataPoint(measurementId, value);
     } catch (Exception e) {
       throw new UnSupportedDataTypeException(
           Messages.format(
               "error.write.datapoint_type_value_mismatch", measurementId, dataType, value));
     }
-
-    return dataPoint;
   }
 
   /**

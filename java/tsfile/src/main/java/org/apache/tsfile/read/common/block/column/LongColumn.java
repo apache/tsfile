@@ -20,13 +20,18 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
@@ -59,7 +64,7 @@ public class LongColumn implements Column {
     this(0, positionCount, valueIsNull.orElse(null), values);
   }
 
-  LongColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, long[] values) {
+  public LongColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, long[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
@@ -91,6 +96,24 @@ public class LongColumn implements Column {
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.INT64_ARRAY;
+  }
+
+  @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.INT64) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.INT64, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else {
+        builder.writeLong(getLong(position));
+      }
+    }
+    return builder.build();
   }
 
   @Override
@@ -139,6 +162,34 @@ public class LongColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsLong(getLong(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putLong(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeLong(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        output.writeLong(values[i + arrayOffset]);
+      }
+    }
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
+    }
+    return !that.isNull(thatPos) && getLong(thisPos) == that.getLong(thatPos);
   }
 
   @Override

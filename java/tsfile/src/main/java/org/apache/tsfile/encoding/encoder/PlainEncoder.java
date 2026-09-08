@@ -19,11 +19,11 @@
 
 package org.apache.tsfile.encoding.encoder;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -112,28 +112,7 @@ public class PlainEncoder extends Encoder {
 
   @Override
   public int getOneItemMaxSize() {
-    switch (dataType) {
-      case BOOLEAN:
-        return 1;
-      case INT32:
-      case DATE:
-        return 4;
-      case INT64:
-      case TIMESTAMP:
-        return 8;
-      case FLOAT:
-        return 4;
-      case DOUBLE:
-        return 8;
-      case TEXT:
-      case STRING:
-      case BLOB:
-      case OBJECT:
-        // refer to encode(Binary,ByteArrayOutputStream)
-        return 4 + TSFileConfig.BYTE_SIZE_PER_CHAR * maxStringLength;
-      default:
-        throw new UnsupportedOperationException(dataType.toString());
-    }
+    return Type.fromTsDataType(dataType).getOneItemMaxSize(maxStringLength);
   }
 
   @Override

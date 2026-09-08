@@ -34,6 +34,8 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.reader.page.PageReader;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -50,6 +52,25 @@ public class TsFileSequenceRead {
   private static boolean printDetail = false;
   public static final String POINT_IN_PAGE = "\t\tpoints in the page: ";
   private static int MASK = 0x80;
+
+  private static final TypeService<PageValueReader> PAGE_VALUE_READER_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> Decoder::readBoolean;
+            case INT32, DATE -> Decoder::readInt;
+            case INT64, TIMESTAMP -> Decoder::readLong;
+            case FLOAT -> Decoder::readFloat;
+            case DOUBLE -> Decoder::readDouble;
+            case TEXT, STRING, BLOB -> Decoder::readBinary;
+            case OBJECT, ROW, UNKNOWN, VECTOR ->
+                (decoder, buffer) -> {
+                  throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()));
+                };
+          };
+
+  static {
+    PAGE_VALUE_READER_SERVICE.check();
+  }
 
   @SuppressWarnings({
     "squid:S3776",
@@ -133,6 +154,8 @@ public class TsFileSequenceRead {
                 }
               } else if ((header.getChunkType() & TsFileConstant.VALUE_COLUMN_MASK)
                   == TsFileConstant.VALUE_COLUMN_MASK) { // Value Chunk
+                PageValueReader valueReader =
+                    PAGE_VALUE_READER_SERVICE.call(Type.fromTsDataType(header.getDataType()));
                 int pointNum = 0;
                 byte[] bitmap = null;
                 if (pageData.hasRemaining()) {
@@ -149,33 +172,7 @@ public class TsFileSequenceRead {
                     }
                     continue;
                   }
-                  Object value;
-                  switch (header.getDataType()) {
-                    case BOOLEAN:
-                      value = valueDecoder.readBoolean(pageData);
-                      break;
-                    case INT32:
-                    case DATE:
-                      value = valueDecoder.readInt(pageData);
-                      break;
-                    case INT64:
-                    case TIMESTAMP:
-                      value = valueDecoder.readLong(pageData);
-                      break;
-                    case FLOAT:
-                      value = valueDecoder.readFloat(pageData);
-                      break;
-                    case DOUBLE:
-                      value = valueDecoder.readDouble(pageData);
-                      break;
-                    case TEXT:
-                    case STRING:
-                    case BLOB:
-                      value = valueDecoder.readBinary(pageData);
-                      break;
-                    default:
-                      throw new UnSupportedDataTypeException(String.valueOf(header.getDataType()));
-                  }
+                  Object value = valueReader.read(valueDecoder, pageData);
                   if (printDetail) {
                     System.out.println("\t\t\tvalue: " + value);
                   }
@@ -239,5 +236,10 @@ public class TsFileSequenceRead {
         }
       }
     }
+  }
+
+  @FunctionalInterface
+  private interface PageValueReader {
+    Object read(Decoder decoder, ByteBuffer buffer);
   }
 }

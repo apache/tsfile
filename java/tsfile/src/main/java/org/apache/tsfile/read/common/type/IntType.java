@@ -19,11 +19,21 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.Field;
+
 public class IntType extends AbstractIntType {
 
   public static final IntType INT32 = new IntType();
 
   private IntType() {}
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.INT32);
+    field.setIntV((int) value);
+    return field;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {

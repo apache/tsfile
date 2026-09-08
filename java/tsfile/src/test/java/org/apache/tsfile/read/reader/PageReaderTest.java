@@ -36,6 +36,8 @@ import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV1;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.TimeRange;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.reader.page.PageReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.page.PageWriter;
@@ -51,6 +53,22 @@ import java.util.List;
 public class PageReaderTest {
 
   private static final int POINTS_COUNT_IN_ONE_PAGE = 1000000;
+  private static final TypeService<PageValueWriter> WRITE_PAGE_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> (writer, time, value) -> writer.write(time, (Boolean) value);
+            case INT32 -> (writer, time, value) -> writer.write(time, (Integer) value);
+            case INT64 -> (writer, time, value) -> writer.write(time, (Long) value);
+            case FLOAT -> (writer, time, value) -> writer.write(time, (Float) value);
+            case DOUBLE -> (writer, time, value) -> writer.write(time, (Double) value);
+            case TEXT -> (writer, time, value) -> writer.write(time, (Binary) value);
+            case BLOB, DATE, OBJECT, ROW, STRING, TIMESTAMP, UNKNOWN, VECTOR ->
+                (writer, time, value) -> {};
+          };
+
+  static {
+    WRITE_PAGE_VALUE_SERVICE.check();
+  }
 
   @Test
   public void testLong() {
@@ -272,31 +290,19 @@ public class PageReaderTest {
     }
 
     private void writeData() {
+      PageValueWriter valueWriter = WRITE_PAGE_VALUE_SERVICE.call(Type.fromTsDataType(dataType));
       for (int i = 0; i < count; i++) {
-        switch (dataType) {
-          case BOOLEAN:
-            pageWriter.write(i, (Boolean) generateValueByIndex(i));
-            break;
-          case INT32:
-            pageWriter.write(i, (Integer) generateValueByIndex(i));
-            break;
-          case INT64:
-            pageWriter.write(i, (Long) generateValueByIndex(i));
-            break;
-          case FLOAT:
-            pageWriter.write(i, (Float) generateValueByIndex(i));
-            break;
-          case DOUBLE:
-            pageWriter.write(i, (Double) generateValueByIndex(i));
-            break;
-          case TEXT:
-            pageWriter.write(i, (Binary) generateValueByIndex(i));
-            break;
-        }
+        valueWriter.write(pageWriter, i, generateValueByIndex(i));
       }
     }
 
     public abstract Object generateValueByIndex(int i);
+  }
+
+  @FunctionalInterface
+  private interface PageValueWriter {
+
+    void write(PageWriter writer, long time, Object value);
   }
 
   @Test

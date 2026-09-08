@@ -32,6 +32,7 @@ import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Chunk;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.read.reader.page.ValuePageReader;
 import org.apache.tsfile.utils.Pair;
@@ -231,11 +232,14 @@ public class TsFileLastReader
           seriesMeta.getMeasurementId(),
           new TimeValuePair(
               seriesMeta.getStatistics().getEndTime(),
-              seriesMeta.getTsDataType() == TSDataType.VECTOR
-                  ? TsPrimitiveType.getByType(
-                      TSDataType.INT64, seriesMeta.getStatistics().getEndTime())
-                  : TsPrimitiveType.getByType(
-                      seriesMeta.getTsDataType(), seriesMeta.getStatistics().getLastValue())));
+              Type.fromTsDataType(
+                      seriesMeta.getTsDataType() == TSDataType.VECTOR
+                          ? TSDataType.INT64
+                          : seriesMeta.getTsDataType())
+                  .getTsPrimitiveType(
+                      seriesMeta.getTsDataType() == TSDataType.VECTOR
+                          ? seriesMeta.getStatistics().getEndTime()
+                          : seriesMeta.getStatistics().getLastValue())));
     } else {
       return readLastPoint(seriesMeta, isAligned);
     }

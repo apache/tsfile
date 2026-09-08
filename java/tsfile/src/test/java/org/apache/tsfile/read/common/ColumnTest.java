@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
@@ -38,16 +39,271 @@ import org.apache.tsfile.read.common.block.column.NullColumn;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
 
 public class ColumnTest {
+
+  @Test
+  public void testConvertTo() {
+    Column source =
+        new IntColumn(
+                4, Optional.of(new boolean[] {false, true, false, false}), new int[] {0, 1, 2, 3})
+            .getRegion(1, 3);
+
+    Column converted = source.convertTo(TSDataType.DOUBLE);
+    Assert.assertEquals(TSDataType.DOUBLE, converted.getDataType());
+    Assert.assertEquals(3, converted.getPositionCount());
+    Assert.assertTrue(converted.isNull(0));
+    Assert.assertEquals(2.0D, converted.getDouble(1), 0);
+    Assert.assertEquals(3.0D, converted.getDouble(2), 0);
+
+    Assert.assertSame(source, source.convertTo(TSDataType.INT32));
+    Assert.assertThrows(ClassCastException.class, () -> source.convertTo(TSDataType.BOOLEAN));
+    Assert.assertThrows(NullPointerException.class, () -> source.convertTo(null));
+  }
+
+  @Test
+  public void testConvertToText() {
+    Column dateColumn =
+        new IntColumn(
+            3,
+            Optional.of(new boolean[] {false, true, false}),
+            new int[] {20260714, 20260715, 20260716},
+            TSDataType.DATE);
+
+    Column converted = dateColumn.convertTo(TSDataType.TEXT);
+    Assert.assertEquals(TSDataType.TEXT, converted.getDataType());
+    Assert.assertEquals(new Binary("2026-07-14", StandardCharsets.UTF_8), converted.getBinary(0));
+    Assert.assertTrue(converted.isNull(1));
+    Assert.assertEquals(new Binary("2026-07-16", StandardCharsets.UTF_8), converted.getBinary(2));
+  }
+
+  @Test
+  public void testConvertEncodedColumns() {
+    Column dictionary =
+        DictionaryColumn.create(
+            3, new IntColumn(3, Optional.empty(), new int[] {1, 2, 3}), new int[] {2, 0, 2});
+    Column convertedDictionary = dictionary.convertTo(TSDataType.DOUBLE);
+    Assert.assertTrue(convertedDictionary instanceof DictionaryColumn);
+    Assert.assertEquals(3.0D, convertedDictionary.getDouble(0), 0);
+    Assert.assertEquals(1.0D, convertedDictionary.getDouble(1), 0);
+    Assert.assertEquals(3.0D, convertedDictionary.getDouble(2), 0);
+
+    Column runLengthEncoded =
+        new RunLengthEncodedColumn(new FloatColumn(1, Optional.empty(), new float[] {1.25F}), 4);
+    Column convertedRle = runLengthEncoded.convertTo(TSDataType.DOUBLE);
+    Assert.assertTrue(convertedRle instanceof RunLengthEncodedColumn);
+    Assert.assertEquals(4, convertedRle.getPositionCount());
+    Assert.assertEquals(1.25D, convertedRle.getDouble(3), 0);
+
+    Column nullColumn = new NullColumn(3).convertTo(TSDataType.DOUBLE);
+    Assert.assertEquals(TSDataType.DOUBLE, nullColumn.getDataType());
+    Assert.assertEquals(3, nullColumn.getPositionCount());
+    Assert.assertTrue(nullColumn.isNull(0));
+    Assert.assertTrue(nullColumn.isNull(2));
+  }
+
+  @Test
+  public void testConvertToRejectsIncompatibleEmptyColumns() {
+    Column emptyDictionary =
+        DictionaryColumn.create(
+                2, new IntColumn(2, Optional.empty(), new int[] {1, 2}), new int[] {0, 1})
+            .getRegion(0, 0);
+    Column emptyRle =
+        new RunLengthEncodedColumn(
+            new IntColumn(1, Optional.of(new boolean[] {true}), new int[1]), 0);
+
+    Assert.assertThrows(
+        ClassCastException.class,
+        () -> new IntColumn(0, Optional.empty(), new int[0]).convertTo(TSDataType.BOOLEAN));
+    Assert.assertThrows(
+        ClassCastException.class,
+        () ->
+            new IntColumn(2, Optional.of(new boolean[] {true, true}), new int[2])
+                .convertTo(TSDataType.BOOLEAN));
+    Assert.assertThrows(
+        ClassCastException.class, () -> emptyDictionary.convertTo(TSDataType.BOOLEAN));
+    Assert.assertThrows(ClassCastException.class, () -> emptyRle.convertTo(TSDataType.BOOLEAN));
+  }
+
+  @Test
+  public void testConvertToDoesNotReadBoxedValues() {
+    Column booleanColumn =
+        new BooleanColumn(1, Optional.empty(), new boolean[] {true}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column intColumn =
+        new IntColumn(1, Optional.empty(), new int[] {1}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column longColumn =
+        new LongColumn(1, Optional.empty(), new long[] {2L}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column floatColumn =
+        new FloatColumn(1, Optional.empty(), new float[] {3.0F}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column doubleColumn =
+        new DoubleColumn(1, Optional.empty(), new double[] {4.0D}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column binaryColumn =
+        new BinaryColumn(
+            1, Optional.empty(), new Binary[] {new Binary("5", StandardCharsets.UTF_8)}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+    Column timeColumn =
+        new TimeColumn(1, new long[] {6L}) {
+          @Override
+          public Object getObject(int position) {
+            throw new AssertionError("convertTo must use primitive accessors");
+          }
+        };
+
+    Assert.assertEquals(
+        new Binary("true", StandardCharsets.UTF_8),
+        booleanColumn.convertTo(TSDataType.TEXT).getBinary(0));
+    Assert.assertEquals(1.0D, intColumn.convertTo(TSDataType.DOUBLE).getDouble(0), 0);
+    Assert.assertEquals(2.0D, longColumn.convertTo(TSDataType.DOUBLE).getDouble(0), 0);
+    Assert.assertEquals(3.0D, floatColumn.convertTo(TSDataType.DOUBLE).getDouble(0), 0);
+    Assert.assertEquals(
+        new Binary("4.0", StandardCharsets.UTF_8),
+        doubleColumn.convertTo(TSDataType.TEXT).getBinary(0));
+    Assert.assertEquals(
+        new Binary("5", StandardCharsets.UTF_8),
+        binaryColumn.convertTo(TSDataType.BLOB).getBinary(0));
+    Assert.assertEquals(6.0D, timeColumn.convertTo(TSDataType.DOUBLE).getDouble(0), 0);
+  }
+
+  @Test
+  public void testWriteTo() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Column intDictionary =
+        DictionaryColumn.create(
+            2, new IntColumn(3, Optional.empty(), new int[] {7, 8, 9}), new int[] {2, 0});
+    Column binaryRle =
+        new RunLengthEncodedColumn(new BinaryColumn(1, Optional.empty(), new Binary[] {binary}), 3);
+
+    Object[][] testCases = {
+      {new BooleanColumn(2, Optional.empty(), new boolean[] {false, true}).getRegion(1, 1), 0},
+      {new IntColumn(2, Optional.empty(), new int[] {0, 42}).getRegion(1, 1), 0},
+      {new LongColumn(2, Optional.empty(), new long[] {0L, 42L}).getRegion(1, 1), 0},
+      {new FloatColumn(2, Optional.empty(), new float[] {0.0F, 1.25F}).getRegion(1, 1), 0},
+      {new DoubleColumn(2, Optional.empty(), new double[] {0.0D, 2.5D}).getRegion(1, 1), 0},
+      {
+        new BinaryColumn(2, Optional.empty(), new Binary[] {Binary.EMPTY_VALUE, binary})
+            .getRegion(1, 1),
+        0
+      },
+      {new TimeColumn(2, new long[] {0L, 42L}).getRegion(1, 1), 0},
+      {intDictionary, 0},
+      {binaryRle, 2}
+    };
+
+    for (Object[] testCase : testCases) {
+      Column column = (Column) testCase[0];
+      int index = (int) testCase[1];
+      ByteArrayOutputStream expectedOutput = new ByteArrayOutputStream();
+      Type.fromTsDataType(column.getDataType())
+          .serializeValue(column.getObject(index), new DataOutputStream(expectedOutput));
+      byte[] expected = expectedOutput.toByteArray();
+
+      ByteBuffer buffer = ByteBuffer.allocate(expected.length);
+      column.writeTo(index, buffer);
+      Assert.assertEquals(expected.length, buffer.position());
+      Assert.assertArrayEquals(expected, Arrays.copyOf(buffer.array(), buffer.position()));
+
+      ByteArrayOutputStream actualOutput = new ByteArrayOutputStream();
+      column.writeTo(index, new DataOutputStream(actualOutput));
+      Assert.assertArrayEquals(expected, actualOutput.toByteArray());
+    }
+
+    Column nullColumn = new NullColumn(1);
+    ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
+    nullColumn.writeTo(0, emptyBuffer);
+    ByteArrayOutputStream emptyOutput = new ByteArrayOutputStream();
+    nullColumn.writeTo(0, new DataOutputStream(emptyOutput));
+    Assert.assertEquals(0, emptyBuffer.position());
+    Assert.assertEquals(0, emptyOutput.size());
+  }
+
+  @Test
+  public void testArePositionsEqual() {
+    IntColumnBuilder builder = new IntColumnBuilder(null, 5);
+    builder.writeInt(1);
+    builder.writeInt(1);
+    builder.writeInt(2);
+    builder.appendNull();
+    builder.appendNull();
+    Column column = builder.build();
+
+    Assert.assertTrue(column.arePositionsEqual(0, 1));
+    Assert.assertFalse(column.arePositionsEqual(0, 2));
+    Assert.assertFalse(column.arePositionsEqual(0, 3));
+    Assert.assertTrue(column.arePositionsEqual(3, 4));
+
+    IntColumnBuilder thatBuilder = new IntColumnBuilder(null, 3);
+    thatBuilder.writeInt(1);
+    thatBuilder.writeInt(2);
+    thatBuilder.appendNull();
+    Column that = thatBuilder.build();
+    Assert.assertTrue(column.arePositionsEqual(0, that, 0));
+    Assert.assertFalse(column.arePositionsEqual(0, that, 1));
+    Assert.assertFalse(column.arePositionsEqual(0, that, 2));
+    Assert.assertTrue(column.arePositionsEqual(3, that, 2));
+
+    Column dictionaryColumn = column.getPositions(new int[] {0, 2, 1}, 0, 3);
+    Assert.assertTrue(dictionaryColumn.arePositionsEqual(0, 2));
+    Assert.assertFalse(dictionaryColumn.arePositionsEqual(0, 1));
+    Assert.assertTrue(dictionaryColumn.arePositionsEqual(0, that, 0));
+    Assert.assertTrue(that.arePositionsEqual(0, dictionaryColumn, 2));
+
+    Column runLengthEncodedColumn = new RunLengthEncodedColumn(column.getRegion(0, 1), 3);
+    Assert.assertTrue(runLengthEncodedColumn.arePositionsEqual(0, 2));
+    Assert.assertTrue(runLengthEncodedColumn.arePositionsEqual(0, that, 0));
+    Assert.assertTrue(that.arePositionsEqual(0, runLengthEncodedColumn, 2));
+
+    Column nanColumn = new DoubleColumn(1, Optional.empty(), new double[] {Double.NaN});
+    Column nanRunLengthEncodedColumn = new RunLengthEncodedColumn(nanColumn, 2);
+    Assert.assertFalse(nanRunLengthEncodedColumn.arePositionsEqual(0, 1));
+
+    Column nullColumn = new NullColumn(2);
+    Assert.assertTrue(nullColumn.arePositionsEqual(0, 1));
+    Assert.assertTrue(nullColumn.arePositionsEqual(0, that, 2));
+    Assert.assertFalse(nullColumn.arePositionsEqual(0, that, 0));
+  }
 
   @Test
   public void timeColumnSubColumnTest() {

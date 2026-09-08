@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,41 +40,16 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
     //    | byte          | list[byte]      | list[int64] |
     //    +---------------+-----------------+-------------+
 
-    boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
-    switch (dataType) {
-      case INT64:
-      case TIMESTAMP:
-        long[] values = new long[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            values[i] = input.getLong();
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              values[i] = input.getLong();
-            }
-          }
-        }
-        return new LongColumn(0, positionCount, nullIndicators, values);
-      case DOUBLE:
-        double[] doubleValues = new double[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            doubleValues[i] = Double.longBitsToDouble(input.getLong());
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              doubleValues[i] = Double.longBitsToDouble(input.getLong());
-            }
-          }
-        }
-        return new DoubleColumn(0, positionCount, nullIndicators, doubleValues);
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.col_encoder_invalid_type", dataType));
+    if (dataType != TSDataType.INT64
+        && dataType != TSDataType.TIMESTAMP
+        && dataType != TSDataType.DOUBLE) {
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
+
+    boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
+    return (Column)
+        Type.fromTsDataType(dataType).deserializeColumn(input, positionCount, nullIndicators);
   }
 
   @Override
@@ -82,26 +58,12 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
     ColumnEncoder.serializeNullIndicators(output, column);
 
     TSDataType dataType = column.getDataType();
-    int positionCount = column.getPositionCount();
-    switch (dataType) {
-      case INT64:
-      case TIMESTAMP:
-        for (int i = 0; i < positionCount; i++) {
-          if (!column.isNull(i)) {
-            output.writeLong(column.getLong(i));
-          }
-        }
-        break;
-      case DOUBLE:
-        for (int i = 0; i < positionCount; i++) {
-          if (!column.isNull(i)) {
-            output.writeLong(Double.doubleToLongBits(column.getDouble(i)));
-          }
-        }
-        break;
-      default:
-        throw new IllegalArgumentException(
-            Messages.format("error.read.col_encoder_invalid_type", dataType));
+    if (dataType != TSDataType.INT64
+        && dataType != TSDataType.TIMESTAMP
+        && dataType != TSDataType.DOUBLE) {
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
+    column.serializeWithoutNulls(output);
   }
 }

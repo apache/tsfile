@@ -23,6 +23,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
 import org.apache.tsfile.exception.write.UnknownColumnTypeException;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
@@ -104,65 +105,11 @@ public abstract class Statistics<T extends Serializable> {
    * @throws UnknownColumnTypeException if the type is unknown
    */
   public static Statistics<? extends Serializable> getStatsByType(TSDataType type) {
-    switch (type) {
-      case INT32:
-        return new IntegerStatistics();
-      case INT64:
-        return new LongStatistics();
-      case TEXT:
-        return new BinaryStatistics();
-      case BOOLEAN:
-        return new BooleanStatistics();
-      case DOUBLE:
-        return new DoubleStatistics();
-      case FLOAT:
-        return new FloatStatistics();
-      case VECTOR:
-        return new TimeStatistics();
-      case DATE:
-        return new DateStatistics();
-      case TIMESTAMP:
-        return new TimestampStatistics();
-      case STRING:
-        return new StringStatistics();
-      case BLOB:
-        return new BlobStatistics();
-      case OBJECT:
-        return new ObjectStatistics();
-      default:
-        throw new UnknownColumnTypeException(type.toString());
-    }
+    return Type.fromTsDataType(type).createStatistics();
   }
 
   public static long getSizeByType(TSDataType type) {
-    switch (type) {
-      case INT32:
-        return IntegerStatistics.INSTANCE_SIZE;
-      case INT64:
-        return LongStatistics.INSTANCE_SIZE;
-      case TEXT:
-        return BinaryStatistics.INSTANCE_SIZE;
-      case BOOLEAN:
-        return BooleanStatistics.INSTANCE_SIZE;
-      case DOUBLE:
-        return DoubleStatistics.INSTANCE_SIZE;
-      case FLOAT:
-        return FloatStatistics.INSTANCE_SIZE;
-      case VECTOR:
-        return TimeStatistics.INSTANCE_SIZE;
-      case DATE:
-        return DateStatistics.INSTANCE_SIZE;
-      case TIMESTAMP:
-        return TimestampStatistics.INSTANCE_SIZE;
-      case STRING:
-        return StringStatistics.INSTANCE_SIZE;
-      case BLOB:
-        return BlobStatistics.INSTANCE_SIZE;
-      case OBJECT:
-        return ObjectStatistics.INSTANCE_SIZE;
-      default:
-        throw new UnknownColumnTypeException(type.toString());
-    }
+    return Type.fromTsDataType(type).getStatisticsInstanceSize();
   }
 
   public abstract TSDataType getType();

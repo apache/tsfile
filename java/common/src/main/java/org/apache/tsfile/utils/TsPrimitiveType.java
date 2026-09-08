@@ -28,73 +28,6 @@ import java.util.Arrays;
 
 public abstract class TsPrimitiveType implements Serializable {
 
-  /**
-   * get tsPrimitiveType by resultDataType.
-   *
-   * @param dataType given TsDataType
-   */
-  public static TsPrimitiveType getByType(TSDataType dataType) {
-    switch (dataType) {
-      case BOOLEAN:
-        return new TsPrimitiveType.TsBoolean();
-      case INT32:
-        return new TsPrimitiveType.TsInt();
-      case DATE:
-        return new TsPrimitiveType.TsInt(TSDataType.DATE);
-      case INT64:
-      case TIMESTAMP:
-        return new TsPrimitiveType.TsLong();
-      case FLOAT:
-        return new TsPrimitiveType.TsFloat();
-      case DOUBLE:
-        return new TsPrimitiveType.TsDouble();
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        return new TsPrimitiveType.TsBinary();
-      case VECTOR:
-        return new TsPrimitiveType.TsVector();
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.common.unsupported_data_type", dataType));
-    }
-  }
-
-  /**
-   * get tsPrimitiveType by resultDataType and initial value.
-   *
-   * @param dataType given TsDataType
-   * @param v initial value
-   */
-  public static TsPrimitiveType getByType(TSDataType dataType, Object v) {
-    switch (dataType) {
-      case BOOLEAN:
-        return new TsPrimitiveType.TsBoolean((boolean) v);
-      case INT32:
-        return new TsPrimitiveType.TsInt((int) v);
-      case DATE:
-        return new TsPrimitiveType.TsInt((int) v, TSDataType.DATE);
-      case INT64:
-      case TIMESTAMP:
-        return new TsPrimitiveType.TsLong((long) v);
-      case FLOAT:
-        return new TsPrimitiveType.TsFloat((float) v);
-      case DOUBLE:
-        return new TsPrimitiveType.TsDouble((double) v);
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        return new TsPrimitiveType.TsBinary((Binary) v);
-      case VECTOR:
-        return new TsPrimitiveType.TsVector((TsPrimitiveType[]) v);
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.common.unsupported_data_type", dataType));
-    }
-  }
-
   public boolean getBoolean() {
     throw new UnsupportedOperationException(
         Messages.format("error.common.subclass_op_not_supported", "getBoolean()"));
@@ -182,6 +115,36 @@ public abstract class TsPrimitiveType implements Serializable {
 
   public abstract TSDataType getDataType();
 
+  public abstract void copy(TsPrimitiveType value);
+
+  private static TsPrimitiveType copyValue(TsPrimitiveType value) {
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof TsBoolean) {
+      return new TsBoolean((TsBoolean) value);
+    }
+    if (value instanceof TsInt) {
+      return new TsInt((TsInt) value);
+    }
+    if (value instanceof TsLong) {
+      return new TsLong((TsLong) value);
+    }
+    if (value instanceof TsFloat) {
+      return new TsFloat((TsFloat) value);
+    }
+    if (value instanceof TsDouble) {
+      return new TsDouble((TsDouble) value);
+    }
+    if (value instanceof TsBinary) {
+      return new TsBinary((TsBinary) value);
+    }
+    if (value instanceof TsVector) {
+      return new TsVector((TsVector) value);
+    }
+    throw new UnSupportedDataTypeException(String.valueOf(value.getDataType()));
+  }
+
   @Override
   public String toString() {
     return getStringValue();
@@ -208,6 +171,10 @@ public abstract class TsPrimitiveType implements Serializable {
       this.value = value;
     }
 
+    public TsBoolean(TsBoolean other) {
+      this.value = other.value;
+    }
+
     @Override
     public boolean getBoolean() {
       return value;
@@ -231,6 +198,15 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsBoolean", "Boolean"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setBoolean(value.getBoolean());
     }
 
     @Override
@@ -297,6 +273,11 @@ public abstract class TsPrimitiveType implements Serializable {
       this.dataType = dataType;
     }
 
+    public TsInt(TsInt other) {
+      this.value = other.value;
+      this.dataType = other.dataType;
+    }
+
     @Override
     public int getInt() {
       return value;
@@ -304,12 +285,12 @@ public abstract class TsPrimitiveType implements Serializable {
 
     @Override
     public double getDouble() {
-      return (double) value;
+      return value;
     }
 
     @Override
     public long getLong() {
-      return (long) value;
+      return value;
     }
 
     @Override
@@ -319,6 +300,9 @@ public abstract class TsPrimitiveType implements Serializable {
 
     @Override
     public Binary getBinary() {
+      if (dataType == TSDataType.DATE) {
+        return new Binary(TSDataType.getDateStringValue(value), StandardCharsets.UTF_8);
+      }
       return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
     }
 
@@ -335,6 +319,16 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsInt", "Integer"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setInt(value.getInt());
+      dataType = value.getDataType();
     }
 
     @Override
@@ -390,6 +384,10 @@ public abstract class TsPrimitiveType implements Serializable {
       this.value = value;
     }
 
+    public TsLong(TsLong other) {
+      this.value = other.value;
+    }
+
     @Override
     public long getLong() {
       return value;
@@ -418,6 +416,15 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsLong", "Long"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setLong(value.getLong());
     }
 
     @Override
@@ -473,6 +480,10 @@ public abstract class TsPrimitiveType implements Serializable {
       this.value = value;
     }
 
+    public TsFloat(TsFloat other) {
+      this.value = other.value;
+    }
+
     @Override
     public float getFloat() {
       return value;
@@ -501,6 +512,15 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsFloat", "float"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setFloat(value.getFloat());
     }
 
     @Override
@@ -556,6 +576,10 @@ public abstract class TsPrimitiveType implements Serializable {
       this.value = value;
     }
 
+    public TsDouble(TsDouble other) {
+      this.value = other.value;
+    }
+
     @Override
     public double getDouble() {
       return value;
@@ -579,6 +603,15 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsDouble", "Double"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setDouble(value.getDouble());
     }
 
     @Override
@@ -634,6 +667,18 @@ public abstract class TsPrimitiveType implements Serializable {
       this.value = value;
     }
 
+    public TsBinary(TsBinary other) {
+      this.value = copyBinary(other.value);
+    }
+
+    private static Binary copyBinary(Binary value) {
+      if (value == null) {
+        return null;
+      }
+      byte[] bytes = value.getValues();
+      return new Binary(bytes == null ? null : Arrays.copyOf(bytes, bytes.length));
+    }
+
     @Override
     public Binary getBinary() {
       return value;
@@ -652,6 +697,15 @@ public abstract class TsPrimitiveType implements Serializable {
       }
       throw new UnSupportedDataTypeException(
           Messages.format("error.common.tsprimitive_wrong_value_type", "TsBinary", "Binary"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setBinary(copyBinary(value.getBinary()));
     }
 
     @Override
@@ -707,6 +761,21 @@ public abstract class TsPrimitiveType implements Serializable {
       this.values = values;
     }
 
+    public TsVector(TsVector other) {
+      this.values = copyValues(other.values);
+    }
+
+    private static TsPrimitiveType[] copyValues(TsPrimitiveType[] values) {
+      if (values == null) {
+        return null;
+      }
+      TsPrimitiveType[] copiedValues = new TsPrimitiveType[values.length];
+      for (int i = 0; i < values.length; i++) {
+        copiedValues[i] = copyValue(values[i]);
+      }
+      return copiedValues;
+    }
+
     @Override
     public TsPrimitiveType[] getVector() {
       return values;
@@ -726,6 +795,15 @@ public abstract class TsPrimitiveType implements Serializable {
       throw new UnSupportedDataTypeException(
           Messages.format(
               "error.common.tsprimitive_wrong_value_type", "TsVector", "TsPrimitiveType[]"));
+    }
+
+    @Override
+    public void copy(TsPrimitiveType value) {
+      if (value == null) {
+        reset();
+        return;
+      }
+      setVector(copyValues(value.getVector()));
     }
 
     @Override

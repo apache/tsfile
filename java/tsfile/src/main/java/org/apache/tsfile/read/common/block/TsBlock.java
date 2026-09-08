@@ -26,10 +26,10 @@ import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.common.IBatchDataIterator;
 import org.apache.tsfile.read.common.block.column.ColumnFactory;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import java.util.Arrays;
@@ -560,47 +560,9 @@ public class TsBlock {
         valueColumns[i].isNull()[updateIdx] = true;
         continue;
       }
-      switch (valueColumns[i].getDataType()) {
-        case BOOLEAN:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getBooleans()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getBoolean(sourceIndex);
-          break;
-        case INT32:
-        case DATE:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getInts()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getInt(sourceIndex);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getLongs()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getLong(sourceIndex);
-          break;
-        case FLOAT:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getFloats()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getFloat(sourceIndex);
-          break;
-        case DOUBLE:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getDoubles()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getDouble(sourceIndex);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          valueColumns[i].isNull()[updateIdx] = false;
-          valueColumns[i].getBinaries()[updateIdx] =
-              sourceTsBlock.getValueColumns()[i].getBinary(sourceIndex);
-          break;
-        default:
-          throw new UnSupportedDataTypeException(
-              Messages.format(
-                  "error.read.tsblock_unknown_datatype", valueColumns[i].getDataType()));
-      }
+      valueColumns[i].isNull()[updateIdx] = false;
+      Type.fromTsDataType(valueColumns[i].getDataType())
+          .setTo(sourceTsBlock.getValueColumns()[i], sourceIndex, valueColumns[i], updateIdx);
     }
   }
 

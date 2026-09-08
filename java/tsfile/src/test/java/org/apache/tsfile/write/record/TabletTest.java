@@ -24,6 +24,8 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
@@ -58,6 +60,98 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class TabletTest {
+
+  private static final TypeService<SampleValueGenerator> SAMPLE_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> (row, col, variableBinaryLength) -> (row + col) % 2 == 0;
+            case INT32 -> (row, col, variableBinaryLength) -> row + col * 100;
+            case INT64, TIMESTAMP ->
+                (row, col, variableBinaryLength) -> (long) (valueOffset(row, col) * 1_000_000L);
+            case FLOAT -> (row, col, variableBinaryLength) -> (row + col) * 1.5f;
+            case DOUBLE -> (row, col, variableBinaryLength) -> (row + col) * 2.5;
+            case TEXT, STRING ->
+                (row, col, variableBinaryLength) ->
+                    stringOfLength(binaryPayloadLength(variableBinaryLength, row, col));
+            case BLOB ->
+                (row, col, variableBinaryLength) ->
+                    binaryOfLength(binaryPayloadLength(variableBinaryLength, row, col));
+            case DATE ->
+                (row, col, variableBinaryLength) ->
+                    LocalDate.of(2000 + (row % 20), (col % 12) + 1, (row % 28) + 1);
+            case OBJECT, ROW, UNKNOWN, VECTOR ->
+                (row, col, variableBinaryLength) -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported type in test: " + type.getTypeEnum());
+                };
+          };
+
+  private static final TypeService<TabletValueWriter> WRITE_TABLET_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32 -> (tablet, row, col, value) -> tablet.addValue(row, col, value);
+            case INT64, TIMESTAMP ->
+                (tablet, row, col, value) -> tablet.addValue(row, col, (long) value);
+            case FLOAT -> (tablet, row, col, value) -> tablet.addValue(row, col, value * 1.0f);
+            case DOUBLE -> (tablet, row, col, value) -> tablet.addValue(row, col, value * 1.0);
+            case BOOLEAN -> (tablet, row, col, value) -> tablet.addValue(row, col, value % 2 == 0);
+            case BLOB, STRING, TEXT ->
+                (tablet, row, col, value) -> tablet.addValue(row, col, String.valueOf(value));
+            case OBJECT ->
+                (tablet, row, col, value) ->
+                    tablet.addValue(row, col, value % 2 == 0, value, new byte[] {(byte) row});
+            case DATE ->
+                (tablet, row, col, value) -> tablet.addValue(row, col, LocalDate.of(value, 1, 1));
+            case ROW, UNKNOWN, VECTOR ->
+                (tablet, row, col, value) -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported type in test: " + type.getTypeEnum());
+                };
+          };
+
+  private static final TypeService<TabletValueChecker> CHECK_TABLET_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32 -> (tablet, row, col) -> assertEquals(row, tablet.getValue(row, col));
+            case INT64, TIMESTAMP ->
+                (tablet, row, col) -> assertEquals((long) row, tablet.getValue(row, col));
+            case FLOAT ->
+                (tablet, row, col) ->
+                    assertEquals(row * 1.0f, (float) tablet.getValue(row, col), 0.0001f);
+            case DOUBLE ->
+                (tablet, row, col) ->
+                    assertEquals(row * 1.0, (double) tablet.getValue(row, col), 0.0001);
+            case BOOLEAN ->
+                (tablet, row, col) -> assertEquals(row % 2 == 0, tablet.getValue(row, col));
+            case BLOB, STRING, TEXT ->
+                (tablet, row, col) ->
+                    assertEquals(
+                        new Binary(String.valueOf(row).getBytes(StandardCharsets.UTF_8)),
+                        tablet.getValue(row, col));
+            case OBJECT ->
+                (tablet, row, col) -> {
+                  byte[] content = new byte[] {(byte) row};
+                  byte[] expected = new byte[content.length + 9];
+                  expected[0] = (byte) (row % 2);
+                  System.arraycopy(BytesUtils.longToBytes(row), 0, expected, 1, 8);
+                  System.arraycopy(content, 0, expected, 9, content.length);
+                  assertEquals(new Binary(expected), tablet.getValue(row, col));
+                };
+            case DATE ->
+                (tablet, row, col) ->
+                    assertEquals(LocalDate.of(row, 1, 1), tablet.getValue(row, col));
+            case ROW, UNKNOWN, VECTOR ->
+                (tablet, row, col) -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported type in test: " + type.getTypeEnum());
+                };
+          };
+
+  static {
+    SAMPLE_VALUE_SERVICE.check();
+    WRITE_TABLET_VALUE_SERVICE.check();
+    CHECK_TABLET_VALUE_SERVICE.check();
+  }
 
   @Test
   public void testAddValue() {
@@ -694,28 +788,9 @@ public class TabletTest {
   }
 
   private Object sampleValue(TSDataType type, int row, int col, boolean variableBinaryLength) {
-    switch (type) {
-      case BOOLEAN:
-        return (row + col) % 2 == 0;
-      case INT32:
-        return row + col * 100;
-      case INT64:
-      case TIMESTAMP:
-        return (long) (valueOffset(row, col) * 1_000_000L);
-      case FLOAT:
-        return (row + col) * 1.5f;
-      case DOUBLE:
-        return (row + col) * 2.5;
-      case TEXT:
-      case STRING:
-        return stringOfLength(binaryPayloadLength(variableBinaryLength, row, col));
-      case BLOB:
-        return binaryOfLength(binaryPayloadLength(variableBinaryLength, row, col));
-      case DATE:
-        return LocalDate.of(2000 + (row % 20), (col % 12) + 1, (row % 28) + 1);
-      default:
-        throw new IllegalArgumentException("Unsupported type in test: " + type);
-    }
+    return SAMPLE_VALUE_SERVICE
+        .call(Type.fromTsDataType(type))
+        .generate(row, col, variableBinaryLength);
   }
 
   private static int valueOffset(int row, int col) {
@@ -799,35 +874,9 @@ public class TabletTest {
     for (int i = 0; i < length; i++) {
       t.addTimestamp(i, i + valueOffset);
       for (int j = 0; j < t.getSchemas().size(); j++) {
-        switch (t.getSchemas().get(j).getType()) {
-          case INT32:
-            t.addValue(i, j, i + valueOffset);
-            break;
-          case TIMESTAMP:
-          case INT64:
-            t.addValue(i, j, (long) (i + valueOffset));
-            break;
-          case FLOAT:
-            t.addValue(i, j, (i + valueOffset) * 1.0f);
-            break;
-          case DOUBLE:
-            t.addValue(i, j, (i + valueOffset) * 1.0);
-            break;
-          case BOOLEAN:
-            t.addValue(i, j, (i + valueOffset) % 2 == 0);
-            break;
-          case TEXT:
-          case STRING:
-          case BLOB:
-            t.addValue(i, j, String.valueOf(i + valueOffset));
-            break;
-          case OBJECT:
-            t.addValue(i, j, (i + valueOffset) % 2 == 0, i + valueOffset, new byte[] {(byte) i});
-            break;
-          case DATE:
-            t.addValue(i, j, LocalDate.of(i + valueOffset, 1, 1));
-            break;
-        }
+        WRITE_TABLET_VALUE_SERVICE
+            .call(Type.fromTsDataType(t.getSchemas().get(j).getType()))
+            .write(t, i, j, i + valueOffset);
       }
     }
   }
@@ -1030,45 +1079,28 @@ public class TabletTest {
         }
 
         assertFalse(result.isNull(i, j));
-        switch (result.getSchemas().get(j).getType()) {
-          case INT32:
-            assertEquals(i, result.getValue(i, j));
-            break;
-          case TIMESTAMP:
-          case INT64:
-            assertEquals((long) i, result.getValue(i, j));
-            break;
-          case FLOAT:
-            assertEquals(i * 1.0f, (float) result.getValue(i, j), 0.0001f);
-            break;
-          case DOUBLE:
-            assertEquals(i * 1.0, (double) result.getValue(i, j), 0.0001);
-            break;
-          case BOOLEAN:
-            assertEquals(i % 2 == 0, result.getValue(i, j));
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-            assertEquals(
-                new Binary(String.valueOf(i).getBytes(StandardCharsets.UTF_8)),
-                result.getValue(i, j));
-            break;
-          case OBJECT:
-            {
-              byte[] content = new byte[] {(byte) i};
-              byte[] expected = new byte[content.length + 9];
-              expected[0] = (byte) (i % 2);
-              System.arraycopy(BytesUtils.longToBytes(i), 0, expected, 1, 8);
-              System.arraycopy(content, 0, expected, 9, content.length);
-              assertEquals(new Binary(expected), result.getValue(i, j));
-            }
-            break;
-          case DATE:
-            assertEquals(LocalDate.of(i, 1, 1), result.getValue(i, j));
-            break;
-        }
+        CHECK_TABLET_VALUE_SERVICE
+            .call(Type.fromTsDataType(result.getSchemas().get(j).getType()))
+            .check(result, i, j);
       }
     }
+  }
+
+  @FunctionalInterface
+  private interface SampleValueGenerator {
+
+    Object generate(int row, int col, boolean variableBinaryLength);
+  }
+
+  @FunctionalInterface
+  private interface TabletValueWriter {
+
+    void write(Tablet tablet, int row, int col, int value);
+  }
+
+  @FunctionalInterface
+  private interface TabletValueChecker {
+
+    void check(Tablet tablet, int row, int col);
   }
 }

@@ -23,6 +23,7 @@ import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.IOException;
@@ -119,36 +120,7 @@ public class TreeResultSet extends AbstractResultSet {
             Integer pathIdx = pathIndexMap.get(path);
             if (pathIdx != null) {
               Field field = currentRow.getField(pathIdx);
-              switch (field.getDataType()) {
-                case INT32:
-                case DATE:
-                  record.addPoint(measurement, field.getIntV());
-                  break;
-                case INT64:
-                case TIMESTAMP:
-                  record.addPoint(measurement, field.getLongV());
-                  break;
-                case FLOAT:
-                  record.addPoint(measurement, field.getFloatV());
-                  break;
-                case DOUBLE:
-                  record.addPoint(measurement, field.getDoubleV());
-                  break;
-                case STRING:
-                case TEXT:
-                  record.addPoint(measurement, field.getStringValue());
-                  break;
-                case BLOB:
-                  record.addPoint(measurement, field.getBinaryV().getValues());
-                  break;
-                case BOOLEAN:
-                  record.addPoint(measurement, field.getBoolV());
-                  break;
-                case VECTOR:
-                case UNKNOWN:
-                default:
-                  break;
-              }
+              Type.fromTsDataType(field.getDataType()).addPoint(record, measurement, field);
             } else {
               record.dataPointList.add(null);
             }

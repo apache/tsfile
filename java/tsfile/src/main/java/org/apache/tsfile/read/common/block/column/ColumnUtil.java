@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 
 import java.util.Arrays;
@@ -36,6 +37,14 @@ public class ColumnUtil {
   static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 
   private ColumnUtil() {}
+
+  static void checkConversion(TSDataType sourceType, TSDataType targetType) {
+    requireNonNull(targetType, "type is null");
+    if (!targetType.isCompatible(sourceType)) {
+      throw new ClassCastException(
+          Messages.format("error.common.unsupported_cast", sourceType, targetType));
+    }
+  }
 
   static void checkArrayRange(int[] array, int offset, int length) {
     requireNonNull(array, "array is null");

@@ -23,6 +23,9 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public interface Column {
@@ -32,6 +35,9 @@ public interface Column {
 
   /** Get the encoding for this column. */
   ColumnEncoding getEncoding();
+
+  /** Converts this column to the specified data type. */
+  Column convertTo(TSDataType type);
 
   /** Gets a boolean at {@code position}. */
   default boolean getBoolean(int position) {
@@ -107,6 +113,33 @@ public interface Column {
   default TsPrimitiveType getTsPrimitiveType(int position) {
     throw new UnsupportedOperationException(getClass().getName());
   }
+
+  /** Serializes the value at {@code index} to {@code buffer}. */
+  default void writeTo(int index, ByteBuffer buffer) {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes the value at {@code index} to {@code stream}. */
+  default void writeTo(int index, DataOutputStream stream) throws IOException {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Serializes all non-null values in this column. */
+  default void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /** Returns whether the values at the two positions are equal. */
+  default boolean arePositionsEqual(int pos1, int pos2) {
+    return arePositionsEqual(pos1, this, pos2);
+  }
+
+  /**
+   * Returns whether this value and the value in another column are equal.
+   *
+   * <p>For non-null values, this column and {@code that} must provide compatible value accessors.
+   */
+  boolean arePositionsEqual(int thisPos, Column that, int thatPos);
 
   /**
    * Is it possible the column may have a null value? If false, the column cannot contain a null,

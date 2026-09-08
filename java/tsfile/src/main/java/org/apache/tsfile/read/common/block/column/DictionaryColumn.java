@@ -27,6 +27,9 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -250,6 +253,24 @@ public final class DictionaryColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    TSDataType sourceType = getDataType();
+    if (type == sourceType) {
+      return this;
+    }
+    ColumnUtil.checkConversion(sourceType, type);
+    // Transform dictionary values only, preserving the ids and dictionary encoding.
+    return new DictionaryColumn(
+        idsOffset,
+        positionCount,
+        dictionary.convertTo(type),
+        ids,
+        isCompact(),
+        isSequentialIds,
+        randomDictionaryId());
+  }
+
+  @Override
   public boolean mayHaveNull() {
     return mayHaveNull && dictionary.mayHaveNull();
   }
@@ -425,6 +446,21 @@ public final class DictionaryColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return dictionary.getTsPrimitiveType(position);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    dictionary.writeTo(getId(index), buffer);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    dictionary.writeTo(getId(index), stream);
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return dictionary.arePositionsEqual(getId(thisPos), that, thatPos);
   }
 
   @Override

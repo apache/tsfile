@@ -20,11 +20,16 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
@@ -81,6 +86,20 @@ public class TimeColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.INT64) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.INT64, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      builder.writeLong(getLong(position));
+    }
+    return builder.build();
+  }
+
+  @Override
   public long getLong(int position) {
     return values[position + arrayOffset];
   }
@@ -88,6 +107,28 @@ public class TimeColumn implements Column {
   @Override
   public Object getObject(int position) {
     return getLong(position);
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    buffer.putLong(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    stream.writeLong(values[index + arrayOffset]);
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      output.writeLong(values[i + arrayOffset]);
+    }
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    return !that.isNull(thatPos) && getLong(thisPos) == that.getLong(thatPos);
   }
 
   public boolean mayHaveNull() {

@@ -32,6 +32,8 @@ import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.expression.QueryExpression;
@@ -68,6 +70,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -81,6 +84,29 @@ public class TableViewTest {
   private static final int measurementSchemaNum = 5;
   private static TableSchema testTableSchema;
   private static int numTimestampPerDevice = 10;
+  private static final TypeService<IntFunction<Object>> GET_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT64 -> i -> (long) i;
+            case TEXT -> i -> new Binary(String.valueOf(i), StandardCharsets.UTF_8);
+            case BLOB,
+                BOOLEAN,
+                DATE,
+                DOUBLE,
+                FLOAT,
+                INT32,
+                OBJECT,
+                ROW,
+                STRING,
+                TIMESTAMP,
+                UNKNOWN,
+                VECTOR ->
+                i -> i;
+          };
+
+  static {
+    GET_VALUE_SERVICE.check();
+  }
 
   @Before
   public void setUp() throws Exception {
@@ -505,14 +531,7 @@ public class TableViewTest {
   }
 
   public static Object getValue(TSDataType dataType, int i) {
-    switch (dataType) {
-      case INT64:
-        return (long) i;
-      case TEXT:
-        return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
-      default:
-        return i;
-    }
+    return GET_VALUE_SERVICE.call(Type.fromTsDataType(dataType)).apply(i);
   }
 
   public static TableSchema genTableSchema(int tableNum) {

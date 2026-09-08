@@ -29,8 +29,8 @@ import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -39,7 +39,6 @@ import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -48,6 +47,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   protected TimeChunkWriter timeChunkWriter;
   protected List<ValueChunkWriter> valueChunkWriterList;
+  private Type[] valueTypes;
   protected int valueIndex;
 
   protected EncryptParameter encryptParam;
@@ -303,39 +303,22 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   public void write(long time, TsPrimitiveType[] points) {
+    if (valueTypes == null) {
+      initValueTypes();
+    }
     valueIndex = 0;
     for (TsPrimitiveType point : points) {
       ValueChunkWriter writer = valueChunkWriterList.get(valueIndex++);
-      switch (writer.getDataType()) {
-        case INT64:
-        case TIMESTAMP:
-          writer.write(time, point != null ? point.getLong() : Long.MAX_VALUE, point == null);
-          break;
-        case INT32:
-        case DATE:
-          writer.write(time, point != null ? point.getInt() : Integer.MAX_VALUE, point == null);
-          break;
-        case FLOAT:
-          writer.write(time, point != null ? point.getFloat() : Float.MAX_VALUE, point == null);
-          break;
-        case DOUBLE:
-          writer.write(time, point != null ? point.getDouble() : Double.MAX_VALUE, point == null);
-          break;
-        case BOOLEAN:
-          writer.write(time, point != null ? point.getBoolean() : false, point == null);
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          writer.write(
-              time,
-              point != null ? point.getBinary() : new Binary("".getBytes(StandardCharsets.UTF_8)),
-              point == null);
-          break;
-      }
+      valueTypes[valueIndex - 1].write(writer, time, point);
     }
     write(time);
+  }
+
+  private void initValueTypes() {
+    valueTypes = new Type[valueChunkWriterList.size()];
+    for (int i = 0; i < valueChunkWriterList.size(); i++) {
+      valueTypes[i] = Type.fromTsDataType(valueChunkWriterList.get(i).getDataType());
+    }
   }
 
   public void write(long time) {
@@ -351,6 +334,9 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   public void write(TimeColumn timeColumn, Column[] valueColumns, int batchSize) {
+    if (valueTypes == null) {
+      initValueTypes();
+    }
     if (remainingPointsNumber < batchSize) {
       int pointsHasWritten = (int) remainingPointsNumber;
       batchWrite(timeColumn, valueColumns, pointsHasWritten, 0);
@@ -367,35 +353,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
     for (Column column : valueColumns) {
       ValueChunkWriter chunkWriter = valueChunkWriterList.get(valueIndex++);
-      TSDataType tsDataType = chunkWriter.getDataType();
-      switch (tsDataType) {
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          chunkWriter.write(times, column.getBinaries(), column.isNull(), batchSize, arrayOffset);
-          break;
-        case DOUBLE:
-          chunkWriter.write(times, column.getDoubles(), column.isNull(), batchSize, arrayOffset);
-          break;
-        case BOOLEAN:
-          chunkWriter.write(times, column.getBooleans(), column.isNull(), batchSize, arrayOffset);
-          break;
-        case INT64:
-        case TIMESTAMP:
-          chunkWriter.write(times, column.getLongs(), column.isNull(), batchSize, arrayOffset);
-          break;
-        case INT32:
-        case DATE:
-          chunkWriter.write(times, column.getInts(), column.isNull(), batchSize, arrayOffset);
-          break;
-        case FLOAT:
-          chunkWriter.write(times, column.getFloats(), column.isNull(), batchSize, arrayOffset);
-          break;
-        default:
-          throw new UnsupportedOperationException(
-              Messages.format("error.write.chunk_unknown_type", tsDataType));
-      }
+      valueTypes[valueIndex - 1].write(chunkWriter, times, column, batchSize, arrayOffset);
     }
 
     write(times, batchSize, arrayOffset);
