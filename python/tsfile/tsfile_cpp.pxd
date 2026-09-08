@@ -360,6 +360,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);
+    TableSchema * tsfile_reader_get_all_table_schemas_with_error(
+        TsFileReader reader, uint32_t * size, ErrorCode * error_code);
     DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                             uint32_t * size);
 

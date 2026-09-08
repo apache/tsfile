@@ -874,8 +874,30 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
 
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size) {
+    ERRNO error_code = common::E_OK;
+    return tsfile_reader_get_all_table_schemas_with_error(reader, size,
+                                                          &error_code);
+}
+
+TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
+                                                            uint32_t* size,
+                                                            ERRNO* error_code) {
+    if (size != nullptr) {
+        *size = 0;
+    }
+    if (error_code == nullptr) {
+        return nullptr;
+    }
+    *error_code = common::E_INVALID_ARG;
+    if (reader == nullptr || size == nullptr) {
+        return nullptr;
+    }
     auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto table_schemas = r->get_all_table_schemas();
+    std::vector<std::shared_ptr<storage::TableSchema>> table_schemas;
+    *error_code = r->get_all_table_schemas(table_schemas);
+    if (*error_code != common::E_OK || table_schemas.empty()) {
+        return nullptr;
+    }
     size_t table_num = table_schemas.size();
     TableSchema* ret =
         static_cast<TableSchema*>(malloc(sizeof(TableSchema) * table_num));
@@ -1594,7 +1616,11 @@ ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
     *out_devices = nullptr;
     *out_length = 0;
     auto* r = static_cast<storage::TsFileReader*>(reader);
-    const auto ids = r->get_all_devices();
+    std::vector<std::shared_ptr<storage::IDeviceID>> ids;
+    const int ret = r->get_all_devices(ids);
+    if (ret != common::E_OK) {
+        return ret;
+    }
     if (ids.empty()) {
         return common::E_OK;
     }

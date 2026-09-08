@@ -980,9 +980,22 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
  *
  * @return TableSchema, contains table and column info.
  * @note Caller should call free_table_schema and free to free the ptr.
+ * @note Use tsfile_reader_get_all_table_schemas_with_error to distinguish
+ *       metadata read failures from an empty schema list.
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
+
+/**
+ * @brief Gets all table schemas and reports metadata read failures.
+ * @return Schema array, or NULL when there are no tables or on error. Check
+ * error_code to distinguish these cases; size is zero on error.
+ * @note Caller must free each schema with free_table_schema, then free the
+ * array.
+ */
+TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
+                                                            uint32_t* size,
+                                                            ERRNO* error_code);
 
 /**
  * @brief Gets all timeseries schema in the tsfile.

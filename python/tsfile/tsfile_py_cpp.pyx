@@ -1240,11 +1240,13 @@ cdef object get_table_schema(TsFileReader reader, object table_name):
 
 cdef object get_all_table_schema(TsFileReader reader):
     cdef uint32_t table_num = 0
+    cdef ErrorCode error_code = 0
     cdef TableSchema * schemas
     cdef int i
 
     table_schemas = {}
-    schemas = tsfile_reader_get_all_table_schemas(reader, &table_num)
+    schemas = tsfile_reader_get_all_table_schemas_with_error(reader, &table_num, &error_code)
+    check_error(error_code)
     for i in range(table_num):
         schema_py = from_c_table_schema(schemas[i])
         table_schemas.update([(schema_py.get_table_name(), schema_py)])

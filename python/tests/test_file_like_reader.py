@@ -26,7 +26,14 @@ from typing import Optional
 
 import pytest
 
-from tsfile import TsFileReader
+from tsfile import (
+    Field,
+    RowRecord,
+    TSDataType,
+    TimeseriesSchema,
+    TsFileReader,
+    TsFileWriter,
+)
 from tsfile.exceptions import FileReadError
 
 RESOURCES = Path(__file__).parent / "resources"
@@ -239,5 +246,137 @@ def test_source_read_error_during_query_preserves_cursor_and_source():
             finally:
                 result.close()
 
+    assert source.tell() == 17
+    assert source.close_calls == 0
+
+
+@pytest.mark.parametrize("measurements", [["temperature"], ["temperature", "status"]])
+@pytest.mark.parametrize("stage", ["initial_block", "next_block"])
+def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, stage):
+    class FailingBytesIO(TrackingBytesIO):
+        read_calls = 0
+        fail_at = None
+        failed = False
+
+        def read(self, size=-1):
+            self.read_calls += 1
+            if self.fail_at is not None and self.read_calls >= self.fail_at:
+                self.failed = True
+                raise OSError("data block read failed")
+            return super().read(size)
+
+    path = tmp_path / "multiple_chunks.tsfile"
+    device = "root.sg.device"
+    with TsFileWriter(str(path)) as writer:
+        for name in measurements:
+            writer.register_timeseries(device, TimeseriesSchema(name, TSDataType.INT64))
+        for chunk in range(2):
+            for timestamp in range(chunk * 100, (chunk + 1) * 100):
+                writer.write_row_record(
+                    RowRecord(
+                        device,
+                        timestamp,
+                        [
+                            Field(name, timestamp, TSDataType.INT64)
+                            for name in measurements
+                        ],
+                    )
+                )
+            writer.flush()
+    data = path.read_bytes()
+
+    def query(reader):
+        return reader.query_timeseries(device, measurements, 0, (1 << 63) - 1)
+
+    # Locate the initial and subsequent block reads without fixing their call
+    # numbers: opening and metadata reads may change as the reader evolves.
+    baseline = FailingBytesIO(data)
+    with TsFileReader(baseline) as reader:
+        with query(reader) as result:
+            initial_block_read = baseline.read_calls
+            rows = 0
+            while result.next():
+                rows += 1
+    assert rows == 200
+    assert baseline.read_calls > initial_block_read
+
+    source = FailingBytesIO(data)
+    source.seek(17)
+    with TsFileReader(source) as reader:
+        if stage == "initial_block":
+            source.fail_at = initial_block_read
+            with pytest.raises(FileReadError):
+                with query(reader):
+                    pass
+        else:
+            with query(reader) as result:
+                source.fail_at = source.read_calls + 1
+                with pytest.raises(FileReadError):
+                    while result.next():
+                        pass
+                # A failed result must not become a successful EOF on retry.
+                source.fail_at = None
+                with pytest.raises(FileReadError):
+                    result.next()
+    assert source.failed
+    assert source.tell() == 17
+    assert source.close_calls == 0
+
+
+@pytest.mark.parametrize("method", ["get_all_devices", "get_all_table_schemas"])
+def test_metadata_read_failure_is_not_an_empty_result(method):
+    class FailingBytesIO(TrackingBytesIO):
+        fail_reads = False
+        failed = False
+
+        def read(self, size=-1):
+            if self.fail_reads:
+                self.failed = True
+                raise OSError("metadata read failed")
+            return super().read(size)
+
+    source = FailingBytesIO((RESOURCES / "simple_table_t1.tsfile").read_bytes())
+    source.seek(17)
+    with TsFileReader(source) as reader:
+        source.fail_reads = True
+        with pytest.raises(FileReadError):
+            getattr(reader, method)()
+    assert source.failed
+    assert source.tell() == 17
+    assert source.close_calls == 0
+
+
+def test_device_index_read_failure_does_not_return_partial_devices(tmp_path):
+    class FailingBytesIO(TrackingBytesIO):
+        fail_index_reads = False
+        index_reads = 0
+        failed = False
+
+        def read(self, size=-1):
+            if self.fail_index_reads:
+                self.index_reads += 1
+                if self.index_reads == 2:
+                    self.failed = True
+                    raise OSError("device index read failed")
+            return super().read(size)
+
+    # More than two default index nodes (256 children each), so a failure in
+    # the second node must not be hidden by a successful read of the third.
+    path = tmp_path / "device_index.tsfile"
+    with TsFileWriter(str(path)) as writer:
+        for index in range(513):
+            device = f"root.sg.d{index:04d}"
+            writer.register_timeseries(device, TimeseriesSchema("s", TSDataType.INT64))
+            writer.write_row_record(
+                RowRecord(device, 0, [Field("s", index, TSDataType.INT64)])
+            )
+    source = FailingBytesIO(path.read_bytes())
+    source.seek(17)
+    with TsFileReader(source) as reader:
+        assert len(reader.get_all_devices()) == 513
+        source.fail_index_reads = True
+        with pytest.raises(FileReadError):
+            reader.get_all_devices()
+    assert source.failed
     assert source.tell() == 17
     assert source.close_calls == 0

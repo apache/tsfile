@@ -214,6 +214,9 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
 
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
     /**
      * @brief get the timeseries schema by the device id and measurement name
      *
@@ -261,6 +264,10 @@ class TsFileReader {
      * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
+
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_all_table_schemas(
+        std::vector<std::shared_ptr<TableSchema>>& table_schemas);
 
    private:
     int open_source(std::unique_ptr<RandomAccessFile> read_file,

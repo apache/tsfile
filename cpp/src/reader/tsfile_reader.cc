@@ -419,21 +419,35 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
 }
 
 std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
-    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     std::vector<std::shared_ptr<IDeviceID>> device_ids;
-    if (tsfile_meta != nullptr) {
-        PageArena pa;
-        pa.init(512, MOD_TSFILE_READER);
-        for (auto entry : tsfile_meta->table_metadata_index_node_map_) {
-            auto index_node = entry.second;
-            get_all_devices(device_ids, index_node, pa);
-        }
-    }
+    get_all_devices(device_ids);
     return device_ids;
 }
 
 std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices() {
     return get_all_device_ids();
+}
+
+int TsFileReader::get_all_devices(
+    std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    device_ids.clear();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* tsfile_meta = nullptr;
+    int ret = tsfile_executor_->get_tsfile_meta(tsfile_meta);
+    if (ret != E_OK) {
+        return ret;
+    }
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+    for (const auto& entry : tsfile_meta->table_metadata_index_node_map_) {
+        if (RET_FAIL(get_all_devices(device_ids, entry.second, pa))) {
+            device_ids.clear();
+            return ret;
+        }
+    }
+    return E_OK;
 }
 
 int TsFileReader::get_all_devices(
@@ -471,10 +485,15 @@ int TsFileReader::get_all_devices(
 
                 if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                               ret_read_len))) {
+                    return ret;
+                } else if (ret_read_len != read_size) {
+                    return E_FILE_READ_ERR;
                 } else if (RET_FAIL(top_node->device_deserialize_from(
                                data_buf, read_size))) {
-                } else {
-                    ret = get_all_devices(device_ids, top_node, pa);
+                    return ret;
+                } else if (RET_FAIL(
+                               get_all_devices(device_ids, top_node, pa))) {
+                    return ret;
                 }
             }
         }
@@ -699,12 +718,26 @@ std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
 
 std::vector<std::shared_ptr<TableSchema>>
 TsFileReader::get_all_table_schemas() {
-    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
     std::vector<std::shared_ptr<TableSchema>> table_schemas;
+    get_all_table_schemas(table_schemas);
+    return table_schemas;
+}
+
+int TsFileReader::get_all_table_schemas(
+    std::vector<std::shared_ptr<TableSchema>>& table_schemas) {
+    table_schemas.clear();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* file_metadata = nullptr;
+    const int ret = tsfile_executor_->get_tsfile_meta(file_metadata);
+    if (ret != E_OK) {
+        return ret;
+    }
     for (const auto& table_schema : file_metadata->table_schemas_) {
         table_schemas.push_back(table_schema.second);
     }
-    return table_schemas;
+    return E_OK;
 }
 
 }  // namespace storage

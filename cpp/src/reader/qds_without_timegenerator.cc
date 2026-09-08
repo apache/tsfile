@@ -70,7 +70,9 @@ int QDSWithoutTimeGenerator::init_prepared(
     value_iters_.resize(1);
     row_record_ = new RowRecord(2);
     index_lookup_.insert({column_name, 1});
-    load_next_tsblock(0, true);
+    if (RET_FAIL(load_next_tsblock(0, true))) {
+        return ret;
+    }
     remaining_offset_ = ssi->get_row_offset();
     if (!table_aligned) {
         remaining_limit_ = ssi->get_row_limit();
@@ -161,7 +163,9 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     value_iters_.resize(path_count);
 
     for (size_t i = 0; i < path_count; i++) {
-        load_next_tsblock(i, true);
+        if (RET_FAIL(load_next_tsblock(i, true))) {
+            return ret;
+        }
         // Prefer the type carried by the value iterator, but fall back to the
         // timeseries-index type captured before load_next_tsblock() when no
         // TsBlock was produced (e.g. limit==0 skips every row, or the series is
@@ -222,6 +226,10 @@ void QDSWithoutTimeGenerator::close() {
 }
 
 int QDSWithoutTimeGenerator::next(bool& has_next) {
+    has_next = false;
+    if (read_error_ != E_OK) {
+        return read_error_;
+    }
     // For single path, apply offset/limit at row level.
     if (is_single_path_) {
         while (true) {
@@ -264,7 +272,10 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 heap_time_.insert(std::make_pair(timev, idx));
                 time_iters_[idx]->next();
             } else {
-                load_next_tsblock(idx, false);
+                read_error_ = load_next_tsblock(idx, false);
+                if (read_error_ != E_OK) {
+                    return read_error_;
+                }
             }
 
             if (skip_row) {
@@ -319,7 +330,11 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 // Pass merge_cursor (current time) as min_time_hint
                 // to help SSI skip chunks/pages that are entirely before
                 // the current merge position.
-                load_next_tsblock_with_hint(iter->second, false, time);
+                read_error_ =
+                    load_next_tsblock_with_hint(iter->second, false, time);
+                if (read_error_ != E_OK) {
+                    return read_error_;
+                }
             }
             std::multimap<int64_t, uint32_t>::iterator cur = iter;
             iter++;  // cppcheck-suppress postfixOperator

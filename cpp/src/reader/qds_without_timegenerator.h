@@ -44,7 +44,8 @@ class QDSWithoutTimeGenerator : public ResultSet {
           remaining_offset_(0),
           remaining_limit_(-1),
           owned_time_filter_(nullptr),
-          is_single_path_(false) {}
+          is_single_path_(false),
+          read_error_(common::E_OK) {}
     ~QDSWithoutTimeGenerator() { close(); }
     int init(TsFileIOReader* io_reader, QueryExpression* qe);
     int init(TsFileIOReader* io_reader, QueryExpression* qe, int offset,
@@ -80,6 +81,9 @@ class QDSWithoutTimeGenerator : public ResultSet {
     int remaining_limit_;
     Filter* owned_time_filter_;
     bool is_single_path_;
+    // A failed block load leaves the merge iterators unusable. Keep reporting
+    // the failure until the result is closed, including subsequent next calls.
+    int read_error_;
 };
 
 }  // namespace storage
