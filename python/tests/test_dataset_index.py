@@ -716,3 +716,231 @@ def test_runtime_lease_close_waits_for_query_lease(tmp_path):
         close_thread.join(timeout=2)
         assert query_done.is_set()
         assert close_done.is_set()
+
+
+def _write_tiny_mapped_index(path):
+    source = path.with_suffix(".tsfile")
+    source.write_bytes(b"T" * 4096)
+    write_index_atomic(
+        str(path), build_sections_from_dataframe(_synthetic_dataframe(str(source)))
+    )
+
+
+def _target_inode(path):
+    stat = os.stat(path)
+    return stat.st_dev, stat.st_ino
+
+
+def _target_inode_fd_count(path):
+    if not os.path.isdir("/proc/self/fd"):
+        pytest.skip("Linux /proc FD attribution is unavailable")
+    target = _target_inode(path)
+    count = 0
+    for fd in os.listdir("/proc/self/fd"):
+        try:
+            stat = os.stat(f"/proc/self/fd/{fd}")
+        except FileNotFoundError:
+            continue
+        if (stat.st_dev, stat.st_ino) == target:
+            count += 1
+    return count
+
+
+def _target_inode_vma_count(path):
+    if not os.path.isfile("/proc/self/maps"):
+        pytest.skip("Linux /proc VMA attribution is unavailable")
+    target_device, target_inode = _target_inode(path)
+    target_device = f"{os.major(target_device):02x}:{os.minor(target_device):02x}"
+    target_inode = str(target_inode)
+    count = 0
+    with open("/proc/self/maps", encoding="utf-8") as maps:
+        for line in maps:
+            fields = line.split(maxsplit=5)
+            if (
+                len(fields) >= 5
+                and fields[3] == target_device
+                and fields[4] == target_inode
+            ):
+                count += 1
+    return count
+
+
+def _assert_index_lookup(index):
+    table_id = index.find_table_ids("root")[0]
+    device_id = index.find_device_id(table_id, "root.")
+    column_id = index.find_column_id(table_id, "s1")
+    assert index.find_series_id(device_id, column_id) == 0
+
+
+def test_mapped_index_releases_original_fd_after_readonly_mmap(tmp_path):
+    output = tmp_path / "single.tsidx"
+    _write_tiny_mapped_index(output)
+    baseline_fds = _target_inode_fd_count(output)
+    baseline_vmas = _target_inode_vma_count(output)
+
+    index = MappedDatasetIndex(str(output))
+    try:
+        _assert_index_lookup(index)
+        assert _target_inode_fd_count(output) == baseline_fds + 1
+        assert index._file is None
+        assert _target_inode_vma_count(output) == baseline_vmas + 1
+    finally:
+        index.close()
+
+    assert _target_inode_fd_count(output) == baseline_fds
+    assert _target_inode_vma_count(output) == baseline_vmas
+
+
+def test_mapped_indices_keep_one_fd_and_live_vma_per_mapping(tmp_path):
+    paths = [tmp_path / f"index-{number}.tsidx" for number in range(16)]
+    for path in paths:
+        _write_tiny_mapped_index(path)
+
+    baseline_vmas = {path: _target_inode_vma_count(path) for path in paths}
+    indices = [MappedDatasetIndex(str(path)) for path in paths]
+    try:
+        for path, index in zip(paths, indices):
+            _assert_index_lookup(index)
+            assert _target_inode_fd_count(path) == 1
+            assert index._file is None
+            assert _target_inode_vma_count(path) == baseline_vmas[path] + 1
+    finally:
+        for index in indices:
+            index.close()
+        for index in indices:
+            index.close()
+
+    for path in paths:
+        assert _target_inode_fd_count(path) == 0
+        assert _target_inode_vma_count(path) == baseline_vmas[path]
+
+
+def test_mapped_index_mmap_failure_releases_target_resources(tmp_path, monkeypatch):
+    output = tmp_path / "mmap-failure.tsidx"
+    _write_tiny_mapped_index(output)
+    baseline_fds = _target_inode_fd_count(output)
+    baseline_vmas = _target_inode_vma_count(output)
+
+    def fail_mmap(*_args, **_kwargs):
+        raise OSError("injected mmap failure")
+
+    monkeypatch.setattr(index_module.mmap, "mmap", fail_mmap)
+    with pytest.raises(OSError, match="injected mmap failure"):
+        MappedDatasetIndex(str(output))
+
+    assert _target_inode_fd_count(output) == baseline_fds
+    assert _target_inode_vma_count(output) == baseline_vmas
+
+
+@pytest.mark.parametrize(
+    ("trust_index", "method_name"),
+    [(False, "_validate"), (True, "_map_entries_without_validation")],
+)
+def test_mapped_index_post_mmap_failure_releases_target_resources(
+    tmp_path, monkeypatch, trust_index, method_name
+):
+    output = tmp_path / f"post-mmap-{trust_index}.tsidx"
+    _write_tiny_mapped_index(output)
+    baseline_fds = _target_inode_fd_count(output)
+    baseline_vmas = _target_inode_vma_count(output)
+
+    def fail_after_mmap(*_args, **_kwargs):
+        raise RuntimeError("injected post-mmap failure")
+
+    monkeypatch.setattr(MappedDatasetIndex, method_name, fail_after_mmap)
+    with pytest.raises(RuntimeError, match="injected post-mmap failure"):
+        MappedDatasetIndex(str(output), trust_index=trust_index)
+
+    assert _target_inode_fd_count(output) == baseline_fds
+    assert _target_inode_vma_count(output) == baseline_vmas
+
+
+def test_mapped_index_close_is_idempotent_and_closes_later_resources_after_error():
+    events = []
+
+    class _View:
+        def release(self):
+            events.append("view.release")
+            raise RuntimeError("view release failed")
+
+    class _Mmap:
+        def close(self):
+            events.append("mmap.close")
+
+    class _File:
+        def close(self):
+            events.append("file.close")
+
+    index = MappedDatasetIndex.__new__(MappedDatasetIndex)
+    index._view = _View()
+    index._mmap = _Mmap()
+    index._file = _File()
+
+    with pytest.raises(RuntimeError, match="view release failed"):
+        index.close()
+    assert events == ["view.release", "mmap.close", "file.close"]
+    assert index._view is None
+    assert index._mmap is None
+    assert index._file is None
+    index.close()
+
+
+def _linux_proc_resource_attribution_available():
+    return (
+        hasattr(os, "fork")
+        and os.path.isdir("/proc/self/fd")
+        and os.path.isfile("/proc/self/maps")
+    )
+
+
+def test_linux_proc_resource_attribution_guard_requires_proc(monkeypatch):
+    monkeypatch.setattr(os, "fork", lambda: None, raising=False)
+    monkeypatch.setattr(os.path, "isdir", lambda path: path != "/proc/self/fd")
+    monkeypatch.setattr(os.path, "isfile", lambda path: True)
+    assert not _linux_proc_resource_attribution_available()
+
+
+def test_mapped_index_inherited_mapping_survives_child_double_close(tmp_path):
+    if not _linux_proc_resource_attribution_available():
+        pytest.skip("Linux fork /proc resource attribution is unavailable")
+    output = tmp_path / "fork.tsidx"
+    _write_tiny_mapped_index(output)
+    index = MappedDatasetIndex(str(output))
+    read_fd, write_fd = os.pipe()
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.close(read_fd)
+        try:
+            _assert_index_lookup(index)
+            assert index._file is None
+            assert _target_inode_fd_count(output) == 1
+            index.close()
+            index.close()
+            assert _target_inode_fd_count(output) == 0
+            assert _target_inode_vma_count(output) == 0
+            os.write(write_fd, b"OK")
+            status = 0
+        except BaseException as exc:
+            os.write(write_fd, f"{type(exc).__name__}: {exc}".encode())
+            status = 1
+        finally:
+            os.close(write_fd)
+        os._exit(status)
+
+    os.close(write_fd)
+    child_message = os.read(read_fd, 4096)
+    os.close(read_fd)
+    waited_pid, child_status = os.waitpid(child_pid, 0)
+    try:
+        assert waited_pid == child_pid
+        assert os.WIFEXITED(child_status), child_message.decode()
+        assert os.WEXITSTATUS(child_status) == 0, child_message.decode()
+        assert child_message == b"OK"
+        _assert_index_lookup(index)
+        assert _target_inode_fd_count(output) == 1
+    finally:
+        index.close()
+        index.close()
+
+    assert _target_inode_fd_count(output) == 0
+    assert _target_inode_vma_count(output) == 0
