@@ -175,6 +175,9 @@ storage::set_write_thread_count(4);
 
 ### 本地文件读取后端
 
+`LocalRandomAccessFile` 是 `RandomAccessFile` 的本地文件实现，
+对应的公开头文件为 `file/local_random_access_file.h`。
+
 Reader 可以为本地文件选择内存映射 I/O 或传统的定位读取路径。配置会在
 reader 打开文件时确定，因此修改配置不会影响已经打开的 reader。
 

@@ -479,8 +479,8 @@ TEST(IndependentFixtures, EmptyTreeAndInputFailuresHaveExactDiagnostics) {
     std::remove(unsupported.c_str());
 
     // Directories are special input paths, not TsFiles.  The check is made in
-    // ReadFile before magic parsing, so this diagnostic is stable across all
-    // read commands and does not leak parser output to stdout.
+    // LocalRandomAccessFile before magic parsing, so this diagnostic is stable
+    // across all read commands and does not leak parser output to stdout.
     for (const std::string& command : commands) {
         std::remove("tsfile_cli_input_error.csv");
         expect_cli_exact(input_args(command, "."), 2, "",

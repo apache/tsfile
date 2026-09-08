@@ -22,7 +22,7 @@
 #include <limits>
 
 #include "common/allocator/alloc_base.h"
-#include "file/read_file.h"
+#include "file/local_random_access_file.h"
 #include "reader/prepared_series.h"
 
 using namespace common;
@@ -30,7 +30,7 @@ using namespace common;
 namespace storage {
 int TsFileIOReader::init(const std::string& file_path) {
     int ret = E_OK;
-    ReadFile* local_file = new ReadFile;
+    LocalRandomAccessFile* local_file = new LocalRandomAccessFile;
     read_file_ = local_file;
     read_file_created_ = true;
     if (RET_FAIL(local_file->open(file_path))) {

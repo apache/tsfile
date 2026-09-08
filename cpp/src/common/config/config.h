@@ -25,7 +25,7 @@
 
 namespace common {
 
-/** Backend used by local ReadFile instances. */
+/** Backend used by local LocalRandomAccessFile instances. */
 enum class FileReadBackend : uint8_t {
     AUTO = 0,
     MMAP = 1,

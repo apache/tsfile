@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef FILE_READ_FILE_H
-#define FILE_READ_FILE_H
+#ifndef FILE_LOCAL_RANDOM_ACCESS_FILE_H
+#define FILE_LOCAL_RANDOM_ACCESS_FILE_H
 
 #include <stdint.h>
 
@@ -32,12 +32,12 @@
 
 namespace storage {
 
-class ReadFile : public RandomAccessFile {
+class LocalRandomAccessFile : public RandomAccessFile {
    public:
-    ReadFile();
-    ~ReadFile() override { destroy(); }
-    ReadFile(const ReadFile&) = delete;
-    ReadFile& operator=(const ReadFile&) = delete;
+    LocalRandomAccessFile();
+    ~LocalRandomAccessFile() override { destroy(); }
+    LocalRandomAccessFile(const LocalRandomAccessFile&) = delete;
+    LocalRandomAccessFile& operator=(const LocalRandomAccessFile&) = delete;
 
     void destroy() { close(); }
 
@@ -100,4 +100,4 @@ class ReadFile : public RandomAccessFile {
 };
 
 }  // end namespace storage
-#endif  // FILE_READ_FILE_H
+#endif  // FILE_LOCAL_RANDOM_ACCESS_FILE_H

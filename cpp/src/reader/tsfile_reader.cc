@@ -26,7 +26,7 @@
 #include "common/allocator/byte_stream.h"
 #include "common/schema.h"
 #include "common/tsfile_common.h"
-#include "file/read_file.h"
+#include "file/local_random_access_file.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
 
@@ -122,7 +122,8 @@ TsFileReader::TsFileReader()
 TsFileReader::~TsFileReader() { close(); }
 
 int TsFileReader::open(const std::string& file_path) {
-    std::unique_ptr<ReadFile> read_file(new ReadFile());
+    std::unique_ptr<LocalRandomAccessFile> read_file(
+        new LocalRandomAccessFile());
     int ret = E_OK;
     // Keep reader diagnostics in the caller's error channel.  Printing here
     // would leak an unstructured line to process stdout/stderr before the CLI

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "file/read_file.h"
+#include "file/local_random_access_file.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -59,7 +59,7 @@ uint64_t generation_hash(uint64_t size, int64_t mtime_ns) {
 }
 }  // namespace
 
-ReadFile::ReadFile()
+LocalRandomAccessFile::LocalRandomAccessFile()
     : file_path_(),
       fd_(-1),
       file_size_(-1),
@@ -79,7 +79,8 @@ ReadFile::ReadFile()
 {
 }
 
-int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
+int LocalRandomAccessFile::generation(uint64_t& size,
+                                      uint64_t& fingerprint) const {
     if (!is_opened()) {
         return E_FILE_READ_ERR;
     }
@@ -93,8 +94,8 @@ int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
     return get_file_generation_from_descriptor(size, fingerprint);
 }
 
-int ReadFile::get_file_generation_from_descriptor(uint64_t& size,
-                                                  uint64_t& fingerprint) const {
+int LocalRandomAccessFile::get_file_generation_from_descriptor(
+    uint64_t& size, uint64_t& fingerprint) const {
     int64_t mtime_ns = 0;
 #ifdef _WIN32
     if (fd_ < 0) {
@@ -139,7 +140,7 @@ int ReadFile::get_file_generation_from_descriptor(uint64_t& size,
     return E_OK;
 }
 
-void ReadFile::close() {
+void LocalRandomAccessFile::close() {
     unmap_file();
     if (fd_ >= 0) {
         ::close(fd_);
@@ -155,7 +156,7 @@ void ReadFile::close() {
 #endif
 }
 
-int ReadFile::open(const std::string& file_path) {
+int LocalRandomAccessFile::open(const std::string& file_path) {
     int ret = E_OK;
     close();
     file_path_ = file_path;
@@ -238,7 +239,7 @@ int ReadFile::open(const std::string& file_path) {
     return ret;
 }
 
-int ReadFile::get_file_size(int64_t& file_size) {
+int LocalRandomAccessFile::get_file_size(int64_t& file_size) {
 #ifdef _WIN32
     struct __stat64 s;
     if (_fstat64(fd_, &s) < 0) {
@@ -258,7 +259,7 @@ int ReadFile::get_file_size(int64_t& file_size) {
     return E_OK;
 }
 
-int ReadFile::map_file() {
+int LocalRandomAccessFile::map_file() {
     DBUG_EXECUTE_IF("read_file_mmap_fail", return E_FILE_MAP_ERR;);
     DBUG_EXECUTE_IF("read_file_mmap_unsupported", return E_NOT_SUPPORT;);
 
@@ -354,7 +355,7 @@ int ReadFile::map_file() {
     return E_OK;
 }
 
-void ReadFile::unmap_file() {
+void LocalRandomAccessFile::unmap_file() {
     if (mapped_data_ != nullptr) {
 #ifdef _WIN32
         UnmapViewOfFile(mapped_data_);
@@ -372,12 +373,12 @@ void ReadFile::unmap_file() {
     mapped_size_ = 0;
 }
 
-int ReadFile::check_file_magic() {
+int LocalRandomAccessFile::check_file_magic() {
     return validate_tsfile(*this, &file_version_);
 }
 
-int ReadFile::read(int64_t offset, char* buf, int32_t buf_size,
-                   int32_t& read_len) {
+int LocalRandomAccessFile::read(int64_t offset, char* buf, int32_t buf_size,
+                                int32_t& read_len) {
     read_len = 0;
     if (offset < 0 || buf_size < 0 || (buf == nullptr && buf_size > 0)) {
         return E_INVALID_ARG;
