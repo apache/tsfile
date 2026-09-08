@@ -47,6 +47,15 @@ from .index import (
     MappedDatasetIndex,
     file_fingerprint,
 )
+from .index_identity import (
+    AttestationMismatchError,
+    DataFileAttestation,
+    IndexAttestation,
+    data_manifest_identity,
+    file_generation_token,
+    validate_data_file_attestation,
+    validate_index_attestation,
+)
 from .metadata import (
     MODEL_TABLE,
     MODEL_TREE,
@@ -57,6 +66,10 @@ from .metadata import (
 from .merge import build_aligned_matrix
 
 _SERIES_DESCRIPTOR_CACHE_SIZE = 4096
+
+
+def _digest_u64(value: str) -> int:
+    return int.from_bytes(bytes.fromhex(value)[:8], byteorder="little")
 
 
 def _configured_non_negative_int(name, default):
@@ -240,6 +253,7 @@ class _ReaderSession:
         expected_size: int,
         fingerprint: int,
         validate_generation: bool = True,
+        data_file_attestation: Optional[DataFileAttestation] = None,
     ):
         self.file_id = file_id
         self.path = path
@@ -248,6 +262,12 @@ class _ReaderSession:
         self._validate_generation_enabled = validate_generation
         if validate_generation:
             self._validate_generation()
+        if data_file_attestation is not None:
+            if data_file_attestation.file_id != file_id:
+                raise AttestationMismatchError(
+                    "data-file attestation has the wrong file_id"
+                )
+            validate_data_file_attestation(path, data_file_attestation)
         self.reader = TsFileReaderPy(path)
         self.active_uses = 0
         self._closed = False
@@ -278,10 +298,12 @@ class ReaderSessionPool:
         index: MappedDatasetIndex,
         max_open_files: int,
         validate_generation: bool = True,
+        data_file_attestations: Optional[Mapping[int, DataFileAttestation]] = None,
     ):
         self._index = index
         self.max_open_files = max(1, int(max_open_files))
         self._validate_generation = bool(validate_generation)
+        self._data_file_attestations = dict(data_file_attestations or {})
         self._sessions: "OrderedDict[int, _ReaderSession]" = OrderedDict()
         self._condition = threading.Condition()
         self._closed = False
@@ -294,6 +316,7 @@ class ReaderSessionPool:
             record[2],
             record[3],
             validate_generation=self._validate_generation,
+            data_file_attestation=self._data_file_attestations.get(file_id),
         )
 
     @contextlib.contextmanager
@@ -378,9 +401,15 @@ class PreparedSeriesCache:
         index: MappedDatasetIndex,
         validate_references: bool = True,
         max_entries: Optional[int] = None,
+        mapped_index_identity: Optional[int] = None,
+        file_generation_tokens: Optional[Mapping[int, str]] = None,
     ):
         self._index = index
         self._validate_references = bool(validate_references)
+        self._mapped_index_identity = (
+            id(index) if mapped_index_identity is None else int(mapped_index_identity)
+        )
+        self._file_generation_tokens = dict(file_generation_tokens or {})
         maximum = _SERIES_DESCRIPTOR_CACHE_SIZE if max_entries is None else max_entries
         if int(maximum) < 0:
             raise ValueError("max_entries must be non-negative")
@@ -398,7 +427,7 @@ class PreparedSeriesCache:
         if self._validate_references and device_span[1] != file_id:
             raise ValueError("series locator points at another TsFile")
         return (
-            id(self._index),
+            self._mapped_index_identity,
             file_id,
             file_record[2],
             file_record[3],
@@ -464,7 +493,16 @@ class PreparedSeriesCache:
 
     @contextlib.contextmanager
     def acquire(self, file_id, locator_id, reader, time_owner=None):
-        key = (id(self._index), file_id, locator_id)
+        generation = self._file_generation_tokens.get(file_id)
+        if generation is None:
+            file_record = self._index.record(TSFILE_RECORD, file_id)
+            generation = (
+                self._mapped_index_identity,
+                file_id,
+                file_record[2],
+                file_record[3],
+            )
+        key = (generation, locator_id)
         entry = None
         owner_entry = None
         prepared_time_owner = time_owner
@@ -585,8 +623,27 @@ class DatasetRuntime:
         query_workers: Optional[int] = None,
         query_parallel_min_rows: Optional[int] = None,
         trust_index: bool = False,
+        index_attestation: Optional[IndexAttestation] = None,
+        data_file_attestations: Optional[Sequence[DataFileAttestation]] = None,
     ):
         self.trust_index = bool(trust_index)
+        has_index_attestation = index_attestation is not None
+        has_data_attestations = data_file_attestations is not None
+        if has_index_attestation != has_data_attestations:
+            raise ValueError(
+                "index_attestation and data_file_attestations must be provided together"
+            )
+        if has_index_attestation and not self.trust_index:
+            raise ValueError("attestations require trust_index=True")
+        if has_index_attestation and not isinstance(
+            index_attestation, IndexAttestation
+        ):
+            raise TypeError("index_attestation must be an IndexAttestation")
+        self.index_attestation = index_attestation
+        self.data_file_attestations = tuple(data_file_attestations or ())
+        self.data_file_attestations_by_id = {}
+        self.data_manifest_identity_sha256 = None
+        self.file_generation_tokens = {}
         maximum = (
             int(os.environ.get("TSFILE_DATAFRAME_MAX_OPEN_FILES", "16"))
             if max_open_files is None
@@ -627,7 +684,21 @@ class DatasetRuntime:
         self._torn_down = False
 
         try:
+            if self.index_attestation is not None:
+                validate_index_attestation(self._path, self.index_attestation)
             self.index = MappedDatasetIndex(self._path, trust_index=self.trust_index)
+            if self.index_attestation is not None:
+                expected_index_identity = (
+                    self.index_attestation.st_dev,
+                    self.index_attestation.st_ino,
+                    self.index_attestation.st_size,
+                    self.index_attestation.st_mtime_ns,
+                )
+                if self.index.identity != expected_index_identity:
+                    raise AttestationMismatchError(
+                        "mapped index does not match its attestation"
+                    )
+            self._configure_attestations()
             self._query_executor = (
                 ThreadPoolExecutor(
                     max_workers=self.query_workers,
@@ -640,11 +711,18 @@ class DatasetRuntime:
                 self.index,
                 self.max_open_files,
                 validate_generation=not self.trust_index,
+                data_file_attestations=self.data_file_attestations_by_id,
             )
             self.prepared = PreparedSeriesCache(
                 self.index,
                 validate_references=not self.trust_index,
                 max_entries=prepared_max_entries,
+                mapped_index_identity=(
+                    _digest_u64(self.index_attestation.index_identity_sha256)
+                    if self.index_attestation is not None
+                    else None
+                ),
+                file_generation_tokens=self.file_generation_tokens,
             )
             self.catalog = MappedDataFrameCatalog(self)
         except BaseException:
@@ -653,6 +731,60 @@ class DatasetRuntime:
             except BaseException:
                 pass
             raise
+
+    def _configure_attestations(self):
+        if self.index_attestation is None:
+            return
+        if any(
+            not isinstance(attestation, DataFileAttestation)
+            for attestation in self.data_file_attestations
+        ):
+            raise TypeError(
+                "data_file_attestations must contain DataFileAttestation values"
+            )
+        expected_file_ids = tuple(range(self.index.count(TSFILE_RECORD)))
+        actual_file_ids = tuple(
+            attestation.file_id for attestation in self.data_file_attestations
+        )
+        if actual_file_ids != expected_file_ids:
+            raise ValueError(
+                "data_file_attestations must cover file_id=0..N-1 in order"
+            )
+
+        for attestation in self.data_file_attestations:
+            record = self.index.record(TSFILE_RECORD, attestation.file_id)
+            indexed_path = os.path.realpath(
+                os.path.abspath(self.index.string(record[0]))
+            )
+            if (
+                indexed_path != attestation.canonical_path
+                or record[2] != attestation.st_size
+            ):
+                raise AttestationMismatchError(
+                    "data-file attestation does not match the Dataset Index"
+                )
+            expected_fingerprint = f"{record[3]:016x}"
+            if attestation.existing_index_fingerprint != expected_fingerprint:
+                raise AttestationMismatchError(
+                    "data-file fingerprint does not match the Dataset Index"
+                )
+
+        self.data_file_attestations_by_id = {
+            attestation.file_id: attestation
+            for attestation in self.data_file_attestations
+        }
+        self.data_manifest_identity_sha256 = data_manifest_identity(
+            self.data_file_attestations,
+            require_sorted=True,
+        )
+        self.file_generation_tokens = {
+            attestation.file_id: file_generation_token(
+                self.index_attestation.index_identity_sha256,
+                self.data_manifest_identity_sha256,
+                attestation,
+            )
+            for attestation in self.data_file_attestations
+        }
 
     def _close_resources(self):
         if self._resources_closed:
@@ -681,6 +813,12 @@ class DatasetRuntime:
             query_workers=self.query_workers,
             query_parallel_min_rows=self.query_parallel_min_rows,
             trust_index=self.trust_index,
+            index_attestation=self.index_attestation,
+            data_file_attestations=(
+                self.data_file_attestations
+                if self.index_attestation is not None
+                else None
+            ),
         )
 
     def _assert_current_process(self):

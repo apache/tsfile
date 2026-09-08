@@ -19,7 +19,32 @@
 """Dataset-style TsFile accessors."""
 
 from .dataframe import TsFileDataFrame
+from .index_identity import (
+    AttestationMismatchError,
+    DataFileAttestation,
+    IndexAttestation,
+    attest_data_file,
+    attest_index,
+    data_manifest_identity,
+    file_generation_token,
+    validate_data_file_attestation,
+    validate_index_attestation,
+)
 from .metadata import SeriesPath
 from .timeseries import AlignedTimeseries, Timeseries
 
-__all__ = ["TsFileDataFrame", "Timeseries", "AlignedTimeseries", "SeriesPath"]
+__all__ = [
+    "AlignedTimeseries",
+    "AttestationMismatchError",
+    "DataFileAttestation",
+    "IndexAttestation",
+    "SeriesPath",
+    "Timeseries",
+    "TsFileDataFrame",
+    "attest_data_file",
+    "attest_index",
+    "data_manifest_identity",
+    "file_generation_token",
+    "validate_data_file_attestation",
+    "validate_index_attestation",
+]

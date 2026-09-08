@@ -24,6 +24,8 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import tsfile.dataset.dataframe as dataframe_module
+import tsfile.dataset.index_identity as identity_module
 import tsfile.dataset.index as index_module
 import tsfile.dataset.runtime as runtime_module
 from tsfile import (
@@ -1746,3 +1748,203 @@ def test_prefork_timeseries_fails_fast_in_child_without_harming_parent(tmp_path)
         inherited_query_lease.close()
         assert parent_runtime._query_leases == 0
         series.close()
+
+
+def _build_runtime_attestations(paths):
+    canonical_paths = [os.path.realpath(os.fspath(path)) for path in paths]
+    with TsFileDataFrame(
+        canonical_paths,
+        show_progress=False,
+        use_index=True,
+    ) as dataframe:
+        index_path = dataframe._runtime.index.path
+
+    index_attestation = identity_module.attest_index(index_path)
+    with MappedDatasetIndex(index_path, trust_index=True) as mapped_index:
+        data_attestations = tuple(
+            identity_module.attest_data_file(
+                file_id,
+                mapped_index.string(record[0]),
+                existing_index_fingerprint=f"{record[3]:016x}",
+            )
+            for file_id in range(mapped_index.count(TSFILE_RECORD))
+            for record in (mapped_index.record(TSFILE_RECORD, file_id),)
+        )
+    return index_path, index_attestation, data_attestations
+
+
+def test_attested_trusted_dataframe_uses_manifest_without_directory_scan(
+    tmp_path, monkeypatch
+):
+    paths = [tmp_path / "part-0.tsfile", tmp_path / "part-1.tsfile"]
+    _write_runtime_file(paths[0], 0)
+    _write_runtime_file(paths[1], 10)
+    _, index_attestation, data_attestations = _build_runtime_attestations(paths)
+
+    def unexpected_scan(_paths):
+        raise AssertionError("attested workers must not expand or scan dataset paths")
+
+    monkeypatch.setattr(dataframe_module, "_expand_paths", unexpected_scan)
+    with TsFileDataFrame(
+        str(tmp_path),
+        show_progress=False,
+        trust_index=True,
+        index_attestation=index_attestation,
+        data_file_attestations=data_attestations,
+    ) as dataframe:
+        runtime = dataframe._runtime
+        assert tuple(dataframe._paths) == tuple(
+            item.canonical_path for item in data_attestations
+        )
+        assert runtime.data_manifest_identity_sha256 == (
+            identity_module.data_manifest_identity(
+                data_attestations,
+                require_sorted=True,
+            )
+        )
+        assert tuple(runtime.file_generation_tokens) == (0, 1)
+        assert runtime.prepared._mapped_index_identity == int.from_bytes(
+            bytes.fromhex(index_attestation.index_identity_sha256)[:8],
+            byteorder="little",
+        )
+        np.testing.assert_array_equal(
+            dataframe[0][:],
+            np.array([0.0, 1.0, 10.0, 11.0]),
+        )
+
+
+def test_attested_dataframe_requires_explicit_trust_and_complete_pair(tmp_path):
+    path = tmp_path / "part.tsfile"
+    _write_runtime_file(path, 0)
+    _, index_attestation, data_attestations = _build_runtime_attestations((path,))
+
+    with pytest.raises(ValueError, match="trust_index=True"):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            use_index=True,
+            index_attestation=index_attestation,
+            data_file_attestations=data_attestations,
+        )
+    with pytest.raises(ValueError, match="provided together"):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            index_attestation=index_attestation,
+        )
+    with pytest.raises(ValueError, match="provided together"):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            data_file_attestations=data_attestations,
+        )
+
+
+def test_attested_dataframe_rejects_incomplete_order_and_unbound_fingerprint(tmp_path):
+    paths = [tmp_path / "part-0.tsfile", tmp_path / "part-1.tsfile"]
+    _write_runtime_file(paths[0], 0)
+    _write_runtime_file(paths[1], 10)
+    _, index_attestation, data_attestations = _build_runtime_attestations(paths)
+
+    with pytest.raises(ValueError, match="file_id=0..N-1 in order"):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            index_attestation=index_attestation,
+            data_file_attestations=data_attestations[:1],
+        )
+    with pytest.raises(ValueError, match="file_id=0..N-1 in order"):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            index_attestation=index_attestation,
+            data_file_attestations=tuple(reversed(data_attestations)),
+        )
+
+    first = data_attestations[0]
+    unbound = identity_module.DataFileAttestation(
+        file_id=first.file_id,
+        canonical_path=first.canonical_path,
+        st_dev=first.st_dev,
+        st_ino=first.st_ino,
+        st_size=first.st_size,
+        st_mtime_ns=first.st_mtime_ns,
+    )
+    with pytest.raises(
+        identity_module.AttestationMismatchError,
+        match="fingerprint",
+    ):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            index_attestation=index_attestation,
+            data_file_attestations=(unbound, data_attestations[1]),
+        )
+
+
+def test_attested_index_mismatch_fails_before_mapping(tmp_path, monkeypatch):
+    path = tmp_path / "part.tsfile"
+    _write_runtime_file(path, 0)
+    index_path, index_attestation, data_attestations = _build_runtime_attestations(
+        (path,)
+    )
+    with open(index_path, "ab") as stream:
+        stream.write(b"x")
+
+    mapped_calls = 0
+
+    def forbidden_mapping(*_args, **_kwargs):
+        nonlocal mapped_calls
+        mapped_calls += 1
+        raise AssertionError("a mismatched index must not be mapped")
+
+    monkeypatch.setattr(runtime_module, "MappedDatasetIndex", forbidden_mapping)
+    with pytest.raises(
+        identity_module.AttestationMismatchError,
+        match="index stat",
+    ):
+        TsFileDataFrame(
+            str(tmp_path),
+            show_progress=False,
+            trust_index=True,
+            index_attestation=index_attestation,
+            data_file_attestations=data_attestations,
+        )
+    assert mapped_calls == 0
+
+
+def test_attested_data_mismatch_fails_before_native_reader_open(tmp_path, monkeypatch):
+    path = tmp_path / "part.tsfile"
+    _write_runtime_file(path, 0)
+    _, index_attestation, data_attestations = _build_runtime_attestations((path,))
+
+    replacement = tmp_path / "replacement.tsfile"
+    replacement.write_bytes(b"X" * path.stat().st_size)
+    os.replace(replacement, path)
+
+    native_open_calls = 0
+
+    def forbidden_reader(*_args, **_kwargs):
+        nonlocal native_open_calls
+        native_open_calls += 1
+        raise AssertionError("a mismatched data file must not reach the native reader")
+
+    monkeypatch.setattr(runtime_module, "TsFileReaderPy", forbidden_reader)
+    with TsFileDataFrame(
+        str(tmp_path),
+        show_progress=False,
+        trust_index=True,
+        index_attestation=index_attestation,
+        data_file_attestations=data_attestations,
+    ) as dataframe:
+        with pytest.raises(
+            identity_module.AttestationMismatchError,
+            match="data-file stat",
+        ):
+            dataframe[0][:]
+    assert native_open_calls == 0

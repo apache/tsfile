@@ -25,7 +25,7 @@ import heapq
 import os
 import sys
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -42,6 +42,9 @@ from .metadata import (
 )
 from .merge import build_aligned_matrix, merge_time_value_parts, merge_timestamp_parts
 from .timeseries import AlignedTimeseries, Timeseries
+
+if TYPE_CHECKING:
+    from .index_identity import DataFileAttestation, IndexAttestation
 
 DeviceKey = Tuple[str, tuple]
 SeriesRefKey = Tuple[int, int]
@@ -811,16 +814,41 @@ class TsFileDataFrame:
         show_progress: bool = True,
         use_index: bool = False,
         trust_index: Optional[bool] = None,
+        index_attestation: Optional["IndexAttestation"] = None,
+        data_file_attestations: Optional[Sequence["DataFileAttestation"]] = None,
     ):
         if not isinstance(use_index, bool):
             raise TypeError("use_index must be a bool")
         self._trust_index = _resolve_trust_index(trust_index)
-        self._paths = _expand_paths(paths)
+        has_index_attestation = index_attestation is not None
+        has_data_attestations = data_file_attestations is not None
+        if has_index_attestation != has_data_attestations:
+            raise ValueError(
+                "index_attestation and data_file_attestations must be provided together"
+            )
+        if has_index_attestation and not self._trust_index:
+            raise ValueError("dataset attestations require trust_index=True")
+
+        self._index_attestation = index_attestation
+        self._data_file_attestations = tuple(data_file_attestations or ())
+        if has_index_attestation:
+            from .index_identity import DataFileAttestation, IndexAttestation
+
+            if not isinstance(index_attestation, IndexAttestation):
+                raise TypeError("index_attestation must be an IndexAttestation")
+            if any(
+                not isinstance(item, DataFileAttestation)
+                for item in self._data_file_attestations
+            ):
+                raise TypeError(
+                    "data_file_attestations must contain DataFileAttestation values"
+                )
+            self._paths = [item.canonical_path for item in self._data_file_attestations]
+        else:
+            self._paths = _expand_paths(paths)
         self._show_progress = show_progress
-        # A trusted index is meaningful only when the persistent index path is
-        # used.  Make the safe, explicit fast-path convenient for callers by
-        # enabling it automatically instead of requiring two flags.
-        self._use_index = use_index or self._trust_index
+        # Trusted and attested indexes always use the persistent mmap path.
+        self._use_index = use_index or self._trust_index or has_index_attestation
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -843,6 +871,8 @@ class TsFileDataFrame:
         obj._show_progress = parent._show_progress
         obj._use_index = parent._use_index
         obj._trust_index = parent._trust_index
+        obj._index_attestation = parent._index_attestation
+        obj._data_file_attestations = parent._data_file_attestations
         obj._readers = parent._readers
         subset_refs = list(series_refs)
         obj._index = SimpleNamespace(
@@ -943,11 +973,18 @@ class TsFileDataFrame:
         )
         from .runtime import DatasetRuntime
 
-        index_path = index_path_for(self._paths)
+        index_path = (
+            self._index_attestation.canonical_index_path
+            if self._index_attestation is not None
+            else index_path_for(self._paths)
+        )
         if self._trust_index:
             if not os.path.isfile(index_path):
+                index_kind = (
+                    "Attested" if self._index_attestation is not None else "Trusted"
+                )
                 raise FileNotFoundError(
-                    f"Trusted Dataset Index not found: {index_path}"
+                    f"{index_kind} Dataset Index not found: {index_path}"
                 )
         elif not index_matches_paths(index_path, self._paths):
             lock_path = index_path + ".lock"
@@ -968,7 +1005,16 @@ class TsFileDataFrame:
                             reader.close()
                         self._readers.clear()
 
-        self._runtime = DatasetRuntime(index_path, trust_index=self._trust_index)
+        self._runtime = DatasetRuntime(
+            index_path,
+            trust_index=self._trust_index,
+            index_attestation=self._index_attestation,
+            data_file_attestations=(
+                self._data_file_attestations
+                if self._index_attestation is not None
+                else None
+            ),
+        )
         self._runtime_lease = self._runtime.lease()
         self._index = self._runtime.catalog
         if len(self._index.series) == 0:
