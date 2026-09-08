@@ -348,6 +348,30 @@ storage::set_write_thread_count(4);
 
 By default, parallel write is enabled when the machine has more than one CPU core, and the thread count is set to the number of hardware cores (capped at 64).
 
+### Local File Read Backend
+
+Readers can use memory-mapped I/O or the traditional positioned-read path for
+local files. The setting is captured when a reader opens a file, so changing it
+does not affect readers that are already open.
+
+```cpp
+#include "common/global.h"
+
+common::set_file_read_backend(common::FileReadBackend::PREAD);  // default
+common::set_file_read_backend(common::FileReadBackend::AUTO);   // prefer mmap, fall back
+common::set_file_read_backend(common::FileReadBackend::MMAP);   // require mmap
+```
+
+The C API exposes the same setting through
+`tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)`. `PREAD` is the default
+to preserve the historical reader behavior. `AUTO` prefers memory mapping for
+supported regular files and falls back to `pread` if mapping is not available.
+`MMAP` does not fall back: unsupported inputs return
+`RET_NOT_SUPPORT`, while mapping failures return `RET_FILE_MAP_ERR`. Files must
+not be modified or truncated while a mapped reader is open. After a mapping is
+created successfully, the original file descriptor is closed; the mapping
+itself remains valid until the reader closes.
+
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples` on how to use a C-style API to read and write data in a C environment. The examples will be built automatically when you run the main build command.

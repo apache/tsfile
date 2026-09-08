@@ -83,3 +83,24 @@ with TsFileReader("example.tsfile") as reader:
 ```
 
 Property value 不携带数据类型；保存数字或结构体时应使用明确、可跨语言的字节编码。
+
+## 本地文件读取后端
+
+Python reader 会在打开文件时继承进程级读取后端配置。默认使用 `PREAD`，
+以保持传统的定位读取行为；`MMAP` 要求必须使用内存映射，`AUTO` 则优先
+使用映射，并在映射不可用时回退到 `PREAD`。
+
+```python
+from tsfile import FileReadBackend, TsFileReader, set_file_read_backend
+
+set_file_read_backend(FileReadBackend.MMAP)
+with TsFileReader("example.tsfile") as reader:
+    ...
+
+# 配置字典入口具有相同效果。
+from tsfile import set_tsfile_config
+set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
+```
+
+该配置只影响之后打开的 reader。通过内存映射后端打开文件期间，请勿修改或
+截断该文件。

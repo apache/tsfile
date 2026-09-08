@@ -122,6 +122,9 @@ public class TsFileMetadata {
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
         int valueSize = ReadWriteForEncodingUtils.readVarInt(buffer);
+        if ("encryptKey".equals(key) && valueSize >= 0) {
+          EncryptUtils.validateSecondKeyStringLength(valueSize);
+        }
         byte[] value = null;
         if (valueSize >= 0) {
           value = new byte[valueSize];

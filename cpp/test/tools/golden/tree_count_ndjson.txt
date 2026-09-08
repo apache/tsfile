@@ -1,0 +1,11 @@
+{"model":"tree","object":"root.t3","column":"xx","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.t3","column":"xx_double","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.t3","column":"xx_text","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test.d1","column":"m1","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test.d1","column":"m2","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test.d1","column":"m3","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test.d1","column":"m4","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test.d1","column":"m5","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx_int","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx_text","category":"FIELD","row_count":"20","entity_count":null,"non_null_count":"20","null_count":"0","min_time":"0","max_time":"19","time_source":"statistics"}

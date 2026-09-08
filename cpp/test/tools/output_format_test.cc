@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <sstream>
+#include <streambuf>
 #include <vector>
 
 #include "common/db_common.h"
@@ -30,6 +31,21 @@
 using tsfile_cli::OutputFormat;
 using tsfile_cli::ParsedArgs;
 using tsfile_cli::RowWriter;
+
+namespace {
+
+class FailingStreamBuf : public std::streambuf {
+   protected:
+    std::streamsize xsputn(const char*, std::streamsize) override { return 0; }
+    int_type overflow(int_type) override { return traits_type::eof(); }
+};
+
+class FlushFailingStreamBuf : public std::stringbuf {
+   protected:
+    int sync() override { return -1; }
+};
+
+}  // namespace
 
 TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
     EXPECT_STREQ(tsfile_cli::error_code_message(common::E_TABLE_NOT_EXIST),
@@ -45,6 +61,8 @@ TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
                  "data is out of order");
     EXPECT_STREQ(tsfile_cli::error_code_message(common::E_DECODE_ERR),
                  "failed to decode data");
+    EXPECT_STREQ(tsfile_cli::error_code_message(common::E_FILE_MAP_ERR),
+                 "failed to memory-map file");
 }
 
 TEST(ErrorCodeMessageTest, UnknownCodeFallsBackToInternalError) {
@@ -53,11 +71,11 @@ TEST(ErrorCodeMessageTest, UnknownCodeFallsBackToInternalError) {
     EXPECT_GT(std::string(tsfile_cli::error_code_message(-1)).size(), 0u);
 }
 
-TEST(ResolveFormatTest, AutoUsesTableOnTtyTsvOtherwise) {
+TEST(ResolveFormatTest, AutoAlwaysUsesTable) {
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kAuto, true),
               OutputFormat::kTable);
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kAuto, false),
-              OutputFormat::kTsv);
+              OutputFormat::kTable);
     EXPECT_EQ(tsfile_cli::resolve_format(ParsedArgs::Format::kJson, true),
               OutputFormat::kJson);
 }
@@ -119,22 +137,42 @@ TEST(RowWriterTest, NoHeaderSuppressesHeader) {
 
 TEST(RowWriterTest, CsvEscapesCells) {
     std::ostringstream out;
-    RowWriter w(out, OutputFormat::kCsv, {"name"}, {common::STRING}, false);
-    w.write({"a,b"}, {false});
+    RowWriter w(out, OutputFormat::kCsv, {"name", "note"},
+                {common::STRING, common::STRING}, false);
+    w.write({"a,b", ""}, {false, true});
+    w.write({"", ""}, {false, false});
     w.finish();
-    EXPECT_EQ(out.str(), "name\n\"a,b\"\n");
+    EXPECT_EQ(out.str(), "name,note\n\"a,b\",\\N\n\"\",\"\"\n");
 }
 
-TEST(RowWriterTest, JsonNumbersUnquotedStringsQuotedNullEmitted) {
+TEST(RowWriterTest, JsonQuotesInt64TimestampAndLeavesSmallNumbersBare) {
     std::ostringstream out;
-    RowWriter w(out, OutputFormat::kJson, {"time", "name"},
-                {common::INT64, common::STRING}, false);
-    w.write({"5", "dev1"}, {false, false});
-    w.write({"6", ""}, {false, true});
+    RowWriter w(
+        out, OutputFormat::kJson, {"time", "small", "ts", "name"},
+        {common::INT64, common::INT32, common::TIMESTAMP, common::STRING},
+        false);
+    w.write({"5", "10", "1700000000000", "dev1"}, {false, false, false, false});
+    w.write({"6", "11", "1700000000001", ""}, {false, false, false, true});
     w.finish();
     EXPECT_EQ(out.str(),
-              "{\"time\":5,\"name\":\"dev1\"}\n"
-              "{\"time\":6,\"name\":null}\n");
+              "{\"time\":\"5\",\"small\":10,\"ts\":\"1700000000000\","
+              "\"name\":\"dev1\"}\n"
+              "{\"time\":\"6\",\"small\":11,\"ts\":\"1700000000001\","
+              "\"name\":null}\n");
+}
+
+TEST(RowWriterTest, BlobCellsUseLowercaseHexLexeme) {
+    std::ostringstream json;
+    RowWriter jw(json, OutputFormat::kJson, {"payload"}, {common::BLOB}, false);
+    jw.write({std::string("A\0z", 3)}, {false});
+    jw.finish();
+    EXPECT_EQ(json.str(), "{\"payload\":\"0x41007a\"}\n");
+
+    std::ostringstream csv;
+    RowWriter cw(csv, OutputFormat::kCsv, {"payload"}, {common::BLOB}, false);
+    cw.write({"hello"}, {false});
+    cw.finish();
+    EXPECT_EQ(csv.str(), "payload\n0x68656c6c6f\n");
 }
 
 TEST(RowWriterTest, TableAlignsColumns) {
@@ -148,4 +186,22 @@ TEST(RowWriterTest, TableAlignsColumns) {
               "name      type\n"
               "s1        INT64\n"
               "longname  BOOLEAN\n");
+}
+
+TEST(RowWriterTest, ReportsStreamWriteFailure) {
+    FailingStreamBuf buffer;
+    std::ostream out(&buffer);
+    RowWriter writer(out, OutputFormat::kCsv, {"name"}, {common::STRING},
+                     false);
+    EXPECT_FALSE(writer.write({"value"}, {false}));
+    EXPECT_FALSE(writer.finish());
+}
+
+TEST(RowWriterTest, ReportsFlushFailure) {
+    FlushFailingStreamBuf buffer;
+    std::ostream out(&buffer);
+    RowWriter writer(out, OutputFormat::kCsv, {"name"}, {common::STRING},
+                     false);
+    ASSERT_TRUE(writer.write({"value"}, {false}));
+    EXPECT_FALSE(writer.finish());
 }

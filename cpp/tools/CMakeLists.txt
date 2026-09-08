@@ -36,8 +36,21 @@ target_include_directories(tsfile_cli_obj PUBLIC
 # can compile these sources before the headers exist.
 add_dependencies(tsfile_cli_obj tsfile)
 
+execute_process(
+        COMMAND git rev-parse HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE TSFILE_CLI_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+if (NOT TSFILE_CLI_GIT_COMMIT)
+    set(TSFILE_CLI_GIT_COMMIT "unknown")
+endif ()
+string(TIMESTAMP TSFILE_CLI_BUILD_TIME "%Y-%m-%dT%H:%M:%SZ" UTC)
+
 target_compile_definitions(tsfile_cli_obj PRIVATE
-        TSFILE_CLI_VERSION="${TsFile_CPP_VERSION}")
+        TSFILE_CLI_VERSION="${TsFile_CPP_VERSION}"
+        TSFILE_CLI_COMMIT="${TSFILE_CLI_GIT_COMMIT}"
+        TSFILE_CLI_BUILT="${TSFILE_CLI_BUILD_TIME}")
 
 add_executable(tsfile_cli tools_main.cc $<TARGET_OBJECTS:tsfile_cli_obj>)
 target_include_directories(tsfile_cli PRIVATE ${CMAKE_SOURCE_DIR}/tools)

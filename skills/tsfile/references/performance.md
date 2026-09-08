@@ -44,6 +44,8 @@ than a universal setting.
 
 ## Encoding and Compression
 
+- Read `references/encoding-compression.md` for the current constructible
+  factory/type matrix. Do not infer factory support from enum membership.
 - Start from the implementation defaults for the target version and language.
 - Match encodings to observed data distribution only after measuring: monotonic
   integers, floating-point continuity, boolean/cardinality patterns, and text

@@ -279,9 +279,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                  dense_row_count_ >= 0)
                     ? remaining_offset_
                     : 0;
-            if (common::E_OK == ctx->init(device_query_task_, meas_names,
-                                          time_filter, pos_list, pa_,
-                                          ssi_offset, -1)) {
+            int ctx_ret = ctx->init(device_query_task_, meas_names, time_filter,
+                                    pos_list, pa_, ssi_offset, -1);
+            if (ctx_ret == common::E_OK) {
                 if (ssi_offset > 0) {
                     row_offset_pushed_to_ssi_ = true;
                     // init() prefetches the first TsBlock and may consume part
@@ -298,6 +298,10 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                 used_multi = true;
             } else {
                 delete ctx;
+                if (ctx_ret != common::E_NO_MORE_DATA &&
+                    ctx_ret != common::E_NOT_SUPPORT) {
+                    return ctx_ret;
+                }
             }
         }
     }
@@ -314,7 +318,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         if (used_multi && multi_names.count(measurement_name) > 0) {
             continue;
         }
-        construct_column_context(time_series_index, time_filter, 0, -1);
+        ret = construct_column_context(time_series_index, time_filter, 0, -1);
+        if (IS_FAIL(ret) && ret != common::E_NO_MORE_DATA) return ret;
     }
 
     if (field_column_contexts_.empty()) {
@@ -449,7 +454,12 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
                 continue;
             }
             int64_t time;
-            if (IS_FAIL(column_context.second->get_current_time(time))) {
+            int time_ret = column_context.second->get_current_time(time);
+            if (IS_FAIL(time_ret) && time_ret != common::E_NO_MORE_DATA) {
+                has_next = false;
+                return time_ret;
+            }
+            if (time_ret == common::E_NO_MORE_DATA) {
                 continue;
             }
             if (!next_time_set || time < next_time_) {
@@ -468,9 +478,8 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
 
         if (remaining_offset_ > 0) {
             for (auto* col_ctx : min_time_columns) {
-                if (IS_FAIL(advance_column(col_ctx))) {
-                    break;
-                }
+                int advance_ret = advance_column(col_ctx);
+                if (IS_FAIL(advance_ret)) return advance_ret;
             }
             remaining_offset_--;
             min_time_columns.clear();
@@ -482,9 +491,10 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
             continue;
         }
 
-        if (IS_FAIL(fill_measurements(min_time_columns))) {
+        int fill_ret = fill_measurements(min_time_columns);
+        if (IS_FAIL(fill_ret)) {
             has_next = false;
-            return common::E_OK;
+            return fill_ret;
         } else {
             next_time_set = false;
             next_time_ = -1;
@@ -720,7 +730,8 @@ int SingleDeviceTsBlockReader::fill_ids() {
 
 int SingleDeviceTsBlockReader::next(common::TsBlock*& ret_block) {
     bool next = false;
-    has_next(next);
+    int ret = has_next(next);
+    if (IS_FAIL(ret)) return ret;
     if (!next) {
         return common::E_NO_MORE_DATA;
     }
@@ -763,7 +774,8 @@ int SingleDeviceTsBlockReader::construct_column_context(
     int ret = common::E_OK;
     if (time_series_index == nullptr ||
         (!time_series_index->is_aligned() &&
-         time_series_index->get_chunk_meta_list()->empty())) {
+         (time_series_index->get_chunk_meta_list() == nullptr ||
+          time_series_index->get_chunk_meta_list()->empty()))) {
     } else if (time_series_index->is_aligned()) {
         const int effective_ssi_offset = dense_row_count_ >= 0 ? ssi_offset : 0;
         const int effective_ssi_limit = dense_row_count_ >= 0 ? ssi_limit : -1;

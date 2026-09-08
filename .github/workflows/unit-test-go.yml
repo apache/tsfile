@@ -1,0 +1,117 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Go unit tests
+
+on:
+  pull_request:
+    paths:
+      - "go/**"
+      - "cpp/src/cwrapper/**"
+      - ".github/workflows/unit-test-go.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "go/**"
+      - "cpp/src/cwrapper/**"
+
+jobs:
+  test:
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            toolchain: native
+          - os: macos-14
+            toolchain: native
+          # MinGW is the native cgo toolchain on Windows. Keep the runner
+          # pinned to the same image used by the repository's C++ MinGW job.
+          - os: windows-2022
+            toolchain: mingw
+          # Also verify that the C++ library produced by the MSVC toolchain
+          # can be consumed by Go/cgo through its Windows import library.
+          - os: windows-2022
+            toolchain: msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: go/go.mod
+      - name: Set up MinGW toolchain
+        if: matrix.toolchain == 'mingw'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+            make
+      - name: Set up MSVC developer environment
+        if: matrix.toolchain == 'msvc'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y uuid-dev
+      - name: Build native library
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            if [[ "${{ matrix.toolchain }}" == "msvc" ]]; then
+              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=msvc -Dbuild.type=Release -DskipTests -Dspotless.skip=true package
+            else
+              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -Dbuild.type=Release -DskipTests -Dspotless.skip=true package
+            fi
+          else
+            ./mvnw -P with-cpp -DskipTests -Dspotless.skip=true package
+          fi
+      - name: Expose Windows native libraries
+        if: matrix.toolchain == 'mingw'
+        shell: pwsh
+        run: |
+          $nativeLib = Join-Path $env:GITHUB_WORKSPACE "cpp\target\build\lib"
+          $nativeLib | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Added native library paths: $nativeLib and C:\mingw64\bin"
+      - name: Test Go API
+        if: matrix.toolchain != 'msvc'
+        working-directory: go
+        run: |
+          go vet ./...
+          go test ./...
+          go test -race ./...
+      - name: Verify MSVC native build
+        if: matrix.toolchain == 'msvc'
+        shell: pwsh
+        run: |
+          $nativeLib = Join-Path $env:GITHUB_WORKSPACE "cpp\target\build\lib"
+          $dll = Get-ChildItem -Path $nativeLib -Filter "tsfile.dll" -Recurse -ErrorAction SilentlyContinue
+          $importLib = Get-ChildItem -Path $nativeLib -Filter "tsfile.lib" -Recurse -ErrorAction SilentlyContinue
+          if (-not $dll) { throw "MSVC tsfile.dll was not produced under $nativeLib" }
+          if (-not $importLib) { throw "MSVC tsfile.lib import library was not produced under $nativeLib" }
+          Write-Host "Verified MSVC outputs: $($dll.FullName) and $($importLib.FullName)"

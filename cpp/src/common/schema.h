@@ -134,19 +134,27 @@ struct MeasurementSchema {
         encoding_ = static_cast<common::TSEncoding>(encoding);
         compression_type_ =
             static_cast<common::CompressionType>(compression_type);
-        uint32_t props_size;
+        uint32_t props_size = 0;
         if (ret == common::E_OK) {
             if (RET_FAIL(
                     common::SerializationUtil::read_ui32(props_size, in))) {
-                for (uint32_t i = 0; i < props_.size(); ++i) {
+            } else {
+                // Java MeasurementSchema.serializeTo writes an int count
+                // followed by count (key, value) string pairs.  Consuming
+                // them (rather than just the count) keeps the cursor
+                // aligned for whatever follows the schema in the stream
+                // (apache/tsfile#901: a schema carrying max_point_number
+                // props desynced the TsFileMeta bloom filter).  A corrupt
+                // count terminates on the first short read.
+                for (uint32_t i = 0; IS_SUCC(ret) && i < props_size; ++i) {
                     std::string key, value;
                     if (RET_FAIL(
                             common::SerializationUtil::read_str(key, in))) {
                     } else if (RET_FAIL(common::SerializationUtil::read_str(
                                    value, in))) {
+                    } else {
+                        props_.insert(std::make_pair(key, value));
                     }
-                    props_.insert(std::make_pair(key, value));
-                    if (IS_FAIL(ret)) break;
                 }
             }
         }

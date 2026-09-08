@@ -87,6 +87,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_COMPRESSION_LZMA2 = 9,
         TS_COMPRESSION_INVALID = 255
 
+    ctypedef enum TsFileReadBackend:
+        TSFILE_READ_BACKEND_AUTO = 0
+        TSFILE_READ_BACKEND_MMAP = 1
+        TSFILE_READ_BACKEND_PREAD = 2
+
     ctypedef enum ColumnCategory:
         TAG = 0,
         FIELD = 1,
@@ -222,6 +227,9 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         uint32_t time_metadata_length
 
     # Function Declarations
+
+    ErrorCode tsfile_set_file_read_backend(int32_t backend)
+    TsFileReadBackend tsfile_get_file_read_backend()
 
     ctypedef void * TagFilterHandle
 

@@ -21,6 +21,9 @@
 #include <climits>
 #include <limits>
 #include <memory>
+#include <regex>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -35,14 +38,116 @@
 namespace tsfile_cli {
 namespace {
 
+class CliFullMatchTagRegExp : public storage::TagFilter {
+   public:
+    CliFullMatchTagRegExp(int col_idx, const std::string& pattern)
+        : storage::TagFilter(col_idx, pattern), pattern_(pattern) {}
+
+    bool satisfyRow(std::vector<std::string*> segments) const override {
+        if (col_idx_ >= segments.size() || segments[col_idx_] == nullptr) {
+            return false;
+        }
+        return std::regex_match(*segments[col_idx_], pattern_);
+    }
+
+   private:
+    std::regex pattern_;
+};
 bool can_push_down_row_window(const ParsedArgs& args, long long offset,
                               long long limit) {
-    return !args.has_start && !args.has_end && offset <= INT_MAX &&
+    return !args.has_start && !args.has_end && offset == 0 &&
            (limit < 0 || limit <= INT_MAX);
 }
 
 int to_reader_row_bound(long long value) {
     return value < 0 ? -1 : static_cast<int>(value);
+}
+
+int resolve_table_fields(const ParsedArgs& args,
+                         const std::shared_ptr<storage::TableSchema>& schema,
+                         std::vector<std::string>& fields, std::ostream& err) {
+    if (!schema) {
+        err << "Error: table '" << args.table << "' does not exist\n";
+        return kExitUsage;
+    }
+    auto measurements = schema->get_measurement_schemas();
+    auto categories = schema->get_column_categories();
+    for (size_t i = 0; i < measurements.size(); ++i) {
+        if (i < categories.size() && measurements[i] &&
+            categories[i] == common::ColumnCategory::TAG) {
+            fields.push_back(measurements[i]->measurement_name_);
+        }
+    }
+    if (args.measurements.empty()) {
+        for (size_t i = 0; i < measurements.size(); ++i) {
+            if (i < categories.size() && measurements[i] &&
+                categories[i] == common::ColumnCategory::FIELD) {
+                fields.push_back(measurements[i]->measurement_name_);
+            }
+        }
+        return kExitOk;
+    }
+    for (const std::string& requested : args.measurements) {
+        const int index = schema->find_column_index(requested);
+        if (index < 0 || static_cast<size_t>(index) >= measurements.size() ||
+            !measurements[index]) {
+            err << "Error: FIELD '" << requested
+                << "' does not exist in table '" << schema->get_table_name()
+                << "'\n";
+            return kExitUsage;
+        }
+        const common::ColumnCategory category =
+            static_cast<size_t>(index) < categories.size()
+                ? categories[index]
+                : common::ColumnCategory::FIELD;
+        if (category != common::ColumnCategory::FIELD) {
+            err << "Error: column '" << requested
+                << "' is not a FIELD in table '" << schema->get_table_name()
+                << "'\n";
+            return kExitUsage;
+        }
+        fields.push_back(measurements[index]->measurement_name_);
+    }
+    return kExitOk;
+}
+
+int resolve_tree_paths(const ParsedArgs& args, storage::TsFileReader& reader,
+                       std::vector<std::string>& paths, std::ostream& err) {
+    auto devices = reader.get_all_device_ids();
+    std::shared_ptr<storage::IDeviceID> target_device;
+    for (const auto& device : devices) {
+        if (device && device->get_device_name() == args.device) {
+            target_device = device;
+            break;
+        }
+    }
+    if (!target_device) {
+        err << "Error: device '" << args.device << "' does not exist\n";
+        return kExitUsage;
+    }
+    std::vector<storage::MeasurementSchema> schemas;
+    if (reader.get_timeseries_schema(target_device, schemas) != common::E_OK) {
+        err << "Error: failed to read schema for device '" << args.device
+            << "'\n";
+        return kExitFile;
+    }
+    std::set<std::string> known;
+    for (const auto& schema : schemas) {
+        known.insert(schema.measurement_name_);
+    }
+    for (const std::string& requested : args.measurements) {
+        if (known.find(requested) == known.end()) {
+            err << "Error: FIELD '" << requested
+                << "' does not exist in device '" << args.device << "'\n";
+            return kExitUsage;
+        }
+    }
+    paths = collect_tree_query_paths(args, reader);
+    if (paths.empty()) {
+        err << "Error: device '" << args.device << "' has no FIELD columns\n";
+        return kExitUsage;
+    }
+    return kExitOk;
 }
 
 }  // namespace
@@ -60,55 +165,58 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
     }
 
     storage::TagFilterBuilder builder(schema.get());
-    storage::Filter* filter = nullptr;
-    switch (args.tag_filter_op) {
-        case ParsedArgs::TagFilterOp::kEq:
-            filter = builder.eq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kNeq:
-            filter = builder.neq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kLt:
-            filter = builder.lt(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kLteq:
-            filter =
-                builder.lteq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kGt:
-            filter = builder.gt(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kGteq:
-            filter =
-                builder.gteq(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kRegexp:
-            filter =
-                builder.reg_exp(args.tag_filter_column, args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kNotRegexp:
-            filter = builder.not_reg_exp(args.tag_filter_column,
-                                         args.tag_filter_value);
-            break;
-        case ParsedArgs::TagFilterOp::kBetween:
-            filter = builder.between_and(args.tag_filter_column,
-                                         args.tag_filter_value,
-                                         args.tag_filter_value2);
-            break;
-        case ParsedArgs::TagFilterOp::kNotBetween:
-            filter = builder.not_between_and(args.tag_filter_column,
-                                             args.tag_filter_value,
-                                             args.tag_filter_value2);
-            break;
-        case ParsedArgs::TagFilterOp::kNone:
-            break;
+    std::unique_ptr<storage::Filter> combined;
+    for (const ParsedArgs::TagFilterSpec& spec : args.tag_filters) {
+        storage::Filter* filter = nullptr;
+        switch (spec.op) {
+            case ParsedArgs::TagFilterOp::kEq:
+                filter = builder.eq(spec.column, spec.value);
+                break;
+            case ParsedArgs::TagFilterOp::kNeq:
+                filter = builder.neq(spec.column, spec.value);
+                break;
+            case ParsedArgs::TagFilterOp::kRegexp:
+                try {
+                    std::regex pattern(spec.value);
+                    (void)pattern;
+                } catch (const std::regex_error&) {
+                    err << "Error: invalid regular expression for TAG '"
+                        << spec.column << "'\n";
+                    return std::unique_ptr<storage::Filter>();
+                }
+                {
+                    int tag_order = schema->find_id_column_order(spec.column);
+                    if (tag_order >= 0) {
+                        filter = new CliFullMatchTagRegExp(tag_order + 1,
+                                                           spec.value);
+                    }
+                }
+                break;
+            case ParsedArgs::TagFilterOp::kIsNull:
+                filter = builder.is_null(spec.column);
+                break;
+            case ParsedArgs::TagFilterOp::kNotNull:
+                filter = builder.is_not_null(spec.column);
+                break;
+            case ParsedArgs::TagFilterOp::kNone:
+                break;
+        }
+        if (filter == nullptr) {
+            err << "Error: invalid tag filter column '" << spec.column
+                << "' for table " << table_name << "\n";
+            return std::unique_ptr<storage::Filter>();
+        }
+        if (!combined) {
+            combined.reset(filter);
+        } else if (args.tag_match == "any") {
+            combined.reset(storage::TagFilterBuilder::or_filter(
+                combined.release(), filter));
+        } else {
+            combined.reset(storage::TagFilterBuilder::and_filter(
+                combined.release(), filter));
+        }
     }
-    if (filter == nullptr) {
-        err << "Error: invalid tag filter column '" << args.tag_filter_column
-            << "' for table " << table_name << "\n";
-        return std::unique_ptr<storage::Filter>();
-    }
-    return std::unique_ptr<storage::Filter>(filter);
+    return combined;
 }
 
 std::vector<std::string> collect_tree_query_paths(
@@ -162,7 +270,7 @@ std::vector<std::string> collect_tree_query_paths(
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
-                  long long offset, long long limit) {
+                  long long offset, long long limit, long long* emitted_rows) {
     const int64_t start = args.has_start ? static_cast<int64_t>(args.start)
                                          : std::numeric_limits<int64_t>::min();
     const int64_t end = args.has_end ? static_cast<int64_t>(args.end)
@@ -181,24 +289,27 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                 err << "Error: no table found in file\n";
                 return kExitRuntime;
             }
+            if (schemas.size() != 1) {
+                err << "Error: head/cat requires -t/--table when the file "
+                       "contains multiple tables\n";
+                return kExitUsage;
+            }
             table_name = schemas[0]->get_table_name();
         }
-        std::vector<std::string> cols = args.measurements;
-        if (cols.empty()) {
-            auto ts = reader.get_table_schema(table_name);
-            if (ts) {
-                cols = ts->get_measurement_names();
-            }
+        auto table_schema = reader.get_table_schema(table_name);
+        std::vector<std::string> cols;
+        int selection_ret = resolve_table_fields(args, table_schema, cols, err);
+        if (selection_ret != kExitOk) {
+            return selection_ret;
         }
         tag_filter = build_table_tag_filter(args, reader, table_name, err);
         if (args.has_tag_filter && tag_filter == nullptr) {
             return kExitUsage;
         }
         if (push_down) {
-            qret = reader.queryByRow(table_name, cols,
-                                     to_reader_row_bound(offset),
-                                     to_reader_row_bound(limit), rs,
-                                     tag_filter.get());
+            qret = reader.queryByRow(
+                table_name, cols, to_reader_row_bound(offset),
+                to_reader_row_bound(limit), rs, tag_filter.get());
         } else {
             qret = reader.query(table_name, cols, start, end, rs,
                                 tag_filter.get());
@@ -208,10 +319,25 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             err << "Error: tag filter flags are only valid for table model\n";
             return kExitUsage;
         }
-        std::vector<std::string> paths = collect_tree_query_paths(args, reader);
-        if (paths.empty()) {
-            err << "Error: no time series found\n";
-            return kExitRuntime;
+        ParsedArgs effective_args = args;
+        if (effective_args.device.empty()) {
+            auto devices = reader.get_all_device_ids();
+            if (devices.empty() || !devices[0]) {
+                err << "Error: no device found in file\n";
+                return kExitRuntime;
+            }
+            if (devices.size() != 1) {
+                err << "Error: head/cat requires -d/--device when the file "
+                       "contains multiple devices\n";
+                return kExitUsage;
+            }
+            effective_args.device = devices[0]->get_device_name();
+        }
+        std::vector<std::string> paths;
+        int selection_ret =
+            resolve_tree_paths(effective_args, reader, paths, err);
+        if (selection_ret != kExitOk) {
+            return selection_ret;
         }
         if (push_down) {
             qret = reader.queryByRow(paths, to_reader_row_bound(offset),
@@ -226,18 +352,36 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
         if (rs != nullptr) {
             reader.destroy_query_data_set(rs);
         }
-        return kExitRuntime;
+        return kExitFile;
     }
 
-    int wret = push_down
-                   ? emit_result_set(rs, fmt, args.no_header, out)
-                   : emit_result_set(rs, fmt, args.no_header, out, offset,
-                                     limit);
+    // Stage the complete result before publishing it.  A decode/read failure
+    // can occur after the result header or earlier rows have been rendered;
+    // input failures must not leave a partial machine-readable stdout stream
+    // that callers could mistake for a complete result.  The final write is
+    // still checked separately so stdout errors remain runtime failures.
+    std::ostringstream staged;
+    int wret = push_down ? emit_result_set(rs, fmt, args.no_header, staged, 0,
+                                           -1, emitted_rows)
+                         : emit_result_set(rs, fmt, args.no_header, staged,
+                                           offset, limit, emitted_rows);
     reader.destroy_query_data_set(rs);
+    if (wret == common::E_OK) {
+        const std::string bytes = staged.str();
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        out.flush();
+        if (!out.good()) {
+            wret = common::E_FILE_WRITE_ERR;
+        }
+    }
+    if (wret == common::E_OUT_OF_RANGE) {
+        err << "Error: offset exceeds matched row count\n";
+        return kExitUsage;
+    }
     if (wret != 0) {
         err << "Error: failed to read rows: " << error_code_message(wret)
             << "\n";
-        return kExitRuntime;
+        return wret == common::E_FILE_WRITE_ERR ? kExitRuntime : kExitFile;
     }
     return kExitOk;
 }

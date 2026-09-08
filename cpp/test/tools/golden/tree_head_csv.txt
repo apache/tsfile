@@ -1,0 +1,3 @@
+time,root.test.d1.m1,root.test.d1.m2,root.test.d1.m3,root.test.d1.m4,root.test.d1.m5
+0,0,0.5,value_0,0,100.5
+1,1,1.5,value_1,2,101.5

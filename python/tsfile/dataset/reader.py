@@ -27,6 +27,7 @@ import numpy as np
 from ..constants import ColumnCategory, NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
+from ._arrow import arrow_column_to_float64
 from .metadata import (
     MetadataCatalog,
     MODEL_TABLE,
@@ -550,10 +551,9 @@ class TsFileSeriesReader:
                     if arrow_table.num_rows == 0:
                         continue
                     timestamp_parts.append(arrow_table.column("time").to_numpy())
-                    raw_values = arrow_table.column(field_name).to_numpy(
-                        zero_copy_only=False
+                    value_parts.append(
+                        arrow_column_to_float64(arrow_table.column(field_name))
                     )
-                    value_parts.append(np.asarray(raw_values, dtype=np.float64))
                     produced_this_call += arrow_table.num_rows
 
             if produced_this_call == 0:
@@ -723,10 +723,9 @@ class TsFileSeriesReader:
 
                 timestamp_parts.append(arrow_table.column("time").to_numpy())
                 for field_column in field_columns:
-                    raw_values = arrow_table.column(field_column).to_numpy()
                     try:
                         field_parts[field_column].append(
-                            np.asarray(raw_values, dtype=np.float64)
+                            arrow_column_to_float64(arrow_table.column(field_column))
                         )
                     except (TypeError, ValueError) as e:
                         raise TypeError(

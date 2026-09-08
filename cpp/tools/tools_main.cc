@@ -19,6 +19,9 @@
 
 #include <exception>
 #include <iostream>
+#ifndef _WIN32
+#include <csignal>
+#endif
 #include <string>
 #include <vector>
 
@@ -26,6 +29,9 @@
 #include "cli/run_cli.h"
 
 int main(int argc, char** argv) {
+#ifndef _WIN32
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
     std::vector<std::string> args(argv + 1, argv + argc);
     try {
         return tsfile_cli::run_cli(args, std::cout, std::cerr);

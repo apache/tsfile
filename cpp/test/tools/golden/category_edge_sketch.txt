@@ -1,0 +1,4 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_category_edge_golden.tsfile
+model: table
+---------------------------------- TsFile Sketch End ----------------------------------

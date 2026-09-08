@@ -45,6 +45,7 @@ from tsfile.schema import StringTimeseriesStatistic as StringTimeseriesStatistic
 from tsfile.schema import TextTimeseriesStatistic as TextTimeseriesStatisticPy
 from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
 from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
+from tsfile.constants import FileReadBackend as FileReadBackendPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char * context=NULL) except*:
@@ -866,9 +867,26 @@ cpdef object get_tsfile_config():
         "double_encoding_type_": TSEncodingPy(int(g_config_value_.double_encoding_type_)),
         "string_encoding_type_": TSEncodingPy(int(g_config_value_.string_encoding_type_)),
         "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
+        "file_read_backend_": FileReadBackendPy(int(tsfile_get_file_read_backend())),
     }
 
+cpdef object get_file_read_backend():
+    """Return the backend configured for subsequently opened readers."""
+    return FileReadBackendPy(int(tsfile_get_file_read_backend()))
+
+cpdef void set_file_read_backend(object backend):
+    """Select the backend used by subsequently opened readers."""
+    if not isinstance(backend, FileReadBackendPy):
+        raise TypeError(f"Unsupported FileReadBackend: {backend}")
+    check_error(tsfile_set_file_read_backend(<int32_t> int(backend.value)))
+
 cpdef void set_tsfile_config(dict new_config):
+    if "file_read_backend_" in new_config and not isinstance(
+        new_config["file_read_backend_"], FileReadBackendPy
+    ):
+        raise TypeError(
+            f"Unsupported FileReadBackend: {new_config['file_read_backend_']}"
+        )
     if "tsblock_mem_inc_step_size_" in new_config:
         _check_uint32(new_config["tsblock_mem_inc_step_size_"])
         g_config_value_.tsblock_max_memory_ = new_config["tsblock_mem_inc_step_size_"]
@@ -948,6 +966,8 @@ cpdef void set_tsfile_config(dict new_config):
             raise TypeError(f"Unsupported CompressionType: {new_config['default_compression_type_']}")
         code = set_global_compression(new_config["default_compression_type_"].value)
         check_error(code)
+    if "file_read_backend_" in new_config:
+        set_file_read_backend(new_config["file_read_backend_"])
 
 cdef _check_uint32(value):
     if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:

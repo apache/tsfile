@@ -159,15 +159,18 @@ class TSDataType(IntEnum):
 
 
 # Field data types exposed by the numeric dataset surface.  The dataset reads
-# value columns as float64 (missing values become NaN), so only numeric field
-# types are exposed.  This must stay in sync with the runtime read path in
+# value columns as float64 (missing values become NaN), so BOOLEAN and
+# TIMESTAMP fields are represented as 1.0/0.0 and float64 timestamps,
+# respectively.  This must stay in sync with the runtime read path in
 # python/tsfile/dataset/runtime.py, which decodes the same set from the index.
 NUMERIC_DATASET_FIELD_TYPES = frozenset(
     {
+        TSDataType.BOOLEAN,
         TSDataType.INT32,
         TSDataType.INT64,
         TSDataType.FLOAT,
         TSDataType.DOUBLE,
+        TSDataType.TIMESTAMP,
     }
 )
 
@@ -211,6 +214,15 @@ class Compressor(IntEnum):
     LZ4 = 7
     ZSTD = 8
     LZMA2 = 9
+
+
+@unique
+class FileReadBackend(IntEnum):
+    """Backend used by TsFile readers opened after configuration."""
+
+    AUTO = 0
+    MMAP = 1
+    PREAD = 2
 
 
 @unique

@@ -52,6 +52,20 @@ class CWrapperTest : public testing::Test {
     }
 };
 
+TEST_F(CWrapperTest, FileReadBackendConfigurationRoundTripsAndValidates) {
+    const TsFileReadBackend original = tsfile_get_file_read_backend();
+
+    EXPECT_EQ(tsfile_set_file_read_backend(TSFILE_READ_BACKEND_MMAP), RET_OK);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_MMAP);
+    EXPECT_EQ(tsfile_set_file_read_backend(TSFILE_READ_BACKEND_PREAD), RET_OK);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_PREAD);
+    EXPECT_EQ(tsfile_set_file_read_backend(99), RET_INVALID_ARG);
+    EXPECT_EQ(tsfile_set_file_read_backend(256), RET_INVALID_ARG);
+    EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_PREAD);
+
+    EXPECT_EQ(tsfile_set_file_read_backend(original), RET_OK);
+}
+
 TEST_F(CWrapperTest, CodecAndCompressionConfigIncludesJavaIds) {
     uint8_t old_int32_encoding = get_datatype_encoding(TS_DATATYPE_INT32);
     uint8_t old_int64_encoding = get_datatype_encoding(TS_DATATYPE_INT64);

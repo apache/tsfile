@@ -25,6 +25,13 @@
 
 namespace common {
 
+/** Backend used by local ReadFile instances. */
+enum class FileReadBackend : uint8_t {
+    AUTO = 0,
+    MMAP = 1,
+    PREAD = 2,
+};
+
 typedef struct ConfigValue {
     uint32_t
         tsblock_mem_inc_step_size_;  // tsblock memory self-increment step size

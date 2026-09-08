@@ -199,6 +199,13 @@ FORCE_INLINE bool get_parallel_write_enabled() {
     return g_config_value_.parallel_write_enabled_;
 }
 
+// Select the backend used by subsequently opened local files. Existing
+// ReadFile instances retain the backend selected when they were opened. This
+// setting deliberately lives outside exported ConfigValue so adding it does
+// not change that public data structure's ABI.
+extern int set_file_read_backend(FileReadBackend backend);
+extern FileReadBackend get_file_read_backend();
+
 // Size of the single global worker pool.  Rejects values outside [1, 64] with
 // E_INVALID_ARG, leaving the field untouched.  If the pool already exists
 // (libtsfile_init has run) it is rebuilt at the new size immediately; the

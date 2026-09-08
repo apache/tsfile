@@ -1,0 +1,11 @@
+{"model":"tree","object":"root.t3","column":"xx","category":"FIELD","data_type":"BOOLEAN","encoding":"PLAIN","compression":"LZ4"}
+{"model":"tree","object":"root.t3","column":"xx_double","category":"FIELD","data_type":"DOUBLE","encoding":"GORILLA","compression":"LZ4"}
+{"model":"tree","object":"root.t3","column":"xx_text","category":"FIELD","data_type":"TEXT","encoding":"PLAIN","compression":"LZ4"}
+{"model":"tree","object":"root.test.d1","column":"m1","category":"FIELD","data_type":"INT32","encoding":"TS_2DIFF","compression":"LZ4"}
+{"model":"tree","object":"root.test.d1","column":"m2","category":"FIELD","data_type":"DOUBLE","encoding":"GORILLA","compression":"LZ4"}
+{"model":"tree","object":"root.test.d1","column":"m3","category":"FIELD","data_type":"TEXT","encoding":"PLAIN","compression":"LZ4"}
+{"model":"tree","object":"root.test.d1","column":"m4","category":"FIELD","data_type":"INT32","encoding":"TS_2DIFF","compression":"LZ4"}
+{"model":"tree","object":"root.test.d1","column":"m5","category":"FIELD","data_type":"DOUBLE","encoding":"GORILLA","compression":"LZ4"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx","category":"FIELD","data_type":"FLOAT","encoding":"GORILLA","compression":"LZ4"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx_int","category":"FIELD","data_type":"INT64","encoding":"TS_2DIFF","compression":"LZ4"}
+{"model":"tree","object":"root.test2.d2.t2","column":"xxx_text","category":"FIELD","data_type":"TEXT","encoding":"PLAIN","compression":"LZ4"}

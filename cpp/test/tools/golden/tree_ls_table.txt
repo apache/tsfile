@@ -1,0 +1,4 @@
+model  object
+tree   root.t3
+tree   root.test.d1
+tree   root.test2.d2.t2

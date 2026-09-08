@@ -286,6 +286,8 @@ if (VENDORED_GTEST_INCLUDE_DIRS)
 endif ()
 if (BUILD_TOOLS)
     target_include_directories(TsFile_Test PRIVATE ${CMAKE_SOURCE_DIR}/tools)
+    target_compile_definitions(TsFile_Test PRIVATE
+            TSFILE_CPP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 endif ()
 if (APPLE AND NOT MSVC)
     target_compile_options(TsFile_Test PRIVATE -std=c++14)

@@ -1,0 +1,4 @@
+model,object,column,category,data_type,encoding,compression
+table,sensors,site,TAG,STRING,PLAIN,UNCOMPRESSED
+table,sensors,room,TAG,STRING,PLAIN,UNCOMPRESSED
+table,sensors,temp,FIELD,DOUBLE,PLAIN,UNCOMPRESSED

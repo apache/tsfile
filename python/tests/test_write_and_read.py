@@ -600,6 +600,75 @@ def test_tsfile_config():
             os.remove("test1.tsfile")
 
 
+def test_file_read_backend_configuration_and_query_equivalence():
+    from tsfile import (
+        FileReadBackend,
+        get_file_read_backend,
+        get_tsfile_config,
+        set_file_read_backend,
+        set_tsfile_config,
+    )
+
+    file_name = "read_backend_python_test.tsfile"
+    original_backend = get_file_read_backend()
+    table = TableSchema(
+        "backend_table",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
+        ],
+    )
+
+    def read_rows(backend):
+        set_file_read_backend(backend)
+        assert get_file_read_backend() == backend
+        rows = []
+        with TsFileReader(file_name) as reader:
+            with reader.query_table(
+                "backend_table", ["device", "value"], 0, 9
+            ) as result:
+                while result.next():
+                    rows.append(
+                        (
+                            result.get_value_by_name(TIME_COLUMN),
+                            result.get_value_by_name("device"),
+                            result.get_value_by_name("value"),
+                        )
+                    )
+        return rows
+
+    try:
+        if os.path.exists(file_name):
+            os.remove(file_name)
+        with TsFileTableWriter(file_name, table) as writer:
+            tablet = Tablet(
+                ["device", "value"],
+                [TSDataType.STRING, TSDataType.INT64],
+                10,
+            )
+            for i in range(10):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("device", i, f"device{i % 2}")
+                tablet.add_value_by_name("value", i, i * 10)
+            writer.write_table(tablet)
+
+        pread_rows = read_rows(FileReadBackend.PREAD)
+        mmap_rows = read_rows(FileReadBackend.MMAP)
+        assert mmap_rows == pread_rows
+        assert len(mmap_rows) == 10
+
+        set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
+        assert get_tsfile_config()["file_read_backend_"] == FileReadBackend.AUTO
+        with pytest.raises(TypeError):
+            set_file_read_backend(1)
+        with pytest.raises(TypeError):
+            set_tsfile_config({"file_read_backend_": "mmap"})
+    finally:
+        set_file_read_backend(original_backend)
+        if os.path.exists(file_name):
+            os.remove(file_name)
+
+
 def test_tsfile_to_df():
     table = TableSchema(
         "test_table",

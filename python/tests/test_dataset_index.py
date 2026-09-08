@@ -244,14 +244,14 @@ def _write_runtime_devices_file(path):
 def test_hot_construction_maps_index_without_opening_readers(tmp_path, monkeypatch):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False) as first:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as first:
         assert len(first) == 1
 
     def fail_legacy_scan(*_args, **_kwargs):
         raise AssertionError("hot construction must not build a legacy catalog")
 
     monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", fail_legacy_scan)
-    with TsFileDataFrame(str(source), show_progress=False) as second:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as second:
         assert len(second) == 1
         assert second._runtime.readers.open_count == 0
         series = second[0]
@@ -264,11 +264,58 @@ def test_hot_construction_maps_index_without_opening_readers(tmp_path, monkeypat
         series.close()
 
 
+def test_dataframe_does_not_use_or_create_index_by_default(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    index_path = index_module.index_path_for([str(source)])
+
+    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+        assert dataframe._runtime is None
+        assert len(dataframe) == 1
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        aligned = dataframe.loc[0:1, [0]]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([0, 1]))
+        np.testing.assert_array_equal(aligned.values, np.array([[0.0], [1.0]]))
+
+    assert not os.path.exists(index_path)
+
+
+def test_persistent_index_path_is_scoped_to_expanded_file_set(tmp_path, monkeypatch):
+    first = tmp_path / "part1.tsfile"
+    second = tmp_path / "part2.tsfile"
+    third = tmp_path / "part3.tsfile"
+    _write_runtime_file(first, 0)
+    _write_runtime_file(second, 2)
+    _write_runtime_file(third, 10)
+
+    first_set = [str(first), str(second)]
+    second_set = [str(first), str(third)]
+    first_index = index_module.index_path_for(first_set)
+    second_index = index_module.index_path_for(second_set)
+    assert first_index != second_index
+
+    with TsFileDataFrame(first_set, show_progress=False, use_index=True) as dataframe:
+        assert len(dataframe) == 1
+    with TsFileDataFrame(second_set, show_progress=False, use_index=True) as dataframe:
+        assert len(dataframe) == 1
+    assert os.path.exists(first_index)
+    assert os.path.exists(second_index)
+
+    def fail_legacy_scan(*_args, **_kwargs):
+        raise AssertionError("matching file-set index should be reused")
+
+    monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", fail_legacy_scan)
+    with TsFileDataFrame(first_set, show_progress=False, use_index=True) as dataframe:
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0, 2.0, 3.0]))
+    with TsFileDataFrame(second_set, show_progress=False, use_index=True) as dataframe:
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0, 10.0, 11.0]))
+
+
 def test_named_selection_reuses_bounded_runtime_descriptor(tmp_path, monkeypatch):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
 
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         name = str(dataframe.list_timeseries()[0])
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -307,7 +354,7 @@ def test_listed_series_path_resolves_directly_by_snapshot_series_id(
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
 
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         path = dataframe.list_timeseries()[0]
         assert isinstance(path, str)
         assert path.series_id == 0
@@ -346,9 +393,13 @@ def test_series_path_from_another_index_falls_back_to_its_name(tmp_path, monkeyp
     _write_runtime_file(first_source, 0)
     _write_runtime_file(second_source, 10)
 
-    with TsFileDataFrame(str(first_source), show_progress=False) as first:
+    with TsFileDataFrame(
+        str(first_source), show_progress=False, use_index=True
+    ) as first:
         foreign_path = first.list_timeseries()[0]
-        with TsFileDataFrame(str(second_source), show_progress=False) as second:
+        with TsFileDataFrame(
+            str(second_source), show_progress=False, use_index=True
+        ) as second:
             assert foreign_path._index_identity != second._runtime.index.identity
             find_device_calls = 0
             original_find_device = second._runtime.index.find_device_id
@@ -372,7 +423,7 @@ def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch
     _write_runtime_devices_file(source)
     monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 2)
 
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         names = [str(name) for name in dataframe.list_timeseries()]
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -403,7 +454,9 @@ def test_reader_pool_enforces_open_file_cap(tmp_path, monkeypatch):
     _write_runtime_file(first, 0)
     _write_runtime_file(second, 2)
     monkeypatch.setenv("TSFILE_DATAFRAME_MAX_OPEN_FILES", "1")
-    with TsFileDataFrame([str(first), str(second)], show_progress=False) as dataframe:
+    with TsFileDataFrame(
+        [str(first), str(second)], show_progress=False, use_index=True
+    ) as dataframe:
         series = dataframe[0]
         assert list(series[:]) == [0.0, 1.0, 2.0, 3.0]
         assert dataframe._runtime.readers.open_count == 1
@@ -481,7 +534,7 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
             )
         )
 
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
@@ -514,7 +567,7 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
 def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
@@ -534,7 +587,7 @@ def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
 def test_reader_session_revalidates_generation_when_reused(tmp_path):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         pool = dataframe._runtime.readers
         with pool.acquire(0):
             pass
@@ -548,7 +601,7 @@ def test_reader_session_revalidates_generation_when_reused(tmp_path):
 def test_runtime_lease_close_waits_for_query_lease(tmp_path):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False) as dataframe:
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
         runtime = DatasetRuntime(str(dataframe._runtime.index.path), query_workers=1)
         lease = runtime.lease()
         entered = threading.Event()

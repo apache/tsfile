@@ -1,0 +1,4 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_complex_tree_golden.tsfile
+model: tree
+---------------------------------- TsFile Sketch End ----------------------------------

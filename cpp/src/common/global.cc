@@ -19,6 +19,8 @@
 
 #include "global.h"
 
+#include <atomic>
+
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
 #endif
@@ -34,6 +36,13 @@
 #include "utils/util_define.h"  // strncasecmp -> _strnicmp shim on Windows
 
 namespace common {
+
+namespace {
+// Kept outside ConfigValue for ABI compatibility. It is also intentionally not
+// reset by init_common(), so callers may configure the first reader before
+// libtsfile_init().
+std::atomic<FileReadBackend> g_file_read_backend(FileReadBackend::PREAD);
+}  // namespace
 
 ColumnSchema g_time_column_schema;
 ConfigValue g_config_value_;
@@ -185,6 +194,22 @@ int set_thread_count(int32_t count) {
     return E_OK;
 }
 
+int set_file_read_backend(FileReadBackend backend) {
+    switch (backend) {
+        case FileReadBackend::AUTO:
+        case FileReadBackend::MMAP:
+        case FileReadBackend::PREAD:
+            g_file_read_backend.store(backend, std::memory_order_relaxed);
+            return E_OK;
+        default:
+            return E_INVALID_ARG;
+    }
+}
+
+FileReadBackend get_file_read_backend() {
+    return g_file_read_backend.load(std::memory_order_relaxed);
+}
+
 bool is_timestamp_column_name(const char* time_col_name) {
     // both "time" and "timestamp" refer to timestamp column.
     int32_t len = strlen(time_col_name);
@@ -263,5 +288,15 @@ void print_backtrace() {
 #endif
 
 std::map<std::string, InjectPoint> g_all_inject_points;
+
+#ifdef ENABLE_TEST
+void enable_injection(const char* inject_point_name, int count) {
+    g_all_inject_points[inject_point_name] = InjectPoint{count};
+}
+
+void disable_injection(const char* inject_point_name) {
+    g_all_inject_points.erase(inject_point_name);
+}
+#endif
 
 }  // namespace common

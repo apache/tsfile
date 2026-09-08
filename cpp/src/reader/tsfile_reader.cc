@@ -19,8 +19,13 @@
 #include "tsfile_reader.h"
 
 #include <stdexcept>
+#include <string>
+#include <vector>
 
+#include "common/allocator/byte_stream.h"
 #include "common/schema.h"
+#include "common/tsfile_common.h"
+#include "file/read_file.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
 
@@ -119,12 +124,17 @@ int TsFileReader::open(const std::string& file_path) {
     int ret = E_OK;
     read_file_ = new storage::ReadFile;
     tsfile_executor_ = new storage::TsFileExecutor();
+    // Keep reader diagnostics in the caller's error channel.  Printing here
+    // would leak an unstructured line to process stdout/stderr before the CLI
+    // can attach its stable error text and exit code.
     if (RET_FAIL(read_file_->open(file_path))) {
-        std::cout << "filed to open file " << ret << std::endl;
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
-        std::cout << "filed to init " << ret << std::endl;
     }
     return ret;
+}
+
+unsigned char TsFileReader::get_file_version() const {
+    return read_file_ == nullptr ? 0 : read_file_->file_version();
 }
 
 int TsFileReader::ensure_table_query_executor(int batch_size) {
@@ -446,6 +456,49 @@ int TsFileReader::get_all_devices(
     return ret;
 }
 
+namespace {
+
+// Encoding and compression are per-chunk properties that only live in the
+// chunk header on disk: ChunkMeta::deserialize_from() reads nothing but
+// offset_of_chunk_header_, so a ChunkMeta obtained from the metadata index
+// never carries them.  Read the header back from the file instead.
+int read_chunk_header_codec(ReadFile* read_file, int64_t chunk_header_offset,
+                            size_t measurement_name_len,
+                            common::TSEncoding& encoding,
+                            common::CompressionType& compression) {
+    if (read_file == nullptr || chunk_header_offset < 0) {
+        return E_INVALID_ARG;
+    }
+    // A serialized chunk header is chunk_type (1 byte) + the measurement name
+    // as a var_str (varint length + bytes) + data size as a var_uint + the
+    // data type, compressor and encoding (1 byte each).  Size the buffer from
+    // the name we already know so an unusually long measurement name cannot
+    // truncate the header and send us back to the defaults.
+    const size_t kMaxVarIntLen = 5;
+    std::vector<char> buf(1 + kMaxVarIntLen + measurement_name_len +
+                          kMaxVarIntLen + 3);
+    int32_t read_len = 0;
+    int ret = read_file->read(chunk_header_offset, buf.data(),
+                              static_cast<int32_t>(buf.size()), read_len);
+    if (ret != E_OK) {
+        return ret;
+    }
+    if (read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
+        return E_TSFILE_CORRUPTED;
+    }
+    common::ByteStream in;
+    in.wrap_from(buf.data(), read_len);
+    ChunkHeader chunk_header;
+    if (RET_FAIL(chunk_header.deserialize_from(in))) {
+        return ret;
+    }
+    encoding = chunk_header.encoding_type_;
+    compression = chunk_header.compression_type_;
+    return E_OK;
+}
+
+}  // namespace
+
 int TsFileReader::get_timeseries_schema(
     std::shared_ptr<IDeviceID> device_id,
     std::vector<MeasurementSchema>& result) {
@@ -471,12 +524,42 @@ int TsFileReader::get_timeseries_schema(
                     dt = aligned->value_ts_idx_->get_data_type();
                 }
             }
-            MeasurementSchema ms(
-                timeseries_index->get_measurement_name().to_std_string(), dt);
-            result.push_back(ms);
+            // Report the codecs stored in the final chunk. The two-argument
+            // MeasurementSchema constructor would otherwise use library
+            // defaults instead of the codecs in the chunk header.
+            const std::string measurement_name =
+                timeseries_index->get_measurement_name().to_std_string();
+            common::TSEncoding encoding = common::get_value_encoder(dt);
+            common::CompressionType compression =
+                common::get_default_compressor();
+
+            // Aligned indexes keep chunk metadata on the value index; the
+            // base get_chunk_meta_list() is intentionally null for them.
+            auto* chunk_meta_list = timeseries_index->get_chunk_meta_list();
+            if (chunk_meta_list == nullptr) {
+                chunk_meta_list = timeseries_index->get_value_chunk_meta_list();
+            }
+            if (chunk_meta_list != nullptr && !chunk_meta_list->empty() &&
+                chunk_meta_list->back() != nullptr) {
+                common::TSEncoding stored_encoding = common::INVALID_ENCODING;
+                common::CompressionType stored_compression =
+                    common::INVALID_COMPRESSION;
+                ret = read_chunk_header_codec(
+                    tsfile_executor_->get_tsfile_io_reader()->get_read_file(),
+                    chunk_meta_list->back()->offset_of_chunk_header_,
+                    measurement_name.size(), stored_encoding,
+                    stored_compression);
+                if (RET_FAIL(ret)) {
+                    break;
+                }
+                encoding = stored_encoding;
+                compression = stored_compression;
+            }
+
+            result.emplace_back(measurement_name, dt, encoding, compression);
         }
     }
-    return E_OK;
+    return ret;
 }
 
 int TsFileReader::get_timeseries_metadata_impl(
@@ -578,13 +661,12 @@ ResultSet* TsFileReader::read_timeseries(
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
     const std::string& table_name) {
     TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
-    MetaIndexNode* table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
-                                                        table_root))) {
-    } else if (IS_FAIL(file_metadata->get_table_schema(to_lower(table_name),
-                                                       table_schema))) {
-    }
+    // A schema-only table has no device-level metadata index.  Schema lookup
+    // must therefore be independent of the presence of data pages; callers
+    // can still construct an empty result set from the returned schema.
+    if (file_metadata == nullptr) return table_schema;
+    file_metadata->get_table_schema(to_lower(table_name), table_schema);
     return table_schema;
 }
 

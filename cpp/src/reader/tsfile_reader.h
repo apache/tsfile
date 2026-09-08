@@ -63,6 +63,7 @@ class TsFileReader {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
+    unsigned char get_file_version() const;
     /**
      * @brief query the tsfile by the query expression,Users can construct
      * their own query expressions to query tsfile

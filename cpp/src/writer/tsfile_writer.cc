@@ -19,12 +19,6 @@
 
 #include "tsfile_writer.h"
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 #include <chrono>
 #include <iomanip>
 
@@ -213,13 +207,22 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
             if (mname.empty()) {
                 continue;
             }
-            if (group->measurement_schema_map_.find(mname) !=
-                group->measurement_schema_map_.end()) {
-                continue;
+            auto schema_it = group->measurement_schema_map_.find(mname);
+            if (schema_it == group->measurement_schema_map_.end()) {
+                MeasurementSchema* ms =
+                    new MeasurementSchema(mname, cm->data_type_, cm->encoding_,
+                                          cm->compression_type_);
+                group->measurement_schema_map_.insert(
+                    std::make_pair(mname, ms));
+            } else {
+                // A series may have different codecs in different chunks.
+                // Appends must use the latest chunk's codec, not the first
+                // recovered chunk's stale settings.
+                MeasurementSchema* ms = schema_it->second;
+                ms->data_type_ = cm->data_type_;
+                ms->encoding_ = cm->encoding_;
+                ms->compression_type_ = cm->compression_type_;
             }
-            MeasurementSchema* ms = new MeasurementSchema(
-                mname, cm->data_type_, cm->encoding_, cm->compression_type_);
-            group->measurement_schema_map_.insert(std::make_pair(mname, ms));
         }
     }
 
@@ -264,23 +267,31 @@ int TsFileWriter::register_table(
     return E_OK;
 }
 
-bool check_file_exist(const std::string& file_path) {
-    return access(file_path.c_str(), F_OK) == 0;
-}
-
 int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
-    if (check_file_exist(file_path)) {
+    if (write_file_ != nullptr || io_writer_ != nullptr) {
         return E_ALREADY_EXIST;
     }
-    write_file_ = new WriteFile;
-    write_file_created_ = true;
-    io_writer_ = new TsFileIOWriter;
-    int ret = E_OK;
-    if (RET_FAIL(write_file_->create(file_path, flags, mode))) {
-    } else {
-        io_writer_->init(write_file_);
+
+    flags |= O_CREAT | O_EXCL;
+    auto* write_file = new WriteFile;
+    int ret = write_file->create(file_path, flags, mode);
+    if (ret != E_OK) {
+        delete write_file;
+        return ret;
     }
-    return ret;
+
+    auto* io_writer = new TsFileIOWriter;
+    ret = io_writer->init(write_file);
+    if (ret != E_OK) {
+        delete io_writer;
+        delete write_file;
+        return ret;
+    }
+
+    write_file_ = write_file;
+    write_file_created_ = true;
+    io_writer_ = io_writer;
+    return E_OK;
 }
 
 int TsFileWriter::open(const std::string& file_path) {
@@ -1351,17 +1362,26 @@ int TsFileWriter::write_table(Tablet& tablet) {
             common::g_thread_pool_ != nullptr) {
             std::vector<std::future<int>> futures;
             for (auto& ctx : device_ctxs) {
+                // Capture the per-iteration state by pointer value. This
+                // is equivalent in lifetime to the old by-reference
+                // captures (each referred to its own vector element, and
+                // device_ctxs outlives all future.get() calls below) — it
+                // only makes the per-task address explicit. Truly task-
+                // owned lifetime would require copying the task inputs.
+                auto* ctx_ptr = &ctx;
                 futures.push_back(common::g_thread_pool_->submit(
-                    [&write_time_segments, &ctx]() {
-                        return write_time_segments(ctx.tcw, ctx.segments,
-                                                   ctx.initial_page_points);
+                    [&write_time_segments, ctx_ptr]() {
+                        return write_time_segments(
+                            ctx_ptr->tcw, ctx_ptr->segments,
+                            ctx_ptr->initial_page_points);
                     }));
                 for (auto& vt : ctx.value_tasks) {
+                    auto* vt_ptr = &vt;
                     futures.push_back(common::g_thread_pool_->submit(
-                        [&write_value_segments, &vt, &ctx]() {
+                        [&write_value_segments, vt_ptr, ctx_ptr]() {
                             return write_value_segments(
-                                vt.vcw, vt.col_idx, ctx.segments,
-                                ctx.initial_page_points);
+                                vt_ptr->vcw, vt_ptr->col_idx, ctx_ptr->segments,
+                                ctx_ptr->initial_page_points);
                         }));
                 }
             }
@@ -1898,7 +1918,13 @@ int TsFileWriter::flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {
         MeasurementSchema* m_schema = ms_iter->second;
-        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr) {
+        // Skip registered-but-empty columns: a measurement that was never
+        // written in this window would otherwise be sealed as an EMPTY chunk
+        // (count=0, dataSize=0). Java readers (TsFileSequenceReader self-
+        // check) treat such a file as crashed. Mirror the aligned branch's
+        // hasData() check below.
+        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr &&
+            m_schema->chunk_writer_->hasData()) {
             ChunkWriter*& chunk_writer = m_schema->chunk_writer_;
             FLUSH_CHUNK_ENCODED(
                 chunk_writer, io_writer_, m_schema->measurement_name_,
@@ -1935,7 +1961,10 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {
         MeasurementSchema* m_schema = ms_iter->second;
-        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr) {
+        // See flush_chunk_group_encoded: never seal a registered-but-empty
+        // column as a count=0 chunk.
+        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr &&
+            m_schema->chunk_writer_->hasData()) {
             ChunkWriter*& chunk_writer = m_schema->chunk_writer_;
             FLUSH_CHUNK(chunk_writer, io_writer_, m_schema->measurement_name_,
                         m_schema->data_type_, m_schema->encoding_,

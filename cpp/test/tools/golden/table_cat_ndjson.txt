@@ -1,0 +1,2 @@
+{"time":"0","site":null,"rack":"rack0","sensor":"sensor0","reading":null}
+{"time":"1","site":"","rack":"rack1","sensor":"sensor1","reading":1.25}

@@ -24,11 +24,13 @@
 
 #include <cmath>
 #include <limits>
+#include <type_traits>
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
+#include "ts2diff_wire_format.h"
 
 #ifdef ENABLE_SIMD
 #include "simde/x86/avx2.h"
@@ -157,11 +159,27 @@ class TS2DIFFEncoder : public Encoder {
 
     void rebase_arr(int i) { delta_arr_[i] = delta_arr_[i] - delta_arr_min_; }
 
-    int cal_bit_width(T n) {
+    // Java-compatible bit width: the maximum width over the *rebased*
+    // deltas, not the width of (max - min).  When the raw deltas wrap
+    // (e.g. two adjacent raw IEEE bit patterns whose difference
+    // overflows the integer type), (max - min) itself wraps negative and
+    // its width would be 0, silently discarding every delta in the
+    // block.  Mirrors Java calculateBitWidthsForDeltaBlockBuffer, which
+    // widens each rebased delta individually.
+    int cal_bit_width_rebased() {
+        typedef typename std::make_unsigned<T>::type UT;
+        UT max_rebased = 0;
+        for (int i = 0; i < write_index_; i++) {
+            UT rebased = static_cast<UT>(delta_arr_[i]) -
+                         static_cast<UT>(delta_arr_min_);
+            if (rebased > max_rebased) {
+                max_rebased = rebased;
+            }
+        }
         int bit_width = 0;
-        while (n > 0) {
+        while (max_rebased > 0) {
             bit_width++;
-            n >>= 1;
+            max_rebased >>= 1;
         }
         return bit_width;
     }
@@ -208,10 +226,9 @@ class TS2DIFFEncoder : public Encoder {
         if (bits_in_accum > 0) {
             buf[pos++] = static_cast<uint8_t>(accum << (8 - bits_in_accum));
         }
-        // Surface write failures.  Previously the return code was dropped on
-        // the floor and flush() returned E_OK, then reset() wiped the
-        // encoder state — the on-disk page ended up missing its delta block
-        // but the caller thought the data was safe.
+        // The write status must reach the caller: a dropped return code
+        // here would let flush() report E_OK for a page whose delta block
+        // never made it to disk.
         return out_stream.write_buf(buf.data(), pos);
     }
 
@@ -284,10 +301,12 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream& out_stream) {
     if (write_index_ == -1) {
         return common::E_OK;
     }
+    // Bit width over the raw deltas rebased by min (computed before the
+    // array itself is rebased, so cal_bit_width_rebased subtracts min
+    // exactly once).
+    int bit_width = cal_bit_width_rebased();
     // Subtract the minimum value for each delta_arr_ item
     SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
-    // Calculate the bit length of each value to writer
-    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
     // Header writes can fail too (back-pressure / OOM on the underlying
     // stream); a half-written header followed by reset() leaves the page
     // corrupted but the caller thinking the data was flushed.
@@ -321,7 +340,10 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream& out_stream) {
         // layer can detect the page is poisoned.
         return pack_ret;
     }
-    reset();
+    // Base reset only (write_index_ = -1).  This is a virtual call so a
+    // float wrapper encoder can keep its page-scoped state (overflow
+    // flags, buffered blocks) alive across the per-block flush.
+    TS2DIFFEncoder<int32_t>::reset();
     return ret;
 }
 
@@ -331,10 +353,11 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
     if (write_index_ == -1) {
         return common::E_OK;
     }
+    // Bit width over the raw deltas rebased by min; see the int32
+    // specialization for ordering rationale.
+    int bit_width = cal_bit_width_rebased();
     // Subtract the minimum value for each delta_arr_ item
     SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
-    // Calculate the bit length of each value to writer
-    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
     // Header writes can fail too — see int32 specialization for rationale.
     if (RET_FAIL(
             common::SerializationUtil::write_i32(write_index_, out_stream))) {
@@ -363,7 +386,9 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
     } else if (pack_ret != common::E_OK) {
         return pack_ret;
     }
-    reset();  // 语义，writeIndex=-1;
+    // Base reset only — see the int32 specialization for the virtual-call
+    // rationale.
+    TS2DIFFEncoder<int64_t>::reset();
     return ret;
 }
 
@@ -551,20 +576,56 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
     return Encoder::encode_batch(values, count, out);
 }
 
+// Java Math.round(x) == floor(x + 0.5) (ties go towards +infinity),
+// unlike std::lround's ties-away-from-zero (-2.5 -> -2, not -3).
+// Math.round saturates at the integer limits; a plain static_cast of the
+// boundary value (e.g. INT64_MAX rounding up from below, or 2^63 passing
+// the <= (double)INT64_MAX gate) would be undefined behaviour, so the
+// conversion clamps first.  The 64-bit upper bound is compared against
+// 2^63 rather than (double)INT64_MAX, which rounds up to 2^63 and would
+// let exactly 2^63 through; the lower limits are exactly representable.
+template <typename Int>
+inline Int java_round(double x) {
+    const double r = std::floor(x + 0.5);
+    if (sizeof(Int) < 8) {
+        if (r > static_cast<double>(std::numeric_limits<Int>::max())) {
+            return std::numeric_limits<Int>::max();
+        }
+    } else if (r >= 9223372036854775808.0) {  // 2^63
+        return std::numeric_limits<Int>::max();
+    }
+    if (r < static_cast<double>(std::numeric_limits<Int>::min())) {
+        return std::numeric_limits<Int>::min();
+    }
+    return static_cast<Int>(r);
+}
+
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
    public:
-    FloatTS2DIFFEncoder() : max_point_number_(2), max_point_value_(100.0) {}
+    FloatTS2DIFFEncoder()
+        : max_point_number_(2),  // Java Ts2Diff builder default via
+                                 // initFromProps -> TSFileConfig
+                                 // floatPrecision
+          max_point_value_(100.0),
+          page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(float value, common::ByteStream& out_stream) {
         int32_t value_int = convert_float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
     }
+    // The wire value is self-describing; tests use this to exercise
+    // maxPointNumber = 0 pages (Form 1 leading 0x00 byte).
+    void set_max_point_number(int mpn) {
+        max_point_number_ = mpn;
+        max_point_value_ = mpn <= 0 ? 1.0 : std::pow(10.0, mpn);
+    }
     // PageWriter resets the encoder between pages without going through a
     // successful flush() (e.g. when the prior page was aborted).  The base
-    // reset() only clears write_index_; underflow_flags_ would otherwise
-    // leak the prior page's overflow markers into the next page's bitmap.
+    // reset() only clears write_index_; underflow_flags_ and the buffered
+    // complete blocks would otherwise leak into the next page.
     void reset() override {
         TS2DIFFEncoder<int32_t>::reset();
         underflow_flags_.clear();
+        page_blocks_.reset();
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -587,14 +648,14 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
                 return common::float_to_int(value);
             }
             underflow_flags_.push_back(0);
-            return static_cast<int32_t>(std::lround(value));
+            return java_round<int32_t>(value);
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::float_to_int(value);
         }
         underflow_flags_.push_back(1);
-        return static_cast<int32_t>(std::lround(scaled));
+        return java_round<int32_t>(scaled);
     }
     bool has_overflow() const {
         for (int8_t f : underflow_flags_) {
@@ -609,20 +670,38 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     int max_point_number_;
     double max_point_value_;
     std::vector<int8_t> underflow_flags_;
+    // Java FloatEncoder emits the page metadata (maxPointNumber and, when
+    // needed, the page-wide overflow bitmaps) once per page, followed by a
+    // continuous sequence of integer TS_2DIFF blocks.  The integer encoder
+    // flushes a complete 129-value block on its own whenever it fills, so
+    // those blocks are buffered here and emitted, metadata first, when the
+    // page is sealed.
+    common::ByteStream page_blocks_;
 };
 
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
    public:
-    DoubleTS2DIFFEncoder() : max_point_number_(2), max_point_value_(100.0) {}
+    DoubleTS2DIFFEncoder()
+        : max_point_number_(2),  // Java Ts2Diff builder default via
+                                 // initFromProps -> TSFileConfig
+                                 // floatPrecision
+          max_point_value_(100.0),
+          page_blocks_(1024, common::MOD_TS2DIFF_OBJ, false) {}
     int do_encode(double value, common::ByteStream& out_stream) {
         int64_t value_long = convert_double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
     }
+    // See FloatTS2DIFFEncoder::set_max_point_number.
+    void set_max_point_number(int mpn) {
+        max_point_number_ = mpn;
+        max_point_value_ = mpn <= 0 ? 1.0 : std::pow(10.0, mpn);
+    }
     // See FloatTS2DIFFEncoder::reset for rationale — the prior page's
-    // overflow markers must not bleed into the next.
+    // overflow markers and buffered blocks must not bleed into the next.
     void reset() override {
         TS2DIFFEncoder<int64_t>::reset();
         underflow_flags_.clear();
+        page_blocks_.reset();
     }
     int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
@@ -645,14 +724,14 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
                 return common::double_to_long(value);
             }
             underflow_flags_.push_back(0);
-            return static_cast<int64_t>(std::llround(value));
+            return java_round<int64_t>(value);
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::double_to_long(value);
         }
         underflow_flags_.push_back(1);
-        return static_cast<int64_t>(std::llround(scaled));
+        return java_round<int64_t>(scaled);
     }
     bool has_overflow() const {
         for (int8_t f : underflow_flags_) {
@@ -667,6 +746,9 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
     int max_point_number_;
     double max_point_value_;
     std::vector<int8_t> underflow_flags_;
+    // See FloatTS2DIFFEncoder::page_blocks_ — buffered complete integer
+    // blocks, emitted with the page metadata when the page is sealed.
+    common::ByteStream page_blocks_;
 };
 
 typedef TS2DIFFEncoder<int32_t> IntTS2DIFFEncoder;
@@ -776,66 +858,55 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
     return do_encode(value, out);
 }
 
-// Keep float/double TS_2DIFF page layout compatible with Java.
+// Java FloatEncoder page layout:
+//   no overflow:   [maxPointNumber varint][block 1][block 2]...
+//   overflow:      [overflow marker varint][pageValueCount varint]
+//                  [page-wide bitmap(s)][maxPointNumber varint][blocks...]
+// The integer encoder triggers flush() whenever a 129-value block fills
+// (write_index_ == block_size_, reachable only from do_encode); those
+// blocks are buffered in page_blocks_ without any float metadata.  When
+// the page is sealed (write_index_ < block_size_), the trailing block is
+// appended and the page metadata plus all buffered blocks are emitted.
 FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     int ret = common::E_OK;
-    if (write_index_ == -1) {
+    const bool block_flush = (write_index_ == block_size_);
+    if (block_flush) {
+        // Complete-block flush from do_encode: plain integer block, no
+        // float wrapper metadata, overflow flags must survive for the
+        // page-wide bitmap.
+        return TS2DIFFEncoder<int32_t>::flush(page_blocks_);
+    }
+    if (write_index_ != -1) {
+        // Page-seal flush: append the trailing (partial) integer block.
+        if (RET_FAIL(TS2DIFFEncoder<int32_t>::flush(page_blocks_))) {
+            return ret;
+        }
+    }
+    if (underflow_flags_.empty()) {
+        // Empty page (nothing encoded, no blocks buffered).
         return common::E_OK;
     }
-    const int num_values = write_index_ + 1;
-    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
-    if (RET_FAIL(common::SerializationUtil::write_var_uint(
-            static_cast<uint32_t>(max_point_number_), inner))) {
-        return ret;
-    }
-    SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
-    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
-    if (RET_FAIL(common::SerializationUtil::write_ui32(
-            static_cast<uint32_t>(write_index_), inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_ui32(
-            static_cast<uint32_t>(bit_width), inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_ui32(
-            static_cast<uint32_t>(delta_arr_min_), inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_ui32(
-            static_cast<uint32_t>(first_value_), inner))) {
-        return ret;
-    }
-    for (int i = 0; i < write_index_; i++) {
-        write_bits(delta_arr_[i], bit_width, inner);
-    }
-    flush_remaining(inner);
-
-    const bool overflow = has_overflow();
-    if (overflow) {
-        std::vector<uint8_t> underflow_bitmap(
+    const int num_values = static_cast<int>(underflow_flags_.size());
+    if (has_overflow()) {
+        std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        std::vector<uint8_t> overflow_bitmap(
+        std::vector<uint8_t> raw_bits_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        bool has_original_value_overflow = false;
+        bool has_raw_bits = false;
         for (int i = 0; i < num_values; i++) {
             int8_t f = underflow_flags_[static_cast<size_t>(i)];
             if (f == 1) {
-                underflow_bitmap[static_cast<size_t>(i / 8)] |=
+                scaled_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             } else if (f == -1) {
-                has_original_value_overflow = true;
-                overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                has_raw_bits = true;
+                raw_bits_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
-            2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
-            2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
-                                            : FLAG_SCALED_VALUE_OVERFLOW,
+                has_raw_bits ? ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW
+                             : ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }
@@ -844,81 +915,68 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
             return ret;
         }
         const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
-        if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
+        if (RET_FAIL(out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
             return ret;
         }
-        if (has_original_value_overflow &&
-            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
+        if (has_raw_bits &&
+            RET_FAIL(out_stream.write_buf(raw_bits_bitmap.data(), bm_len))) {
             return ret;
         }
     }
-    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+    // maxPointNumber sits right before the first integer block in every
+    // page layout.
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(max_point_number_), out_stream))) {
         return ret;
     }
-    // Defer encoder-state wipe until after every write into out_stream has
-    // committed.  An earlier reset() let a mid-flush failure leave
-    // write_index_ at -1, so the next flush() short-circuited at the top
-    // and the data was silently lost.
+    if (RET_FAIL(common::merge_byte_stream(out_stream, page_blocks_))) {
+        return ret;
+    }
+    // The encoder state is wiped only after every write into out_stream has
+    // committed: clearing it earlier would leave write_index_ at -1 after a
+    // mid-flush failure, so the retrying flush() would short-circuit at the
+    // top and drop the data.
     underflow_flags_.clear();
-    TS2DIFFEncoder<int32_t>::reset();
+    page_blocks_.reset();
     return ret;
 }
 
+// See FloatTS2DIFFEncoder::flush for the page layout rationale.
 FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     int ret = common::E_OK;
-    if (write_index_ == -1) {
+    const bool block_flush = (write_index_ == block_size_);
+    if (block_flush) {
+        return TS2DIFFEncoder<int64_t>::flush(page_blocks_);
+    }
+    if (write_index_ != -1) {
+        if (RET_FAIL(TS2DIFFEncoder<int64_t>::flush(page_blocks_))) {
+            return ret;
+        }
+    }
+    if (underflow_flags_.empty()) {
         return common::E_OK;
     }
-    const int num_values = write_index_ + 1;
-    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
-    if (RET_FAIL(common::SerializationUtil::write_var_uint(
-            static_cast<uint32_t>(max_point_number_), inner))) {
-        return ret;
-    }
-    SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
-    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
-    if (RET_FAIL(common::SerializationUtil::write_i32(write_index_, inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_i32(bit_width, inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_i64(delta_arr_min_, inner))) {
-        return ret;
-    }
-    if (RET_FAIL(common::SerializationUtil::write_i64(first_value_, inner))) {
-        return ret;
-    }
-    for (int i = 0; i < write_index_; i++) {
-        write_bits(delta_arr_[i], bit_width, inner);
-    }
-    flush_remaining(inner);
-
-    const bool overflow = has_overflow();
-    if (overflow) {
-        std::vector<uint8_t> underflow_bitmap(
+    const int num_values = static_cast<int>(underflow_flags_.size());
+    if (has_overflow()) {
+        std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        std::vector<uint8_t> overflow_bitmap(
+        std::vector<uint8_t> raw_bits_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
-        bool has_original_value_overflow = false;
+        bool has_raw_bits = false;
         for (int i = 0; i < num_values; i++) {
             int8_t f = underflow_flags_[static_cast<size_t>(i)];
             if (f == 1) {
-                underflow_bitmap[static_cast<size_t>(i / 8)] |=
+                scaled_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             } else if (f == -1) {
-                has_original_value_overflow = true;
-                overflow_bitmap[static_cast<size_t>(i / 8)] |=
+                has_raw_bits = true;
+                raw_bits_bitmap[static_cast<size_t>(i / 8)] |=
                     static_cast<uint8_t>(1u << (i % 8));
             }
         }
-        constexpr uint32_t FLAG_SCALED_VALUE_OVERFLOW =
-            2147483647u;  // Integer.MAX_VALUE
-        constexpr uint32_t FLAG_ORIGINAL_VALUE_OVERFLOW =
-            2147483646u;  // Integer.MAX_VALUE - 1
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
-                has_original_value_overflow ? FLAG_ORIGINAL_VALUE_OVERFLOW
-                                            : FLAG_SCALED_VALUE_OVERFLOW,
+                has_raw_bits ? ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW
+                             : ts2diff_java_detail::FLAG_SCALED_VALUE_OVERFLOW,
                 out_stream))) {
             return ret;
         }
@@ -927,22 +985,26 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
             return ret;
         }
         const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
-        if (RET_FAIL(out_stream.write_buf(underflow_bitmap.data(), bm_len))) {
+        if (RET_FAIL(out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
             return ret;
         }
-        if (has_original_value_overflow &&
-            RET_FAIL(out_stream.write_buf(overflow_bitmap.data(), bm_len))) {
+        if (has_raw_bits &&
+            RET_FAIL(out_stream.write_buf(raw_bits_bitmap.data(), bm_len))) {
             return ret;
         }
     }
-    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(max_point_number_), out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(common::merge_byte_stream(out_stream, page_blocks_))) {
         return ret;
     }
     // Same deferred-reset rationale as FloatTS2DIFFEncoder::flush — keeping
     // write_index_ live until every committed write succeeds avoids the
     // "next flush returns E_OK on lost data" pattern.
     underflow_flags_.clear();
-    TS2DIFFEncoder<int64_t>::reset();
+    page_blocks_.reset();
     return ret;
 }
 

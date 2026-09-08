@@ -87,3 +87,5 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                                                         object device_ids)
 cpdef public api object get_tsfile_config()
 cpdef public api void set_tsfile_config(dict new_config)
+cpdef public api object get_file_read_backend()
+cpdef public api void set_file_read_backend(object backend)

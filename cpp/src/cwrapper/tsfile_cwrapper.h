@@ -77,6 +77,13 @@ typedef enum {
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
+/** Local-file read backend selected for subsequently opened readers. */
+typedef enum {
+    TSFILE_READ_BACKEND_AUTO = 0,
+    TSFILE_READ_BACKEND_MMAP = 1,
+    TSFILE_READ_BACKEND_PREAD = 2
+} TsFileReadBackend;
+
 typedef enum column_category {
     TAG = 0,
     FIELD = 1,
@@ -274,6 +281,7 @@ typedef void* WriteFile;
 
 typedef void* TsFileReader;
 typedef void* TsFileWriter;
+typedef void* TsFileGenericWriter;
 
 // just reuse Tablet from c++
 typedef void* Tablet;
@@ -332,6 +340,22 @@ typedef struct arrow_array {
 
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
+
+/**
+ * @brief Select the backend used by subsequently opened local TsFile readers.
+ *
+ * AUTO prefers memory mapping and falls back to pread, MMAP requires memory
+ * mapping, and PREAD preserves the traditional positioned-read path. Existing
+ * readers are unaffected.
+ *
+ * @param backend One of TSFILE_READ_BACKEND_AUTO, TSFILE_READ_BACKEND_MMAP,
+ * or TSFILE_READ_BACKEND_PREAD.
+ * @return RET_OK on success, or RET_INVALID_ARG for any other value.
+ */
+ERRNO tsfile_set_file_read_backend(int32_t backend);
+
+/** @return The backend configured for subsequently opened readers. */
+TsFileReadBackend tsfile_get_file_read_backend(void);
 
 /**
  * @brief Get the encoding type for global time column
@@ -732,6 +756,22 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
 ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
                                      uint32_t column_num, Timestamp start_time,
                                      Timestamp end_time, ERRNO* err_code);
+
+/**
+ * @brief Query exact tree-model full paths within a time range.
+ *
+ * @param reader [in] Valid reader handle.
+ * @param paths [in] Array of full paths such as root.device.measurement.
+ * @param path_num [in] Number of paths; must be greater than zero.
+ * @param start_time [in] Inclusive start timestamp.
+ * @param end_time [in] Inclusive end timestamp.
+ * @param err_code [out] Error code; must not be NULL.
+ * @return ResultSet handle on success, or NULL on failure.
+ */
+ResultSet tsfile_reader_query_tree(TsFileReader reader, char** paths,
+                                   uint32_t path_num, Timestamp start_time,
+                                   Timestamp end_time, ERRNO* err_code);
+
 /**
  * @brief Query time series (tree model) by row with offset/limit.
  *
@@ -841,11 +881,10 @@ char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char* column_name);
 
 /**
- * @brief Gets value from current row by column_index[0 <= column_index <<
- * column_num] (generic types).
+ * @brief Gets a value from the current row by 1-based column index.
  *
  * @param result_set [in] Valid ResultSet with active row (after next()=true).
- * @param column_name [in] Existing column index in result schema.
+ * @param column_index [in] Existing column index in [1, column_num].
  * @return type-value, return type-specific value.
  * @note Generated for: bool, int32_t, int64_t, float, double
  */
@@ -881,7 +920,7 @@ bool tsfile_result_set_is_null_by_name(ResultSet result_set,
 /**
  * @brief Checks if the current row's column value is NULL by column index.
  *
- * @param column_index [in] Column position (0 ≤ index < result_column_count).
+ * @param column_index [in] Column position in [1, result_column_count].
  * @return bool - true: Value is NULL or index out of range, false: Valid value.
  */
 bool tsfile_result_set_is_null_by_index(ResultSet result_set,
@@ -903,7 +942,7 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
 /**
  * @brief Gets column name by index from metadata.
  *
- * @param column_index [in] Column position (0 ≤ index < column_num).
+ * @param column_index [in] Column position in [1, column_num].
  * @return const char* Read-only string. NULL if index invalid.
  */
 char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
@@ -1078,6 +1117,117 @@ void free_timeseries_schema(TimeseriesSchema schema);
 void free_table_schema(TableSchema schema);
 void free_column_schema(ColumnSchema schema);
 void free_write_file(WriteFile* write_file);
+
+// ---------- Generic Writer API ----------
+//
+// Safety rules:
+// - No C++ exception (e.g. std::bad_alloc) is allowed to cross this API:
+//   allocation failures are reported as RET_OOM, and null/invalid
+//   arguments as RET_INVALID_ARG (handle constructors additionally return
+//   NULL).
+// - tsfile_generic_writer_close(NULL) is a no-op returning RET_OK.
+//
+// Ownership and lifetime rules:
+// - tsfile_generic_writer_new returns an owning handle. The caller owns the
+//   returned handle until it is passed to tsfile_generic_writer_close, which
+//   flushes, closes and deletes it.
+// - Input schemas (TableSchema, TimeseriesSchema, DeviceSchema) and strings
+//   (pathname, target_name, device_id, keys) are borrowed for the duration of
+//   the call only; the writer does not retain them after the call returns.
+// - Tablets are not consumed by the writer: after
+//   tsfile_generic_writer_write_tree_tablet or
+//   tsfile_generic_writer_write_table_tablet the tablet remains caller-owned
+//   and must be freed by the caller (e.g. via free_tablet).
+
+/**
+ * @brief Create a new generic writer.
+ * @param pathname file path of the TsFile to write; must not be NULL
+ * @param memory_threshold in-memory buffer threshold in bytes
+ * @param err_code out parameter receiving the error code; may be NULL, in
+ *        which case the call fails silently with a NULL return
+ * @return an owning handle to the new writer, or NULL on failure with
+ *         *err_code set (unless err_code was NULL)
+ */
+TsFileGenericWriter tsfile_generic_writer_new(const char* pathname,
+                                              uint64_t memory_threshold,
+                                              ERRNO* err_code);
+
+/**
+ * @brief Create a tablet whose rows target the named table.
+ * @param target_name name of the target table (borrowed); NULL selects the
+ *        table-less constructor
+ * @param column_name_list column names (borrowed); must not be NULL when
+ *        column_num > 0, and no entry may be NULL
+ * @param data_types data types of the columns (borrowed); must not be NULL
+ *        when column_num > 0
+ * @param column_num number of columns; must be >= 0
+ * @param max_rows maximum number of rows the tablet can hold; must satisfy
+ *        0 < max_rows < 2^30
+ * @return a caller-owned tablet, or NULL if the arguments are invalid or
+ *         memory allocation fails
+ */
+Tablet tablet_new_with_target_name(const char* target_name,
+                                   char** column_name_list,
+                                   TSDataType* data_types, int column_num,
+                                   int max_rows);
+
+/**
+ * @brief Register a table schema with the writer. The schema is borrowed for
+ *        the duration of the call.
+ */
+ERRNO tsfile_generic_writer_register_table(TsFileGenericWriter writer,
+                                           TableSchema* schema);
+
+/**
+ * @brief Register a timeseries schema for a device with the writer. The
+ *        device_id string and schema are borrowed for the duration of the
+ *        call.
+ */
+ERRNO tsfile_generic_writer_register_timeseries(TsFileGenericWriter writer,
+                                                const char* device_id,
+                                                const TimeseriesSchema* schema);
+
+/**
+ * @brief Register a device schema with the writer. The device schema is
+ *        borrowed for the duration of the call.
+ */
+ERRNO tsfile_generic_writer_register_device(TsFileGenericWriter writer,
+                                            const DeviceSchema* device_schema);
+
+/**
+ * @brief Write a tree-model tablet. The tablet remains caller-owned after the
+ *        call returns.
+ */
+ERRNO tsfile_generic_writer_write_tree_tablet(TsFileGenericWriter writer,
+                                              Tablet tablet);
+
+/**
+ * @brief Write a table-model tablet. The tablet remains caller-owned after
+ *        the call returns.
+ */
+ERRNO tsfile_generic_writer_write_table_tablet(TsFileGenericWriter writer,
+                                               Tablet tablet);
+
+/**
+ * @brief Flush pending data to the file.
+ */
+ERRNO tsfile_generic_writer_flush(TsFileGenericWriter writer);
+
+/**
+ * @brief Add a key/value TsFile property to the writer. The key and value
+ *        buffers are borrowed for the duration of the call.
+ */
+ERRNO tsfile_generic_writer_add_tsfile_property(TsFileGenericWriter writer,
+                                                const char* key,
+                                                uint32_t key_len,
+                                                const uint8_t* value,
+                                                uint32_t value_len);
+
+/**
+ * @brief Flush, close and delete the writer. After this call the handle must
+ *        not be used.
+ */
+ERRNO tsfile_generic_writer_close(TsFileGenericWriter writer);
 
 // ---------- !For Python API! ----------
 

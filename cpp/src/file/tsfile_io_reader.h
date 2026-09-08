@@ -112,6 +112,10 @@ class TsFileIOReader {
 
     std::string get_file_path() const { return read_file_->file_path(); }
 
+    // Raw read access for callers that need to parse structures the metadata
+    // index does not carry, e.g. the chunk header at a ChunkMeta offset.
+    ReadFile* get_read_file() const { return read_file_; }
+
     TsFileMeta* get_tsfile_meta() {
         load_tsfile_meta_if_necessary();
         return &tsfile_meta_;

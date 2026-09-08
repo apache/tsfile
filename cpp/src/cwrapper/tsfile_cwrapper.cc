@@ -19,9 +19,9 @@
 
 #include "cwrapper/tsfile_cwrapper.h"
 
+#include <fcntl.h>
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
-#include <sys/stat.h>
 #include <writer/tsfile_table_writer.h>
 
 #ifdef _WIN32
@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "common/device_id.h"
+#include "common/global.h"
 #include "common/statistic.h"
 #include "common/tablet.h"
 #include "common/tsfile_common.h"
@@ -92,28 +93,40 @@ int set_global_compression(uint8_t compression) {
     return common::set_global_compression(compression);
 }
 
+ERRNO tsfile_set_file_read_backend(int32_t backend) {
+    switch (backend) {
+        case TSFILE_READ_BACKEND_AUTO:
+            return common::set_file_read_backend(common::FileReadBackend::AUTO);
+        case TSFILE_READ_BACKEND_MMAP:
+            return common::set_file_read_backend(common::FileReadBackend::MMAP);
+        case TSFILE_READ_BACKEND_PREAD:
+            return common::set_file_read_backend(
+                common::FileReadBackend::PREAD);
+        default:
+            return common::E_INVALID_ARG;
+    }
+}
+
+TsFileReadBackend tsfile_get_file_read_backend() {
+    return static_cast<TsFileReadBackend>(common::get_file_read_backend());
+}
+
 WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     int ret;
     init_tsfile_config();
 
-    struct stat path_stat {};
-    if (stat(pathname, &path_stat) == 0) {
-#ifdef _WIN32
-        const bool is_dir = (path_stat.st_mode & _S_IFDIR) != 0;
-#else
-        const bool is_dir = S_ISDIR(path_stat.st_mode);
-#endif
-        *err_code = is_dir ? common::E_FILE_OPEN_ERR : common::E_ALREADY_EXIST;
-        return nullptr;
-    }
-
-    int flags = O_RDWR | O_CREAT | O_TRUNC;
+    int flags = O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
     mode_t mode = 0666;
     storage::WriteFile* file = new storage::WriteFile;
     ret = file->create(pathname, flags, mode);
+    if (ret != common::E_OK) {
+        delete file;
+        *err_code = ret;
+        return nullptr;
+    }
     *err_code = ret;
     return file;
 }
@@ -580,6 +593,36 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
     return table_result_set;
 }
 
+ResultSet tsfile_reader_query_tree(TsFileReader reader, char** paths,
+                                   uint32_t path_num, Timestamp start_time,
+                                   Timestamp end_time, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
+    if (reader == nullptr || paths == nullptr || path_num == 0 ||
+        end_time < start_time) {
+        return nullptr;
+    }
+    try {
+        std::vector<std::string> selected_paths;
+        selected_paths.reserve(path_num);
+        for (uint32_t i = 0; i < path_num; i++) {
+            if (paths[i] == nullptr) {
+                return nullptr;
+            }
+            selected_paths.emplace_back(paths[i]);
+        }
+        storage::ResultSet* result_set = nullptr;
+        *err_code = static_cast<storage::TsFileReader*>(reader)->query(
+            selected_paths, start_time, end_time, result_set);
+        return result_set;
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    }
+}
+
 ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
                                           char** device_ids, int device_ids_len,
                                           char** measurement_names,
@@ -788,7 +831,7 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
 
 char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
                                                  uint32_t column_index) {
-    if (column_index > (uint32_t)result_set.column_num) {
+    if (column_index < 1 || column_index > (uint32_t)result_set.column_num) {
         return nullptr;
     }
     return result_set.column_names[column_index - 1];
@@ -1954,6 +1997,165 @@ ERRNO _tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
         auto* w = static_cast<storage::TsFileWriter*>(writer);
         return w->add_tsfile_property(std::string(key, key_len), value,
                                       value_len);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+TsFileGenericWriter tsfile_generic_writer_new(const char* pathname,
+                                              uint64_t memory_threshold,
+                                              ERRNO* err_code) {
+    // Public C entry point: guard null arguments before the private delegate
+    // dereferences them, and keep std::bad_alloc from crossing the C ABI.
+    // See tsfile_writer_new() above for the null-guard rationale.
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_OK;
+    if (pathname == nullptr) {
+        *err_code = common::E_INVALID_ARG;
+        return nullptr;
+    }
+    try {
+        return _tsfile_writer_new(pathname, memory_threshold, err_code);
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    }
+}
+
+Tablet tablet_new_with_target_name(const char* target_name,
+                                   char** column_name_list,
+                                   TSDataType* data_types, int column_num,
+                                   int max_rows) {
+    // Public C entry point: reject arguments that would make the private
+    // delegate read out-of-bounds memory (negative column_num, null lists or
+    // null column names) before touching caller buffers. The native Tablet
+    // constructor asserts 0 < max_rows < (1 << 30); reject values outside
+    // that domain here instead of letting an assertion abort the host
+    // process. Returns NULL on invalid arguments or allocation failure.
+    if (column_num < 0 || max_rows <= 0 || max_rows >= (1 << 30)) {
+        return nullptr;
+    }
+    if (column_num > 0) {
+        if (column_name_list == nullptr || data_types == nullptr) {
+            return nullptr;
+        }
+        for (int i = 0; i < column_num; i++) {
+            if (column_name_list[i] == nullptr) {
+                return nullptr;
+            }
+        }
+    }
+    try {
+        return _tablet_new_with_target_name(target_name, column_name_list,
+                                            data_types, column_num, max_rows);
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+}
+
+ERRNO tsfile_generic_writer_register_table(TsFileGenericWriter writer,
+                                           TableSchema* schema) {
+    if (writer == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        return _tsfile_writer_register_table(writer, schema);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_register_timeseries(
+    TsFileGenericWriter writer, const char* device_id,
+    const TimeseriesSchema* schema) {
+    if (writer == nullptr || device_id == nullptr || schema == nullptr ||
+        schema->timeseries_name == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        return _tsfile_writer_register_timeseries(writer, device_id, schema);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_register_device(TsFileGenericWriter writer,
+                                            const DeviceSchema* device_schema) {
+    if (writer == nullptr || device_schema == nullptr ||
+        device_schema->device_name == nullptr ||
+        device_schema->timeseries_num < 0) {
+        return common::E_INVALID_ARG;
+    }
+    if (device_schema->timeseries_num > 0 &&
+        device_schema->timeseries_schema == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    for (int i = 0; i < device_schema->timeseries_num; i++) {
+        if (device_schema->timeseries_schema[i].timeseries_name == nullptr) {
+            return common::E_INVALID_ARG;
+        }
+    }
+    try {
+        return _tsfile_writer_register_device(writer, device_schema);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_write_tree_tablet(TsFileGenericWriter writer,
+                                              Tablet tablet) {
+    if (writer == nullptr || tablet == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        return _tsfile_writer_write_tablet(writer, tablet);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_write_table_tablet(TsFileGenericWriter writer,
+                                               Tablet tablet) {
+    if (writer == nullptr || tablet == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        return _tsfile_writer_write_table(writer, tablet);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_flush(TsFileGenericWriter writer) {
+    if (writer == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        return _tsfile_writer_flush(writer);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    }
+}
+
+ERRNO tsfile_generic_writer_add_tsfile_property(TsFileGenericWriter writer,
+                                                const char* key,
+                                                uint32_t key_len,
+                                                const uint8_t* value,
+                                                uint32_t value_len) {
+    return _tsfile_writer_add_tsfile_property(writer, key, key_len, value,
+                                              value_len);
+}
+
+ERRNO tsfile_generic_writer_close(TsFileGenericWriter writer) {
+    // Matches the public tsfile_writer_close(): a null handle is treated as
+    // already closed.
+    if (writer == nullptr) {
+        return common::E_OK;
+    }
+    try {
+        return _tsfile_writer_close(writer);
     } catch (const std::bad_alloc&) {
         return common::E_OOM;
     }

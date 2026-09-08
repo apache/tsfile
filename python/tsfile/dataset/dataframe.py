@@ -663,8 +663,28 @@ class _LocIndexer:
 
             _, table_entry, _ = self._df._get_series_components(series_ref)
             field_name = table_entry.field_columns[field_idx]
-            descriptor = self._df._index.series_shards.describe(series_ref)
-            for shard in descriptor.shards:
+            describe = getattr(self._df._index.series_shards, "describe", None)
+            if describe is None:
+                shard_entries = []
+                for (
+                    reader,
+                    device_id,
+                    reader_field_idx,
+                ) in self._df._index.series_shards[series_ref]:
+                    info = reader.get_series_info_by_ref(device_id, reader_field_idx)
+                    shard_entries.append(
+                        SimpleNamespace(
+                            reader=reader,
+                            device_id=device_id,
+                            column_id=reader_field_idx,
+                            min_time=info["timeline_min_time"],
+                            max_time=info["timeline_max_time"],
+                            timeline_length=info["timeline_length"],
+                        )
+                    )
+            else:
+                shard_entries = describe(series_ref).shards
+            for shard in shard_entries:
                 overlap_start = max(start_time, shard.min_time)
                 overlap_end = min(end_time, shard.max_time)
                 if shard.timeline_length <= 0 or overlap_start > overlap_end:
@@ -710,13 +730,16 @@ class _LocIndexer:
             return entries, ts_arr, field_vals
 
         group_entries = list(groups.values())
-        group_results = self._df._runtime.map_query_groups(
-            query_group,
-            group_entries,
-            estimated_rows=[
-                max(entry[6] for entry in entries) for entries in group_entries
-            ],
-        )
+        if self._df._runtime is None:
+            group_results = [query_group(entries) for entries in group_entries]
+        else:
+            group_results = self._df._runtime.map_query_groups(
+                query_group,
+                group_entries,
+                estimated_rows=[
+                    max(entry[6] for entry in entries) for entries in group_entries
+                ],
+            )
 
         series_time_parts = defaultdict(list)
         series_value_parts = defaultdict(list)
@@ -751,9 +774,17 @@ class _LocIndexer:
 class TsFileDataFrame:
     """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
 
-    def __init__(self, paths: Union[str, List[str]], show_progress: bool = True):
+    def __init__(
+        self,
+        paths: Union[str, List[str]],
+        show_progress: bool = True,
+        use_index: bool = False,
+    ):
+        if not isinstance(use_index, bool):
+            raise TypeError("use_index must be a bool")
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
+        self._use_index = use_index
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -773,6 +804,7 @@ class TsFileDataFrame:
         obj._is_view = True
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
+        obj._use_index = parent._use_index
         obj._readers = parent._readers
         subset_refs = list(series_refs)
         obj._index = SimpleNamespace(
@@ -808,9 +840,24 @@ class TsFileDataFrame:
             with self._runtime_lease.query_lease():
                 yield
 
+    def _load_metadata_without_index(self, reader_class):
+        if len(self._paths) >= 2:
+            self._load_metadata_parallel(reader_class)
+        else:
+            self._load_metadata_serial(reader_class)
+
+        if not self._index.series:
+            raise ValueError("No valid time series found in the provided TsFile files")
+        _validate_unique_shard_timestamps(self._index)
+
     def _load_metadata(self):
-        """Map a valid persistent index, or build it once under a file lock."""
+        """Load metadata, optionally through a persistent mmap-backed index."""
         from .reader import TsFileSeriesReader
+
+        if not self._use_index:
+            self._load_metadata_without_index(TsFileSeriesReader)
+            return
+
         from .index import (
             build_index_from_dataframe,
             index_matches_paths,
@@ -830,17 +877,8 @@ class TsFileDataFrame:
                 except ImportError:
                     pass
                 if not index_matches_paths(index_path, self._paths):
-                    if len(self._paths) >= 2:
-                        self._load_metadata_parallel(TsFileSeriesReader)
-                    else:
-                        self._load_metadata_serial(TsFileSeriesReader)
-
-                    if not self._index.series:
-                        raise ValueError(
-                            "No valid time series found in the provided TsFile files"
-                        )
+                    self._load_metadata_without_index(TsFileSeriesReader)
                     try:
-                        _validate_unique_shard_timestamps(self._index)
                         build_index_from_dataframe(self, index_path)
                     finally:
                         for reader in self._readers.values():

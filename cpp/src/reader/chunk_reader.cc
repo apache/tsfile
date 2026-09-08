@@ -149,6 +149,13 @@ int ChunkReader::load_by_meta(ChunkMeta* meta) {
 
 int ChunkReader::alloc_compressor_and_value_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
+    // The on-wire enum is a byte, so an arbitrary damaged value can otherwise
+    // fall through DecoderFactory and be reported as an allocation failure.
+    // Distinguish malformed file metadata from a genuine OOM before creating
+    // any decoder object.
+    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+        return E_TSFILE_CORRUPTED;
+    }
     if (value_decoder_ != nullptr) {
         value_decoder_->reset();
     } else {

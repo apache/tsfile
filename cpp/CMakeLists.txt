@@ -229,6 +229,9 @@ endif ()
 option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
 message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 
+option(BUILD_BENCHMARK "Build the read-backend benchmark" OFF)
+message("cmake using: BUILD_BENCHMARK=${BUILD_BENCHMARK}")
+
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
@@ -378,6 +381,15 @@ if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
 endif ()
 
 add_subdirectory(src)
+if (BUILD_BENCHMARK)
+    find_package(Threads REQUIRED)
+    add_executable(read_backend_benchmark
+            bench_mark/bench_mark_src/read_backend_benchmark.cc)
+    target_include_directories(read_backend_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(read_backend_benchmark PRIVATE
+            tsfile Threads::Threads)
+endif ()
 if (BUILD_TOOLS)
     add_subdirectory(tools)
 endif ()
