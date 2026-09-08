@@ -320,6 +320,127 @@ TEST_F(TS2DIFFCodecTest, TestLongEncoding2) {
     }
 }
 
+// Wide packed values can start partway through a byte and require nine bytes
+// to decode. Exercise every wide bit width independently of the encoder.
+TEST_F(TS2DIFFCodecTest, ReadBatchInt64WideValuesAcrossByteBoundaries) {
+    const int count = 129;
+    for (int width = 57; width <= 64; ++width) {
+        SCOPED_TRACE(width);
+        const int64_t amplitude = int64_t{1} << std::min(width - 2, 61);
+        std::vector<int64_t> expected(count, 0);
+        std::vector<uint8_t> packed(((count - 1) * width + 7) / 8, 0);
+        for (int i = 0; i < count - 1; ++i) {
+            const int64_t residual = i % 2 == 0 ? 2 * amplitude + i + 1 : 0;
+            expected[i + 1] = expected[i] + (residual - amplitude);
+            for (int bit = 0; bit < width; ++bit) {
+                const int position = i * width + bit;
+                packed[position / 8] |=
+                    ((static_cast<uint64_t>(residual) >> (width - bit - 1)) &
+                     1U)
+                    << (7 - position % 8);
+            }
+        }
+        common::ByteStream encoded(1024, common::MOD_TS2DIFF_OBJ, false);
+        ASSERT_EQ(common::SerializationUtil::write_ui32(count - 1, encoded),
+                  common::E_OK);
+        ASSERT_EQ(common::SerializationUtil::write_ui32(width, encoded),
+                  common::E_OK);
+        ASSERT_EQ(common::SerializationUtil::write_ui64(
+                      static_cast<uint64_t>(-amplitude), encoded),
+                  common::E_OK);
+        ASSERT_EQ(common::SerializationUtil::write_ui64(0, encoded),
+                  common::E_OK);
+        ASSERT_EQ(encoded.write_buf(packed.data(), packed.size()),
+                  common::E_OK);
+        std::vector<uint8_t> page(encoded.total_size());
+        uint32_t read_len = 0;
+        ASSERT_EQ(encoded.read_buf(page.data(), page.size(), read_len),
+                  common::E_OK);
+        ASSERT_EQ(read_len, page.size());
+
+        for (int batch_size : {count, 17}) {
+            SCOPED_TRACE(batch_size);
+            common::ByteStream input;
+            input.wrap_from(reinterpret_cast<const char*>(page.data()),
+                            page.size());
+            LongTS2DIFFDecoder decoder;
+            std::vector<int64_t> actual(count);
+            int offset = 0;
+            while (offset < count) {
+                int decoded = 0;
+                ASSERT_EQ(
+                    decoder.read_batch_int64(
+                        actual.data() + offset,
+                        std::min(batch_size, count - offset), decoded, input),
+                    common::E_OK);
+                ASSERT_GT(decoded, 0);
+                offset += decoded;
+            }
+            ASSERT_EQ(actual, expected);
+            EXPECT_FALSE(decoder.has_remaining(input));
+        }
+    }
+}
+
+TEST_F(TS2DIFFCodecTest, ReadBatchInt64WideResidualWithHighBase) {
+    const int width = 63;
+    const int count = 129;
+    const int64_t base = int64_t{1} << 62;
+    std::vector<uint64_t> residuals(count - 1, static_cast<uint64_t>(base));
+    residuals[0] += 1;
+    residuals[1] = 0;
+    std::vector<int64_t> expected(count, 1);
+    expected[0] = base;
+    expected[1] = base + 1;
+    // Every reconstructed value fits INT64, but residual + previous can
+    // overflow before the negative minimum delta is added.
+    std::vector<uint8_t> packed(((count - 1) * width + 7) / 8, 0);
+    for (int i = 0; i < count - 1; ++i) {
+        for (int bit = 0; bit < width; ++bit) {
+            const int position = i * width + bit;
+            packed[position / 8] |= ((residuals[i] >> (width - bit - 1)) & 1U)
+                                    << (7 - position % 8);
+        }
+    }
+    common::ByteStream encoded(1024, common::MOD_TS2DIFF_OBJ, false);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(count - 1, encoded),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui32(width, encoded),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui64(
+                  static_cast<uint64_t>(-base), encoded),
+              common::E_OK);
+    ASSERT_EQ(common::SerializationUtil::write_ui64(base, encoded),
+              common::E_OK);
+    ASSERT_EQ(encoded.write_buf(packed.data(), packed.size()), common::E_OK);
+    std::vector<uint8_t> page(encoded.total_size());
+    uint32_t read_len = 0;
+    ASSERT_EQ(encoded.read_buf(page.data(), page.size(), read_len),
+              common::E_OK);
+    ASSERT_EQ(read_len, page.size());
+
+    for (int batch_size : {count, 17, 1}) {
+        SCOPED_TRACE(batch_size);
+        common::ByteStream input;
+        input.wrap_from(reinterpret_cast<const char*>(page.data()),
+                        page.size());
+        LongTS2DIFFDecoder decoder;
+        std::vector<int64_t> actual(count);
+        int offset = 0;
+        while (offset < count) {
+            int decoded = 0;
+            ASSERT_EQ(decoder.read_batch_int64(
+                          actual.data() + offset,
+                          std::min(batch_size, count - offset), decoded, input),
+                      common::E_OK);
+            ASSERT_GT(decoded, 0);
+            offset += decoded;
+        }
+        ASSERT_EQ(actual, expected);
+        EXPECT_FALSE(decoder.has_remaining(input));
+    }
+}
+
 TEST_F(TS2DIFFCodecTest, TestRandomEncoding) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 10000;

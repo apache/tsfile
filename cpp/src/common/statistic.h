@@ -864,10 +864,10 @@ class Int64Statistic : public Statistic {
                 vsum = simde_mm_add_pd(vsum,
                                        simde_mm_set_pd((double)v1, (double)v0));
             }
-            min_value_ = std::min(simde_mm_cvtsi128_si64(vmin),
-                                  simde_mm_extract_epi64(vmin, 1));
-            max_value_ = std::max(simde_mm_cvtsi128_si64(vmax),
-                                  simde_mm_extract_epi64(vmax, 1));
+            min_value_ = std::min<int64_t>(simde_mm_cvtsi128_si64(vmin),
+                                           simde_mm_extract_epi64(vmin, 1));
+            max_value_ = std::max<int64_t>(simde_mm_cvtsi128_si64(vmax),
+                                           simde_mm_extract_epi64(vmax, 1));
             sum_value_ += simde_mm_cvtsd_f64(vsum) +
                           simde_mm_cvtsd_f64(simde_mm_unpackhi_pd(vsum, vsum));
         }
