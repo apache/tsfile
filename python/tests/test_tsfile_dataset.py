@@ -1175,7 +1175,8 @@ def test_subset_release_preserves_shared_readers(
             "-X",
             "faulthandler",
             "-c",
-            textwrap.dedent("""
+            textwrap.dedent(
+                """
                 import gc
                 import json
                 import sys
@@ -1216,7 +1217,8 @@ def test_subset_release_preserves_shared_readers(
                         np.testing.assert_allclose(frame[name][:], expected)
                     sibling.close()
                     nested.close()
-                """),
+                """,
+            ),
             path,
             name,
             str(expected),
@@ -1238,7 +1240,8 @@ def test_no_index_subset_rejects_reads_after_root_close(subset_lifecycle_dataset
             "-X",
             "faulthandler",
             "-c",
-            textwrap.dedent("""
+            textwrap.dedent(
+                """
                 import sys
                 import pytest
                 from tsfile import TsFileDataFrame
@@ -1257,7 +1260,8 @@ def test_no_index_subset_rejects_reads_after_root_close(subset_lifecycle_dataset
                     series[:]
                 subset.close()
                 nested.close()
-                """),
+                """,
+            ),
             path,
             name,
         ],
