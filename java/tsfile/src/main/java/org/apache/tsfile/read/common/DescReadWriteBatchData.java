@@ -52,6 +52,12 @@ public class DescReadWriteBatchData extends DescReadBatchData {
     Type.fromTsDataType(dataType).init(this);
   }
 
+  @Override
+  protected <T> LinkedList<T> createValueList() {
+    // Reverse writes prepend value blocks when the array capacity threshold is reached.
+    return new LinkedList<>();
+  }
+
   /**
    * put boolean data reversely.
    *

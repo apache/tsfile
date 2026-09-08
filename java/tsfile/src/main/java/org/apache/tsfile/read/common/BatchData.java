@@ -161,38 +161,42 @@ public class BatchData {
     Type.fromTsDataType(dataType).init(this);
   }
 
+  protected <T> List<T> createValueList() {
+    return new ArrayList<>();
+  }
+
   public void initBooleanValues() {
-    booleanRet = new ArrayList<>();
+    booleanRet = createValueList();
     booleanRet.add(new boolean[capacity]);
   }
 
   public void initIntValues() {
-    intRet = new ArrayList<>();
+    intRet = createValueList();
     intRet.add(new int[capacity]);
   }
 
   public void initLongValues() {
-    longRet = new ArrayList<>();
+    longRet = createValueList();
     longRet.add(new long[capacity]);
   }
 
   public void initFloatValues() {
-    floatRet = new ArrayList<>();
+    floatRet = createValueList();
     floatRet.add(new float[capacity]);
   }
 
   public void initDoubleValues() {
-    doubleRet = new ArrayList<>();
+    doubleRet = createValueList();
     doubleRet.add(new double[capacity]);
   }
 
   public void initBinaryValues() {
-    binaryRet = new ArrayList<>();
+    binaryRet = createValueList();
     binaryRet.add(new Binary[capacity]);
   }
 
   public void initVectorValues() {
-    vectorRet = new ArrayList<>();
+    vectorRet = createValueList();
     vectorRet.add(new TsPrimitiveType[capacity][]);
   }
 

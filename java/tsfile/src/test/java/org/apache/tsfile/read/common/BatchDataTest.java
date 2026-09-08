@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -183,6 +184,57 @@ public class BatchDataTest {
       }
       assertEquals(-1, inputStream.read());
     }
+  }
+
+  @Test
+  public void testDescReadWriteExpansion() {
+    TSDataType[] dataTypes = {
+      TSDataType.BOOLEAN, TSDataType.INT32, TSDataType.DATE, TSDataType.INT64,
+      TSDataType.TIMESTAMP, TSDataType.FLOAT, TSDataType.DOUBLE, TSDataType.TEXT,
+      TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT, TSDataType.VECTOR
+    };
+    // Exercise array growth, the first prepended block, and multiple prepended blocks.
+    int[] sizes = {
+      BatchData.CAPACITY_THRESHOLD,
+      BatchData.CAPACITY_THRESHOLD + 1,
+      2 * BatchData.CAPACITY_THRESHOLD + 1
+    };
+    for (TSDataType dataType : dataTypes) {
+      for (int size : sizes) {
+        BatchData batchData = new DescReadWriteBatchData(dataType);
+        for (int i = size; i > 0; i--) {
+          batchData.putAnObject(i, expansionValue(dataType, i));
+        }
+        assertEquals(size, batchData.length());
+        batchData.flip();
+        for (int i = size; i > 0; i--) {
+          assertTrue(batchData.hasCurrent());
+          assertEquals(i, batchData.currentTime());
+          Object expected = expansionValue(dataType, i);
+          if (expected instanceof TsPrimitiveType[] vector) {
+            assertArrayEquals(vector, (TsPrimitiveType[]) batchData.currentValue());
+          } else {
+            assertEquals(expected, batchData.currentValue());
+          }
+          batchData.next();
+        }
+        assertFalse(batchData.hasCurrent());
+      }
+    }
+  }
+
+  private Object expansionValue(TSDataType dataType, int value) {
+    return switch (dataType) {
+      case BOOLEAN -> value % 2 == 0;
+      case INT32, DATE -> value;
+      case INT64, TIMESTAMP -> (long) value;
+      case FLOAT -> (float) value;
+      case DOUBLE -> (double) value;
+      case TEXT, STRING, BLOB, OBJECT ->
+          new Binary(Integer.toString(value), StandardCharsets.UTF_8);
+      case VECTOR -> new TsPrimitiveType[] {new TsPrimitiveType.TsInt(value)};
+      case UNKNOWN -> throw new AssertionError("Unexpected data type: " + dataType);
+    };
   }
 
   private DataInputStream serialize(BatchData batchData) throws IOException {
