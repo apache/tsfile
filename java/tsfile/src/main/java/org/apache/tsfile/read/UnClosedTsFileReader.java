@@ -21,7 +21,6 @@ package org.apache.tsfile.read;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
-import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.NotImplementedException;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 
@@ -46,7 +45,7 @@ public class UnClosedTsFileReader extends TsFileSequenceReader {
   public UnClosedTsFileReader(
       String file, EncryptParameter encryptParam, LongConsumer ioSizeRecorder) throws IOException {
     super(file, false, ioSizeRecorder, encryptParam);
-    this.dataEncryptParam = EncryptUtils.getEncryptParameter(encryptParam);
+    this.dataEncryptParam = super.getEncryptParam();
   }
 
   /** unclosed file has no tail magic data. */

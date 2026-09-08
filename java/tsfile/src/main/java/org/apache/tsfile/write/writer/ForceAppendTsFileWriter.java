@@ -45,6 +45,7 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
 
   private long truncatePosition;
   private static Logger logger = LoggerFactory.getLogger(ForceAppendTsFileWriter.class);
+  private EncryptParameter ownedEncryptParameter;
 
   public ForceAppendTsFileWriter(File file) throws IOException {
     this(
@@ -58,18 +59,25 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
     if (logger.isDebugEnabled()) {
       logger.debug(Messages.get("log.write.writer_opened"), file.getName());
     }
-    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
     this.file = file;
-    setEncryptParam(param);
 
     // file doesn't exist
     if (file.length() == 0 || !file.exists()) {
       throw new TsFileNotCompleteException(
           Messages.format("error.write.force_append_not_complete", file.getPath()));
     }
+    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
+    setEncryptParam(param);
 
     try (TsFileSequenceReader reader =
         new TsFileSequenceReader(file.getAbsolutePath(), param, true)) {
+
+      EncryptParameter recoveredParameter = reader.getEncryptParam();
+      if (recoveredParameter != null && recoveredParameter.isTdePageAead()) {
+        ownedEncryptParameter = recoveredParameter.copy();
+        setEncryptParam(ownedEncryptParameter);
+      }
+      markExistingFileStarted(recoveredParameter != null && recoveredParameter.isTdePageAead());
 
       // this tsfile is not complete
       if (!reader.isComplete()) {
@@ -88,6 +96,9 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
         ChunkGroupMetadata chunkGroupMetadata = new ChunkGroupMetadata(device, chunkMetadataList);
         chunkGroupMetadataList.add(chunkGroupMetadata);
       }
+    } catch (IOException | RuntimeException e) {
+      closeAfterFailedInitialization(e);
+      throw e;
     }
   }
 
@@ -97,5 +108,39 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
 
   public long getTruncatePosition() {
     return truncatePosition;
+  }
+
+  @Override
+  public void endFile() throws IOException {
+    try {
+      super.endFile();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  @Override
+  public void close() throws IOException {
+    try {
+      super.close();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  private void closeOwnedEncryptParameter() {
+    if (ownedEncryptParameter != null) {
+      ownedEncryptParameter.close();
+    }
+  }
+
+  private void closeAfterFailedInitialization(Exception exception) {
+    try {
+      out.close();
+    } catch (IOException e) {
+      exception.addSuppressed(e);
+    } finally {
+      closeOwnedEncryptParameter();
+    }
   }
 }

@@ -18,29 +18,18 @@
  */
 package org.apache.tsfile.encrypt;
 
-import java.util.concurrent.ConcurrentHashMap;
+/**
+ * Service provider interface for file-level encryption implementations.
+ *
+ * <p>Provider ids are persisted in a TsFile and therefore must remain stable across releases. A
+ * provider implementation may be registered explicitly through {@link EncryptionProviderRegistry}
+ * or discovered through {@link java.util.ServiceLoader}. Providers own the encryption profiles
+ * referenced by {@link EncryptParameter#getProfileId()}; a profile's algorithms, page layout, key
+ * envelope format, and page body overhead must remain immutable while files using it exist.
+ */
+public interface IEncryptProvider {
 
-public interface IEncrypt extends AutoCloseable {
+  String getProviderId();
 
-  static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
-      new ConcurrentHashMap<>();
-
-  static ConcurrentHashMap<String, String> encryptTypeToClassMap = new ConcurrentHashMap<>();
-
-  IDecryptor getDecryptor();
-
-  IEncryptor getEncryptor();
-
-  /**
-   * Returns the fixed number of bytes added to every encrypted page body by this profile.
-   *
-   * <p>Page AEAD providers must override this method. The value is part of the profile contract and
-   * must not change while files using that profile exist.
-   */
-  default int getPageBodyOverhead() {
-    return -1;
-  }
-
-  @Override
-  default void close() {}
+  IEncrypt create(EncryptParameter encryptParameter);
 }

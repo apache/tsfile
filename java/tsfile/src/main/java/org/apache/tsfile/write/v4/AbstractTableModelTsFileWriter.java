@@ -94,7 +94,10 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   protected AbstractTableModelTsFileWriter(
       File file, long chunkGroupSizeThreshold, EncryptParameter firstEncryptParam)
       throws IOException {
-    this(new TsFileIOWriter(file), chunkGroupSizeThreshold, firstEncryptParam);
+    this(
+        new TsFileIOWriter(file, copyEncryptParameter(firstEncryptParam)),
+        chunkGroupSizeThreshold,
+        firstEncryptParam);
   }
 
   @TsFileApi
@@ -123,21 +126,37 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
       LOG.warn(Messages.get("log.write.page_size_warn"), pageSize, chunkGroupSizeThreshold);
     }
 
-    this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
-    String encryptLevel;
-    if (firstEncryptParam != null
-        && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
-        && !Objects.equals(firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      encryptLevel = "2";
-      String str =
-          EncryptUtils.getKeyStr(
-              IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
-                  .encrypt(secondEncryptParam.getKey()));
-      fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
+    EncryptParameter fileEncryptParameter = fileWriter.getEncryptParameter();
+    EncryptParameter effectiveEncryptParameter =
+        fileEncryptParameter != null && fileEncryptParameter.isTdePageAead()
+            ? fileEncryptParameter
+            : firstEncryptParam;
+    if (effectiveEncryptParameter != null && effectiveEncryptParameter.isTdePageAead()) {
+      this.secondEncryptParam = effectiveEncryptParameter;
+      fileWriter.setEncryptParam(effectiveEncryptParameter);
+      fileWriter.writeEncryptionHeaderIfNecessary();
     } else {
-      encryptLevel = "0";
-      fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
+      this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
+      String encryptLevel;
+      if (firstEncryptParam != null
+          && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
+          && !Objects.equals(
+              firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
+        encryptLevel = "2";
+        String str =
+            EncryptUtils.getKeyStr(
+                IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
+                    .encrypt(secondEncryptParam.getKey()));
+        fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
+      } else {
+        encryptLevel = "0";
+        fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
+      }
     }
+  }
+
+  private static EncryptParameter copyEncryptParameter(EncryptParameter parameter) {
+    return parameter == null ? null : parameter.copy();
   }
 
   protected IChunkGroupWriter tryToInitialGroupWriter(
@@ -273,7 +292,13 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   @TsFileApi
   public void close() throws IOException {
     LOG.info(Messages.get("log.write.close_file"));
-    flush();
-    fileWriter.endFile();
+    try {
+      flush();
+      fileWriter.endFile();
+    } finally {
+      if (secondEncryptParam != null && secondEncryptParam.isTdePageAead()) {
+        secondEncryptParam.close();
+      }
+    }
   }
 }

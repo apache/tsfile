@@ -23,14 +23,24 @@ import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.PlainDecoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
+import org.apache.tsfile.encrypt.IDecryptor;
+import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
+import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.page.TimePageWriter;
 
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -40,6 +50,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class TimePageWriterTest {
+
+  @BeforeClass
+  public static void setUpEncryptionProvider() {
+    EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+  }
+
+  @AfterClass
+  public static void tearDownEncryptionProvider() {
+    EncryptionProviderRegistry.unregisterProvider(TestAeadEncryptionProvider.PROVIDER_ID);
+  }
 
   @Test
   public void testWrite() {
@@ -166,6 +186,48 @@ public class TimePageWriterTest {
       assertEquals(3L, ReadWriteIOUtils.readLong(uncompressedBuffer));
     } catch (IOException e) {
       fail();
+    }
+  }
+
+  @Test
+  public void testWriteAndReadPageWithAeadEncryption() throws IOException {
+    Encoder timeEncoder = new PlainEncoder(TSDataType.INT64, 0);
+    ICompressor compressor = ICompressor.getCompressor(CompressionType.UNCOMPRESSED);
+    EncryptParameter encryptParameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16]);
+    TimePageWriter pageWriter = new TimePageWriter(timeEncoder, compressor, encryptParameter);
+    PublicBAOS publicBAOS = new PublicBAOS();
+
+    try {
+      pageWriter.write(1L);
+      pageWriter.write(2L);
+      pageWriter.write(3L);
+      pageWriter.writePageHeaderAndDataIntoBuff(publicBAOS, false, 0);
+
+      ByteBuffer pageBuffer = ByteBuffer.wrap(publicBAOS.getBuf(), 0, publicBAOS.size());
+      PageHeader pageHeader = PageHeader.deserializeFrom(pageBuffer, TSDataType.VECTOR);
+      assertEquals(24, pageHeader.getUncompressedSize());
+      assertEquals(52, pageHeader.getCompressedSize());
+
+      ChunkHeader chunkHeader =
+          new ChunkHeader(
+              "time",
+              pageHeader.getCompressedSize(),
+              TSDataType.INT64,
+              CompressionType.UNCOMPRESSED,
+              TSEncoding.PLAIN,
+              1);
+      IDecryptor decryptor = IDecryptor.getDecryptor(encryptParameter);
+      ByteBuffer uncompressedPageData =
+          ChunkReader.deserializePageData(
+              pageHeader, pageBuffer, chunkHeader, decryptor, encryptParameter, 0);
+
+      assertEquals(1L, ReadWriteIOUtils.readLong(uncompressedPageData));
+      assertEquals(2L, ReadWriteIOUtils.readLong(uncompressedPageData));
+      assertEquals(3L, ReadWriteIOUtils.readLong(uncompressedPageData));
+      assertEquals(0, uncompressedPageData.remaining());
+    } finally {
+      encryptParameter.close();
     }
   }
 }

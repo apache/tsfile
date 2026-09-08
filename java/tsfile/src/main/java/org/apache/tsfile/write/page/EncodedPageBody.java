@@ -16,31 +16,33 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.tsfile.encrypt;
+package org.apache.tsfile.write.page;
 
-import java.util.concurrent.ConcurrentHashMap;
+class EncodedPageBody {
 
-public interface IEncrypt extends AutoCloseable {
+  private final byte[] data;
+  private final int offset;
+  private final int size;
 
-  static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
-      new ConcurrentHashMap<>();
-
-  static ConcurrentHashMap<String, String> encryptTypeToClassMap = new ConcurrentHashMap<>();
-
-  IDecryptor getDecryptor();
-
-  IEncryptor getEncryptor();
-
-  /**
-   * Returns the fixed number of bytes added to every encrypted page body by this profile.
-   *
-   * <p>Page AEAD providers must override this method. The value is part of the profile contract and
-   * must not change while files using that profile exist.
-   */
-  default int getPageBodyOverhead() {
-    return -1;
+  EncodedPageBody(byte[] data) {
+    this(data, 0, data.length);
   }
 
-  @Override
-  default void close() {}
+  EncodedPageBody(byte[] data, int offset, int size) {
+    this.data = data;
+    this.offset = offset;
+    this.size = size;
+  }
+
+  byte[] getData() {
+    return data;
+  }
+
+  int getOffset() {
+    return offset;
+  }
+
+  int size() {
+    return size;
+  }
 }
