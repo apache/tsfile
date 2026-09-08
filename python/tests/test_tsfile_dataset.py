@@ -19,6 +19,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+import subprocess
+import sys
+import textwrap
 import threading
 
 from tsfile.dataset import dataframe as dataframe_module
@@ -1147,6 +1150,126 @@ def test_subset_close_releases_only_subset_lease(tmp_path):
 
         series = tsdf[0]
         assert series[0] == 20.0
+
+
+@pytest.fixture(params=["tree", "table"])
+def subset_lifecycle_dataset(tmp_path, request):
+    path = tmp_path / "lifecycle.tsfile"
+    if request.param == "tree":
+        _write_tree_rows(path, {"root.name.lower": [("value", TSDataType.DOUBLE)]})
+        return str(path), "root.name.lower.value", [0.5, 1.5, 2.5]
+    _write_weather_file(path, 0)
+    return str(path), "weather.device_a.temperature", [20.0, 21.5, 23.0]
+
+
+@pytest.mark.parametrize("release", ["close", "collect", "context", "filter"])
+def test_subset_release_preserves_shared_readers(
+    subset_lifecycle_dataset, dataframe_use_index, release
+):
+    path, name, expected = subset_lifecycle_dataset
+    # A regression here can dereference a closed native reader. Keep the
+    # assertions in a child process so it cannot terminate the pytest suite.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "faulthandler",
+            "-c",
+            textwrap.dedent(
+                """
+                import gc
+                import json
+                import sys
+                import numpy as np
+                import pytest
+                from tsfile import TsFileDataFrame
+
+                path, name, expected, use_index, release = sys.argv[1:]
+                expected = json.loads(expected)
+                with TsFileDataFrame(path, show_progress=False,
+                                     use_index=use_index == "True") as root:
+                    index = root.list_timeseries().index(name)
+                    sibling = root[[index]]
+                    parent = root[[index]]
+                    nested = parent[[0]]
+                    series = root[name]
+                    if release == "close":
+                        parent.close()
+                        parent.close()
+                        with pytest.raises(RuntimeError, match="closed"):
+                            parent.loc[:, [name]]
+                    elif release == "collect":
+                        del parent
+                        gc.collect()
+                    elif release == "context":
+                        with parent:
+                            np.testing.assert_allclose(parent[name][:], expected)
+                    else:
+                        field = root.list_timeseries_metadata().loc[name, "field"]
+                        assert name in root[root["field"] == field].list_timeseries()
+                        gc.collect()
+                    np.testing.assert_allclose(series[:], expected)
+                    for frame in (root, sibling, nested):
+                        aligned = frame.loc[:, [name, name]]
+                        np.testing.assert_array_equal(aligned.timestamps, [0, 1, 2])
+                        np.testing.assert_allclose(aligned.values,
+                                                   np.column_stack([expected, expected]))
+                        np.testing.assert_allclose(frame[name][:], expected)
+                    sibling.close()
+                    nested.close()
+                """,
+            ),
+            path,
+            name,
+            str(expected),
+            str(dataframe_use_index),
+            release,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_no_index_subset_rejects_reads_after_root_close(subset_lifecycle_dataset):
+    path, name, _ = subset_lifecycle_dataset
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "faulthandler",
+            "-c",
+            textwrap.dedent(
+                """
+                import sys
+                import pytest
+                from tsfile import TsFileDataFrame
+
+                root = TsFileDataFrame(sys.argv[1], show_progress=False)
+                subset = root[[root.list_timeseries().index(sys.argv[2])]]
+                nested = subset[[0]]
+                series = nested[0]
+                root.close()
+                for frame in (root, subset, nested):
+                    with pytest.raises(RuntimeError, match="closed"):
+                        frame.loc[:, [0]]
+                    with pytest.raises(RuntimeError, match="closed"):
+                        frame[0][:]
+                with pytest.raises(RuntimeError, match="closed"):
+                    series[:]
+                subset.close()
+                nested.close()
+                """,
+            ),
+            path,
+            name,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_dataset_rejects_incompatible_table_schemas_across_shards(

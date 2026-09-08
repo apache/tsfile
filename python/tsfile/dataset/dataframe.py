@@ -830,6 +830,10 @@ class TsFileDataFrame:
     def _assert_open(self):
         if self._closed:
             raise RuntimeError("Current TsFileDataFrame is closed.")
+        if self._is_view and self._runtime_lease is None:
+            # Direct readers belong to the root; a view cannot outlive an
+            # explicit root close. Indexed views have independent leases.
+            self._root._assert_open()
 
     @contextlib.contextmanager
     def _query_guard(self):
@@ -1416,7 +1420,9 @@ class TsFileDataFrame:
         self._closed = True
         if self._runtime_lease is not None:
             self._runtime_lease.close()
-        else:
+        elif not self._is_view:
+            # Subsets share these readers and their dictionary with the root.
+            # Closing or collecting a view must not release the root's readers.
             for reader in self._readers.values():
                 reader.close()
             self._readers.clear()
