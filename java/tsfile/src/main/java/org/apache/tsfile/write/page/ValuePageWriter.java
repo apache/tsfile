@@ -28,6 +28,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -265,6 +266,108 @@ public class ValuePageWriter {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
       setBit(isNull[i]);
       if (!isNull[i]) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      boolean[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      int[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      long[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      float[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      double[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
+        valueEncoder.encode(values[i], valueOut);
+        statistics.update(timestamps[i], values[i]);
+      }
+    }
+  }
+
+  public void write(
+      long[] timestamps,
+      Binary[] values,
+      BitMap bitMap,
+      int bitMapOffset,
+      int batchSize,
+      int arrayOffset) {
+    for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      boolean isNull = bitMap.isMarked(bitMapOffset + i - arrayOffset);
+      setBit(isNull);
+      if (!isNull) {
         valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
