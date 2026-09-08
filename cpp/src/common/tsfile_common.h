@@ -204,10 +204,12 @@ struct ChunkMeta {
 
     ChunkMeta()
         : measurement_name_(),
-          data_type_(),
+          data_type_(common::INVALID_DATATYPE),
           offset_of_chunk_header_(0),
           statistic_(nullptr),
-          mask_(0) {}
+          mask_(0),
+          encoding_(common::INVALID_ENCODING),
+          compression_type_(common::INVALID_COMPRESSION) {}
 
     int init(const common::String& measurement_name,
              common::TSDataType data_type, int64_t offset_of_chunk_header,
@@ -233,6 +235,8 @@ struct ChunkMeta {
         }
         data_type_ = that.data_type_;
         offset_of_chunk_header_ = that.offset_of_chunk_header_;
+        encoding_ = that.encoding_;
+        compression_type_ = that.compression_type_;
         if (that.statistic_ != nullptr) {
             statistic_ =
                 StatisticFactory::alloc_statistic_with_pa(data_type_, pa);

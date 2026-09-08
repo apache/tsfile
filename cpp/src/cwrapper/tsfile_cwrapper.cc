@@ -19,9 +19,9 @@
 
 #include "cwrapper/tsfile_cwrapper.h"
 
+#include <fcntl.h>
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
-#include <sys/stat.h>
 #include <writer/tsfile_table_writer.h>
 
 #ifdef _WIN32
@@ -115,24 +115,18 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     int ret;
     init_tsfile_config();
 
-    struct stat path_stat {};
-    if (stat(pathname, &path_stat) == 0) {
-#ifdef _WIN32
-        const bool is_dir = (path_stat.st_mode & _S_IFDIR) != 0;
-#else
-        const bool is_dir = S_ISDIR(path_stat.st_mode);
-#endif
-        *err_code = is_dir ? common::E_FILE_OPEN_ERR : common::E_ALREADY_EXIST;
-        return nullptr;
-    }
-
-    int flags = O_RDWR | O_CREAT | O_TRUNC;
+    int flags = O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
     mode_t mode = 0666;
     storage::WriteFile* file = new storage::WriteFile;
     ret = file->create(pathname, flags, mode);
+    if (ret != common::E_OK) {
+        delete file;
+        *err_code = ret;
+        return nullptr;
+    }
     *err_code = ret;
     return file;
 }

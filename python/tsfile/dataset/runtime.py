@@ -33,6 +33,7 @@ import numpy as np
 from ..constants import NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
+from ._arrow import arrow_column_to_float64
 from .index import (
     COLUMN_NAME_INDEX,
     COLUMN_SCHEMA,
@@ -846,12 +847,7 @@ class RuntimeSeriesReader:
                         dtype=np.int64,
                     )
                 )
-                value_parts.append(
-                    np.asarray(
-                        arrow_batch.column(1).to_numpy(zero_copy_only=False),
-                        dtype=np.float64,
-                    )
-                )
+                value_parts.append(arrow_column_to_float64(arrow_batch.column(1)))
         if not timestamp_parts:
             return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
         if len(timestamp_parts) == 1:
@@ -880,12 +876,7 @@ class RuntimeSeriesReader:
                 )
                 for column_index, name in enumerate(column_names, start=1):
                     value_parts[name].append(
-                        np.asarray(
-                            arrow_batch.column(column_index).to_numpy(
-                                zero_copy_only=False
-                            ),
-                            dtype=np.float64,
-                        )
+                        arrow_column_to_float64(arrow_batch.column(column_index))
                     )
         if not timestamp_parts:
             return np.array([], dtype=np.int64), {

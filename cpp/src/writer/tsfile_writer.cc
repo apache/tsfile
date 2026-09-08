@@ -19,12 +19,6 @@
 
 #include "tsfile_writer.h"
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 #include <chrono>
 #include <iomanip>
 
@@ -213,13 +207,22 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
             if (mname.empty()) {
                 continue;
             }
-            if (group->measurement_schema_map_.find(mname) !=
-                group->measurement_schema_map_.end()) {
-                continue;
+            auto schema_it = group->measurement_schema_map_.find(mname);
+            if (schema_it == group->measurement_schema_map_.end()) {
+                MeasurementSchema* ms =
+                    new MeasurementSchema(mname, cm->data_type_, cm->encoding_,
+                                          cm->compression_type_);
+                group->measurement_schema_map_.insert(
+                    std::make_pair(mname, ms));
+            } else {
+                // A series may have different codecs in different chunks.
+                // Appends must use the latest chunk's codec, not the first
+                // recovered chunk's stale settings.
+                MeasurementSchema* ms = schema_it->second;
+                ms->data_type_ = cm->data_type_;
+                ms->encoding_ = cm->encoding_;
+                ms->compression_type_ = cm->compression_type_;
             }
-            MeasurementSchema* ms = new MeasurementSchema(
-                mname, cm->data_type_, cm->encoding_, cm->compression_type_);
-            group->measurement_schema_map_.insert(std::make_pair(mname, ms));
         }
     }
 
@@ -264,23 +267,31 @@ int TsFileWriter::register_table(
     return E_OK;
 }
 
-bool check_file_exist(const std::string& file_path) {
-    return access(file_path.c_str(), F_OK) == 0;
-}
-
 int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
-    if (check_file_exist(file_path)) {
+    if (write_file_ != nullptr || io_writer_ != nullptr) {
         return E_ALREADY_EXIST;
     }
-    write_file_ = new WriteFile;
-    write_file_created_ = true;
-    io_writer_ = new TsFileIOWriter;
-    int ret = E_OK;
-    if (RET_FAIL(write_file_->create(file_path, flags, mode))) {
-    } else {
-        io_writer_->init(write_file_);
+
+    flags |= O_CREAT | O_EXCL;
+    auto* write_file = new WriteFile;
+    int ret = write_file->create(file_path, flags, mode);
+    if (ret != E_OK) {
+        delete write_file;
+        return ret;
     }
-    return ret;
+
+    auto* io_writer = new TsFileIOWriter;
+    ret = io_writer->init(write_file);
+    if (ret != E_OK) {
+        delete io_writer;
+        delete write_file;
+        return ret;
+    }
+
+    write_file_ = write_file;
+    write_file_created_ = true;
+    io_writer_ = io_writer;
+    return E_OK;
 }
 
 int TsFileWriter::open(const std::string& file_path) {

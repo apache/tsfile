@@ -32,6 +32,7 @@
 #include "common/tsfile_common.h"
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
+#include "file/utf8_file_open.h"
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
@@ -93,11 +94,11 @@ struct SelfCheckReader {
     }
 
     int open(const std::string& path) {
+        int open_flags = O_RDONLY;
 #ifdef _WIN32
-        fd_ = ::_open(path.c_str(), _O_RDONLY | _O_BINARY);
-#else
-        fd_ = ::open(path.c_str(), O_RDONLY);
+        open_flags |= _O_BINARY;
 #endif
+        fd_ = file_internal::open_utf8(path, open_flags);
         if (fd_ < 0) {
             return E_FILE_OPEN_ERR;
         }
