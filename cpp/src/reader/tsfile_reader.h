@@ -52,8 +52,8 @@ class TsFileReader {
     ~TsFileReader();
     TsFileReader(const TsFileReader&) = delete;
     TsFileReader& operator=(const TsFileReader&) = delete;
-    TsFileReader(TsFileReader&& other) noexcept;
-    TsFileReader& operator=(TsFileReader&& other) noexcept;
+    TsFileReader(TsFileReader&& other) = delete;
+    TsFileReader& operator=(TsFileReader&& other) = delete;
     /**
      * @brief open the tsfile
      *
@@ -277,7 +277,7 @@ class TsFileReader {
     storage::TableQueryExecutor* table_query_executor_;
     int table_query_executor_batch_size_ = -1;
     unsigned char file_version_ = 0;
-    std::unique_ptr<common::PageArena> tsfile_reader_meta_pa_;
+    common::PageArena tsfile_reader_meta_pa_;
     // Test-only hook for the unbounded-arena-growth regression check.
     friend class TsFileReaderMetaArenaTest;
 };

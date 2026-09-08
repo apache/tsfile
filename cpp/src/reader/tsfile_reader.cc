@@ -111,44 +111,11 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr),
-      tsfile_reader_meta_pa_(new common::PageArena()) {
-    tsfile_reader_meta_pa_->init(512, MOD_TSFILE_READER);
+      table_query_executor_(nullptr) {
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 }
 
 TsFileReader::~TsFileReader() { close(); }
-
-TsFileReader::TsFileReader(TsFileReader&& other) noexcept
-    : read_file_(std::move(other.read_file_)),
-      tsfile_executor_(other.tsfile_executor_),
-      table_query_executor_(other.table_query_executor_),
-      table_query_executor_batch_size_(other.table_query_executor_batch_size_),
-      file_version_(other.file_version_),
-      tsfile_reader_meta_pa_(std::move(other.tsfile_reader_meta_pa_)) {
-    other.tsfile_executor_ = nullptr;
-    other.table_query_executor_ = nullptr;
-    other.table_query_executor_batch_size_ = -1;
-    other.file_version_ = 0;
-}
-
-TsFileReader& TsFileReader::operator=(TsFileReader&& other) noexcept {
-    if (this != &other) {
-        close();
-        read_file_ = std::move(other.read_file_);
-        tsfile_executor_ = other.tsfile_executor_;
-        table_query_executor_ = other.table_query_executor_;
-        table_query_executor_batch_size_ =
-            other.table_query_executor_batch_size_;
-        file_version_ = other.file_version_;
-        tsfile_reader_meta_pa_ = std::move(other.tsfile_reader_meta_pa_);
-
-        other.tsfile_executor_ = nullptr;
-        other.table_query_executor_ = nullptr;
-        other.table_query_executor_batch_size_ = -1;
-        other.file_version_ = 0;
-    }
-    return *this;
-}
 
 int TsFileReader::open(const std::string& file_path) {
     std::unique_ptr<ReadFile> read_file(new ReadFile());
@@ -552,7 +519,7 @@ int TsFileReader::get_timeseries_metadata_impl(
     if (RET_FAIL(
             tsfile_executor_->get_tsfile_io_reader()
                 ->get_device_timeseries_meta_without_chunk_meta(
-                    device_id, timeseries_indexs, *tsfile_reader_meta_pa_))) {
+                    device_id, timeseries_indexs, tsfile_reader_meta_pa_))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
             result.emplace_back(std::shared_ptr<ITimeseriesIndex>(
@@ -571,8 +538,8 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     // duplicates the per-device payload).  Callers that need to retain prior
     // results past this call must copy them out before invoking again — the
     // shared_ptrs handed back use a noop deleter pointing into this arena.
-    tsfile_reader_meta_pa_->destroy();
-    tsfile_reader_meta_pa_->init(512, MOD_TSFILE_READER);
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
     DeviceTimeseriesMetadataMap result;
     for (const auto& device_id : device_ids) {
         std::vector<std::shared_ptr<ITimeseriesIndex>> list;
@@ -592,8 +559,8 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     }
 
     // Same arena-reset rationale as the device_ids overload above.
-    tsfile_reader_meta_pa_->destroy();
-    tsfile_reader_meta_pa_->init(512, MOD_TSFILE_READER);
+    tsfile_reader_meta_pa_.destroy();
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
 
     PageArena pa;
     pa.init(512, MOD_TSFILE_READER);
@@ -611,7 +578,7 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
         if (tsfile_executor_->get_tsfile_io_reader()
                 ->get_device_timeseries_meta_by_offset(
                     device_entry.start_offset, device_entry.end_offset,
-                    raw_ts_indexes, *tsfile_reader_meta_pa_) == E_OK) {
+                    raw_ts_indexes, tsfile_reader_meta_pa_) == E_OK) {
             std::vector<std::shared_ptr<ITimeseriesIndex>> list;
             for (auto ts_idx : raw_ts_indexes) {
                 list.emplace_back(

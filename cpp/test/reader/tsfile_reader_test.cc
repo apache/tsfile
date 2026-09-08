@@ -28,6 +28,7 @@
 #include <memory>
 #include <numeric>
 #include <random>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -47,6 +48,15 @@
 
 using namespace storage;
 using namespace common;
+
+static_assert(!std::is_copy_constructible<TsFileReader>::value,
+              "TsFileReader must not be copy constructible");
+static_assert(!std::is_copy_assignable<TsFileReader>::value,
+              "TsFileReader must not be copy assignable");
+static_assert(!std::is_move_constructible<TsFileReader>::value,
+              "TsFileReader must not be move constructible");
+static_assert(!std::is_move_assignable<TsFileReader>::value,
+              "TsFileReader must not be move assignable");
 
 TEST(TsFileSeriesScanIteratorTest, ConsumeRowOffsetSaturates) {
     storage::TsFileSeriesScanIterator ssi;
@@ -235,37 +245,6 @@ TEST_F(TsFileReaderTest, ReadsThroughRandomAccessFile) {
 
     reader.destroy_query_data_set(result);
     reader.close();
-}
-
-TEST_F(TsFileReaderTest, MoveTransfersAnOpenReader) {
-    const std::string device = "root.sg.move_device";
-    const std::string measurement = "temperature";
-    ASSERT_EQ(tsfile_writer_->register_timeseries(
-                  device, MeasurementSchema(measurement, TSDataType::INT32,
-                                            TSEncoding::PLAIN,
-                                            CompressionType::UNCOMPRESSED)),
-              E_OK);
-    TsRecord record(100, device);
-    record.add_point(measurement, static_cast<int32_t>(42));
-    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
-
-    TsFileReader original;
-    ASSERT_EQ(original.open(file_name_), E_OK);
-    TsFileReader moved = std::move(original);
-    TsFileReader reader;
-    reader = std::move(moved);
-
-    std::vector<std::string> paths = {device + "." + measurement};
-    ResultSet* result = nullptr;
-    ASSERT_EQ(reader.query(paths, 0, 200, result), E_OK);
-    ASSERT_NE(result, nullptr);
-    bool has_next = false;
-    ASSERT_EQ(result->next(has_next), E_OK);
-    ASSERT_TRUE(has_next);
-    EXPECT_EQ(result->get_value<int32_t>(2), 42);
-    reader.destroy_query_data_set(result);
 }
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
@@ -1736,7 +1715,7 @@ namespace storage {
 class TsFileReaderMetaArenaTest {
    public:
     static int64_t arena_used(const storage::TsFileReader& r) {
-        return r.tsfile_reader_meta_pa_->get_total_used_bytes();
+        return r.tsfile_reader_meta_pa_.get_total_used_bytes();
     }
 };
 }  // namespace storage

@@ -465,7 +465,7 @@ TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
     tsfile_table_writer->flush();
     tsfile_table_writer->close();
 
-    TsFileReader reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     std::vector<std::string> column_names = {"non-exist-column"};
@@ -501,7 +501,7 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     ASSERT_EQ(ret_, common::E_OK);
     ret_ = tsfile_table_writer_->close();
     ASSERT_EQ(ret_, common::E_OK);
-    TsFileReader reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value =
