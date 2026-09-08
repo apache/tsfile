@@ -49,24 +49,23 @@ func newError(op string, code int32) error {
 }
 
 var (
-	ErrInvalidArgument     = &Error{Code: 4}
-	ErrOutOfRange          = &Error{Code: 5}
-	ErrOverflow            = &Error{Code: 20}
-	ErrInvalidSchema       = &Error{Code: 8}
-	ErrTypeNotSupported    = &Error{Code: 26}
-	ErrTypeMismatch        = &Error{Code: 27}
-	ErrFileOpen            = &Error{Code: 28}
-	ErrFileClose           = &Error{Code: 29}
-	ErrFileWrite           = &Error{Code: 30}
-	ErrFileRead            = &Error{Code: 31}
-	ErrInvalidPath         = &Error{Code: 37}
-	ErrDeviceNotExist      = &Error{Code: 44}
-	ErrMeasurementNotExist = &Error{Code: 45}
-	ErrTableNotExist       = &Error{Code: 49}
-	ErrColumnNotExist      = &Error{Code: 50}
+	ErrInvalidArgument  = &Error{Code: 4}
+	ErrOutOfRange       = &Error{Code: 5}
+	ErrOverflow         = &Error{Code: 20}
+	ErrInvalidSchema    = &Error{Code: 8}
+	ErrTypeNotSupported = &Error{Code: 26}
+	ErrTypeMismatch     = &Error{Code: 27}
+	ErrFileOpen         = &Error{Code: 28}
+	ErrFileClose        = &Error{Code: 29}
+	ErrFileWrite        = &Error{Code: 30}
+	ErrFileRead         = &Error{Code: 31}
+	ErrInvalidPath      = &Error{Code: 37}
+	ErrTableNotExist    = &Error{Code: 49}
+	ErrColumnNotExist   = &Error{Code: 50}
 
-	ErrClosed    = errors.New("tsfile: closed")
-	ErrNullValue = errors.New("tsfile: null value")
+	ErrClosed          = errors.New("tsfile: closed")
+	ErrNullValue       = errors.New("tsfile: null value")
+	ErrWrongResultMode = errors.New("tsfile: operation is unavailable in this result mode")
 )
 
 func errorCodeMessage(code int32) string {

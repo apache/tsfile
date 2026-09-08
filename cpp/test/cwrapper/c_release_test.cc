@@ -47,15 +47,15 @@ TEST_F(CReleaseTest, TestCreateFile) {
     ASSERT_EQ(RET_OK, error_no);
     free_write_file(&file);
 
-    // Already exists
+    // Existing files are truncated and reopened.
     file = write_file_new("create_file1.tsfile", &error_no);
-    ASSERT_EQ(RET_ALREADY_EXIST, error_no);
-    ASSERT_EQ(nullptr, file);
+    ASSERT_EQ(RET_OK, error_no);
+    ASSERT_NE(nullptr, file);
+    free_write_file(&file);
 
-    // Folder: rejected either as an open error (POSIX) or as already-existing
-    // (Windows / filesystems where the directory already exists).
+    // A directory cannot be opened as a writable TsFile.
     file = write_file_new("test/", &error_no);
-    ASSERT_TRUE(error_no == RET_FILE_OPEN_ERR || error_no == RET_ALREADY_EXIST);
+    ASSERT_NE(RET_OK, error_no);
 
     remove("create_file1.tsfile");
     free_write_file(&file);

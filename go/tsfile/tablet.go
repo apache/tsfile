@@ -23,21 +23,25 @@ import (
 	"sync"
 )
 
-// Tablet is a fixed-capacity batch of rows for one device or table.
+// Tablet is a fixed-capacity batch of table rows.
 type Tablet struct {
 	mu      sync.Mutex
 	handle  *tabletHandle
 	columns []TabletColumn
 	maxRows int
+	timeSet []bool
+	rows    int
 }
 
 // NewTablet allocates a tablet with fixed columns and row capacity.
-func NewTablet(target string, columns []TabletColumn, maxRows int) (*Tablet, error) {
+func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("%w: at least one column is required", ErrInvalidArgument)
 	}
+	columns = append([]TabletColumn(nil), columns...)
 	names := make([]string, len(columns))
 	types := make([]DataType, len(columns))
+	seen := make(map[string]struct{}, len(columns))
 	for i, column := range columns {
 		if err := validateCString("new tablet", "column name", column.Name); err != nil {
 			return nil, fmt.Errorf("column %d: %w", i, err)
@@ -45,13 +49,42 @@ func NewTablet(target string, columns []TabletColumn, maxRows int) (*Tablet, err
 		if !validDataType(column.DataType) {
 			return nil, fmt.Errorf("%w: unsupported data type %d for column %q", ErrInvalidSchema, column.DataType, column.Name)
 		}
-		names[i], types[i] = column.Name, column.DataType
+		name := normalizeIdentifier(column.Name)
+		if _, ok := seen[name]; ok {
+			return nil, fmt.Errorf("%w: duplicate column %q", ErrInvalidSchema, column.Name)
+		}
+		seen[name] = struct{}{}
+		names[i], types[i] = name, column.DataType
+		columns[i].Name = name
 	}
-	handle, err := newTabletHandle(target, names, types, maxRows)
+	handle, err := newTabletHandle(names, types, maxRows)
 	if err != nil {
 		return nil, err
 	}
-	return &Tablet{handle: handle, columns: append([]TabletColumn(nil), columns...), maxRows: maxRows}, nil
+	return &Tablet{
+		handle: handle, columns: append([]TabletColumn(nil), columns...),
+		maxRows: maxRows, timeSet: make([]bool, maxRows),
+	}, nil
+}
+
+// SetBytes assigns a BLOB value without interpreting its contents.
+func (t *Tablet) SetBytes(row, column int, value []byte) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := t.validateLocked(row, column, DataTypeBlob); err != nil {
+		return err
+	}
+	if err := t.handle.addBytes(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
+}
+
+func (t *Tablet) markRowLocked(row int) {
+	if row >= t.rows {
+		t.rows = row + 1
+	}
 }
 
 func (t *Tablet) validateLocked(row, column int, allowed ...DataType) error {
@@ -80,7 +113,12 @@ func (t *Tablet) AddTimestamp(row int, timestamp int64) error {
 	if row < 0 || row >= t.maxRows {
 		return ErrOutOfRange
 	}
-	return t.handle.addTimestamp(row, timestamp)
+	if err := t.handle.addTimestamp(row, timestamp); err != nil {
+		return err
+	}
+	t.timeSet[row] = true
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetBool assigns a BOOLEAN value by zero-based row and column.
@@ -90,7 +128,11 @@ func (t *Tablet) SetBool(row, column int, value bool) error {
 	if err := t.validateLocked(row, column, DataTypeBoolean); err != nil {
 		return err
 	}
-	return t.handle.addBool(row, column, value)
+	if err := t.handle.addBool(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetInt32 assigns an INT32 or DATE value.
@@ -100,7 +142,11 @@ func (t *Tablet) SetInt32(row, column int, value int32) error {
 	if err := t.validateLocked(row, column, DataTypeInt32, DataTypeDate); err != nil {
 		return err
 	}
-	return t.handle.addInt32(row, column, value)
+	if err := t.handle.addInt32(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetInt64 assigns an INT64 or TIMESTAMP value.
@@ -110,7 +156,11 @@ func (t *Tablet) SetInt64(row, column int, value int64) error {
 	if err := t.validateLocked(row, column, DataTypeInt64, DataTypeTimestamp); err != nil {
 		return err
 	}
-	return t.handle.addInt64(row, column, value)
+	if err := t.handle.addInt64(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetFloat32 assigns a FLOAT value.
@@ -120,7 +170,11 @@ func (t *Tablet) SetFloat32(row, column int, value float32) error {
 	if err := t.validateLocked(row, column, DataTypeFloat); err != nil {
 		return err
 	}
-	return t.handle.addFloat32(row, column, value)
+	if err := t.handle.addFloat32(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetFloat64 assigns a DOUBLE value.
@@ -130,7 +184,11 @@ func (t *Tablet) SetFloat64(row, column int, value float64) error {
 	if err := t.validateLocked(row, column, DataTypeDouble); err != nil {
 		return err
 	}
-	return t.handle.addFloat64(row, column, value)
+	if err := t.handle.addFloat64(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // SetString assigns a TEXT or STRING value.
@@ -143,7 +201,11 @@ func (t *Tablet) SetString(row, column int, value string) error {
 	if strings.IndexByte(value, 0) >= 0 {
 		return fmt.Errorf("%w: strings with embedded NUL are not supported", ErrInvalidArgument)
 	}
-	return t.handle.addString(row, column, value)
+	if err := t.handle.addString(row, column, value); err != nil {
+		return err
+	}
+	t.markRowLocked(row)
+	return nil
 }
 
 // Rows returns the number of rows currently present in the tablet. It returns
@@ -154,7 +216,7 @@ func (t *Tablet) Rows() int {
 	if t.handle == nil || t.handle.ptr == nil {
 		return 0
 	}
-	return t.handle.rowCount()
+	return t.rows
 }
 
 // Close releases the native tablet. It is safe to call more than once.

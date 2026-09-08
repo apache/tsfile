@@ -15,18 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// This file is the only place in the package that imports "C". All cgo
-// traffic goes through the unexported helpers and handle types defined here
-// so that C allocation and release sites stay easy to audit. Go pointers are
-// never retained by C: values crossing the boundary are copied into
-// temporary C allocations (C.CString / C.malloc) that are freed before the
-// helper returns, and C-allocated results are copied back into Go memory
-// before the matching free call.
-//
-// Handle constructors return plain Go values (unsafe.Pointer, int32) rather
-// than _Ctype aliases so that the narrow API surface of the bridge is usable
-// from the package's other files and _test files, which live in separate
-// cgo translation units and cannot reference C types directly.
 package tsfile
 
 /*
@@ -41,6 +29,19 @@ package tsfile
 #include "cwrapper/tsfile_cwrapper.h"
 */
 import "C"
+
+// This file is the only place in the package that imports "C". All cgo
+// traffic goes through the unexported helpers and handle types defined here
+// so that C allocation and release sites stay easy to audit. Go pointers are
+// never retained by C: values crossing the boundary are copied into
+// temporary C allocations (C.CString / C.malloc) that are freed before the
+// helper returns, and C-allocated results are copied back into Go memory
+// before the matching free call.
+//
+// Handle constructors return plain Go values (unsafe.Pointer, int32) rather
+// than _Ctype aliases so that the narrow API surface of the bridge is usable
+// from the package's other files and _test files, which live in separate
+// cgo translation units and cannot reference C types directly.
 
 import (
 	"fmt"
@@ -291,7 +292,21 @@ type readerHandle struct{ nativeHandle }
 
 // resultSetHandle is the native half of ResultSet. It is valid only while
 // its owning reader remains open.
-type resultSetHandle struct{ nativeHandle }
+type resultSetHandle struct {
+	nativeHandle
+	tagFilter unsafe.Pointer
+}
+
+func (h *resultSetHandle) close() error {
+	if err := h.nativeHandle.close(); err != nil {
+		return err
+	}
+	if h.tagFilter != nil {
+		C.tsfile_tag_filter_free(C.TagFilterHandle(h.tagFilter))
+		h.tagFilter = nil
+	}
+	return nil
+}
 
 // releaseReader calls tsfile_reader_close, which deletes the native reader.
 // A nil pointer is reported as RET_OK, matching close-on-nil semantics.
@@ -381,10 +396,9 @@ func validateCInt32(op, field string, v int) error {
 	return nil
 }
 
-// newTabletHandle creates a tablet whose rows target target (a device path or
-// a table name) with the given column schema and row capacity. maxRows must
-// be in [1, cTabletMaxRowsMax) per the native Tablet contract.
-func newTabletHandle(target string, columnNames []string, dataTypes []DataType, maxRows int) (*tabletHandle, error) {
+// newTabletHandle creates a targetless table batch. The bound Writer supplies
+// the table name when the batch is written.
+func newTabletHandle(columnNames []string, dataTypes []DataType, maxRows int) (*tabletHandle, error) {
 	if len(columnNames) == 0 || len(dataTypes) != len(columnNames) || maxRows < 1 {
 		return nil, newError("new tablet", C.RET_INVALID_ARG)
 	}
@@ -394,14 +408,9 @@ func newTabletHandle(target string, columnNames []string, dataTypes []DataType, 
 	if err := validateCInt32("new tablet", "column count", len(columnNames)); err != nil {
 		return nil, err
 	}
-	if err := validateCString("new tablet", "target", target); err != nil {
-		return nil, err
-	}
 	if idx, err := validateCStrings("new tablet", "column", columnNames); err != nil {
 		return nil, fmt.Errorf("%w: column name %d is invalid", err, idx)
 	}
-	targetCs := cStringPtr(target)
-	defer freeCString(targetCs)
 	names, err := marshalCStrings(columnNames)
 	if err != nil {
 		return nil, err
@@ -412,13 +421,7 @@ func newTabletHandle(target string, columnNames []string, dataTypes []DataType, 
 	for i, t := range dataTypes {
 		types[i] = C.TSDataType(t)
 	}
-	h := C.tablet_new_with_target_name(
-		targetCs,
-		&names[0],
-		&types[0],
-		C.int(len(dataTypes)),
-		C.int(maxRows),
-	)
+	h := C.tablet_new(&names[0], &types[0], C.uint32_t(len(dataTypes)), C.uint32_t(maxRows))
 	if h == nil {
 		return nil, newError("new tablet", C.RET_OOM)
 	}
@@ -476,122 +479,89 @@ func (h *tabletHandle) addString(row, column int, value string) error {
 		C.Tablet(h.ptr), C.uint32_t(row), C.uint32_t(column), cs, C.int(len(value)))))
 }
 
+func (h *tabletHandle) addBytes(row, column int, value []byte) error {
+	p, n, err := copyCBytes("set tablet bytes", value)
+	if err != nil {
+		return err
+	}
+	defer freeCBytes(p)
+	return newError("set tablet bytes", cerrno(C.tablet_add_value_by_index_string_with_len(
+		C.Tablet(h.ptr), C.uint32_t(row), C.uint32_t(column), (*C.char)(p), C.int(n))))
+}
+
 // ---------------------------------------------------------------------------
 // Writer handle
 // ---------------------------------------------------------------------------
 
-// writerHandle is the native half of the public Writer type. It uses the
-// public generic writer API; tsfile_generic_writer_close flushes, closes, and
-// deletes the native writer.
-type writerHandle struct{ nativeHandle }
+// writerHandle owns a table writer and the WriteFile passed to it.
+type writerHandle struct {
+	nativeHandle
+	file unsafe.Pointer
+}
 
 // releaseWriter closes and deletes the native writer; nil is RET_OK.
 func releaseWriter(ptr unsafe.Pointer) cerrno {
 	if ptr == nil {
 		return C.RET_OK
 	}
-	return cerrno(C.tsfile_generic_writer_close(C.TsFileGenericWriter(ptr)))
+	return cerrno(C.tsfile_writer_close(C.TsFileWriter(ptr)))
+}
+
+func (h *writerHandle) close() error {
+	if err := h.nativeHandle.close(); err != nil {
+		return err
+	}
+	if h.file != nil {
+		file := C.WriteFile(h.file)
+		C.free_write_file(&file)
+		h.file = nil
+	}
+	return nil
 }
 
 // newWriterHandle opens (or creates) the TsFile at path for writing.
 // memoryThresholdBytes bounds the in-memory write buffer.
-func newWriterHandle(path string, memoryThresholdBytes uint64) (*writerHandle, error) {
+func newWriterHandle(path string, schema TableSchema, memoryThresholdBytes uint64) (*writerHandle, error) {
 	if err := validateCString("open writer", "path", path); err != nil {
 		return nil, err
 	}
 	cs := cStringPtr(path)
 	defer freeCString(cs)
 	var code C.ERRNO
-	h := C.tsfile_generic_writer_new(cs, C.uint64_t(memoryThresholdBytes), &code)
-	if h == nil {
+	file := C.write_file_new(cs, &code)
+	if file == nil {
 		return nil, newError("open writer", cerrno(code))
 	}
-	return &writerHandle{nativeHandle{ptr: unsafe.Pointer(h), release: releaseWriter}}, nil
-}
-
-func allocTimeseriesSchema(schema TimeseriesSchema) (*C.TimeseriesSchema, func(), error) {
-	name := cStringPtr(schema.Name)
-	if name == nil {
-		return nil, func() {}, newError("marshal timeseries schema", C.RET_OOM)
+	nativeSchema, freeSchema, err := allocTableSchema(schema)
+	if err != nil {
+		C.free_write_file(&file)
+		return nil, err
 	}
-	p := (*C.TimeseriesSchema)(C.malloc(C.size_t(C.sizeof_TimeseriesSchema)))
-	if p == nil {
-		freeCString(name)
-		return nil, func() {}, newError("marshal timeseries schema", C.RET_OOM)
+	defer freeSchema()
+	h := C.tsfile_writer_new_with_memory_threshold(file, nativeSchema, C.uint64_t(memoryThresholdBytes), &code)
+	if h == nil {
+		C.free_write_file(&file)
+		return nil, newError("open writer", cerrno(code))
 	}
-	p.timeseries_name = name
-	p.data_type = C.TSDataType(schema.DataType)
-	p.encoding = C.TSEncoding(schema.Encoding)
-	p.compression = C.CompressionType(schema.Compression)
-	return p, func() {
-		freeCString(name)
-		C.free(unsafe.Pointer(p))
+	return &writerHandle{
+		nativeHandle: nativeHandle{ptr: unsafe.Pointer(h), release: releaseWriter},
+		file:         unsafe.Pointer(file),
 	}, nil
 }
 
-func (h *writerHandle) registerTimeseries(device string, schema TimeseriesSchema) error {
-	deviceName := cStringPtr(device)
-	defer freeCString(deviceName)
-	native, freeSchema, err := allocTimeseriesSchema(schema)
-	if err != nil {
-		return err
-	}
-	defer freeSchema()
-	return newError("register timeseries", cerrno(C.tsfile_generic_writer_register_timeseries(
-		C.TsFileGenericWriter(h.ptr), deviceName, native)))
-}
-
-func (h *writerHandle) registerDevice(schema DeviceSchema) error {
-	deviceName := cStringPtr(schema.Device)
-	defer freeCString(deviceName)
-	names, err := marshalCStrings(timeseriesNames(schema.TimeSeries))
-	if err != nil {
-		return err
-	}
-	defer freeCStrings(names)
-
-	var series *C.TimeseriesSchema
-	if len(schema.TimeSeries) > 0 {
-		mem := C.malloc(C.size_t(len(schema.TimeSeries)) * C.size_t(C.sizeof_TimeseriesSchema))
-		if mem == nil {
-			return newError("marshal device schema", C.RET_OOM)
-		}
-		defer C.free(mem)
-		items := unsafe.Slice((*C.TimeseriesSchema)(mem), len(schema.TimeSeries))
-		for i, item := range schema.TimeSeries {
-			items[i].timeseries_name = names[i]
-			items[i].data_type = C.TSDataType(item.DataType)
-			items[i].encoding = C.TSEncoding(item.Encoding)
-			items[i].compression = C.CompressionType(item.Compression)
-		}
-		series = (*C.TimeseriesSchema)(mem)
-	}
-	native := (*C.DeviceSchema)(C.malloc(C.size_t(C.sizeof_DeviceSchema)))
-	if native == nil {
-		return newError("marshal device schema", C.RET_OOM)
-	}
-	defer C.free(unsafe.Pointer(native))
-	native.device_name = deviceName
-	native.timeseries_schema = series
-	native.timeseries_num = C.int(len(schema.TimeSeries))
-	return newError("register device", cerrno(C.tsfile_generic_writer_register_device(
-		C.TsFileGenericWriter(h.ptr), native)))
-}
-
-func (h *writerHandle) registerTable(schema TableSchema) error {
+func allocTableSchema(schema TableSchema) (*C.TableSchema, func(), error) {
 	tableName := cStringPtr(schema.Table)
-	defer freeCString(tableName)
 	names, err := marshalCStrings(columnNames(schema.Columns))
 	if err != nil {
-		return err
+		freeCString(tableName)
+		return nil, func() {}, err
 	}
-	defer freeCStrings(names)
-
 	mem := C.malloc(C.size_t(len(schema.Columns)) * C.size_t(C.sizeof_ColumnSchema))
 	if mem == nil {
-		return newError("marshal table schema", C.RET_OOM)
+		freeCString(tableName)
+		freeCStrings(names)
+		return nil, func() {}, newError("marshal table schema", C.RET_OOM)
 	}
-	defer C.free(mem)
 	columns := unsafe.Slice((*C.ColumnSchema)(mem), len(schema.Columns))
 	for i, item := range schema.Columns {
 		columns[i].column_name = names[i]
@@ -600,28 +570,34 @@ func (h *writerHandle) registerTable(schema TableSchema) error {
 	}
 	native := (*C.TableSchema)(C.malloc(C.size_t(C.sizeof_TableSchema)))
 	if native == nil {
-		return newError("marshal table schema", C.RET_OOM)
+		freeCString(tableName)
+		freeCStrings(names)
+		C.free(mem)
+		return nil, func() {}, newError("marshal table schema", C.RET_OOM)
 	}
-	defer C.free(unsafe.Pointer(native))
 	native.table_name = tableName
 	native.column_schemas = (*C.ColumnSchema)(mem)
 	native.column_num = C.int(len(schema.Columns))
-	return newError("register table", cerrno(C.tsfile_generic_writer_register_table(
-		C.TsFileGenericWriter(h.ptr), native)))
-}
-
-func (h *writerHandle) writeTreeTablet(tablet *tabletHandle) error {
-	return newError("write tree tablet", cerrno(C.tsfile_generic_writer_write_tree_tablet(
-		C.TsFileGenericWriter(h.ptr), C.Tablet(tablet.ptr))))
+	return native, func() {
+		freeCString(tableName)
+		freeCStrings(names)
+		C.free(mem)
+		C.free(unsafe.Pointer(native))
+	}, nil
 }
 
 func (h *writerHandle) writeTableTablet(tablet *tabletHandle) error {
-	return newError("write table tablet", cerrno(C.tsfile_generic_writer_write_table_tablet(
-		C.TsFileGenericWriter(h.ptr), C.Tablet(tablet.ptr))))
+	return newError("write table tablet", cerrno(C.tsfile_writer_write(
+		C.TsFileWriter(h.ptr), C.Tablet(tablet.ptr))))
+}
+
+func (h *writerHandle) writeArrow(array, schema unsafe.Pointer, timeColumn int) error {
+	return newError("write Arrow batch", cerrno(C.tsfile_writer_write_arrow(
+		C.TsFileWriter(h.ptr), (*C.ArrowArray)(array), (*C.ArrowSchema)(schema), C.int(timeColumn))))
 }
 
 func (h *writerHandle) flush() error {
-	return newError("flush writer", cerrno(C.tsfile_generic_writer_flush(C.TsFileGenericWriter(h.ptr))))
+	return newError("flush writer", cerrno(C.tsfile_writer_flush(C.TsFileWriter(h.ptr))))
 }
 
 func (h *writerHandle) addProperty(key string, value []byte) error {
@@ -635,8 +611,8 @@ func (h *writerHandle) addProperty(key string, value []byte) error {
 		return err
 	}
 	defer freeCBytes(valuePtr)
-	return newError("add property", cerrno(C.tsfile_generic_writer_add_tsfile_property(
-		C.TsFileGenericWriter(h.ptr), (*C.char)(keyPtr), C.uint32_t(keyLen),
+	return newError("add property", cerrno(C.tsfile_writer_add_tsfile_property(
+		C.TsFileWriter(h.ptr), (*C.char)(keyPtr), C.uint32_t(keyLen),
 		(*C.uint8_t)(valuePtr), C.uint32_t(valueLen))))
 }
 
@@ -651,64 +627,157 @@ func newResultSetHandle(ptr C.ResultSet, code C.ERRNO, op string) (*resultSetHan
 	if ptr == nil {
 		return nil, fmt.Errorf("%s: native query returned a nil result", op)
 	}
-	return &resultSetHandle{nativeHandle{ptr: unsafe.Pointer(ptr), release: releaseResultSet}}, nil
+	return &resultSetHandle{nativeHandle: nativeHandle{ptr: unsafe.Pointer(ptr), release: releaseResultSet}}, nil
 }
 
-func (h *readerHandle) queryTable(query TableQuery) (*resultSetHandle, error) {
-	table := cStringPtr(query.Table)
-	defer freeCString(table)
-	columns, err := marshalCStrings(query.Columns)
+func (h *readerHandle) queryTableOptions(table string, columns []string, options queryOptions) (*resultSetHandle, error) {
+	tableName := cStringPtr(table)
+	defer freeCString(tableName)
+	columnNames, err := marshalCStrings(columns)
 	if err != nil {
 		return nil, err
 	}
-	defer freeCStrings(columns)
+	defer freeCStrings(columnNames)
+	var nativeFilter C.TagFilterHandle
+	if options.tagFilter != nil {
+		nativeFilter, err = h.compileTagFilter(table, options.tagFilter)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var code C.ERRNO
-	result := C.tsfile_query_table(C.TsFileReader(h.ptr), table, &columns[0],
-		C.uint32_t(len(columns)), C.Timestamp(query.Start), C.Timestamp(query.End), &code)
-	return newResultSetHandle(result, code, "query table")
+	result := C.tsfile_reader_query_table(
+		C.TsFileReader(h.ptr), tableName, &columnNames[0], C.uint32_t(len(columnNames)),
+		C.Timestamp(options.start), C.Timestamp(options.end), C.int(options.offset), C.int(options.limit),
+		nativeFilter, C.int(options.batchSize), &code)
+	handle, err := newResultSetHandle(result, code, "query table")
+	if err != nil {
+		if nativeFilter != nil {
+			C.tsfile_tag_filter_free(nativeFilter)
+		}
+		return nil, err
+	}
+	handle.tagFilter = unsafe.Pointer(nativeFilter)
+	return handle, nil
 }
 
-func (h *readerHandle) queryTree(query TreeQuery) (*resultSetHandle, error) {
-	paths, err := marshalCStrings(query.Paths)
-	if err != nil {
-		return nil, err
+func (h *readerHandle) compileTagFilter(table string, filter TagFilter) (C.TagFilterHandle, error) {
+	value := filter.(*tagFilter)
+	switch value.op {
+	case tagEqual, tagNotEqual, tagLess, tagLessEqual, tagGreater, tagGreaterEqual:
+		tableName, column, operand := cStringPtr(table), cStringPtr(value.column), cStringPtr(value.value)
+		defer freeCString(tableName)
+		defer freeCString(column)
+		defer freeCString(operand)
+		var code C.ERRNO
+		handle := C.tsfile_tag_filter_create(C.TsFileReader(h.ptr), tableName, column, operand,
+			C.TagFilterOp(value.op), &code)
+		if code != C.RET_OK || handle == nil {
+			if code == C.RET_OK {
+				code = C.RET_COLUMN_NOT_EXIST
+			}
+			return nil, newError("create tag filter", cerrno(code))
+		}
+		return handle, nil
+	case tagBetween:
+		tableName, column := cStringPtr(table), cStringPtr(value.column)
+		lower, upper := cStringPtr(value.value), cStringPtr(value.secondValue)
+		defer freeCString(tableName)
+		defer freeCString(column)
+		defer freeCString(lower)
+		defer freeCString(upper)
+		var code C.ERRNO
+		handle := C.tsfile_tag_filter_between(C.TsFileReader(h.ptr), tableName, column, lower, upper, false, &code)
+		if code != C.RET_OK || handle == nil {
+			if code == C.RET_OK {
+				code = C.RET_COLUMN_NOT_EXIST
+			}
+			return nil, newError("create tag filter", cerrno(code))
+		}
+		return handle, nil
+	case tagAnd, tagOr:
+		left, err := h.compileTagFilter(table, value.left)
+		if err != nil {
+			return nil, err
+		}
+		right, err := h.compileTagFilter(table, value.right)
+		if err != nil {
+			C.tsfile_tag_filter_free(left)
+			return nil, err
+		}
+		var combined C.TagFilterHandle
+		if value.op == tagAnd {
+			combined = C.tsfile_tag_filter_and(left, right)
+		} else {
+			combined = C.tsfile_tag_filter_or(left, right)
+		}
+		if combined == nil {
+			C.tsfile_tag_filter_free(left)
+			C.tsfile_tag_filter_free(right)
+			return nil, newError("create tag filter", C.RET_INVALID_ARG)
+		}
+		return combined, nil
+	case tagNot:
+		child, err := h.compileTagFilter(table, value.left)
+		if err != nil {
+			return nil, err
+		}
+		combined := C.tsfile_tag_filter_not(child)
+		if combined == nil {
+			C.tsfile_tag_filter_free(child)
+			return nil, newError("create tag filter", C.RET_INVALID_ARG)
+		}
+		return combined, nil
+	default:
+		return nil, newError("create tag filter", C.RET_INVALID_ARG)
 	}
-	defer freeCStrings(paths)
-	var code C.ERRNO
-	result := C.tsfile_reader_query_tree(C.TsFileReader(h.ptr), &paths[0],
-		C.uint32_t(len(paths)), C.Timestamp(query.Start), C.Timestamp(query.End), &code)
-	return newResultSetHandle(result, code, "query tree")
 }
 
-func (h *readerHandle) queryTreeRows(query TreeRowsQuery) (*resultSetHandle, error) {
-	devices, err := marshalCStrings(query.Devices)
-	if err != nil {
-		return nil, err
+func copyTableSchemaFromC(schema *C.TableSchema) TableSchema {
+	result := TableSchema{Table: C.GoString(schema.table_name)}
+	if schema.column_num <= 0 || schema.column_schemas == nil {
+		return result
 	}
-	defer freeCStrings(devices)
-	measurements, err := marshalCStrings(query.Measurements)
-	if err != nil {
-		return nil, err
+	columns := unsafe.Slice(schema.column_schemas, int(schema.column_num))
+	result.Columns = make([]ColumnSchema, len(columns))
+	for i, column := range columns {
+		result.Columns[i] = ColumnSchema{
+			Name: C.GoString(column.column_name), DataType: DataType(column.data_type), Category: ColumnCategory(column.column_category),
+		}
 	}
-	defer freeCStrings(measurements)
-	var code C.ERRNO
-	result := C.tsfile_reader_query_tree_by_row(C.TsFileReader(h.ptr), &devices[0], C.int(len(devices)),
-		&measurements[0], C.int(len(measurements)), C.int(query.Offset), C.int(query.Limit), &code)
-	return newResultSetHandle(result, code, "query tree rows")
+	return result
 }
 
-func (h *readerHandle) queryTableRows(query TableRowsQuery) (*resultSetHandle, error) {
-	table := cStringPtr(query.Table)
-	defer freeCString(table)
-	columns, err := marshalCStrings(query.Columns)
-	if err != nil {
-		return nil, err
+func (h *readerHandle) tableSchema(table string) (TableSchema, error) {
+	tableName := cStringPtr(table)
+	defer freeCString(tableName)
+	var native C.TableSchema
+	code := C.tsfile_reader_get_table_schema_checked(C.TsFileReader(h.ptr), tableName, &native)
+	if code != C.RET_OK {
+		return TableSchema{}, newError("get table schema", cerrno(code))
 	}
-	defer freeCStrings(columns)
-	var code C.ERRNO
-	result := C.tsfile_reader_query_table_by_row(C.TsFileReader(h.ptr), table, &columns[0],
-		C.int(len(columns)), C.int(query.Offset), C.int(query.Limit), nil, C.int(query.BatchSize), &code)
-	return newResultSetHandle(result, code, "query table rows")
+	defer C.free_table_schema(native)
+	return copyTableSchemaFromC(&native), nil
+}
+
+func (h *readerHandle) allTableSchemas() ([]TableSchema, error) {
+	var native *C.TableSchema
+	var count C.uint32_t
+	code := C.tsfile_reader_get_all_table_schemas_checked(C.TsFileReader(h.ptr), &native, &count)
+	if code != C.RET_OK {
+		return nil, newError("get all table schemas", cerrno(code))
+	}
+	if native == nil || count == 0 {
+		return []TableSchema{}, nil
+	}
+	items := unsafe.Slice(native, int(count))
+	result := make([]TableSchema, len(items))
+	for i := range items {
+		result[i] = copyTableSchemaFromC(&items[i])
+		C.free_table_schema(items[i])
+	}
+	C.free(unsafe.Pointer(native))
+	return result, nil
 }
 
 func (h *resultSetHandle) next() (bool, error) {
@@ -717,13 +786,18 @@ func (h *resultSetHandle) next() (bool, error) {
 	return ok, newError("advance result set", cerrno(code))
 }
 
+func (h *resultSetHandle) nextArrow(array, schema unsafe.Pointer) error {
+	return newError("read Arrow batch", cerrno(C.tsfile_result_set_get_next_tsblock_as_arrow(
+		C.ResultSet(h.ptr), (*C.ArrowArray)(array), (*C.ArrowSchema)(schema))))
+}
+
 func (h *resultSetHandle) metadata() []ColumnMetadata {
 	meta := C.tsfile_result_set_get_metadata(C.ResultSet(h.ptr))
 	defer C.free_result_set_meta_data(meta)
 	count := int(C.tsfile_result_set_metadata_get_column_num(meta))
 	columns := make([]ColumnMetadata, count)
 	for i := range columns {
-		// The C metadata ABI is 1-based; the public Go API is 0-based.
+		// The C metadata ABI and the public Go API are both 1-based.
 		index := C.uint32_t(i + 1)
 		columns[i] = ColumnMetadata{
 			Name:     C.GoString(C.tsfile_result_set_metadata_get_column_name(meta, index)),
@@ -734,36 +808,51 @@ func (h *resultSetHandle) metadata() []ColumnMetadata {
 }
 
 func (h *resultSetHandle) isNull(column int) bool {
-	return bool(C.tsfile_result_set_is_null_by_index(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return bool(C.tsfile_result_set_is_null_by_index(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) bool(column int) bool {
-	return bool(C.tsfile_result_set_get_value_by_index_bool(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return bool(C.tsfile_result_set_get_value_by_index_bool(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) int32(column int) int32 {
-	return int32(C.tsfile_result_set_get_value_by_index_int32_t(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return int32(C.tsfile_result_set_get_value_by_index_int32_t(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) int64(column int) int64 {
-	return int64(C.tsfile_result_set_get_value_by_index_int64_t(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return int64(C.tsfile_result_set_get_value_by_index_int64_t(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) float32(column int) float32 {
-	return float32(C.tsfile_result_set_get_value_by_index_float(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return float32(C.tsfile_result_set_get_value_by_index_float(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) float64(column int) float64 {
-	return float64(C.tsfile_result_set_get_value_by_index_double(C.ResultSet(h.ptr), C.uint32_t(column+1)))
+	return float64(C.tsfile_result_set_get_value_by_index_double(C.ResultSet(h.ptr), C.uint32_t(column)))
 }
 
 func (h *resultSetHandle) string(column int) string {
-	p := C.tsfile_result_set_get_value_by_index_string(C.ResultSet(h.ptr), C.uint32_t(column+1))
+	p := C.tsfile_result_set_get_value_by_index_string(C.ResultSet(h.ptr), C.uint32_t(column))
 	if p == nil {
 		return ""
 	}
 	defer C.free(unsafe.Pointer(p))
 	return C.GoString(p)
+}
+
+func (h *resultSetHandle) bytes(column int) ([]byte, error) {
+	var value *C.uint8_t
+	var length C.uint32_t
+	code := C.tsfile_result_set_get_value_by_index_binary(
+		C.ResultSet(h.ptr), C.uint32_t(column), &value, &length)
+	if code != C.RET_OK {
+		return nil, newError("get result bytes", cerrno(code))
+	}
+	if value == nil {
+		return []byte{}, nil
+	}
+	defer C.free(unsafe.Pointer(value))
+	return cgoBytes(unsafe.Pointer(value), int(length)), nil
 }
 
 // unsafe_NewPointer returns a small, non-nil Go-managed pointer suitable for

@@ -40,8 +40,8 @@ writes always target the writer's bound table.
 
 `NewTablet(columns, maxRows)` creates a reusable table batch. Row and column
 indexes on a Tablet are zero-based. It supports setters for BOOLEAN, INT32,
-DATE, INT64, TIMESTAMP, FLOAT, DOUBLE, STRING, TEXT, and BLOB, as well as NULL
-and reset operations.
+DATE, INT64, TIMESTAMP, FLOAT, DOUBLE, STRING, TEXT, and BLOB. Cells that are
+not assigned remain NULL. A Tablet is not reset or reused after writing.
 
 `NewReader(path)` opens a file. `Reader.Query(table, columns, options...)` is
 the only table query entry point. The options are `WithTimeRange`,
@@ -60,9 +60,9 @@ methods reject row-mode result sets. `ReadArrowRecordBatch` and
 `ReadArrowBatch` return `io.EOF` after the last batch.
 
 Arrow writes use `github.com/apache/arrow-go/v18`. `WriteArrowBatch` accepts
-an `arrow.RecordBatch`; `WriteArrowTable` accepts an `arrow.Table`. Both
-validate the time column, field names, field types, row counts, and nullability
-against the writer schema before crossing the C boundary.
+an `arrow.Record` or `arrow.Table` and validates the time column, field names,
+field types, row counts, and nullability against the writer schema before
+crossing the C boundary.
 
 ## C ABI
 
@@ -88,15 +88,17 @@ when they fail.
 Table schemas require a non-empty table name, unique non-empty column names,
 supported data types, and TAG or FIELD column categories. Names containing a
 NUL byte are rejected before cgo conversion. Public table fields exclude
-VECTOR and NULL_TYPE.
+VECTOR and NULL_TYPE. Real table and column identifiers are normalized to
+lower case, matching the native table model and Python binding.
 
 BLOB values preserve their explicit length, embedded NUL bytes, empty values,
 and NULL distinction. STRING and TEXT remain UTF-8 strings. Time values are
 signed 64-bit integers and may not be NULL in Tablet or Arrow input.
 
-The writer serializes operations and becomes closed even if native close
-reports an error. A reader owns the result sets it creates; closing the reader
-closes those result sets first. Close is idempotent for all Go wrappers.
+The writer serializes operations. If native close reports an error, the writer
+retains the native handle so the caller may retry. A reader owns the result
+sets it creates; closing the reader closes those result sets first. Successful
+close is idempotent for all Go wrappers.
 
 ## Compatibility and migration
 

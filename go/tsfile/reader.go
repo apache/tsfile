@@ -19,33 +19,90 @@ package tsfile
 
 import (
 	"fmt"
+	"math"
 	"sync"
 )
 
-// TableQuery selects table-model columns over an inclusive time range.
-type TableQuery struct {
-	Table      string
-	Columns    []string
-	Start, End int64
+type queryOptions struct {
+	start, end               int64
+	offset, limit, batchSize int
+	tagFilter                TagFilter
 }
 
-// TreeQuery selects exact tree-model full paths over an inclusive time range.
-type TreeQuery struct {
-	Paths      []string
-	Start, End int64
+// QueryOption customizes one table query.
+type QueryOption func(*queryOptions) error
+
+func WithTimeRange(start, end int64) QueryOption {
+	return func(options *queryOptions) error {
+		if end < start {
+			return fmt.Errorf("%w: end must not precede start", ErrInvalidArgument)
+		}
+		options.start, options.end = start, end
+		return nil
+	}
 }
 
-// TreeRowsQuery selects tree-model rows with global offset and limit.
-type TreeRowsQuery struct {
-	Devices, Measurements []string
-	Offset, Limit         int
+func WithTagFilter(filter TagFilter) QueryOption {
+	return func(options *queryOptions) error {
+		if err := validateTagFilter(filter); err != nil {
+			return err
+		}
+		options.tagFilter = filter
+		return nil
+	}
 }
 
-// TableRowsQuery selects table-model rows with offset and limit.
-type TableRowsQuery struct {
-	Table                    string
-	Columns                  []string
-	Offset, Limit, BatchSize int
+func WithOffset(offset int) QueryOption {
+	return func(options *queryOptions) error {
+		if offset < 0 {
+			return fmt.Errorf("%w: offset must be nonnegative", ErrInvalidArgument)
+		}
+		if err := validateCInt32("query", "offset", offset); err != nil {
+			return err
+		}
+		options.offset = offset
+		return nil
+	}
+}
+
+func WithLimit(limit int) QueryOption {
+	return func(options *queryOptions) error {
+		if limit < -1 {
+			return fmt.Errorf("%w: limit must be -1 or nonnegative", ErrInvalidArgument)
+		}
+		if err := validateCInt32("query", "limit", limit); err != nil {
+			return err
+		}
+		options.limit = limit
+		return nil
+	}
+}
+
+func WithBatchSize(batchSize int) QueryOption {
+	return func(options *queryOptions) error {
+		if batchSize <= 0 {
+			options.batchSize = 0
+			return nil
+		}
+		if err := validateCInt32("query", "batch size", batchSize); err != nil {
+			return err
+		}
+		options.batchSize = batchSize
+		return nil
+	}
+}
+
+func buildQueryOptions(options ...QueryOption) (queryOptions, error) {
+	settings := queryOptions{start: math.MinInt64, end: math.MaxInt64, limit: -1}
+	for _, option := range options {
+		if option == nil {
+			return queryOptions{}, fmt.Errorf("%w: nil query option", ErrInvalidArgument)
+		}
+		if err := option(&settings); err != nil {
+			return queryOptions{}, err
+		}
+	}
+	return settings, nil
 }
 
 // Reader queries one TsFile and owns all ResultSets created from it.
@@ -77,7 +134,7 @@ func validateQueryStrings(op, field string, values []string) error {
 	return nil
 }
 
-func (r *Reader) query(fn func(*readerHandle) (*resultSetHandle, error)) (*ResultSet, error) {
+func (r *Reader) query(mode resultMode, fn func(*readerHandle) (*resultSetHandle, error)) (*ResultSet, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.handle == nil || r.handle.ptr == nil {
@@ -87,79 +144,60 @@ func (r *Reader) query(fn func(*readerHandle) (*resultSetHandle, error)) (*Resul
 	if err != nil {
 		return nil, err
 	}
-	result := &ResultSet{handle: handle, reader: r}
+	result := &ResultSet{handle: handle, reader: r, mode: mode}
 	result.metadata = handle.metadata()
 	r.results[result] = struct{}{}
 	return result, nil
 }
 
-// QueryTable executes a time-range table-model query.
-func (r *Reader) QueryTable(query TableQuery) (*ResultSet, error) {
-	if err := validateCString("query table", "table", query.Table); err != nil {
+// Query executes a table query. Omitting options scans the full time range in
+// row mode.
+func (r *Reader) Query(table string, columns []string, options ...QueryOption) (*ResultSet, error) {
+	if err := validateCString("query table", "table", table); err != nil {
 		return nil, err
 	}
-	if err := validateQueryStrings("query table", "columns", query.Columns); err != nil {
+	if err := validateQueryStrings("query table", "columns", columns); err != nil {
 		return nil, err
 	}
-	if query.End < query.Start {
-		return nil, fmt.Errorf("%w: end must not precede start", ErrInvalidArgument)
+	settings, err := buildQueryOptions(options...)
+	if err != nil {
+		return nil, err
 	}
-	return r.query(func(h *readerHandle) (*resultSetHandle, error) { return h.queryTable(query) })
+	mode := resultModeRows
+	if settings.batchSize > 0 {
+		mode = resultModeBatches
+	}
+	table = normalizeIdentifier(table)
+	normalizedColumns := make([]string, len(columns))
+	for i, column := range columns {
+		normalizedColumns[i] = normalizeIdentifier(column)
+	}
+	return r.query(mode, func(h *readerHandle) (*resultSetHandle, error) {
+		return h.queryTableOptions(table, normalizedColumns, settings)
+	})
 }
 
-// QueryTree executes a time-range query for exact full paths.
-func (r *Reader) QueryTree(query TreeQuery) (*ResultSet, error) {
-	if err := validateQueryStrings("query tree", "paths", query.Paths); err != nil {
-		return nil, err
+// GetTableSchema returns an independent copy of one table schema.
+func (r *Reader) GetTableSchema(table string) (TableSchema, error) {
+	if err := validateCString("get table schema", "table", table); err != nil {
+		return TableSchema{}, err
 	}
-	if query.End < query.Start {
-		return nil, fmt.Errorf("%w: end must not precede start", ErrInvalidArgument)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.handle == nil || r.handle.ptr == nil {
+		return TableSchema{}, ErrClosed
 	}
-	return r.query(func(h *readerHandle) (*resultSetHandle, error) { return h.queryTree(query) })
+	return r.handle.tableSchema(normalizeIdentifier(table))
 }
 
-func validateRows(offset, limit int, op string) error {
-	if offset < 0 {
-		return fmt.Errorf("%w: offset must be nonnegative", ErrInvalidArgument)
+// GetAllTableSchemas returns independent copies of every table schema.
+func (r *Reader) GetAllTableSchemas() ([]TableSchema, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.handle == nil || r.handle.ptr == nil {
+		return nil, ErrClosed
 	}
-	if err := validateCInt32(op, "offset", offset); err != nil {
-		return err
-	}
-	return validateCInt32(op, "limit", limit)
-}
-
-// QueryTreeRows executes an offset/limit tree-model query.
-func (r *Reader) QueryTreeRows(query TreeRowsQuery) (*ResultSet, error) {
-	if err := validateQueryStrings("query tree rows", "devices", query.Devices); err != nil {
-		return nil, err
-	}
-	if err := validateQueryStrings("query tree rows", "measurements", query.Measurements); err != nil {
-		return nil, err
-	}
-	if err := validateRows(query.Offset, query.Limit, "query tree rows"); err != nil {
-		return nil, err
-	}
-	return r.query(func(h *readerHandle) (*resultSetHandle, error) { return h.queryTreeRows(query) })
-}
-
-// QueryTableRows executes an offset/limit table-model query.
-func (r *Reader) QueryTableRows(query TableRowsQuery) (*ResultSet, error) {
-	if err := validateCString("query table rows", "table", query.Table); err != nil {
-		return nil, err
-	}
-	if err := validateQueryStrings("query table rows", "columns", query.Columns); err != nil {
-		return nil, err
-	}
-	if err := validateRows(query.Offset, query.Limit, "query table rows"); err != nil {
-		return nil, err
-	}
-	if query.BatchSize < 0 {
-		return nil, fmt.Errorf("%w: batch size must be nonnegative", ErrInvalidArgument)
-	}
-	if err := validateCInt32("query table rows", "batch size", query.BatchSize); err != nil {
-		return nil, err
-	}
-	return r.query(func(h *readerHandle) (*resultSetHandle, error) { return h.queryTableRows(query) })
+	return r.handle.allTableSchemas()
 }
 
 // Close releases all active result sets and then the reader. It is idempotent.

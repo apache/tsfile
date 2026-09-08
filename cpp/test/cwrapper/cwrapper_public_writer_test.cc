@@ -120,6 +120,74 @@ TEST_F(CWrapperPublicWriterTest, WriterNewInvalidArgs) {
     EXPECT_NE(err, RET_OK);
 }
 
+TEST_F(CWrapperPublicWriterTest, TableWriterRejectsInvalidSchema) {
+    const std::string filename = unique_writer_path("cwrapper_table_writer");
+    remove(filename.c_str());
+    ERRNO err = RET_OK;
+    WriteFile file = write_file_new(filename.c_str(), &err);
+    ASSERT_EQ(RET_OK, err);
+    ASSERT_NE(nullptr, file);
+
+    ColumnSchema null_name = {nullptr, TS_DATATYPE_INT64, FIELD};
+    TableSchema schema = {const_cast<char*>("metrics"), &null_name, 1};
+    EXPECT_EQ(tsfile_writer_new(file, &schema, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+
+    ColumnSchema unsupported_type = {const_cast<char*>("value"),
+                                     TS_DATATYPE_VECTOR, FIELD};
+    schema.column_schemas = &unsupported_type;
+    EXPECT_EQ(tsfile_writer_new(file, &schema, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_SCHEMA);
+
+    ColumnSchema unsupported_category = {const_cast<char*>("value"),
+                                         TS_DATATYPE_INT64, ATTRIBUTE};
+    schema.column_schemas = &unsupported_category;
+    EXPECT_EQ(tsfile_writer_new(file, &schema, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_SCHEMA);
+
+    ColumnSchema duplicate_names[] = {
+        {const_cast<char*>("value"), TS_DATATYPE_INT64, FIELD},
+        {const_cast<char*>("VALUE"), TS_DATATYPE_INT64, FIELD}};
+    schema.column_schemas = duplicate_names;
+    schema.column_num = 2;
+    EXPECT_EQ(tsfile_writer_new(file, &schema, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_SCHEMA);
+
+    ColumnSchema valid = {const_cast<char*>("value"), TS_DATATYPE_INT64, FIELD};
+    schema.column_schemas = &valid;
+    schema.column_num = 1;
+    EXPECT_EQ(tsfile_writer_new_with_memory_threshold(file, &schema, 0, &err),
+              nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+
+    free_write_file(&file);
+    EXPECT_EQ(nullptr, file);
+    remove(filename.c_str());
+}
+
+TEST_F(CWrapperPublicWriterTest, PublicTableAndArrowNullArgs) {
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 0, 1), nullptr);
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 1), nullptr);
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 0), nullptr);
+
+    char first[] = "value";
+    char second[] = "VALUE";
+    char* duplicate_names[] = {first, second};
+    TSDataType duplicate_types[] = {TS_DATATYPE_INT64, TS_DATATYPE_INT64};
+    EXPECT_EQ(tablet_new(duplicate_names, duplicate_types, 2, 1), nullptr);
+
+    char* one_name[] = {first};
+    TSDataType one_type[] = {TS_DATATYPE_INT64};
+    EXPECT_EQ(tablet_new(one_name, one_type, 1, 1u << 30), nullptr);
+
+    ArrowArray array = {};
+    ArrowSchema schema = {};
+    EXPECT_EQ(tsfile_writer_write_arrow(nullptr, &array, &schema, 0),
+              RET_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_write_arrow(nullptr, nullptr, &schema, 0),
+              RET_INVALID_ARG);
+}
+
 TEST_F(CWrapperPublicWriterTest, QueryTreeInvalidArgs) {
     ERRNO err = RET_OK;
     char path[] = "root.d1.s1";

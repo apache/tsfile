@@ -48,17 +48,20 @@ make race
 make vet
 ```
 
-The public package is `github.com/apache/tsfile/go/tsfile`. Result-set columns
-use idiomatic Go zero-based indexes; the underlying C ABI remains one-based.
-Readers own their active result sets, so closing a reader also closes every
-result set created from it. All native `Close` methods are idempotent.
-`Writer.AddProperty` rejects empty values because the native ABI reserves a nil
-value for a NULL property.
+The public package is `github.com/apache/tsfile/go/tsfile` and currently exposes
+the table model. Create a writer with its single table schema, then write
+targetless `Tablet` values or Arrow record batches. Use `Reader.Query` with
+optional time-range, tag-filter, pagination, and batch-size options.
 
-Runnable tree and table examples are under `examples/tree_read_write` and
-`examples/table_read_write`:
+Result-set columns are one-based: column 1 is `time`, followed by the selected
+data columns. Tablet rows and columns retain Go's zero-based indexing. A query
+with a positive batch size returns Arrow batches; other queries use `Next` and
+the scalar getters. Readers own their active result sets, so closing a reader
+also closes every result set created from it. Returned Arrow objects have their
+own lifetime and must be released by the caller.
+
+The runnable table example is under `examples/table_read_write`:
 
 ```bash
-go run ./examples/tree_read_write
 go run ./examples/table_read_write
 ```

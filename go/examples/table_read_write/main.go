@@ -28,18 +28,16 @@ import (
 func main() {
 	path := "table-example.tsfile"
 	_ = os.Remove(path)
-	writer, err := tsfile.NewWriter(path)
+	schema := tsfile.TableSchema{Table: "metrics", Columns: []tsfile.ColumnSchema{
+		{Name: "device", DataType: tsfile.DataTypeString, Category: tsfile.ColumnCategoryTag},
+		{Name: "value", DataType: tsfile.DataTypeInt64, Category: tsfile.ColumnCategoryField},
+	}}
+	writer, err := tsfile.NewWriter(path, schema)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer writer.Close()
-	if err := writer.RegisterTable(tsfile.TableSchema{Table: "metrics", Columns: []tsfile.ColumnSchema{
-		{Name: "device", DataType: tsfile.DataTypeString, Category: tsfile.ColumnCategoryTag},
-		{Name: "value", DataType: tsfile.DataTypeInt64, Category: tsfile.ColumnCategoryField},
-	}}); err != nil {
-		log.Fatal(err)
-	}
-	tablet, err := tsfile.NewTablet("metrics", []tsfile.TabletColumn{
+	tablet, err := tsfile.NewTablet([]tsfile.TabletColumn{
 		{Name: "device", DataType: tsfile.DataTypeString},
 		{Name: "value", DataType: tsfile.DataTypeInt64},
 	}, 1)
@@ -67,9 +65,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer reader.Close()
-	result, err := reader.QueryTable(tsfile.TableQuery{
-		Table: "metrics", Columns: []string{"device", "value"}, Start: 0, End: 10,
-	})
+	result, err := reader.Query("metrics", []string{"device", "value"}, tsfile.WithTimeRange(0, 10))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,11 +78,11 @@ func main() {
 		if !ok {
 			break
 		}
-		device, err := result.String(1)
+		device, err := result.String(2)
 		if err != nil {
 			log.Fatal(err)
 		}
-		value, err := result.Int64(2)
+		value, err := result.Int64(3)
 		if err != nil {
 			log.Fatal(err)
 		}

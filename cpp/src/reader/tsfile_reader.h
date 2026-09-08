@@ -118,6 +118,11 @@ class TsFileReader {
               int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
               int batch_size = 0);
 
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, int offset, int limit, ResultSet*& result_set,
+              Filter* tag_filter = nullptr, int batch_size = 0);
+
     /**
      * @brief Query tree-model time series by row with offset and limit.
      *

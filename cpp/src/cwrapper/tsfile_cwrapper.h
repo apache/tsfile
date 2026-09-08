@@ -515,6 +515,9 @@ ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
                                         uint32_t key_len, const uint8_t* value,
                                         uint32_t value_len);
 
+/** Flushes buffered table data without closing the writer. */
+ERRNO tsfile_writer_flush(TsFileWriter writer);
+
 /**
  * @brief Releases resources associated with a TsFileReader.
  *
@@ -704,6 +707,17 @@ ERRNO tsfile_writer_register_device(TsFileWriter writer,
  */
 
 ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
+
+/**
+ * @brief Writes one Arrow C Data Interface record batch to the table bound to
+ * the writer.
+ *
+ * The input array and schema remain owned by the caller. The time column is
+ * selected by its zero-based child index and must contain non-null int64 or
+ * nanosecond timestamp values.
+ */
+ERRNO tsfile_writer_write_arrow(TsFileWriter writer, ArrowArray* array,
+                                ArrowSchema* schema, int time_col_index);
 // ERRNO tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);
 // ERRNO tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);
 // ERRNO tsfile_writer_flush_data(TsFileWriter writer);
@@ -815,6 +829,18 @@ ResultSet tsfile_reader_query_table_by_row(
     int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
     int batch_size, ERRNO* err_code);
 
+/**
+ * @brief Query table data with composable time, tag, pagination, and batch
+ * options.
+ */
+ResultSet tsfile_reader_query_table(TsFileReader reader, const char* table_name,
+                                    char** column_names,
+                                    uint32_t column_names_len,
+                                    Timestamp start_time, Timestamp end_time,
+                                    int offset, int limit,
+                                    TagFilterHandle tag_filter, int batch_size,
+                                    ERRNO* err_code);
+
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
@@ -908,6 +934,17 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index);
 
 /**
+ * @brief Copies a binary value from the current row by 1-based column index.
+ *
+ * The caller owns the returned buffer and must release it with free(). An
+ * empty non-null value returns E_OK with a NULL buffer and length zero.
+ */
+ERRNO tsfile_result_set_get_value_by_index_binary(ResultSet result_set,
+                                                  uint32_t column_index,
+                                                  uint8_t** out_value,
+                                                  uint32_t* out_length);
+
+/**
  * @brief Checks if the current row's column value is NULL by column name.
  *
  * @param result_set [in] Valid ResultSet with active row (after next()=true).
@@ -975,6 +1012,11 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
  */
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name);
+
+/** Retrieves one table schema and reports missing tables through ERRNO. */
+ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
+                                             const char* table_name,
+                                             TableSchema* out_schema);
 /**
  * @brief Gets all table schema in the tsfile.
  *
@@ -983,6 +1025,11 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
+
+/** Retrieves every table schema into a caller-freed array. */
+ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
+                                                  TableSchema** out_schemas,
+                                                  uint32_t* out_size);
 
 /**
  * @brief Gets all timeseries schema in the tsfile.

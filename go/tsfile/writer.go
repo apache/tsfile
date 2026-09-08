@@ -20,6 +20,11 @@ package tsfile
 import (
 	"fmt"
 	"sync"
+	"unsafe"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/cdata"
 )
 
 const defaultMemoryThreshold = 128 * 1024 * 1024
@@ -44,14 +49,19 @@ func WithMemoryThreshold(bytes uint64) WriterOption {
 	}
 }
 
-// Writer writes tree-model and table-model tablets to one TsFile.
+// Writer writes batches for one table to a TsFile.
 type Writer struct {
 	mu     sync.Mutex
 	handle *writerHandle
+	schema TableSchema
 }
 
-// NewWriter creates or truncates a TsFile at path.
-func NewWriter(path string, options ...WriterOption) (*Writer, error) {
+// NewWriter creates or truncates a TsFile and binds it to schema.
+func NewWriter(path string, schema TableSchema, options ...WriterOption) (*Writer, error) {
+	boundSchema, err := validateAndCopyTableSchema(schema)
+	if err != nil {
+		return nil, err
+	}
 	settings := writerOptions{memoryThreshold: defaultMemoryThreshold}
 	for _, option := range options {
 		if option == nil {
@@ -63,11 +73,11 @@ func NewWriter(path string, options ...WriterOption) (*Writer, error) {
 	}
 	nativeWriterConfigMu.Lock()
 	defer nativeWriterConfigMu.Unlock()
-	handle, err := newWriterHandle(path, settings.memoryThreshold)
+	handle, err := newWriterHandle(path, boundSchema, settings.memoryThreshold)
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{handle: handle}, nil
+	return &Writer{handle: handle, schema: boundSchema}, nil
 }
 
 func (w *Writer) withHandle(fn func(*writerHandle) error) error {
@@ -79,53 +89,7 @@ func (w *Writer) withHandle(fn func(*writerHandle) error) error {
 	return fn(w.handle)
 }
 
-// RegisterTable registers a table-model schema.
-func (w *Writer) RegisterTable(schema TableSchema) error {
-	if err := validateCString("register table", "table name", schema.Table); err != nil {
-		return err
-	}
-	if len(schema.Columns) == 0 {
-		return fmt.Errorf("%w: table requires at least one column", ErrInvalidSchema)
-	}
-	for i, column := range schema.Columns {
-		if err := validateCString("register table", "column name", column.Name); err != nil {
-			return fmt.Errorf("column %d: %w", i, err)
-		}
-		if !validDataType(column.DataType) || !validColumnCategory(column.Category) {
-			return fmt.Errorf("%w: invalid column %q", ErrInvalidSchema, column.Name)
-		}
-	}
-	return w.withHandle(func(h *writerHandle) error { return h.registerTable(schema) })
-}
-
-// RegisterTimeseries registers one tree-model measurement for a device.
-func (w *Writer) RegisterTimeseries(device string, schema TimeseriesSchema) error {
-	if err := validateCString("register timeseries", "device", device); err != nil {
-		return err
-	}
-	if err := validateTimeseriesSchema("register timeseries", schema); err != nil {
-		return err
-	}
-	return w.withHandle(func(h *writerHandle) error { return h.registerTimeseries(device, schema) })
-}
-
-// RegisterDevice registers all tree-model measurements for a device.
-func (w *Writer) RegisterDevice(schema DeviceSchema) error {
-	if err := validateCString("register device", "device", schema.Device); err != nil {
-		return err
-	}
-	if len(schema.TimeSeries) == 0 {
-		return fmt.Errorf("%w: device requires at least one timeseries", ErrInvalidSchema)
-	}
-	for i, series := range schema.TimeSeries {
-		if err := validateTimeseriesSchema("register device", series); err != nil {
-			return fmt.Errorf("timeseries %d: %w", i, err)
-		}
-	}
-	return w.withHandle(func(h *writerHandle) error { return h.registerDevice(schema) })
-}
-
-func (w *Writer) writeTablet(tablet *Tablet, tableModel bool) error {
+func (w *Writer) writeTablet(tablet *Tablet) error {
 	if tablet == nil {
 		return fmt.Errorf("%w: nil tablet", ErrInvalidArgument)
 	}
@@ -139,17 +103,174 @@ func (w *Writer) writeTablet(tablet *Tablet, tableModel bool) error {
 	if tablet.handle == nil || tablet.handle.ptr == nil {
 		return ErrClosed
 	}
-	if tableModel {
-		return w.handle.writeTableTablet(tablet.handle)
+	if len(tablet.columns) != len(w.schema.Columns) {
+		return fmt.Errorf("%w: Tablet has %d columns; writer schema has %d",
+			ErrInvalidSchema, len(tablet.columns), len(w.schema.Columns))
 	}
-	return w.handle.writeTreeTablet(tablet.handle)
+	expected := make(map[string]DataType, len(w.schema.Columns))
+	for _, column := range w.schema.Columns {
+		expected[column.Name] = column.DataType
+	}
+	for _, column := range tablet.columns {
+		dataType, ok := expected[column.Name]
+		if !ok {
+			return fmt.Errorf("%w: Tablet column %q is not present in the writer schema", ErrColumnNotExist, column.Name)
+		}
+		if dataType != column.DataType {
+			return fmt.Errorf("%w: Tablet column %q has data type %d", ErrTypeMismatch, column.Name, column.DataType)
+		}
+		delete(expected, column.Name)
+	}
+	rows := tablet.rows
+	for row := 0; row < rows; row++ {
+		if !tablet.timeSet[row] {
+			return fmt.Errorf("%w: Tablet row %d has no timestamp", ErrInvalidArgument, row)
+		}
+	}
+	return w.handle.writeTableTablet(tablet.handle)
 }
 
-// WriteTreeTablet writes a tree-model tablet without consuming it.
-func (w *Writer) WriteTreeTablet(tablet *Tablet) error { return w.writeTablet(tablet, false) }
-
 // WriteTableTablet writes a table-model tablet without consuming it.
-func (w *Writer) WriteTableTablet(tablet *Tablet) error { return w.writeTablet(tablet, true) }
+func (w *Writer) WriteTableTablet(tablet *Tablet) error { return w.writeTablet(tablet) }
+
+func arrowDataType(dataType DataType) arrow.DataType {
+	switch dataType {
+	case DataTypeBoolean:
+		return arrow.FixedWidthTypes.Boolean
+	case DataTypeInt32:
+		return arrow.PrimitiveTypes.Int32
+	case DataTypeInt64:
+		return arrow.PrimitiveTypes.Int64
+	case DataTypeFloat:
+		return arrow.PrimitiveTypes.Float32
+	case DataTypeDouble:
+		return arrow.PrimitiveTypes.Float64
+	case DataTypeText, DataTypeString:
+		return arrow.BinaryTypes.String
+	case DataTypeTimestamp:
+		return &arrow.TimestampType{Unit: arrow.Nanosecond}
+	case DataTypeDate:
+		return arrow.FixedWidthTypes.Date32
+	case DataTypeBlob:
+		return arrow.BinaryTypes.Binary
+	default:
+		return nil
+	}
+}
+
+func isArrowTimeType(dataType arrow.DataType) bool {
+	if arrow.TypeEqual(dataType, arrow.PrimitiveTypes.Int64) {
+		return true
+	}
+	timestamp, ok := dataType.(*arrow.TimestampType)
+	return ok && timestamp.Unit == arrow.Nanosecond && timestamp.TimeZone == ""
+}
+
+func validateArrowSchema(schema *arrow.Schema, bound TableSchema) (int, error) {
+	if schema == nil {
+		return -1, fmt.Errorf("%w: nil Arrow schema", ErrInvalidArgument)
+	}
+	if schema.NumFields() != len(bound.Columns)+1 {
+		return -1, fmt.Errorf("%w: Arrow batch has %d columns; expected time plus %d table columns",
+			ErrInvalidSchema, schema.NumFields(), len(bound.Columns))
+	}
+	expected := make(map[string]DataType, len(bound.Columns))
+	for _, column := range bound.Columns {
+		expected[column.Name] = column.DataType
+	}
+	seen := make(map[string]struct{}, schema.NumFields())
+	timeColumn := -1
+	for i, field := range schema.Fields() {
+		name := normalizeIdentifier(field.Name)
+		if _, duplicate := seen[name]; duplicate {
+			return -1, fmt.Errorf("%w: duplicate Arrow column %q", ErrInvalidSchema, field.Name)
+		}
+		seen[name] = struct{}{}
+		if name == "time" {
+			if !isArrowTimeType(field.Type) {
+				return -1, fmt.Errorf("%w: Arrow time column must be int64 or timestamp[ns] without timezone", ErrTypeMismatch)
+			}
+			timeColumn = i
+			continue
+		}
+		dataType, ok := expected[name]
+		if !ok {
+			return -1, fmt.Errorf("%w: Arrow column %q is not present in the writer schema", ErrColumnNotExist, field.Name)
+		}
+		if !arrow.TypeEqual(field.Type, arrowDataType(dataType)) {
+			return -1, fmt.Errorf("%w: Arrow column %q has type %s", ErrTypeMismatch, field.Name, field.Type)
+		}
+	}
+	if timeColumn < 0 {
+		return -1, fmt.Errorf("%w: Arrow batch has no time column", ErrInvalidSchema)
+	}
+	return timeColumn, nil
+}
+
+func (w *Writer) writeArrowRecordLocked(record arrow.Record) error {
+	if record == nil {
+		return fmt.Errorf("%w: nil Arrow record", ErrInvalidArgument)
+	}
+	timeColumn, err := validateArrowSchema(record.Schema(), w.schema)
+	if err != nil {
+		return err
+	}
+	if record.Column(timeColumn).NullN() != 0 {
+		return fmt.Errorf("%w: Arrow time column must not contain null values", ErrInvalidArgument)
+	}
+	if record.NumRows() == 0 {
+		return nil
+	}
+	if record.NumRows() >= cTabletMaxRowsMax {
+		return fmt.Errorf("%w: Arrow batch has %d rows; native limit is %d",
+			ErrOverflow, record.NumRows(), cTabletMaxRowsMax-1)
+	}
+	var nativeArray cdata.CArrowArray
+	var nativeSchema cdata.CArrowSchema
+	cdata.ExportArrowRecordBatch(record, &nativeArray, &nativeSchema)
+	defer cdata.ReleaseCArrowArray(&nativeArray)
+	defer cdata.ReleaseCArrowSchema(&nativeSchema)
+	return w.handle.writeArrow(unsafe.Pointer(&nativeArray), unsafe.Pointer(&nativeSchema), timeColumn)
+}
+
+// WriteArrowBatch writes an Arrow record batch or table to the bound table.
+// The input remains owned by the caller and may be released after this method
+// returns.
+func (w *Writer) WriteArrowBatch(data any) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.handle == nil || w.handle.ptr == nil {
+		return ErrClosed
+	}
+	switch value := data.(type) {
+	case arrow.Record:
+		if value == nil {
+			return fmt.Errorf("%w: nil Arrow record", ErrInvalidArgument)
+		}
+		return w.writeArrowRecordLocked(value)
+	case arrow.Table:
+		if value == nil {
+			return fmt.Errorf("%w: nil Arrow table", ErrInvalidArgument)
+		}
+		timeColumn, err := validateArrowSchema(value.Schema(), w.schema)
+		if err != nil {
+			return err
+		}
+		if value.Column(timeColumn).NullN() != 0 {
+			return fmt.Errorf("%w: Arrow time column must not contain null values", ErrInvalidArgument)
+		}
+		reader := array.NewTableReader(value, 0)
+		defer reader.Release()
+		for reader.Next() {
+			if err := w.writeArrowRecordLocked(reader.Record()); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: expected arrow.Record or arrow.Table", ErrInvalidArgument)
+	}
+}
 
 // AddProperty adds a binary TsFile property. Empty values are rejected because
 // the native ABI represents a nil pointer as a NULL property, not an empty

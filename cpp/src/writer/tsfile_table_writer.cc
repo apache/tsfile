@@ -85,6 +85,14 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
     return tsfile_writer_->write_table(tablet);
 }
 
+std::shared_ptr<storage::TableSchema>
+storage::TsFileTableWriter::get_table_schema() const {
+    if (!tsfile_writer_ || exclusive_table_name_.empty()) {
+        return nullptr;
+    }
+    return tsfile_writer_->get_table_schema(exclusive_table_name_);
+}
+
 int storage::TsFileTableWriter::flush() {
     if (closed_) {
         return common::E_OK;

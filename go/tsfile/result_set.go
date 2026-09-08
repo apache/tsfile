@@ -20,12 +20,25 @@ package tsfile
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync"
+	"unsafe"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/cdata"
 )
 
 // ErrNoCurrentRow indicates that a value was requested before a successful
 // call to Next or after the result set reached its end.
 var ErrNoCurrentRow = errors.New("tsfile: result set is not positioned on a row")
+
+type resultMode uint8
+
+const (
+	resultModeRows resultMode = iota
+	resultModeBatches
+)
 
 // ResultSet is a forward-only query result owned by its Reader.
 type ResultSet struct {
@@ -34,6 +47,14 @@ type ResultSet struct {
 	reader   *Reader
 	metadata []ColumnMetadata
 	current  bool
+	mode     resultMode
+}
+
+func (rs *ResultSet) requireMode(mode resultMode) error {
+	if rs.mode != mode {
+		return ErrWrongResultMode
+	}
+	return nil
 }
 
 func (rs *ResultSet) locked(fn func() error) error {
@@ -55,6 +76,9 @@ func (rs *ResultSet) locked(fn func() error) error {
 func (rs *ResultSet) Next() (bool, error) {
 	var next bool
 	err := rs.locked(func() error {
+		if err := rs.requireMode(resultModeRows); err != nil {
+			return err
+		}
 		var err error
 		next, err = rs.handle.next()
 		rs.current = next
@@ -63,7 +87,7 @@ func (rs *ResultSet) Next() (bool, error) {
 	return next, err
 }
 
-// Metadata returns a copy of the result columns, including timestamp at zero.
+// Metadata returns a copy of the result columns, including timestamp first.
 // It returns nil after the result set has been closed.
 func (rs *ResultSet) Metadata() []ColumnMetadata {
 	reader := rs.reader
@@ -84,10 +108,10 @@ func (rs *ResultSet) validateColumn(column int, allowed ...DataType) error {
 	if !rs.current {
 		return ErrNoCurrentRow
 	}
-	if column < 0 || column >= len(rs.metadata) {
+	if column < 1 || column > len(rs.metadata) {
 		return ErrOutOfRange
 	}
-	actual := rs.metadata[column].DataType
+	actual := rs.metadata[column-1].DataType
 	for _, expected := range allowed {
 		if actual == expected {
 			return nil
@@ -96,13 +120,16 @@ func (rs *ResultSet) validateColumn(column int, allowed ...DataType) error {
 	return fmt.Errorf("%w: column %d has data type %d", ErrTypeMismatch, column, actual)
 }
 
-// IsNull reports whether the zero-based column is null in the current row.
+// IsNull reports whether the one-based column is null in the current row.
 func (rs *ResultSet) IsNull(column int) (value bool, err error) {
 	err = rs.locked(func() error {
+		if err := rs.requireMode(resultModeRows); err != nil {
+			return err
+		}
 		if !rs.current {
 			return ErrNoCurrentRow
 		}
-		if column < 0 || column >= len(rs.metadata) {
+		if column < 1 || column > len(rs.metadata) {
 			return ErrOutOfRange
 		}
 		value = rs.handle.isNull(column)
@@ -111,53 +138,102 @@ func (rs *ResultSet) IsNull(column int) (value bool, err error) {
 	return
 }
 
-func (rs *ResultSet) get(column int, allowed []DataType, fn func()) error {
+func (rs *ResultSet) get(column int, allowed []DataType, fn func() error) error {
 	return rs.locked(func() error {
+		if err := rs.requireMode(resultModeRows); err != nil {
+			return err
+		}
 		if err := rs.validateColumn(column, allowed...); err != nil {
 			return err
 		}
 		if rs.handle.isNull(column) {
 			return ErrNullValue
 		}
-		fn()
-		return nil
+		return fn()
 	})
 }
 
 // Bool returns a BOOLEAN column from the current row.
 func (rs *ResultSet) Bool(column int) (value bool, err error) {
-	err = rs.get(column, []DataType{DataTypeBoolean}, func() { value = rs.handle.bool(column) })
+	err = rs.get(column, []DataType{DataTypeBoolean}, func() error { value = rs.handle.bool(column); return nil })
 	return
 }
 
 // Int32 returns an INT32 or DATE column from the current row.
 func (rs *ResultSet) Int32(column int) (value int32, err error) {
-	err = rs.get(column, []DataType{DataTypeInt32, DataTypeDate}, func() { value = rs.handle.int32(column) })
+	err = rs.get(column, []DataType{DataTypeInt32, DataTypeDate}, func() error { value = rs.handle.int32(column); return nil })
 	return
 }
 
 // Int64 returns an INT64 or TIMESTAMP column from the current row.
 func (rs *ResultSet) Int64(column int) (value int64, err error) {
-	err = rs.get(column, []DataType{DataTypeInt64, DataTypeTimestamp}, func() { value = rs.handle.int64(column) })
+	err = rs.get(column, []DataType{DataTypeInt64, DataTypeTimestamp}, func() error { value = rs.handle.int64(column); return nil })
 	return
 }
 
 // Float32 returns a FLOAT column from the current row.
 func (rs *ResultSet) Float32(column int) (value float32, err error) {
-	err = rs.get(column, []DataType{DataTypeFloat}, func() { value = rs.handle.float32(column) })
+	err = rs.get(column, []DataType{DataTypeFloat}, func() error { value = rs.handle.float32(column); return nil })
 	return
 }
 
 // Float64 returns a DOUBLE column from the current row.
 func (rs *ResultSet) Float64(column int) (value float64, err error) {
-	err = rs.get(column, []DataType{DataTypeDouble}, func() { value = rs.handle.float64(column) })
+	err = rs.get(column, []DataType{DataTypeDouble}, func() error { value = rs.handle.float64(column); return nil })
 	return
 }
 
 // String returns a TEXT or STRING column from the current row.
 func (rs *ResultSet) String(column int) (value string, err error) {
-	err = rs.get(column, []DataType{DataTypeText, DataTypeString}, func() { value = rs.handle.string(column) })
+	err = rs.get(column, []DataType{DataTypeText, DataTypeString}, func() error { value = rs.handle.string(column); return nil })
 	return
+}
+
+// Bytes returns a copy of a BLOB column from the current row.
+func (rs *ResultSet) Bytes(column int) (value []byte, err error) {
+	err = rs.get(column, []DataType{DataTypeBlob}, func() error {
+		value, err = rs.handle.bytes(column)
+		return err
+	})
+	return
+}
+
+// ReadArrowRecordBatch returns the next query batch. The caller owns the
+// returned record and must call Release. It returns io.EOF after the last
+// batch.
+func (rs *ResultSet) ReadArrowRecordBatch() (arrow.Record, error) {
+	var nativeArray cdata.CArrowArray
+	var nativeSchema cdata.CArrowSchema
+	defer cdata.ReleaseCArrowArray(&nativeArray)
+	defer cdata.ReleaseCArrowSchema(&nativeSchema)
+	err := rs.locked(func() error {
+		if err := rs.requireMode(resultModeBatches); err != nil {
+			return err
+		}
+		return rs.handle.nextArrow(unsafe.Pointer(&nativeArray), unsafe.Pointer(&nativeSchema))
+	})
+	if err != nil {
+		if nativeError, ok := err.(*Error); ok && nativeError.Code == 21 {
+			return nil, io.EOF
+		}
+		return nil, err
+	}
+	record, err := cdata.ImportCRecordBatch(&nativeArray, &nativeSchema)
+	if err != nil {
+		return nil, fmt.Errorf("import Arrow batch: %w", err)
+	}
+	return record, nil
+}
+
+// ReadArrowBatch returns the next query batch as a one-batch Arrow table. The
+// caller owns the returned table and must call Release.
+func (rs *ResultSet) ReadArrowBatch() (arrow.Table, error) {
+	record, err := rs.ReadArrowRecordBatch()
+	if err != nil {
+		return nil, err
+	}
+	defer record.Release()
+	return array.NewTableFromRecords(record.Schema(), []arrow.Record{record}), nil
 }
 
 // Close releases the native result. It is idempotent.

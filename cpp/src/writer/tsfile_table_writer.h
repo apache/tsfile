@@ -56,7 +56,10 @@ class TsFileTableWriter {
         static_assert(!std::is_same<T, std::nullptr_t>::value,
                       "table_schema cannot be nullptr");
         tsfile_writer_ = std::make_shared<TsFileWriter>();
-        tsfile_writer_->init(writer_file);
+        error_number = tsfile_writer_->init(writer_file);
+        if (error_number != common::E_OK) {
+            return;
+        }
         tsfile_writer_->set_generate_table_schema(false);
 
         // Perform a deep copy. The source TableSchema object may be
@@ -98,6 +101,15 @@ class TsFileTableWriter {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int write_table(Tablet& tablet) const;
+
+    /** Returns the schema bound to this single-table writer. */
+    std::shared_ptr<TableSchema> get_table_schema() const;
+
+    /** Returns the table name bound to this single-table writer. */
+    const std::string& get_table_name() const { return exclusive_table_name_; }
+
+    /** Returns an initialization or registration failure, if any. */
+    int get_error() const { return error_number; }
     /**
      * Flushes any buffered data to the underlying storage medium, ensuring all
      * data is written out. This method ensures that all pending writes are
