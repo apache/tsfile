@@ -69,6 +69,8 @@ public class ValuePageWriter {
 
   private static final int MASK = 1 << 7;
 
+  private static final byte[] NULL_BITMAP_BATCH = new byte[1024];
+
   public ValuePageWriter(Encoder valueEncoder, ICompressor compressor, TSDataType dataType) {
     this.valueOut = new PublicBAOS();
     this.bitmap = 0;
@@ -155,6 +157,34 @@ public class ValuePageWriter {
     if (!isNull) {
       valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
+    }
+  }
+
+  /** Write consecutive null values without encoding values or updating statistics. */
+  public void writeNull(int count) {
+    if (count <= 0) {
+      return;
+    }
+
+    int remaining = count;
+    while (remaining > 0 && size % 8 != 0) {
+      setBit(true);
+      remaining--;
+    }
+
+    // At a byte boundary, eight nulls are a zero byte. Reuse a bounded buffer for large runs.
+    int fullByteCount = remaining / 8;
+    while (fullByteCount > 0) {
+      int batchSize = Math.min(fullByteCount, NULL_BITMAP_BATCH.length);
+      bitmapOut.write(NULL_BITMAP_BATCH, 0, batchSize);
+      size += batchSize * 8;
+      fullByteCount -= batchSize;
+      remaining -= batchSize * 8;
+    }
+
+    while (remaining > 0) {
+      setBit(true);
+      remaining--;
     }
   }
 
