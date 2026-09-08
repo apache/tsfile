@@ -835,6 +835,7 @@ class TsFileDataFrame:
         cls, parent: "TsFileDataFrame", series_refs: List[SeriesRefKey]
     ) -> "TsFileDataFrame":
         """Create a lightweight view that reuses the parent's readers and caches."""
+        parent._assert_open()
         obj = object.__new__(cls)
         obj._root = parent._root if parent._is_view else parent
         obj._is_view = True
@@ -864,9 +865,49 @@ class TsFileDataFrame:
     def _owner(self) -> "TsFileDataFrame":
         return self
 
+    def _ensure_process_local_runtime(self):
+        runtime = self._runtime
+        if runtime is None or runtime.creator_pid == os.getpid():
+            return
+
+        subset_refs = list(self._index.series) if self._is_view else None
+        inherited_lease = self._runtime_lease
+        replacement = None
+        if self._is_view and self._root is not None and not self._root._closed:
+            self._root._ensure_process_local_runtime()
+            replacement = self._root._runtime
+        if replacement is None:
+            replacement = runtime.fork_replacement()
+
+        replacement_lease = replacement.lease()
+        try:
+            if inherited_lease is None:
+                runtime.discard_after_fork()
+            else:
+                inherited_lease.close()
+        except BaseException:
+            replacement_lease.close()
+            raise
+        self._runtime = replacement
+        self._runtime_lease = replacement_lease
+        catalog = replacement.catalog
+        if subset_refs is None:
+            self._index = catalog
+        else:
+            self._index = SimpleNamespace(
+                model=catalog.model,
+                table_entries=catalog.table_entries,
+                devices=catalog.devices,
+                device_index=catalog.device_index,
+                device_time_bounds=catalog.device_time_bounds,
+                series=subset_refs,
+                series_shards=catalog.series_shards,
+            )
+
     def _assert_open(self):
         if self._closed:
             raise RuntimeError("Current TsFileDataFrame is closed.")
+        self._ensure_process_local_runtime()
 
     @contextlib.contextmanager
     def _query_guard(self):
@@ -1269,6 +1310,7 @@ class TsFileDataFrame:
         )
 
     def __getitem__(self, key):
+        self._assert_open()
         try:
             import pandas as pd
 
@@ -1457,7 +1499,9 @@ class TsFileDataFrame:
             return
         self._closed = True
         if self._runtime_lease is not None:
-            self._runtime_lease.close()
+            runtime_lease = self._runtime_lease
+            self._runtime_lease = None
+            runtime_lease.close()
         else:
             for reader in self._readers.values():
                 reader.close()

@@ -622,18 +622,18 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
         with runtime.readers.acquire(0) as reader:
-            prepared = runtime.prepared.get(0, span[2], reader)
-            with reader.query_prepared(prepared, offset=1, limit=7) as result:
-                batches = []
-                while True:
-                    batch = result.read_arrow_batch()
-                    if batch is None:
-                        break
-                    batches.append(batch)
-            with reader.query_prepared(
-                prepared, start_time=100, end_time=200
-            ) as empty_result:
-                assert empty_result.read_arrow_batch() is None
+            with runtime.prepared.acquire(0, span[2], reader) as prepared:
+                with reader.query_prepared(prepared, offset=1, limit=7) as result:
+                    batches = []
+                    while True:
+                        batch = result.read_arrow_batch()
+                        if batch is None:
+                            break
+                        batches.append(batch)
+                with reader.query_prepared(
+                    prepared, start_time=100, end_time=200
+                ) as empty_result:
+                    assert empty_result.read_arrow_batch() is None
 
     assert batches
     table = pa.concat_tables(batches)
@@ -944,3 +944,805 @@ def test_mapped_index_inherited_mapping_survives_child_double_close(tmp_path):
 
     assert _target_inode_fd_count(output) == 0
     assert _target_inode_vma_count(output) == 0
+
+
+class _LifecycleAbort(BaseException):
+    pass
+
+
+class _PreparedIndexStub:
+    @staticmethod
+    def record(section_type, record_id):
+        if section_type == SERIES_LOCATOR:
+            return (0, 0, record_id * 10, 8, 1)
+        if section_type == DEVICE_FILE_SPAN:
+            return (0, 0, 100, 16, 1, 0, 2)
+        if section_type == TSFILE_RECORD:
+            return (0, 0, 4096, 12345)
+        raise AssertionError(section_type)
+
+
+class _PreparedHandleStub:
+    def __init__(
+        self, locator_id, close_error=None, time_owner=None, close_events=None
+    ):
+        self.locator_id = locator_id
+        self.close_error = close_error
+        self.time_owner = time_owner
+        self.close_events = close_events
+        self.close_calls = 0
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_events is not None:
+            self.close_events.append(f"prepared.close:{self.locator_id}")
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class _PreparedReaderStub:
+    def __init__(
+        self,
+        *,
+        abort_once=False,
+        abort_query=False,
+        close_error_ids=(),
+        close_events=None,
+        query_result=None,
+    ):
+        self.abort_once = abort_once
+        self.abort_query = abort_query
+        self.close_error_ids = set(close_error_ids)
+        self.close_events = close_events
+        self.query_result = query_result
+        self.prepared = []
+
+    def prepare_series(self, locator, time_owner=None):
+        if self.abort_once:
+            self.abort_once = False
+            raise _LifecycleAbort("prepare interrupted")
+        locator_id = locator[4]
+        prepared = _PreparedHandleStub(
+            locator_id,
+            close_error=(
+                RuntimeError(f"close {locator_id}")
+                if locator_id in self.close_error_ids
+                else None
+            ),
+            time_owner=time_owner,
+            close_events=self.close_events,
+        )
+        self.prepared.append(prepared)
+        return prepared
+
+    def query_prepared(self, _prepared, **_kwargs):
+        if self.abort_query:
+            raise _LifecycleAbort("query interrupted")
+        return self.query_result
+
+
+def test_prepared_cache_evicts_lru_and_plateaus_at_configured_cap():
+    reader = _PreparedReaderStub()
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub(), max_entries=2)
+
+    with cache.acquire(0, 0, reader) as first:
+        assert first.locator_id == 0
+    with cache.acquire(0, 1, reader):
+        pass
+    with cache.acquire(0, 0, reader) as reused:
+        assert reused is first
+    with cache.acquire(0, 2, reader):
+        pass
+
+    assert cache.size == 2
+    assert [entry.close_calls for entry in reader.prepared] == [0, 1, 0]
+    cache.close()
+    assert [entry.close_calls for entry in reader.prepared] == [1, 1, 1]
+
+
+def test_prepared_cache_default_is_finite_and_plateaus_without_environment(
+    monkeypatch,
+):
+    monkeypatch.delenv("TSFILE_DATAFRAME_MAX_PREPARED_SERIES", raising=False)
+    reader = _PreparedReaderStub()
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub())
+
+    for locator_id in range(4097):
+        with cache.acquire(0, locator_id, reader):
+            pass
+
+    assert cache.max_entries == 4096
+    assert cache.size == 4096
+    assert reader.prepared[0].close_calls == 1
+    assert all(entry.close_calls == 0 for entry in reader.prepared[1:])
+    cache.close()
+    assert all(entry.close_calls == 1 for entry in reader.prepared)
+
+
+def test_prepared_cache_keeps_active_lru_until_lease_release():
+    reader = _PreparedReaderStub()
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub(), max_entries=1)
+
+    with cache.acquire(0, 0, reader) as active:
+        with cache.acquire(0, 1, reader):
+            assert cache.size == 2
+            assert active.close_calls == 0
+        assert cache.size == 1
+        assert active.close_calls == 0
+
+    with cache.acquire(0, 2, reader):
+        pass
+    assert active.close_calls == 1
+    assert cache.size == 1
+    cache.close()
+
+
+@pytest.mark.parametrize("max_entries", [0, 1, 2])
+def test_prepared_cache_owner_graph_plateaus_without_dependency_chains(max_entries):
+    reader = _PreparedReaderStub()
+    cache = runtime_module.PreparedSeriesCache(
+        _PreparedIndexStub(), max_entries=max_entries
+    )
+
+    for locator_id in range(1, 33):
+        with cache.acquire(0, locator_id - 1, reader) as owner:
+            with cache.acquire(0, locator_id, reader, time_owner=owner):
+                pass
+
+        reachable = {}
+        pending = [entry.prepared for entry in cache._entries.values()]
+        while pending:
+            prepared = pending.pop()
+            if id(prepared) in reachable:
+                continue
+            reachable[id(prepared)] = prepared
+            if prepared.time_owner is not None:
+                pending.append(prepared.time_owner)
+
+        assert cache.size <= cache.max_entries
+        assert len(reachable) <= cache.max_entries
+        assert all(
+            prepared.time_owner is None or prepared.time_owner.time_owner is None
+            for prepared in reachable.values()
+        )
+
+    cache.close()
+    assert all(prepared.close_calls == 1 for prepared in reader.prepared)
+
+
+def test_prepared_cache_zero_retention_closes_each_handle_exactly_once():
+    reader = _PreparedReaderStub()
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub(), max_entries=0)
+
+    for _ in range(3):
+        with cache.acquire(0, 0, reader):
+            assert cache.size == 1
+        assert cache.size == 0
+
+    assert len(reader.prepared) == 3
+    assert [entry.close_calls for entry in reader.prepared] == [1, 1, 1]
+    cache.close()
+    assert [entry.close_calls for entry in reader.prepared] == [1, 1, 1]
+
+
+def test_prepared_cache_recovers_single_flight_after_prepare_baseexception():
+    reader = _PreparedReaderStub(abort_once=True)
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub(), max_entries=0)
+
+    with pytest.raises(_LifecycleAbort, match="prepare interrupted"):
+        with cache.acquire(0, 0, reader):
+            pass
+
+    assert not cache._loading
+    with cache.acquire(0, 0, reader) as prepared:
+        assert prepared.locator_id == 0
+    assert prepared.close_calls == 1
+    cache.close()
+
+
+def test_prepared_cache_close_is_idempotent_and_closes_past_errors():
+    reader = _PreparedReaderStub(close_error_ids={0})
+    cache = runtime_module.PreparedSeriesCache(_PreparedIndexStub())
+    with cache.acquire(0, 0, reader) as first:
+        pass
+    with cache.acquire(0, 1, reader) as second:
+        pass
+
+    with pytest.raises(RuntimeError, match="close 0"):
+        cache.close()
+    assert first.close_calls == 1
+    assert second.close_calls == 1
+
+    cache.close()
+    assert first.close_calls == 1
+    assert second.close_calls == 1
+
+
+def test_runtime_discard_after_fork_is_lock_free_exact_once_and_resilient():
+    from concurrent.futures import thread as thread_pool_module
+    import queue
+
+    close_calls = []
+
+    class _PoisonCondition:
+        def __enter__(self):
+            raise AssertionError("inherited condition must not be acquired")
+
+    class _Discardable:
+        def __init__(self, name, fail=False):
+            self.name = name
+            self.fail = fail
+
+        def discard_after_fork(self):
+            close_calls.append(self.name)
+            if self.fail:
+                raise RuntimeError(f"discard {self.name}")
+
+    class _Index:
+        def close(self):
+            close_calls.append("index")
+
+    class _Executor:
+        def __init__(self):
+            self._shutdown = False
+            self._work_queue = queue.SimpleQueue()
+            self._threads = {_InheritedThread()}
+
+        def shutdown(self, **_kwargs):
+            raise AssertionError("an inherited executor must not be shut down")
+
+    class _InheritedThread:
+        def __init__(self):
+            self._target = object()
+            self._args = (object(),)
+            self._kwargs = {"inherited": True}
+
+        @staticmethod
+        def join():
+            pass
+
+    runtime = object.__new__(runtime_module.DatasetRuntime)
+    runtime.creator_pid = os.getpid() + 1
+    runtime._condition = _PoisonCondition()
+    executor = _Executor()
+    inherited_thread = next(iter(executor._threads))
+    thread_pool_module._threads_queues[inherited_thread] = executor._work_queue
+    runtime._query_executor = executor
+    runtime.prepared = _Discardable("prepared", fail=True)
+    runtime.readers = _Discardable("readers")
+    runtime.index = _Index()
+    catalog = SimpleNamespace(
+        runtime=runtime, index=runtime.index, _readers={0: object()}
+    )
+    runtime.catalog = catalog
+    runtime._resources_closed = False
+    runtime._discarded_pid = None
+    runtime._accepting = True
+    runtime._torn_down = False
+
+    with pytest.raises(RuntimeError, match="discard prepared"):
+        runtime.discard_after_fork()
+
+    assert close_calls == ["prepared", "readers", "index"]
+    assert runtime._resources_closed
+    assert runtime._discarded_pid == os.getpid()
+    assert runtime._query_executor is None
+    assert executor._shutdown
+    assert executor._work_queue is None
+    assert executor._threads == set()
+    assert inherited_thread not in thread_pool_module._threads_queues
+    assert inherited_thread._target is None
+    assert inherited_thread._args == ()
+    assert inherited_thread._kwargs == {}
+    assert runtime.prepared is None
+    assert runtime.readers is None
+    assert runtime.index is None
+    assert runtime.catalog is None
+    assert catalog.runtime is None
+    assert catalog.index is None
+    assert catalog._readers == {}
+
+    runtime.discard_after_fork()
+    assert close_calls == ["prepared", "readers", "index"]
+
+
+def test_reader_pool_never_evicts_an_active_reader(monkeypatch):
+    pool = runtime_module.ReaderSessionPool(
+        SimpleNamespace(), max_open_files=1, validate_generation=False
+    )
+    sessions = {}
+
+    class _Session:
+        def __init__(self, file_id):
+            self.reader = file_id
+            self.active_uses = 0
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    def new_session(file_id):
+        session = _Session(file_id)
+        sessions[file_id] = session
+        return session
+
+    monkeypatch.setattr(pool, "_new_session", new_session)
+    acquired_second = threading.Event()
+
+    def acquire_second():
+        with pool.acquire(1):
+            acquired_second.set()
+
+    with pool.acquire(0):
+        thread = threading.Thread(target=acquire_second)
+        thread.start()
+        assert not acquired_second.wait(timeout=0.05)
+        assert sessions[0].close_calls == 0
+
+    thread.join(timeout=2)
+    assert acquired_second.is_set()
+    assert sessions[0].close_calls == 1
+    pool.close()
+    assert sessions[1].close_calls == 1
+
+
+def test_runtime_partial_construction_rolls_back_all_resources(monkeypatch):
+    events = []
+
+    class _Index:
+        def __init__(self, *_args, **_kwargs):
+            events.append("index.open")
+
+        def close(self):
+            events.append("index.close")
+
+    class _Executor:
+        def __init__(self, *_args, **_kwargs):
+            events.append("executor.open")
+
+        def shutdown(self, **kwargs):
+            events.append(("executor.shutdown", kwargs))
+
+    class _Readers:
+        def __init__(self, *_args, **_kwargs):
+            events.append("readers.open")
+
+        def close(self):
+            events.append("readers.close")
+
+    class _Prepared:
+        def __init__(self, *_args, **_kwargs):
+            events.append("prepared.open")
+
+        def close(self):
+            events.append("prepared.close")
+            raise RuntimeError("prepared cleanup failed")
+
+    class _Catalog:
+        def __init__(self, _runtime):
+            raise _LifecycleAbort("catalog construction interrupted")
+
+    monkeypatch.setattr(runtime_module, "MappedDatasetIndex", _Index)
+    monkeypatch.setattr(runtime_module, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(runtime_module, "ReaderSessionPool", _Readers)
+    monkeypatch.setattr(runtime_module, "PreparedSeriesCache", _Prepared)
+    monkeypatch.setattr(runtime_module, "MappedDataFrameCatalog", _Catalog)
+
+    with pytest.raises(_LifecycleAbort, match="catalog construction interrupted"):
+        runtime_module.DatasetRuntime("unused.tsidx", query_workers=2)
+
+    assert events == [
+        "index.open",
+        "executor.open",
+        "readers.open",
+        "prepared.open",
+        ("executor.shutdown", {"wait": True, "cancel_futures": True}),
+        "prepared.close",
+        "readers.close",
+        "index.close",
+    ]
+
+
+@pytest.mark.parametrize("cache_size", [0, 2])
+def test_prepared_cache_follows_environment_cap(tmp_path, monkeypatch, cache_size):
+    source = tmp_path / "devices.tsfile"
+    _write_runtime_devices_file(source)
+    monkeypatch.setenv("TSFILE_DATAFRAME_MAX_PREPARED_SERIES", str(cache_size))
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        for index in range(3):
+            series = dataframe[index]
+            np.testing.assert_array_equal(
+                series[:], np.array([index * 10.0, index * 10.0 + 1.0])
+            )
+            series.close()
+
+        assert dataframe._runtime.prepared.max_entries == cache_size
+        assert dataframe._runtime.prepared.size == cache_size
+
+
+class _ReaderPoolStub:
+    def __init__(self, reader, events):
+        self.reader = reader
+        self.events = events
+        self.acquire_calls = 0
+        self.release_calls = 0
+
+    def acquire(self, _file_id):
+        pool = self
+
+        class _Lease:
+            def __enter__(self):
+                pool.acquire_calls += 1
+                return pool.reader
+
+            def __exit__(self, *_args):
+                pool.release_calls += 1
+                pool.events.append("reader.release")
+
+        return _Lease()
+
+
+class _FailingResultStub:
+    def __init__(self, events):
+        self.events = events
+        self.close_calls = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close_calls += 1
+        self.events.append("result.close")
+
+    @staticmethod
+    def read_arrow_batch():
+        raise _LifecycleAbort("decode interrupted")
+
+
+def test_query_baseexception_releases_prepared_and_reader_exactly_once():
+    events = []
+    reader = _PreparedReaderStub(
+        abort_query=True,
+        close_events=events,
+    )
+    pool = _ReaderPoolStub(reader, events)
+    prepared_cache = runtime_module.PreparedSeriesCache(
+        _PreparedIndexStub(), max_entries=0
+    )
+    runtime = SimpleNamespace(
+        index=_PreparedIndexStub(), readers=pool, prepared=prepared_cache
+    )
+
+    with pytest.raises(_LifecycleAbort, match="query interrupted"):
+        RuntimeSeriesReader(runtime, 0)._query_at_locator(0, offset=0, limit=1)
+
+    assert [item.close_calls for item in reader.prepared] == [1]
+    assert pool.acquire_calls == 1
+    assert pool.release_calls == 1
+    assert events == ["prepared.close:0", "reader.release"]
+    prepared_cache.close()
+
+
+def test_decode_baseexception_closes_result_before_ownership_leases():
+    events = []
+    result = _FailingResultStub(events)
+    reader = _PreparedReaderStub(
+        close_events=events,
+        query_result=result,
+    )
+    pool = _ReaderPoolStub(reader, events)
+    prepared_cache = runtime_module.PreparedSeriesCache(
+        _PreparedIndexStub(), max_entries=0
+    )
+    runtime = SimpleNamespace(
+        index=_PreparedIndexStub(), readers=pool, prepared=prepared_cache
+    )
+
+    with pytest.raises(_LifecycleAbort, match="decode interrupted"):
+        RuntimeSeriesReader(runtime, 0)._query_at_locator(0, offset=0, limit=1)
+
+    assert result.close_calls == 1
+    assert [item.close_calls for item in reader.prepared] == [1]
+    assert pool.release_calls == 1
+    assert events == ["result.close", "prepared.close:0", "reader.release"]
+    prepared_cache.close()
+
+
+def test_reader_pool_close_is_idempotent_and_closes_past_errors(monkeypatch):
+    pool = runtime_module.ReaderSessionPool(
+        SimpleNamespace(), max_open_files=2, validate_generation=False
+    )
+    sessions = {}
+
+    class _Session:
+        def __init__(self, file_id):
+            self.reader = file_id
+            self.active_uses = 0
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+            if self.reader == 0:
+                raise RuntimeError("reader close 0")
+
+    def new_session(file_id):
+        session = _Session(file_id)
+        sessions[file_id] = session
+        return session
+
+    monkeypatch.setattr(pool, "_new_session", new_session)
+    with pool.acquire(0):
+        pass
+    with pool.acquire(1):
+        pass
+
+    with pytest.raises(RuntimeError, match="reader close 0"):
+        pool.close()
+    assert sessions[0].close_calls == 1
+    assert sessions[1].close_calls == 1
+    pool.close()
+    assert sessions[0].close_calls == 1
+    assert sessions[1].close_calls == 1
+
+
+def test_resultset_survives_zero_retention_prepared_eviction(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    monkeypatch.setenv("TSFILE_DATAFRAME_MAX_PREPARED_SERIES", "0")
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        runtime = dataframe._runtime
+        series = runtime.index.record(LOGICAL_SERIES, 0)
+        span = runtime.index.record(SERIES_FILE_SPAN, series[2])
+        with runtime.readers.acquire(0) as reader:
+            prepared_lease = runtime.prepared.acquire(0, span[2], reader)
+            prepared = prepared_lease.__enter__()
+            result = reader.query_prepared(prepared, offset=0, limit=2)
+            prepared_lease.__exit__(None, None, None)
+            assert runtime.prepared.size == 0
+            timestamps, values = RuntimeSeriesReader._consume(result)
+
+    np.testing.assert_array_equal(timestamps, np.array([0, 1], dtype=np.int64))
+    np.testing.assert_array_equal(values, np.array([0.0, 1.0]))
+
+
+def _write_runtime_aligned_fields_file(path):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value_a", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("value_b", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(
+            pd.DataFrame(
+                {
+                    "time": [0, 1, 2],
+                    "device": ["d0", "d0", "d0"],
+                    "value_a": [1.0, 2.0, 3.0],
+                    "value_b": [10.0, 20.0, 30.0],
+                }
+            )
+        )
+
+
+@pytest.mark.parametrize("release_owner_first", [True, False])
+def test_aligned_prepared_handles_survive_both_eviction_orders(
+    tmp_path, monkeypatch, release_owner_first
+):
+    source = tmp_path / "aligned.tsfile"
+    _write_runtime_aligned_fields_file(source)
+    monkeypatch.setenv("TSFILE_DATAFRAME_MAX_PREPARED_SERIES", "0")
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        runtime = dataframe._runtime
+        series_records = [
+            runtime.index.record(LOGICAL_SERIES, index) for index in range(2)
+        ]
+        spans = [
+            runtime.index.record(SERIES_FILE_SPAN, series[2])
+            for series in series_records
+        ]
+        with runtime.readers.acquire(0) as reader:
+            owner_lease = runtime.prepared.acquire(0, spans[0][2], reader)
+            owner = owner_lease.__enter__()
+            value_lease = runtime.prepared.acquire(
+                0, spans[1][2], reader, time_owner=owner
+            )
+            value = value_lease.__enter__()
+
+            if release_owner_first:
+                owner_lease.__exit__(None, None, None)
+                result = reader.query_prepared(value, offset=0, limit=3)
+                value_lease.__exit__(None, None, None)
+                expected = np.array([10.0, 20.0, 30.0])
+            else:
+                value_lease.__exit__(None, None, None)
+                result = reader.query_prepared(owner, offset=0, limit=3)
+                owner_lease.__exit__(None, None, None)
+                expected = np.array([1.0, 2.0, 3.0])
+
+            assert runtime.prepared.size == 0
+            timestamps, values = RuntimeSeriesReader._consume(result)
+
+    np.testing.assert_array_equal(timestamps, np.array([0, 1, 2], dtype=np.int64))
+    np.testing.assert_array_equal(values, expected)
+
+
+def test_dataframe_reopens_process_local_runtime_after_fork(tmp_path):
+    if not _linux_proc_resource_attribution_available():
+        pytest.skip("Linux fork lifecycle validation is unavailable")
+
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        parent_runtime = dataframe._runtime
+        parent_reader_pool = parent_runtime.readers
+        parent_prepared_cache = parent_runtime.prepared
+        parent_index = parent_runtime.index
+        parent_executor = parent_runtime._query_executor
+        inherited_executor_threads = ()
+        if parent_executor is not None:
+            assert (
+                parent_executor.submit(lambda: "parent-ready").result()
+                == "parent-ready"
+            )
+            inherited_executor_threads = tuple(parent_executor._threads)
+            assert inherited_executor_threads
+        inherited_runtime_lease = dataframe._runtime_lease
+        series = dataframe[0]
+        np.testing.assert_array_equal(series[:], np.array([0.0, 1.0]))
+        series.close()
+        assert parent_reader_pool.open_count == 1
+        assert parent_prepared_cache.size == 1
+
+        read_fd, write_fd = os.pipe()
+        child_pid = os.fork()
+        if child_pid == 0:
+            os.close(read_fd)
+            try:
+                child_series = dataframe[0]
+                child_runtime = dataframe._runtime
+                assert child_runtime is not parent_runtime
+                assert child_runtime.readers is not parent_reader_pool
+                assert child_runtime.prepared is not parent_prepared_cache
+                assert child_runtime.creator_pid == os.getpid()
+                assert parent_runtime._resources_closed
+                assert parent_runtime._discarded_pid == os.getpid()
+                assert parent_runtime.readers is None
+                assert parent_runtime.prepared is None
+                assert parent_runtime.index is None
+                assert parent_runtime.catalog is None
+                if parent_executor is not None:
+                    assert parent_executor._shutdown
+                    assert parent_executor._work_queue is None
+                    assert parent_executor._threads == set()
+                    assert all(
+                        thread._target is None
+                        and thread._args == ()
+                        and thread._kwargs == {}
+                        for thread in inherited_executor_threads
+                    )
+                assert parent_reader_pool._closed
+                assert parent_reader_pool._sessions == {}
+                assert parent_prepared_cache._closed
+                assert parent_prepared_cache._entries == {}
+                assert parent_index._view is None
+                assert inherited_runtime_lease._closed
+                values = child_series[:]
+                child_series.close()
+                np.testing.assert_array_equal(values, np.array([0.0, 1.0]))
+                dataframe.close()
+                assert child_runtime._resources_closed
+                if os.path.isdir("/proc/self/fd"):
+                    open_targets = {
+                        os.path.realpath(f"/proc/self/fd/{fd}")
+                        for fd in os.listdir("/proc/self/fd")
+                        if os.path.exists(f"/proc/self/fd/{fd}")
+                    }
+                    assert os.path.realpath(source) not in open_targets
+                    assert os.path.realpath(parent_index.path) not in open_targets
+                os.write(write_fd, b"OK")
+                status = 0
+            except BaseException as exc:
+                os.write(write_fd, f"{type(exc).__name__}: {exc}".encode())
+                status = 1
+            finally:
+                os.close(write_fd)
+            os._exit(status)
+
+        os.close(write_fd)
+        child_message = os.read(read_fd, 4096)
+        os.close(read_fd)
+        waited_pid, child_status = os.waitpid(child_pid, 0)
+
+        assert waited_pid == child_pid
+        assert os.WIFEXITED(child_status), child_message.decode()
+        assert os.WEXITSTATUS(child_status) == 0, child_message.decode()
+        assert child_message == b"OK"
+        assert dataframe._runtime is parent_runtime
+        assert dataframe._runtime.readers is parent_reader_pool
+        assert dataframe._runtime.prepared is parent_prepared_cache
+        assert parent_reader_pool.open_count == 1
+        assert parent_prepared_cache.size == 1
+        if parent_executor is not None:
+            assert not parent_executor._shutdown
+            assert parent_executor._work_queue is not None
+            assert parent_executor.submit(lambda: "parent-ok").result() == "parent-ok"
+        parent_series = dataframe[0]
+        np.testing.assert_array_equal(parent_series[:], np.array([0.0, 1.0]))
+        parent_series.close()
+
+
+def test_prefork_timeseries_fails_fast_in_child_without_harming_parent(tmp_path):
+    if not _linux_proc_resource_attribution_available():
+        pytest.skip("Linux fork lifecycle validation is unavailable")
+
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        parent_runtime = dataframe._runtime
+        parent_reader_pool = parent_runtime.readers
+        parent_prepared_cache = parent_runtime.prepared
+        parent_index = parent_runtime.index
+        series = dataframe[0]
+        np.testing.assert_array_equal(series[:], np.array([0.0, 1.0]))
+        inherited_query_lease = series._runtime_lease.query_lease()
+
+        read_fd, write_fd = os.pipe()
+        child_pid = os.fork()
+        if child_pid == 0:
+            os.close(read_fd)
+            try:
+                with pytest.raises(
+                    RuntimeError,
+                    match="obtain a new Timeseries from the child.*TsFileDataFrame",
+                ):
+                    series[:]
+                with pytest.raises(
+                    RuntimeError,
+                    match="obtain a new Timeseries from the child.*TsFileDataFrame",
+                ):
+                    series._runtime_lease.clone()
+                inherited_query_lease.close()
+                assert not inherited_query_lease._acquired
+                series.close()
+                assert series._closed
+                assert parent_runtime._resources_closed
+                assert parent_runtime._discarded_pid == os.getpid()
+                assert parent_runtime.readers is None
+                assert parent_runtime.prepared is None
+                assert parent_runtime.index is None
+                assert parent_runtime.catalog is None
+                assert parent_reader_pool._closed
+                assert parent_reader_pool._sessions == {}
+                assert parent_prepared_cache._closed
+                assert parent_prepared_cache._entries == {}
+                assert parent_index._view is None
+                os.write(write_fd, b"OK")
+                status = 0
+            except BaseException as exc:
+                os.write(write_fd, f"{type(exc).__name__}: {exc}".encode())
+                status = 1
+            finally:
+                os.close(write_fd)
+            os._exit(status)
+
+        os.close(write_fd)
+        child_message = os.read(read_fd, 4096)
+        os.close(read_fd)
+        waited_pid, child_status = os.waitpid(child_pid, 0)
+
+        assert waited_pid == child_pid
+        assert os.WIFEXITED(child_status), child_message.decode()
+        assert os.WEXITSTATUS(child_status) == 0, child_message.decode()
+        assert child_message == b"OK"
+        assert inherited_query_lease._acquired
+        assert parent_runtime._query_leases == 1
+        np.testing.assert_array_equal(series[:], np.array([0.0, 1.0]))
+        inherited_query_lease.close()
+        assert parent_runtime._query_leases == 0
+        series.close()
