@@ -102,15 +102,15 @@ sqlite3_enable_load_extension(db, 0);
 以下按目标功能设计定义建表语法；示例表达待实现接口，不代表当前原型已支持。
 列定义采用 `列名 类型 [类别]`，省略类别时默认为 `FIELD`；`TIME` 和 `TAG` 显式声明。
 
-<!-- tag-comment-scope-A-start mode="block" hash="sha256:ea95a37724664b6e701bd56bb5b1ff0ccfca90fc6dfa9aef1dee7f601c1c4001" -->
+<!-- tag-comment-scope-A-start mode="block" hash="sha256:0e9a78743b7900e3d2c4dcd95c70a64cbd9c7fd7881724a7432e026c455a6ecd" -->
 ```sql
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   time TIMESTAMP TIME,
   device STRING TAG,
   region STRING TAG,
-  temperature DOUBLE,
-  status STRING,
-  payload BLOB,
+  temperature DOUBLE FIELD,
+  status STRING FIELD,
+  payload BLOB FIELD,
   directory='/var/lib/example/sensor',
   timestamp_precision='ms'
 );
@@ -118,6 +118,7 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
 <!-- tag-comment-scope-A-end mode="block" -->
 <!-- tag-comment-thread-A
 cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","body":"这里强制说明FIELD 列吧，就要求带。 "}
+cmd39 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:28:49.464Z","body":"回复 cmd33：按这个要求确定语法：每列都必须写明 `列名 类型 类别`，类别只能是 TIME、TAG 或 FIELD，不再默认 FIELD。已给选中示例的 temperature、status、payload 补上 FIELD。省略类别应在建表时报错并指出列名。\n\n本次按该评论修改选中示例；相邻的旧默认说明以及另一条待评审规则中仍有“默认 FIELD”措辞，先保留其评论范围，全文定稿时需要一起统一为强制类别。"}
 -->
 
 列定义按书写顺序组成 schema，表级选项使用 `key=value`。未知选项、重复的表级
@@ -134,17 +135,28 @@ cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","b
 
 列定义的目标规则如下：
 
-<!-- tag-comment-scope-B-start mode="block" hash="sha256:08ee28ffe774a39d78378efd92be5a7264e48c6d94494f4c9e499d9a5043aebe" -->
+<!-- tag-comment-scope-B-start mode="block" hash="sha256:693e3cfecfa5246c1c684e7865fffda20008ac5c6e0e82c242c350da16e68f69" -->
 - 恰好一个 `TIME` 列，必须是第一列，类型为 `TIMESTAMP`，值不能为 `NULL`；
-- `TAG` 列可以有零个或多个；存在时类型必须为 `STRING`，值不能为 `NULL`；
+- `TAG` 列可以有零个或多个；存在时类型必须为 `STRING`，值允许为 SQL `NULL`；
 - 有 TAG 时，全部 TAG 与 TIME 共同组成唯一键；无 TAG 时，TIME 单独组成唯一键；
 - 不声明类别的列默认为 `FIELD`，FIELD 值可以为 `NULL`；
 - 列名不能仅靠 ASCII 大小写区分，例如 `Temperature` 和 `temperature` 视为重名；
 - 封存通过第 7 节的管理 UDF 发起，业务 schema 不需要声明或操作
   `_tsfile_command`、`_tsfile_cutoff` 控制列。
+
+NULL TAG 的目标语义：
+
+- SQL `NULL`、空字符串 `''` 和字符串 `'null'` 是三个不同值，封存和查询必须保留区别；
+- 判定逻辑唯一键时，相同位置的两个 NULL TAG 视为同一个键分量。例如同一 TIME 下，
+  两条 `(device=NULL, region='cn-east')` 记录冲突；
+- NULL 查询使用 `IS NULL`，普通 WHERE 表达式继续遵循 SQLite 的 NULL 语义，
+  不把 `= NULL` 改成相等比较；
+- 热数据的唯一键检查必须显式处理 NULL，不能仅依赖 SQLite 默认 UNIQUE 对 NULL
+  的处理，也不能用可能与实际 TAG 冲突的字符串替换 NULL。
 <!-- tag-comment-scope-B-end mode="block" -->
 <!-- tag-comment-thread-B
 cmd34 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:12:36.036Z","body":"TAG 允许设置为null，这个应该是底层的能力吧"}
+cmd40 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:29:13.195Z","body":"回复 cmd34：是底层已有的数据表示能力。`Tablet::get_device_id()` 会为 NULL TAG 生成 nullptr 分量，`StringArrayDeviceID` 保留它，并在相等比较中把同位置的两个 nullptr 视为相等；空字符串另有表示。已把当前选中规则改成允许 NULL TAG。\n\n同时补了必要的键语义：NULL、空字符串、字面值 'null' 必须区分；在逻辑唯一键中，相同位置的 NULL 视为同一分量，防止同一设备同一时间出现重复行。SQLite 默认 UNIQUE 会允许多个含 NULL 的键，因此需要在扩展层用保留类型/NULL 标志的键编码或等效检查来保证一致，而不是只移除 NOT NULL。查询仍用 IS NULL，普通 SQL 三值逻辑不变。参见 [SQLite NULL 处理](https://www.sqlite.org/nulls.html)。这些是设计规则，底层 NULL TAG 的端到端封存读回仍应列入验收。"}
 -->
 
 无 TAG 表可按以下方式定义；每个时间戳最多对应一行：
@@ -233,6 +245,7 @@ cmd15 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:40.742Z","b
 cmd24 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:59:22.105Z","body":"我的意思是， 用户如果操作一些数据的话， 那他就必须得知道他可操作的数据范围？如果数据被写下去了， 封口成tsfile ，就不能再处理了。 所以每次更新都得做一下检查之类的？ 当然我们持续追加写倒是没啥问题。 "}
 cmd29 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:02:47.981Z","body":"回复 cmd24：是的，封存会改变数据的可修改范围，但不应要求用户每次 UPDATE 前手动查一遍。建议把“检查范围、保证并发一致性、给出清楚错误”作为扩展的职责：\n\n1. 默认严格更新：UPDATE/DELETE 命中任意冷行，就让整条语句失败并撤销本语句已经做的修改，不能出现前面热行已改、后面遇到冷行才失败的部分成功。INSERT 或 UPDATE 后的新时间必须满足 `time >= watermark`。之前已完成的其他语句是否保留，遵循外层事务的回滚选择。\n2. 更新和封存使用同一 SQLite 写事务协调；取得写权限后重新读取有效 watermark，再检查和修改。用户提前查到的范围只能用于提示，不能作为后续写操作的授权凭据，避免“查完后另一连接封存”的竞态。\n3. 提供只读 `tsfile_table_info('main.sensor')` 表值函数，返回 watermark、precision 等状态。用户明确要“只修改仍可变的数据”时，可把该状态条件写进同一条 UPDATE 的 WHERE 中；默认 UPDATE 不自动过滤冷行。\n4. 报错应包含逻辑表名、watermark、时间单位以及冲突时间或键，并使用可识别的约束错误。正常追加不要求额外调用检查接口，但迟到数据只要落到 watermark 之前也要拒绝。\n\n另一种方案是静默跳过冷行，操作更省事却容易让用户误以为全部更新成功；再一种是给冷数据增加 correction 层，会明显扩大本期范围。我建议先采用上述“严格失败 + 可查状态 + 显式限定热区”的设计。业务上，调用 seal 就表示放弃 cutoff 之前的修改权，cutoff 应覆盖业务允许的迟到和修正窗口。这条先回复设计取舍，待你确认后再整理成 DML 正文规则。"}
 cmd37 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:25:38.739Z","body":"我有机会发现他的操作命中了冷读数据吗？ 如果发现更新在冷数据上，或者删除在冷数据上， 我就直接拒绝好了。 "}
+cmd41 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:29:35.664Z","body":"回复 cmd37：可以，而且在真正修改之前就有明确的拦截点。SQLite 对虚拟表执行 UPDATE/DELETE 时，会把目标行的旧 rowid 交给 `xUpdate`；我们根据该 rowid 对应的来源判断它是热行还是 TsFile 冷行，冷行直接拒绝，无需让用户提前检查。当前原型已经给冷行分配负 rowid，并在 `update_hot()`、`delete_hot()` 开头拒绝负值。参见 [SQLite xUpdate](https://www.sqlite.org/vtab.html#the_xupdate_method)。\n\n这里应判断“真正被 UPDATE/DELETE 命中的目标行”，不能因为查询扫描到了冷数据就拒绝。WHERE 未匹配的冷行、子查询里只读的冷数据都不应触发写入错误；因此不要在通用 xFilter/read_cold 里直接拒绝读取。\n\n设计规则建议就定为：命中冷行即拒绝整条写语句，其他已修改热行也要回滚；只命中热行时正常执行。插入和修改热行时间另检查新时间不得小于 watermark。冷行来源标识必须在本语句期间稳定且不与热行混淆。\n\n还需处理冲突策略：当前开启 CONSTRAINT_SUPPORT 后，单纯返回 SQLITE_CONSTRAINT 可能受到 UPDATE OR IGNORE/OR FAIL 的影响。冷数据不可修改属于能力边界，不应被 IGNORE 静默跳过；建议统一用不可写错误（如 SQLITE_READONLY）拒绝，并用“先热后冷、多行语句、OR IGNORE/FAIL、外层事务”测试保证整条语句撤销。参见 [SQLite 虚拟表约束处理](https://www.sqlite.org/c3ref/c_vtab_constraint_support.html)。本条先回复拦截机制与原子性要求，不改动 DML 示例。"}
 -->
 
 ## 6. 查询冷热数据
@@ -375,17 +388,21 @@ ORDER BY cutoff;
 SELECT count(*) AS hot_rows FROM sensor_data;
 ```
 
-<!-- tag-comment-scope-G-start mode="block" hash="sha256:42fc02103e60aa6f6a98ce6001a2caa190ed56a90eac5d4c20e316aed12f197a" -->
-不要直接修改 shadow table。绕过虚拟表写入会破坏 watermark、manifest 和文件
-之间的一致性。
-<!-- tag-comment-scope-G-end mode="block" -->
-<!-- tag-comment-thread-G
-cmd8 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:31:55.454Z","body":"这个用户可以直观地查看到这张表吗？ 感觉这个名字还是可能会和用户的名字撞车的。"}
-cmd17 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:37:10.407Z","body":"回复 cmd8：可以看到。Shadow 表不是隐藏文件，也不是独立命名空间；它们是 SQLite schema 内的真实表。用户可查询 `SELECT name, sql FROM main.sqlite_master WHERE name IN ('sensor_data','sensor_segments','sensor_config');`，SQLite 3.37+ 还可用 `PRAGMA main.table_list` 查看 shadow 类型。\n\n撞名风险确实存在。如果同一 schema 已有用户表 `sensor_data`，当前创建 `sensor` 时执行普通 `CREATE TABLE sensor_data ...` 会失败，不会自动覆盖或复用它。`xShadowName` 负责声明内部表身份，并不能消除命名冲突。可改进为：创建前检查三个派生名，返回明确的冲突对象；采用更有辨识度的内部后缀；在用户工具中把 shadow 表单独显示。这些是待做的改进。\n\n另一个边界是：单靠 xShadowName 不保证禁止直接写入；SQLite 在连接启用 `SQLITE_DBCONFIG_DEFENSIVE` 时才限制普通 SQL 写 shadow 表。当前扩展没有替宿主启用该设置。参见 [SQLite shadow table 机制](https://www.sqlite.org/vtab.html#the_xshadowname_method)。"}
-cmd26 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:00:17.054Z","body":"我觉得这个名字还得再内部一点，加一些符号，_xxx_xxx，或者带上 _xx_xx_tsfile_xx 关于tsfile 的相关标记。 "}
-cmd31 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:03:34.191Z","body":"回复 cmd26：同意，名字应明确带有 TsFile 内部对象标记。建议采用 `\"\u003c逻辑表名>_tsfile$\u003c用途>\"`，例如 `\"sensor_tsfile$hot\"`、`\"sensor_tsfile$segments\"`、`\"sensor_tsfile$config\"`，统一通过双引号引用。这样普通列表里也能一眼看出是 sensor 所属的内部表。\n\n这里有一个命名约束：SQLite 原生 xShadowName 按“最后一个下划线之前是虚拟表名、之后是用途后缀”识别 shadow 表。直接改为 `_tsfile_sensor_data` 或 `sensor__tsfile_data`，会破坏它与 sensor 的默认关联。把内部标记和用途放在同一个后缀里，并用 `$` 分隔，可以同时保留关联和明显的内部标记。参见 [SQLite xShadowName](https://www.sqlite.org/vtab.html#the_xshadowname_method)。\n\n若希望名字更朴素，也可以用 `sensor_tsfiledata` 等无符号后缀；我倾向前一组。无论哪种命名，建表时都必须预检同名对象并明确拒绝，不能覆盖或误认用户表。用户日常查询状态应通过公开的只读状态接口，内部名称不作为业务 API。本条先回复具体命名方案和约束，正文中的实际名字待确定后统一替换。"}
-cmd38 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:26:41.524Z","body":"就前面那种吧， 朴素就容易撞车， 我看这个表名“sensor_tsfiledata\"就容易自己创建出来。 "}
--->
+内部对象采用带符号的命名形式 `"<逻辑表名>_tsfile$<用途>"`。例如 sensor 对应：
+
+| 内部表 | 用途 |
+| --- | --- |
+| `"sensor_tsfile$hot"` | 可变热数据 |
+| `"sensor_tsfile$segments"` | TsFile 文件登记信息 |
+| `"sensor_tsfile$config"` | schema、精度、watermark 和目录配置 |
+
+名字必须统一做标识符转义。建表前检查全部派生名；任何同名对象都使创建失败并明确
+报告冲突，不覆盖或复用用户对象。符号用于提高辨识度，不能被当作绝不撞名的保证。
+最后一个下划线之前保留完整逻辑表名，以维持 SQLite 的 shadow 表识别关系。
+
+这些名字属于内部实现，不作为业务 API。日常诊断通过公开状态接口完成；用户能够
+在 schema 中查看内部对象，但不应直接修改它们。绕过虚拟表写入会破坏 watermark、
+文件登记和实际文件之间的一致性。
 
 热行使用 SQLite 的正 rowid；冷行使用扩展生成的负 rowid。冷 rowid 是内部
 实现标识，不应作为跨查询或跨版本稳定的业务主键。
@@ -405,115 +422,137 @@ DROP TABLE sensor;
 会删除虚拟表及其三个 shadow table，但不会删除已经导出的 TsFile。删除或归档
 这些文件需要由运维流程显式完成。
 
-<!-- tag-comment-scope-H-start mode="block" hash="sha256:19c5dab067d18d5f839c3673e8c7bbb9789ed4d80193f3186f48bf1ea2cc1d7e" -->
-## 11. 导出、导入与文件校验（功能设计草案）
+<!-- tag-comment-scope-H-start mode="block" hash="sha256:1a861167f2fc4826a3f722848caedc1e0749da51b58aa2339a8dda2c1300f804" -->
+## 11. TsFile 导出、导入与文件校验（功能设计草案）
 
-本节定义目标接口，供设计评审；导出以一张 hybrid 逻辑表为单位，包含该表完整的
-冷热数据，不包含数据库中的其他业务表。导入第一版只创建新表，不合并或覆盖已有表。
-本节的受控文件管理规则是目标行为，现有原型的目录清理方式需要随之调整。
+本节定义面向标准 TsFile 的交换和查询接口。导出产物只有 `.tsfile` 文件，不导出
+SQLite 数据库、热表、WAL、shadow 表或独立的 JSON 清单，也不承诺恢复源表的可写状态。
+导入接口及只读语义在 11.2 节定义。
 
-### 11.1 导出接口和内容
+### 11.1 仅导出 TsFile
 
 ```sql
-SELECT tsfile_export('main.sensor', '/backup/sensor-snapshot-001');
+SELECT tsfile_export('main.sensor', '/export/sensor-001');
 ```
 
-`tsfile_export(table_name, output_directory)` 导出逻辑表快照，成功返回快照 ID。
-目标目录必须为绝对路径且尚不存在；拒绝写入源表管理目录或其子目录。
-导出不会推进 watermark，也不会为了生成快照而隐式封存热数据。
+`tsfile_export(table_name, output_directory)` 导出指定逻辑表已经落到 TsFile 的
+数据，成功返回产出的文件数。SQLite 中尚未封存的热数据不在导出范围内。
+如需导出这些热数据，调用方先显式 seal 到选定 cutoff，提交后再执行 export。
+export 本身不封存、不修改源数据、不推进 watermark。
 
-导出包采用目录格式：
+目标目录必须为绝对路径且尚不存在，并且不得与源数据目录重合或互相嵌套。
+输出示例：
 
 ```text
-sensor-snapshot-001/
-  manifest.json
-  hot.sqlite
-  segments/
-    <segment-id>.tsfile
+sensor-001/
+  part-000001.tsfile
+  part-000002.tsfile
 ```
 
-- `manifest.json`：包格式版本、快照 ID、来源表标识、逻辑 schema、精度、watermark、
-  热数据行数，以及各文件的相对路径、大小和 SHA-256；段记录额外保存段 ID、行数、
-  时间范围及文件内部的 TsFile 表名。
-- `hot.sqlite`：同一快照中的可变数据，按逻辑列和唯一键保存，不暴露源库内部表名。
-- `segments/`：该快照引用的不可变 TsFile 副本，保留原文件内容；包不依赖源目录绝对路径。
+- 表名、列类型和类别从 TsFile 自身元数据读取；可用的时间精度放在文件 Properties。
+- 输出文件只包含所选逻辑表的数据。如果输入段同时含其他表，需要导出所选表为独立
+  TsFile，不能直接复制而意外带出其他表。文件内部表名使用该逻辑表的导出名称。
+- 文件可由标准 TsFile Reader 独立读取，不依赖本扩展的 JSON 清单或 SQLite 文件。
+- 没有已封存数据时返回 0，目标目录为空；不会制造可恢复空表或热数据的假象。
 
-第一版采用阻止源库并发写入的保守导出方式：取得 SQLite 写保留锁，在同一事务视图内
-读取配置、热数据和段清单，复制并校验所有文件后释放锁。导出时间较长时会阻塞该
-SQLite 数据库的其他写入，不宣称提供无阻塞在线快照。
+第一版采用保守的一致性方式：取得源 SQLite 数据库的写保留锁，在同一事务视图内
+固定该表的文件登记集合，复制或重写完成后释放锁。期间阻塞该数据库的其他写入。
+对外部只读文件也要检查读取错误和文件变化；外部修改不属于 SQLite 锁的保护范围。
 
-先写入目标旁的专用暂存目录，完成文件同步、清单校验后再原子发布整个目录，并同步
-父目录。任一步失败不返回快照 ID，不留下看似完整的目标包，源数据保持不变。
-导出只允许作为独立管理语句执行，调用前不能存在用户显式事务，避免把未提交数据
-导出为可独立使用的包；成功返回时包已发布。
+先在目标旁的专用暂存目录生成文件，校验 footer、schema 和已知精度，完成文件同步，
+再原子发布整个目录并同步父目录。失败不发布完整目标，源文件不变。
+仅允许独立管理调用，不接受用户已有的显式事务；成功返回时输出目录已发布。
 
-### 11.2 导入接口和冲突规则
+### 11.2 扫描目录并建立只读查询表
 
 ```sql
-SELECT tsfile_import(
-  '/backup/sensor-snapshot-001',
-  'main.sensor_restored',
-  '/var/lib/example/sensor-restored'
-);
+SELECT tsfile_import('/data/archive');
 ```
 
-`tsfile_import(package_directory, target_table, target_directory)` 成功返回新逻辑表
-的名称。目标表及其内部对象必须不存在，目标目录必须尚不存在；不覆盖、合并或
-自动删除现有对象。包目录与目标目录必须彼此独立，不允许互为父子目录。
+`tsfile_import(directory [, target_schema])` 默认把发现的表注册到 `main`；可显式
+指定一个已经存在的 SQLite schema。成功返回新注册的逻辑表数量。
 
-导入应执行以下检查与发布流程：
+```sql
+SELECT tsfile_import('/data/archive', 'archive');
+```
 
-1. 验证包版本、清单完整性、schema、时间精度和全部文件的大小与校验值；拒绝绝对
-   包内路径、`..` 路径逃逸及符号链接文件，不执行包里提供的任意 SQL。
-2. 验证热数据满足唯一键且时间不小于 watermark；冷段的 schema、精度、时间范围
-   与清单一致，冷数据时间小于 watermark，同一逻辑键不能重复。通过实际数据扫描
-   完成必要校验，不仅相信清单中的统计值。
-3. 复制段文件到本次导入专用的暂存区，并生成新的目录所有权标识；保留源包不变。
-4. 在目标 SQLite 写事务中创建新逻辑表、内部对象和热数据，恢复原 watermark，
-   将 manifest 路径映射到新的目录。
-5. 在提交前验证并发布目标文件，持久化文件及目录后提交 SQLite 状态。成功后新表
-   才对其他连接完整可见。失败时回滚本次新建对象并清理本次导入拥有的文件。
+这里的导入指登记外部 TsFile 并建立查询入口：默认直接引用原文件，不复制、移动、
+重写文件，也不把行装入 SQLite 热表。源目录必须是可持续访问的绝对路径，文件需
+由调用方保持不可变。SQLite 中只保存查询所需的文件登记和 schema 元数据。
 
-允许更换逻辑表名和目录。文件内部 TsFile 表名与外部 SQLite 表名分别记录，Reader
-通过 manifest 映射访问原文件内部表名，不能简单假设它等于新逻辑表名。
+扫描与分组规则：
 
-导入也要求独立管理调用，不加入用户已有的显式事务。包校验和文件准备可以先完成，
-取得目标写锁后再次检查名称与目录冲突；进程中断后的恢复只能清理有本次操作所有权
-记录的暂存内容，不触碰其他文件。第一版暂不提供向现有表合并数据的语义。
+1. 第一版扫描指定目录当前层的普通 `.tsfile` 文件，不递归子目录，不跟随符号链接；
+   非 TsFile 文件忽略，扩展名匹配但无法读取的文件使本次导入失败并报告路径。
+2. 从每个文件的元数据枚举全部表名；一个文件包含多张表时分别登记，不按文件名猜
+   表名。同一张表出现在多个文件中时，组成同一个只读逻辑表。
+3. 同名表要求列定义、类型、类别和顺序兼容；第一版要求完全一致，不自动补列、
+   类型提升或统一不同 schema。按 SQLite 标识符比较产生的大小写冲突应明确报错。
+4. 接受普通 TsFile，不要求来自本扩展，也不要求携带私有快照清单。时间精度属性
+   存在时读取；缺失时标记为 unknown 并按原始整数时间查询，不默认为 ms。
+   同名表的已知精度必须一致；已知/未知混合也拒绝自动合并，避免混淆时间单位。
+5. 同名表跨文件的结果按 `UNION ALL` 语义读取，重叠时间和重复逻辑键保留，不自动
+   覆盖、去重或取最新值。只读导入不对外部数据强加可写 hybrid 表的唯一键约束。
+6. 保存“SQLite 逻辑表 → 文件路径集合 → 各文件内部表名”的映射，所有路径和表名
+   都按数据处理并正确转义。文件内部表名不会因 SQL 名称变化而被重写。
 
-### 11.3 文件复制、移动与校验
+用户通过普通 SQL 查询，例如目录内包含 sensor 和 meter 两个表时：
+
+```sql
+SELECT time, device, temperature FROM sensor ORDER BY time;
+SELECT count(*) FROM meter;
+```
+
+所有导入表默认且固定为只读：拒绝 INSERT、UPDATE、DELETE 和 seal，即使当前表为空
+也不接受写入。只读表不创建可写热区，不恢复源库 watermark，也不因为时间较新就
+自动允许修改。持续追加写入仍使用另行创建的可写 hybrid 表。
+
+注册时先完整枚举、验证并建立映射，再在同一个 SQLite 事务中发布所有表。目标
+schema 中任何同名用户表、虚拟表或所需内部对象冲突，都使整批失败；不覆盖、不
+合并到已存在的表。对同一目录重复调用也遵循此规则，不会重复追加登记。
+
+导入要求独立管理调用，不能嵌入已有用户显式事务。取得目标写锁后再次检查对象
+冲突；失败回滚本次新建的所有登记，源文件保持不变。空目录或未发现表时返回 0。
+本次扫描后新加入目录的文件不会自动进入已注册表，第一版不提供后台监控或刷新；
+如需重新登记，可删除相关只读逻辑表后再导入，删除逻辑表不会删除外部文件。
+
+### 11.3 文件所有权、移动与校验
 
 ```sql
 SELECT * FROM tsfile_verify('main.sensor');
 ```
 
 `tsfile_verify(table_name)` 是只读表值接口，返回
-`segment_id, path, status, detail`。检查结果包括 `OK`、`MISSING`、`CORRUPT`、
-`MISMATCH` 和 `UNREGISTERED`；检查已登记文件的存在性、内容校验值、schema 和精度，
-并报告管理目录中的未登记文件。检查本身不导入、删除或修复文件。
+`segment_id, path, status, detail`。状态包括 `OK`、`MISSING`、`CORRUPT`、
+`MISMATCH` 和 `UNREGISTERED`。导入时建立文件指纹，verify 对比文件内容、schema
+和可用精度；普通文件不需要预先存储本扩展的校验属性。
 
-- 复制到管理目录之外且保留源文件，不改变源库，也不自动登记副本。
-- 已登记文件被移走或删除时，查询必须失败并报告具体逻辑表、段和原路径，不能
-  静默跳过；verify 提供完整诊断，不承诺持续文件监控。
-- 同路径文件被替换时，通过校验值与元数据识别。完整校验由 verify 执行；普通
-  查询的轻量检查不能被描述为能识别所有任意字节修改。
-- 放入目录的任意 `.tsfile` 不自动成为数据；后续 seal 也不能仅按后缀将其删除。
-  孤儿回收只处理具有扩展所有权和失败操作记录的文件，未知文件只报告。
-- 迁移使用 export/import 完成，不自动搜索移动后的路径。成功导入并校验后，由用户
-  单独决定是否删除源逻辑表或源文件，导入不隐式搬走源数据。
+- 自有 hybrid 段与外部只读引用必须有明确的所有权区别。导入不取得源文件的删除权，
+  DROP TABLE、seal 清理和失败恢复都不得删除外部引用文件。
+- 文件被移走或删除时，访问该文件的查询失败并报告表名、文件标识和原路径，不能
+  静默跳过；verify 可集中报告问题，不承诺持续监控或自动搜索新路径。
+- 同路径文件被替换或修改时，完整 verify 对比导入指纹并报告差异；普通查询的轻量
+  检查不宣称能够发现所有字节修改。调用方必须保证登记后外部文件保持不可变。
+- 外部目录新增文件不会自动导入；verify 报告发现的未登记 TsFile，且不删除它们。
+  自有目录中的未知文件也不能仅凭 `.tsfile` 后缀被孤儿清理删除。
+- 复制到其他位置且保留源文件不影响已有查询；移动目录后应在保留源数据的前提下
+  重新建立登记，不直接改写内部表路径。
 
-复制单个 TsFile 只获得部分历史数据，不等于完整导出包。第一版 import 仅接受上述
-完整包；导入任意独立 TsFile 需要另行定义热冷边界、冲突和归属规则，不混入此接口。
+导出目录只包含 TsFile，导入后得到只读数据集；这一过程不是恢复完整 SQLite 数据库
+或可写 hybrid 状态的备份协议。
 
 ### 11.4 验收场景
 
-- 有 TAG、无 TAG、全热、全冷、冷热混合以及空表都能导出并恢复；
-- 恢复到不同表名和目录后，逻辑查询结果、精度与 watermark 与源快照一致；
-- 并发写入期间导出仍获得一致快照，且不推进源表 watermark；
-- 名称冲突、目录冲突、包损坏、文件缺失、校验失败和不支持的包版本明确失败；
-- 在复制、同步、目录发布和 SQLite 提交边界注入故障，验证源数据不变、目标不出现
-  可查询的半成品、重试不会覆盖用户文件；
-- verify 能区分丢失、被替换及未登记文件，并保持文件系统和数据库不变。
+- 导出目录只含标准 `.tsfile`；热数据不被导出，watermark 不改变，无冷数据返回 0；
+- 目录内多文件、多表能被完整发现，同表跨文件汇成一个只读表；
+- 不带本扩展私有 Properties 的普通 TsFile 可以查询，缺失精度标为 unknown；
+- 多文件重叠时间和重复键按 UNION ALL 保留；NULL TAG 与空字符串不混淆；
+- schema 不兼容、精度冲突、表名冲突及损坏文件使批量导入失败且不留下部分注册；
+- 对导入表执行 INSERT、UPDATE、DELETE、seal 均被拒绝，源文件字节保持不变；
+- 文件移走、替换和新增分别被诊断为缺失、变化和未登记；verify 不修改任何文件；
+- 删除只读逻辑表、导入失败及进程重启清理都不会删除外部文件；
+- 对导出复制、文件同步、目录发布和导入登记提交注入故障，验证源数据不变及
+  目标没有部分可见的发布结果。
 <!-- tag-comment-scope-H-end mode="block" -->
 <!-- tag-comment-thread-H
 cmd9 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:33:44.758Z","body":"这里应该给出导出命令， 用户如果直接拷贝或者移动走了tsfile ， 那应该也得识别出来？"}
@@ -522,6 +561,8 @@ cmd22 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:57:28.150Z","b
 cmd32 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:05:05.658Z","body":"回复 cmd22：已在本节写入导出/导入设计草案，给出三个明确入口：`tsfile_export` 导出完整单表快照，`tsfile_import` 恢复为新表，`tsfile_verify` 只读检查文件。第一版采用保守的写锁一致快照，不自动封存、不覆盖已有表，也不把任意单个 TsFile 当完整备份导入。\n\n重点补了两个边界：导入改名时要保留文件内部表名映射，否则 Reader 用新逻辑名读旧 TsFile 会出错；未知文件不能仅因后缀匹配就被“孤儿清理”删除。草案同时规定包内容、校验、路径迁移、失败回滚和验收场景。需要你继续评审的主要取舍是：先接受导出阻塞写入、导入只建新表，后续再扩展无阻塞快照和合并导入。"}
 cmd35 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:19:45.943Z","body":"导出只会导出tsfile，不会导出sqlite 的东西了。 "}
 cmd36 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:24:28.857Z","body":"导入的话， 给定一个文件夹， 然后遍历其中的表名称，都做导入吧。 导入的数据应该不做更新。 就是默认的tsfile文件，可供查询。 "}
+cmd43 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:30:43.459Z","body":"回复 cmd35：已把导出部分改成仅生成标准 `.tsfile`，去掉 hot.sqlite、SQLite 状态和 JSON 包清单。这里按“只导出已经落入 TsFile 的数据”定义：热数据不自动转换，用户需要时先显式 seal，再 export；export 不改变原表 watermark，返回实际生成的文件数。没有冷数据就返回 0。\n\n还补了一个多表文件边界：导出指定表时，如果源文件含其他表，要重写出所选表，不能整文件复制而带出额外表。当前先完成这一条导出修改；下一条关于遍历目录和只读导入的评论单独处理。"}
+cmd44 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:32:15.927Z","body":"回复 cmd36：已按“给目录、发现所有表、只读查询”重写导入设计。`tsfile_import('/data/archive')` 扫描文件元数据中的全部表名，同名表跨文件组成一张查询表；不同文件内的重复行按 UNION ALL 保留，不替用户做覆盖或去重。\n\n默认采用引用方式，文件仍留在原目录，SQLite 只保存登记。导入表固定只读，INSERT/UPDATE/DELETE/seal 都拒绝，也不会恢复热区和 watermark。DROP TABLE 或失败清理只删除登记，不删除外部文件。普通 TsFile 没有本扩展的精度 Property 也能读取，精度记为 unknown，不猜测单位。\n\n第一版还明确了边界：扫描目录当前层、不递归；已有同名表或 schema/精度冲突时整批失败；新增文件不自动刷新。上述默认让目录导入保持简单、可预测。第 11 节的验证和验收也已同步改成这套只读导入语义，前一条确定的“仅导出已封存 TsFile”保持不变。"}
 -->
 
 ## 12. 常见问题
