@@ -218,7 +218,7 @@ COMMIT;
 <!-- tag-comment-thread-E
 cmd6 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:28:30.003Z","body":"这部分应该是针对shadow 表的，但是其余的表是不是就不行了？怎么区分呢？或者用户该怎么处理知道自己的操作的作用范围呢？"}
 cmd15 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:40.742Z","body":"回复 cmd6：示例的操作入口是用户创建的虚拟表 `sensor`，用户不应直接对 shadow 表发 DML。可以按三类理解作用范围：\n\n1. 普通 SQLite 表：继续使用 SQLite 原有行为，加载扩展不会接管这些表。\n2. `USING tsfile_hybrid` 创建的表：SELECT 查询该逻辑表的冷热数据；INSERT 只能写 `time >= watermark`；UPDATE/DELETE 只能修改命中的热行，命中冷行会返回约束错误，不会自动忽略冷行。\n3. `sensor_data`、`sensor_segments`、`sensor_config`：扩展维护的内部表，用户只做诊断读取。\n\n用户应始终通过逻辑表操作，并用业务 WHERE 条件限定对象。若只想修改热数据，可在业务条件之外增加 `time >= (SELECT watermark FROM sensor_config WHERE id=1)`。每张 hybrid 表都有自己的 watermark 和目录，其他 hybrid 表不会因此一起封存或修改。针对整个 schema 的区分，SQLite 3.37+ 的 `PRAGMA main.table_list` 提供 table/virtual/shadow 类型；兼容最低版本时可查看 `main.sqlite_master` 中的建表 SQL。参见 [SQLite table_list](https://www.sqlite.org/pragma.html#pragma_table_list)。"}
-cmd20 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:42:37.377Z","body":"我的意思是， 用户如果操作一些数据的话， 那他就必须得知道他可操作的数据范围？如果数据被写下去了， 封口成tsfile ，就不能再处理了。 所以每次更新都得做一下操作之类的？ 当然我们持续追加写倒是没啥问题。 "}
+cmd24 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:59:22.105Z","body":"我的意思是， 用户如果操作一些数据的话， 那他就必须得知道他可操作的数据范围？如果数据被写下去了， 封口成tsfile ，就不能再处理了。 所以每次更新都得做一下检查之类的？ 当然我们持续追加写倒是没啥问题。 "}
 -->
 
 ## 6. 查询冷热数据
