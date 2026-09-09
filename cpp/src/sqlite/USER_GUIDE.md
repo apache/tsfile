@@ -348,8 +348,13 @@ ORDER BY cutoff;
 SELECT count(*) AS hot_rows FROM sensor_data;
 ```
 
+<!-- tag-comment-scope-G-start mode="block" hash="sha256:42fc02103e60aa6f6a98ce6001a2caa190ed56a90eac5d4c20e316aed12f197a" -->
 不要直接修改 shadow table。绕过虚拟表写入会破坏 watermark、manifest 和文件
 之间的一致性。
+<!-- tag-comment-scope-G-end mode="block" -->
+<!-- tag-comment-thread-G
+cmd8 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:31:55.454Z","body":"这个用户可以直观地查看到这张表吗？ 感觉这个名字还是可能会和用户的名字撞车的。"}
+-->
 
 热行使用 SQLite 的正 rowid；冷行使用扩展生成的负 rowid。冷 rowid 是内部
 实现标识，不应作为跨查询或跨版本稳定的业务主键。
