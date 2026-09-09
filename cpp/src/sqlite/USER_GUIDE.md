@@ -132,7 +132,6 @@ cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","b
 | `timestamp_precision` | 必填，只能是 `ms`、`us` 或 `ns` |
 | `column` | 可重复，格式为 `名称:类型:类别` |
 
-<!-- tag-comment-scope-B-start mode="block" hash="sha256:fa3f346ce3e0c13306fc53f37df980f7f7ed55fcafcb46ffa72c746e17a264ac" -->
 列定义的目标规则如下：
 
 - 恰好一个 `TIME` 列，必须是第一列，类型为 `TIMESTAMP`，值不能为 `NULL`；
@@ -153,15 +152,6 @@ CREATE VIRTUAL TABLE readings USING tsfile_hybrid(
   timestamp_precision='ms'
 );
 ```
-<!-- tag-comment-scope-B-end mode="block" -->
-<!-- tag-comment-thread-B
-cmd2 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:21.571Z","body":"可以没有tag 列，列名是否唯一的问题， 在tsfile 的层次上是大小不敏感的， 但是在sqlite 里面我不清楚 \n\n"}
-cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","body":"这里的 _tsfile_command 与 _tsfile_cutoff 是什么呢？"}
-cmd12 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:55.995Z","body":"回复 cmd2：这里应区分 TsFile 数据模型的能力与当前 SQLite 扩展的限制。支持零 TAG 的目标合理：这种表可以视为只有一条设备序列，唯一键退化为 TIME。但当前 `parse_args()` 明确拒绝空 TAG 列表，所以现在还不能把手册改成“已支持无 TAG”。实现上也不能只删这条检查：`create_shadow_tables()` 在追加 TIME 前固定输出逗号，无 TAG 时会生成非法的 `UNIQUE(,time)`；需要一起调整，并验证无 TAG 的写入、封存、读取和时间唯一性。\n\n列名方面，我用本机 SQLite 3.51.0 实测：`CREATE TABLE t(Foo INT, foo INT)` 报 `duplicate column name: foo`，给两个名字加双引号也一样。因此至少 ASCII 大小写不同不能用来区分列名，当前文档这条约束应保留；这不意味着已验证任意 Unicode 字符的大小写折叠规则。本次先记录实现差距，不把尚未实现的能力写成现状。"}
-cmd13 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:09.840Z","body":"回复 cmd3：这两个是扩展声明的 HIDDEN 控制列，不是用户的时间序列字段，也不会写入 TsFile 的业务 schema。\n\n- `_tsfile_command`：操作名，目前只识别 `seal`。\n- `_tsfile_cutoff`：该操作的整数时间上界，单位与 `timestamp_precision` 相同；封存范围是 `[旧 watermark, cutoff)`，等于 cutoff 的行仍可修改。\n\n例如 `INSERT INTO sensor(_tsfile_command, _tsfile_cutoff) VALUES ('seal', 1700086400000)` 会进入 `xUpdate` 的命令分支，不会插入一条普通数据行。`SELECT *` 不显示这两个列；可用 `PRAGMA table_xinfo(sensor)` 查看其 hidden 标记。参见 [SQLite table_xinfo](https://www.sqlite.org/pragma.html#pragma_table_xinfo)。"}
-cmd23 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:58:58.023Z","body":"我们更新一下文档吧。 就支持不带tag。以及封口的机制看后面的描述。 "}
-cmd28 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:02:23.023Z","body":"回复 cmd23：已更新正文，明确支持零 TAG：有 TAG 时唯一键为 `(TAG..., TIME)`，无 TAG 时唯一键为 TIME，同一时间戳不能写入多行。封存统一引用后面确定的管理 UDF，用户不需要再接触那两个控制列。列名继续禁止仅靠 ASCII 大小写区分；非 ASCII 名称的归一化规则需要实现时与 TsFile、SQLite 两端一起验证，不扩大成未经定义的 Unicode 折叠。"}
--->
 
 所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
 
