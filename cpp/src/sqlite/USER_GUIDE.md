@@ -134,6 +134,7 @@ cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","b
 
 列定义的目标规则如下：
 
+<!-- tag-comment-scope-B-start mode="block" hash="sha256:08ee28ffe774a39d78378efd92be5a7264e48c6d94494f4c9e499d9a5043aebe" -->
 - 恰好一个 `TIME` 列，必须是第一列，类型为 `TIMESTAMP`，值不能为 `NULL`；
 - `TAG` 列可以有零个或多个；存在时类型必须为 `STRING`，值不能为 `NULL`；
 - 有 TAG 时，全部 TAG 与 TIME 共同组成唯一键；无 TAG 时，TIME 单独组成唯一键；
@@ -141,6 +142,10 @@ cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","b
 - 列名不能仅靠 ASCII 大小写区分，例如 `Temperature` 和 `temperature` 视为重名；
 - 封存通过第 7 节的管理 UDF 发起，业务 schema 不需要声明或操作
   `_tsfile_command`、`_tsfile_cutoff` 控制列。
+<!-- tag-comment-scope-B-end mode="block" -->
+<!-- tag-comment-thread-B
+cmd34 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:12:36.036Z","body":"TAG 允许设置为null，这个应该是底层的能力吧"}
+-->
 
 无 TAG 表可按以下方式定义；每个时间戳最多对应一行：
 
