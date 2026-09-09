@@ -27,7 +27,7 @@
 using namespace common;
 namespace storage {
 
-int ChunkReader::init(RandomAccessFile* read_file, String m_name,
+int ChunkReader::init(RandomAccessReadFile* read_file, String m_name,
                       TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);

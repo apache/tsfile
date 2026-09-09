@@ -25,7 +25,7 @@
 #include "common/row_record.h"
 #include "common/tsfile_common.h"
 #include "expression.h"
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "reader/prepared_series.h"
 #include "reader/table_query_executor.h"
 namespace storage {
@@ -66,7 +66,7 @@ class TsFileReader {
      *
      * The reader takes ownership of @p read_file.
      */
-    int open(std::unique_ptr<RandomAccessFile> read_file);
+    int open(std::unique_ptr<RandomAccessReadFile> read_file);
     /**
      * @brief close the tsfile, this method should be called after the
      * query is finished
@@ -270,7 +270,7 @@ class TsFileReader {
         std::vector<std::shared_ptr<TableSchema>>& table_schemas);
 
    private:
-    int open_source(std::unique_ptr<RandomAccessFile> read_file,
+    int open_source(std::unique_ptr<RandomAccessReadFile> read_file,
                     unsigned char file_version);
     int ensure_table_query_executor(int batch_size);
     int get_timeseries_metadata_impl(
@@ -279,7 +279,7 @@ class TsFileReader {
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
                         common::PageArena& pa);
-    std::unique_ptr<storage::RandomAccessFile> read_file_;
+    std::unique_ptr<storage::RandomAccessReadFile> read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
     int table_query_executor_batch_size_ = -1;

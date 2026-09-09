@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "common/global.h"
-#include "file/local_random_access_file.h"
+#include "file/local_random_access_read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
@@ -71,7 +71,8 @@ struct QueryPlan {
     int row_count;
 };
 
-typedef std::vector<std::unique_ptr<storage::LocalRandomAccessFile>> OpenFiles;
+typedef std::vector<std::unique_ptr<storage::LocalRandomAccessReadFile>>
+    OpenFiles;
 
 uint64_t update_checksum(uint64_t checksum, const std::vector<char>& buffer,
                          int32_t read_len) {
@@ -201,8 +202,8 @@ int build_query_plan(storage::TsFileReader& reader, QueryPlan& plan,
 bool open_files(const std::vector<std::string>& paths, OpenFiles& files) {
     files.clear();
     for (size_t i = 0; i < paths.size(); ++i) {
-        std::unique_ptr<storage::LocalRandomAccessFile> file(
-            new storage::LocalRandomAccessFile());
+        std::unique_ptr<storage::LocalRandomAccessReadFile> file(
+            new storage::LocalRandomAccessReadFile());
         const int ret = file->open(paths[i]);
         if (ret != common::E_OK) {
             std::cerr << "failed to open " << paths[i] << ": error " << ret
@@ -220,7 +221,7 @@ Result run_sequential(const OpenFiles& files) {
     const std::chrono::steady_clock::time_point start =
         std::chrono::steady_clock::now();
     for (size_t file_index = 0; file_index < files.size(); ++file_index) {
-        storage::LocalRandomAccessFile& file = *files[file_index];
+        storage::LocalRandomAccessReadFile& file = *files[file_index];
         for (int64_t offset = 0; offset < file.file_size();
              offset += kSequentialBlockSize) {
             int32_t read_len = 0;
@@ -252,7 +253,7 @@ Result run_random(const OpenFiles& files, int32_t requested_block_size,
     const std::chrono::steady_clock::time_point start =
         std::chrono::steady_clock::now();
     for (size_t file_index = 0; file_index < files.size(); ++file_index) {
-        storage::LocalRandomAccessFile& file = *files[file_index];
+        storage::LocalRandomAccessReadFile& file = *files[file_index];
         const uint64_t file_size = static_cast<uint64_t>(file.file_size());
         const int32_t block_size = static_cast<int32_t>(std::min<uint64_t>(
             file_size, static_cast<uint64_t>(requested_block_size)));
@@ -412,7 +413,7 @@ Result run_concurrent(const std::vector<std::string>& paths) {
     workers.reserve(paths.size());
     for (size_t file_index = 0; file_index < paths.size(); ++file_index) {
         workers.push_back(std::thread([&, file_index]() {
-            storage::LocalRandomAccessFile file;
+            storage::LocalRandomAccessReadFile file;
             if (file.open(paths[file_index]) != common::E_OK) {
                 per_file[file_index].success = false;
                 return;

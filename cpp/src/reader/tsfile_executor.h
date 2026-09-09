@@ -22,7 +22,7 @@
 #include <map>
 #include <memory>
 
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "query_executor.h"
 #include "result_set.h"
 
@@ -33,7 +33,7 @@ class TsFileExecutor  // : public QueryExecutor
    public:
     TsFileExecutor();
     ~TsFileExecutor();
-    int init(RandomAccessFile* read_file);
+    int init(RandomAccessReadFile* read_file);
     int init(const std::string& file_path);
     int execute(QueryExpression* query_expr, ResultSet*& ret_qds);
     int execute(QueryExpression* query_expr, ResultSet*& ret_qds, int offset,

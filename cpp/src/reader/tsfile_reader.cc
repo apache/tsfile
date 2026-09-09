@@ -26,7 +26,7 @@
 #include "common/allocator/byte_stream.h"
 #include "common/schema.h"
 #include "common/tsfile_common.h"
-#include "file/local_random_access_file.h"
+#include "file/local_random_access_read_file.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
 
@@ -56,7 +56,7 @@ int parse_paths(const std::vector<std::string>& path_list,
 
 int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
                            std::shared_ptr<MetaIndexNode> index_node,
-                           RandomAccessFile* read_file, PageArena& pa) {
+                           RandomAccessReadFile* read_file, PageArena& pa) {
     int ret = E_OK;
     if (index_node == nullptr) {
         return ret;
@@ -124,8 +124,8 @@ TsFileReader::TsFileReader()
 TsFileReader::~TsFileReader() { close(); }
 
 int TsFileReader::open(const std::string& file_path) {
-    std::unique_ptr<LocalRandomAccessFile> read_file(
-        new LocalRandomAccessFile());
+    std::unique_ptr<LocalRandomAccessReadFile> read_file(
+        new LocalRandomAccessReadFile());
     int ret = E_OK;
     // Keep reader diagnostics in the caller's error channel.  Printing here
     // would leak an unstructured line to process stdout/stderr before the CLI
@@ -137,7 +137,7 @@ int TsFileReader::open(const std::string& file_path) {
     return open_source(std::move(read_file), file_version);
 }
 
-int TsFileReader::open(std::unique_ptr<RandomAccessFile> read_file) {
+int TsFileReader::open(std::unique_ptr<RandomAccessReadFile> read_file) {
     if (read_file == nullptr || !read_file->is_opened()) {
         return E_INVALID_ARG;
     }
@@ -149,7 +149,7 @@ int TsFileReader::open(std::unique_ptr<RandomAccessFile> read_file) {
     return open_source(std::move(read_file), file_version);
 }
 
-int TsFileReader::open_source(std::unique_ptr<RandomAccessFile> read_file,
+int TsFileReader::open_source(std::unique_ptr<RandomAccessReadFile> read_file,
                               unsigned char file_version) {
     close();
     read_file_ = std::move(read_file);
@@ -516,7 +516,7 @@ namespace {
 // chunk header on disk: ChunkMeta::deserialize_from() reads nothing but
 // offset_of_chunk_header_, so a ChunkMeta obtained from the metadata index
 // never carries them.  Read the header back from the file instead.
-int read_chunk_header_codec(RandomAccessFile* read_file,
+int read_chunk_header_codec(RandomAccessReadFile* read_file,
                             int64_t chunk_header_offset,
                             size_t measurement_name_len,
                             common::TSEncoding& encoding,

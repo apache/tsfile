@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "python_random_access_file.h"
+#include "python_random_access_read_file.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -28,7 +28,7 @@
 #include <string>
 #include <utility>
 
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "reader/tsfile_reader.h"
 #include "utils/errno_define.h"
 
@@ -127,14 +127,14 @@ std::string source_name(PyObject* source) {
     return name;
 }
 
-class PythonRandomAccessFile : public storage::RandomAccessFile {
+class PythonRandomAccessReadFile : public storage::RandomAccessReadFile {
    public:
-    PythonRandomAccessFile(PyObject* source, int64_t size, std::string name)
+    PythonRandomAccessReadFile(PyObject* source, int64_t size, std::string name)
         : source_(source), size_(size), name_(std::move(name)) {
         Py_INCREF(source_);
     }
 
-    ~PythonRandomAccessFile() override { close(); }
+    ~PythonRandomAccessReadFile() override { close(); }
 
     bool is_opened() const override {
         PythonSourceLock lock(mutex_);
@@ -292,11 +292,11 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
         if (*error_code != common::E_OK) {
             return nullptr;
         }
-        std::unique_ptr<storage::RandomAccessFile> random_access_file(
-            new PythonRandomAccessFile(source, size, source_name(source)));
+        std::unique_ptr<storage::RandomAccessReadFile> random_access_read_file(
+            new PythonRandomAccessReadFile(source, size, source_name(source)));
         std::unique_ptr<storage::TsFileReader> reader(
             new storage::TsFileReader());
-        *error_code = reader->open(std::move(random_access_file));
+        *error_code = reader->open(std::move(random_access_read_file));
         if (*error_code != common::E_OK) {
             return nullptr;
         }

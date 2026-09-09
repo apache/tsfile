@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef FILE_LOCAL_RANDOM_ACCESS_FILE_H
-#define FILE_LOCAL_RANDOM_ACCESS_FILE_H
+#ifndef FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H
+#define FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H
 
 #include <stdint.h>
 
@@ -26,18 +26,19 @@
 #include <string>
 
 #include "common/config/config.h"
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 namespace storage {
 
-class LocalRandomAccessFile : public RandomAccessFile {
+class LocalRandomAccessReadFile : public RandomAccessReadFile {
    public:
-    LocalRandomAccessFile();
-    ~LocalRandomAccessFile() override { destroy(); }
-    LocalRandomAccessFile(const LocalRandomAccessFile&) = delete;
-    LocalRandomAccessFile& operator=(const LocalRandomAccessFile&) = delete;
+    LocalRandomAccessReadFile();
+    ~LocalRandomAccessReadFile() override { destroy(); }
+    LocalRandomAccessReadFile(const LocalRandomAccessReadFile&) = delete;
+    LocalRandomAccessReadFile& operator=(const LocalRandomAccessReadFile&) =
+        delete;
 
     void destroy() { close(); }
 
@@ -100,4 +101,4 @@ class LocalRandomAccessFile : public RandomAccessFile {
 };
 
 }  // end namespace storage
-#endif  // FILE_LOCAL_RANDOM_ACCESS_FILE_H
+#endif  // FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H

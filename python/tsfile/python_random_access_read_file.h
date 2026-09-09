@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_FILE_H
-#define PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_FILE_H
+#ifndef PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_READ_FILE_H
+#define PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_READ_FILE_H
 
 #include <Python.h>
 #include <stdint.h>
@@ -26,4 +26,4 @@
 void* create_tsfile_reader_from_python_file(PyObject* source,
                                             int32_t* error_code);
 
-#endif  // PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_FILE_H
+#endif  // PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_READ_FILE_H

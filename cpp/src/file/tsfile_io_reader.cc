@@ -22,7 +22,7 @@
 #include <limits>
 
 #include "common/allocator/alloc_base.h"
-#include "file/local_random_access_file.h"
+#include "file/local_random_access_read_file.h"
 #include "reader/prepared_series.h"
 
 using namespace common;
@@ -30,7 +30,7 @@ using namespace common;
 namespace storage {
 int TsFileIOReader::init(const std::string& file_path) {
     int ret = E_OK;
-    LocalRandomAccessFile* local_file = new LocalRandomAccessFile;
+    LocalRandomAccessReadFile* local_file = new LocalRandomAccessReadFile;
     read_file_ = local_file;
     read_file_created_ = true;
     if (RET_FAIL(local_file->open(file_path))) {
@@ -38,7 +38,7 @@ int TsFileIOReader::init(const std::string& file_path) {
     return ret;
 }
 
-int TsFileIOReader::init(RandomAccessFile* read_file) {
+int TsFileIOReader::init(RandomAccessReadFile* read_file) {
     if (IS_NULL(read_file)) {
         ASSERT(false);
         return E_INVALID_ARG;
@@ -94,9 +94,9 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
 }
 
 namespace {
-int load_exact_timeseries_index(RandomAccessFile* read_file, uint64_t offset,
-                                uint32_t length, PageArena& arena,
-                                TimeseriesIndex*& index) {
+int load_exact_timeseries_index(RandomAccessReadFile* read_file,
+                                uint64_t offset, uint32_t length,
+                                PageArena& arena, TimeseriesIndex*& index) {
     if (read_file == nullptr || length == 0 ||
         length > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
         offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
@@ -1383,7 +1383,7 @@ int TsFileIOReader::get_next_page(TsBlock *ret_tsblock)
 }
 
 int TsFileIOReader::init_first_chunk_reader(ChunkMeta *cm,
-                                            RandomAccessFile *read_file,
+                                            RandomAccessReadFile *read_file,
                                             const ColumnDesc &col_desc)
 {
   ASSERT(!chunk_reader_.has_more_data());

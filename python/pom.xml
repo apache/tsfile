@@ -197,7 +197,7 @@
                                 <include>*.cpp</include>
                             </includes>
                             <excludes>
-                                <exclude>python_random_access_file.h</exclude>
+                                <exclude>python_random_access_read_file.h</exclude>
                             </excludes>
                         </fileset>
                         <fileset>

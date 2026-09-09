@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "file/local_random_access_file.h"
+#include "file/local_random_access_read_file.h"
 
 #include <gtest/gtest.h>
 
@@ -70,7 +70,7 @@ class InjectionGuard {
     const char* point_;
 };
 
-class LocalRandomAccessFileTest : public ::testing::Test {
+class LocalRandomAccessReadFileTest : public ::testing::Test {
    protected:
     void SetUp() override {
         content_ = "TsFile";
@@ -102,14 +102,14 @@ class LocalRandomAccessFileTest : public ::testing::Test {
     std::string content_;
 };
 
-TEST_F(LocalRandomAccessFileTest, PreadIsTheDefaultBackend) {
+TEST_F(LocalRandomAccessReadFileTest, PreadIsTheDefaultBackend) {
     EXPECT_EQ(common::get_file_read_backend(), common::FileReadBackend::PREAD);
 }
 
-TEST_F(LocalRandomAccessFileTest, PreadPreservesPositionedReadBehavior) {
+TEST_F(LocalRandomAccessReadFileTest, PreadPreservesPositionedReadBehavior) {
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::PREAD),
               common::E_OK);
-    storage::LocalRandomAccessFile file;
+    storage::LocalRandomAccessReadFile file;
     ASSERT_EQ(file.open(file_name_), common::E_OK);
     EXPECT_TRUE(file.is_opened());
     EXPECT_EQ(file.active_backend(), common::FileReadBackend::PREAD);
@@ -132,10 +132,11 @@ TEST_F(LocalRandomAccessFileTest, PreadPreservesPositionedReadBehavior) {
     EXPECT_EQ(read_len, 0);
 }
 
-TEST_F(LocalRandomAccessFileTest, MmapReadsBoundedRangesAndReleasesResources) {
+TEST_F(LocalRandomAccessReadFileTest,
+       MmapReadsBoundedRangesAndReleasesResources) {
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::MMAP),
               common::E_OK);
-    storage::LocalRandomAccessFile file;
+    storage::LocalRandomAccessReadFile file;
     ASSERT_EQ(file.open(file_name_), common::E_OK);
     EXPECT_TRUE(file.is_opened());
     EXPECT_EQ(file.active_backend(), common::FileReadBackend::MMAP);
@@ -161,10 +162,10 @@ TEST_F(LocalRandomAccessFileTest, MmapReadsBoundedRangesAndReleasesResources) {
     EXPECT_EQ(std::remove(file_name_.c_str()), 0);
 }
 
-TEST_F(LocalRandomAccessFileTest, AutoPrefersMmapAndCloseIsIdempotent) {
+TEST_F(LocalRandomAccessReadFileTest, AutoPrefersMmapAndCloseIsIdempotent) {
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::AUTO),
               common::E_OK);
-    storage::LocalRandomAccessFile file;
+    storage::LocalRandomAccessReadFile file;
     ASSERT_EQ(file.open(file_name_), common::E_OK);
     EXPECT_EQ(file.active_backend(), common::FileReadBackend::MMAP);
 
@@ -178,51 +179,53 @@ TEST_F(LocalRandomAccessFileTest, AutoPrefersMmapAndCloseIsIdempotent) {
     EXPECT_EQ(file.active_backend(), common::FileReadBackend::PREAD);
 }
 
-TEST_F(LocalRandomAccessFileTest, AutoFallsBackButRequiredMmapReportsFailure) {
+TEST_F(LocalRandomAccessReadFileTest,
+       AutoFallsBackButRequiredMmapReportsFailure) {
     InjectionGuard mmap_failure("read_file_mmap_fail");
 
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::AUTO),
               common::E_OK);
-    storage::LocalRandomAccessFile automatic;
+    storage::LocalRandomAccessReadFile automatic;
     ASSERT_EQ(automatic.open(file_name_), common::E_OK);
     EXPECT_EQ(automatic.active_backend(), common::FileReadBackend::PREAD);
     automatic.close();
 
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::MMAP),
               common::E_OK);
-    storage::LocalRandomAccessFile required;
+    storage::LocalRandomAccessReadFile required;
     EXPECT_EQ(required.open(file_name_), common::E_FILE_MAP_ERR);
     EXPECT_FALSE(required.is_opened());
 }
 
-TEST_F(LocalRandomAccessFileTest,
+TEST_F(LocalRandomAccessReadFileTest,
        AutoFallsBackButRequiredMmapReportsUnsupported) {
     InjectionGuard mmap_unsupported("read_file_mmap_unsupported");
 
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::AUTO),
               common::E_OK);
-    storage::LocalRandomAccessFile automatic;
+    storage::LocalRandomAccessReadFile automatic;
     ASSERT_EQ(automatic.open(file_name_), common::E_OK);
     EXPECT_EQ(automatic.active_backend(), common::FileReadBackend::PREAD);
     automatic.close();
 
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::MMAP),
               common::E_OK);
-    storage::LocalRandomAccessFile required;
+    storage::LocalRandomAccessReadFile required;
     EXPECT_EQ(required.open(file_name_), common::E_NOT_SUPPORT);
     EXPECT_FALSE(required.is_opened());
 }
 
-TEST_F(LocalRandomAccessFileTest, EmptyFileIsRejectedBeforeMapping) {
+TEST_F(LocalRandomAccessReadFileTest, EmptyFileIsRejectedBeforeMapping) {
     write_file(empty_file_name_, "");
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::MMAP),
               common::E_OK);
-    storage::LocalRandomAccessFile file;
+    storage::LocalRandomAccessReadFile file;
     EXPECT_EQ(file.open(empty_file_name_), common::E_TSFILE_CORRUPTED);
     EXPECT_FALSE(file.is_opened());
 }
 
-TEST_F(LocalRandomAccessFileTest, InvalidConfigurationDoesNotChangeBackend) {
+TEST_F(LocalRandomAccessReadFileTest,
+       InvalidConfigurationDoesNotChangeBackend) {
     ASSERT_EQ(common::set_file_read_backend(common::FileReadBackend::PREAD),
               common::E_OK);
     EXPECT_EQ(

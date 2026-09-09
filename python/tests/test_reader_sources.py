@@ -16,6 +16,8 @@
 # under the License.
 #
 
+"""Reader input sources: paths, file objects, ownership, and read failures."""
+
 import gc
 import io
 import os
@@ -134,7 +136,7 @@ def test_non_utf8_filesystem_path_is_preserved(tmp_path):
     assert collect_table_rows(path) == collect_table_rows(str(fixture))
 
 
-def test_seekable_binary_source_matches_local_table_query_and_preserves_cursor():
+def test_file_object_table_query_handles_short_reads_and_preserves_cursor():
     path = RESOURCES / "simple_table_t1.tsfile"
     expected = collect_table_rows(str(path))
     source = TrackingBytesIO(path.read_bytes(), max_chunk_size=7)
@@ -148,7 +150,7 @@ def test_seekable_binary_source_matches_local_table_query_and_preserves_cursor()
     assert source.close_calls == 0
 
 
-def test_file_like_source_initializes_native_runtime_in_fresh_process():
+def test_file_object_initializes_native_runtime_in_fresh_process():
     path = RESOURCES / "simple_table_t1.tsfile"
     script = """
 import io
@@ -180,46 +182,25 @@ assert source.tell() == 11
     assert completed.returncode == 0, completed.stderr
 
 
-def test_file_like_multi_field_row_query_does_not_deadlock():
+def test_file_object_multi_field_query_returns_expected_row():
     path = RESOURCES / "simple_table_t1.tsfile"
-    script = """
-import io
-import sys
-from pathlib import Path
+    source = io.BytesIO(path.read_bytes())
+    source.seek(19)
 
-from tsfile import TsFileReader
+    with TsFileReader(source) as reader:
+        result = reader.query_table("test", ["s2", "s3"])
+        try:
+            assert result.next()
+            assert result.get_value_by_index(1) == 1760106020000
+            assert result.get_value_by_index(2) == 1010
+            assert result.get_value_by_index(3) == 2.0
+        finally:
+            result.close()
 
-source = io.BytesIO(Path(sys.argv[1]).read_bytes())
-source.seek(19)
-with TsFileReader(source) as reader:
-    result = reader.query_table("test", ["s2", "s3"])
-    try:
-        assert result.next()
-        assert result.get_value_by_index(1) == 1760106020000
-        assert result.get_value_by_index(2) == 1010
-        assert result.get_value_by_index(3) == 2.0
-    finally:
-        result.close()
-assert source.tell() == 19
-"""
-
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-c", script, str(path)],
-            cwd=Path(__file__).parents[1],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except subprocess.TimeoutExpired:
-        pytest.fail(
-            "multi-field row query deadlocked while native workers waited for the GIL"
-        )
-
-    assert completed.returncode == 0, completed.stderr
+    assert source.tell() == 19
 
 
-def test_reader_keeps_source_alive_until_close_without_closing_it():
+def test_reader_retains_source_until_close_then_releases_it():
     path = RESOURCES / "simple_table_t1.tsfile"
     source = TrackingBytesIO(path.read_bytes())
     source_ref = weakref.ref(source)
@@ -234,7 +215,7 @@ def test_reader_keeps_source_alive_until_close_without_closing_it():
     assert source_ref() is None
 
 
-def test_seekable_binary_source_supports_tree_queries():
+def test_file_object_tree_query_handles_short_reads():
     path = RESOURCES / "simple_tree.tsfile"
     expected = collect_tree_rows(str(path))
     source = TrackingBytesIO(path.read_bytes(), max_chunk_size=5)
@@ -242,7 +223,7 @@ def test_seekable_binary_source_supports_tree_queries():
     assert collect_tree_rows(source) == expected
 
 
-def test_non_file_object_is_rejected():
+def test_source_without_file_methods_is_rejected():
     with pytest.raises(TypeError, match="seekable binary file object"):
         TsFileReader(object())
 

@@ -26,7 +26,7 @@
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
-#include "file/local_random_access_file.h"
+#include "file/local_random_access_read_file.h"
 #include "reader/aligned_chunk_reader.h"
 
 namespace storage {
@@ -50,7 +50,7 @@ class TempTsFile {
     std::string path_;
 };
 
-AlignedChunkReader* allocate_reader(LocalRandomAccessFile* read_file) {
+AlignedChunkReader* allocate_reader(LocalRandomAccessReadFile* read_file) {
     void* memory =
         common::mem_alloc(sizeof(AlignedChunkReader), common::MOD_CHUNK_READER);
     if (memory == nullptr) {
@@ -73,7 +73,7 @@ void free_reader(AlignedChunkReader* reader) {
 
 TEST(ChunkReaderResourceTest, AlignedInitialShortReadReleasesBuffer) {
     TempTsFile temp_file("aligned_initial_short_read.tsfile");
-    LocalRandomAccessFile read_file;
+    LocalRandomAccessReadFile read_file;
     ASSERT_EQ(read_file.open(temp_file.path()), common::E_OK);
     AlignedChunkReader* reader = allocate_reader(&read_file);
     ASSERT_NE(reader, nullptr);
@@ -94,7 +94,7 @@ TEST(ChunkReaderResourceTest, AlignedInitialShortReadReleasesBuffer) {
 
 TEST(ChunkReaderResourceTest, MultiAlignedInitialShortReadReleasesBuffer) {
     TempTsFile temp_file("multi_aligned_initial_short_read.tsfile");
-    LocalRandomAccessFile read_file;
+    LocalRandomAccessReadFile read_file;
     ASSERT_EQ(read_file.open(temp_file.path()), common::E_OK);
     AlignedChunkReader* reader = allocate_reader(&read_file);
     ASSERT_NE(reader, nullptr);

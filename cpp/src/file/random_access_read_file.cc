@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 
 #include <cstring>
 
@@ -26,7 +26,7 @@
 
 namespace storage {
 
-int validate_tsfile(RandomAccessFile& file, unsigned char* file_version) {
+int validate_tsfile(RandomAccessReadFile& file, unsigned char* file_version) {
     static const int64_t MIN_FILE_SIZE = 2 * MAGIC_STRING_TSFILE_LEN + 1;
     if (!file.is_opened()) {
         return common::E_FILE_READ_ERR;

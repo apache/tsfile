@@ -36,7 +36,7 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
@@ -156,9 +156,9 @@ class TsFileReaderTest : public ::testing::Test {
 
 namespace {
 
-class InMemoryRandomAccessFile : public RandomAccessFile {
+class InMemoryRandomAccessReadFile : public RandomAccessReadFile {
    public:
-    explicit InMemoryRandomAccessFile(std::vector<char> bytes)
+    explicit InMemoryRandomAccessReadFile(std::vector<char> bytes)
         : bytes_(std::move(bytes)), opened_(true), name_("memory://test") {}
 
     bool is_opened() const override { return opened_; }
@@ -204,15 +204,15 @@ class InMemoryRandomAccessFile : public RandomAccessFile {
     std::string name_;
 };
 
-class ShortMetadataReadFile : public InMemoryRandomAccessFile {
+class ShortMetadataReadFile : public InMemoryRandomAccessReadFile {
    public:
     explicit ShortMetadataReadFile(const std::vector<char>& bytes)
-        : InMemoryRandomAccessFile(bytes) {}
+        : InMemoryRandomAccessReadFile(bytes) {}
 
     int read(int64_t offset, char* buffer, int32_t size,
              int32_t& read_size) override {
         int ret =
-            InMemoryRandomAccessFile::read(offset, buffer, size, read_size);
+            InMemoryRandomAccessReadFile::read(offset, buffer, size, read_size);
         if (ret == E_OK && offset >= metadata_offset &&
             ++read_count == short_read_at && read_size > 0) {
             // Keep the entire buffer initialized with valid bytes so a missing
@@ -387,7 +387,8 @@ class DeviceIndexReadTest : public TsFileReaderTest {
 
     void open_reader(TsFileReader& reader, ShortMetadataReadFile*& source) {
         source = new ShortMetadataReadFile(bytes_);
-        ASSERT_EQ(reader.open(std::unique_ptr<RandomAccessFile>(source)), E_OK);
+        ASSERT_EQ(reader.open(std::unique_ptr<RandomAccessReadFile>(source)),
+                  E_OK);
         // Warm the file footer so subsequent reads start at the device index.
         std::vector<std::shared_ptr<IDeviceID>> devices;
         ASSERT_EQ(reader.get_all_devices(devices), E_OK);
@@ -450,7 +451,7 @@ TEST_F(DeviceIndexReadTest, TreeTableQueryPropagatesDeviceAndSchemaReadErrors) {
     }
 }
 
-TEST_F(TsFileReaderTest, ReadsThroughRandomAccessFile) {
+TEST_F(TsFileReaderTest, ReadsThroughRandomAccessReadFile) {
     const std::string device = "root.sg.device";
     const std::string measurement = "temperature";
     ASSERT_EQ(tsfile_writer_->register_timeseries(
@@ -470,8 +471,8 @@ TEST_F(TsFileReaderTest, ReadsThroughRandomAccessFile) {
                             std::istreambuf_iterator<char>());
     ASSERT_FALSE(bytes.empty());
 
-    std::unique_ptr<RandomAccessFile> source(
-        new InMemoryRandomAccessFile(std::move(bytes)));
+    std::unique_ptr<RandomAccessReadFile> source(
+        new InMemoryRandomAccessReadFile(std::move(bytes)));
     TsFileReader reader;
     ASSERT_EQ(reader.open(std::move(source)), E_OK);
     EXPECT_EQ(reader.get_file_version(),
@@ -714,8 +715,8 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchemaUsesLastChunkCodec) {
     std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
                             std::istreambuf_iterator<char>());
     input.close();
-    std::unique_ptr<RandomAccessFile> source(
-        new InMemoryRandomAccessFile(std::move(bytes)));
+    std::unique_ptr<RandomAccessReadFile> source(
+        new InMemoryRandomAccessReadFile(std::move(bytes)));
     ASSERT_EQ(reader.open(std::move(source)), E_OK);
     schemas.clear();
     ASSERT_EQ(reader.get_timeseries_schema(

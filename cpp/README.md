@@ -350,8 +350,8 @@ By default, parallel write is enabled when the machine has more than one CPU cor
 
 ### Local File Read Backend
 
-`LocalRandomAccessFile` implements `RandomAccessFile` for local files. Its
-public header is `file/local_random_access_file.h`.
+`LocalRandomAccessReadFile` implements `RandomAccessReadFile` for local files. Its
+public header is `file/local_random_access_read_file.h`.
 
 Readers can use memory-mapped I/O or the traditional positioned-read path for
 local files. The setting is captured when a reader opens a file, so changing it

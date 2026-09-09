@@ -200,7 +200,7 @@ FORCE_INLINE bool get_parallel_write_enabled() {
 }
 
 // Select the backend used by subsequently opened local files. Existing
-// LocalRandomAccessFile instances retain the backend selected when opened.
+// LocalRandomAccessReadFile instances retain the backend selected when opened.
 // This setting deliberately lives outside exported ConfigValue so adding it
 // does not change that public data structure's ABI.
 extern int set_file_read_backend(FileReadBackend backend);

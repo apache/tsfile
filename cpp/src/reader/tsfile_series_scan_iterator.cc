@@ -33,7 +33,7 @@ namespace storage {
 
 int TsFileSeriesScanIterator::init_prepared(
     const std::shared_ptr<PreparedSeries>& prepared,
-    RandomAccessFile* read_file, Filter* time_filter,
+    RandomAccessReadFile* read_file, Filter* time_filter,
     common::PageArena& data_pa) {
     if (prepared == nullptr || prepared->index() == nullptr ||
         read_file == nullptr) {
@@ -69,7 +69,7 @@ int TsFileSeriesScanIterator::init_prepared(
 
 int TsFileSeriesScanIterator::init_prepared_multi(
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
-    RandomAccessFile* read_file, Filter* time_filter,
+    RandomAccessReadFile* read_file, Filter* time_filter,
     common::PageArena& data_pa) {
     if (prepared.empty() || prepared.front() == nullptr ||
         read_file == nullptr) {

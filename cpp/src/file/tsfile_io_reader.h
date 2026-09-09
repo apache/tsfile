@@ -26,7 +26,7 @@
 #include <unordered_set>
 
 #include "common/tsblock/tsblock.h"
-#include "file/random_access_file.h"
+#include "file/random_access_read_file.h"
 #include "reader/chunk_reader.h"
 #include "reader/filter/filter.h"
 #include "reader/tsfile_series_scan_iterator.h"
@@ -76,7 +76,7 @@ class TsFileIOReader {
 
     int init(const std::string& file_path);
 
-    int init(RandomAccessFile* read_file);
+    int init(RandomAccessReadFile* read_file);
 
     void reset();
 
@@ -120,7 +120,7 @@ class TsFileIOReader {
 
     // Raw read access for callers that need to parse structures the metadata
     // index does not carry, e.g. the chunk header at a ChunkMeta offset.
-    RandomAccessFile* get_read_file() const { return read_file_; }
+    RandomAccessReadFile* get_read_file() const { return read_file_; }
 
     TsFileMeta* get_tsfile_meta() {
         load_tsfile_meta_if_necessary();
@@ -243,7 +243,7 @@ class TsFileIOReader {
     static std::string device_node_cache_key(
         const std::shared_ptr<IDeviceID>& device_id);
 
-    RandomAccessFile* read_file_;
+    RandomAccessReadFile* read_file_;
     common::PageArena tsfile_meta_page_arena_;
     TsFileMeta tsfile_meta_;
     bool tsfile_meta_ready_;

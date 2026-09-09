@@ -39,7 +39,7 @@ from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
-cdef extern from "python_random_access_file.h":
+cdef extern from "python_random_access_read_file.h":
     TsFileReader create_tsfile_reader_from_python_file(
         PyObject* source, int32_t* error_code) except? NULL
 

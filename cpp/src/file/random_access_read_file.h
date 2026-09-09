@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef FILE_RANDOM_ACCESS_FILE_H
-#define FILE_RANDOM_ACCESS_FILE_H
+#ifndef FILE_RANDOM_ACCESS_READ_FILE_H
+#define FILE_RANDOM_ACCESS_READ_FILE_H
 
 #include <stdint.h>
 
@@ -33,9 +33,9 @@ namespace storage {
  * range is filled or EOF is reached. Concurrent read() calls must be safe
  * after initialization; close() must not race with read() or generation().
  */
-class RandomAccessFile {
+class RandomAccessReadFile {
    public:
-    virtual ~RandomAccessFile() = default;
+    virtual ~RandomAccessReadFile() = default;
 
     virtual bool is_opened() const = 0;
     virtual int64_t file_size() const = 0;
@@ -48,9 +48,9 @@ class RandomAccessFile {
     virtual void close() = 0;
 };
 
-int validate_tsfile(RandomAccessFile& file,
+int validate_tsfile(RandomAccessReadFile& file,
                     unsigned char* file_version = nullptr);
 
 }  // namespace storage
 
-#endif  // FILE_RANDOM_ACCESS_FILE_H
+#endif  // FILE_RANDOM_ACCESS_READ_FILE_H
