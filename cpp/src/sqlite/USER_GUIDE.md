@@ -167,14 +167,8 @@ cmd23 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:58:58.023Z","b
 | `DATE` | INTEGER | 必须在 int32 范围内 |
 | `TIMESTAMP` | INTEGER | SQLite int64 |
 
-<!-- tag-comment-scope-D-start mode="block" hash="sha256:e2fbdf2c5f765a2d21a22b3e3b8c8e9d95ae1b3970cdabb3b3292f89dd390740" -->
 扩展不会换算时间戳。`timestamp_precision` 仅声明整数时间戳的单位，并写入
 非空 TsFile 段的 `tsfile_sqlite.timestamp_precision` property。
-<!-- tag-comment-scope-D-end mode="block" -->
-<!-- tag-comment-thread-D
-cmd5 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:53.614Z","body":"这里的其实就是reader 里面的属性写入吧？"}
-cmd14 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:22.360Z","body":"回复 cmd5：如果你指的是 Reader 能读到的文件级 Properties，是同一套机制；具体写入发生在 Writer 侧。这里调用 `TsFileTableWriter::add_tsfile_property()`，Reader 通过 `TsFileReader::get_tsfile_properties()` 读取已经落盘的属性。Reader 本身不负责写入。\n\n当前 key 是 `tsfile_sqlite.timestamp_precision`，value 是 `ms/us/ns` 的字节。扩展冷读目前没有读回这个 Property 并与 SQLite 配置进行一致性校验；“写进文件”和“读取时验证精度”是两个步骤，前者已经有实现，后者还需要补充。"}
--->
 
 ### 4.2 创建后的固定配置
 
