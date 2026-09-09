@@ -201,6 +201,19 @@ static inline int64_t scalar_read_bits(const uint8_t* data, int32_t bit_pos,
     return value;
 }
 
+// Reconstruct with modulo-2^64 arithmetic, as in the SIMD additions. A
+// residual plus the previous value can overflow INT64 before a negative
+// minimum delta brings the final value back into range.
+static inline int64_t ts2diff_restore_int64(int64_t residual, int64_t previous,
+                                            int64_t minimum_delta) {
+    const uint64_t bits = static_cast<uint64_t>(residual) +
+                          static_cast<uint64_t>(previous) +
+                          static_cast<uint64_t>(minimum_delta);
+    int64_t value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 namespace ts2diff_java_detail {
 
 inline bool bitmap_marked(const std::vector<uint8_t>& bm, int idx) {
@@ -529,7 +542,7 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream& in) {
         return ret_value;
     }
     stored_value_ = (int64_t)read_long(bit_width_, in);
-    ret_value = stored_value_ + first_value_ + delta_min_;
+    ret_value = ts2diff_restore_int64(stored_value_, first_value_, delta_min_);
     first_value_ = ret_value;
     if (current_index_++ >= write_index_) {
         current_index_ = 0;
@@ -796,8 +809,12 @@ inline int TS2DIFFDecoder<int64_t>::read_batch_int64(int64_t* out, int capacity,
         }
 
 #ifdef ENABLE_SIMD
-        // SIMD path: decode 4 INT64 values at a time
-        for (; i + 3 < remaining; i += 4) {
+        // Each SIMD lane gathers eight bytes. Widths 59, 61, 62 and 63 can
+        // start at a bit offset that requires a ninth byte; decode those
+        // blocks with the scalar path below to preserve the low bits.
+        const bool simd_width_fits =
+            bit_width_ <= 58 || bit_width_ == 60 || bit_width_ == 64;
+        for (; simd_width_fits && i + 3 < remaining; i += 4) {
             int32_t need_bytes =
                 ((i + 3) * bit_width_ + bit_width_ + 7) / 8 + 8;
             if (need_bytes > block_bytes) break;
@@ -815,7 +832,7 @@ inline int TS2DIFFDecoder<int64_t>::read_batch_int64(int64_t* out, int capacity,
         for (; i < remaining; ++i) {
             int64_t delta = scalar_read_bits(blk_ptr, bit_pos, bit_width_);
             bit_pos += bit_width_;
-            int64_t val = delta + prev + delta_min_;
+            int64_t val = ts2diff_restore_int64(delta, prev, delta_min_);
             prev = val;
             out[actual++] = val;
         }
