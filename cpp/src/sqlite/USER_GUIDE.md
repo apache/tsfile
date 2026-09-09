@@ -102,7 +102,6 @@ sqlite3_enable_load_extension(db, 0);
 以下按目标功能设计定义建表语法；示例表达待实现接口，不代表当前原型已支持。
 列定义采用 `列名 类型 [类别]`，省略类别时默认为 `FIELD`；`TIME` 和 `TAG` 显式声明。
 
-<!-- tag-comment-scope-A-start mode="block" hash="sha256:0e9a78743b7900e3d2c4dcd95c70a64cbd9c7fd7881724a7432e026c455a6ecd" -->
 ```sql
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   time TIMESTAMP TIME,
@@ -115,11 +114,6 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   timestamp_precision='ms'
 );
 ```
-<!-- tag-comment-scope-A-end mode="block" -->
-<!-- tag-comment-thread-A
-cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","body":"这里强制说明FIELD 列吧，就要求带。 "}
-cmd39 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:28:49.464Z","body":"回复 cmd33：按这个要求确定语法：每列都必须写明 `列名 类型 类别`，类别只能是 TIME、TAG 或 FIELD，不再默认 FIELD。已给选中示例的 temperature、status、payload 补上 FIELD。省略类别应在建表时报错并指出列名。\n\n本次按该评论修改选中示例；相邻的旧默认说明以及另一条待评审规则中仍有“默认 FIELD”措辞，先保留其评论范围，全文定稿时需要一起统一为强制类别。"}
--->
 
 列定义按书写顺序组成 schema，表级选项使用 `key=value`。未知选项、重复的表级
 选项和不合法的列定义在建表时返回明确错误。标识符支持双引号转义，例如
