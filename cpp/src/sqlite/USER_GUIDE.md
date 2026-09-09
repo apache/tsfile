@@ -115,6 +115,8 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
 <!-- tag-comment-scope-C-end mode="block" -->
 <!-- tag-comment-thread-C
 cmd4 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:11.739Z","body":"这个语法可以再简洁一些吗？还是说都得这样，逐个column= 来指定？\n"}
+cmd10 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:29.187Z","body":"回复 cmd4：可以简化，逐个 `column=` 是当前扩展 `parse_args()` 自己定义的格式，并非 SQLite 的强制要求。SQLite 会把 USING 后的各个参数文本交给模块解析，见 [CREATE VIRTUAL TABLE 官方说明](https://www.sqlite.org/lang_createvtab.html)。\n\n建议下一版支持更接近普通建表的写法，例如 `USING tsfile_hybrid(time TIMESTAMP TIME, device STRING TAG, temperature DOUBLE FIELD, directory='...', timestamp_precision='ms')`，并可让 FIELD 成为省略类别时的默认值。这里是语法提案，当前分支还不能执行；现有示例准确反映当前实现，所以本次保留正文，先回复这个设计问题。"}
+cmd19 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:39:59.171Z","body":"按照这种来修改吧，修改正文。 这个userguide 就当我们的功能设计手册。 "}
 -->
 
 模块参数如下：
@@ -128,6 +130,7 @@ cmd4 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:11.739Z","bo
 <!-- tag-comment-scope-A-end mode="block" -->
 <!-- tag-comment-thread-A
 cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","body":"这个时间戳 精度得写到文件里， 最好写到Property里面"}
+cmd11 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:40.597Z","body":"回复 cmd1：这点当前已经实现。`write_segment()` 在每个非空段写完后调用 `TsFileTableWriter::add_tsfile_property(\"tsfile_sqlite.timestamp_precision\", precision)`，把 `ms`、`us` 或 `ns` 的字节写进 TsFile 文件级 Properties，随后 flush 并关闭文件。它不只存在于 SQLite 的 `_config` 表里；空区间不产生段文件，因此也没有对应文件属性。\n\n可通过 `TsFileReader::get_tsfile_properties()` 读取。我核对了写入调用和 Reader 接口；当前 SQLite 扩展的四个测试还没有独立读回该 Property 的断言，后续应补上该验证。"}
 -->
 
 <!-- tag-comment-scope-B-start mode="block" hash="sha256:46aac11794b9cf17d2e4e7e584bfbb5a3f42ee2a10015dbe7f719d50c91f3f49" -->
@@ -144,6 +147,8 @@ cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","bo
 <!-- tag-comment-thread-B
 cmd2 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:21.571Z","body":"可以没有tag 列，列名是否唯一的问题， 在tsfile 的层次上是大小不敏感的， 但是在sqlite 里面我不清楚 \n\n"}
 cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","body":"这里的 _tsfile_command 与 _tsfile_cutoff 是什么呢？"}
+cmd12 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:55.995Z","body":"回复 cmd2：这里应区分 TsFile 数据模型的能力与当前 SQLite 扩展的限制。支持零 TAG 的目标合理：这种表可以视为只有一条设备序列，唯一键退化为 TIME。但当前 `parse_args()` 明确拒绝空 TAG 列表，所以现在还不能把手册改成“已支持无 TAG”。实现上也不能只删这条检查：`create_shadow_tables()` 在追加 TIME 前固定输出逗号，无 TAG 时会生成非法的 `UNIQUE(,time)`；需要一起调整，并验证无 TAG 的写入、封存、读取和时间唯一性。\n\n列名方面，我用本机 SQLite 3.51.0 实测：`CREATE TABLE t(Foo INT, foo INT)` 报 `duplicate column name: foo`，给两个名字加双引号也一样。因此至少 ASCII 大小写不同不能用来区分列名，当前文档这条约束应保留；这不意味着已验证任意 Unicode 字符的大小写折叠规则。本次先记录实现差距，不把尚未实现的能力写成现状。"}
+cmd13 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:09.840Z","body":"回复 cmd3：这两个是扩展声明的 HIDDEN 控制列，不是用户的时间序列字段，也不会写入 TsFile 的业务 schema。\n\n- `_tsfile_command`：操作名，目前只识别 `seal`。\n- `_tsfile_cutoff`：该操作的整数时间上界，单位与 `timestamp_precision` 相同；封存范围是 `[旧 watermark, cutoff)`，等于 cutoff 的行仍可修改。\n\n例如 `INSERT INTO sensor(_tsfile_command, _tsfile_cutoff) VALUES ('seal', 1700086400000)` 会进入 `xUpdate` 的命令分支，不会插入一条普通数据行。`SELECT *` 不显示这两个列；可用 `PRAGMA table_xinfo(sensor)` 查看其 hidden 标记。参见 [SQLite table_xinfo](https://www.sqlite.org/pragma.html#pragma_table_xinfo)。"}
 -->
 
 所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
@@ -173,6 +178,7 @@ cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","bo
 <!-- tag-comment-scope-D-end mode="block" -->
 <!-- tag-comment-thread-D
 cmd5 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:53.614Z","body":"这里的其实就是reader 里面的属性写入吧？"}
+cmd14 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:22.360Z","body":"回复 cmd5：如果你指的是 Reader 能读到的文件级 Properties，是同一套机制；具体写入发生在 Writer 侧。这里调用 `TsFileTableWriter::add_tsfile_property()`，Reader 通过 `TsFileReader::get_tsfile_properties()` 读取已经落盘的属性。Reader 本身不负责写入。\n\n当前 key 是 `tsfile_sqlite.timestamp_precision`，value 是 `ms/us/ns` 的字节。扩展冷读目前没有读回这个 Property 并与 SQLite 配置进行一致性校验；“写进文件”和“读取时验证精度”是两个步骤，前者已经有实现，后者还需要补充。"}
 -->
 
 ### 4.2 创建后的固定配置
@@ -222,6 +228,7 @@ COMMIT;
 <!-- tag-comment-scope-E-end mode="block" -->
 <!-- tag-comment-thread-E
 cmd6 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:28:30.003Z","body":"这部分应该是针对shadow 表的，但是其余的表是不是就不行了？怎么区分呢？或者用户该怎么处理知道自己的操作的作用范围呢？"}
+cmd15 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:40.742Z","body":"回复 cmd6：示例的操作入口是用户创建的虚拟表 `sensor`，用户不应直接对 shadow 表发 DML。可以按三类理解作用范围：\n\n1. 普通 SQLite 表：继续使用 SQLite 原有行为，加载扩展不会接管这些表。\n2. `USING tsfile_hybrid` 创建的表：SELECT 查询该逻辑表的冷热数据；INSERT 只能写 `time >= watermark`；UPDATE/DELETE 只能修改命中的热行，命中冷行会返回约束错误，不会自动忽略冷行。\n3. `sensor_data`、`sensor_segments`、`sensor_config`：扩展维护的内部表，用户只做诊断读取。\n\n用户应始终通过逻辑表操作，并用业务 WHERE 条件限定对象。若只想修改热数据，可在业务条件之外增加 `time >= (SELECT watermark FROM sensor_config WHERE id=1)`。每张 hybrid 表都有自己的 watermark 和目录，其他 hybrid 表不会因此一起封存或修改。针对整个 schema 的区分，SQLite 3.37+ 的 `PRAGMA main.table_list` 提供 table/virtual/shadow 类型；兼容最低版本时可查看 `main.sqlite_master` 中的建表 SQL。参见 [SQLite table_list](https://www.sqlite.org/pragma.html#pragma_table_list)。"}
 -->
 
 ## 6. 查询冷热数据
@@ -302,6 +309,7 @@ COMMIT;
 <!-- tag-comment-scope-F-end mode="block" -->
 <!-- tag-comment-thread-F
 cmd7 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:29:53.389Z","body":"有没有更优雅的指令方法呢？"}
+cmd16 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:55.665Z","body":"回复 cmd7：可以提供更直观的入口。我建议面向用户增加类似 `SELECT tsfile_seal('main.sensor', 1700086400000);` 的管理函数，让它在内部执行现有隐藏列 INSERT，继续走 virtual table 的事务回调；隐藏列方式可保留为底层兼容接口。这只是提案，当前扩展还没有注册这个函数，不能直接执行。\n\n管理函数需要限定为直接调用、校验目标确实是 tsfile_hybrid 表，并验证自动提交、显式事务和 savepoint 下的行为。暂不建议引入 `SEAL TABLE ...` 新 SQL 语法，因为这会涉及 SQLite parser 的修改。现有示例中的 `BEGIN IMMEDIATE/COMMIT` 也是可选事务包装；单条 seal INSERT 本身已经可以在自动提交模式下执行。"}
 -->
 
 如果事务回滚，manifest、watermark 和热数据删除都会回滚，扩展也会删除本次
@@ -354,6 +362,7 @@ SELECT count(*) AS hot_rows FROM sensor_data;
 <!-- tag-comment-scope-G-end mode="block" -->
 <!-- tag-comment-thread-G
 cmd8 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:31:55.454Z","body":"这个用户可以直观地查看到这张表吗？ 感觉这个名字还是可能会和用户的名字撞车的。"}
+cmd17 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:37:10.407Z","body":"回复 cmd8：可以看到。Shadow 表不是隐藏文件，也不是独立命名空间；它们是 SQLite schema 内的真实表。用户可查询 `SELECT name, sql FROM main.sqlite_master WHERE name IN ('sensor_data','sensor_segments','sensor_config');`，SQLite 3.37+ 还可用 `PRAGMA main.table_list` 查看 shadow 类型。\n\n撞名风险确实存在。如果同一 schema 已有用户表 `sensor_data`，当前创建 `sensor` 时执行普通 `CREATE TABLE sensor_data ...` 会失败，不会自动覆盖或复用它。`xShadowName` 负责声明内部表身份，并不能消除命名冲突。可改进为：创建前检查三个派生名，返回明确的冲突对象；采用更有辨识度的内部后缀；在用户工具中把 shadow 表单独显示。这些是待做的改进。\n\n另一个边界是：单靠 xShadowName 不保证禁止直接写入；SQLite 在连接启用 `SQLITE_DBCONFIG_DEFENSIVE` 时才限制普通 SQL 写 shadow 表。当前扩展没有替宿主启用该设置。参见 [SQLite shadow table 机制](https://www.sqlite.org/vtab.html#the_xshadowname_method)。"}
 -->
 
 热行使用 SQLite 的正 rowid；冷行使用扩展生成的负 rowid。冷 rowid 是内部
@@ -391,6 +400,7 @@ DROP TABLE sensor;
 <!-- tag-comment-scope-H-end mode="block" -->
 <!-- tag-comment-thread-H
 cmd9 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:33:44.758Z","body":"这里应该给出导出命令， 用户如果直接拷贝或者移动走了tsfile ， 那应该也得识别出来？"}
+cmd18 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:37:35.440Z","body":"回复 cmd9：这里确实缺少面向用户的完整导出/恢复入口，应该补产品能力。当前分支只有 seal，没有统一的 export、restore 或 verify 命令；不能把尚不存在的命令写成可执行用法。导出也应区分“只导出历史 TsFile”与“完整备份逻辑表”：后者必须包含热数据、manifest、配置和引用的段文件。\n\n对直接文件操作，目前行为是：\n\n- 复制到管理目录之外且保留原文件：原库继续使用原路径，扩展不会感知多了一份副本，也无需自动改变 manifest；这份副本本身不是完整备份。\n- 移走或删除 manifest 引用的文件：`read_cold()` 尝试打开它时返回 `SQLITE_IOERR`，不会静默跳过；若整个目录消失，重新连接虚拟表时会报 `SQLITE_CANTOPEN`。当前没有持续监控、自动定位新路径或详细的缺失文件诊断。\n- 把文件复制进受管理目录：不会自动导入；未登记的 `.tsfile` 可能在下一次 seal 的孤儿清理中被删除。文件路径也不等于文件身份，当前没有完善的校验机制来识别同路径下被替换的另一个有效 TsFile。\n\n建议提供导出、恢复和校验三个明确入口：导出在一致快照下生成 SQLite 备份与段文件包，附带 schema、精度、文件清单和校验信息；恢复负责验证并重建路径映射；校验返回缺失、损坏、被替换或未登记文件的具体路径。移动/迁移应通过受控命令更新 manifest，而不是看到目录变化就自动接受文件。命令语法需要和前面的 seal 管理接口一起确定。本次先把能力缺口和现有检测行为回复清楚，没有修改实现或虚构已支持的导出命令。"}
 -->
 
 ## 12. 常见问题
