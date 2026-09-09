@@ -23,6 +23,7 @@ from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 import contextlib
 from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import thread as thread_pool_module
 from dataclasses import dataclass
 import os
 import threading
@@ -46,6 +47,15 @@ from .index import (
     MappedDatasetIndex,
     file_fingerprint,
 )
+from .index_identity import (
+    AttestationMismatchError,
+    DataFileAttestation,
+    IndexAttestation,
+    data_manifest_identity,
+    file_generation_token,
+    validate_data_file_attestation,
+    validate_index_attestation,
+)
 from .metadata import (
     MODEL_TABLE,
     MODEL_TREE,
@@ -56,6 +66,66 @@ from .metadata import (
 from .merge import build_aligned_matrix
 
 _SERIES_DESCRIPTOR_CACHE_SIZE = 4096
+
+
+def _digest_u64(value: str) -> int:
+    return int.from_bytes(bytes.fromhex(value)[:8], byteorder="little")
+
+
+def _configured_non_negative_int(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return value
+
+
+def _configured_prepared_series_cache_size():
+    return _configured_non_negative_int(
+        "TSFILE_DATAFRAME_MAX_PREPARED_SERIES",
+        _SERIES_DESCRIPTOR_CACHE_SIZE,
+    )
+
+
+def _run_cleanups(cleanups):
+    first_error = None
+    for cleanup in cleanups:
+        try:
+            cleanup()
+        except BaseException as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+
+
+def _discard_executor_after_fork(executor):
+    """Detach a CPython ThreadPoolExecutor without touching inherited locks."""
+    # CPython resets the thread module's global shutdown lock after fork, but
+    # not a ThreadPoolExecutor instance's _shutdown_lock.  shutdown()/join()
+    # can therefore deadlock in the child.  Disconnect the vanished workers
+    # and their queues lock-free; this runtime never uses the executor again.
+    executor._shutdown = True
+    threads = tuple(getattr(executor, "_threads", ()))
+    if hasattr(executor, "_threads"):
+        executor._threads = set()
+    if hasattr(executor, "_work_queue"):
+        executor._work_queue = None
+    thread_queues = getattr(thread_pool_module, "_threads_queues", None)
+    for thread in threads:
+        if thread_queues is not None:
+            thread_queues.pop(thread, None)
+        if hasattr(thread, "_target"):
+            thread._target = None
+        if hasattr(thread, "_args"):
+            thread._args = ()
+        if hasattr(thread, "_kwargs"):
+            thread._kwargs = {}
 
 
 @dataclass(frozen=True)
@@ -102,17 +172,27 @@ def _exact_tag_filter(tag_columns, tag_values):
 class RuntimeLease:
     def __init__(self, runtime: "DatasetRuntime"):
         self._runtime = runtime
+        self._creator_pid = os.getpid()
         self._lock = threading.Lock()
         self._closed = False
         runtime._acquire_object()
 
+    def _assert_current_process(self):
+        if self._creator_pid != os.getpid():
+            raise RuntimeError(
+                "Inherited runtime handles cannot be queried after fork; "
+                "obtain a new Timeseries from the child's TsFileDataFrame"
+            )
+
     def clone(self):
+        self._assert_current_process()
         with self._lock:
             if self._closed:
                 raise RuntimeError("Runtime lease is closed")
             return RuntimeLease(self._runtime)
 
     def query_lease(self):
+        self._assert_current_process()
         with self._lock:
             if self._closed:
                 raise RuntimeError("Runtime lease is closed")
@@ -120,6 +200,12 @@ class RuntimeLease:
             return _QueryLease(self._runtime, acquired=True)
 
     def close(self):
+        if self._creator_pid != os.getpid():
+            if self._closed:
+                return
+            self._closed = True
+            self._runtime.discard_after_fork()
+            return
         with self._lock:
             if self._closed:
                 return
@@ -130,9 +216,15 @@ class RuntimeLease:
 class _QueryLease:
     def __init__(self, runtime: "DatasetRuntime", acquired: bool = False):
         self._runtime = runtime
+        self._creator_pid = os.getpid()
         self._acquired = acquired
 
     def __enter__(self):
+        if self._creator_pid != os.getpid():
+            raise RuntimeError(
+                "Inherited runtime handles cannot be queried after fork; "
+                "obtain a new Timeseries from the child's TsFileDataFrame"
+            )
         if not self._acquired:
             self._runtime._acquire_query()
             self._acquired = True
@@ -142,6 +234,12 @@ class _QueryLease:
         self.close()
 
     def close(self):
+        if self._creator_pid != os.getpid():
+            if not self._acquired:
+                return
+            self._acquired = False
+            self._runtime.discard_after_fork()
+            return
         if self._acquired:
             self._acquired = False
             self._runtime._release_query()
@@ -155,6 +253,7 @@ class _ReaderSession:
         expected_size: int,
         fingerprint: int,
         validate_generation: bool = True,
+        data_file_attestation: Optional[DataFileAttestation] = None,
     ):
         self.file_id = file_id
         self.path = path
@@ -163,8 +262,15 @@ class _ReaderSession:
         self._validate_generation_enabled = validate_generation
         if validate_generation:
             self._validate_generation()
+        if data_file_attestation is not None:
+            if data_file_attestation.file_id != file_id:
+                raise AttestationMismatchError(
+                    "data-file attestation has the wrong file_id"
+                )
+            validate_data_file_attestation(path, data_file_attestation)
         self.reader = TsFileReaderPy(path)
         self.active_uses = 0
+        self._closed = False
 
     def _validate_generation(self):
         st = os.stat(self.path)
@@ -178,6 +284,9 @@ class _ReaderSession:
             )
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         self.reader.close()
 
 
@@ -189,10 +298,12 @@ class ReaderSessionPool:
         index: MappedDatasetIndex,
         max_open_files: int,
         validate_generation: bool = True,
+        data_file_attestations: Optional[Mapping[int, DataFileAttestation]] = None,
     ):
         self._index = index
         self.max_open_files = max(1, int(max_open_files))
         self._validate_generation = bool(validate_generation)
+        self._data_file_attestations = dict(data_file_attestations or {})
         self._sessions: "OrderedDict[int, _ReaderSession]" = OrderedDict()
         self._condition = threading.Condition()
         self._closed = False
@@ -205,6 +316,7 @@ class ReaderSessionPool:
             record[2],
             record[3],
             validate_generation=self._validate_generation,
+            data_file_attestation=self._data_file_attestations.get(file_id),
         )
 
     @contextlib.contextmanager
@@ -256,8 +368,16 @@ class ReaderSessionPool:
                 self._condition.wait()
             sessions = list(self._sessions.values())
             self._sessions.clear()
-        for session in sessions:
-            session.close()
+        _run_cleanups(session.close for session in sessions)
+
+    def discard_after_fork(self):
+        """Close only this child copy without acquiring inherited locks."""
+        if self._closed and not self._sessions:
+            return
+        self._closed = True
+        sessions = list(self._sessions.values())
+        self._sessions = OrderedDict()
+        _run_cleanups(session.close for session in sessions)
 
     @property
     def open_count(self):
@@ -265,18 +385,38 @@ class ReaderSessionPool:
             return len(self._sessions)
 
 
+@dataclass
+class _PreparedSeriesEntry:
+    prepared: object
+    active_uses: int = 0
+    time_owner: Optional["_PreparedSeriesEntry"] = None
+    dependent_uses: int = 0
+
+
 class PreparedSeriesCache:
-    """Runtime-wide single-flight cache of native exact-locator metadata."""
+    """Runtime-wide single-flight LRU of native exact-locator metadata."""
 
     def __init__(
         self,
         index: MappedDatasetIndex,
         validate_references: bool = True,
+        max_entries: Optional[int] = None,
+        mapped_index_identity: Optional[int] = None,
+        file_generation_tokens: Optional[Mapping[int, str]] = None,
     ):
         self._index = index
         self._validate_references = bool(validate_references)
+        self._mapped_index_identity = (
+            id(index) if mapped_index_identity is None else int(mapped_index_identity)
+        )
+        self._file_generation_tokens = dict(file_generation_tokens or {})
+        maximum = _SERIES_DESCRIPTOR_CACHE_SIZE if max_entries is None else max_entries
+        if int(maximum) < 0:
+            raise ValueError("max_entries must be non-negative")
+        self.max_entries = int(maximum)
         self._condition = threading.Condition()
-        self._entries = {}
+        self._entries = OrderedDict()
+        self._entries_by_prepared_id = {}
         self._loading = set()
         self._closed = False
 
@@ -287,7 +427,7 @@ class PreparedSeriesCache:
         if self._validate_references and device_span[1] != file_id:
             raise ValueError("series locator points at another TsFile")
         return (
-            id(self._index),
+            self._mapped_index_identity,
             file_id,
             file_record[2],
             file_record[3],
@@ -300,48 +440,174 @@ class PreparedSeriesCache:
             device_span[3],
         )
 
-    def get(self, file_id, locator_id, reader, time_owner=None):
-        key = (id(self._index), file_id, locator_id)
+    def _evict_idle_locked(self):
+        evicted = []
+        while len(self._entries) > self.max_entries:
+            idle_key = next(
+                (
+                    key
+                    for key, entry in self._entries.items()
+                    if entry.active_uses == 0 and entry.dependent_uses == 0
+                ),
+                None,
+            )
+            if idle_key is None:
+                break
+            evicted.append(self._pop_entry_locked(idle_key))
+        return evicted
+
+    def _pop_entry_locked(self, key):
+        entry = self._entries.pop(key)
+        self._entries_by_prepared_id.pop(id(entry.prepared), None)
+        if entry.time_owner is not None:
+            entry.time_owner.dependent_uses -= 1
+            entry.time_owner = None
+        return entry.prepared
+
+    def _drain_entries_locked(self):
+        prepared = []
+        while self._entries:
+            leaf_key = next(
+                (
+                    key
+                    for key, entry in self._entries.items()
+                    if entry.dependent_uses == 0
+                ),
+                None,
+            )
+            if leaf_key is None:
+                raise RuntimeError("PreparedSeries owner graph contains a cycle")
+            prepared.append(self._pop_entry_locked(leaf_key))
+        return prepared
+
+    @staticmethod
+    def _close_entries(entries):
+        _run_cleanups(prepared.close for prepared in entries)
+
+    def _release(self, entry):
+        with self._condition:
+            entry.active_uses -= 1
+            evicted = self._evict_idle_locked()
+            self._condition.notify_all()
+        self._close_entries(evicted)
+
+    @contextlib.contextmanager
+    def acquire(self, file_id, locator_id, reader, time_owner=None):
+        generation = self._file_generation_tokens.get(file_id)
+        if generation is None:
+            file_record = self._index.record(TSFILE_RECORD, file_id)
+            generation = (
+                self._mapped_index_identity,
+                file_id,
+                file_record[2],
+                file_record[3],
+            )
+        key = (generation, locator_id)
+        entry = None
+        owner_entry = None
+        prepared_time_owner = time_owner
         with self._condition:
             while True:
                 if self._closed:
                     raise RuntimeError("PreparedSeriesCache is closed")
-                result = self._entries.get(key)
-                if result is not None:
-                    return result
+                entry = self._entries.get(key)
+                if entry is not None:
+                    self._entries.move_to_end(key)
+                    entry.active_uses += 1
+                    break
                 if key not in self._loading:
+                    if time_owner is not None:
+                        requested_owner = self._entries_by_prepared_id.get(
+                            id(time_owner)
+                        )
+                        if (
+                            requested_owner is None
+                            or requested_owner.prepared is not time_owner
+                            or requested_owner.active_uses == 0
+                        ):
+                            raise RuntimeError(
+                                "PreparedSeries time owner requires an active cache lease"
+                            )
+                        owner_entry = requested_owner.time_owner or requested_owner
+                        prepared_time_owner = owner_entry.prepared
                     self._loading.add(key)
                     break
                 self._condition.wait()
-        try:
-            result = reader.prepare_series(
-                self._locator_tuple(file_id, locator_id), time_owner=time_owner
-            )
-        except Exception:
+
+        evicted = []
+        if entry is None:
+            try:
+                result = reader.prepare_series(
+                    self._locator_tuple(file_id, locator_id),
+                    time_owner=prepared_time_owner,
+                )
+            except BaseException:
+                with self._condition:
+                    self._loading.discard(key)
+                    self._condition.notify_all()
+                raise
+
             with self._condition:
-                self._loading.remove(key)
+                self._loading.discard(key)
+                rejected = self._closed
+                if not rejected:
+                    entry = _PreparedSeriesEntry(
+                        result,
+                        active_uses=1,
+                        time_owner=owner_entry,
+                    )
+                    if owner_entry is not None:
+                        owner_entry.dependent_uses += 1
+                    self._entries[key] = entry
+                    self._entries_by_prepared_id[id(result)] = entry
+                    evicted = self._evict_idle_locked()
                 self._condition.notify_all()
-            raise
-        with self._condition:
-            if self._closed:
-                result.close()
-                self._loading.remove(key)
-                self._condition.notify_all()
+            if rejected:
+                try:
+                    result.close()
+                except BaseException as exc:
+                    raise RuntimeError("PreparedSeriesCache is closed") from exc
                 raise RuntimeError("PreparedSeriesCache is closed")
-            self._entries[key] = result
-            self._loading.remove(key)
-            self._condition.notify_all()
-            return result
+
+        try:
+            self._close_entries(evicted)
+        except BaseException:
+            try:
+                self._release(entry)
+            except BaseException:
+                pass
+            raise
+
+        try:
+            yield entry.prepared
+        except BaseException:
+            try:
+                self._release(entry)
+            except BaseException:
+                pass
+            raise
+        else:
+            self._release(entry)
 
     def close(self):
         with self._condition:
             self._closed = True
-            while self._loading:
+            while self._loading or any(
+                entry.active_uses for entry in self._entries.values()
+            ):
                 self._condition.wait()
-            entries = list(self._entries.values())
-            self._entries.clear()
-        for prepared in entries:
-            prepared.close()
+            entries = self._drain_entries_locked()
+        self._close_entries(entries)
+
+    def discard_after_fork(self):
+        """Close only this child copy without acquiring inherited locks."""
+        if self._closed and not self._entries and not self._loading:
+            return
+        self._closed = True
+        entries = self._drain_entries_locked()
+        self._entries_by_prepared_id = {}
+        self._loading = set()
+        self._close_entries(entries)
 
     @property
     def size(self):
@@ -357,14 +623,33 @@ class DatasetRuntime:
         query_workers: Optional[int] = None,
         query_parallel_min_rows: Optional[int] = None,
         trust_index: bool = False,
+        index_attestation: Optional[IndexAttestation] = None,
+        data_file_attestations: Optional[Sequence[DataFileAttestation]] = None,
     ):
         self.trust_index = bool(trust_index)
-        self.index = MappedDatasetIndex(path, trust_index=self.trust_index)
+        has_index_attestation = index_attestation is not None
+        has_data_attestations = data_file_attestations is not None
+        if has_index_attestation != has_data_attestations:
+            raise ValueError(
+                "index_attestation and data_file_attestations must be provided together"
+            )
+        if has_index_attestation and not self.trust_index:
+            raise ValueError("attestations require trust_index=True")
+        if has_index_attestation and not isinstance(
+            index_attestation, IndexAttestation
+        ):
+            raise TypeError("index_attestation must be an IndexAttestation")
+        self.index_attestation = index_attestation
+        self.data_file_attestations = tuple(data_file_attestations or ())
+        self.data_file_attestations_by_id = {}
+        self.data_manifest_identity_sha256 = None
+        self.file_generation_tokens = {}
         maximum = (
             int(os.environ.get("TSFILE_DATAFRAME_MAX_OPEN_FILES", "16"))
             if max_open_files is None
             else max_open_files
         )
+        self.max_open_files = max(1, int(maximum))
         workers = (
             int(
                 os.environ.get(
@@ -382,38 +667,220 @@ class DatasetRuntime:
             else query_parallel_min_rows
         )
         self.query_parallel_min_rows = max(1, int(minimum_rows))
-        self._query_executor = (
-            ThreadPoolExecutor(
-                max_workers=self.query_workers,
-                thread_name_prefix="tsfile-dataframe-query",
-            )
-            if self.query_workers > 1
-            else None
-        )
-        self.readers = ReaderSessionPool(
-            self.index,
-            maximum,
-            validate_generation=not self.trust_index,
-        )
-        self.prepared = PreparedSeriesCache(
-            self.index,
-            validate_references=not self.trust_index,
-        )
+        prepared_max_entries = _configured_prepared_series_cache_size()
+        self.creator_pid = os.getpid()
+        self._discarded_pid = None
+        self._path = os.fspath(path)
+        self.index = None
+        self._query_executor = None
+        self.readers = None
+        self.prepared = None
+        self.catalog = None
+        self._resources_closed = False
         self._condition = threading.Condition()
         self._object_leases = 0
         self._query_leases = 0
         self._accepting = True
         self._torn_down = False
-        self.catalog = MappedDataFrameCatalog(self)
+
+        try:
+            if self.index_attestation is not None:
+                validate_index_attestation(self._path, self.index_attestation)
+            self.index = MappedDatasetIndex(self._path, trust_index=self.trust_index)
+            if self.index_attestation is not None:
+                expected_index_identity = (
+                    self.index_attestation.st_dev,
+                    self.index_attestation.st_ino,
+                    self.index_attestation.st_size,
+                    self.index_attestation.st_mtime_ns,
+                )
+                if self.index.identity != expected_index_identity:
+                    raise AttestationMismatchError(
+                        "mapped index does not match its attestation"
+                    )
+            self._configure_attestations()
+            self._query_executor = (
+                ThreadPoolExecutor(
+                    max_workers=self.query_workers,
+                    thread_name_prefix="tsfile-dataframe-query",
+                )
+                if self.query_workers > 1
+                else None
+            )
+            self.readers = ReaderSessionPool(
+                self.index,
+                self.max_open_files,
+                validate_generation=not self.trust_index,
+                data_file_attestations=self.data_file_attestations_by_id,
+            )
+            self.prepared = PreparedSeriesCache(
+                self.index,
+                validate_references=not self.trust_index,
+                max_entries=prepared_max_entries,
+                mapped_index_identity=(
+                    _digest_u64(self.index_attestation.index_identity_sha256)
+                    if self.index_attestation is not None
+                    else None
+                ),
+                file_generation_tokens=self.file_generation_tokens,
+            )
+            self.catalog = MappedDataFrameCatalog(self)
+        except BaseException:
+            try:
+                self._close_resources()
+            except BaseException:
+                pass
+            raise
+
+    def _configure_attestations(self):
+        if self.index_attestation is None:
+            return
+        if any(
+            not isinstance(attestation, DataFileAttestation)
+            for attestation in self.data_file_attestations
+        ):
+            raise TypeError(
+                "data_file_attestations must contain DataFileAttestation values"
+            )
+        expected_file_ids = tuple(range(self.index.count(TSFILE_RECORD)))
+        actual_file_ids = tuple(
+            attestation.file_id for attestation in self.data_file_attestations
+        )
+        if actual_file_ids != expected_file_ids:
+            raise ValueError(
+                "data_file_attestations must cover file_id=0..N-1 in order"
+            )
+
+        for attestation in self.data_file_attestations:
+            record = self.index.record(TSFILE_RECORD, attestation.file_id)
+            indexed_path = os.path.realpath(
+                os.path.abspath(self.index.string(record[0]))
+            )
+            if (
+                indexed_path != attestation.canonical_path
+                or record[2] != attestation.st_size
+            ):
+                raise AttestationMismatchError(
+                    "data-file attestation does not match the Dataset Index"
+                )
+            expected_fingerprint = f"{record[3]:016x}"
+            if attestation.existing_index_fingerprint != expected_fingerprint:
+                raise AttestationMismatchError(
+                    "data-file fingerprint does not match the Dataset Index"
+                )
+
+        self.data_file_attestations_by_id = {
+            attestation.file_id: attestation
+            for attestation in self.data_file_attestations
+        }
+        self.data_manifest_identity_sha256 = data_manifest_identity(
+            self.data_file_attestations,
+            require_sorted=True,
+        )
+        self.file_generation_tokens = {
+            attestation.file_id: file_generation_token(
+                self.index_attestation.index_identity_sha256,
+                self.data_manifest_identity_sha256,
+                attestation,
+            )
+            for attestation in self.data_file_attestations
+        }
+
+    def _close_resources(self):
+        if self._resources_closed:
+            return
+        self._resources_closed = True
+        cleanups = []
+        if self._query_executor is not None:
+            cleanups.append(
+                lambda executor=self._query_executor: executor.shutdown(
+                    wait=True, cancel_futures=True
+                )
+            )
+        if self.prepared is not None:
+            cleanups.append(self.prepared.close)
+        if self.readers is not None:
+            cleanups.append(self.readers.close)
+        if self.index is not None:
+            cleanups.append(self.index.close)
+        _run_cleanups(cleanups)
+
+    def fork_replacement(self):
+        """Create fresh process-local mutable/native state after ``fork``."""
+        return type(self)(
+            self._path,
+            max_open_files=self.max_open_files,
+            query_workers=self.query_workers,
+            query_parallel_min_rows=self.query_parallel_min_rows,
+            trust_index=self.trust_index,
+            index_attestation=self.index_attestation,
+            data_file_attestations=(
+                self.data_file_attestations
+                if self.index_attestation is not None
+                else None
+            ),
+        )
+
+    def _assert_current_process(self):
+        if self.creator_pid != os.getpid():
+            raise RuntimeError(
+                "Inherited DatasetRuntime cannot be used after fork; "
+                "obtain a new Timeseries from the child's TsFileDataFrame"
+            )
+
+    def discard_after_fork(self):
+        """Deterministically discard this child copy without inherited locks."""
+        current_pid = os.getpid()
+        if self.creator_pid == current_pid:
+            raise RuntimeError("discard_after_fork requires an inherited runtime")
+        if self._discarded_pid == current_pid:
+            return
+
+        self._discarded_pid = current_pid
+        self._resources_closed = True
+        self._accepting = False
+        self._torn_down = True
+
+        prepared = self.prepared
+        readers = self.readers
+        index = self.index
+        catalog = self.catalog
+        executor = self._query_executor
+        self._query_executor = None
+        self.prepared = None
+        self.readers = None
+        self.index = None
+        self.catalog = None
+
+        if catalog is not None:
+            catalog.runtime = None
+            catalog.index = None
+            catalog_readers = getattr(catalog, "_readers", None)
+            if catalog_readers is not None:
+                catalog_readers.clear()
+
+        cleanups = []
+        if executor is not None:
+            cleanups.append(lambda: _discard_executor_after_fork(executor))
+        if prepared is not None:
+            cleanups.append(prepared.discard_after_fork)
+        if readers is not None:
+            cleanups.append(readers.discard_after_fork)
+        if index is not None:
+            cleanups.append(index.close)
+        _run_cleanups(cleanups)
 
     def lease(self):
+        self._assert_current_process()
         return RuntimeLease(self)
 
     def query_lease(self):
+        self._assert_current_process()
         return _QueryLease(self)
 
     def map_query_groups(self, function, groups, estimated_rows=None):
         """Run independent query groups under the caller's query lease."""
+        self._assert_current_process()
         groups = list(groups)
         if not groups:
             return []
@@ -435,12 +902,16 @@ class DatasetRuntime:
             raise
 
     def _acquire_object(self):
+        self._assert_current_process()
         with self._condition:
             if not self._accepting:
                 raise RuntimeError("Dataset Runtime is closing")
             self._object_leases += 1
 
     def _release_object(self):
+        if self.creator_pid != os.getpid():
+            self.discard_after_fork()
+            return
         teardown = False
         with self._condition:
             self._object_leases -= 1
@@ -451,19 +922,19 @@ class DatasetRuntime:
                 teardown = not self._torn_down
                 self._torn_down = True
         if teardown:
-            if self._query_executor is not None:
-                self._query_executor.shutdown(wait=True, cancel_futures=True)
-            self.prepared.close()
-            self.readers.close()
-            self.index.close()
+            self._close_resources()
 
     def _acquire_query(self):
+        self._assert_current_process()
         with self._condition:
             if not self._accepting:
                 raise RuntimeError("Dataset Runtime is closing")
             self._query_leases += 1
 
     def _release_query(self):
+        if self.creator_pid != os.getpid():
+            self.discard_after_fork()
+            return
         with self._condition:
             self._query_leases -= 1
             self._condition.notify_all()
@@ -960,14 +1431,16 @@ class RuntimeSeriesReader:
         limit=None,
     ):
         with self.runtime.readers.acquire(self.file_id) as reader:
-            prepared = self.runtime.prepared.get(self.file_id, locator_id, reader)
-            if offset is None:
-                result = reader.query_prepared(
-                    prepared, start_time=start_time, end_time=end_time
-                )
-            else:
-                result = reader.query_prepared(prepared, offset=offset, limit=limit)
-            return self._consume(result)
+            with self.runtime.prepared.acquire(
+                self.file_id, locator_id, reader
+            ) as prepared:
+                if offset is None:
+                    result = reader.query_prepared(
+                        prepared, start_time=start_time, end_time=end_time
+                    )
+                else:
+                    result = reader.query_prepared(prepared, offset=offset, limit=limit)
+                return self._consume(result)
 
     def read_series_by_ref(self, device_id, column_id, start_time, end_time):
         return self._query(device_id, column_id, start_time, end_time)
@@ -1010,19 +1483,25 @@ class RuntimeSeriesReader:
                 self._identity(device_id, column_id)[3] for column_id in column_ids
             ]
             with self.runtime.readers.acquire(self.file_id) as reader:
-                prepared = []
-                time_owner = None
-                for span in spans:
-                    current = self.runtime.prepared.get(
-                        self.file_id, span[2], reader, time_owner=time_owner
+                with contextlib.ExitStack() as stack:
+                    prepared = []
+                    time_owner = None
+                    for span in spans:
+                        current = stack.enter_context(
+                            self.runtime.prepared.acquire(
+                                self.file_id,
+                                span[2],
+                                reader,
+                                time_owner=time_owner,
+                            )
+                        )
+                        prepared.append(current)
+                        if time_owner is None:
+                            time_owner = current
+                    result = reader.query_prepared_multi(
+                        prepared, start_time=start_time, end_time=end_time
                     )
-                    prepared.append(current)
-                    if time_owner is None:
-                        time_owner = current
-                result = reader.query_prepared_multi(
-                    prepared, start_time=start_time, end_time=end_time
-                )
-                return self._consume_multi(result, column_names)
+                    return self._consume_multi(result, column_names)
 
         # Non-aligned device (or fields spanning different device spans): each
         # field carries its own timeline, so align them onto a single timestamp

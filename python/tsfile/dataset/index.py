@@ -242,8 +242,11 @@ class MappedDatasetIndex:
     ):
         self.path = path
         self._trusted = bool(trust_index)
-        self._file = open(path, "rb")
+        self._file = None
+        self._mmap = None
+        self._view = None
         try:
+            self._file = open(path, "rb")
             stat = os.fstat(self._file.fileno())
             self.identity = (
                 stat.st_dev,
@@ -252,6 +255,9 @@ class MappedDatasetIndex:
                 stat.st_mtime_ns,
             )
             self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
+            if os.name == "posix" and os.uname().sysname == "Linux":
+                self._file.close()
+                self._file = None
             self._view = memoryview(self._mmap)
             self._entries = (
                 self._map_entries_without_validation()
@@ -259,14 +265,26 @@ class MappedDatasetIndex:
                 else self._validate(verify_sections)
             )
         except Exception:
-            if getattr(self, "_view", None) is not None:
-                self._view.release()
-                self._view = None
-            if getattr(self, "_mmap", None) is not None:
-                self._mmap.close()
-                self._mmap = None
-            self._file.close()
+            self._close_owned_resources()
             raise
+
+    def _close_owned_resources(self):
+        view = self._view
+        self._view = None
+        try:
+            if view is not None:
+                view.release()
+        finally:
+            mapped = self._mmap
+            self._mmap = None
+            try:
+                if mapped is not None:
+                    mapped.close()
+            finally:
+                file_object = self._file
+                self._file = None
+                if file_object is not None:
+                    file_object.close()
 
     def _map_entries_without_validation(self):
         """Read v1 section descriptors without checking their contents.
@@ -374,15 +392,7 @@ class MappedDatasetIndex:
         return entries
 
     def close(self):
-        if getattr(self, "_view", None) is not None:
-            self._view.release()
-            self._view = None
-        if getattr(self, "_mmap", None) is not None:
-            self._mmap.close()
-            self._mmap = None
-        if getattr(self, "_file", None) is not None:
-            self._file.close()
-            self._file = None
+        self._close_owned_resources()
 
     def __enter__(self):
         return self
