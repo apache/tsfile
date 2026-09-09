@@ -125,6 +125,7 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
 cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","body":"这个时间戳 精度得写到文件里， 最好写到Property里面"}
 -->
 
+<!-- tag-comment-scope-B-start mode="block" hash="sha256:46aac11794b9cf17d2e4e7e584bfbb5a3f42ee2a10015dbe7f719d50c91f3f49" -->
 列定义必须满足：
 
 - 恰好一个 `TIME` 列；
@@ -134,6 +135,10 @@ cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","bo
 - `FIELD` 可以为 `NULL`；
 - 列名大小写不敏感地唯一；
 - `_tsfile_command` 和 `_tsfile_cutoff` 是保留名称。
+<!-- tag-comment-scope-B-end mode="block" -->
+<!-- tag-comment-thread-B
+cmd2 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:21.571Z","body":"可以没有tag 列，列名是否唯一的问题， 在tsfile 的层次上是大小不敏感的， 但是在sqlite 里面我不清楚 \n\n"}
+-->
 
 所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
 
