@@ -374,6 +374,7 @@ DROP TABLE sensor;
 会删除虚拟表及其三个 shadow table，但不会删除已经导出的 TsFile。删除或归档
 这些文件需要由运维流程显式完成。
 
+<!-- tag-comment-scope-H-start mode="block" hash="sha256:ce1291072b0568bf2bce6f718ae12f960bce613e928d1de8dae206b73666c519" -->
 ## 11. 备份与恢复
 
 完整数据由两部分共同组成：
@@ -387,6 +388,10 @@ DROP TABLE sensor;
 
 恢复时必须保持配置中记录的绝对目录可用；如果恢复到不同路径，应创建新的逻辑
 表并执行受控迁移，而不是手工修改 `sensor_config`。
+<!-- tag-comment-scope-H-end mode="block" -->
+<!-- tag-comment-thread-H
+cmd9 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:33:44.758Z","body":"这里应该给出导出命令， 用户如果直接拷贝或者移动走了tsfile ， 那应该也得识别出来？"}
+-->
 
 ## 12. 常见问题
 
