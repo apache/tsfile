@@ -19,6 +19,24 @@ under the License.
 
 find_package(SQLite3 3.31 REQUIRED)
 
+# Apple's SDK SQLite header disables extension loading. Require headers from
+# the same extension-capable SQLite installation used by the application.
+include(CheckCXXSourceCompiles)
+set(_tsfile_saved_required_includes "${CMAKE_REQUIRED_INCLUDES}")
+set(CMAKE_REQUIRED_INCLUDES "${SQLite3_INCLUDE_DIRS}")
+unset(TSFILE_SQLITE_CAN_LOAD_EXTENSIONS CACHE)
+check_cxx_source_compiles("
+#include <sqlite3ext.h>
+#ifdef SQLITE_OMIT_LOAD_EXTENSION
+#error SQLite extension loading is disabled
+#endif
+int main() { return 0; }
+" TSFILE_SQLITE_CAN_LOAD_EXTENSIONS)
+set(CMAKE_REQUIRED_INCLUDES "${_tsfile_saved_required_includes}")
+if (NOT TSFILE_SQLITE_CAN_LOAD_EXTENSIONS)
+    message(FATAL_ERROR "SQLite headers disable extension loading. Set SQLite3_INCLUDE_DIR and SQLite3_LIBRARY to an extension-capable SQLite installation (for example Homebrew SQLite on macOS).")
+endif ()
+
 add_library(tsfile_sqlite MODULE tsfile_sqlite.cc)
 target_include_directories(tsfile_sqlite PRIVATE
         ${CMAKE_SOURCE_DIR}/src

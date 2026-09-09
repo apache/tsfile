@@ -340,7 +340,8 @@ if (BUILD_SQLITE_EXTENSION)
             TSFILE_SQLITE_EXTENSION_PATH="$<TARGET_FILE:tsfile_sqlite>")
     set_target_properties(TsFile_Sqlite_Test PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR}
-            SKIP_BUILD_RPATH TRUE)
+            SKIP_BUILD_RPATH FALSE
+            BUILD_RPATH "$<TARGET_FILE_DIR:tsfile>")
     add_test(NAME TsFileSqliteTest COMMAND TsFile_Sqlite_Test)
     if (APPLE)
         set_tests_properties(TsFileSqliteTest PROPERTIES

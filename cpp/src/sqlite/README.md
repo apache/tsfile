@@ -21,54 +21,77 @@
 
 # SQLite + TsFile extension
 
-`tsfile_sqlite` is an experimental SQLite loadable extension that keeps recent
-rows in SQLite and seals older rows into immutable TsFile table-model segments.
+`tsfile_sqlite` is an experimental SQLite extension for querying TsFile table-model
+files and maintaining writable tables with mutable SQLite hot rows and immutable
+TsFile history.
 
 Documentation:
 
-- [User guide](USER_GUIDE.md): build, load, configure, query, seal, deploy, and
-  operate the extension.
-- [Technical guide](TECHNICAL_GUIDE.md): architecture, virtual-table callbacks,
-  storage layout, query planning, and transaction/crash consistency.
+- User manual: [English](USER_GUIDE_EN.md) |
+  [Chinese](USER_GUIDE.md).
+- Technical report: [English](TECHNICAL_GUIDE_EN.md) |
+  [Chinese](TECHNICAL_GUIDE.md).
 
-Build it with:
+Build from the repository root:
 
 ```bash
 cmake -S cpp -B cpp/build/sqlite \
   -DBUILD_SQLITE_EXTENSION=ON -DTSFILE_BUILD_SHARED=ON -DBUILD_TEST=ON
-cmake --build cpp/build/sqlite --target tsfile_sqlite
+cmake --build cpp/build/sqlite --target tsfile_sqlite TsFile_Sqlite_Test -j
+ctest --test-dir cpp/build/sqlite/test -R '^TsFileSqliteTest$' --output-on-failure
 ```
 
-The extension is emitted next to `libtsfile` in the build `lib` directory.
-Load it and create a hybrid table with:
+Use SQLite 3.31 or newer with extension loading enabled. On macOS, select
+extension-capable headers and libraries, for example by adding
+`-DSQLite3_INCLUDE_DIR=/opt/homebrew/opt/sqlite/include` and
+`-DSQLite3_LIBRARY=/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib` for Homebrew on
+Apple Silicon. Deploy the extension next to `libtsfile` from the same build.
+
+All three creation modes use `tsfile_hybrid`:
 
 ```sql
-.load ./tsfile_sqlite
+.load /absolute/path/to/tsfile_sqlite
 
+-- Empty writable table: declare its schema and time unit.
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
-  directory='/absolute/path/to/segments',
-  timestamp_precision='ms',
-  column='time:TIMESTAMP:TIME',
-  column='device:STRING:TAG',
-  column='temperature:DOUBLE:FIELD'
+  time TIMESTAMP TIME,
+  device STRING TAG,
+  temperature DOUBLE FIELD,
+  directory='/absolute/path/to/sensor-segments',
+  timestamp_precision='ms'
 );
+
+-- Existing history plus a writable hot area: infer the source schema.
+CREATE VIRTUAL TABLE continued USING tsfile_hybrid(
+  file='/archive/history.tsfile',
+  source_table='sensor',
+  directory='/absolute/path/to/continued-segments'
+);
+
+-- Existing history without a directory: query only.
+CREATE VIRTUAL TABLE temp.history USING tsfile_hybrid(
+  file='/archive/history.tsfile',
+  source_table='sensor'
+);
+
+INSERT INTO sensor VALUES (1700000000000, 'device-1', 21.5);
+SELECT * FROM sensor ORDER BY time;
+SELECT tsfile_seal('main.sensor', 1700000000001);
+SELECT tsfile_export('main.sensor', '/export/sensor-001');
+SELECT * FROM tsfile_table_info('main.sensor');
+SELECT * FROM tsfile_verify('main.sensor');
 ```
 
-Seal the half-open historical interval ending at `cutoff` with:
+The writable external-file mode requires a known time unit; supply
+`timestamp_precision='ms'`, `'us'`, or `'ns'` when the source has no precision
+property. New rows must be strictly later than the selected source table's maximum
+time. External files stay unchanged. Actual updates or deletes of cold rows fail
+with `SQLITE_READONLY` and roll back the whole statement.
 
-```sql
-INSERT INTO sensor(_tsfile_command, _tsfile_cutoff)
-VALUES ('seal', 1700000000000);
-```
+Export automatically seals all current hot rows, commits that seal, then publishes
+an independent snapshot as one standard TsFile (zero files for an empty table).
+It must run outside an explicit transaction. An output failure after sealing keeps
+the committed seal; the error reports the stage.
 
-The generated `<table>_data`, `<table>_segments`, and `<table>_config` tables
-are SQLite shadow tables. A seal is synchronous and participates in the
-surrounding SQLite transaction. Data at or above the watermark remains mutable;
-attempts to insert or modify older data return `SQLITE_CONSTRAINT`.
-
-The supported field types are `BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`,
-`TEXT`, `STRING`, `BLOB`, `DATE`, and `TIMESTAMP`. The first column must be a
-`TIMESTAMP:TIME`, TAG columns must be non-null `STRING`, and the TAG columns
-together with time form the unique key. The directory is created on table
-creation and must be dedicated to that logical table; dropping the virtual
-table does not delete already exported segment files.
+This version replaces the prototype's `column=` syntax, hidden management columns,
+and shadow-table layout. It does not automatically migrate prototype databases.

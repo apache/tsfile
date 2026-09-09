@@ -26,6 +26,10 @@ SQLITE_EXTENSION_INIT1
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifndef __APPLE__
+#include <linux/fs.h>
+#include <sys/syscall.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -33,7 +37,9 @@ SQLITE_EXTENSION_INIT1
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -96,6 +102,10 @@ struct PendingFile {
 };
 
 struct HybridTable;
+struct Connection {
+    std::map<std::string, HybridTable*> tables;
+    bool managing = false;
+};
 
 struct HybridCursor : sqlite3_vtab_cursor {
     HybridTable* table = nullptr;
@@ -105,17 +115,28 @@ struct HybridCursor : sqlite3_vtab_cursor {
 
 struct HybridTable : sqlite3_vtab {
     sqlite3* db = nullptr;
+    Connection* connection = nullptr;
     std::string db_name;
     std::string table_name;
     std::string directory;
     std::string precision;
+    std::string source_file;
+    std::string source_table;
+    std::string source_identity;
+    bool readonly = false;
+    bool exhausted = false;
+    bool source_has_rows = false;
+    int64_t source_max = kNoWatermark;
     std::vector<Column> columns;
     int time_index = -1;
     std::vector<int> tag_indexes;
     int64_t watermark = kNoWatermark;
     std::vector<PendingFile> pending;
-    std::vector<size_t> savepoint_marks;
+    std::map<int, size_t> savepoint_marks;
     uint64_t file_counter = 0;
+    bool new_directory_owner = false;
+    bool uncommitted_create = false;
+    std::vector<std::string> created_directories;
 };
 
 struct ConstraintSpec {
@@ -180,17 +201,54 @@ int exec_sql(sqlite3* db, const std::string& sql,
     return rc;
 }
 
-bool parse_key_value(const char* arg, std::string& key, std::string& value) {
-    if (arg == nullptr) return false;
-    const char* equal = std::strchr(arg, '=');
-    if (equal == nullptr) return false;
-    key.assign(arg, static_cast<size_t>(equal - arg));
-    value.assign(equal + 1);
-    if (value.size() >= 2 && ((value.front() == '\'' && value.back() == '\'') ||
-                              (value.front() == '"' && value.back() == '"'))) {
-        value = value.substr(1, value.size() - 2);
+std::string trim(const std::string& value) {
+    size_t a = value.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return "";
+    return value.substr(a, value.find_last_not_of(" \t\r\n") - a + 1);
+}
+
+bool sql_token(const std::string& input, size_t& pos, std::string& token) {
+    while (pos < input.size() &&
+           std::isspace(static_cast<unsigned char>(input[pos])))
+        ++pos;
+    token.clear();
+    if (pos == input.size()) return false;
+    char quote = input[pos];
+    if (quote == '\'' || quote == '"' || quote == '`' || quote == '[') {
+        char end = quote == '[' ? ']' : quote;
+        ++pos;
+        while (pos < input.size()) {
+            char c = input[pos++];
+            if (c == end) {
+                if (pos < input.size() && input[pos] == end) {
+                    token += end;
+                    ++pos;
+                } else
+                    return true;
+            } else
+                token += c;
+        }
+        return false;
     }
-    return true;
+    size_t start = pos;
+    while (pos < input.size() &&
+           !std::isspace(static_cast<unsigned char>(input[pos])) &&
+           input[pos] != '=')
+        ++pos;
+    token = input.substr(start, pos - start);
+    return !token.empty();
+}
+
+bool parse_key_value(const char* arg, std::string& key, std::string& value) {
+    std::string input = arg == nullptr ? "" : arg;
+    size_t pos = 0;
+    if (!sql_token(input, pos, key)) return false;
+    while (pos < input.size() &&
+           std::isspace(static_cast<unsigned char>(input[pos])))
+        ++pos;
+    if (pos == input.size() || input[pos++] != '=') return false;
+    if (!sql_token(input, pos, value)) return false;
+    return trim(input.substr(pos)).empty();
 }
 
 bool parse_column(const std::string& spec, Column& column, std::string& error) {
@@ -252,18 +310,94 @@ std::string sqlite_type(TSDataType type) {
 
 std::string shadow_name(const HybridTable* table, const char* suffix) {
     return quote_id(table->db_name) + "." +
-           quote_id(table->table_name + suffix);
+           quote_id(table->table_name + "_tsfile$" +
+                    (std::string(suffix) == "_data" ? "hot" : suffix + 1));
+}
+
+std::string hot_rowid(const HybridTable* table) {
+    std::string name = "tsfile$rowid";
+    for (;;) {
+        bool collision = false;
+        for (const auto& column : table->columns)
+            if (lower(column.name) == name) {
+                collision = true;
+                break;
+            }
+        if (!collision) return quote_id(name);
+        name += '$';
+    }
 }
 
 std::string schema_signature(const HybridTable* table) {
     std::ostringstream out;
-    for (size_t i = 0; i < table->columns.size(); ++i) {
-        if (i) out << ';';
-        out << table->columns[i].name << ':'
-            << static_cast<int>(table->columns[i].type) << ':'
-            << static_cast<int>(table->columns[i].category);
-    }
+    for (const auto& column : table->columns)
+        out << column.name.size() << ':' << column.name << ':'
+            << static_cast<int>(column.type) << ':'
+            << static_cast<int>(column.category) << ';';
     return out.str();
+}
+
+bool restore_source_schema(HybridTable* table, std::string& error) {
+    sqlite3_stmt* stmt = nullptr;
+    std::string sql =
+        "SELECT schema,precision,source_max,source_file,source_table,mode "
+        "FROM " +
+        shadow_name(table, "_config") + " WHERE id=1";
+    int rc = sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK || sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        error = "stored TsFile configuration is unavailable";
+        return false;
+    }
+    auto text = [stmt](int i) {
+        const unsigned char* value = sqlite3_column_text(stmt, i);
+        return value ? std::string(reinterpret_cast<const char*>(value),
+                                   sqlite3_column_bytes(stmt, i))
+                     : std::string();
+    };
+    std::string signature = text(0), precision = text(1);
+    bool valid = text(3) == table->source_file &&
+                 text(4) == table->source_table &&
+                 text(5) == (table->readonly ? "readonly" : "writable") &&
+                 (table->precision.empty() || table->precision == precision);
+    table->precision = precision;
+    table->source_has_rows = sqlite3_column_type(stmt, 2) != SQLITE_NULL;
+    table->source_max = sqlite3_column_int64(stmt, 2);
+    sqlite3_finalize(stmt);
+    std::istringstream input(signature);
+    while (valid && input.peek() != std::char_traits<char>::eof()) {
+        size_t length = 0;
+        char delimiter = 0;
+        int type = 0, category = 0;
+        if (!(input >> length >> delimiter) || delimiter != ':' ||
+            length > signature.size()) {
+            valid = false;
+            break;
+        }
+        std::string name(length, '\0');
+        if (!input.read(&name[0], length) || !(input >> delimiter) ||
+            delimiter != ':' || !(input >> type >> delimiter) ||
+            delimiter != ':' || !(input >> category >> delimiter) ||
+            delimiter != ';') {
+            valid = false;
+            break;
+        }
+        if (category != static_cast<int>(ColumnCategory::TIME) &&
+            category != static_cast<int>(ColumnCategory::TAG) &&
+            category != static_cast<int>(ColumnCategory::FIELD)) {
+            valid = false;
+            break;
+        }
+        table->columns.push_back({name, static_cast<TSDataType>(type),
+                                  static_cast<ColumnCategory>(category)});
+    }
+    if (!valid || table->columns.empty()) {
+        error =
+            "stored TsFile schema is invalid or conflicts with creation "
+            "options";
+        return false;
+    }
+    return true;
 }
 
 std::string file_stem(const std::string& table_name) {
@@ -277,22 +411,6 @@ std::string file_stem(const std::string& table_name) {
     return stem;
 }
 
-bool ensure_directory(const std::string& path) {
-    if (path.empty() || path[0] != '/') return false;
-    size_t pos = 1;
-    while (pos <= path.size()) {
-        pos = path.find('/', pos);
-        std::string part =
-            path.substr(0, pos == std::string::npos ? path.size() : pos);
-        if (!part.empty() && mkdir(part.c_str(), 0755) != 0 && errno != EEXIST)
-            return false;
-        if (pos == std::string::npos) break;
-        ++pos;
-    }
-    struct stat st {};
-    return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
-}
-
 bool directory_exists(const std::string& path) {
     struct stat st {};
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
@@ -304,6 +422,19 @@ int sync_directory(const std::string& path) {
     int rc = fsync(fd) == 0 ? SQLITE_OK : SQLITE_IOERR_FSYNC;
     close(fd);
     return rc;
+}
+
+int publish_without_replacing(const std::string& from, const std::string& to) {
+#ifdef __APPLE__
+    return renamex_np(from.c_str(), to.c_str(), RENAME_EXCL) == 0
+               ? SQLITE_OK
+               : SQLITE_IOERR;
+#else
+    return syscall(SYS_renameat2, AT_FDCWD, from.c_str(), AT_FDCWD, to.c_str(),
+                   RENAME_NOREPLACE) == 0
+               ? SQLITE_OK
+               : SQLITE_IOERR;
+#endif
 }
 
 int close_writer_and_sync(WriteFile& write_file, TsFileTableWriter& writer) {
@@ -338,7 +469,7 @@ bool value_from_sqlite(sqlite3_value* value, const Column& column, Value& out,
                 error = "BOOLEAN requires INTEGER";
                 return false;
             }
-            out.b = sqlite3_value_int(value) != 0;
+            out.b = sqlite3_value_int64(value) != 0;
             break;
         case common::INT32:
         case common::DATE:
@@ -485,49 +616,172 @@ bool row_value_from_sqlite(sqlite3_stmt* stmt, int index, const Column& column,
     return true;
 }
 
-int create_shadow_tables(HybridTable* table, bool insert_config) {
-    std::ostringstream data;
-    data << "CREATE TABLE " << shadow_name(table, "_data") << " (";
-    for (size_t i = 0; i < table->columns.size(); ++i) {
-        if (i) data << ',';
-        data << quote_id(table->columns[i].name) << ' '
-             << sqlite_type(table->columns[i].type);
-        if (table->columns[i].category == ColumnCategory::TIME ||
-            table->columns[i].category == ColumnCategory::TAG)
-            data << " NOT NULL";
+std::string file_identity(const std::string& path) {
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) return "";
+    struct stat st {};
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        return "";
     }
-    data << ", UNIQUE(";
-    bool first = true;
-    for (int index : table->tag_indexes) {
-        if (!first) data << ',';
-        first = false;
-        data << quote_id(table->columns[index].name);
-    }
-    data << ',' << quote_id(table->columns[table->time_index].name) << "))";
-    int rc = exec_sql(table->db, data.str(), table);
-    if (rc != SQLITE_OK) return rc;
+    uint64_t hash = 14695981039346656037ULL;
+    unsigned char buffer[16384];
+    ssize_t n;
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0)
+        for (ssize_t i = 0; i < n; ++i) {
+            hash ^= buffer[i];
+            hash *= 1099511628211ULL;
+        }
+    close(fd);
+    if (n < 0) return "";
+    return std::to_string(st.st_size) + ":" + std::to_string(hash);
+}
 
+std::shared_ptr<TableSchema> source_schema(TsFileReader& reader,
+                                           const std::string& name) {
+    for (const auto& schema : reader.get_all_table_schemas())
+        if (lower(schema->get_table_name()) == lower(name)) return schema;
+    return nullptr;
+}
+
+bool infer_source(HybridTable* table, std::string& error) {
+    table->source_identity = file_identity(table->source_file);
+    TsFileReader reader;
+    if (table->source_identity.empty() ||
+        reader.open(table->source_file) != common::E_OK) {
+        error = "cannot read source file: " + table->source_file;
+        return false;
+    }
+    auto schema = source_schema(reader, table->source_table);
+    if (!schema) {
+        error = "source table not found: " + table->source_table;
+        reader.close();
+        return false;
+    }
+    auto properties = reader.get_tsfile_properties();
+    std::string time_name = "time";
+    auto time_property = properties.find("tsfile_sqlite.time_column");
+    if (time_property != properties.end() && !time_property->second.is_null)
+        time_name.assign(time_property->second.value.begin(),
+                         time_property->second.value.end());
+    table->columns.push_back(
+        {time_name, common::TIMESTAMP, ColumnCategory::TIME});
+    auto names = schema->get_measurement_names();
+    auto fields = schema->get_measurement_schemas();
+    auto categories = schema->get_column_categories();
+    for (size_t i = 0; i < fields.size(); ++i)
+        table->columns.push_back(
+            {names[i], fields[i]->data_type_, categories[i]});
+    auto precision = properties.find("tsfile_sqlite.timestamp_precision");
+    if (precision != properties.end()) {
+        std::string known(precision->second.value.begin(),
+                          precision->second.value.end());
+        if (precision->second.is_null ||
+            (known != "ms" && known != "us" && known != "ns") ||
+            (!table->precision.empty() && table->precision != known)) {
+            error = "invalid or conflicting timestamp_precision: " +
+                    table->source_file;
+            reader.close();
+            return false;
+        }
+        table->precision = known;
+    }
+    if (table->precision.empty()) table->precision = "unknown";
+    if (!reader.get_table_schema(table->source_table)) {
+        reader.close();
+        return true;
+    }
+    ResultSet* result = nullptr;
+    int rc = reader.query(table->source_table, names, kNoWatermark,
+                          std::numeric_limits<int64_t>::max(), result);
+    if (rc != common::E_OK) {
+        error = "cannot query source table";
+        reader.close();
+        return false;
+    }
+    bool next = false;
+    while ((rc = result->next(next)) == common::E_OK && next) {
+        table->source_has_rows = true;
+        table->source_max =
+            std::max(table->source_max, result->get_value<int64_t>(1));
+    }
+    reader.destroy_query_data_set(result);
+    reader.close();
+    if (rc != common::E_OK ||
+        file_identity(table->source_file) != table->source_identity) {
+        error = "source file unreadable or changed during creation";
+        return false;
+    }
+    if (!table->readonly && table->source_has_rows) {
+        table->exhausted =
+            table->source_max == std::numeric_limits<int64_t>::max();
+        if (!table->exhausted) table->watermark = table->source_max + 1;
+    }
+    return true;
+}
+
+int create_shadow_tables(HybridTable* table, bool insert_config) {
+    int rc = SQLITE_OK;
+    if (!table->readonly) {
+        std::ostringstream data;
+        data << "CREATE TABLE " << shadow_name(table, "_data") << " ("
+             << hot_rowid(table) << " INTEGER PRIMARY KEY";
+        for (size_t i = 0; i < table->columns.size(); ++i) {
+            data << ',';
+            data << quote_id(table->columns[i].name) << ' '
+                 << sqlite_type(table->columns[i].type);
+            if (table->columns[i].category == ColumnCategory::TIME)
+                data << " NOT NULL";
+        }
+        data << ')';
+        rc = exec_sql(table->db, data.str(), table);
+        if (rc != SQLITE_OK) return rc;
+        std::ostringstream unique;
+        unique << "CREATE UNIQUE INDEX " << quote_id(table->db_name) << '.'
+               << quote_id(table->table_name + "_tsfile$key") << " ON "
+               << quote_id(table->table_name + "_tsfile$hot") << '(';
+        for (int index : table->tag_indexes) {
+            std::string name = quote_id(table->columns[index].name);
+            unique << '(' << name << " IS NULL),coalesce(" << name << ",''),";
+        }
+        unique << quote_id(table->columns[table->time_index].name) << ')';
+        rc = exec_sql(table->db, unique.str(), table);
+        if (rc != SQLITE_OK) return rc;
+    }
     std::ostringstream segments;
     segments << "CREATE TABLE " << shadow_name(table, "_segments")
              << " (path TEXT PRIMARY KEY, cutoff INTEGER NOT NULL, row_count "
-                "INTEGER NOT NULL)";
+                "INTEGER NOT NULL, source_table TEXT NOT NULL, identity TEXT "
+                "NOT NULL)";
     rc = exec_sql(table->db, segments.str(), table);
     if (rc != SQLITE_OK) return rc;
 
     std::ostringstream config;
-    config << "CREATE TABLE " << shadow_name(table, "_config")
-           << " (id INTEGER PRIMARY KEY CHECK(id=1), watermark INTEGER NOT "
-              "NULL, precision TEXT NOT NULL, directory TEXT NOT NULL, schema "
-              "TEXT NOT NULL)";
+    config
+        << "CREATE TABLE " << shadow_name(table, "_config")
+        << " (id INTEGER PRIMARY KEY CHECK(id=1), watermark INTEGER, precision "
+           "TEXT NOT NULL, "
+           "directory TEXT NOT NULL, schema TEXT NOT NULL, mode TEXT NOT NULL, "
+           "source_file TEXT NOT NULL, source_table TEXT NOT NULL, source_max "
+           "INTEGER)";
     rc = exec_sql(table->db, config.str(), table);
     if (rc != SQLITE_OK) return rc;
     if (insert_config) {
         std::ostringstream insert;
         insert << "INSERT INTO " << shadow_name(table, "_config")
-               << "(id,watermark,precision,directory,schema) VALUES(1,"
-               << kNoWatermark << ',' << quote_sql(table->precision) << ','
+               << " VALUES(1,"
+               << (table->readonly || table->exhausted
+                       ? "NULL"
+                       : std::to_string(table->watermark))
+               << ',' << quote_sql(table->precision) << ','
                << quote_sql(table->directory) << ','
-               << quote_sql(schema_signature(table)) << ')';
+               << quote_sql(schema_signature(table)) << ','
+               << quote_sql(table->readonly ? "readonly" : "writable") << ','
+               << quote_sql(table->source_file) << ','
+               << quote_sql(table->source_table) << ','
+               << (table->source_has_rows ? std::to_string(table->source_max)
+                                          : "NULL")
+               << ')';
         rc = exec_sql(table->db, insert.str(), table);
         if (rc != SQLITE_OK) return rc;
     }
@@ -542,6 +796,8 @@ int load_config(HybridTable* table) {
     if (rc != SQLITE_OK) return rc;
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_ROW) {
+        table->exhausted =
+            !table->readonly && sqlite3_column_type(stmt, 0) == SQLITE_NULL;
         table->watermark = sqlite3_column_int64(stmt, 0);
         const unsigned char* precision = sqlite3_column_text(stmt, 1);
         std::string stored_precision =
@@ -576,43 +832,84 @@ int declare_table(HybridTable* table) {
         if (i) sql << ',';
         sql << quote_id(table->columns[i].name) << ' '
             << sqlite_type(table->columns[i].type);
-        if (table->columns[i].category == ColumnCategory::TIME ||
-            table->columns[i].category == ColumnCategory::TAG)
+        if (table->columns[i].category == ColumnCategory::TIME)
             sql << " NOT NULL";
     }
-    sql << ",_tsfile_command TEXT HIDDEN,_tsfile_cutoff INTEGER HIDDEN)";
+    sql << ")";
     return sqlite3_declare_vtab(table->db, sql.str().c_str());
 }
 
 bool parse_args(HybridTable* table, int argc, const char* const* argv,
-                std::string& error) {
+                std::string& error, bool create) {
+    std::set<std::string> options;
     for (int i = 3; i < argc; ++i) {
         std::string key, value;
         if (!parse_key_value(argv[i], key, value)) {
-            error = "module arguments must be key=value";
-            return false;
+            std::string input = argv[i], name, type, category;
+            size_t pos = 0;
+            if (!sql_token(input, pos, name) || !sql_token(input, pos, type) ||
+                !sql_token(input, pos, category) ||
+                !trim(input.substr(pos)).empty()) {
+                error = "column must be name TYPE CATEGORY";
+                return false;
+            }
+            Column column;
+            if (!parse_column("placeholder:" + type + ":" + category, column,
+                              error))
+                return false;
+            column.name = name;
+            table->columns.push_back(column);
+            continue;
         }
         key = lower(key);
+        if (!options.insert(key).second) {
+            error = "duplicate option: " + key;
+            return false;
+        }
         if (key == "directory")
             table->directory = value;
+        else if (key == "file")
+            table->source_file = value;
+        else if (key == "source_table")
+            table->source_table = value;
         else if (key == "timestamp_precision")
             table->precision = lower(value);
-        else if (key == "column") {
-            Column column;
-            if (!parse_column(value, column, error)) return false;
-            table->columns.push_back(column);
-        } else {
+        else {
             error = "unknown tsfile_hybrid option: " + key;
             return false;
         }
     }
-    if (table->directory.empty() || table->directory[0] != '/') {
+    if (options.count("timestamp_precision") && table->precision != "ms" &&
+        table->precision != "us" && table->precision != "ns") {
+        error = "timestamp_precision must be ms, us, or ns";
+        return false;
+    }
+    table->readonly = options.count("file") && !options.count("directory");
+    if (options.count("file")) {
+        if (table->source_file.empty() || table->source_file[0] != '/' ||
+            table->source_table.empty() || !table->columns.empty()) {
+            error =
+                "file requires an absolute path, source_table, and inferred "
+                "columns";
+            return false;
+        }
+        if (create ? !infer_source(table, error)
+                   : !restore_source_schema(table, error))
+            return false;
+    } else if (options.count("source_table")) {
+        error = "source_table requires file";
+        return false;
+    }
+    if (!table->readonly &&
+        (table->directory.empty() || table->directory[0] != '/')) {
         error = "directory must be an absolute path";
         return false;
     }
     if (table->precision != "ms" && table->precision != "us" &&
-        table->precision != "ns") {
-        error = "timestamp_precision must be ms, us, or ns";
+        table->precision != "ns" &&
+        !(table->readonly && table->precision == "unknown")) {
+        error =
+            "timestamp_precision must be ms, us, or ns for a writable table";
         return false;
     }
     if (table->columns.empty() ||
@@ -622,13 +919,9 @@ bool parse_args(HybridTable* table, int argc, const char* const* argv,
         return false;
     }
     for (size_t i = 0; i < table->columns.size(); ++i) {
-        if (table->columns[i].name.empty()) {
-            error = "column name cannot be empty";
-            return false;
-        }
-        if (lower(table->columns[i].name) == "_tsfile_command" ||
-            lower(table->columns[i].name) == "_tsfile_cutoff") {
-            error = "column name is reserved by tsfile_hybrid";
+        if (table->columns[i].name.empty() ||
+            sqlite_type(table->columns[i].type).empty()) {
+            error = "column name or type is unsupported";
             return false;
         }
         for (size_t j = 0; j < i; ++j)
@@ -655,32 +948,155 @@ bool parse_args(HybridTable* table, int argc, const char* const* argv,
         error = "TIME column must be the first column";
         return false;
     }
-    if (table->tag_indexes.empty()) {
-        error = "at least one TAG column is required";
-        return false;
-    }
     return true;
+}
+
+std::string directory_owner(const HybridTable* table) {
+    const char* filename =
+        sqlite3_db_filename(table->db, table->db_name.c_str());
+    std::string database;
+    if (filename && filename[0]) {
+        char* resolved = realpath(filename, nullptr);
+        database = resolved ? resolved : filename;
+        free(resolved);
+    } else {
+        database =
+            "connection:" +
+            std::to_string(reinterpret_cast<uintptr_t>(table->connection)) +
+            ':' + table->db_name;
+    }
+    return "tsfile-sqlite:1\n" + database + '\n' + table->table_name + '\n';
+}
+
+int check_directory_owner(HybridTable* table) {
+    if (table->readonly) return SQLITE_OK;
+    int fd = open((table->directory + "/.tsfile-owner").c_str(), O_RDONLY);
+    if (fd < 0) {
+        set_error(table, "TsFile directory ownership record is missing");
+        return SQLITE_CANTOPEN;
+    }
+    const std::string expected = directory_owner(table);
+    std::string actual(expected.size() + 1, '\0');
+    ssize_t bytes = read(fd, &actual[0], actual.size());
+    close(fd);
+    if (bytes != static_cast<ssize_t>(expected.size()) ||
+        actual.compare(0, expected.size(), expected) != 0) {
+        set_error(
+            table,
+            "TsFile directory belongs to a different SQLite database or table");
+        return SQLITE_CONSTRAINT;
+    }
+    return SQLITE_OK;
+}
+
+void release_new_directory(HybridTable* table) {
+    if (table->new_directory_owner)
+        unlink((table->directory + "/.tsfile-owner").c_str());
+    table->new_directory_owner = false;
+    for (auto it = table->created_directories.rbegin();
+         it != table->created_directories.rend(); ++it)
+        rmdir(it->c_str());
+    table->created_directories.clear();
+}
+
+int acquire_directory(HybridTable* table) {
+    if (table->readonly) return SQLITE_OK;
+    // Resolve existing ancestors before testing ownership so aliases and '..'
+    // cannot evade a parent's exclusive directory reservation.
+    std::string path = table->directory;
+    std::vector<std::string> missing;
+    char* resolved = nullptr;
+    while (!(resolved = realpath(path.c_str(), nullptr))) {
+        size_t slash = path.find_last_of('/');
+        if (slash == std::string::npos || path.empty()) return SQLITE_CANTOPEN;
+        std::string component = path.substr(slash + 1);
+        if (component.empty() || component == "." || component == "..")
+            return SQLITE_CANTOPEN;
+        missing.push_back(component);
+        path = slash == 0 ? "/" : path.substr(0, slash);
+    }
+    std::string existing(resolved);
+    free(resolved);
+    for (std::string ancestor = existing; !ancestor.empty();) {
+        if (access((ancestor + "/.tsfile-owner").c_str(), F_OK) == 0) {
+            set_error(table, "directory is already owned by a TsFile table: " +
+                                 ancestor);
+            return SQLITE_CONSTRAINT;
+        }
+        size_t slash = ancestor.find_last_of('/');
+        if (slash == std::string::npos || ancestor == "/") break;
+        ancestor = slash == 0 ? "/" : ancestor.substr(0, slash);
+    }
+    path = existing;
+    for (auto it = missing.rbegin(); it != missing.rend(); ++it) {
+        path += (path == "/" ? "" : "/") + *it;
+        if (mkdir(path.c_str(), 0755) != 0) return SQLITE_CANTOPEN;
+        table->created_directories.push_back(path);
+    }
+    DIR* dir = opendir(path.c_str());
+    if (!dir) return SQLITE_CANTOPEN;
+    bool empty = true;
+    while (dirent* entry = readdir(dir))
+        if (std::strcmp(entry->d_name, ".") &&
+            std::strcmp(entry->d_name, "..")) {
+            empty = false;
+            break;
+        }
+    closedir(dir);
+    if (!empty) {
+        set_error(table, "new table directory must be empty: " + path);
+        return SQLITE_CONSTRAINT;
+    }
+    int fd = open((path + "/.tsfile-owner").c_str(),
+                  O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) return SQLITE_CANTOPEN;
+    // This marker reserves the directory across connections and databases;
+    // it is never inferred from a filename suffix or another table's files.
+    std::string owner = directory_owner(table);
+    bool ok = write(fd, owner.data(), owner.size()) ==
+              static_cast<ssize_t>(owner.size());
+    ok = fsync(fd) == 0 && ok;
+    close(fd);
+    table->new_directory_owner = true;
+    if (!ok || sync_directory(path) != SQLITE_OK) return SQLITE_IOERR_FSYNC;
+    return SQLITE_OK;
 }
 
 int init_table(HybridTable* table, int argc, const char* const* argv,
                bool create, char** error_message) {
+    table->uncommitted_create = create;
     table->db_name = argv[1] == nullptr ? "main" : argv[1];
     table->table_name = argv[2] == nullptr ? "" : argv[2];
     std::string error;
-    if (!parse_args(table, argc, argv, error)) {
+    if (!parse_args(table, argc, argv, error, create)) {
         if (error_message)
             *error_message = sqlite3_mprintf("%s", error.c_str());
         return SQLITE_ERROR;
     }
-    if (create && !ensure_directory(table->directory)) {
-        if (error_message)
-            *error_message = sqlite3_mprintf("cannot create TsFile directory");
-        return SQLITE_CANTOPEN;
+    if (create) {
+        int rc = acquire_directory(table);
+        if (rc != SQLITE_OK) {
+            if (error_message)
+                *error_message = sqlite3_mprintf(
+                    "%s", table->zErrMsg ? table->zErrMsg
+                                         : "cannot acquire TsFile directory");
+            return rc;
+        }
     }
-    if (!create && !directory_exists(table->directory)) {
+    if (!create && !table->readonly && !directory_exists(table->directory)) {
         if (error_message)
             *error_message = sqlite3_mprintf("TsFile directory does not exist");
         return SQLITE_CANTOPEN;
+    }
+    if (!create) {
+        int rc = check_directory_owner(table);
+        if (rc != SQLITE_OK) {
+            if (error_message)
+                *error_message = sqlite3_mprintf(
+                    "%s", table->zErrMsg ? table->zErrMsg
+                                         : "invalid directory owner");
+            return rc;
+        }
     }
     if (declare_table(table) != SQLITE_OK) return SQLITE_ERROR;
     sqlite3_vtab_config(table->db, SQLITE_VTAB_DIRECTONLY);
@@ -688,6 +1104,15 @@ int init_table(HybridTable* table, int argc, const char* const* argv,
     if (create) {
         int rc = create_shadow_tables(table, true);
         if (rc != SQLITE_OK) return rc;
+        if (!table->source_file.empty()) {
+            rc = exec_sql(table->db,
+                          "INSERT INTO " + shadow_name(table, "_segments") +
+                              " VALUES(" + quote_sql(table->source_file) +
+                              ",0,0," + quote_sql(table->source_table) + "," +
+                              quote_sql(table->source_identity) + ")",
+                          table);
+            if (rc != SQLITE_OK) return rc;
+        }
     } else {
         int rc = load_config(table);
         if (rc != SQLITE_OK) return rc;
@@ -697,11 +1122,17 @@ int init_table(HybridTable* table, int argc, const char* const* argv,
 
 int create_or_connect(sqlite3* db, void* aux, int argc, const char* const* argv,
                       sqlite3_vtab** vtab, char** error_message, bool create) {
-    (void)aux;
     std::unique_ptr<HybridTable> table(new HybridTable());
     table->db = db;
+    table->connection = static_cast<Connection*>(aux);
     int rc = init_table(table.get(), argc, argv, create, error_message);
-    if (rc != SQLITE_OK) return rc;
+    if (rc != SQLITE_OK) {
+        release_new_directory(table.get());
+        return rc;
+    }
+    table->connection
+        ->tables[lower(table->db_name) + "." + lower(table->table_name)] =
+        table.get();
     *vtab = table.release();
     return SQLITE_OK;
 }
@@ -717,6 +1148,8 @@ int xConnect(sqlite3* db, void* aux, int argc, const char* const* argv,
 
 int xDisconnect(sqlite3_vtab* vtab) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
+    table->connection->tables.erase(lower(table->db_name) + "." +
+                                    lower(table->table_name));
     delete table;
     return SQLITE_OK;
 }
@@ -734,6 +1167,9 @@ int xDestroy(sqlite3_vtab* vtab) {
         rc = exec_sql(table->db,
                       "DROP TABLE IF EXISTS " + shadow_name(table, "_config"),
                       table);
+    release_new_directory(table);
+    table->connection->tables.erase(lower(table->db_name) + "." +
+                                    lower(table->table_name));
     delete table;
     return rc;
 }
@@ -899,6 +1335,7 @@ int read_hot(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
              const std::vector<std::pair<int, std::string>>& tag_eq,
              const std::vector<int>& projection) {
     HybridTable* table = cursor->table;
+    if (table->readonly) return SQLITE_OK;
     std::ostringstream sql;
     sql << "SELECT ";
     for (size_t i = 0; i < projection.size(); ++i) {
@@ -906,7 +1343,7 @@ int read_hot(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
         if (i) sql << ',';
         sql << quote_id(table->columns[column].name);
     }
-    sql << ",rowid FROM " << shadow_name(table, "_data");
+    sql << ',' << hot_rowid(table) << " FROM " << shadow_name(table, "_data");
     if (!specs.empty()) {
         sql << " WHERE ";
         for (size_t i = 0; i < specs.size(); ++i) {
@@ -934,7 +1371,7 @@ int read_hot(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             }
         }
     }
-    sql << " ORDER BY rowid";
+    sql << " ORDER BY " << hot_rowid(table);
     sqlite3_stmt* stmt = nullptr;
     int rc =
         sqlite3_prepare_v2(table->db, sql.str().c_str(), -1, &stmt, nullptr);
@@ -1044,8 +1481,8 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
               const std::vector<std::pair<int, std::string>>& tag_eq,
               const std::vector<int>& projection) {
     HybridTable* table = cursor->table;
-    std::string sql = "SELECT path FROM " + shadow_name(table, "_segments") +
-                      " ORDER BY path";
+    std::string sql = "SELECT path,source_table,identity FROM " +
+                      shadow_name(table, "_segments") + " ORDER BY path";
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) return rc;
@@ -1061,11 +1498,32 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
         const unsigned char* path = sqlite3_column_text(stmt, 0);
         if (path == nullptr) continue;
+        std::string read_path = reinterpret_cast<const char*>(path);
+        std::string selected =
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        std::string identity =
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        for (const auto& pending : table->pending)
+            if (pending.final_path == read_path && !pending.temporary.empty() &&
+                !pending.renamed)
+                read_path = pending.temporary;
+        if (file_identity(read_path) != identity) {
+            set_error(table, "missing or changed file for " +
+                                 table->table_name + ": " + read_path);
+            sqlite3_finalize(stmt);
+            return SQLITE_IOERR;
+        }
         TsFileReader reader;
-        int reader_rc = reader.open(reinterpret_cast<const char*>(path));
+        int reader_rc = reader.open(read_path);
         if (reader_rc != common::E_OK) {
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
+        }
+        if (!reader.get_table_schema(selected) &&
+            source_schema(reader, selected)) {
+            reader.close();
+            ++segment_ordinal;
+            continue;
         }
         storage::Filter* tag_filter = nullptr;
         storage::TagFilterBuilder tag_builder(schema.get());
@@ -1094,9 +1552,8 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             reader.close();
             continue;
         }
-        int query_rc =
-            reader.query(table->table_name, value_columns, query_lower,
-                         query_upper, result, tag_filter);
+        int query_rc = reader.query(selected, value_columns, query_lower,
+                                    query_upper, result, tag_filter);
         if (query_rc != common::E_OK) {
             delete tag_filter;
             reader.close();
@@ -1232,11 +1689,9 @@ int xRowid(sqlite3_vtab_cursor* cursor_base, sqlite3_int64* rowid) {
 
 int check_mutable(HybridTable* table, const std::vector<Value>& values) {
     const Value& time = values[table->time_index];
-    if (time.is_null || time.type != common::TIMESTAMP ||
+    if (table->exhausted || time.is_null || time.type != common::TIMESTAMP ||
         time.i64 < table->watermark)
         return SQLITE_CONSTRAINT;
-    for (int index : table->tag_indexes)
-        if (values[index].is_null) return SQLITE_CONSTRAINT_NOTNULL;
     return SQLITE_OK;
 }
 
@@ -1285,9 +1740,12 @@ int insert_hot(HybridTable* table, int argc, sqlite3_value** argv,
 }
 
 int delete_hot(HybridTable* table, sqlite3_int64 rowid) {
-    if (rowid < 0) return SQLITE_CONSTRAINT;
-    std::string sql =
-        "DELETE FROM " + shadow_name(table, "_data") + " WHERE rowid=?";
+    if (rowid < 0) {
+        set_error(table, "TsFile cold rows are immutable");
+        return SQLITE_READONLY;
+    }
+    std::string sql = "DELETE FROM " + shadow_name(table, "_data") + " WHERE " +
+                      hot_rowid(table) + "=?";
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr);
     if (rc == SQLITE_OK) {
@@ -1300,7 +1758,10 @@ int delete_hot(HybridTable* table, sqlite3_int64 rowid) {
 
 int update_hot(HybridTable* table, int argc, sqlite3_value** argv,
                sqlite3_int64 rowid) {
-    if (rowid < 0) return SQLITE_CONSTRAINT;
+    if (rowid < 0) {
+        set_error(table, "TsFile cold rows are immutable");
+        return SQLITE_READONLY;
+    }
     std::vector<Value> values(table->columns.size());
     std::string error;
     for (size_t i = 0; i < table->columns.size(); ++i) {
@@ -1318,7 +1779,7 @@ int update_hot(HybridTable* table, int argc, sqlite3_value** argv,
         if (i) sql << ',';
         sql << quote_id(table->columns[i].name) << "=?";
     }
-    sql << " WHERE rowid=?";
+    sql << " WHERE " << hot_rowid(table) << "=?";
     sqlite3_stmt* stmt = nullptr;
     rc = sqlite3_prepare_v2(table->db, sql.str().c_str(), -1, &stmt, nullptr);
     if (rc == SQLITE_OK) {
@@ -1332,25 +1793,26 @@ int update_hot(HybridTable* table, int argc, sqlite3_value** argv,
     return rc;
 }
 
-int write_segment(HybridTable* table, int64_t cutoff, PendingFile& file,
-                  sqlite3_int64& row_count) {
-    if (!ensure_directory(table->directory)) return SQLITE_CANTOPEN;
-    std::ostringstream base;
-    do {
-        base.str("");
-        base.clear();
-        base << table->directory << '/' << file_stem(table->table_name) << '-'
-             << static_cast<long long>(getpid()) << '-'
-             << table->file_counter++;
-        file.temporary = base.str() + ".tmp";
-        file.final_path = base.str() + ".tsfile";
-    } while (access(file.temporary.c_str(), F_OK) == 0 ||
-             access(file.final_path.c_str(), F_OK) == 0);
+int write_rows(HybridTable* table, std::vector<Row> rows,
+               const std::string& path, bool* created) {
+    *created = false;
+    std::stable_sort(rows.begin(), rows.end(),
+                     [table](const Row& a, const Row& b) {
+                         for (int index : table->tag_indexes) {
+                             const Value& x = a.values[index];
+                             const Value& y = b.values[index];
+                             if (x.is_null != y.is_null) return x.is_null;
+                             if (!x.is_null && x.bytes != y.bytes)
+                                 return x.bytes < y.bytes;
+                         }
+                         return a.values[0].i64 < b.values[0].i64;
+                     });
     WriteFile write_file;
-    int flags = O_WRONLY | O_CREAT | O_EXCL | O_TRUNC;
-    int rc = write_file.create(file.temporary, flags, 0644);
-    if (rc != common::E_OK) return SQLITE_CANTOPEN;
-    std::shared_ptr<TableSchema> schema = build_tsfile_schema(table);
+    if (write_file.create(path, O_WRONLY | O_CREAT | O_EXCL, 0644) !=
+        common::E_OK)
+        return SQLITE_CANTOPEN;
+    *created = true;
+    auto schema = build_tsfile_schema(table);
     TsFileTableWriter writer(&write_file, schema.get());
     std::vector<std::string> names;
     std::vector<TSDataType> types;
@@ -1362,36 +1824,12 @@ int write_segment(HybridTable* table, int64_t cutoff, PendingFile& file,
     }
     const int max_rows = 1024;
     Tablet tablet(table->table_name, names, types, categories, max_rows);
-    std::string sql = "SELECT " + quote_id(table->columns[0].name);
-    for (size_t i = 1; i < table->columns.size(); ++i)
-        sql += "," + quote_id(table->columns[i].name);
-    sql += " FROM " + shadow_name(table, "_data") + " WHERE " +
-           quote_id(table->columns[0].name) + " >= ? AND " +
-           quote_id(table->columns[0].name) + " < ? ORDER BY ";
-    bool first = true;
-    for (int index : table->tag_indexes) {
-        if (!first) sql += ',';
-        first = false;
-        sql += quote_id(table->columns[index].name);
-    }
-    sql += ',' + quote_id(table->columns[0].name);
-    sqlite3_stmt* stmt = nullptr;
-    rc = sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr);
-    if (rc != SQLITE_OK) return rc;
-    sqlite3_bind_int64(stmt, 1, table->watermark);
-    sqlite3_bind_int64(stmt, 2, cutoff);
     uint32_t tablet_rows = 0;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        int64_t timestamp = sqlite3_column_int64(stmt, 0);
-        tablet.add_timestamp(tablet_rows, timestamp);
+    for (const Row& row : rows) {
+        tablet.add_timestamp(tablet_rows, row.values[0].i64);
         for (size_t i = 1; i < table->columns.size(); ++i) {
             const Column& column = table->columns[i];
-            Value value;
-            if (!row_value_from_sqlite(stmt, static_cast<int>(i), column,
-                                       value)) {
-                sqlite3_finalize(stmt);
-                return SQLITE_ERROR;
-            }
+            const Value& value = row.values[i];
             if (value.is_null) continue;
             int add_rc = common::E_OK;
             switch (column.type) {
@@ -1428,86 +1866,80 @@ int write_segment(HybridTable* table, int64_t cutoff, PendingFile& file,
                     add_rc = common::E_TYPE_NOT_SUPPORTED;
             }
             if (add_rc != common::E_OK) {
-                sqlite3_finalize(stmt);
                 return SQLITE_ERROR;
             }
         }
         ++tablet_rows;
-        ++row_count;
         if (tablet_rows == max_rows) {
-            if (writer.write_table(tablet) != common::E_OK) {
-                sqlite3_finalize(stmt);
-                return SQLITE_IOERR;
-            }
+            if (writer.write_table(tablet) != common::E_OK) return SQLITE_IOERR;
             tablet.reset();
             tablet_rows = 0;
         }
     }
-    sqlite3_finalize(stmt);
-    if (rc != SQLITE_DONE) return rc;
-    if (tablet_rows > 0 && writer.write_table(tablet) != common::E_OK)
+    if (tablet_rows && writer.write_table(tablet) != common::E_OK)
         return SQLITE_IOERR;
-    if (row_count == 0) return close_writer_and_sync(write_file, writer);
-    std::vector<uint8_t> precision(table->precision.begin(),
-                                   table->precision.end());
-    if (writer.add_tsfile_property("tsfile_sqlite.timestamp_precision",
-                                   precision) != common::E_OK)
+    if (table->precision != "unknown") {
+        std::vector<uint8_t> precision(table->precision.begin(),
+                                       table->precision.end());
+        if (writer.add_tsfile_property("tsfile_sqlite.timestamp_precision",
+                                       precision) != common::E_OK)
+            return SQLITE_IOERR;
+    }
+    std::vector<uint8_t> time_name(table->columns[0].name.begin(),
+                                   table->columns[0].name.end());
+    if (writer.add_tsfile_property("tsfile_sqlite.time_column", time_name) !=
+        common::E_OK)
         return SQLITE_IOERR;
     if (writer.flush() != common::E_OK) return SQLITE_IOERR;
     return close_writer_and_sync(write_file, writer);
 }
 
-void cleanup_orphans(HybridTable* table) {
-    std::vector<std::string> referenced;
-    std::string sql = "SELECT path FROM " + shadow_name(table, "_segments");
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr) ==
-        SQLITE_OK) {
-        while (sqlite3_step(stmt) == SQLITE_ROW) {
-            const unsigned char* path = sqlite3_column_text(stmt, 0);
-            if (path != nullptr)
-                referenced.emplace_back(reinterpret_cast<const char*>(path));
-        }
-    }
-    sqlite3_finalize(stmt);
-    DIR* directory = opendir(table->directory.c_str());
-    if (directory == nullptr) return;
-    while (dirent* entry = readdir(directory)) {
-        std::string name(entry->d_name);
-        bool candidate =
-            name.size() > 7 && name.substr(name.size() - 7) == ".tsfile";
-        candidate = candidate ||
-                    (name.size() > 4 && name.substr(name.size() - 4) == ".tmp");
-        if (!candidate) continue;
-        std::string path = table->directory + "/" + name;
-        bool pending = false;
-        for (const PendingFile& file : table->pending) {
-            if (path == file.temporary || path == file.final_path) {
-                pending = true;
-                break;
-            }
-        }
-        if (pending) continue;
-        if (std::find(referenced.begin(), referenced.end(), path) ==
-            referenced.end())
-            unlink(path.c_str());
-    }
-    closedir(directory);
+int write_segment(HybridTable* table, int64_t cutoff, PendingFile& file,
+                  sqlite3_int64& row_count, bool all = false) {
+    HybridCursor cursor;
+    cursor.table = table;
+    std::vector<int> projection;
+    for (size_t i = 0; i < table->columns.size(); ++i) projection.push_back(i);
+    int rc = read_hot(&cursor, {}, nullptr, table->watermark, true, cutoff, all,
+                      {}, projection);
+    if (rc != SQLITE_OK) return rc;
+    row_count = cursor.rows.size();
+    if (row_count == 0) return SQLITE_OK;
+    if (!directory_exists(table->directory)) return SQLITE_CANTOPEN;
+    struct stat st {};
+    do {
+        std::string base = table->directory + '/' +
+                           file_stem(table->table_name) + '-' +
+                           std::to_string(getpid()) + '-' +
+                           std::to_string(table->file_counter++);
+        file.temporary = base + ".tmp";
+        file.final_path = base + ".tsfile";
+    } while (lstat(file.temporary.c_str(), &st) == 0 ||
+             lstat(file.final_path.c_str(), &st) == 0);
+    bool created = false;
+    rc = write_rows(table, std::move(cursor.rows), file.temporary, &created);
+    // An O_EXCL failure can mean another directory entry appeared after the
+    // check. Cleanup must not unlink a path this operation never created.
+    if (!created) file.temporary.clear();
+    return rc;
 }
 
-int seal(HybridTable* table, int64_t cutoff) {
+int seal(HybridTable* table, int64_t cutoff, sqlite3_int64* sealed = nullptr,
+         bool all = false) {
     if (cutoff < table->watermark) return SQLITE_CONSTRAINT;
-    cleanup_orphans(table);
+    if (table->readonly) return SQLITE_READONLY;
+    if (table->exhausted) return SQLITE_CONSTRAINT;
     PendingFile file;
     sqlite3_int64 row_count = 0;
-    int rc = write_segment(table, cutoff, file, row_count);
+    int rc = write_segment(table, cutoff, file, row_count, all);
     if (rc != SQLITE_OK) {
         unlink(file.temporary.c_str());
         return rc;
     }
     if (row_count > 0) {
-        std::string insert = "INSERT INTO " + shadow_name(table, "_segments") +
-                             "(path,cutoff,row_count) VALUES(?,?,?)";
+        std::string insert =
+            "INSERT INTO " + shadow_name(table, "_segments") +
+            "(path,cutoff,row_count,source_table,identity) VALUES(?,?,?,?,?)";
         sqlite3_stmt* stmt = nullptr;
         rc = sqlite3_prepare_v2(table->db, insert.c_str(), -1, &stmt, nullptr);
         if (rc == SQLITE_OK) {
@@ -1515,6 +1947,10 @@ int seal(HybridTable* table, int64_t cutoff) {
                               SQLITE_TRANSIENT);
             sqlite3_bind_int64(stmt, 2, cutoff);
             sqlite3_bind_int64(stmt, 3, row_count);
+            sqlite3_bind_text(stmt, 4, table->table_name.c_str(), -1,
+                              SQLITE_TRANSIENT);
+            std::string identity = file_identity(file.temporary);
+            sqlite3_bind_text(stmt, 5, identity.c_str(), -1, SQLITE_TRANSIENT);
             rc = sqlite3_step(stmt);
         }
         sqlite3_finalize(stmt);
@@ -1525,7 +1961,7 @@ int seal(HybridTable* table, int64_t cutoff) {
         std::string del = "DELETE FROM " + shadow_name(table, "_data") +
                           " WHERE " + quote_id(table->columns[0].name) +
                           " >= ? AND " + quote_id(table->columns[0].name) +
-                          " < ?";
+                          (all ? " <= ?" : " < ?");
         stmt = nullptr;
         rc = sqlite3_prepare_v2(table->db, del.c_str(), -1, &stmt, nullptr);
         if (rc == SQLITE_OK) {
@@ -1547,36 +1983,30 @@ int seal(HybridTable* table, int64_t cutoff) {
     sqlite3_stmt* stmt = nullptr;
     rc = sqlite3_prepare_v2(table->db, update.c_str(), -1, &stmt, nullptr);
     if (rc == SQLITE_OK) {
-        sqlite3_bind_int64(stmt, 1, cutoff);
+        if (all && cutoff == std::numeric_limits<int64_t>::max())
+            sqlite3_bind_null(stmt, 1);
+        else
+            sqlite3_bind_int64(stmt, 1, cutoff);
         rc = sqlite3_step(stmt);
     }
     sqlite3_finalize(stmt);
     if (rc != SQLITE_DONE) return rc;
+    table->exhausted = all && cutoff == std::numeric_limits<int64_t>::max();
     table->watermark = cutoff;
+    if (sealed) *sealed = row_count;
     return SQLITE_OK;
 }
 
 int xUpdate(sqlite3_vtab* vtab, int argc, sqlite3_value** argv,
             sqlite3_int64* rowid) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
+    if (table->readonly) {
+        set_error(table, "table is readonly");
+        return SQLITE_READONLY;
+    }
     int public_count = static_cast<int>(table->columns.size());
     if (argc == 1) return delete_hot(table, sqlite3_value_int64(argv[0]));
-    if (argc != public_count + 4) return SQLITE_ERROR;
-    sqlite3_value* command = argv[2 + public_count];
-    if (sqlite3_value_type(command) != SQLITE_NULL) {
-        const unsigned char* text = sqlite3_value_text(command);
-        if (text == nullptr ||
-            lower(reinterpret_cast<const char*>(text)) != "seal") {
-            set_error(vtab, "unknown _tsfile_command");
-            return SQLITE_ERROR;
-        }
-        sqlite3_value* cutoff = argv[3 + public_count];
-        if (sqlite3_value_type(cutoff) != SQLITE_INTEGER) {
-            set_error(vtab, "_tsfile_cutoff must be INTEGER");
-            return SQLITE_MISMATCH;
-        }
-        return seal(table, sqlite3_value_int64(cutoff));
-    }
+    if (argc != public_count + 2) return SQLITE_ERROR;
     if (sqlite3_value_type(argv[0]) == SQLITE_NULL)
         return insert_hot(table, argc, argv, rowid);
     sqlite3_int64 old_rowid = sqlite3_value_int64(argv[0]);
@@ -1591,7 +2021,8 @@ int xBegin(sqlite3_vtab* vtab) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
     table->pending.clear();
     table->savepoint_marks.clear();
-    return SQLITE_OK;
+    int rc = check_directory_owner(table);
+    return rc == SQLITE_OK ? load_config(table) : rc;
 }
 int xSync(sqlite3_vtab* vtab) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
@@ -1602,8 +2033,8 @@ int xSync(sqlite3_vtab* vtab) {
         if (open_rc != common::E_OK) return SQLITE_IOERR;
         int close_rc = reader.close();
         if (close_rc != common::E_OK) return SQLITE_IOERR;
-        if (access(file.final_path.c_str(), F_OK) == 0) return SQLITE_IOERR;
-        if (rename(file.temporary.c_str(), file.final_path.c_str()) != 0)
+        if (publish_without_replacing(file.temporary, file.final_path) !=
+            SQLITE_OK)
             return SQLITE_IOERR;
         file.renamed = true;
         if (sync_directory(table->directory) != SQLITE_OK)
@@ -1614,6 +2045,9 @@ int xSync(sqlite3_vtab* vtab) {
 }
 int xCommit(sqlite3_vtab* vtab) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
+    table->new_directory_owner = false;
+    table->uncommitted_create = false;
+    table->created_directories.clear();
     table->pending.clear();
     table->savepoint_marks.clear();
     return SQLITE_OK;
@@ -1626,39 +2060,49 @@ int xRollback(sqlite3_vtab* vtab) {
     }
     table->pending.clear();
     table->savepoint_marks.clear();
+    release_new_directory(table);
     load_config(table);
     return SQLITE_OK;
 }
-int xSavepoint(sqlite3_vtab* vtab, int) {
+int xSavepoint(sqlite3_vtab* vtab, int id) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
-    table->savepoint_marks.push_back(table->pending.size());
+    table->savepoint_marks[id] = table->pending.size();
     return SQLITE_OK;
 }
-int xRelease(sqlite3_vtab* vtab, int) {
+int xRelease(sqlite3_vtab* vtab, int id) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
-    if (!table->savepoint_marks.empty()) table->savepoint_marks.pop_back();
+    table->savepoint_marks.erase(table->savepoint_marks.lower_bound(id),
+                                 table->savepoint_marks.end());
     return SQLITE_OK;
 }
-int xRollbackTo(sqlite3_vtab* vtab, int) {
+int xRollbackTo(sqlite3_vtab* vtab, int id) {
     HybridTable* table = static_cast<HybridTable*>(vtab);
-    if (table->savepoint_marks.empty()) return SQLITE_OK;
-    size_t mark = table->savepoint_marks.back();
+    auto it = table->savepoint_marks.find(id);
+    size_t mark = it == table->savepoint_marks.end() ? 0 : it->second;
     while (table->pending.size() > mark) {
         const PendingFile& file = table->pending.back();
         if (!file.temporary.empty()) unlink(file.temporary.c_str());
         if (file.renamed) unlink(file.final_path.c_str());
         table->pending.pop_back();
     }
-    load_config(table);
-    return SQLITE_OK;
+    table->savepoint_marks.erase(table->savepoint_marks.upper_bound(id),
+                                 table->savepoint_marks.end());
+    int rc = load_config(table);
+    if (rc != SQLITE_OK && table->uncommitted_create) {
+        // SQLite has already undone this table's creation. Its shadow config
+        // no longer exists; the vtab is about to be disconnected.
+        release_new_directory(table);
+        return SQLITE_OK;
+    }
+    return rc;
 }
 int xRename(sqlite3_vtab*, const char*) { return SQLITE_CONSTRAINT; }
 int xShadowName(const char* name) {
     if (name == nullptr) return 0;
-    const char* suffixes[] = {"_data", "_segments", "_config"};
+    const char* suffixes[] = {"tsfile$hot", "tsfile$segments", "tsfile$config"};
     for (const char* suffix : suffixes) {
         size_t length = std::strlen(name), suffix_length = std::strlen(suffix);
-        if (length > suffix_length &&
+        if (length == suffix_length &&
             std::strcmp(name + length - suffix_length, suffix) == 0)
             return 1;
     }
@@ -1671,6 +2115,8 @@ const sqlite3_module kModule = {
     xEof,       xColumn,  xRowid,      xUpdate,     xBegin,
     xSync,      xCommit,  xRollback,   nullptr,     xRename,
     xSavepoint, xRelease, xRollbackTo, xShadowName, nullptr};
+
+#include "tsfile_sqlite_management.inc"
 
 }  // namespace
 
@@ -1687,6 +2133,10 @@ extern "C" int sqlite3_extension_init(sqlite3* db, char** error_message,
         }
         initialized = true;
     }
-    return sqlite3_create_module_v2(db, "tsfile_hybrid", &kModule, nullptr,
-                                    nullptr);
+    Connection* connection = new Connection();
+    int rc = sqlite3_create_module_v2(
+        db, "tsfile_hybrid", &kModule, connection,
+        [](void* p) { delete static_cast<Connection*>(p); });
+    if (rc != SQLITE_OK) return rc;
+    return register_management(db, connection);
 }

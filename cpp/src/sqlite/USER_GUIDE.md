@@ -19,551 +19,429 @@
 
 -->
 
-# tsfile_sqlite 用户手册
+# SQLite + TsFile 用户手册
 
-`tsfile_sqlite` 是一个实验性的 SQLite loadable extension。它提供
-`tsfile_hybrid` 虚拟表，让一张逻辑表同时使用两种物理存储：
+使用 `tsfile_sqlite`，你可以通过 SQL 查询已有 TsFile，也可以持续写入新数据，
+再将它们保存为 TsFile。新增数据先保存在 SQLite 中，可以更新和删除；封存后的
+数据保存在 TsFile 中，仍然可以查询，但不能再修改。
 
-- 尚未封存的近期数据保存在 SQLite shadow table 中，支持事务和 CRUD；
-- 已封存的历史数据保存在不可变的 TsFile 段文件中；
-- 应用继续对同一张虚拟表执行 SQL，扩展自动合并冷热数据。
+本手册带你完成一次建表、读写、导出和重新读取，然后介绍日常使用与排障。
+示例使用 SQLite 命令行；应用程序也可以执行相同的 SQL。
+[English](USER_GUIDE_EN.md) · [技术报告](TECHNICAL_GUIDE.md)
 
-它适合以追加为主、近期数据偶尔需要修正、历史数据可以冻结的时序场景。
-它不是 SQLite 通用表的替代存储引擎，也不会自动把已有 SQLite 表转换为
-TsFile。
+## 1. 准备运行环境
 
-## 1. 环境要求
+需要 Linux 或 macOS、支持加载扩展的 SQLite 3.31 或更高版本，以及同一次构建生成的
+`tsfile_sqlite` 和共享库 `libtsfile`。已有这两个库时，可以直接进入下一节。
+当前支持 TsFile 的表模型文件。
 
-- Linux 或 macOS；
-- SQLite 3.31 或更高版本；
-- 支持加载扩展的 SQLite 构建；
-- CMake 构建时启用共享版 `libtsfile`；
-- TsFile 目录必须使用绝对路径，并由一张逻辑表独占。
-
-当前 MVP 不支持 Windows。
-
-## 2. 构建
-
-在仓库根目录执行：
+从源码构建时，在仓库根目录执行：
 
 ```bash
 cmake -S cpp -B cpp/build/sqlite \
   -DBUILD_SQLITE_EXTENSION=ON \
   -DTSFILE_BUILD_SHARED=ON \
   -DBUILD_TEST=ON
-
 cmake --build cpp/build/sqlite --target tsfile_sqlite -j
 ```
 
-产物位于构建目录的 `lib` 子目录：
+构建产物位于 `cpp/build/sqlite/lib`。Linux 扩展名为 `tsfile_sqlite.so`，macOS 为
+`tsfile_sqlite.dylib`。部署时将扩展和 `libtsfile` 放在同一目录。
 
-- Linux：`cpp/build/sqlite/lib/tsfile_sqlite.so`
-- macOS：`cpp/build/sqlite/lib/tsfile_sqlite.dylib`
-
-扩展依赖同一次构建产生的 `libtsfile`。默认 RPATH 会从扩展所在目录寻找
-`libtsfile`，部署时建议把二者放在同一目录。
-
-运行扩展测试：
+macOS 系统 SDK 的 SQLite 头文件禁用了扩展加载。使用 Homebrew SQLite 时，可以
+改用下面的配置命令，然后执行上面的构建命令：
 
 ```bash
-cmake --build cpp/build/sqlite --target TsFile_Sqlite_Test -j
-ctest --test-dir cpp/build/sqlite/test -R TsFileSqliteTest \
-  --output-on-failure
+cmake -S cpp -B cpp/build/sqlite \
+  -DBUILD_SQLITE_EXTENSION=ON \
+  -DTSFILE_BUILD_SHARED=ON \
+  -DBUILD_TEST=ON \
+  -DSQLite3_INCLUDE_DIR="$(brew --prefix sqlite)/include" \
+  -DSQLite3_LIBRARY="$(brew --prefix sqlite)/lib/libsqlite3.dylib"
 ```
 
-## 3. 加载扩展
+命令行也应使用支持扩展加载的 SQLite。Homebrew 安装的命令可通过
+`"$(brew --prefix sqlite)/bin/sqlite3"` 启动。
 
-### 3.1 SQLite CLI
+## 2. 跑通第一个示例
+
+本节的步骤可以按顺序执行，完成后会得到一个 SQLite 数据库和一个可独立读取的
+TsFile。示例使用 `/tmp/tsfile-demo`；请选择一个尚不存在的目录。重复练习时换一个
+目录名，并替换后续示例中的路径。正式数据应使用持久存储目录。
+
+### 打开数据库并加载扩展
+
+在终端执行：
+
+```bash
+mkdir /tmp/tsfile-demo
+sqlite3 /tmp/tsfile-demo/demo.db
+```
+
+进入 SQLite 后，将下面的扩展路径替换为构建产物的绝对路径：
 
 ```sql
 .load /absolute/path/to/tsfile_sqlite
+.headers on
+.mode column
 ```
 
-SQLite CLI 通常会根据平台自动补全 `.so` 或 `.dylib` 后缀。也可以传入完整
-文件名。
+每次重新打开连接都需要加载扩展。`.load` 可以使用完整的 `.so` 或 `.dylib` 文件名。
 
-### 3.2 C/C++ 应用
-
-```c
-sqlite3_enable_load_extension(db, 1);
-
-char *error = NULL;
-int rc = sqlite3_load_extension(
-    db, "/absolute/path/to/tsfile_sqlite", NULL, &error);
-
-sqlite3_enable_load_extension(db, 0);
-```
-
-应用应在打开数据库连接后、访问 hybrid 表之前加载扩展。生产环境建议加载
-完成后立即关闭动态扩展加载能力。
-
-## 4. 创建逻辑表
-
-以下按目标功能设计定义建表语法；示例表达待实现接口，不代表当前原型已支持。
-列定义采用 `列名 类型 [类别]`，省略类别时默认为 `FIELD`；`TIME` 和 `TAG` 显式声明。
+### 创建一张表并写入数据
 
 ```sql
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   time TIMESTAMP TIME,
   device STRING TAG,
-  region STRING TAG,
   temperature DOUBLE FIELD,
-  status STRING FIELD,
-  payload BLOB FIELD,
-  directory='/var/lib/example/sensor',
+  directory='/tmp/tsfile-demo/sensor-segments',
   timestamp_precision='ms'
 );
+
+INSERT INTO sensor VALUES
+  (1000, 'd1', 21.5),
+  (2000, 'd1', 22.0),
+  (3000, 'd2', 19.0);
 ```
 
-列定义按书写顺序组成 schema，表级选项使用 `key=value`。未知选项、重复的表级
-选项和不合法的列定义在建表时返回明确错误。标识符支持双引号转义，例如
-`"sensor value" DOUBLE`；字符串选项使用单引号。
+这里的 time 保存毫秒时间戳，device 标识设备，temperature 保存测量值。
+`directory` 是这张表封存数据时使用的独占目录，扩展会创建它；建表时它必须不存在
+或为空。此时三行数据都在 SQLite 中，还没有封存。
 
-模块参数如下：
+### 查询和修改
 
-| 参数 | 要求 |
-| --- | --- |
-| `directory` | 必填、绝对路径、由当前逻辑表独占 |
-| `timestamp_precision` | 必填，只能是 `ms`、`us` 或 `ns` |
-| `column` | 可重复，格式为 `名称:类型:类别` |
+```sql
+SELECT time, device, temperature FROM sensor ORDER BY time;
+```
 
-列定义的目标规则如下：
+结果为：
 
-- 恰好一个 `TIME` 列，必须是第一列，类型为 `TIMESTAMP`，值不能为 `NULL`；
-- `TAG` 列可以有零个或多个；存在时类型必须为 `STRING`，值允许为 SQL `NULL`；
-- 有 TAG 时，全部 TAG 与 TIME 共同组成唯一键；无 TAG 时，TIME 单独组成唯一键；
-- 不声明类别的列默认为 `FIELD`，FIELD 值可以为 `NULL`；
-- 列名不能仅靠 ASCII 大小写区分，例如 `Temperature` 和 `temperature` 视为重名；
-- 封存通过第 7 节的管理 UDF 发起，业务 schema 不需要声明或操作
-  `_tsfile_command`、`_tsfile_cutoff` 控制列。
+```text
+time  device  temperature
+1000  d1      21.5
+2000  d1      22.0
+3000  d2      19.0
+```
 
-NULL TAG 的目标语义：
+修正第二条记录，再查看结果：
 
-- SQL `NULL`、空字符串 `''` 和字符串 `'null'` 是三个不同值，封存和查询必须保留区别；
-- 判定逻辑唯一键时，相同位置的两个 NULL TAG 视为同一个键分量。例如同一 TIME 下，
-  两条 `(device=NULL, region='cn-east')` 记录冲突；
-- NULL 查询使用 `IS NULL`，普通 WHERE 表达式继续遵循 SQLite 的 NULL 语义，
-  不把 `= NULL` 改成相等比较；
-- 热数据的唯一键检查必须显式处理 NULL，不能仅依赖 SQLite 默认 UNIQUE 对 NULL
-  的处理，也不能用可能与实际 TAG 冲突的字符串替换 NULL。
+```sql
+UPDATE sensor SET temperature=22.5 WHERE time=2000 AND device='d1';
+SELECT temperature FROM sensor WHERE time=2000 AND device='d1';
+```
 
-无 TAG 表可按以下方式定义；每个时间戳最多对应一行：
+查询返回 `22.5`。尚未封存的数据也可以通过普通 DELETE 删除。
+
+### 导出为 TsFile
+
+```sql
+SELECT tsfile_export('main.sensor', '/tmp/tsfile-demo/export-001');
+```
+
+返回 `1`，表示生成了一个文件：
+
+```text
+/tmp/tsfile-demo/export-001/part-000001.tsfile
+```
+
+这次调用会自动封存当前三行数据，再导出完整表内容，不需要提前执行 seal。
+导出文件是独立副本，可以交给标准 TsFile Reader 读取。原表仍然能查到三行数据，
+但这些行已经封存，不能再更新或删除。
+
+查看现在还有多少可修改的数据，以及下一次写入允许的起点：
+
+```sql
+SELECT hot_rows, watermark FROM tsfile_table_info('main.sensor');
+```
+
+结果为 `hot_rows=0`、`watermark=3001`：热数据已全部封存，后续新增时间必须不小于
+3001。导出函数中的 `main.sensor` 指当前数据库的 sensor 表，管理操作需要带上这个
+数据库前缀。
+
+### 直接查询刚导出的文件
+
+```sql
+CREATE VIRTUAL TABLE temp.history USING tsfile_hybrid(
+  file='/tmp/tsfile-demo/export-001/part-000001.tsfile',
+  source_table='sensor'
+);
+
+SELECT time, device, temperature FROM history ORDER BY time;
+```
+
+结果与刚才导出的三行数据一致，包括修正后的 `22.5`。没有提供 directory，所以
+history 只用于查询。`temp` 表在关闭连接后消失，文件仍然保留。
+
+这里不需要声明列。`source_table='sensor'` 选择文件内部的 sensor 表，扩展会读取
+它的列结构；SQLite 中的名称 history 可以与文件内部表名不同。
+
+### 基于这份文件继续写入
+
+```sql
+CREATE VIRTUAL TABLE continued USING tsfile_hybrid(
+  file='/tmp/tsfile-demo/export-001/part-000001.tsfile',
+  source_table='sensor',
+  directory='/tmp/tsfile-demo/continued-segments'
+);
+
+INSERT INTO continued VALUES (4000, 'd1', 23.0);
+SELECT time, device, temperature FROM continued ORDER BY time;
+```
+
+这次查询返回四行。前三行仍从原 TsFile 读取，新增的 4000 行保存在 SQLite 热区，
+可以继续修改；原文件和 history 的查询结果不变。
+
+文件中最大时间是 3000，因此 continued 只能接受晚于 3000 的新数据，即使写入的是
+另一个设备也一样。提供 directory 就表示为后续写入准备独立存储空间。
+
+## 3. 使用你自己的数据
+
+### 从空表开始采集
+
+按照示例中的 sensor 建表方式，换成业务列名、独占目录和实际时间单位。
+每列使用 `列名 类型 类别` 声明：第一列是 `TIMESTAMP TIME`，设备等标识列使用
+`STRING TAG`，测量值使用 FIELD。
+
+TAG 可以有多个，也可以没有。例如每个时间只记录一个值时：
 
 ```sql
 CREATE VIRTUAL TABLE readings USING tsfile_hybrid(
   time TIMESTAMP TIME,
-  value DOUBLE,
-  directory='/var/lib/example/readings',
+  value DOUBLE FIELD,
+  directory='/tmp/tsfile-demo/readings-segments',
   timestamp_precision='ms'
 );
 ```
 
-所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
+readings 每个时间戳只能新增一条记录；sensor 则以 `(device, time)` 区分记录。
+列名包含空格时使用双引号，例如 `"sensor value" DOUBLE FIELD`。列名不能仅靠
+大小写区分，每列都要写明 TIME、TAG 或 FIELD。
 
-```text
-(device, region, time)
-```
+### 打开已有 TsFile
 
-### 4.1 数据类型映射
+先确认文件的绝对路径和文件内部表名，再按照 history 或 continued 的示例建表。
+只查询时省略 directory；需要追加时提供一个新的独占目录。每次建表选择一个文件
+中的一张表，不从文件名猜测表名，也不自动读取文件中的其他表。
 
-| TsFile 类型 | SQLite 表现 | 写入要求 |
-| --- | --- | --- |
-| `BOOLEAN` | INTEGER | 必须传 SQLite INTEGER；0 为假，非 0 为真 |
-| `INT32` | INTEGER | 必须在 int32 范围内 |
-| `INT64` | INTEGER | SQLite int64 |
-| `FLOAT` | REAL | INTEGER 或 REAL |
-| `DOUBLE` | REAL | INTEGER 或 REAL |
-| `TEXT` | TEXT | SQLite TEXT |
-| `STRING` | TEXT | SQLite TEXT |
-| `BLOB` | BLOB | SQLite BLOB，保留长度和二进制零字节 |
-| `DATE` | INTEGER | 必须在 int32 范围内 |
-| `TIMESTAMP` | INTEGER | SQLite int64 |
-
-扩展不会换算时间戳。`timestamp_precision` 仅声明整数时间戳的单位，并写入
-非空 TsFile 段的 `tsfile_sqlite.timestamp_precision` property。
-
-### 4.2 创建后的固定配置
-
-schema、目录和时间精度会记录在配置 shadow table 中。数据库重新打开时，
-扩展会验证这些信息是否与 `CREATE VIRTUAL TABLE` 中保存的参数一致。
-
-当前版本不支持修改 schema、目录或时间精度。需要变更时，应创建一张新的
-逻辑表并迁移数据。
-
-## 5. 写入和修改热数据
-
-普通 DML 的用法与 SQLite 表一致：
+文件建表不再写列定义。创建后可以查看 SQLite 识别到的结构：
 
 ```sql
-INSERT INTO sensor(time, device, region, temperature, status)
-VALUES (1700000000000, 'device-1', 'cn-east', 21.5, 'ok');
-
-UPDATE sensor
-SET temperature = 22.0
-WHERE device = 'device-1'
-  AND region = 'cn-east'
-  AND time = 1700000000000;
-
-DELETE FROM sensor
-WHERE device = 'device-1'
-  AND region = 'cn-east'
-  AND time = 1700000000000;
+PRAGMA table_info(continued);
 ```
 
-热数据实际写入 `<虚拟表名>_data` shadow table，因此自动使用 SQLite 的
-rollback journal/WAL、锁、唯一约束、事务和 savepoint。
+示例的三列为 `time INTEGER`、`device TEXT` 和 `temperature REAL`。查询和写入使用
+这里显示的列名。普通 TsFile 的时间列通常显示为 time；由本扩展生成的文件也会保留
+自定义时间列名。
+
+如果文件没有时间精度信息，只查询时可以保持 unknown。追加数据前必须确认原文件
+时间单位，并在建表参数中补充 `timestamp_precision='ms'`、`'us'` 或 `'ns'`。
+已带精度的文件会自动继承该精度；显式填写的值必须与它一致。
+
+请保持源文件路径和内容不变。新增数据写入 SQLite，不会追加到或改写这个源文件。
+源文件后续被替换时，原表不会自动刷新。
+
+### 选择正确的值和时间单位
+
+时间戳直接存储为整数，不自动在秒、毫秒、微秒之间换算。例如源数据是秒而表声明为
+ms，应用需要先完成单位换算，再写入正确的毫秒值。
+
+| 声明类型 | 写入值 |
+| --- | --- |
+| BOOLEAN | 整数；0 为假，非 0 为真，查询返回 0 或 1 |
+| INT32、DATE | int32 范围内的整数 |
+| INT64、TIMESTAMP | int64 范围内的整数 |
+| FLOAT、DOUBLE | 整数或小数 |
+| STRING、TEXT | 文本 |
+| BLOB | 二进制值，保留长度和零字节 |
+
+TIME 不能为 NULL。TAG 和 FIELD 可以为 NULL；TAG 必须是 STRING 类型。
+同一时间、相同 TAG 组合的新记录会冲突。在这个唯一键中，相同位置的 NULL 也视为
+相同分量，因此不能用 NULL 绕过重复检查。NULL、空字符串和文本 `'null'` 各不相同。
+查找 NULL 使用 `IS NULL`。
+
+已有源文件中的重复记录会按原样查询，不会在建表时自动去重。
+
+## 4. 日常查询、修改与封存
+
+### 用普通 SQL 查询
+
+对逻辑表执行查询时，无需区分数据在 SQLite 还是 TsFile 中。可以使用条件、关联、
+聚合和排序。例如在完成第二节后：
+
+```sql
+SELECT device, avg(temperature) AS avg_temperature
+FROM continued
+WHERE time >= 1000 AND time < 5000
+GROUP BY device
+ORDER BY device;
+```
+
+需要固定顺序时写出 ORDER BY。时间范围和设备等 TAG 条件有助于减少扫描量。
+不要把隐含 rowid 当作持久业务主键；封存和重新查询可能改变它。
+
+### 成批写入或修正近期数据
 
 ```sql
 BEGIN;
-
-INSERT INTO sensor(time, device, region, temperature)
-VALUES (1700000001000, 'device-1', 'cn-east', 22.1);
-
-UPDATE sensor
-SET status = 'checked'
-WHERE device = 'device-1' AND time = 1700000001000;
-
+INSERT INTO continued VALUES (5000, 'd2', 20.0);
+UPDATE continued SET temperature=23.5 WHERE time=4000 AND device='d1';
 COMMIT;
 ```
 
-## 6. 查询冷热数据
+需要取消整批修改时，用 ROLLBACK 代替 COMMIT。热数据也支持 savepoint。
+通常应通过时间和 TAG 精确定位要修改的记录。
 
-无论数据位于 SQLite 还是 TsFile，都查询同一张虚拟表：
+若 UPDATE 或 DELETE 实际命中任意已封存行，整条语句都会失败，包括对其他热行的
+修改；IGNORE、FAIL 等冲突选项也不能跳过这个限制。仅查询冷数据不受影响。
 
-```sql
-SELECT time, device, temperature, status
-FROM sensor
-WHERE device = 'device-1'
-  AND time >= 1700000000000
-  AND time < 1700086400000
-ORDER BY time;
-```
+### 提前冻结一段历史
 
-常规 SQLite SQL 仍然可用，包括 FIELD 条件、表达式、聚合、排序和分页：
+当某个时间之前的数据不再需要修正时，可以主动封存，不必等到导出：
 
 ```sql
-SELECT device, avg(temperature)
-FROM sensor
-WHERE time >= 1700000000000
-  AND temperature IS NOT NULL
-GROUP BY device;
+SELECT tsfile_seal('main.continued', 4500);
 ```
 
-为了得到更好的 TsFile 扫描效率，查询应尽量包含：
+如果已按本节顺序操作，返回 `1`：4000 的记录被封存，5000 的记录继续留在热区。
+4500 是不包含的上界，时间恰好等于 4500 的记录也会留在热区。此后新数据必须不早于
+4500。封存不改变查询结果。
 
-- 整数时间范围；
-- 使用 `BINARY` collation 的 TAG 等值条件；
-- 只选择需要的列。
+即使边界之前没有热行，较大的 cutoff 仍会推进写入起点。因此，应按业务允许的迟到
+和修正窗口选择 cutoff。重复使用当前边界返回 0，使用更早的边界会失败。
 
-扩展会把这些条件和投影下推到冷热读取路径。FIELD 条件、排序、聚合、
-`LIMIT/OFFSET` 由 SQLite 在合并结果上处理。扩展不会声称原始输出已经满足
-`ORDER BY`，因此需要稳定顺序时必须显式写出 `ORDER BY`。
-
-所有已下推的约束仍由 SQLite 二次检查，以保证 SQL 结果正确。
-
-## 7. 封存历史数据
-
-使用两个隐藏列发送 `seal` 命令：
-
-```sql
-INSERT INTO sensor(_tsfile_command, _tsfile_cutoff)
-VALUES ('seal', 1700086400000);
-```
-
-`cutoff` 是不包含的上界。上述操作封存：
-
-```text
-旧 watermark <= time < 1700086400000
-```
-
-其中 `time == 1700086400000` 的行仍在热区，可以继续修改。
-
-一次非空 seal 会：
-
-1. 按全部 TAG、TIME 排序读取待封存热数据；
-2. 使用 Tablet 批量写入临时 TsFile；
-3. 校验并将临时文件原子改名为 `.tsfile`；
-4. 在 manifest 中登记文件；
-5. 从热表删除已封存行；
-6. 将 watermark 推进到 cutoff。
-
-如果区间内没有数据，不生成 TsFile，但仍会推进 watermark。cutoff 不能小于
-当前 watermark。
-
-seal 是同步写操作，在完成期间会占用 SQLite 写事务。可以显式把它放入事务：
-
-目标设计使用显式管理 UDF 封存数据：
-
-```sql
-SELECT tsfile_seal('main.sensor', 1700086400000);
-```
-
-`tsfile_seal(table_name, cutoff)` 的接口契约：
-
-- `table_name` 指定一张 hybrid 逻辑表，示例中为 main schema 下的 sensor；
-- `cutoff` 必须为整数，单位与该表的 timestamp_precision 相同；
-- 封存 `[当前 watermark, cutoff)`，等于 cutoff 的行继续留在热区；
-- cutoff 小于当前 watermark 时返回约束错误，等于 watermark 时返回 0；
-- 成功返回本次封存的行数。空区间返回 0，但 cutoff 更大时仍推进 watermark；
-- 取得写权限后重新读取 watermark。封存与普通写入使用同一事务协调；
-- 自动提交模式下，独立语句完成时提交；显式事务内不擅自提交外层事务，
-  返回行数仅表示本事务已执行封存，最终持久化取决于外层 COMMIT；
-- 失败时撤销本次调用的元数据、热数据删除和待发布文件，不能部分封存。
-
-也可以由调用方显式控制事务：
+seal 同步执行，可以参与显式事务：
 
 ```sql
 BEGIN IMMEDIATE;
-SELECT tsfile_seal('main.sensor', 1700086400000);
-COMMIT;
+SELECT tsfile_seal('main.continued', 5001);
+ROLLBACK;
 ```
 
-该 UDF 属于有副作用的管理操作，规定以独立顶层 `SELECT` 调用，不支持放入
-逐行查询、视图、触发器或其他 schema 表达式。注册时不标记为 deterministic，
-并限制间接调用。业务接口不再要求向隐藏控制列插入数据。
+这里的回滚会撤销本次封存，5000 的记录仍是热数据。正式保留封存结果时改用 COMMIT。
+在外层事务提交之前，seal 返回成功只表示当前事务内操作成功。
 
-如果事务回滚，manifest、watermark 和热数据删除都会回滚，扩展也会删除本次
-事务产生的临时文件或已经改名的段文件。
+## 5. 导出和交付数据
 
-## 8. Watermark 和冷数据不可变性
+每次需要一份独立的完整数据副本时，直接执行 export，并换用一个尚不存在的输出目录：
 
-watermark 把逻辑时间轴分成两部分：
-
-```text
-time < watermark     冷区：不可修改
-time >= watermark    热区：允许 INSERT/UPDATE/DELETE
+```sql
+SELECT tsfile_export('main.continued', '/tmp/tsfile-demo/export-002');
 ```
 
-以下操作会返回约束错误：
+先提交或回滚当前事务，再单独执行这条 SELECT。export 和 seal 都应独立调用，
+不要放入逐行查询、视图、触发器或其他表达式中。
 
-- 插入 `time < watermark` 的行；
-- 把热行的时间更新到 watermark 之前；
-- 更新或删除已经位于 TsFile 的冷行；
-- 写入重复的 `(所有 TAG, TIME)` 唯一键。
+export 包含本次数据视图中的外部历史、已封存记录和全部当前热记录。它自动封存热数据，
+所以输出包含刚写入的数据；自动封存提交之后才到达的新写入留给下一次导出。
+只读文件表也可以 export，输出只包含选中的表。
 
-当前版本没有 correction 或 tombstone。如果业务必须修正历史数据，需要重建
-逻辑表或在业务层保留单独的修正数据。
+当前非空表导出一个 `part-000001.tsfile`，返回 1；空表导出空目录，返回 0。
+输出文件内部表名使用当前逻辑表名，例如这次是 continued。交付给其他使用者时，同时
+告知这个表名，便于对方通过 source_table 选择它。已知时间精度随文件保留。
 
-## 9. 内部状态与诊断
+输出目录的父目录必须已经存在。不要把输出放在表的自有段目录内，也不要让它包含
+或替代源文件；和外部文件放在同一个父目录下可以。已有输出路径不会被覆盖。
+删除导出副本不会影响原表，但若另建了引用该副本的表，例如第二节的 history，则
+仍需保留副本供它读取。
 
-每张名为 `sensor` 的 hybrid 表拥有三个 SQLite shadow table：
+导出成功后，本次热数据已经冻结，新写入必须晚于这些数据的最大时间。若需要继续
+修改近期记录，请在修改完成后再导出。
 
-| 表 | 内容 |
+### 导出失败后如何处理
+
+先看错误信息，再查询 `tsfile_table_info` 确认热行数和 watermark：
+
+| 错误发生时的状态 | 下一步 |
 | --- | --- |
-| `sensor_data` | 可变热数据 |
-| `sensor_segments` | TsFile 路径、cutoff 和行数 manifest |
-| `sensor_config` | watermark、精度、目录和 schema 签名 |
+| 路径检查失败或自动封存尚未提交 | 修正路径、权限或文件问题后重试；本次操作没有提交封存变化 |
+| 已提交自动封存，生成输出失败 | 数据仍可查询，但已经封存；修复输出问题后使用新目录重试 |
+| 完整输出已发布，父目录同步失败 | 先检查目标目录及文件，不要直接覆盖；需要重新导出时使用新目录 |
 
-可以只读查看它们进行诊断：
+失败不会把已经提交的冷数据恢复成可修改的热数据。进程中断可能留下名称包含
+`.tsfile-export-` 的临时目录，不要把它当作已完成的交付结果。
+
+导出保存表数据，不保存原 SQLite 数据库的全部表、业务配置或冷热状态。空表导出也
+不保存表定义。它不能替代完整的业务数据库备份。
+
+## 6. 查看状态和处理常见问题
+
+### 确认还能写入什么数据
 
 ```sql
-SELECT watermark, precision, directory FROM sensor_config;
-
-SELECT path, cutoff, row_count
-FROM sensor_segments
-ORDER BY cutoff;
-
-SELECT count(*) AS hot_rows FROM sensor_data;
+SELECT mode, hot_rows, watermark, append_available, timestamp_precision
+FROM tsfile_table_info('main.continued');
 ```
 
-内部对象采用带符号的命名形式 `"<逻辑表名>_tsfile$<用途>"`。例如 sensor 对应：
+hot_rows 是尚可修改的热行数，watermark 是新增时间的最小允许值。mode 为 readonly
+时只能查询。append_available 为 1 表示仍有可表示的新时间，但写入仍需满足唯一键
+等约束。状态只反映查询当时的情况，最终以写操作结果为准。
 
-| 内部表 | 用途 |
+若最大时间已达到 INT64_MAX，append_available 为 0，watermark 为 NULL，不能再
+追加更晚数据，原有数据仍可查询和导出。显式 seal 的半开 int64 上界无法覆盖时间
+为 INT64_MAX 的热行；export 可以自动封存它。
+
+### INSERT、UPDATE 或 DELETE 失败
+
+先用上面的状态查询检查模式和时间边界。引用文件但没有指定 directory 的表只读；
+需要追加时，以新名称和新目录另建可写表。没有目标行的写语句可能作为空操作成功，
+这不表示只读表变成了可写表。
+
+可写表中，新时间必须不小于 watermark。引用外部文件时，这意味着严格晚于源表的
+最大时间，不能回填历史空隙。再检查是否重复了 `(全部 TAG, time)`、TIME 是否为 NULL，
+以及类型和数值范围是否正确。UPDATE/DELETE 失败时还应确认目标记录尚未封存。
+
+### 源文件找不到、查询失败或怀疑文件变化
+
+```sql
+SELECT path, status, detail FROM tsfile_verify('main.continued');
+```
+
+按报告检查对应路径：
+
+| 状态 | 如何处理 |
 | --- | --- |
-| `"sensor_tsfile$hot"` | 可变热数据 |
-| `"sensor_tsfile$segments"` | TsFile 文件登记信息 |
-| `"sensor_tsfile$config"` | schema、精度、watermark 和目录配置 |
+| OK | 本次文件检查通过 |
+| MISSING | 确认文件是否被移动或删除，恢复登记路径下的原文件 |
+| CORRUPT | 文件无法打开或解析，检查读取权限及文件是否完整 |
+| MISMATCH | 文件与登记时不一致，核对是否被替换，恢复原始文件 |
+| UNREGISTERED | 自有目录中有未登记 TsFile，先核对来源，不要直接将其当作表数据或删除 |
 
-名字必须统一做标识符转义。建表前检查全部派生名；任何同名对象都使创建失败并明确
-报告冲突，不覆盖或复用用户对象。符号用于提高辨识度，不能被当作绝不撞名的保证。
-最后一个下划线之前保留完整逻辑表名，以维持 SQLite 的 shadow 表识别关系。
+verify 只检查和报告，不修复、注册或删除文件。它也不会扫描外部源文件旁边的其他
+文件。检查包括文件特征和元数据，但不逐页解码全部数据。
 
-这些名字属于内部实现，不作为业务 API。日常诊断通过公开状态接口完成；用户能够
-在 schema 中查看内部对象，但不应直接修改它们。绕过虚拟表写入会破坏 watermark、
-文件登记和实际文件之间的一致性。
+### 加载扩展或建表失败
 
-热行使用 SQLite 的正 rowid；冷行使用扩展生成的负 rowid。冷 rowid 是内部
-实现标识，不应作为跨查询或跨版本稳定的业务主键。
+加载报告 not authorized 时，确认 SQLite 支持扩展加载；应用连接需要先启用加载。
+找不到 libtsfile 时，检查扩展和共享库是否来自同次构建并位于同一目录。
 
-## 10. 数据目录和生命周期
+建表失败时，核对绝对路径、源文件内部表名和时间精度。新可写表应使用空或不存在的
+独占目录，不能与另一张表的目录重合或嵌套。引用文件时不要同时声明列；从空表开始
+时则要声明列、目录和精度。
 
-每张逻辑表必须使用独占目录。扩展会在 seal 前清理目录中未被 manifest 引用的
-`.tmp` 和 `.tsfile` 文件，用来恢复进程崩溃后遗留的孤儿文件。因此不要把手工
-创建的 TsFile、其他表的段文件或任何同后缀文件放进该目录。
+### 查看建表语句时为什么没有列定义
 
-执行：
+`sqlite_schema.sql` 保存的是创建虚拟表时的 SQL，文件建表不会在这里展开推断列。
+使用 `PRAGMA table_info(表名)` 查看实际结构。较旧 SQLite 若不识别 sqlite_schema，
+可以使用兼容名称 sqlite_master。
 
-```sql
-DROP TABLE sensor;
-```
+## 7. 关闭、重开和管理数据文件
 
-会删除虚拟表及其三个 shadow table，但不会删除已经导出的 TsFile。删除或归档
-这些文件需要由运维流程显式完成。
+退出 SQLite 后，重新打开同一个数据库并加载扩展，即可继续使用持久表。列结构、
+热数据和写入边界会保留，不需要重复 CREATE。使用 temp 创建的表随连接消失，其
+热数据也会丢弃，已经生成或引用的 TsFile 则保留。
 
-## 11. TsFile 导出、导入与文件校验（功能设计草案）
+保留 SQLite 数据库、源文件和各表的自有段目录。不要单独移动或改写仍被表引用的
+文件，也不要把目录中新出现的文件当作自动加入表的数据。
 
-本节定义面向标准 TsFile 的交换和查询接口。导出产物只有 `.tsfile` 文件，不导出
-SQLite 数据库、热表、WAL、shadow 表或独立的 JSON 清单，也不承诺恢复源表的可写状态。
-导入接口及只读语义在 11.2 节定义。
+可写目录中的 `.tsfile-owner` 记录归属，绑定数据库路径及表名。复制或移动 SQLite
+数据库后，不能直接复用原目录继续写入；迁移前应规划数据和路径的处理。不要直接
+修改名称含 `_tsfile$` 的内部表来改路径或改数据。
 
-### 11.1 仅导出 TsFile
+确认不再需要某张逻辑表时，才执行 `DROP TABLE 表名`。这会删除该表的 SQLite 热数据
+和登记，保留外部源文件、已封存文件及目录归属标记。后续归档或删除文件之前，先确认
+没有其他表还在引用它们。
 
-```sql
-SELECT tsfile_export('main.sensor', '/export/sensor-001');
-```
-
-`tsfile_export(table_name, output_directory)` 导出指定逻辑表已经落到 TsFile 的
-数据，成功返回产出的文件数。SQLite 中尚未封存的热数据不在导出范围内。
-如需导出这些热数据，调用方先显式 seal 到选定 cutoff，提交后再执行 export。
-export 本身不封存、不修改源数据、不推进 watermark。
-
-目标目录必须为绝对路径且尚不存在，并且不得与源数据目录重合或互相嵌套。
-输出示例：
-
-```text
-sensor-001/
-  part-000001.tsfile
-  part-000002.tsfile
-```
-
-- 表名、列类型和类别从 TsFile 自身元数据读取；可用的时间精度放在文件 Properties。
-- 输出文件只包含所选逻辑表的数据。如果输入段同时含其他表，需要导出所选表为独立
-  TsFile，不能直接复制而意外带出其他表。文件内部表名使用该逻辑表的导出名称。
-- 文件可由标准 TsFile Reader 独立读取，不依赖本扩展的 JSON 清单或 SQLite 文件。
-- 没有已封存数据时返回 0，目标目录为空；不会制造可恢复空表或热数据的假象。
-
-第一版采用保守的一致性方式：取得源 SQLite 数据库的写保留锁，在同一事务视图内
-固定该表的文件登记集合，复制或重写完成后释放锁。期间阻塞该数据库的其他写入。
-对外部只读文件也要检查读取错误和文件变化；外部修改不属于 SQLite 锁的保护范围。
-
-先在目标旁的专用暂存目录生成文件，校验 footer、schema 和已知精度，完成文件同步，
-再原子发布整个目录并同步父目录。失败不发布完整目标，源文件不变。
-仅允许独立管理调用，不接受用户已有的显式事务；成功返回时输出目录已发布。
-
-### 11.2 扫描目录并建立只读查询表
-
-```sql
-SELECT tsfile_import('/data/archive');
-```
-
-`tsfile_import(directory [, target_schema])` 默认把发现的表注册到 `main`；可显式
-指定一个已经存在的 SQLite schema。成功返回新注册的逻辑表数量。
-
-```sql
-SELECT tsfile_import('/data/archive', 'archive');
-```
-
-这里的导入指登记外部 TsFile 并建立查询入口：默认直接引用原文件，不复制、移动、
-重写文件，也不把行装入 SQLite 热表。源目录必须是可持续访问的绝对路径，文件需
-由调用方保持不可变。SQLite 中只保存查询所需的文件登记和 schema 元数据。
-
-扫描与分组规则：
-
-1. 第一版扫描指定目录当前层的普通 `.tsfile` 文件，不递归子目录，不跟随符号链接；
-   非 TsFile 文件忽略，扩展名匹配但无法读取的文件使本次导入失败并报告路径。
-2. 从每个文件的元数据枚举全部表名；一个文件包含多张表时分别登记，不按文件名猜
-   表名。同一张表出现在多个文件中时，组成同一个只读逻辑表。
-3. 同名表要求列定义、类型、类别和顺序兼容；第一版要求完全一致，不自动补列、
-   类型提升或统一不同 schema。按 SQLite 标识符比较产生的大小写冲突应明确报错。
-4. 接受普通 TsFile，不要求来自本扩展，也不要求携带私有快照清单。时间精度属性
-   存在时读取；缺失时标记为 unknown 并按原始整数时间查询，不默认为 ms。
-   同名表的已知精度必须一致；已知/未知混合也拒绝自动合并，避免混淆时间单位。
-5. 同名表跨文件的结果按 `UNION ALL` 语义读取，重叠时间和重复逻辑键保留，不自动
-   覆盖、去重或取最新值。只读导入不对外部数据强加可写 hybrid 表的唯一键约束。
-6. 保存“SQLite 逻辑表 → 文件路径集合 → 各文件内部表名”的映射，所有路径和表名
-   都按数据处理并正确转义。文件内部表名不会因 SQL 名称变化而被重写。
-
-用户通过普通 SQL 查询，例如目录内包含 sensor 和 meter 两个表时：
-
-```sql
-SELECT time, device, temperature FROM sensor ORDER BY time;
-SELECT count(*) FROM meter;
-```
-
-所有导入表默认且固定为只读：拒绝 INSERT、UPDATE、DELETE 和 seal，即使当前表为空
-也不接受写入。只读表不创建可写热区，不恢复源库 watermark，也不因为时间较新就
-自动允许修改。持续追加写入仍使用另行创建的可写 hybrid 表。
-
-注册时先完整枚举、验证并建立映射，再在同一个 SQLite 事务中发布所有表。目标
-schema 中任何同名用户表、虚拟表或所需内部对象冲突，都使整批失败；不覆盖、不
-合并到已存在的表。对同一目录重复调用也遵循此规则，不会重复追加登记。
-
-导入要求独立管理调用，不能嵌入已有用户显式事务。取得目标写锁后再次检查对象
-冲突；失败回滚本次新建的所有登记，源文件保持不变。空目录或未发现表时返回 0。
-本次扫描后新加入目录的文件不会自动进入已注册表，第一版不提供后台监控或刷新；
-如需重新登记，可删除相关只读逻辑表后再导入，删除逻辑表不会删除外部文件。
-
-### 11.3 文件所有权、移动与校验
-
-```sql
-SELECT * FROM tsfile_verify('main.sensor');
-```
-
-`tsfile_verify(table_name)` 是只读表值接口，返回
-`segment_id, path, status, detail`。状态包括 `OK`、`MISSING`、`CORRUPT`、
-`MISMATCH` 和 `UNREGISTERED`。导入时建立文件指纹，verify 对比文件内容、schema
-和可用精度；普通文件不需要预先存储本扩展的校验属性。
-
-- 自有 hybrid 段与外部只读引用必须有明确的所有权区别。导入不取得源文件的删除权，
-  DROP TABLE、seal 清理和失败恢复都不得删除外部引用文件。
-- 文件被移走或删除时，访问该文件的查询失败并报告表名、文件标识和原路径，不能
-  静默跳过；verify 可集中报告问题，不承诺持续监控或自动搜索新路径。
-- 同路径文件被替换或修改时，完整 verify 对比导入指纹并报告差异；普通查询的轻量
-  检查不宣称能够发现所有字节修改。调用方必须保证登记后外部文件保持不可变。
-- 外部目录新增文件不会自动导入；verify 报告发现的未登记 TsFile，且不删除它们。
-  自有目录中的未知文件也不能仅凭 `.tsfile` 后缀被孤儿清理删除。
-- 复制到其他位置且保留源文件不影响已有查询；移动目录后应在保留源数据的前提下
-  重新建立登记，不直接改写内部表路径。
-
-导出目录只包含 TsFile，导入后得到只读数据集；这一过程不是恢复完整 SQLite 数据库
-或可写 hybrid 状态的备份协议。
-
-### 11.4 验收场景
-
-- 导出目录只含标准 `.tsfile`；热数据不被导出，watermark 不改变，无冷数据返回 0；
-- 目录内多文件、多表能被完整发现，同表跨文件汇成一个只读表；
-- 不带本扩展私有 Properties 的普通 TsFile 可以查询，缺失精度标为 unknown；
-- 多文件重叠时间和重复键按 UNION ALL 保留；NULL TAG 与空字符串不混淆；
-- schema 不兼容、精度冲突、表名冲突及损坏文件使批量导入失败且不留下部分注册；
-- 对导入表执行 INSERT、UPDATE、DELETE、seal 均被拒绝，源文件字节保持不变；
-- 文件移走、替换和新增分别被诊断为缺失、变化和未登记；verify 不修改任何文件；
-- 删除只读逻辑表、导入失败及进程重启清理都不会删除外部文件；
-- 对导出复制、文件同步、目录发布和导入登记提交注入故障，验证源数据不变及
-  目标没有部分可见的发布结果。
-
-## 12. 常见问题
-
-### 加载时报 `not authorized` 或扩展加载被禁用
-
-确认 SQLite 构建允许 loadable extension，并在应用连接上调用
-`sqlite3_enable_load_extension()`。CLI 使用 `.load` 即可。
-
-### 加载时报找不到 `libtsfile`
-
-把当前构建对应的 `libtsfile` 与 `tsfile_sqlite` 放到同一目录，避免混用不同
-版本的库。必要时检查平台动态链接器的搜索路径。
-
-### 创建表时报目录错误
-
-`directory` 必须是绝对路径，父目录必须可创建或可写。连接已有数据库时，该
-目录必须仍然存在。
-
-### seal 后无法更新某些行
-
-这是 watermark 的预期行为。任何 `time < watermark` 的数据已经进入不可变
-冷区。
-
-### 查询没有固定顺序
-
-虚拟表会合并多个来源，但不承诺自然顺序。需要顺序时使用显式 `ORDER BY`。
-
-## 13. MVP 限制
-
-- seal 只能显式、同步执行；
-- 冷数据不可更新或删除；
-- 不支持后台自动封存、compaction 和冷段删除；
-- 不支持原地 schema 演进；
-- 查询游标当前会在内存中汇集冷热结果；
-- 不跨冷热来源下推排序和 `LIMIT/OFFSET`；
-- Windows 尚未支持；
-- 这仍是实验性扩展，接口和内部格式可能继续演进。
+当前版本不自动迁移早期原型数据库，也不支持原地修改列结构或把只读表切换为可写表。
+查询和导出会在内存中收集数据，导出还会重写完整表；处理大表前应按实际数据量评估
+内存和执行时间。封存与导出均由调用方主动执行，没有后台定时封存。
