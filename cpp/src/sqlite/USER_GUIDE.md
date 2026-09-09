@@ -143,6 +143,7 @@ cmd2 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:21.571Z","bo
 cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","body":"这里的 _tsfile_command 与 _tsfile_cutoff 是什么呢？"}
 cmd12 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:55.995Z","body":"回复 cmd2：这里应区分 TsFile 数据模型的能力与当前 SQLite 扩展的限制。支持零 TAG 的目标合理：这种表可以视为只有一条设备序列，唯一键退化为 TIME。但当前 `parse_args()` 明确拒绝空 TAG 列表，所以现在还不能把手册改成“已支持无 TAG”。实现上也不能只删这条检查：`create_shadow_tables()` 在追加 TIME 前固定输出逗号，无 TAG 时会生成非法的 `UNIQUE(,time)`；需要一起调整，并验证无 TAG 的写入、封存、读取和时间唯一性。\n\n列名方面，我用本机 SQLite 3.51.0 实测：`CREATE TABLE t(Foo INT, foo INT)` 报 `duplicate column name: foo`，给两个名字加双引号也一样。因此至少 ASCII 大小写不同不能用来区分列名，当前文档这条约束应保留；这不意味着已验证任意 Unicode 字符的大小写折叠规则。本次先记录实现差距，不把尚未实现的能力写成现状。"}
 cmd13 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:09.840Z","body":"回复 cmd3：这两个是扩展声明的 HIDDEN 控制列，不是用户的时间序列字段，也不会写入 TsFile 的业务 schema。\n\n- `_tsfile_command`：操作名，目前只识别 `seal`。\n- `_tsfile_cutoff`：该操作的整数时间上界，单位与 `timestamp_precision` 相同；封存范围是 `[旧 watermark, cutoff)`，等于 cutoff 的行仍可修改。\n\n例如 `INSERT INTO sensor(_tsfile_command, _tsfile_cutoff) VALUES ('seal', 1700086400000)` 会进入 `xUpdate` 的命令分支，不会插入一条普通数据行。`SELECT *` 不显示这两个列；可用 `PRAGMA table_xinfo(sensor)` 查看其 hidden 标记。参见 [SQLite table_xinfo](https://www.sqlite.org/pragma.html#pragma_table_xinfo)。"}
+cmd23 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:58:58.023Z","body":"我们更新一下文档吧。 就支持不带tag。以及封口的机制看后面的描述。 "}
 -->
 
 所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
