@@ -28,6 +28,49 @@ import java.util.Arrays;
 
 public abstract class TsPrimitiveType implements Serializable {
 
+  /**
+   * get tsPrimitiveType by resultDataType.
+   *
+   * @param dataType given TsDataType
+   */
+  public static TsPrimitiveType getByType(TSDataType dataType) {
+    return switch (dataType) {
+      case BOOLEAN -> new TsBoolean();
+      case INT32 -> new TsInt();
+      case DATE -> new TsInt(TSDataType.DATE);
+      case INT64, TIMESTAMP -> new TsLong();
+      case FLOAT -> new TsFloat();
+      case DOUBLE -> new TsDouble();
+      case TEXT, BLOB, STRING, OBJECT -> new TsBinary();
+      case VECTOR -> new TsVector();
+      case UNKNOWN ->
+          throw new UnSupportedDataTypeException(
+              Messages.format("error.common.unsupported_data_type", dataType));
+    };
+  }
+
+  /**
+   * get tsPrimitiveType by resultDataType and initial value.
+   *
+   * @param dataType given TsDataType
+   * @param v initial value
+   */
+  public static TsPrimitiveType getByType(TSDataType dataType, Object v) {
+    return switch (dataType) {
+      case BOOLEAN -> new TsBoolean((boolean) v);
+      case INT32 -> new TsInt((int) v);
+      case DATE -> new TsInt((int) v, TSDataType.DATE);
+      case INT64, TIMESTAMP -> new TsLong((long) v);
+      case FLOAT -> new TsFloat((float) v);
+      case DOUBLE -> new TsDouble((double) v);
+      case TEXT, BLOB, STRING, OBJECT -> new TsBinary((Binary) v);
+      case VECTOR -> new TsVector((TsPrimitiveType[]) v);
+      case UNKNOWN ->
+          throw new UnSupportedDataTypeException(
+              Messages.format("error.common.unsupported_data_type", dataType));
+    };
+  }
+
   public boolean getBoolean() {
     throw new UnsupportedOperationException(
         Messages.format("error.common.subclass_op_not_supported", "getBoolean()"));
