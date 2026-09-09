@@ -354,6 +354,7 @@ SELECT count(*) AS hot_rows FROM sensor_data;
 <!-- tag-comment-thread-G
 cmd8 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:31:55.454Z","body":"这个用户可以直观地查看到这张表吗？ 感觉这个名字还是可能会和用户的名字撞车的。"}
 cmd17 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:37:10.407Z","body":"回复 cmd8：可以看到。Shadow 表不是隐藏文件，也不是独立命名空间；它们是 SQLite schema 内的真实表。用户可查询 `SELECT name, sql FROM main.sqlite_master WHERE name IN ('sensor_data','sensor_segments','sensor_config');`，SQLite 3.37+ 还可用 `PRAGMA main.table_list` 查看 shadow 类型。\n\n撞名风险确实存在。如果同一 schema 已有用户表 `sensor_data`，当前创建 `sensor` 时执行普通 `CREATE TABLE sensor_data ...` 会失败，不会自动覆盖或复用它。`xShadowName` 负责声明内部表身份，并不能消除命名冲突。可改进为：创建前检查三个派生名，返回明确的冲突对象；采用更有辨识度的内部后缀；在用户工具中把 shadow 表单独显示。这些是待做的改进。\n\n另一个边界是：单靠 xShadowName 不保证禁止直接写入；SQLite 在连接启用 `SQLITE_DBCONFIG_DEFENSIVE` 时才限制普通 SQL 写 shadow 表。当前扩展没有替宿主启用该设置。参见 [SQLite shadow table 机制](https://www.sqlite.org/vtab.html#the_xshadowname_method)。"}
+cmd25 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:59:52.187Z","body":"我觉得这个名字还得再内部一点，加一些符号，_xxx_xxx。"}
 -->
 
 热行使用 SQLite 的正 rowid；冷行使用扩展生成的负 rowid。冷 rowid 是内部
