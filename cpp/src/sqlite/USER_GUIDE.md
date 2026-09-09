@@ -114,11 +114,16 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
 
 模块参数如下：
 
+<!-- tag-comment-scope-A-start mode="block" hash="sha256:0bd0476df20a8f9d79a863bbfabea5f9b7458673e3b744aca7b8ac646e382c7e" -->
 | 参数 | 要求 |
 | --- | --- |
 | `directory` | 必填、绝对路径、由当前逻辑表独占 |
 | `timestamp_precision` | 必填，只能是 `ms`、`us` 或 `ns` |
 | `column` | 可重复，格式为 `名称:类型:类别` |
+<!-- tag-comment-scope-A-end mode="block" -->
+<!-- tag-comment-thread-A
+cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","body":"这个时间戳 精度得写到文件里， 最好写到Property里面"}
+-->
 
 列定义必须满足：
 
