@@ -104,3 +104,21 @@ set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
 
 该配置只影响之后打开的 reader。通过内存映射后端打开文件期间，请勿修改或
 截断该文件。
+
+## 可定位的二进制文件对象
+
+`TsFileReader` 也可以直接接收可定位的二进制文件对象。因此，通过 `fsspec`
+等库打开远程文件后，无需先把整个文件复制到本地即可读取。
+
+```python
+import fsspec
+from tsfile import TsFileReader
+
+with fsspec.open("s3://bucket/example.tsfile", "rb") as source:
+    with TsFileReader(source) as reader:
+        result = reader.query_table("table_name", ["column_name"])
+```
+
+文件对象必须提供 `seek()`、`tell()` 和带明确长度的二进制 `read(size)`。
+该对象仍由调用方管理：`TsFileReader` 会在使用期间保持其存活、恢复其游标位置，
+但不会关闭它。本地 `FileReadBackend` 配置不适用于文件对象。

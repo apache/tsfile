@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "file/read_file.h"
+#include "file/local_random_access_read_file.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -59,7 +59,7 @@ uint64_t generation_hash(uint64_t size, int64_t mtime_ns) {
 }
 }  // namespace
 
-ReadFile::ReadFile()
+LocalRandomAccessReadFile::LocalRandomAccessReadFile()
     : file_path_(),
       fd_(-1),
       file_size_(-1),
@@ -79,7 +79,8 @@ ReadFile::ReadFile()
 {
 }
 
-int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
+int LocalRandomAccessReadFile::generation(uint64_t& size,
+                                          uint64_t& fingerprint) const {
     if (!is_opened()) {
         return E_FILE_READ_ERR;
     }
@@ -93,8 +94,8 @@ int ReadFile::generation(uint64_t& size, uint64_t& fingerprint) const {
     return get_file_generation_from_descriptor(size, fingerprint);
 }
 
-int ReadFile::get_file_generation_from_descriptor(uint64_t& size,
-                                                  uint64_t& fingerprint) const {
+int LocalRandomAccessReadFile::get_file_generation_from_descriptor(
+    uint64_t& size, uint64_t& fingerprint) const {
     int64_t mtime_ns = 0;
 #ifdef _WIN32
     if (fd_ < 0) {
@@ -139,7 +140,7 @@ int ReadFile::get_file_generation_from_descriptor(uint64_t& size,
     return E_OK;
 }
 
-void ReadFile::close() {
+void LocalRandomAccessReadFile::close() {
     unmap_file();
     if (fd_ >= 0) {
         ::close(fd_);
@@ -155,7 +156,7 @@ void ReadFile::close() {
 #endif
 }
 
-int ReadFile::open(const std::string& file_path) {
+int LocalRandomAccessReadFile::open(const std::string& file_path) {
     int ret = E_OK;
     close();
     file_path_ = file_path;
@@ -238,7 +239,7 @@ int ReadFile::open(const std::string& file_path) {
     return ret;
 }
 
-int ReadFile::get_file_size(int64_t& file_size) {
+int LocalRandomAccessReadFile::get_file_size(int64_t& file_size) {
 #ifdef _WIN32
     struct __stat64 s;
     if (_fstat64(fd_, &s) < 0) {
@@ -258,7 +259,7 @@ int ReadFile::get_file_size(int64_t& file_size) {
     return E_OK;
 }
 
-int ReadFile::map_file() {
+int LocalRandomAccessReadFile::map_file() {
     DBUG_EXECUTE_IF("read_file_mmap_fail", return E_FILE_MAP_ERR;);
     DBUG_EXECUTE_IF("read_file_mmap_unsupported", return E_NOT_SUPPORT;);
 
@@ -354,7 +355,7 @@ int ReadFile::map_file() {
     return E_OK;
 }
 
-void ReadFile::unmap_file() {
+void LocalRandomAccessReadFile::unmap_file() {
     if (mapped_data_ != nullptr) {
 #ifdef _WIN32
         UnmapViewOfFile(mapped_data_);
@@ -372,63 +373,12 @@ void ReadFile::unmap_file() {
     mapped_size_ = 0;
 }
 
-int ReadFile::check_file_magic() {
-    int ret = E_OK;
-    if (file_size_ < MIN_FILE_SIZE) {
-        ret = E_TSFILE_CORRUPTED;
-        LOGE("tsfile" << file_path_.c_str()
-                      << "is corrupted, file_size=" << file_size_);
-    } else {
-        char buf[MAGIC_STRING_TSFILE_LEN];
-        int32_t read_len = 0;
-        // file header magic
-        memset(buf, 0, MAGIC_STRING_TSFILE_LEN);
-        if (RET_FAIL(read(0, buf, MAGIC_STRING_TSFILE_LEN, read_len))) {
-        } else if (read_len != MAGIC_STRING_TSFILE_LEN) {
-            ret = E_TSFILE_CORRUPTED;
-        } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
-                   0) {
-            ret = E_TSFILE_CORRUPTED;
-        }
-        if (IS_FAIL(ret)) {
-            return ret;
-        }
-
-        char version = 0;
-        if (RET_FAIL(read(MAGIC_STRING_TSFILE_LEN, &version, 1, read_len))) {
-        } else if (read_len != 1) {
-            ret = E_TSFILE_CORRUPTED;
-        } else {
-            file_version_ = static_cast<unsigned char>(version);
-            // Version 3 remains readable for backward compatibility; version
-            // 4 is the current writer format.  Other values are not safely
-            // interpretable and must be reported as an input failure before
-            // metadata parsing begins.
-            if (file_version_ != 3 &&
-                file_version_ != static_cast<unsigned char>(VERSION_NUM_BYTE)) {
-                ret = E_UNSUPPORTED_VERSION;
-            }
-        }
-        if (IS_FAIL(ret)) {
-            return ret;
-        }
-
-        // file footer magic
-        memset(buf, 0, MAGIC_STRING_TSFILE_LEN);
-        if (RET_FAIL(read(file_size_ - MAGIC_STRING_TSFILE_LEN, buf,
-                          MAGIC_STRING_TSFILE_LEN, read_len))) {
-        } else if (read_len != MAGIC_STRING_TSFILE_LEN) {
-            ret = E_TSFILE_CORRUPTED;
-        } else if (memcmp(buf, MAGIC_STRING_TSFILE, MAGIC_STRING_TSFILE_LEN) !=
-                   0) {
-            ret = E_TSFILE_CORRUPTED;
-        }
-    }
-    return ret;
+int LocalRandomAccessReadFile::check_file_magic() {
+    return validate_tsfile(*this, &file_version_);
 }
 
-int ReadFile::read(int64_t offset, char* buf, int32_t buf_size,
-                   int32_t& read_len) {
+int LocalRandomAccessReadFile::read(int64_t offset, char* buf, int32_t buf_size,
+                                    int32_t& read_len) {
     read_len = 0;
     if (offset < 0 || buf_size < 0 || (buf == nullptr && buf_size > 0)) {
         return E_INVALID_ARG;

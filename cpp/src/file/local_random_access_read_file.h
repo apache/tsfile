@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef FILE_READ_FILE_H
-#define FILE_READ_FILE_H
+#ifndef FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H
+#define FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H
 
 #include <stdint.h>
 
@@ -26,26 +26,30 @@
 #include <string>
 
 #include "common/config/config.h"
+#include "file/random_access_read_file.h"
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 namespace storage {
 
-class ReadFile {
+class LocalRandomAccessReadFile : public RandomAccessReadFile {
    public:
-    ReadFile();
-    ~ReadFile() { destroy(); }
-    ReadFile(const ReadFile&) = delete;
-    ReadFile& operator=(const ReadFile&) = delete;
+    LocalRandomAccessReadFile();
+    ~LocalRandomAccessReadFile() override { destroy(); }
+    LocalRandomAccessReadFile(const LocalRandomAccessReadFile&) = delete;
+    LocalRandomAccessReadFile& operator=(const LocalRandomAccessReadFile&) =
+        delete;
 
     void destroy() { close(); }
 
     int open(const std::string& file_path);
-    FORCE_INLINE bool is_opened() const {
+    FORCE_INLINE bool is_opened() const override {
         return fd_ >= 0 || mapped_data_ != nullptr;
     }
-    FORCE_INLINE int64_t file_size() const { return file_size_; }
-    FORCE_INLINE const std::string& file_path() const { return file_path_; }
+    FORCE_INLINE int64_t file_size() const override { return file_size_; }
+    FORCE_INLINE const std::string& file_path() const override {
+        return file_path_;
+    }
     FORCE_INLINE unsigned char file_version() const { return file_version_; }
     FORCE_INLINE common::FileReadBackend active_backend() const {
         return active_backend_;
@@ -55,17 +59,17 @@ class ReadFile {
      * MMAP readers return the generation captured before closing the file
      * descriptor.
      */
-    int generation(uint64_t& size, uint64_t& fingerprint) const;
+    int generation(uint64_t& size, uint64_t& fingerprint) const override;
 
     /*
      * try to reader @buf_size bytes from @offset of this file
      * into @buf. @read_len return the actual len reader.
      */
     int read(int64_t offset, char* buf, int32_t buf_size,
-             int32_t& ret_read_len);
+             int32_t& ret_read_len) override;
     // open()/close() must not race with read() or generation(). Concurrent
     // reads are supported after the file has been opened.
-    void close();
+    void close() override;
 
    private:
     int get_file_size(int64_t& file_size);
@@ -97,4 +101,4 @@ class ReadFile {
 };
 
 }  // end namespace storage
-#endif  // FILE_READ_FILE_H
+#endif  // FILE_LOCAL_RANDOM_ACCESS_READ_FILE_H

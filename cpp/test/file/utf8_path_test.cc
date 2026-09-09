@@ -24,7 +24,7 @@
 #include <string>
 
 #include "common/tsfile_common.h"
-#include "file/read_file.h"
+#include "file/local_random_access_read_file.h"
 #include "file/restorable_tsfile_io_writer.h"
 #include "file/utf8_file_open.h"
 #include "file/write_file.h"
@@ -43,9 +43,8 @@ CWriteFile write_file_new(const char* pathname, int32_t* err_code);
 void free_write_file(CWriteFile* write_file);
 }
 
-// Note: storage::WriteFile / storage::ReadFile are named after Win32 API
-// functions that <windows.h> declares at global scope, so the class names are
-// always written qualified here.
+// storage::WriteFile shares its name with a global Win32 API function, so
+// storage classes are explicitly qualified here.
 using namespace common;
 
 namespace {
@@ -84,9 +83,10 @@ std::wstring WideName() {
 #endif
 
 // Smallest byte sequence that counts as a complete TsFile: head magic, the
-// current version byte, then the tail magic. This is what ReadFile::open()
-// requires (>= MIN_FILE_SIZE bytes, magic at both ends) and also what
-// RestorableTsFileIOWriter's self check treats as complete.
+// current version byte, then the tail magic. This is what
+// LocalRandomAccessReadFile::open() requires (>= MIN_FILE_SIZE bytes, magic at
+// both ends) and also what RestorableTsFileIOWriter's self check treats as
+// complete.
 //
 // Built on first use rather than at file scope: VERSION_NUM_BYTE is defined in
 // another translation unit, so a file-scope initializer would depend on static
@@ -147,7 +147,7 @@ bool CreateFixtureByWidePath() {
 }
 
 bool MinimalTsFileIsUnchanged() {
-    storage::ReadFile read_file;
+    storage::LocalRandomAccessReadFile read_file;
     std::string buf(MinimalTsFile().size(), '\0');
     int32_t read_len = 0;
     const bool opened = read_file.open(Utf8Name()) == E_OK;
@@ -212,22 +212,24 @@ TEST_F(Utf8PathTest, ExistingUtf8PathIsRejectedByCWrapper) {
     EXPECT_TRUE(MinimalTsFileIsUnchanged());
 }
 
-// ReadFile must find a file that exists on disk under a non-ASCII name.
-TEST_F(Utf8PathTest, ReadFileOpensUtf8Path) {
+// LocalRandomAccessReadFile must find a file that exists on disk under a
+// non-ASCII name.
+TEST_F(Utf8PathTest, LocalRandomAccessReadFileOpensUtf8Path) {
     ASSERT_TRUE(CreateFixtureByWidePath());
     ASSERT_TRUE(ExistsByWidePath());
 
-    storage::ReadFile read_file;
+    storage::LocalRandomAccessReadFile read_file;
     EXPECT_EQ(read_file.open(Utf8Name()), E_OK)
         << "an existing file with a non-ASCII name could not be opened";
     EXPECT_TRUE(read_file.is_opened());
     read_file.close();
 }
 
-// Round trip through both classes: what WriteFile wrote, ReadFile must read.
-// The wide-path check matters even though the round trip alone would succeed
-// while both sides are equally broken -- a consistently mangled name still
-// round trips, so only the on-disk name proves the bytes were honoured.
+// Round trip through both classes: what WriteFile wrote,
+// LocalRandomAccessReadFile must read. The wide-path check matters even though
+// the round trip alone would succeed while both sides are equally broken -- a
+// consistently mangled name still round trips, so only the on-disk name proves
+// the bytes were honoured.
 TEST_F(Utf8PathTest, Utf8PathRoundTripsBetweenWriteAndRead) {
     storage::WriteFile write_file;
     ASSERT_EQ(write_file.create(Utf8Name(), O_WRONLY | O_CREAT | O_TRUNC, 0666),
@@ -241,7 +243,7 @@ TEST_F(Utf8PathTest, Utf8PathRoundTripsBetweenWriteAndRead) {
     ASSERT_TRUE(ExistsByWidePath())
         << "the round trip used a name that is not the requested UTF-8 path";
 
-    storage::ReadFile read_file;
+    storage::LocalRandomAccessReadFile read_file;
     ASSERT_EQ(read_file.open(Utf8Name()), E_OK);
     EXPECT_EQ(read_file.file_size(), static_cast<int64_t>(content.size()));
 

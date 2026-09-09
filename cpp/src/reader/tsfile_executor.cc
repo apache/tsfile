@@ -42,7 +42,7 @@ TsFileExecutor::TsFileExecutor()
 
 TsFileExecutor::~TsFileExecutor() {}
 
-int TsFileExecutor::init(ReadFile* read_file) {
+int TsFileExecutor::init(RandomAccessReadFile* read_file) {
     int ret = E_OK;
     io_reader_.reset();
     if (RET_FAIL(io_reader_.init(read_file))) {
