@@ -258,11 +258,13 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
     int64_t original_position = 0;
     if (!tell_position(source, original_position)) {
         *error_code = common::E_FILE_OPEN_ERR;
+        PyErr_Clear();
         return nullptr;
     }
     if (!seek_to(source, 0, SEEK_END)) {
         *error_code = common::E_FILE_OPEN_ERR;
         restore_position_preserving_error(source, original_position);
+        PyErr_Clear();
         return nullptr;
     }
 
@@ -270,10 +272,12 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
     if (!tell_position(source, size)) {
         *error_code = common::E_FILE_OPEN_ERR;
         restore_position_preserving_error(source, original_position);
+        PyErr_Clear();
         return nullptr;
     }
     if (!seek_to(source, original_position, SEEK_SET)) {
         *error_code = common::E_FILE_OPEN_ERR;
+        PyErr_Clear();
         return nullptr;
     }
     if (size < 0) {

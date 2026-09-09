@@ -247,6 +247,60 @@ def test_non_file_object_is_rejected():
         TsFileReader(object())
 
 
+@pytest.mark.parametrize(
+    "failure,fail_restore",
+    [
+        ("initial_tell", False),
+        ("seek_end", False),
+        ("size_tell", False),
+        ("restore", True),
+        ("seek_end", True),
+        ("size_tell", True),
+    ],
+)
+def test_size_probe_errors_map_to_file_open_error(failure, fail_restore):
+    class FailingProbeSource(TrackingBytesIO):
+        tell_calls = 0
+
+        def __init__(self, data):
+            super().__init__(data)
+            self.seek_calls = []
+
+        def tell(self):
+            self.tell_calls += 1
+            if (failure == "initial_tell" and self.tell_calls == 1) or (
+                failure == "size_tell" and self.tell_calls == 2
+            ):
+                raise OSError("size probe tell failed")
+            return super().tell()
+
+        def seek(self, offset, whence=os.SEEK_SET):
+            self.seek_calls.append((offset, whence))
+            if whence == os.SEEK_SET and fail_restore:
+                raise RuntimeError("cursor restoration failed")
+            position = super().seek(offset, whence)
+            if whence == os.SEEK_END and failure == "seek_end":
+                # A source may move its cursor before reporting failure.
+                raise OSError("size probe seek failed")
+            return position
+
+    data = (RESOURCES / "simple_table_t1.tsfile").read_bytes()
+    source = FailingProbeSource(data)
+    io.BytesIO.seek(source, 13)
+
+    with pytest.raises(FileOpenError):
+        TsFileReader(source)
+
+    assert not source.closed
+    assert source.close_calls == 0
+    assert source.read_sizes == []
+    if failure == "initial_tell":
+        assert source.seek_calls == []
+    else:
+        assert source.seek_calls == [(0, os.SEEK_END), (13, os.SEEK_SET)]
+    assert io.BytesIO.tell(source) == (len(data) if fail_restore else 13)
+
+
 def test_source_read_error_during_open_preserves_cursor():
     path = RESOURCES / "simple_table_t1.tsfile"
 
