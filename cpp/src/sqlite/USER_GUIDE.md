@@ -135,7 +135,6 @@ cmd39 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:28:49.464Z","b
 
 列定义的目标规则如下：
 
-<!-- tag-comment-scope-B-start mode="block" hash="sha256:693e3cfecfa5246c1c684e7865fffda20008ac5c6e0e82c242c350da16e68f69" -->
 - 恰好一个 `TIME` 列，必须是第一列，类型为 `TIMESTAMP`，值不能为 `NULL`；
 - `TAG` 列可以有零个或多个；存在时类型必须为 `STRING`，值允许为 SQL `NULL`；
 - 有 TAG 时，全部 TAG 与 TIME 共同组成唯一键；无 TAG 时，TIME 单独组成唯一键；
@@ -153,11 +152,6 @@ NULL TAG 的目标语义：
   不把 `= NULL` 改成相等比较；
 - 热数据的唯一键检查必须显式处理 NULL，不能仅依赖 SQLite 默认 UNIQUE 对 NULL
   的处理，也不能用可能与实际 TAG 冲突的字符串替换 NULL。
-<!-- tag-comment-scope-B-end mode="block" -->
-<!-- tag-comment-thread-B
-cmd34 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:12:36.036Z","body":"TAG 允许设置为null，这个应该是底层的能力吧"}
-cmd40 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:29:13.195Z","body":"回复 cmd34：是底层已有的数据表示能力。`Tablet::get_device_id()` 会为 NULL TAG 生成 nullptr 分量，`StringArrayDeviceID` 保留它，并在相等比较中把同位置的两个 nullptr 视为相等；空字符串另有表示。已把当前选中规则改成允许 NULL TAG。\n\n同时补了必要的键语义：NULL、空字符串、字面值 'null' 必须区分；在逻辑唯一键中，相同位置的 NULL 视为同一分量，防止同一设备同一时间出现重复行。SQLite 默认 UNIQUE 会允许多个含 NULL 的键，因此需要在扩展层用保留类型/NULL 标志的键编码或等效检查来保证一致，而不是只移除 NOT NULL。查询仍用 IS NULL，普通 SQL 三值逻辑不变。参见 [SQLite NULL 处理](https://www.sqlite.org/nulls.html)。这些是设计规则，底层 NULL TAG 的端到端封存读回仍应列入验收。"}
--->
 
 无 TAG 表可按以下方式定义；每个时间戳最多对应一行：
 
