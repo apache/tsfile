@@ -99,7 +99,6 @@ sqlite3_enable_load_extension(db, 0);
 
 ## 4. 创建逻辑表
 
-<!-- tag-comment-scope-C-start mode="block" hash="sha256:13df5ef0379347db120798fac52653ced0ff7057593c462093d83174d5012841" -->
 以下按目标功能设计定义建表语法；示例表达待实现接口，不代表当前原型已支持。
 列定义采用 `列名 类型 [类别]`，省略类别时默认为 `FIELD`；`TIME` 和 `TAG` 显式声明。
 
@@ -119,14 +118,6 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
 列定义按书写顺序组成 schema，表级选项使用 `key=value`。未知选项、重复的表级
 选项和不合法的列定义在建表时返回明确错误。标识符支持双引号转义，例如
 `"sensor value" DOUBLE`；字符串选项使用单引号。
-<!-- tag-comment-scope-C-end mode="block" -->
-<!-- tag-comment-thread-C
-cmd4 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:11.739Z","body":"这个语法可以再简洁一些吗？还是说都得这样，逐个column= 来指定？\n"}
-cmd10 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:29.187Z","body":"回复 cmd4：可以简化，逐个 `column=` 是当前扩展 `parse_args()` 自己定义的格式，并非 SQLite 的强制要求。SQLite 会把 USING 后的各个参数文本交给模块解析，见 [CREATE VIRTUAL TABLE 官方说明](https://www.sqlite.org/lang_createvtab.html)。\n\n建议下一版支持更接近普通建表的写法，例如 `USING tsfile_hybrid(time TIMESTAMP TIME, device STRING TAG, temperature DOUBLE FIELD, directory='...', timestamp_precision='ms')`，并可让 FIELD 成为省略类别时的默认值。这里是语法提案，当前分支还不能执行；现有示例准确反映当前实现，所以本次保留正文，先回复这个设计问题。"}
-cmd19 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:39:59.171Z","body":"按照这种来修改吧，修改正文。 这个userguide 就当我们的功能设计手册。 "}
-cmd27 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:01:58.610Z","body":"回复 cmd19：已按你确定的方向修改这段正文，把它作为目标功能设计：采用 `列名 类型 [类别]`，FIELD 可以省略，TIME/TAG 显式声明，表级配置继续用 key=value。并补上重复选项、未知选项和标识符转义的规则。后续讨论以期望的产品行为为准，当前原型的能力只用于识别实现差距。本轮按评论逐段更新，不会再用“尚未实现”阻止设计进入正文。"}
-cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:01.365Z","body":"这里需要强制说明FIELD 列吧。 "}
--->
 
 模块参数如下：
 
