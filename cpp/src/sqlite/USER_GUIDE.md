@@ -138,6 +138,7 @@ cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","bo
 <!-- tag-comment-scope-B-end mode="block" -->
 <!-- tag-comment-thread-B
 cmd2 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:21.571Z","body":"可以没有tag 列，列名是否唯一的问题， 在tsfile 的层次上是大小不敏感的， 但是在sqlite 里面我不清楚 \n\n"}
+cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","body":"这里的 _tsfile_command 与 _tsfile_cutoff 是什么呢？"}
 -->
 
 所有 TAG 列与 TIME 列共同组成唯一键。例如上表的唯一键是：
