@@ -59,9 +59,11 @@ data.values                                   # -> np.ndarray, shape (N, 2)：N 
 
 | 示例 | 操作 | 返回类型 |
 |---|---|---|
-| `TsFileDataFrame(paths)` | 加载文件 / 文件列表 / 目录 | `TsFileDataFrame` |
+| `TsFileDataFrame(paths, show_progress=True)` | 加载文件 / 文件列表 / 目录。设置 `show_progress=False` 可关闭 stderr 上的加载进度 | `TsFileDataFrame` |
 | `len(df)` | 时间序列总数 | `int` |
+| `df.model` | 已加载文件模型：`"table"` 或 `"tree"` | `str` |
 | `df.list_timeseries("weather")` | 获取序列名，可按前缀筛选 | `List[str]` |
+| `df.list_timeseries_metadata("weather")` | 获取序列元数据，可按前缀筛选 | `pandas.DataFrame` |
 | `df["weather.Beijing.humidity"]`、`df[0]`、`df[-1]` | 获取单条序列 | `Timeseries` |
 | `df["city"]` | 获取某元数据列（标签 / `field` / `start_time` / `end_time` / `count`） | `pandas.Series` |
 | `df[0:3]`、`df[[0, 2, 5]]` | 按整数位置取子集视图：连续区间（`0:3`）或所列位置（`[0, 2, 5]`）；位置即打印的 `index` 列 | `TsFileDataFrame` |
@@ -132,6 +134,7 @@ from tsfile import TsFileDataFrame
 
 df = TsFileDataFrame(["data/weather.tsfile", "data/sensor.tsfile"])
 df = TsFileDataFrame("data/")     # 递归查找目录下所有 .tsfile
+df = TsFileDataFrame("data/", show_progress=False)
 print(df)
 ```
 
@@ -172,7 +175,21 @@ TsFileDataFrame(table model, 972 time series, 5 files)
 ['weather.Beijing.humidity', 'weather.Beijing.temperature']
 ```
 
-若需查看起止时间、点数等元信息，可打印 DataFrame（或其子集）——见[DataFrame 的展示](#dataframe-的展示)。
+若需查看起止时间、点数等元信息，可打印 DataFrame（或其子集）——见[DataFrame 的展示](#dataframe-的展示)——也可以调用
+`list_timeseries_metadata()`。
+
+## 查看元数据
+
+`list_timeseries_metadata(path_prefix="")` 返回以序列名为索引的 pandas DataFrame。
+其中包含 `field`、`start_time`、`end_time`、`count` 以及设备标签列。对于
+table 模型文件，还会包含 `table` 列。
+
+```python
+meta = df.list_timeseries_metadata()
+weather_meta = df.list_timeseries_metadata("weather")
+
+meta[["field", "start_time", "end_time", "count"]].head()
+```
 
 ## 选取序列
 
