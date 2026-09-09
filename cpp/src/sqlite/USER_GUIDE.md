@@ -204,7 +204,6 @@ schema、目录和时间精度会记录在配置 shadow table 中。数据库重
 
 ## 5. 写入和修改热数据
 
-<!-- tag-comment-scope-E-start mode="block" hash="sha256:32362269b36a7c24879ad5debdd05cca2d3415f63029faff299d431e0af79f4f" -->
 普通 DML 的用法与 SQLite 表一致：
 
 ```sql
@@ -238,15 +237,6 @@ WHERE device = 'device-1' AND time = 1700000001000;
 
 COMMIT;
 ```
-<!-- tag-comment-scope-E-end mode="block" -->
-<!-- tag-comment-thread-E
-cmd6 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:28:30.003Z","body":"这部分应该是针对shadow 表的，但是其余的表是不是就不行了？怎么区分呢？或者用户该怎么处理知道自己的操作的作用范围呢？"}
-cmd15 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:40.742Z","body":"回复 cmd6：示例的操作入口是用户创建的虚拟表 `sensor`，用户不应直接对 shadow 表发 DML。可以按三类理解作用范围：\n\n1. 普通 SQLite 表：继续使用 SQLite 原有行为，加载扩展不会接管这些表。\n2. `USING tsfile_hybrid` 创建的表：SELECT 查询该逻辑表的冷热数据；INSERT 只能写 `time >= watermark`；UPDATE/DELETE 只能修改命中的热行，命中冷行会返回约束错误，不会自动忽略冷行。\n3. `sensor_data`、`sensor_segments`、`sensor_config`：扩展维护的内部表，用户只做诊断读取。\n\n用户应始终通过逻辑表操作，并用业务 WHERE 条件限定对象。若只想修改热数据，可在业务条件之外增加 `time >= (SELECT watermark FROM sensor_config WHERE id=1)`。每张 hybrid 表都有自己的 watermark 和目录，其他 hybrid 表不会因此一起封存或修改。针对整个 schema 的区分，SQLite 3.37+ 的 `PRAGMA main.table_list` 提供 table/virtual/shadow 类型；兼容最低版本时可查看 `main.sqlite_master` 中的建表 SQL。参见 [SQLite table_list](https://www.sqlite.org/pragma.html#pragma_table_list)。"}
-cmd24 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:59:22.105Z","body":"我的意思是， 用户如果操作一些数据的话， 那他就必须得知道他可操作的数据范围？如果数据被写下去了， 封口成tsfile ，就不能再处理了。 所以每次更新都得做一下检查之类的？ 当然我们持续追加写倒是没啥问题。 "}
-cmd29 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:02:47.981Z","body":"回复 cmd24：是的，封存会改变数据的可修改范围，但不应要求用户每次 UPDATE 前手动查一遍。建议把“检查范围、保证并发一致性、给出清楚错误”作为扩展的职责：\n\n1. 默认严格更新：UPDATE/DELETE 命中任意冷行，就让整条语句失败并撤销本语句已经做的修改，不能出现前面热行已改、后面遇到冷行才失败的部分成功。INSERT 或 UPDATE 后的新时间必须满足 `time >= watermark`。之前已完成的其他语句是否保留，遵循外层事务的回滚选择。\n2. 更新和封存使用同一 SQLite 写事务协调；取得写权限后重新读取有效 watermark，再检查和修改。用户提前查到的范围只能用于提示，不能作为后续写操作的授权凭据，避免“查完后另一连接封存”的竞态。\n3. 提供只读 `tsfile_table_info('main.sensor')` 表值函数，返回 watermark、precision 等状态。用户明确要“只修改仍可变的数据”时，可把该状态条件写进同一条 UPDATE 的 WHERE 中；默认 UPDATE 不自动过滤冷行。\n4. 报错应包含逻辑表名、watermark、时间单位以及冲突时间或键，并使用可识别的约束错误。正常追加不要求额外调用检查接口，但迟到数据只要落到 watermark 之前也要拒绝。\n\n另一种方案是静默跳过冷行，操作更省事却容易让用户误以为全部更新成功；再一种是给冷数据增加 correction 层，会明显扩大本期范围。我建议先采用上述“严格失败 + 可查状态 + 显式限定热区”的设计。业务上，调用 seal 就表示放弃 cutoff 之前的修改权，cutoff 应覆盖业务允许的迟到和修正窗口。这条先回复设计取舍，待你确认后再整理成 DML 正文规则。"}
-cmd37 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:25:38.739Z","body":"我有机会发现他的操作命中了冷读数据吗？ 如果发现更新在冷数据上，或者删除在冷数据上， 我就直接拒绝好了。 "}
-cmd41 {"author":"codex","kind":"codex","createdAt":"2026-09-09T04:29:35.664Z","body":"回复 cmd37：可以，而且在真正修改之前就有明确的拦截点。SQLite 对虚拟表执行 UPDATE/DELETE 时，会把目标行的旧 rowid 交给 `xUpdate`；我们根据该 rowid 对应的来源判断它是热行还是 TsFile 冷行，冷行直接拒绝，无需让用户提前检查。当前原型已经给冷行分配负 rowid，并在 `update_hot()`、`delete_hot()` 开头拒绝负值。参见 [SQLite xUpdate](https://www.sqlite.org/vtab.html#the_xupdate_method)。\n\n这里应判断“真正被 UPDATE/DELETE 命中的目标行”，不能因为查询扫描到了冷数据就拒绝。WHERE 未匹配的冷行、子查询里只读的冷数据都不应触发写入错误；因此不要在通用 xFilter/read_cold 里直接拒绝读取。\n\n设计规则建议就定为：命中冷行即拒绝整条写语句，其他已修改热行也要回滚；只命中热行时正常执行。插入和修改热行时间另检查新时间不得小于 watermark。冷行来源标识必须在本语句期间稳定且不与热行混淆。\n\n还需处理冲突策略：当前开启 CONSTRAINT_SUPPORT 后，单纯返回 SQLITE_CONSTRAINT 可能受到 UPDATE OR IGNORE/OR FAIL 的影响。冷数据不可修改属于能力边界，不应被 IGNORE 静默跳过；建议统一用不可写错误（如 SQLITE_READONLY）拒绝，并用“先热后冷、多行语句、OR IGNORE/FAIL、外层事务”测试保证整条语句撤销。参见 [SQLite 虚拟表约束处理](https://www.sqlite.org/c3ref/c_vtab_constraint_support.html)。本条先回复拦截机制与原子性要求，不改动 DML 示例。"}
--->
 
 ## 6. 查询冷热数据
 
