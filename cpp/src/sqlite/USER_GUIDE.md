@@ -185,6 +185,7 @@ schema、目录和时间精度会记录在配置 shadow table 中。数据库重
 
 ## 5. 写入和修改热数据
 
+<!-- tag-comment-scope-E-start mode="block" hash="sha256:32362269b36a7c24879ad5debdd05cca2d3415f63029faff299d431e0af79f4f" -->
 普通 DML 的用法与 SQLite 表一致：
 
 ```sql
@@ -218,6 +219,10 @@ WHERE device = 'device-1' AND time = 1700000001000;
 
 COMMIT;
 ```
+<!-- tag-comment-scope-E-end mode="block" -->
+<!-- tag-comment-thread-E
+cmd6 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:28:30.003Z","body":"这部分应该是针对shadow 表的，但是其余的表是不是就不行了？怎么区分呢？或者用户该怎么处理知道自己的操作的作用范围呢？"}
+-->
 
 ## 6. 查询冷热数据
 
