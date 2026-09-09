@@ -99,6 +99,7 @@ sqlite3_enable_load_extension(db, 0);
 
 ## 4. 创建逻辑表
 
+<!-- tag-comment-scope-C-start mode="block" hash="sha256:f3cf7479aed193524e15a16fc86dd8f64529f4d67415b3632a4d1e91dd3d6465" -->
 ```sql
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   directory='/var/lib/example/sensor',
@@ -111,6 +112,10 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   column='payload:BLOB:FIELD'
 );
 ```
+<!-- tag-comment-scope-C-end mode="block" -->
+<!-- tag-comment-thread-C
+cmd4 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:11.739Z","body":"这个语法可以再简洁一些吗？还是说都得这样，逐个column= 来指定？\n"}
+-->
 
 模块参数如下：
 
