@@ -290,6 +290,7 @@ VALUES ('seal', 1700086400000);
 
 seal 是同步写操作，在完成期间会占用 SQLite 写事务。可以显式把它放入事务：
 
+<!-- tag-comment-scope-F-start mode="block" hash="sha256:540dace662a28daed4b54340806373729d21db411caf166c62a92f3b3d55b425" -->
 ```sql
 BEGIN IMMEDIATE;
 
@@ -298,6 +299,10 @@ VALUES ('seal', 1700086400000);
 
 COMMIT;
 ```
+<!-- tag-comment-scope-F-end mode="block" -->
+<!-- tag-comment-thread-F
+cmd7 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:29:53.389Z","body":"有没有更优雅的指令方法呢？"}
+-->
 
 如果事务回滚，manifest、watermark 和热数据删除都会回滚，扩展也会删除本次
 事务产生的临时文件或已经改名的段文件。
