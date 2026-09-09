@@ -167,8 +167,13 @@ cmd3 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:25:44.770Z","bo
 | `DATE` | INTEGER | 必须在 int32 范围内 |
 | `TIMESTAMP` | INTEGER | SQLite int64 |
 
+<!-- tag-comment-scope-D-start mode="block" hash="sha256:e2fbdf2c5f765a2d21a22b3e3b8c8e9d95ae1b3970cdabb3b3292f89dd390740" -->
 扩展不会换算时间戳。`timestamp_precision` 仅声明整数时间戳的单位，并写入
 非空 TsFile 段的 `tsfile_sqlite.timestamp_precision` property。
+<!-- tag-comment-scope-D-end mode="block" -->
+<!-- tag-comment-thread-D
+cmd5 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:26:53.614Z","body":"这里的其实就是reader 里面的属性写入吧？"}
+-->
 
 ### 4.2 创建后的固定配置
 
