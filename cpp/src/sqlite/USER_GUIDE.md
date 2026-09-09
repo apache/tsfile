@@ -102,6 +102,7 @@ sqlite3_enable_load_extension(db, 0);
 以下按目标功能设计定义建表语法；示例表达待实现接口，不代表当前原型已支持。
 列定义采用 `列名 类型 [类别]`，省略类别时默认为 `FIELD`；`TIME` 和 `TAG` 显式声明。
 
+<!-- tag-comment-scope-A-start mode="block" hash="sha256:ea95a37724664b6e701bd56bb5b1ff0ccfca90fc6dfa9aef1dee7f601c1c4001" -->
 ```sql
 CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   time TIMESTAMP TIME,
@@ -114,6 +115,10 @@ CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
   timestamp_precision='ms'
 );
 ```
+<!-- tag-comment-scope-A-end mode="block" -->
+<!-- tag-comment-thread-A
+cmd33 {"author":"colin","kind":"human","createdAt":"2026-09-09T04:08:28.882Z","body":"这里强制说明FIELD 列吧，就要求带。 "}
+-->
 
 列定义按书写顺序组成 schema，表级选项使用 `key=value`。未知选项、重复的表级
 选项和不合法的列定义在建表时返回明确错误。标识符支持双引号转义，例如
