@@ -311,6 +311,7 @@ COMMIT;
 <!-- tag-comment-thread-F
 cmd7 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:29:53.389Z","body":"有没有更优雅的指令方法呢？"}
 cmd16 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:36:55.665Z","body":"回复 cmd7：可以提供更直观的入口。我建议面向用户增加类似 `SELECT tsfile_seal('main.sensor', 1700086400000);` 的管理函数，让它在内部执行现有隐藏列 INSERT，继续走 virtual table 的事务回调；隐藏列方式可保留为底层兼容接口。这只是提案，当前扩展还没有注册这个函数，不能直接执行。\n\n管理函数需要限定为直接调用、校验目标确实是 tsfile_hybrid 表，并验证自动提交、显式事务和 savepoint 下的行为。暂不建议引入 `SEAL TABLE ...` 新 SQL 语法，因为这会涉及 SQLite parser 的修改。现有示例中的 `BEGIN IMMEDIATE/COMMIT` 也是可选事务包装；单条 seal INSERT 本身已经可以在自动提交模式下执行。"}
+cmd21 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:44:58.785Z","body":"我建议按照这个来， 使用一个udf 来显式的处理。 而不是向所谓的列里插入数据。 "}
 -->
 
 如果事务回滚，manifest、watermark 和热数据删除都会回滚，扩展也会删除本次
