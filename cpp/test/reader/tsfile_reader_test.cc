@@ -353,6 +353,103 @@ TEST_P(MetadataReadLengthTest, RejectsIncompleteRangesBeforeParsing) {
 INSTANTIATE_TEST_SUITE_P(LeafAndInternalIndexes, MetadataReadLengthTest,
                          ::testing::Values(1, 5));
 
+class DeviceIndexReadTest : public TsFileReaderTest {
+   protected:
+    void SetUp() override {
+        TsFileReaderTest::SetUp();
+        saved_index_degree_ = g_config_value_.max_degree_of_index_node_;
+        ASSERT_EQ(set_max_degree_of_index_node(2), E_OK);
+        // Five devices force an internal device index, not just measurement
+        // indexes within one device.
+        for (int i = 0; i < 5; ++i) {
+            const std::string device = "root.sg.d" + std::to_string(i);
+            ASSERT_EQ(tsfile_writer_->register_timeseries(
+                          device, MeasurementSchema("value", INT32, PLAIN,
+                                                    UNCOMPRESSED)),
+                      E_OK);
+            TsRecord record(100, device);
+            record.add_point("value", static_cast<int32_t>(42));
+            ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        ASSERT_EQ(tsfile_writer_->close(), E_OK);
+        std::ifstream input(file_name_, std::ios::binary);
+        ASSERT_TRUE(input.is_open());
+        bytes_.assign(std::istreambuf_iterator<char>(input),
+                      std::istreambuf_iterator<char>());
+    }
+
+    void TearDown() override {
+        set_max_degree_of_index_node(saved_index_degree_);
+        TsFileReaderTest::TearDown();
+        std::remove(file_name_.c_str());
+    }
+
+    void open_reader(TsFileReader& reader, ShortMetadataReadFile*& source) {
+        source = new ShortMetadataReadFile(bytes_);
+        ASSERT_EQ(reader.open(std::unique_ptr<RandomAccessFile>(source)), E_OK);
+        // Warm the file footer so subsequent reads start at the device index.
+        std::vector<std::shared_ptr<IDeviceID>> devices;
+        ASSERT_EQ(reader.get_all_devices(devices), E_OK);
+        ASSERT_EQ(devices.size(), 5u);
+        source->read_count = 0;
+    }
+
+    uint32_t saved_index_degree_ = 0;
+    std::vector<char> bytes_;
+};
+
+TEST_F(DeviceIndexReadTest, MetadataEnumerationRejectsShortDeviceIndex) {
+    for (int fail_at : {0, 1, 2}) {
+        for (bool report_zero : {false, true}) {
+            SCOPED_TRACE(::testing::Message() << fail_at << ":" << report_zero);
+            TsFileReader reader;
+            ShortMetadataReadFile* source = nullptr;
+            ASSERT_NO_FATAL_FAILURE(open_reader(reader, source));
+            source->short_read_at = fail_at;
+            source->report_zero = report_zero;
+            auto metadata = reader.get_timeseries_metadata();
+            if (fail_at == 0) {
+                ASSERT_EQ(metadata.size(), 5u);
+            } else {
+                // This legacy map-returning API has no error-code output, but
+                // must stop before parsing a short node or returning metadata.
+                EXPECT_TRUE(metadata.empty());
+                EXPECT_EQ(source->read_count, fail_at);
+            }
+        }
+    }
+}
+
+TEST_F(DeviceIndexReadTest, TreeTableQueryPropagatesDeviceAndSchemaReadErrors) {
+    for (const auto& measurements :
+         {std::vector<std::string>{}, std::vector<std::string>{"value"}}) {
+        for (bool fail_schema : {false, true}) {
+            for (bool report_zero : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << measurements.size() << ":" << fail_schema << ":"
+                             << report_zero);
+                TsFileReader reader;
+                ShortMetadataReadFile* source = nullptr;
+                ASSERT_NO_FATAL_FAILURE(open_reader(reader, source));
+                std::vector<std::shared_ptr<IDeviceID>> devices;
+                ASSERT_EQ(reader.get_all_devices(devices), E_OK);
+                const int device_reads = source->read_count;
+                ASSERT_GT(device_reads, 0);
+                source->read_count = 0;
+                source->short_read_at = fail_schema ? device_reads + 1 : 1;
+                source->report_zero = report_zero;
+                ResultSet* result = nullptr;
+                EXPECT_EQ(
+                    reader.query_table_on_tree(measurements, 0, 200, result),
+                    E_FILE_READ_ERR);
+                EXPECT_EQ(source->read_count, source->short_read_at);
+                if (result != nullptr) reader.destroy_query_data_set(result);
+            }
+        }
+    }
+}
+
 TEST_F(TsFileReaderTest, ReadsThroughRandomAccessFile) {
     const std::string device = "root.sg.device";
     const std::string measurement = "temperature";

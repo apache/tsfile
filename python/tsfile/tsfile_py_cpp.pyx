@@ -20,6 +20,7 @@ from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
+import os
 import pandas as pd
 import numpy as np
 
@@ -784,7 +785,7 @@ cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold
 cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     cdef ErrorCode errno = 0
     cdef TsFileReader reader = NULL
-    cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
+    cdef bytes encoded_path = os.fsencode(pathname)
     cdef const char * c_path = encoded_path
     reader = tsfile_reader_new(c_path, &errno)
     check_error(errno)

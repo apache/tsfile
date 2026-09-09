@@ -18,6 +18,7 @@
 
 import gc
 import io
+import os
 import subprocess
 import sys
 import weakref
@@ -25,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 import pytest
+import numpy as np
 
 from tsfile import (
     Field,
@@ -34,7 +36,7 @@ from tsfile import (
     TsFileReader,
     TsFileWriter,
 )
-from tsfile.exceptions import FileReadError
+from tsfile.exceptions import FileOpenError, FileReadError
 
 RESOURCES = Path(__file__).parent / "resources"
 
@@ -86,6 +88,50 @@ def collect_tree_rows(source):
             return rows
         finally:
             result.close()
+
+
+class CustomPath:
+    def __init__(self, path):
+        self.path = path
+
+    def __fspath__(self):
+        return self.path
+
+
+@pytest.mark.parametrize(
+    "make_source",
+    [str, Path, os.fsencode, CustomPath, lambda p: CustomPath(os.fsencode(p)), np.str_],
+    ids=["str", "pathlib", "bytes", "pathlike-str", "pathlike-bytes", "numpy-str"],
+)
+def test_path_sources_match_string_path(make_source):
+    path = RESOURCES / "simple_table_t1.tsfile"
+    expected = collect_table_rows(str(path))
+    assert expected
+    assert collect_table_rows(make_source(str(path))) == expected
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX filesystem byte paths")
+@pytest.mark.parametrize(
+    "make_source",
+    [lambda p: p, CustomPath, lambda p: Path(os.fsdecode(p))],
+    ids=["bytes", "pathlike-bytes", "pathlib"],
+)
+def test_non_utf8_missing_path_reaches_native_open(tmp_path, make_source):
+    path = os.fsencode(tmp_path) + b"/missing-\xff.tsfile"
+    with pytest.raises(FileOpenError):
+        TsFileReader(make_source(path))
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="Linux filenames permit arbitrary non-NUL bytes; macOS rejects them",
+)
+def test_non_utf8_filesystem_path_is_preserved(tmp_path):
+    fixture = RESOURCES / "simple_table_t1.tsfile"
+    path = os.fsencode(tmp_path) + b"/sample-\xff.tsfile"
+    with open(path, "wb") as output:
+        output.write(fixture.read_bytes())
+    assert collect_table_rows(path) == collect_table_rows(str(fixture))
 
 
 def test_seekable_binary_source_matches_local_table_query_and_preserves_cursor():

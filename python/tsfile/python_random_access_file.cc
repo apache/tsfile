@@ -20,6 +20,7 @@
 #include "python_random_access_file.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -93,7 +94,7 @@ void restore_position_preserving_error(PyObject* source, int64_t position) {
     PyObject* error_value = nullptr;
     PyObject* traceback = nullptr;
     PyErr_Fetch(&error_type, &error_value, &traceback);
-    if (!seek_to(source, position, 0)) {
+    if (!seek_to(source, position, SEEK_SET)) {
         PyErr_Clear();
     }
     PyErr_Restore(error_type, error_value, traceback);
@@ -176,7 +177,7 @@ class PythonRandomAccessFile : public storage::RandomAccessFile {
         int ret = common::E_OK;
         int64_t saved_position = 0;
         const bool has_saved_position = tell_position(source_, saved_position);
-        if (!has_saved_position || !seek_to(source_, offset, 0)) {
+        if (!has_saved_position || !seek_to(source_, offset, SEEK_SET)) {
             PyErr_Clear();
             ret = common::E_FILE_READ_ERR;
         }
@@ -213,7 +214,7 @@ class PythonRandomAccessFile : public storage::RandomAccessFile {
             Py_DECREF(chunk);
         }
 
-        if (has_saved_position && !seek_to(source_, saved_position, 0)) {
+        if (has_saved_position && !seek_to(source_, saved_position, SEEK_SET)) {
             PyErr_Clear();
             ret = common::E_FILE_READ_ERR;
         }
@@ -259,7 +260,7 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
         *error_code = common::E_FILE_OPEN_ERR;
         return nullptr;
     }
-    if (!seek_to(source, 0, 2)) {
+    if (!seek_to(source, 0, SEEK_END)) {
         *error_code = common::E_FILE_OPEN_ERR;
         restore_position_preserving_error(source, original_position);
         return nullptr;
@@ -271,7 +272,7 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
         restore_position_preserving_error(source, original_position);
         return nullptr;
     }
-    if (!seek_to(source, original_position, 0)) {
+    if (!seek_to(source, original_position, SEEK_SET)) {
         *error_code = common::E_FILE_OPEN_ERR;
         return nullptr;
     }

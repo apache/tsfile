@@ -18,6 +18,7 @@
 
 #cython: language_level=3
 
+import os
 import weakref
 from typing import List, Optional, Dict
 
@@ -364,7 +365,7 @@ cdef class TsFileReaderPy:
 
     def __init__(self, source):
         """
-        Initialize a TsFile reader from a path or seekable binary file object.
+        Initialize from a str/bytes/PathLike path or seekable binary file object.
         """
         self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
@@ -372,8 +373,8 @@ cdef class TsFileReaderPy:
 
     cdef init_reader(self, source):
         cdef ErrorCode error_code = 0
-        if isinstance(source, str):
-            self.reader = tsfile_reader_new_c(source)
+        if isinstance(source, (str, bytes, os.PathLike)):
+            self.reader = tsfile_reader_new_c(os.fspath(source))
             return
         self.reader = create_tsfile_reader_from_python_file(
             <PyObject*>source, &error_code)

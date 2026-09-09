@@ -96,6 +96,8 @@ int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
                 });
             if (RET_FAIL(read_file->read(start_offset, data_buf, read_size,
                                          ret_read_len))) {
+            } else if (ret_read_len != read_size) {
+                ret = E_FILE_READ_ERR;
             } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
                                                                   read_size))) {
             } else {
@@ -327,7 +329,10 @@ int TsFileReader::query_table_on_tree(
     if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
         return ret;
     }
-    auto device_ids = this->get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    if (RET_FAIL(get_all_devices(device_ids))) {
+        return ret;
+    }
     std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;
     std::unordered_set<std::string> measurement_names_set_to_query;
     size_t device_max_len = 0;
@@ -335,7 +340,9 @@ int TsFileReader::query_table_on_tree(
     if (measurement_names.empty()) {
         for (auto& device_name : device_ids) {
             std::vector<MeasurementSchema> schemas;
-            this->get_timeseries_schema(device_name, schemas);
+            if (RET_FAIL(get_timeseries_schema(device_name, schemas))) {
+                return ret;
+            }
             satisfied_device_ids.push_back(device_name);
             for (auto& schema : schemas) {
                 measurement_names_set_to_query.insert(schema.measurement_name_);
@@ -351,7 +358,9 @@ int TsFileReader::query_table_on_tree(
             measurement_names.begin(), measurement_names.end());
         for (auto& device_name : device_ids) {
             std::vector<MeasurementSchema> schemas;
-            this->get_timeseries_schema(device_name, schemas);
+            if (RET_FAIL(get_timeseries_schema(device_name, schemas))) {
+                return ret;
+            }
 
             bool device_has_required_measurement_names = false;
             for (auto& schema : schemas) {
