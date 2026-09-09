@@ -121,17 +121,11 @@ cmd19 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:39:59.171Z","b
 
 模块参数如下：
 
-<!-- tag-comment-scope-A-start mode="block" hash="sha256:0bd0476df20a8f9d79a863bbfabea5f9b7458673e3b744aca7b8ac646e382c7e" -->
 | 参数 | 要求 |
 | --- | --- |
 | `directory` | 必填、绝对路径、由当前逻辑表独占 |
 | `timestamp_precision` | 必填，只能是 `ms`、`us` 或 `ns` |
 | `column` | 可重复，格式为 `名称:类型:类别` |
-<!-- tag-comment-scope-A-end mode="block" -->
-<!-- tag-comment-thread-A
-cmd1 {"author":"colin","kind":"human","createdAt":"2026-09-09T03:24:11.181Z","body":"这个时间戳 精度得写到文件里， 最好写到Property里面"}
-cmd11 {"author":"codex","kind":"codex","createdAt":"2026-09-09T03:35:40.597Z","body":"回复 cmd1：这点当前已经实现。`write_segment()` 在每个非空段写完后调用 `TsFileTableWriter::add_tsfile_property(\"tsfile_sqlite.timestamp_precision\", precision)`，把 `ms`、`us` 或 `ns` 的字节写进 TsFile 文件级 Properties，随后 flush 并关闭文件。它不只存在于 SQLite 的 `_config` 表里；空区间不产生段文件，因此也没有对应文件属性。\n\n可通过 `TsFileReader::get_tsfile_properties()` 读取。我核对了写入调用和 Reader 接口；当前 SQLite 扩展的四个测试还没有独立读回该 Property 的断言，后续应补上该验证。"}
--->
 
 <!-- tag-comment-scope-B-start mode="block" hash="sha256:46aac11794b9cf17d2e4e7e584bfbb5a3f42ee2a10015dbe7f719d50c91f3f49" -->
 列定义必须满足：
