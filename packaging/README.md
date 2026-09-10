@@ -133,3 +133,20 @@ The workflow uploads that ZIP as the intermediate artifact
 `native-windows-msvc-x86_64` for 14 days. Like the Linux jobs, it validates the
 license files, CMake package config, staged executable, library, import library,
 and public headers without publishing the artifact.
+
+## Final native package bundle
+
+Only after the Ubuntu 22.04 and 24.04 DEB installation tests, AlmaLinux 9 RPM
+installation test, Homebrew bottle merge, and Windows SDK/CLI build all succeed,
+the workflow assembles `tsfile-native-packages-<archive-version>`. The final
+GitHub Actions artifact retains the DEBs, RPMs, merged Formula and bottles, and
+Windows ZIP in their package-family layouts for 14 days. It also contains a
+sorted `SHA256SUMS` and `manifest.json` with the source identity, generated
+versions, byte sizes, SHA-256 values, and the JFrog repository, immutable target
+path, and properties required for later manual publication.
+
+The final job has no publishing credentials and does not upload to JFrog. A
+maintainer can later use the manifest to upload DEBs to `tsfile-debian` with the
+recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/x86_64`, and Homebrew
+and Windows files to their immutable `tsfile/homebrew/dev/versions/<version>`
+and `tsfile/windows/dev/versions/<version>` paths.

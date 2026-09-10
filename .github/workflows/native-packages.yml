@@ -659,3 +659,99 @@ jobs:
           path: homebrew/
           if-no-files-found: error
           retention-days: 14
+
+  assemble:
+    name: Assemble checksummed native package bundle
+    needs: [prepare, test-deb, test-rpm, merge-homebrew, build-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download package versions
+        uses: actions/download-artifact@v8
+        with:
+          name: native-package-versions
+          path: versions
+
+      - name: Download DEB packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-deb-ubuntu22.04-amd64
+          path: input/deb
+
+      - name: Download RPM packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-rpm-almalinux9-x86_64
+          path: input/rpm
+
+      - name: Download Homebrew Formula and bottles
+        uses: actions/download-artifact@v8
+        with:
+          name: native-homebrew
+          path: input/homebrew
+
+      - name: Download Windows ZIP
+        uses: actions/download-artifact@v8
+        with:
+          name: native-windows-msvc-x86_64
+          path: input/windows
+
+      - name: Assemble the publishable bundle
+        env:
+          LOGICAL_VERSION: ${{ needs.prepare.outputs.logical_version }}
+        shell: bash
+        run: |
+          python3 packaging/scripts/assemble_native_packages.py \
+            --input-dir input \
+            --output-dir "tsfile-native-packages-$LOGICAL_VERSION" \
+            --versions-json versions/versions.json \
+            --source-repository "${{ github.repository }}" \
+            --source-commit "${{ github.sha }}"
+
+      - name: Verify assembled manifest checksums
+        env:
+          LOGICAL_VERSION: ${{ needs.prepare.outputs.logical_version }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          output = Path(f"tsfile-native-packages-{os.environ['LOGICAL_VERSION']}")
+          manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+          checksums = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+          expected_checksums = []
+          paths = set()
+          for artifact in manifest["artifacts"]:
+              relative = Path(artifact["path"])
+              assert relative.as_posix() == artifact["path"]
+              assert relative not in paths, f"Duplicate manifest path: {relative}"
+              paths.add(relative)
+              path = output / relative
+              assert path.is_file() and not path.is_symlink(), f"Missing artifact: {relative}"
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
+              assert digest == artifact["sha256"], f"Hash mismatch: {relative}"
+              assert path.stat().st_size == artifact["size"], f"Size mismatch: {relative}"
+              expected_checksums.append(f"{digest}  {relative.as_posix()}")
+          assert checksums == sorted(expected_checksums)
+          actual_paths = {
+              path.relative_to(output)
+              for path in output.rglob("*")
+              if path.is_file() and path.name not in {"SHA256SUMS", "manifest.json"}
+          }
+          assert actual_paths == paths
+          PY
+
+      - name: Upload checksummed native package bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-native-packages-${{ needs.prepare.outputs.archive_version }}
+          path: tsfile-native-packages-${{ needs.prepare.outputs.logical_version }}/
+          if-no-files-found: error
+          retention-days: 14
