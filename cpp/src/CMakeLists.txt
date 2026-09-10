@@ -157,3 +157,9 @@ install(TARGETS tsfile
         RUNTIME DESTINATION ${LIBRARY_OUTPUT_PATH}
         LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH}
         ARCHIVE DESTINATION ${LIBRARY_OUTPUT_PATH})
+
+# LabVIEW-friendly shim DLL (depends on the tsfile target defined above).
+option(BUILD_LABVIEW_WRAPPER "Build the LabVIEW shim DLL" ON)
+if (BUILD_LABVIEW_WRAPPER)
+    add_subdirectory(labview_wrapper)
+endif ()

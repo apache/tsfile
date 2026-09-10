@@ -355,3 +355,14 @@ if(WIN32)
 else()
   gtest_discover_tests(TsFile_Test)
 endif()
+
+if(TARGET tsfile_labview_smoke_test)
+    add_test(NAME LabVIEWSmokeTest
+             COMMAND $<TARGET_FILE:tsfile_labview_smoke_test>)
+    add_test(NAME LabVIEWReadOnlyTest
+             COMMAND $<TARGET_FILE:tsfile_labview_read_only_test>)
+    add_test(NAME LabVIEWDumpTest
+             COMMAND $<TARGET_FILE:tsfile_labview_dump_test>)
+    add_test(NAME LabVIEWBlockTest
+             COMMAND $<TARGET_FILE:tsfile_labview_block_test>)
+endif()
