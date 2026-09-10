@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -65,6 +66,7 @@ def build_versions(
         raise ValueError("source_version must be MAJOR.MINOR.PATCH.dev")
     if _BUILD_DATE_RE.fullmatch(build_date) is None:
         raise ValueError("build_date must be YYYYMMDD")
+    datetime.strptime(build_date, "%Y%m%d")
     if _GIT_SHA_RE.fullmatch(git_sha) is None:
         raise ValueError("git_sha must contain at least seven hexadecimal characters")
 
@@ -117,10 +119,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     arguments.json_out.write_text(json.dumps(versions, indent=2) + "\n", encoding="utf-8")
     if arguments.github_output is not None:
-        arguments.github_output.write_text(
-            "\n".join(f"{key}={value}" for key, value in versions.items()) + "\n",
-            encoding="utf-8",
-        )
+        with arguments.github_output.open("a", encoding="utf-8") as github_output:
+            github_output.write(
+                "\n".join(f"{key}={value}" for key, value in versions.items()) + "\n"
+            )
     return 0
 
 

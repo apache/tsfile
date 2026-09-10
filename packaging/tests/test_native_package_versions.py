@@ -86,6 +86,7 @@ class NativePackageVersionsTest(unittest.TestCase):
         invalid_cases = (
             ("2026-09-10", 123, 1, "abcdef123456"),
             ("2026091", 123, 1, "abcdef123456"),
+            ("20261340", 123, 1, "abcdef123456"),
             ("20260910", "run", 1, "abcdef123456"),
             ("20260910", 123, "attempt", "abcdef123456"),
             ("20260910", 123, 1, "abcdef"),
@@ -111,6 +112,7 @@ class NativePackageVersionsTest(unittest.TestCase):
             temporary_path = Path(temporary_directory)
             json_output = temporary_path / "versions.json"
             github_output = temporary_path / "github-output.txt"
+            github_output.write_text("existing=value\n", encoding="utf-8")
             subprocess.run(
                 [
                     sys.executable,
@@ -136,7 +138,7 @@ class NativePackageVersionsTest(unittest.TestCase):
             self.assertEqual(json.loads(json_output.read_text(encoding="utf-8")), expected)
             self.assertEqual(
                 github_output.read_text(encoding="utf-8").splitlines(),
-                [f"{key}={value}" for key, value in expected.items()],
+                ["existing=value", *[f"{key}={value}" for key, value in expected.items()]],
             )
 
 
