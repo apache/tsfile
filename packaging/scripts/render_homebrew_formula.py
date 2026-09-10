@@ -46,6 +46,9 @@ def render_formula(
     unknown = set(TOKEN.findall(template)) - replacements.keys()
     if unknown:
         raise ValueError(f"Unknown Formula placeholders: {sorted(unknown)}")
+    if not bottle_block:
+        # Omit an empty standalone block and its following separator line.
+        template = re.sub(r"(?m)^[ \t]*@BOTTLE_BLOCK@\n(?:[ \t]*\n)?", "", template)
     rendered = TOKEN.sub(lambda match: replacements[match.group(1)], template)
     if TOKEN.search(rendered):
         raise ValueError("Unresolved Formula placeholder")

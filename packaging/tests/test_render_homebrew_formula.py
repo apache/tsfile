@@ -167,6 +167,7 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
                 )
                 self.assertIn("#{rpath}", rendered)
                 self.assertNotRegex(rendered, r"@[A-Z0-9_]+@")
+                self.assertNotIn("\n\n\n", rendered)
                 if expected_block:
                     self.assertIn(BOTTLE_BLOCK, rendered)
                 else:
