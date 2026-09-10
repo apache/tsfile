@@ -476,3 +476,186 @@ jobs:
           path: packages/*.zip
           if-no-files-found: error
           retention-days: 14
+
+  build-homebrew:
+    name: Build Homebrew bottle on ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest
+          - name: macos-x86_64
+            os: macos-15-intel
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
+      SOURCE_REPOSITORY: ColinLeeo/tsfile
+      SOURCE_GIT_SHA: ${{ github.sha }}
+      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Render immutable source Formula in a temporary local tap
+        shell: bash
+        run: |
+          mkdir -p homebrew/Formula homebrew/bottles
+          curl --fail --location --retry 3 \
+            "https://github.com/$SOURCE_REPOSITORY/archive/$SOURCE_GIT_SHA.tar.gz" \
+            --output "$RUNNER_TEMP/tsfile-source.tar.gz"
+          source_sha256="$(shasum -a 256 "$RUNNER_TEMP/tsfile-source.tar.gz" | awk '{print $1}')"
+          python3 packaging/scripts/render_homebrew_formula.py \
+            --template packaging/homebrew/tsfile-dev.rb.in \
+            --repository "$SOURCE_REPOSITORY" \
+            --git-sha "$SOURCE_GIT_SHA" \
+            --version "$TSFILE_HOMEBREW_VERSION" \
+            --source-sha256 "$source_sha256" \
+            --output homebrew/Formula/tsfile-dev.rb
+          ruby -c homebrew/Formula/tsfile-dev.rb
+          brew tap-new apache/tsfile-dev
+          tap_path="$(brew --repository apache/tsfile-dev)"
+          cp homebrew/Formula/tsfile-dev.rb "$tap_path/Formula/tsfile-dev.rb"
+
+      - name: Build, test, and bottle the development Formula
+        shell: bash
+        run: |
+          brew install --build-bottle apache/tsfile-dev/tsfile-dev
+          brew test apache/tsfile-dev/tsfile-dev
+          cd homebrew/bottles
+          brew bottle --json --root-url "$BOTTLE_ROOT_URL" apache/tsfile-dev/tsfile-dev
+          shopt -s nullglob
+          bottles=(*.bottle*.tar.gz)
+          metadata=(*.bottle.json)
+          [[ ${#bottles[@]} -eq 1 && ${#metadata[@]} -eq 1 ]]
+
+      - name: Upload platform Homebrew bottle and source Formula
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-homebrew-${{ matrix.name }}
+          path: homebrew/
+          if-no-files-found: error
+          retention-days: 14
+
+  merge-homebrew:
+    name: Merge Homebrew development bottles
+    needs: [prepare, build-homebrew]
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
+      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
+    steps:
+      - name: Download both platform Homebrew artifacts separately
+        uses: actions/download-artifact@v8
+        with:
+          pattern: native-homebrew-macos-*
+          path: homebrew-intermediate
+          merge-multiple: false
+
+      - name: Recreate the same pre-bottle Formula and collect metadata
+        shell: bash
+        run: |
+          arm=homebrew-intermediate/native-homebrew-macos-arm64
+          intel=homebrew-intermediate/native-homebrew-macos-x86_64
+          cmp "$arm/Formula/tsfile-dev.rb" "$intel/Formula/tsfile-dev.rb"
+          brew tap-new apache/tsfile-dev
+          tap_path="$(brew --repository apache/tsfile-dev)"
+          cp "$arm/Formula/tsfile-dev.rb" "$tap_path/Formula/tsfile-dev.rb"
+          mkdir -p homebrew/Formula homebrew/bottles
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          destination = Path("homebrew/bottles")
+          tags = set()
+          for platform in ("macos-arm64", "macos-x86_64"):
+              directory = Path("homebrew-intermediate") / f"native-homebrew-{platform}" / "bottles"
+              metadata = list(directory.glob("*.bottle.json"))
+              assert len(metadata) == 1, f"Expected one JSON for {platform}"
+              data = json.loads(metadata[0].read_text())
+              assert list(data) == ["apache/tsfile-dev/tsfile-dev"]
+              entry = data["apache/tsfile-dev/tsfile-dev"]
+              assert entry["formula"]["pkg_version"] == os.environ["TSFILE_HOMEBREW_VERSION"]
+              assert entry["formula"]["path"] == "Library/Taps/apache/homebrew-tsfile-dev/Formula/tsfile-dev.rb"
+              assert entry["bottle"]["root_url"] == os.environ["BOTTLE_ROOT_URL"]
+              assert len(entry["bottle"]["tags"]) == 1
+              tag, bottle = next(iter(entry["bottle"]["tags"].items()))
+              assert (platform == "macos-arm64") == tag.startswith("arm64_")
+              assert tag not in tags, f"Duplicate bottle tag: {tag}"
+              tags.add(tag)
+              local_name = bottle["local_filename"]
+              assert Path(local_name).name == local_name
+              source = directory / local_name
+              assert hashlib.sha256(source.read_bytes()).hexdigest() == bottle["sha256"]
+              for source in (source, metadata[0]):
+                  target = destination / source.name
+                  assert not target.exists(), f"Duplicate artifact: {target}"
+                  shutil.copy2(source, target)
+          assert len(tags) == 2
+          PY
+
+      - name: Merge both bottle tags into the Formula
+        shell: bash
+        run: |
+          brew bottle --merge --write --no-commit homebrew/bottles/*.json
+          tap_path="$(brew --repository apache/tsfile-dev)"
+          cp "$tap_path/Formula/tsfile-dev.rb" homebrew/Formula/tsfile-dev.rb
+          ruby -c homebrew/Formula/tsfile-dev.rb
+
+      - name: Verify merged Formula and normalize HTTP bottle filenames
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import unquote
+
+          formula = Path("homebrew/Formula/tsfile-dev.rb").read_text()
+          assert not re.search(r"@[A-Z0-9_]+@", formula), "Unresolved Formula token"
+          assert len(re.findall(r"^\s*bottle\s+do\b", formula, re.M)) == 1
+          assert f'root_url "{os.environ["BOTTLE_ROOT_URL"]}"' in formula
+          directory = Path("homebrew/bottles")
+          metadata = list(directory.glob("*.bottle.json"))
+          assert len(metadata) == 2
+          tags = set()
+          for path in metadata:
+              data = json.loads(path.read_text())
+              entry = data["apache/tsfile-dev/tsfile-dev"]
+              for tag, bottle in entry["bottle"]["tags"].items():
+                  assert tag not in tags, f"Duplicate bottle tag: {tag}"
+                  tags.add(tag)
+                  assert re.search(rf'\b{re.escape(tag)}:\s*"{bottle["sha256"]}"', formula)
+                  # Homebrew emits a double-dash local name but serves a single-dash URL.
+                  filename = unquote(bottle["filename"])
+                  assert Path(filename).name == filename and filename.endswith(".tar.gz")
+                  source = directory / bottle["local_filename"]
+                  target = directory / filename
+                  assert hashlib.sha256(source.read_bytes()).hexdigest() == bottle["sha256"]
+                  if source != target:
+                      assert not target.exists(), f"Duplicate HTTP bottle name: {filename}"
+                      source.rename(target)
+                  bottle["local_filename"] = filename
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          assert len(tags) == 2
+          assert len(list(directory.glob("*.tar.gz"))) == 2
+          PY
+
+      - name: Upload merged Homebrew Formula and bottles
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-homebrew
+          path: homebrew/
+          if-no-files-found: error
+          retention-days: 14

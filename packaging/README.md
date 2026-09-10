@@ -94,6 +94,30 @@ brew install ./packaging/homebrew/tsfile.rb
 The stable formula URL and checksum must be updated to the ASF source archive
 when the first release containing this packaging work is published.
 
+The manual native-package workflow also builds the self-hosted development
+Formula `tsfile-dev`, using `packaging/homebrew/tsfile-dev.rb.in`. This is not a
+Homebrew/core submission. Each build pins the full workflow commit from
+`ColinLeeo/tsfile`, hashes that source archive, and uses the generated immutable
+Homebrew development version. The Formula retains the CMake install behavior
+and tests the installed C++ consumer and CLI before bottling.
+
+The ARM64 job runs on `macos-latest` and the Intel job on `macos-15-intel`.
+Their `native-homebrew-macos-arm64` and `native-homebrew-macos-x86_64`
+intermediate artifacts remain separate until merge. The merge job checks that
+both source Formula files match, merges both platform JSON files with Homebrew,
+and checks both generated tags and checksums in the resulting Formula.
+
+The `native-homebrew` artifact contains `Formula/tsfile-dev.rb` and `bottles/`
+with both bottle tarballs and both JSON metadata files. When downloaded into
+`homebrew/`, this gives the final `homebrew/Formula/` and `homebrew/bottles/`
+layout. The configured future bottle root is
+`https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/<homebrew-version>/bottles`.
+Homebrew generates local tarballs with a double dash before the version but
+requests a single dash in HTTP URLs. After merge, the workflow renames each
+tarball to the JSON `filename` (URL-decoded) and updates its `local_filename`
+to match, preserving its checksum. The workflow only uploads GitHub Actions
+artifacts for 14 days; it does not publish to that root or update `latest`.
+
 ## Windows
 
 The manual workflow builds a 64-bit Release package with Visual Studio 2022 and
