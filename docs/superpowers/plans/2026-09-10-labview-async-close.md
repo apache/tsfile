@@ -59,7 +59,7 @@
 - Consumes: `LV_Status` from `tsfile_labview.h` and `RET_OK`/`RET_OOM` status constants from the existing C wrapper.
 - Produces: `labview::AsyncCloseTask::Wait()` and `labview::AsyncCloseCoordinator::Submit(CloseAction, std::shared_ptr<AsyncCloseTask>*)` for Task 2.
 
-- [ ] **Step 1: Write the failing coordinator test**
+- [x] **Step 1: Write the failing coordinator test**
 
 Create a standalone C++ test that uses promises/condition variables rather than timing thresholds. Its essential cases are:
 
@@ -120,7 +120,7 @@ CHECK(max_running.load() == 1);
 
 Also verify that destroying a coordinator waits for its last blocked action before the destructor returns.
 
-- [ ] **Step 2: Register and run the test to verify it fails**
+- [x] **Step 2: Register and run the test to verify it fails**
 
 Add `tsfile_labview_async_close_coordinator_test` to the LabVIEW CMake file and register `LabVIEWAsyncCloseCoordinatorTest` with CTest.
 
@@ -133,7 +133,7 @@ cmake --build cpp/target/build --target \
 
 Expected: build fails because `async_close.h` and its types do not exist.
 
-- [ ] **Step 3: Implement the minimal coordinator**
+- [x] **Step 3: Implement the minimal coordinator**
 
 Declare the focused internal interface:
 
@@ -171,7 +171,7 @@ class AsyncCloseCoordinator {
 
 `Submit` must hold `submission_mutex_` across joining the old thread and creating the new thread. The worker catches all exceptions, completes the task exactly once, and owns the close action by value. If task allocation or thread construction fails, invoke the action synchronously, leave `out_task` empty, and return its final status. The destructor obtains submission ownership and joins `worker_` if it is joinable.
 
-- [ ] **Step 4: Run the coordinator test to verify it passes**
+- [x] **Step 4: Run the coordinator test to verify it passes**
 
 Run:
 
@@ -184,7 +184,7 @@ ctest --test-dir cpp/target/build/test \
 
 Expected: one test passes, including deterministic serialization and destructor join cases.
 
-- [ ] **Step 5: Commit the coordinator**
+- [x] **Step 5: Commit the coordinator**
 
 ```bash
 git add cpp/src/labview_wrapper/async_close.h \
@@ -207,7 +207,7 @@ git commit -m "feat(cpp): add single-thread async close coordinator"
 - Consumes: `labview::AsyncCloseCoordinator` and `labview::AsyncCloseTask` from Task 1; existing `WriterCtx`, Handle Registry, and synchronous close resources.
 - Produces: `lv_tsfile_writer_close_ex(LV_Handle, int32_t, LV_Handle*)` and `lv_tsfile_close_task_wait(LV_Handle)`.
 
-- [ ] **Step 1: Write the failing C ABI test**
+- [x] **Step 1: Write the failing C ABI test**
 
 Create `test_async_close.c` with isolated file names and these assertions:
 
@@ -227,7 +227,7 @@ CHECK_OK(verify_written_file(path));
 
 Open a second isolated Writer and verify `close_ex(writer, 0, &task)` returns with `task == 0` and produces a readable file. Keep the old `lv_tsfile_writer_close` test coverage intact.
 
-- [ ] **Step 2: Register and run the ABI test to verify it fails**
+- [x] **Step 2: Register and run the ABI test to verify it fails**
 
 Add `async_close` to the LabVIEW standalone test targets and add the CTest name `LabVIEWAsyncCloseTest`.
 
@@ -239,7 +239,7 @@ cmake --build cpp/target/build --target tsfile_labview_async_close_test -j 8
 
 Expected: compile or link fails because the two new C functions are absent.
 
-- [ ] **Step 3: Add the public declarations and close-task Handle type**
+- [x] **Step 3: Add the public declarations and close-task Handle type**
 
 Add to `tsfile_labview.h`:
 
@@ -252,7 +252,7 @@ LV_API LV_Status lv_tsfile_close_task_wait(LV_Handle close_task);
 
 Extend the Registry kind with `kCloseTask`. Store each task as a heap-allocated `std::shared_ptr<labview::AsyncCloseTask>` so the Registry owns the caller's task reference while the worker owns its own reference.
 
-- [ ] **Step 4: Centralize Writer resource destruction**
+- [x] **Step 4: Centralize Writer resource destruction**
 
 Extract the existing close sequence into one no-throw helper:
 
@@ -274,13 +274,13 @@ LV_Status close_writer(WriterCtx* ctx) noexcept {
 
 Preserve the first close failure while always releasing the `WriteFile`, cached Tablet, scratch vectors, and context.
 
-- [ ] **Step 5: Implement synchronous and asynchronous close paths**
+- [x] **Step 5: Implement synchronous and asynchronous close paths**
 
 Use a function-local process-wide coordinator whose destructor joins the last worker. `close_ex` validates and zeroes `out_close_task`, unregisters the Writer once, and then either calls `close_writer` directly or submits `[ctx] { return close_writer(ctx); }`.
 
 On successful async submission, allocate/register the task wrapper and return `E_OK`. If registering the task wrapper fails after the worker started, wait for the task and return its close result so no task or Writer resource is orphaned. `lv_tsfile_close_task_wait` unregisters the task Handle before blocking, waits indefinitely, returns the task's final status, and deletes the heap wrapper. Make `lv_tsfile_writer_close` delegate to the synchronous path.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -294,7 +294,7 @@ ctest --test-dir cpp/target/build/test \
 
 Expected: all three focused tests pass.
 
-- [ ] **Step 7: Commit the public async close API**
+- [x] **Step 7: Commit the public async close API**
 
 ```bash
 git add cpp/src/labview_wrapper/tsfile_labview.h \
@@ -315,7 +315,7 @@ git commit -m "feat(cpp): add two-phase LabVIEW writer close"
 - Consumes: the two C ABI functions from Task 2.
 - Produces: documented LabVIEW CLFN mappings and an `--async-close` benchmark mode reporting submission and wait separately.
 
-- [ ] **Step 1: Extend the benchmark smoke contract before implementation**
+- [x] **Step 1: Extend the benchmark smoke contract before implementation**
 
 Add command-line parsing and output assertions so this invocation requires the new metrics:
 
@@ -326,7 +326,7 @@ python3 cpp/src/labview_wrapper/benchmark_block.py --smoke --async-close \
 
 Expected before binding the API: fail because `--async-close` is unknown or the required symbols/metrics are absent.
 
-- [ ] **Step 2: Bind and measure the two-phase API**
+- [x] **Step 2: Bind and measure the two-phase API**
 
 Add `ctypes` signatures for `lv_tsfile_writer_close_ex` and
 `lv_tsfile_close_task_wait`. In async mode measure:
@@ -345,13 +345,13 @@ close_wait_seconds = time.perf_counter() - wait_started
 Print `close_submit_seconds`, `close_wait_seconds`, and
 `close_total_seconds`. Keep the existing synchronous benchmark output when the flag is absent.
 
-- [ ] **Step 3: Document exact LabVIEW use**
+- [x] **Step 3: Document exact LabVIEW use**
 
 Document `async_close` as signed I32 by value and `out_close_task` as U64 Pointer to Value. Show a shift-register sequence that stores the previous Close Task, calls blocking wait outside the DAQ timing loop, sets the consumed task to zero, and always waits for the final task before application/DLL shutdown.
 
 State explicitly that write and explicit flush remain synchronous, the switch affects only close, and a new close submission waits indefinitely for the previous background close before starting.
 
-- [ ] **Step 4: Run formatting and benchmark smoke checks**
+- [x] **Step 4: Run formatting and benchmark smoke checks**
 
 Run:
 
@@ -365,7 +365,7 @@ python3 cpp/src/labview_wrapper/benchmark_block.py --smoke --async-close \
 
 Expected: Black passes; both benchmark modes succeed; async output includes positive submission, wait, and total durations.
 
-- [ ] **Step 5: Commit documentation and benchmark support**
+- [x] **Step 5: Commit documentation and benchmark support**
 
 ```bash
 git add cpp/src/labview_wrapper/README.md \
@@ -383,7 +383,7 @@ git commit -m "docs(cpp): document LabVIEW asynchronous close"
 - Consumes: all deliverables from Tasks 1–3.
 - Produces: fresh completion evidence and a clean feature branch.
 
-- [ ] **Step 1: Run all focused close tests in parallel**
+- [x] **Step 1: Run all focused close tests in parallel**
 
 Run:
 
@@ -395,7 +395,7 @@ ctest --test-dir cpp/target/build/test \
 
 Expected: all selected tests pass under parallel CTest execution.
 
-- [ ] **Step 2: Run the complete clean C++ verification**
+- [x] **Step 2: Run the complete clean C++ verification**
 
 Use the persistent verified dependency archive cache so `clean` does not force network downloads:
 
@@ -407,7 +407,7 @@ Use the persistent verified dependency archive cache so `clean` does not force n
 
 Expected: Maven `BUILD SUCCESS`, all active CTest cases pass, Spotless reports no changes needed, and Apache RAT reports zero unapproved files.
 
-- [ ] **Step 3: Restore Maven's generated CMake version edit and audit the branch**
+- [x] **Step 3: Restore Maven's generated CMake version edit and audit the branch**
 
 If Maven rewrites `TsFile_CPP_VERSION`, restore `cpp/CMakeLists.txt` to its committed value without touching other files. Then run:
 
