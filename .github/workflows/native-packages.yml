@@ -1,0 +1,328 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Build native package artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare package versions
+    runs-on: ubuntu-24.04
+    outputs:
+      base_version: ${{ steps.versions.outputs.base_version }}
+      logical_version: ${{ steps.versions.outputs.logical_version }}
+      deb_version: ${{ steps.versions.outputs.deb_version }}
+      rpm_version: ${{ steps.versions.outputs.rpm_version }}
+      rpm_release: ${{ steps.versions.outputs.rpm_release }}
+      archive_version: ${{ steps.versions.outputs.archive_version }}
+      homebrew_version: ${{ steps.versions.outputs.homebrew_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate package versions
+        id: versions
+        run: |
+          python3 packaging/scripts/native_package_versions.py \
+            --cmake-file cpp/CMakeLists.txt \
+            --build-date "$(date -u +%Y%m%d)" \
+            --run-number "${{ github.run_number }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --git-sha "${{ github.sha }}" \
+            --json-out versions.json \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload package versions
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-versions
+          path: versions.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build-deb:
+    name: Build Ubuntu 22.04 DEB packages
+    needs: prepare
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install DEB build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            dpkg-dev \
+            uuid-dev
+
+      - name: Configure and build
+        env:
+          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          TSFILE_DEBIAN_PACKAGE_VERSION: ${{ needs.prepare.outputs.deb_version }}
+        run: |
+          cmake -S cpp -B build/deb -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=ON \
+            -DTSFILE_ENABLE_CPACK=ON \
+            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
+            -DTSFILE_ENABLE_NATIVE_ARCH=OFF \
+            -DTSFILE_ARCHIVE_VERSION="$TSFILE_ARCHIVE_VERSION" \
+            -DTSFILE_DEBIAN_PACKAGE_VERSION="$TSFILE_DEBIAN_PACKAGE_VERSION"
+          cmake --build build/deb --parallel
+
+      - name: Build and verify DEB packages
+        env:
+          EXPECTED_DEB_VERSION: ${{ needs.prepare.outputs.deb_version }}
+        shell: bash
+        run: |
+          mkdir -p packages
+          cpack -G DEB --config build/deb/CPackConfig.cmake -B packages
+
+          mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.deb' -print | sort)
+          if [[ ${#packages[@]} -ne 3 ]]; then
+            printf 'Expected exactly 3 DEB packages, found %s\n' "${#packages[@]}"
+            exit 1
+          fi
+
+          actual_names="$({
+            for package in "${packages[@]}"; do
+              dpkg-deb --field "$package" Package
+            done
+          } | sort)"
+          expected_names="$(printf '%s\n' tsfile tsfile-dev tsfile-tools | sort)"
+          if [[ "$actual_names" != "$expected_names" ]]; then
+            printf 'Unexpected DEB package names:\n%s\n' "$actual_names"
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
+            package_version="$(dpkg-deb --field "$package" Version)"
+            if [[ "$package_version" != "$EXPECTED_DEB_VERSION" ]]; then
+              printf '%s has version %s, expected %s\n' \
+                "$package" "$package_version" "$EXPECTED_DEB_VERSION"
+              exit 1
+            fi
+          done
+
+      - name: Upload DEB packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-deb-ubuntu22.04-amd64
+          path: packages/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  test-deb:
+    name: Test DEB packages on ${{ matrix.container }}
+    needs: build-deb
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - ubuntu:22.04
+          - ubuntu:24.04
+    container: ${{ matrix.container }}
+    steps:
+      - name: Download DEB packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-deb-ubuntu22.04-amd64
+          path: packages
+
+      - name: Install DEB packages
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y ./packages/*.deb cmake build-essential
+
+      - name: Verify installed DEB packages
+        run: |
+          tsfile-cli --version
+          dpkg-query -W tsfile tsfile-dev tsfile-tools
+
+      - name: Build and run an installed-package consumer
+        shell: bash
+        run: |
+          mkdir -p consumer
+          cat > consumer/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.11)
+          project(TsFileInstalledConsumer LANGUAGES CXX)
+
+          find_package(TsFile CONFIG REQUIRED)
+          add_executable(installed_consumer main.cpp)
+          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
+          CMAKE
+          cat > consumer/main.cpp <<'CPP'
+          #include <tsfile/cwrapper/tsfile_cwrapper.h>
+
+          int main() {
+            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
+          }
+          CPP
+          cmake -S consumer -B consumer/build
+          cmake --build consumer/build --parallel
+          ./consumer/build/installed_consumer
+
+  build-rpm:
+    name: Build AlmaLinux 9 RPM packages
+    needs: prepare
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 30
+    steps:
+      - name: Install RPM build prerequisites
+        run: |
+          dnf install -y \
+            cmake \
+            gcc-c++ \
+            ninja-build \
+            pkgconf-pkg-config \
+            rpm-build \
+            git \
+            curl \
+            tar \
+            gzip \
+            libuuid-devel
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure and build
+        env:
+          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          TSFILE_RPM_PACKAGE_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          TSFILE_RPM_PACKAGE_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
+        run: |
+          cmake -S cpp -B build/rpm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF \
+            -DBUILD_TOOLS=ON \
+            -DTSFILE_ENABLE_CPACK=ON \
+            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
+            -DTSFILE_ENABLE_NATIVE_ARCH=OFF \
+            -DTSFILE_ARCHIVE_VERSION="$TSFILE_ARCHIVE_VERSION" \
+            -DTSFILE_RPM_PACKAGE_VERSION="$TSFILE_RPM_PACKAGE_VERSION" \
+            -DTSFILE_RPM_PACKAGE_RELEASE="$TSFILE_RPM_PACKAGE_RELEASE"
+          cmake --build build/rpm --parallel
+
+      - name: Build and verify RPM packages
+        env:
+          EXPECTED_RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          EXPECTED_RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
+        run: |
+          mkdir -p packages
+          cpack -G RPM --config build/rpm/CPackConfig.cmake -B packages
+
+          mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.rpm' -print | sort)
+          if [[ ${#packages[@]} -ne 3 ]]; then
+            printf 'Expected exactly 3 RPM packages, found %s\n' "${#packages[@]}"
+            exit 1
+          fi
+
+          actual_names="$({
+            for package in "${packages[@]}"; do
+              rpm -qp --queryformat '%{NAME}\n' "$package"
+            done
+          } | sort)"
+          expected_names="$(printf '%s\n' tsfile tsfile-devel tsfile-tools | sort)"
+          if [[ "$actual_names" != "$expected_names" ]]; then
+            printf 'Unexpected RPM package names:\n%s\n' "$actual_names"
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
+            package_version="$(rpm -qp --queryformat '%{VERSION}' "$package")"
+            package_release="$(rpm -qp --queryformat '%{RELEASE}' "$package")"
+            if [[ "$package_version" != "$EXPECTED_RPM_VERSION" ]]; then
+              printf '%s has version %s, expected %s\n' \
+                "$package" "$package_version" "$EXPECTED_RPM_VERSION"
+              exit 1
+            fi
+            if [[ "$package_release" != "$EXPECTED_RPM_RELEASE" ]]; then
+              printf '%s has release %s, expected %s\n' \
+                "$package" "$package_release" "$EXPECTED_RPM_RELEASE"
+              exit 1
+            fi
+          done
+
+      - name: Upload RPM packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-rpm-almalinux9-x86_64
+          path: packages/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+
+  test-rpm:
+    name: Test RPM packages on AlmaLinux 9
+    needs: build-rpm
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    steps:
+      - name: Download RPM packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-rpm-almalinux9-x86_64
+          path: packages
+
+      - name: Install RPM packages
+        run: dnf install -y packages/*.rpm cmake gcc-c++
+
+      - name: Verify installed RPM packages
+        run: |
+          tsfile-cli --version
+          rpm -q tsfile tsfile-devel tsfile-tools
+
+      - name: Build and run an installed-package consumer
+        shell: bash
+        run: |
+          mkdir -p consumer
+          cat > consumer/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.11)
+          project(TsFileInstalledConsumer LANGUAGES CXX)
+
+          find_package(TsFile CONFIG REQUIRED)
+          add_executable(installed_consumer main.cpp)
+          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
+          CMAKE
+          cat > consumer/main.cpp <<'CPP'
+          #include <tsfile/cwrapper/tsfile_cwrapper.h>
+
+          int main() {
+            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
+          }
+          CPP
+          cmake -S consumer -B consumer/build
+          cmake --build consumer/build --parallel
+          ./consumer/build/installed_consumer

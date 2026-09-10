@@ -73,10 +73,13 @@ compatible dependency, including ANTLR4 4.9.x. `AUTO` is the reproducible
 release default and uses the verified source fallback for unavailable or
 incompatible distro versions.
 
-The repository workflow `Cpp-Packaging` builds and uploads native DEB and RPM
-artifacts on packaging-related changes. The DEB job runs on Ubuntu and the RPM
-job runs in Fedora, so each package is generated with its native dependency
-metadata tool.
+The manual `Build native package artifacts` workflow is the authoritative
+native package build. Its Linux jobs create `tsfile`, `tsfile-dev`, and
+`tsfile-tools` DEBs on Ubuntu 22.04 and `tsfile`, `tsfile-devel`, and
+`tsfile-tools` RPMs on AlmaLinux 9. Fresh Ubuntu 22.04, Ubuntu 24.04, and
+AlmaLinux 9 containers install the packages and verify both `tsfile-cli` and an
+external CMake consumer. The workflow uploads intermediate artifacts for 14
+days and does not publish packages.
 
 ## macOS
 
