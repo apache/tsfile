@@ -141,6 +141,47 @@ class NativePackageVersionsTest(unittest.TestCase):
                 ["existing=value", *[f"{key}={value}" for key, value in expected.items()]],
             )
 
+    def test_cli_separates_unterminated_github_output_without_changing_bytes(self):
+        for existing in (
+            b"",
+            b"existing=value",
+            b"existing=value\n",
+            b"existing=value\r\n",
+        ):
+            with self.subTest(
+                existing=existing
+            ), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "github-output.txt"
+                output.write_bytes(existing)
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(MODULE_PATH),
+                        "--cmake-file",
+                        str(CPP_CMAKE_FILE),
+                        "--build-date",
+                        "20260910",
+                        "--run-number",
+                        "123",
+                        "--run-attempt",
+                        "1",
+                        "--git-sha",
+                        "abcdef123456",
+                        "--json-out",
+                        str(Path(directory) / "versions.json"),
+                        "--github-output",
+                        str(output),
+                    ],
+                    check=True,
+                )
+                separator = b"\n" if existing and not existing.endswith(b"\n") else b""
+                self.assertTrue(
+                    output.read_bytes().startswith(
+                        existing + separator + b"base_version=2.5.0\n"
+                    ),
+                    output.read_bytes(),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

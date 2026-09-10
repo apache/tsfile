@@ -17,6 +17,18 @@ specific language governing permissions and limitations
 under the License.
 ]]
 cmake_minimum_required(VERSION 3.11)
+option(TSFILE_MSVC_STATIC_RUNTIME
+        "Use the static MSVC runtime throughout a portable bundled build" OFF)
+if (TSFILE_MSVC_STATIC_RUNTIME)
+    if (NOT POLICY CMP0091)
+        message(FATAL_ERROR "TSFILE_MSVC_STATIC_RUNTIME requires CMake 3.15+")
+    endif ()
+    # The policy must be selected before the first project(), and inherited by
+    # upstream projects that reset their policy version in add_subdirectory().
+    cmake_policy(SET CMP0091 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif ()
 project(TsFile_CPP)
 
 if (DEFINED ToolChain)
@@ -62,6 +74,12 @@ if (NOT TSFILE_ABI_VERSION MATCHES "^[0-9]+$")
 endif ()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
+if (TSFILE_MSVC_STATIC_RUNTIME AND
+        NOT TSFILE_DEPENDENCY_SOURCE STREQUAL "BUNDLED")
+    message(FATAL_ERROR
+            "TSFILE_MSVC_STATIC_RUNTIME requires TSFILE_DEPENDENCY_SOURCE=BUNDLED "
+            "so prebuilt dependencies cannot introduce a different MSVC runtime")
+endif ()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
@@ -514,6 +532,13 @@ install(FILES
         COMPONENT development)
 
 set(TSFILE_PKGCONFIG_CFLAGS "")
+if (NOT TSFILE_BUILD_SHARED)
+    string(APPEND TSFILE_PKGCONFIG_CFLAGS " -DTSFILE_STATIC")
+    if (ENABLE_ANTLR4 AND (TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED" OR
+            TSFILE_ANTLR4_SYSTEM_STATIC))
+        string(APPEND TSFILE_PKGCONFIG_CFLAGS " -DANTLR4CPP_STATIC")
+    endif ()
+endif ()
 foreach (_TSFILE_PUBLIC_FEATURE
         ENABLE_ANTLR4
         ENABLE_MEM_STAT
@@ -531,6 +556,8 @@ foreach (_TSFILE_PUBLIC_FEATURE
                 " -D${_TSFILE_PUBLIC_FEATURE}")
     endif ()
 endforeach ()
+file(RELATIVE_PATH TSFILE_PKGCONFIG_PREFIX_RELATIVE
+        "${CMAKE_INSTALL_FULL_LIBDIR}/pkgconfig" "${CMAKE_INSTALL_PREFIX}")
 configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/libtsfile.pc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"

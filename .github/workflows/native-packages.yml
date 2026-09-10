@@ -42,6 +42,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check packaging helpers and workflow contracts
+        run: |
+          python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
+          ruby packaging/tests/check_native_workflow.rb
+
       - name: Generate package versions
         id: versions
         run: |
@@ -152,6 +157,9 @@ jobs:
           - ubuntu:24.04
     container: ${{ matrix.container }}
     steps:
+      - name: Checkout installed-consumer fixture
+        uses: actions/checkout@v7
+
       - name: Download DEB packages
         uses: actions/download-artifact@v8
         with:
@@ -181,25 +189,9 @@ jobs:
       - name: Build and run an installed-package consumer
         shell: bash
         run: |
-          mkdir -p consumer
-          cat > consumer/CMakeLists.txt <<'CMAKE'
-          cmake_minimum_required(VERSION 3.11)
-          project(TsFileInstalledConsumer LANGUAGES CXX)
-
-          find_package(TsFile CONFIG REQUIRED)
-          add_executable(installed_consumer main.cpp)
-          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
-          CMAKE
-          cat > consumer/main.cpp <<'CPP'
-          #include <tsfile/cwrapper/tsfile_cwrapper.h>
-
-          int main() {
-            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
-          }
-          CPP
-          cmake -S consumer -B consumer/build
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build
           cmake --build consumer/build --parallel
-          ./consumer/build/installed_consumer
+          ./consumer/build/tsfile_installed_consumer
 
   build-rpm:
     name: Build AlmaLinux 9 RPM packages
@@ -217,7 +209,7 @@ jobs:
             pkgconf-pkg-config \
             rpm-build \
             git \
-            curl \
+            curl-minimal \
             tar \
             gzip \
             libuuid-devel
@@ -299,6 +291,9 @@ jobs:
     runs-on: ubuntu-24.04
     container: almalinux:9
     steps:
+      - name: Checkout installed-consumer fixture
+        uses: actions/checkout@v7
+
       - name: Download RPM packages
         uses: actions/download-artifact@v8
         with:
@@ -324,25 +319,9 @@ jobs:
       - name: Build and run an installed-package consumer
         shell: bash
         run: |
-          mkdir -p consumer
-          cat > consumer/CMakeLists.txt <<'CMAKE'
-          cmake_minimum_required(VERSION 3.11)
-          project(TsFileInstalledConsumer LANGUAGES CXX)
-
-          find_package(TsFile CONFIG REQUIRED)
-          add_executable(installed_consumer main.cpp)
-          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
-          CMAKE
-          cat > consumer/main.cpp <<'CPP'
-          #include <tsfile/cwrapper/tsfile_cwrapper.h>
-
-          int main() {
-            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
-          }
-          CPP
-          cmake -S consumer -B consumer/build
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build
           cmake --build consumer/build --parallel
-          ./consumer/build/installed_consumer
+          ./consumer/build/tsfile_installed_consumer
 
   build-windows:
     name: Build Windows MSVC x86_64 ZIP
@@ -370,6 +349,8 @@ jobs:
             -DBUILD_TOOLS=ON `
             -DTSFILE_ENABLE_CPACK=ON `
             -DTSFILE_DEPENDENCY_SOURCE=BUNDLED `
+            -DTSFILE_MSVC_STATIC_RUNTIME=ON `
+            -DCMAKE_PROJECT_TsFile_CPP_INCLUDE="$((Resolve-Path cpp/cmake/tests/CheckStaticMSVCRuntime.cmake).Path)" `
             -DTSFILE_ENABLE_NATIVE_ARCH=OFF `
             -DTSFILE_ARCHIVE_VERSION="$env:TSFILE_ARCHIVE_VERSION"
           cmake --build build/windows --config Release --parallel
@@ -396,29 +377,16 @@ jobs:
             }
           }
 
+          python packaging/scripts/verify_windows_runtime.py "$stage"
           $env:PATH = "$stage/bin;$env:PATH"
           tsfile-cli.exe --version
 
-          New-Item -ItemType Directory -Path consumer -Force | Out-Null
-          @'
-          cmake_minimum_required(VERSION 3.11)
-          project(TsFileInstalledConsumer LANGUAGES CXX)
-
-          find_package(TsFile CONFIG REQUIRED)
-          add_executable(installed_consumer main.cpp)
-          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
-          '@ | Set-Content -Path consumer/CMakeLists.txt
-          @'
-          #include <tsfile/cwrapper/tsfile_cwrapper.h>
-
-          int main() {
-            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
-          }
-          '@ | Set-Content -Path consumer/main.cpp
-          cmake -S consumer -B consumer/build -G "Visual Studio 17 2022" -A x64 `
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
             -DCMAKE_PREFIX_PATH="$stage"
           cmake --build consumer/build --config Release --parallel
-          & consumer/build/Release/installed_consumer.exe
+          & consumer/build/Release/tsfile_installed_consumer.exe
 
       - name: Build and inspect combined ZIP
         env:
@@ -468,6 +436,13 @@ jobs:
           } finally {
             $archive.Dispose()
           }
+
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath extracted/windows
+          python packaging/scripts/verify_windows_runtime.py extracted/windows
+          $zipCli = @(Get-ChildItem extracted/windows -Recurse -Filter tsfile-cli.exe -File)
+          if ($zipCli.Count -ne 1) { throw 'Expected exactly one extracted CLI' }
+          $env:PATH = "$($zipCli[0].DirectoryName);$env:SystemRoot/System32"
+          & $zipCli[0].FullName --version
 
       - name: Upload Windows ZIP
         uses: actions/upload-artifact@v7

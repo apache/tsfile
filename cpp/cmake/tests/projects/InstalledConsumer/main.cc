@@ -21,4 +21,7 @@
 #include <tsfile/writer/tsfile_table_writer.h>
 #include <tsfile/writer/tsfile_tree_writer.h>
 
-int main() { return TS_DATATYPE_INT32 == 1 ? 0 : 1; }
+int main() {
+    if (set_global_time_encoding(TS_ENCODING_TS_2DIFF) != 0) return 1;
+    return get_global_time_encoding() == TS_ENCODING_TS_2DIFF ? 0 : 1;
+}

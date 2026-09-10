@@ -18,7 +18,7 @@
 # The .pc file is installed below ${prefix}/@CMAKE_INSTALL_LIBDIR@/pkgconfig.
 # Deriving the prefix from its own location keeps DESTDIR and relocations
 # working without embedding the build-time install prefix.
-prefix=${pcfiledir}/../..
+prefix=${pcfiledir}/@TSFILE_PKGCONFIG_PREFIX_RELATIVE@
 exec_prefix=${prefix}
 libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
 includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@

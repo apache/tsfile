@@ -16,6 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include <tsfile/cwrapper/tsfile_cwrapper.h>
 #include <tsfile/reader/tsfile_reader.h>
 
-int main() { return 0; }
+int main() {
+    if (set_global_time_encoding(TS_ENCODING_TS_2DIFF) != 0) return 1;
+    return get_global_time_encoding() == TS_ENCODING_TS_2DIFF ? 0 : 1;
+}

@@ -126,6 +126,10 @@ else()
     # Consumers of the CMake target must see TSFILE_API without DLL import
     # decoration when linking the static library on MSVC.
     target_compile_definitions(tsfile INTERFACE TSFILE_STATIC)
+    if (ENABLE_ANTLR4 AND (TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED" OR
+            TSFILE_ANTLR4_SYSTEM_STATIC))
+        target_compile_definitions(tsfile INTERFACE ANTLR4CPP_STATIC)
+    endif ()
 endif()
 
 if (${COV_ENABLED})
@@ -151,9 +155,10 @@ foreach (_TSFILE_OBJECT_TARGET IN LISTS _TSFILE_OBJECT_TARGETS)
             $<TARGET_OBJECTS:${_TSFILE_OBJECT_TARGET}>)
 endforeach ()
 
-if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")
-    target_link_libraries(tsfile PRIVATE ${_TSFILE_PROJECT_DEPENDENCIES})
-endif ()
+foreach (_TSFILE_DEPENDENCY IN LISTS _TSFILE_PROJECT_DEPENDENCIES)
+    target_link_libraries(tsfile PRIVATE $<BUILD_INTERFACE:${_TSFILE_DEPENDENCY}>)
+endforeach ()
+unset(_TSFILE_DEPENDENCY)
 
 unset(_TSFILE_OBJECT_SOURCES)
 unset(_TSFILE_OBJECT_TARGET)
@@ -230,6 +235,8 @@ if (TSFILE_BUILD_SHARED)
     # dependencies at link time. Do not export those build-only targets as
     # consumer link requirements; they are not installed with the package.
     set_property(TARGET tsfile PROPERTY INTERFACE_LINK_LIBRARIES "")
+else ()
+    include(${CMAKE_SOURCE_DIR}/cmake/TsFileStaticDependencies.cmake)
 endif ()
 
 # A shared library is a RUNTIME plus an import ARCHIVE on Windows and a LIBRARY

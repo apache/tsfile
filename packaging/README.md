@@ -147,10 +147,51 @@ runtime, development files, and tools under a relocatable prefix. In
 particular, the MSVC outputs are installed as `bin/tsfile.dll`,
 `lib/tsfile.lib`, and `bin/tsfile-cli.exe`.
 
+The portable ZIP targets Windows 10 / Windows Server 2022 or newer and uses
+the static MSVC runtime (`/MT`) in Release. `TSFILE_MSVC_STATIC_RUNTIME=ON`
+requires CMake 3.15+ and `TSFILE_DEPENDENCY_SOURCE=BUNDLED`: all codec archives,
+TsFile, and the CLI are compiled with the same runtime selection. The workflow
+checks the runtime property on every native target and inspects every shipped
+EXE/DLL with `dumpbin`, rejecting dynamic Visual C++ runtime imports and missing
+non-system DLLs in both the staged tree and the extracted ZIP. Running the CLI
+does not require a separate Visual C++ Redistributable installation. Microsoft
+redistributable DLLs are not copied from the runner or included in the ZIP;
+runtime security updates require rebuilding the static-runtime package.
+
+C++ SDK consumers should use the matching MSVC v143 Release toolset and `/MT`
+(`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, with CMake policy CMP0091 set to
+NEW before `project()`). Keep allocation and release paired through the public
+APIs; CRT-owned objects such as `FILE*` must not cross DLL boundaries. The
+installed-consumer fixture demonstrates a public setting/getter round trip
+that requires real symbols from `tsfile.dll`.
+
 The workflow uploads that ZIP as the intermediate artifact
 `native-windows-msvc-x86_64` for 14 days. Like the Linux jobs, it validates the
 license files, CMake package config, staged executable, library, import library,
 and public headers without publishing the artifact.
+
+## Static SDK and install regressions
+
+`TSFILE_BUILD_SHARED=OFF` remains installable. Its CMake package rediscovers
+system codec packages on the consuming machine and installs bundled codec
+archives under `<libdir>/tsfile/<configuration>`. Link with `TsFile::tsfile`
+to receive the complete static dependency list. Bundled archives and CMake
+metadata move with the install prefix; system dependency development packages
+must be available on the consuming machine. The shared package retains its
+existing runtime/development/tools layout.
+
+The pkg-config prefix is derived from the configured pkg-config installation
+directory, including multiarch library directories. The optional Unix native
+integration suite builds, installs, relocates, and links CMake and pkg-config
+consumers. It requires CMake 3.19+ for the runtime-property test, pkg-config,
+system LZ4, and a verified dependency cache containing ANTLR4, utf8cpp, zlib,
+and LZOKAY archives:
+
+```bash
+TSFILE_RUN_INSTALL_TESTS=1 \
+TSFILE_TEST_DEPENDENCY_CACHE=/path/to/dependency-cache \
+python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
+```
 
 ## Final native package bundle
 

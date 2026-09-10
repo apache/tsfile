@@ -18,4 +18,7 @@
  */
 #include <tsfile/cwrapper/tsfile_cwrapper.h>
 
-int main(void) { return TS_DATATYPE_INT32 == 1 ? 0 : 1; }
+int main(void) {
+    if (set_global_time_encoding(TS_ENCODING_TS_2DIFF) != 0) return 1;
+    return get_global_time_encoding() == TS_ENCODING_TS_2DIFF ? 0 : 1;
+}

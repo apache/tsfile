@@ -119,9 +119,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     arguments.json_out.write_text(json.dumps(versions, indent=2) + "\n", encoding="utf-8")
     if arguments.github_output is not None:
-        with arguments.github_output.open("a", encoding="utf-8") as github_output:
+        with arguments.github_output.open("a+b") as github_output:
+            if github_output.tell():
+                github_output.seek(-1, 2)
+                if github_output.read(1) != b"\n":
+                    github_output.write(b"\n")
             github_output.write(
-                "\n".join(f"{key}={value}" for key, value in versions.items()) + "\n"
+                (
+                    "\n".join(f"{key}={value}" for key, value in versions.items())
+                    + "\n"
+                ).encode("utf-8")
             )
     return 0
 
