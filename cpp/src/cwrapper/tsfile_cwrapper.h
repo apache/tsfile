@@ -592,6 +592,35 @@ Tablet tablet_new(char** column_name_list, TSDataType* data_types,
 uint32_t tablet_get_cur_row_size(Tablet tablet);
 
 /**
+ * @brief Resets a Tablet for reuse and sets its logical row count.
+ *
+ * Existing backing storage is retained. A row_count larger than the Tablet's
+ * capacity returns E_OUT_OF_RANGE.
+ */
+ERRNO tablet_reset(Tablet tablet, uint32_t row_count);
+
+/**
+ * @brief Bulk-copies timestamps into a Tablet.
+ *
+ * @param timestamps [in] Array of count int64 timestamps. May be NULL only
+ * when count is zero.
+ */
+ERRNO tablet_set_timestamps(Tablet tablet, const int64_t* timestamps,
+                            uint32_t count);
+
+/**
+ * @brief Bulk-copies one fixed-width column into a Tablet.
+ *
+ * @param values [in] Typed array matching the Tablet column. May be NULL only
+ * when count is zero.
+ * @param null_bitmap [in] Optional packed bitmap where bit 1 means NULL and
+ * bit 0 means valid. NULL means every value is valid.
+ */
+ERRNO tablet_set_column_values(Tablet tablet, uint32_t column_index,
+                               const void* values, const uint8_t* null_bitmap,
+                               uint32_t count);
+
+/**
  * @brief Assigns timestamp to a row in the Tablet.
  *
  * @param tablet [in] Valid Tablet handle.

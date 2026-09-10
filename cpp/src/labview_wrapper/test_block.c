@@ -213,6 +213,89 @@ static int test_f64(void) {
     return 0;
 }
 
+static int test_f64_reuse_and_growth(void) {
+    static const char* path = "lv_block_f64_reuse.tsfile";
+    static const char* columns = "c0\nc1\nc2\nc3\nc4\nc5\nc6\nc7\nc8";
+    enum { COLS = 9, FIRST_ROWS = 1024, SECOND_ROWS = 256, THIRD_ROWS = 2048 };
+    const int row_counts[] = {FIRST_ROWS, SECOND_ROWS, THIRD_ROWS};
+    const int total_rows = FIRST_ROWS + SECOND_ROWS + THIRD_ROWS;
+    int64_t* timestamps =
+        (int64_t*)malloc((size_t)THIRD_ROWS * sizeof(int64_t));
+    double* values =
+        (double*)malloc((size_t)THIRD_ROWS * COLS * sizeof(double));
+    if (timestamps == NULL || values == NULL) {
+        free(timestamps);
+        free(values);
+        return 1;
+    }
+
+    remove(path);
+    LV_Handle builder = lv_tsfile_schema_builder_new("reuse_f64");
+    if (builder == 0) {
+        free(timestamps);
+        free(values);
+        return 1;
+    }
+    for (int col = 0; col < COLS; ++col) {
+        char name[8];
+        snprintf(name, sizeof(name), "c%d", col);
+        CHECK_OK(lv_tsfile_schema_builder_add_column(
+            builder, name, LV_TYPE_DOUBLE, LV_CAT_FIELD));
+    }
+    LV_Handle writer = 0;
+    CHECK_OK(lv_tsfile_writer_open(path, builder, 0, &writer));
+    lv_tsfile_schema_builder_free(builder);
+
+    int global_row = 0;
+    for (int batch = 0; batch < 3; ++batch) {
+        for (int row = 0; row < row_counts[batch]; ++row) {
+            timestamps[row] = 1000 + global_row + row;
+            for (int col = 0; col < COLS; ++col) {
+                values[row * COLS + col] =
+                    (double)((global_row + row) * 100 + col) + 0.25;
+            }
+        }
+        CHECK_OK(lv_tsfile_write_block_f64(writer, timestamps, values,
+                                           row_counts[batch], COLS));
+        global_row += row_counts[batch];
+    }
+    CHECK_OK(lv_tsfile_writer_close(writer));
+
+    LV_Handle reader = 0;
+    LV_Handle rs = 0;
+    CHECK_OK(lv_tsfile_reader_open(path, &reader));
+    CHECK_OK(
+        lv_tsfile_query_table(reader, "reuse_f64", columns, 0, 10000, &rs));
+    LV_Status err = 0;
+    int row = 0;
+    while (lv_tsfile_rs_next(rs, &err) == 1 && err == 0) {
+        if (row >= total_rows || lv_tsfile_rs_get_i64(rs, 0) != 1000 + row) {
+            fprintf(stderr, "FAIL: reuse timestamp at row %d\n", row);
+            return 1;
+        }
+        for (int col = 0; col < COLS; ++col) {
+            double expected = (double)(row * 100 + col) + 0.25;
+            double actual = lv_tsfile_rs_get_f64(rs, (uint32_t)(col + 1));
+            if (fabs(actual - expected) > 1e-12) {
+                fprintf(stderr, "FAIL: reuse value at row %d col %d\n", row,
+                        col);
+                return 1;
+            }
+        }
+        ++row;
+    }
+    lv_tsfile_rs_free(rs);
+    CHECK_OK(lv_tsfile_reader_close(reader));
+    free(timestamps);
+    free(values);
+    remove(path);
+    if (err != 0 || row != total_rows) {
+        fprintf(stderr, "FAIL: reuse row count=%d err=%d\n", row, (int)err);
+        return 1;
+    }
+    return 0;
+}
+
 static int test_file_f64(void) {
     static const char* path = "lv_file_f64.tsfile";
     const int64_t ts[NROWS] = {10, 11, 12, 13};
@@ -280,6 +363,10 @@ int main(void) {
     }
     fprintf(stderr, "RUN test_f64\n");
     if (test_f64() != 0) {
+        return 1;
+    }
+    fprintf(stderr, "RUN test_f64_reuse_and_growth\n");
+    if (test_f64_reuse_and_growth() != 0) {
         return 1;
     }
     fprintf(stderr, "RUN test_file_f64\n");

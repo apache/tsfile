@@ -320,6 +320,37 @@ uint32_t tablet_get_cur_row_size(Tablet tablet) {
     return static_cast<storage::Tablet*>(tablet)->get_cur_row_size();
 }
 
+ERRNO tablet_reset(Tablet tablet, uint32_t row_count) {
+    if (tablet == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    auto* typed_tablet = static_cast<storage::Tablet*>(tablet);
+    if (row_count > typed_tablet->get_max_row_size()) {
+        return common::E_OUT_OF_RANGE;
+    }
+    typed_tablet->reset(row_count);
+    return common::E_OK;
+}
+
+ERRNO tablet_set_timestamps(Tablet tablet, const int64_t* timestamps,
+                            uint32_t count) {
+    if (tablet == nullptr || (timestamps == nullptr && count != 0)) {
+        return common::E_INVALID_ARG;
+    }
+    return static_cast<storage::Tablet*>(tablet)->set_timestamps(timestamps,
+                                                                 count);
+}
+
+ERRNO tablet_set_column_values(Tablet tablet, uint32_t column_index,
+                               const void* values, const uint8_t* null_bitmap,
+                               uint32_t count) {
+    if (tablet == nullptr || (values == nullptr && count != 0)) {
+        return common::E_INVALID_ARG;
+    }
+    return static_cast<storage::Tablet*>(tablet)->set_column_values(
+        column_index, values, null_bitmap, count);
+}
+
 ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                            Timestamp timestamp) {
     return static_cast<storage::Tablet*>(tablet)->add_timestamp(row_index,

@@ -60,6 +60,11 @@ struct WriterCtx {
     TsFileWriter writer = nullptr;
     std::vector<std::string> col_names;
     std::vector<TSDataType> col_types;
+    Tablet block_tablet = nullptr;
+    uint32_t block_capacity = 0;
+    std::vector<int32_t> i32_scratch;
+    std::vector<float> f32_scratch;
+    std::vector<double> f64_scratch;
 };
 
 struct TabletCtx {
@@ -115,25 +120,43 @@ void* unregister(uint64_t id, Kind kind) {
     return p;
 }
 
-class ScopedTablet {
-   public:
-    explicit ScopedTablet(Tablet tablet) : tablet_(tablet) {}
-    ~ScopedTablet() {
-        if (tablet_ != nullptr) {
-            free_tablet(&tablet_);
-        }
+std::vector<int32_t>& block_scratch(WriterCtx* ctx, const int32_t*) {
+    return ctx->i32_scratch;
+}
+
+std::vector<float>& block_scratch(WriterCtx* ctx, const float*) {
+    return ctx->f32_scratch;
+}
+
+std::vector<double>& block_scratch(WriterCtx* ctx, const double*) {
+    return ctx->f64_scratch;
+}
+
+ERRNO ensure_block_tablet(WriterCtx* ctx, uint32_t rows, uint32_t cols) {
+    if (ctx->block_tablet != nullptr && ctx->block_capacity >= rows) {
+        return E_OK;
     }
 
-    Tablet get() const { return tablet_; }
-
-   private:
-    Tablet tablet_;
-};
+    std::vector<char*> names(cols);
+    for (uint32_t col = 0; col < cols; ++col) {
+        names[col] = const_cast<char*>(ctx->col_names[col].c_str());
+    }
+    Tablet replacement =
+        tablet_new(names.data(), ctx->col_types.data(), cols, rows);
+    if (replacement == nullptr) {
+        return RET_OOM;
+    }
+    if (ctx->block_tablet != nullptr) {
+        free_tablet(&ctx->block_tablet);
+    }
+    ctx->block_tablet = replacement;
+    ctx->block_capacity = rows;
+    return E_OK;
+}
 
 template <typename T>
 LV_Status write_block(LV_Handle writer, const int64_t* ts, const T* data,
-                      int32_t nrows, int32_t ncols, TSDataType expected_type,
-                      ERRNO (*add_value)(Tablet, uint32_t, uint32_t, T)) {
+                      int32_t nrows, int32_t ncols, TSDataType expected_type) {
     auto* wctx = static_cast<WriterCtx*>(lookup(writer, Kind::kWriter));
     if (wctx == nullptr || wctx->writer == nullptr || ts == nullptr ||
         data == nullptr || nrows <= 0 || ncols <= 0 ||
@@ -156,34 +179,38 @@ LV_Status write_block(LV_Handle writer, const int64_t* ts, const T* data,
     }
 
     try {
-        std::vector<char*> names(cols);
+        ERRNO err = ensure_block_tablet(wctx, static_cast<uint32_t>(rows),
+                                        static_cast<uint32_t>(cols));
+        if (err != E_OK) {
+            return err;
+        }
+
+        err = tablet_reset(wctx->block_tablet, 0);
+        if (err != E_OK) {
+            return err;
+        }
+        err = tablet_set_timestamps(wctx->block_tablet, ts,
+                                    static_cast<uint32_t>(rows));
+        if (err != E_OK) {
+            return err;
+        }
+
+        std::vector<T>& scratch = block_scratch(wctx, static_cast<T*>(nullptr));
+        scratch.resize(rows * cols);
         for (size_t col = 0; col < cols; ++col) {
-            names[col] = const_cast<char*>(wctx->col_names[col].c_str());
-        }
-
-        ScopedTablet tablet(tablet_new(names.data(), wctx->col_types.data(),
-                                       static_cast<uint32_t>(cols),
-                                       static_cast<uint32_t>(rows)));
-        if (tablet.get() == nullptr) {
-            return E_INVALID_ARG;
-        }
-
-        ERRNO err = E_OK;
-        for (uint32_t row = 0; row < static_cast<uint32_t>(rows); ++row) {
-            err = tablet_add_timestamp(tablet.get(), row, ts[row]);
+            T* column = scratch.data() + col * rows;
+            for (size_t row = 0; row < rows; ++row) {
+                column[row] = data[row * cols + col];
+            }
+            err = tablet_set_column_values(
+                wctx->block_tablet, static_cast<uint32_t>(col), column, nullptr,
+                static_cast<uint32_t>(rows));
             if (err != E_OK) {
                 return err;
             }
-            const size_t row_offset = static_cast<size_t>(row) * cols;
-            for (uint32_t col = 0; col < static_cast<uint32_t>(cols); ++col) {
-                err = add_value(tablet.get(), row, col, data[row_offset + col]);
-                if (err != E_OK) {
-                    return err;
-                }
-            }
         }
 
-        return tsfile_writer_write(wctx->writer, tablet.get());
+        return tsfile_writer_write(wctx->writer, wctx->block_tablet);
     } catch (const std::bad_alloc&) {
         return RET_OOM;
     } catch (...) {
@@ -239,6 +266,7 @@ LV_Status lv_tsfile_writer_open(const char* path, LV_Handle schema_builder,
     if (path == nullptr || out_writer == nullptr) {
         return E_INVALID_ARG;
     }
+    *out_writer = 0;
     auto* sb = static_cast<SchemaBuilderCtx*>(
         lookup(schema_builder, Kind::kSchemaBuilder));
     if (sb == nullptr || sb->col_names.empty()) {
@@ -305,22 +333,19 @@ LV_Status lv_tsfile_writer_write(LV_Handle writer, LV_Handle tablet) {
 LV_Status lv_tsfile_write_block_i32(LV_Handle writer, const int64_t* ts,
                                     const int32_t* data, int32_t nrows,
                                     int32_t ncols) {
-    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_INT32,
-                       tablet_add_value_by_index_int32_t);
+    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_INT32);
 }
 
 LV_Status lv_tsfile_write_block_f32(LV_Handle writer, const int64_t* ts,
                                     const float* data, int32_t nrows,
                                     int32_t ncols) {
-    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_FLOAT,
-                       tablet_add_value_by_index_float);
+    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_FLOAT);
 }
 
 LV_Status lv_tsfile_write_block_f64(LV_Handle writer, const int64_t* ts,
                                     const double* data, int32_t nrows,
                                     int32_t ncols) {
-    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_DOUBLE,
-                       tablet_add_value_by_index_double);
+    return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_DOUBLE);
 }
 
 LV_Status lv_tsfile_writer_close(LV_Handle writer) {
@@ -334,6 +359,9 @@ LV_Status lv_tsfile_writer_close(LV_Handle writer) {
     }
     if (ctx->wf != nullptr) {
         free_write_file(&ctx->wf);
+    }
+    if (ctx->block_tablet != nullptr) {
+        free_tablet(&ctx->block_tablet);
     }
     delete ctx;
     return err;

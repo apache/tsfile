@@ -301,6 +301,7 @@ class Tablet {
     }
     size_t get_column_count() const { return schema_vec_->size(); }
     uint32_t get_cur_row_size() const { return cur_row_size_; }
+    uint32_t get_max_row_size() const { return max_row_num_; }
 
     /**
      * @brief Adds a timestamp to the specified row.
