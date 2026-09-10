@@ -195,6 +195,63 @@ class AssembleNativePackagesTest(unittest.TestCase):
                 ],
             )
 
+    def test_verifies_assembler_checksum_lines_sorted_by_path(self):
+        module = self.require_module()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            input_directory = Path(temporary_directory) / "input"
+            output_directory = Path(temporary_directory) / "bundle"
+            self.write_fixture(input_directory)
+            module.assemble(input_directory, output_directory, VERSIONS, SOURCE)
+
+            checksum_lines = (
+                (output_directory / "SHA256SUMS")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            )
+            self.assertNotEqual(
+                checksum_lines,
+                sorted(checksum_lines),
+                "fixture must distinguish path ordering from hash ordering",
+            )
+            self.assertIsNone(module.verify_bundle(output_directory))
+
+    def test_rejects_unsafe_versions_and_empty_source_identity(self):
+        module = self.require_module()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            input_directory = Path(temporary_directory) / "input"
+            self.write_fixture(input_directory)
+            for index, (field, value) in enumerate(
+                (
+                    ("archive_version", "../../latest"),
+                    ("homebrew_version", "../latest"),
+                    ("archive_version", ""),
+                    ("homebrew_version", "version\\latest"),
+                )
+            ):
+                with self.subTest(field=field, value=value):
+                    versions = {**VERSIONS, field: value}
+                    with self.assertRaisesRegex(ValueError, "safe path component"):
+                        module.assemble(
+                            input_directory,
+                            Path(temporary_directory) / f"invalid-{index}",
+                            versions,
+                            SOURCE,
+                        )
+            for index, (field, value) in enumerate(
+                (("commit", ""), ("repository", "   "))
+            ):
+                with self.subTest(field=field, value=value):
+                    source = {**SOURCE, field: value}
+                    with self.assertRaisesRegex(ValueError, "nonempty"):
+                        module.assemble(
+                            input_directory,
+                            Path(temporary_directory) / f"empty-{index}",
+                            VERSIONS,
+                            source,
+                        )
+
     def test_rejects_unknown_files(self):
         module = self.require_module()
 

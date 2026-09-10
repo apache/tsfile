@@ -715,38 +715,8 @@ jobs:
           LOGICAL_VERSION: ${{ needs.prepare.outputs.logical_version }}
         shell: bash
         run: |
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          output = Path(f"tsfile-native-packages-{os.environ['LOGICAL_VERSION']}")
-          manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-          checksums = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
-          expected_checksums = []
-          paths = set()
-          for artifact in manifest["artifacts"]:
-              relative = Path(artifact["path"])
-              assert relative.as_posix() == artifact["path"]
-              assert relative not in paths, f"Duplicate manifest path: {relative}"
-              paths.add(relative)
-              path = output / relative
-              assert path.is_file() and not path.is_symlink(), f"Missing artifact: {relative}"
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
-              assert digest == artifact["sha256"], f"Hash mismatch: {relative}"
-              assert path.stat().st_size == artifact["size"], f"Size mismatch: {relative}"
-              expected_checksums.append(f"{digest}  {relative.as_posix()}")
-          assert checksums == sorted(expected_checksums)
-          actual_paths = {
-              path.relative_to(output)
-              for path in output.rglob("*")
-              if path.is_file() and path.name not in {"SHA256SUMS", "manifest.json"}
-          }
-          assert actual_paths == paths
-          PY
+          python3 packaging/scripts/assemble_native_packages.py \
+            --verify-bundle "tsfile-native-packages-$LOGICAL_VERSION"
 
       - name: Upload checksummed native package bundle
         uses: actions/upload-artifact@v7
