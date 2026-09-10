@@ -97,6 +97,17 @@ LV_API LV_Status lv_tsfile_write_block_f64(LV_Handle writer, const int64_t* ts,
                                            int32_t ncols);
 /* Synchronously flush buffered chunks. The writer remains open. */
 LV_API LV_Status lv_tsfile_writer_flush(LV_Handle writer);
+/* Close the writer synchronously when async_close is 0. When async_close is
+ * 1, invalidate the writer immediately and return a Close Task handle while
+ * the process-wide close thread finishes the file. A new asynchronous close
+ * waits for the previous close thread before it starts. */
+LV_API LV_Status lv_tsfile_writer_close_ex(LV_Handle writer,
+                                           int32_t async_close,
+                                           LV_Handle* out_close_task);
+/* Wait indefinitely for an asynchronous close, return its final status, and
+ * consume the Close Task handle. */
+LV_API LV_Status lv_tsfile_close_task_wait(LV_Handle close_task);
+/* Backward-compatible synchronous close. */
 LV_API LV_Status lv_tsfile_writer_close(LV_Handle writer);
 
 /* ===================== tablet builder ===================== */

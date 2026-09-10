@@ -50,7 +50,7 @@ if (BUILD_LABVIEW_WRAPPER_TESTS)
         CXX_STANDARD_REQUIRED ON
         RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
 
-    foreach(test_name smoke read_only dump block block_read)
+    foreach(test_name smoke read_only dump block block_read async_close)
         add_executable(tsfile_labview_${test_name}_test test_${test_name}.c)
         target_link_libraries(tsfile_labview_${test_name}_test
                               PRIVATE tsfile_labview)

@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "async_close.h"
 #include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
 
@@ -46,7 +47,14 @@
 namespace {
 
 /* ---------- handle registry ---------- */
-enum class Kind { kSchemaBuilder, kWriter, kTablet, kReader, kResultSet };
+enum class Kind {
+    kSchemaBuilder,
+    kWriter,
+    kTablet,
+    kReader,
+    kResultSet,
+    kCloseTask
+};
 
 struct SchemaBuilderCtx {
     std::string table_name;
@@ -65,6 +73,10 @@ struct WriterCtx {
     std::vector<int32_t> i32_scratch;
     std::vector<float> f32_scratch;
     std::vector<double> f64_scratch;
+};
+
+struct CloseTaskCtx {
+    std::shared_ptr<labview::AsyncCloseTask> task;
 };
 
 struct TabletCtx {
@@ -98,6 +110,11 @@ std::mutex g_mtx;
 std::unordered_map<uint64_t, Entry> g_registry;
 uint64_t g_next_id = 1;
 
+labview::AsyncCloseCoordinator& close_coordinator() {
+    static labview::AsyncCloseCoordinator coordinator;
+    return coordinator;
+}
+
 uint64_t register_handle(Kind kind, void* ptr) {
     std::lock_guard<std::mutex> lock(g_mtx);
     uint64_t id = g_next_id++;
@@ -123,6 +140,32 @@ void* unregister(uint64_t id, Kind kind) {
     void* p = it->second.ptr;
     g_registry.erase(it);
     return p;
+}
+
+LV_Status close_writer(WriterCtx* ctx) noexcept {
+    if (ctx == nullptr) {
+        return E_INVALID_ARG;
+    }
+
+    LV_Status status = E_OK;
+    try {
+        if (ctx->writer != nullptr) {
+            status = tsfile_writer_close(ctx->writer);
+        }
+    } catch (const std::bad_alloc&) {
+        status = RET_OOM;
+    } catch (...) {
+        status = RET_FILE_CLOSE_ERR;
+    }
+
+    if (ctx->wf != nullptr) {
+        free_write_file(&ctx->wf);
+    }
+    if (ctx->block_tablet != nullptr) {
+        free_tablet(&ctx->block_tablet);
+    }
+    delete ctx;
+    return status;
 }
 
 std::vector<int32_t>& block_scratch(WriterCtx* ctx, const int32_t*) {
@@ -367,23 +410,72 @@ LV_Status lv_tsfile_writer_flush(LV_Handle writer) {
     }
 }
 
-LV_Status lv_tsfile_writer_close(LV_Handle writer) {
+LV_Status lv_tsfile_writer_close_ex(LV_Handle writer, int32_t async_close,
+                                    LV_Handle* out_close_task) {
+    if (out_close_task == nullptr) {
+        return E_INVALID_ARG;
+    }
+    *out_close_task = 0;
+    if (async_close != 0 && async_close != 1) {
+        return E_INVALID_ARG;
+    }
+
     auto* ctx = static_cast<WriterCtx*>(unregister(writer, Kind::kWriter));
     if (ctx == nullptr) {
         return E_INVALID_ARG;
     }
-    ERRNO err = E_OK;
-    if (ctx->writer != nullptr) {
-        err = tsfile_writer_close(ctx->writer);
+
+    if (async_close == 0) {
+        return close_writer(ctx);
     }
-    if (ctx->wf != nullptr) {
-        free_write_file(&ctx->wf);
+
+    std::shared_ptr<labview::AsyncCloseTask> task;
+    LV_Status submit_status = E_OK;
+    try {
+        submit_status = close_coordinator().Submit(
+            [ctx] { return close_writer(ctx); }, &task);
+    } catch (...) {
+        return close_writer(ctx);
     }
-    if (ctx->block_tablet != nullptr) {
-        free_tablet(&ctx->block_tablet);
+    if (task == nullptr) {
+        return submit_status;
+    }
+
+    CloseTaskCtx* task_ctx = nullptr;
+    try {
+        task_ctx = new CloseTaskCtx();
+        task_ctx->task = task;
+        *out_close_task = register_handle(Kind::kCloseTask, task_ctx);
+        return E_OK;
+    } catch (...) {
+        delete task_ctx;
+        return task->Wait();
+    }
+}
+
+LV_Status lv_tsfile_close_task_wait(LV_Handle close_task) {
+    auto* ctx =
+        static_cast<CloseTaskCtx*>(unregister(close_task, Kind::kCloseTask));
+    if (ctx == nullptr || ctx->task == nullptr) {
+        delete ctx;
+        return E_INVALID_ARG;
+    }
+
+    LV_Status status = E_OK;
+    try {
+        status = ctx->task->Wait();
+    } catch (const std::bad_alloc&) {
+        status = RET_OOM;
+    } catch (...) {
+        status = RET_FILE_CLOSE_ERR;
     }
     delete ctx;
-    return err;
+    return status;
+}
+
+LV_Status lv_tsfile_writer_close(LV_Handle writer) {
+    LV_Handle unused_task = 0;
+    return lv_tsfile_writer_close_ex(writer, 0, &unused_task);
 }
 
 /* ===================== tablet builder ===================== */

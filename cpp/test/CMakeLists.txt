@@ -359,6 +359,8 @@ endif()
 if(TARGET tsfile_labview_smoke_test)
     add_test(NAME LabVIEWAsyncCloseCoordinatorTest
              COMMAND $<TARGET_FILE:tsfile_labview_async_close_coordinator_test>)
+    add_test(NAME LabVIEWAsyncCloseTest
+             COMMAND $<TARGET_FILE:tsfile_labview_async_close_test>)
     add_test(NAME LabVIEWSmokeTest
              COMMAND $<TARGET_FILE:tsfile_labview_smoke_test>)
     add_test(NAME LabVIEWReadOnlyTest
