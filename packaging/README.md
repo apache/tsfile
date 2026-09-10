@@ -29,9 +29,29 @@ The header closure mirrors the include relationships used by the current C++
 implementation. It is intentionally broader than the long-term stable public
 API; a separate API cleanup will narrow it in a future version.
 
+## Manual artifact workflow
+
+`Build native package artifacts` (`.github/workflows/native-packages.yml`) is
+the authoritative native packaging workflow. In the fork's GitHub Actions tab,
+select this workflow, choose **Run workflow**, select the branch containing the
+commit to build, and dispatch it manually. It runs only on `workflow_dispatch`,
+with read-only repository permissions; pushes and pull requests do not trigger
+native packaging.
+
+A successful run produces Ubuntu DEBs, AlmaLinux RPMs, an ARM64 and Intel
+Homebrew development bottle with a merged Formula, and a Windows x86_64 SDK/CLI
+ZIP. It combines these into `tsfile-native-packages-<archive-version>` with
+`manifest.json` and `SHA256SUMS`. Download this final artifact from the workflow
+run; both intermediate and final artifacts are retained for 14 days.
+
+Publishing is a separate, manual step. This workflow only builds, tests, and
+uploads GitHub Actions artifacts. It has no publishing credentials and does
+not upload to JFrog, sign packages, update `latest`, create tags or releases, or
+implement RC/final release behavior.
+
 ## Portable archive
 
-Build a relocatable source archive on any host with CMake and CPack:
+Build a relocatable binary archive on any host with CMake and CPack:
 
 ```bash
 cmake -S cpp -B cpp/build/package \
@@ -41,7 +61,6 @@ cmake -S cpp -B cpp/build/package \
   -DTSFILE_ENABLE_CPACK=ON \
   -DTSFILE_DEPENDENCY_SOURCE=AUTO
 cmake --build cpp/build/package --parallel
-cmake --install cpp/build/package
 cpack --config cpp/build/package/CPackConfig.cmake -G TGZ
 ```
 
@@ -63,15 +82,14 @@ cmake -S cpp -B cpp/build/package \
   -DTSFILE_ENABLE_CPACK=ON \
   -DTSFILE_DEPENDENCY_SOURCE=AUTO
 cmake --build cpp/build/package --parallel
-cmake --install cpp/build/package
 cpack --config cpp/build/package/CPackConfig.cmake -G DEB
 # or: cpack --config cpp/build/package/CPackConfig.cmake -G RPM
 ```
 
 `SYSTEM` can be used instead of `AUTO` when the build image provides every
-compatible dependency, including ANTLR4 4.9.x. `AUTO` is the reproducible
-release default and uses the verified source fallback for unavailable or
-incompatible distro versions.
+compatible dependency, including ANTLR4 >=4.9.3 and <4.13.0. `AUTO` is the
+reproducible release default and uses the verified source fallback for
+unavailable or incompatible distro versions.
 
 The manual `Build native package artifacts` workflow is the authoritative
 native package build. Its Linux jobs create `tsfile`, `tsfile-dev`, and
