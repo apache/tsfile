@@ -50,9 +50,33 @@ function(tsfile_install_static_dependency NAME SOURCE SYSTEM_TARGET FIND_CODE)
 endfunction()
 
 set(TSFILE_STATIC_DEPENDENCY_CODE "")
+# Keep the build-side compatibility interval when a static consumer rediscovers
+# ANTLR4. Explicit comparisons also support CMake 3.11 and packages that report
+# ANTLR_VERSION instead of antlr4-runtime_VERSION.
+string(CONFIGURE [=[
+find_package(utf8cpp CONFIG QUIET)
+find_package(antlr4-runtime CONFIG QUIET)
+set(_TSFILE_ANTLR4_VERSION "${antlr4-runtime_VERSION}")
+if ("${_TSFILE_ANTLR4_VERSION}" STREQUAL "" AND DEFINED ANTLR_VERSION)
+    set(_TSFILE_ANTLR4_VERSION "${ANTLR_VERSION}")
+endif ()
+if (NOT antlr4-runtime_FOUND OR
+        "${_TSFILE_ANTLR4_VERSION}" STREQUAL "" OR
+        _TSFILE_ANTLR4_VERSION VERSION_LESS "@TSFILE_ANTLR4_MIN_VERSION@" OR
+        NOT _TSFILE_ANTLR4_VERSION VERSION_LESS "@TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION@" OR
+        NOT TARGET @TSFILE_ANTLR4_SYSTEM_TARGET@)
+    set(TsFile_FOUND FALSE)
+    set(TsFile_NOT_FOUND_MESSAGE
+            "Static TsFile requires a compatible system ANTLR4 >=@TSFILE_ANTLR4_MIN_VERSION@ and <@TSFILE_ANTLR4_NEXT_INCOMPATIBLE_VERSION@ with target @TSFILE_ANTLR4_SYSTEM_TARGET@; reported version '${_TSFILE_ANTLR4_VERSION}'.")
+    unset(_TSFILE_ANTLR4_VERSION)
+    return()
+endif ()
+unset(_TSFILE_ANTLR4_VERSION)
+]=] _TSFILE_FIND_STATIC_ANTLR4 @ONLY)
 tsfile_install_static_dependency(ANTLR4 "${TSFILE_ANTLR4_SOURCE}"
         "${TSFILE_ANTLR4_SYSTEM_TARGET}"
-        "find_package(utf8cpp CONFIG QUIET)\nfind_dependency(antlr4-runtime CONFIG)")
+        "${_TSFILE_FIND_STATIC_ANTLR4}")
+unset(_TSFILE_FIND_STATIC_ANTLR4)
 if (ENABLE_ANTLR4 AND TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED")
     if (WIN32)
         string(APPEND TSFILE_STATIC_DEPENDENCY_CODE

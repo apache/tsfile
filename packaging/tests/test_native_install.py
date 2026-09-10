@@ -20,6 +20,7 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -28,6 +29,168 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "cpp/cmake/tests/projects"
+
+
+class StaticANTLRPackageTest(unittest.TestCase):
+    """Exercise installed metadata without compiling the ANTLR runtime."""
+
+    def test_installed_system_antlr_requires_compatible_runtime(self):
+        with tempfile.TemporaryDirectory(prefix="tsfile-antlr-config-") as temporary:
+            directory = Path(temporary)
+            producer = directory / "producer"
+            (producer / "cmake").mkdir(parents=True)
+            shutil.copyfile(
+                ROOT / "cpp/cmake/TsFileStaticDependencies.cmake.in",
+                producer / "cmake/TsFileStaticDependencies.cmake.in",
+            )
+            (producer / "CMakeLists.txt").write_text(textwrap.dedent("""\
+                    cmake_minimum_required(VERSION 3.11)
+                    project(StaticANTLRPackage NONE)
+                    include(CMakePackageConfigHelpers)
+                    include("${TSFILE_CMAKE_DIR}/DependencySource.cmake")
+                    include("${TSFILE_CMAKE_DIR}/ANTLR4Dependency.cmake")
+                    set(CMAKE_INSTALL_LIBDIR lib)
+                    set(ENABLE_ANTLR4 ON)
+                    set(ENABLE_THREADS OFF)
+                    set(TSFILE_BUILD_SHARED OFF)
+                    add_library(tsfile INTERFACE)
+                    add_library(TsFile::ANTLR4 INTERFACE IMPORTED)
+                    include("${TSFILE_CMAKE_DIR}/TsFileStaticDependencies.cmake")
+                    configure_package_config_file(
+                        "${TSFILE_CMAKE_DIR}/TsFileConfig.cmake.in"
+                        "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake"
+                        INSTALL_DESTINATION lib/cmake/TsFile)
+                    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake"
+                        DESTINATION lib/cmake/TsFile)
+                    install(TARGETS tsfile EXPORT TsFileTargets)
+                    install(EXPORT TsFileTargets NAMESPACE TsFile::
+                        DESTINATION lib/cmake/TsFile)
+                    """))
+            consumer = directory / "consumer"
+            consumer.mkdir()
+            (consumer / "CMakeLists.txt").write_text(textwrap.dedent("""\
+                    cmake_minimum_required(VERSION 3.11)
+                    project(StaticANTLRConsumer NONE)
+                    find_package(TsFile CONFIG REQUIRED)
+                    get_target_property(runtime TsFile::Static_ANTLR4
+                        INTERFACE_LINK_LIBRARIES)
+                    if (NOT runtime STREQUAL EXPECTED_TARGET OR NOT TARGET ${runtime})
+                        message(FATAL_ERROR "Static TsFile lost its system target")
+                    endif ()
+                    if (NOT TARGET utf8cpp)
+                        message(FATAL_ERROR "Static TsFile lost utf8cpp compatibility")
+                    endif ()
+                    """))
+
+            def configure(source, build, *options):
+                return subprocess.run(
+                    [
+                        "cmake",
+                        "-S",
+                        str(source),
+                        "-B",
+                        str(build),
+                        "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=FALSE",
+                        "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=FALSE",
+                        "-DCMAKE_FIND_USE_CMAKE_SYSTEM_PATH=FALSE",
+                        "-DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH=FALSE",
+                        f"-DCMAKE_MAKE_PROGRAM={shutil.which('make')}",
+                        "-G",
+                        "Unix Makefiles",
+                        *options,
+                    ],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+
+            def package(prefix, version, target, version_field):
+                prefix.mkdir(parents=True)
+                (prefix / "utf8cppConfig.cmake").write_text(
+                    "add_library(utf8cpp INTERFACE IMPORTED)\n"
+                )
+                if version == "missing-package":
+                    return
+                content = ""
+                if version is not None:
+                    content += f'set({version_field} "{version}")\n'
+                if target is not None:
+                    content += (
+                        f"add_library({target} INTERFACE IMPORTED)\n"
+                        f"set_property(TARGET {target} PROPERTY "
+                        "INTERFACE_LINK_LIBRARIES utf8cpp)\n"
+                    )
+                (prefix / "antlr4-runtime-config.cmake").write_text(content)
+
+            targets = (
+                "antlr4_static",
+                "antlr4-runtime::antlr4_static",
+                "antlr4_shared",
+                "antlr4-runtime::antlr4_shared",
+            )
+            for index, target in enumerate(targets):
+                build = directory / f"producer-build-{index}"
+                stage = directory / f"stage-{index}"
+                build_package = directory / f"build-package-{index}"
+                package(build_package, "4.9.3", target, "ANTLR_VERSION")
+                result = configure(
+                    producer,
+                    build,
+                    f"-DTSFILE_CMAKE_DIR={ROOT / 'cpp/cmake'}",
+                    "-DTSFILE_DEPENDENCY_SOURCE=SYSTEM",
+                    f"-DCMAKE_PREFIX_PATH={build_package}",
+                    f"-DCMAKE_INSTALL_PREFIX={stage}",
+                )
+                self.assertEqual(result.returncode, 0, result.stdout)
+                result = subprocess.run(
+                    ["cmake", "--install", str(build)],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout)
+                relocated = directory / f"relocated-{index}"
+                stage.rename(relocated)
+                cases = (
+                    ("4.9.3", target, True),
+                    ("4.12.0", target, True),
+                    ("4.13.0", target, False),
+                    ("4.13.2", target, False),
+                    ("4.9.2", target, False),
+                    (None, target, False),
+                    ("4.9.3", None, False),
+                    ("missing-package", None, False),
+                )
+                for field in ("antlr4-runtime_VERSION", "ANTLR_VERSION"):
+                    for case, (version, consumer_target, succeeds) in enumerate(cases):
+                        with self.subTest(
+                            target=target,
+                            field=field,
+                            version=version,
+                            consumer_target=consumer_target,
+                        ):
+                            suffix = f"{index}-{field}-{case}"
+                            runtime = directory / f"runtime-{suffix}"
+                            package(runtime, version, consumer_target, field)
+                            result = configure(
+                                consumer,
+                                directory / f"consumer-{suffix}",
+                                f"-DCMAKE_PREFIX_PATH={relocated};{runtime}",
+                                f"-DEXPECTED_TARGET={target}",
+                            )
+                            if succeeds:
+                                self.assertEqual(result.returncode, 0, result.stdout)
+                            else:
+                                self.assertNotEqual(
+                                    result.returncode,
+                                    0,
+                                    f"Installed static TsFile accepted {version}:\n"
+                                    + result.stdout,
+                                )
+                                diagnostic = " ".join(result.stdout.split())
+                                self.assertIn("compatible system ANTLR4", diagnostic)
+                                self.assertIn(">=4.9.3", diagnostic)
+                                self.assertIn("<4.13.0", diagnostic)
 
 
 @unittest.skipUnless(
