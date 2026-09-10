@@ -19,7 +19,7 @@ under the License.
 
 message(STATUS "Running in src/labview_wrapper directory")
 
-add_library(tsfile_labview SHARED tsfile_labview.cc)
+add_library(tsfile_labview SHARED tsfile_labview.cc async_close.cc)
 target_include_directories(tsfile_labview PRIVATE ${PROJECT_SRC_DIR})
 target_link_libraries(tsfile_labview PRIVATE tsfile)
 
@@ -41,6 +41,15 @@ install(FILES tsfile_labview.h DESTINATION include)
 option(BUILD_LABVIEW_WRAPPER_TESTS "Build LabVIEW shim standalone tests"
        ${BUILD_TEST})
 if (BUILD_LABVIEW_WRAPPER_TESTS)
+    add_executable(tsfile_labview_async_close_coordinator_test
+                   test_async_close.cc async_close.cc)
+    target_include_directories(tsfile_labview_async_close_coordinator_test
+                               PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    set_target_properties(tsfile_labview_async_close_coordinator_test PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
+
     foreach(test_name smoke read_only dump block block_read)
         add_executable(tsfile_labview_${test_name}_test test_${test_name}.c)
         target_link_libraries(tsfile_labview_${test_name}_test
