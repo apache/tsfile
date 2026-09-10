@@ -53,6 +53,12 @@ the table model. Create a writer with its single table schema, then write
 targetless `Tablet` values or Arrow record batches. Use `Reader.Query` with
 optional time-range, tag-filter, pagination, and batch-size options.
 
+`Tablet` is a Go API backed by the native C++ `storage::Tablet`: Go validates
+arguments and manages the handle lifetime, while its setters populate the C++
+batch through cgo. Arrow batches are created with Arrow Go and passed through
+the Arrow C Data Interface; the C++ bridge converts them to a native Tablet
+before writing.
+
 Result-set columns are one-based: column 1 is `time`, followed by the selected
 data columns. Tablet rows and columns retain Go's zero-based indexing. A query
 with a positive batch size returns Arrow batches; other queries use `Next` and
@@ -65,3 +71,6 @@ The runnable table example is under `examples/table_read_write`:
 ```bash
 go run ./examples/table_read_write
 ```
+
+The example writes one batch with a Tablet and another with an Arrow record
+batch, then queries and prints all rows.
