@@ -63,4 +63,14 @@ if (BUILD_LABVIEW_WRAPPER_TESTS)
         C_STANDARD 99
         C_STANDARD_REQUIRED ON
         RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
+
+    add_executable(tsfile_labview_codec_benchmark benchmark_codec_matrix.c)
+    target_include_directories(tsfile_labview_codec_benchmark
+                               PRIVATE ${PROJECT_SRC_DIR})
+    target_link_libraries(tsfile_labview_codec_benchmark
+                          PRIVATE tsfile_labview tsfile)
+    set_target_properties(tsfile_labview_codec_benchmark PROPERTIES
+        C_STANDARD 99
+        C_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
 endif ()

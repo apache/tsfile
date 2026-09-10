@@ -31,6 +31,9 @@ Library Function Node (CLFN).
 - Continuous acquisition: open one writer, call
   `lv_tsfile_write_block_f64` once per acquisition block, and close the writer
   when the file rolls over.
+- Homogeneous numeric reads: create a batch result set with
+  `lv_tsfile_query_table_batch`, then call the matching
+  `lv_tsfile_rs_read_block_i32/f32/f64` function until it returns zero rows.
 - Existing mixed-type applications: use the schema, writer, and tablet builder
   functions in `tsfile_labview.h`.
 
@@ -85,10 +88,39 @@ The streaming sequence is:
 3. Call `lv_tsfile_write_block_f64` for each block. Configure `writer` as U64
    by value, `ts` as 1D I64 Array Data Pointer, and `data` as 1D DBL Array Data
    Pointer.
-4. Call `lv_tsfile_writer_close` exactly once.
+4. Optionally call `lv_tsfile_writer_flush` at a controlled point. It is
+   synchronous and leaves the writer open.
+5. Call `lv_tsfile_writer_close` exactly once.
 
-The block call creates and releases its temporary tablet. The caller retains
-ownership of both input arrays.
+The writer caches and reuses its internal tablet and typed deinterleave buffer;
+only a larger batch grows them. The caller retains ownership of both input
+arrays, and the wrapper never stores their addresses after the call returns.
+
+## Batch reads
+
+Pass only homogeneous `INT32`, `FLOAT`, or `DOUBLE` value columns to
+`lv_tsfile_query_table_batch`. Allocate `batch_rows` I64 timestamps and
+`batch_rows * ncols` typed values, then call the matching block-read function.
+Values use the same row-major indexing as writes. The optional byte-per-cell
+null array uses `0` for valid and `1` for null; null numeric values are written
+as zero. Status `0` with `out_rows == 0` means EOF.
+
+`capacity_rows` must be at least the `batch_rows` used to create the query.
+This is checked before the next TsBlock is consumed. Row-mode scalar getters
+and batch-mode block functions must not be mixed on one result-set handle.
+
+For exact LabVIEW CLFN mappings and acquisition-loop guidance, see
+[LabVIEW读写TsFile操作手册.md](LabVIEW读写TsFile操作手册.md).
+
+## Acquisition and file rotation
+
+`flush` and `close` are synchronous. File size is not the only factor in close
+latency: the writer may still need to encode buffered pages and serialize
+chunk metadata, indexes, Bloom filters, footer data, and filesystem writes.
+Keep acquisition timing isolated with a Producer/Consumer design: the DAQ loop
+enqueues blocks, while one writer loop owns write, flush, rotation, and close.
+Typical starting batch sizes are 1,000 to 10,000 rows; benchmark real device
+data before selecting codecs or rotation thresholds.
 
 ## Build and package
 
@@ -141,4 +173,8 @@ dist\TsFile-LabVIEW-x86\examples\run_block_test.cmd
 python cpp/src/labview_wrapper/benchmark_block.py \
   --dll /path/to/libtsfile_labview.so \
   --rows 10000 --cols 9 --batches 3 --repeats 5
+
+python cpp/src/labview_wrapper/benchmark_read_block.py \
+  --dll /path/to/libtsfile_labview.so \
+  --rows 150000 --cols 9 --batch-rows 10000
 ```
