@@ -433,7 +433,7 @@ jobs:
           }
 
           New-Item -ItemType Directory -Path packages -Force | Out-Null
-          cpack -G ZIP --config build/windows/CPackConfig.cmake -B packages `
+          cpack -G ZIP -C Release --config build/windows/CPackConfig.cmake -B packages `
             -D "CPACK_PACKAGE_VERSION=$env:TSFILE_ARCHIVE_VERSION"
 
           $archives = @(Get-ChildItem -Path packages -Filter *.zip -File)
