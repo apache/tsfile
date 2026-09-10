@@ -50,14 +50,16 @@ import (
 	"unsafe"
 )
 
-// errnoOK and errnoFileClose are plain-Go mirrors of the C RET_* constants
-// used by the test stubs: _test files live in a separate cgo translation
-// unit and cannot reference C types or C.RET_* constants directly, so the
-// bridge exposes just the numeric values they need.
+// These errno values are plain-Go mirrors of the C RET_* constants. Keeping
+// the C names in this bridge lets the rest of the package and its tests use
+// meaningful Go names without importing "C" or duplicating ABI numbers.
 const (
-	errnoOK        = C.RET_OK
-	errnoFileClose = C.RET_FILE_CLOSE_ERR
+	errnoOK         = C.RET_OK
+	errnoNoMoreData = C.RET_NO_MORE_DATA
+	errnoFileClose  = C.RET_FILE_CLOSE_ERR
 )
+
+var errNoMoreData = &Error{Code: errnoNoMoreData}
 
 // cerrno is the Go-side mirror of the C ERRNO type (int32_t). The bridge
 // converts between it and C.ERRNO at the boundary.

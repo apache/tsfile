@@ -18,6 +18,8 @@ package tsfile
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"testing"
 )
 
@@ -59,4 +61,20 @@ func TestErrorIsComparesCodes(t *testing.T) {
 	if !errors.Is(ErrClosed, ErrClosed) {
 		t.Fatal("ErrClosed did not match itself")
 	}
+}
+
+func TestTranslateArrowReadError(t *testing.T) {
+	t.Run("no more data becomes EOF", func(t *testing.T) {
+		nativeErr := fmt.Errorf("native wrapper: %w", newError("read Arrow batch", errnoNoMoreData))
+		if got := translateArrowReadError(nativeErr); !errors.Is(got, io.EOF) {
+			t.Fatalf("translateArrowReadError() = %v, want io.EOF", got)
+		}
+	})
+
+	t.Run("other native errors are preserved", func(t *testing.T) {
+		nativeErr := &Error{Code: ErrFileRead.Code, Op: "read Arrow batch"}
+		if got := translateArrowReadError(nativeErr); got != nativeErr {
+			t.Fatalf("translateArrowReadError() = %v, want original error %v", got, nativeErr)
+		}
+	})
 }

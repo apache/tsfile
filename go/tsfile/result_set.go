@@ -198,6 +198,13 @@ func (rs *ResultSet) Bytes(column int) (value []byte, err error) {
 	return
 }
 
+func translateArrowReadError(err error) error {
+	if errors.Is(err, errNoMoreData) {
+		return io.EOF
+	}
+	return err
+}
+
 // ReadArrowRecordBatch returns the next query batch. The caller owns the
 // returned record and must call Release. It returns io.EOF after the last
 // batch.
@@ -213,10 +220,7 @@ func (rs *ResultSet) ReadArrowRecordBatch() (arrow.Record, error) {
 		return rs.handle.nextArrow(unsafe.Pointer(&nativeArray), unsafe.Pointer(&nativeSchema))
 	})
 	if err != nil {
-		if nativeError, ok := err.(*Error); ok && nativeError.Code == 21 {
-			return nil, io.EOF
-		}
-		return nil, err
+		return nil, translateArrowReadError(err)
 	}
 	record, err := cdata.ImportCRecordBatch(&nativeArray, &nativeSchema)
 	if err != nil {
