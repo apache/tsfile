@@ -92,6 +92,14 @@ def bind(dll_path: Path) -> ctypes.CDLL:
     lib.lv_tsfile_writer_flush.restype = status
     lib.lv_tsfile_writer_close.argtypes = [handle]
     lib.lv_tsfile_writer_close.restype = status
+    lib.lv_tsfile_writer_close_ex.argtypes = [
+        handle,
+        ctypes.c_int32,
+        ctypes.POINTER(handle),
+    ]
+    lib.lv_tsfile_writer_close_ex.restype = status
+    lib.lv_tsfile_close_task_wait.argtypes = [handle]
+    lib.lv_tsfile_close_task_wait.restype = status
     lib.lv_tsfile_tablet_new.argtypes = [ctypes.c_uint32]
     lib.lv_tsfile_tablet_new.restype = handle
     lib.lv_tsfile_tablet_add_column.argtypes = [handle, ctypes.c_char_p, ctypes.c_uint8]
@@ -198,7 +206,9 @@ def run_cell(lib, path, columns, batches, rows, cols) -> float:
     return time.perf_counter() - started
 
 
-def run_block(lib, path, columns, batches, rows, cols) -> dict[str, float]:
+def run_block(
+    lib, path, columns, batches, rows, cols, async_close=False
+) -> dict[str, float]:
     opened = time.perf_counter()
     writer = open_writer(lib, path, columns)
     open_seconds = time.perf_counter() - opened
@@ -215,15 +225,37 @@ def run_block(lib, path, columns, batches, rows, cols) -> dict[str, float]:
     check(lib.lv_tsfile_writer_flush(writer), "writer_flush")
     flush_seconds = time.perf_counter() - started
 
-    started = time.perf_counter()
-    check(lib.lv_tsfile_writer_close(writer), "writer_close")
-    close_seconds = time.perf_counter() - started
-    return {
+    phases = {
         "open_seconds": open_seconds,
         "writer_seconds": writer_seconds,
         "flush_seconds": flush_seconds,
-        "close_seconds": close_seconds,
     }
+    if async_close:
+        close_task = ctypes.c_uint64()
+        started = time.perf_counter()
+        check(
+            lib.lv_tsfile_writer_close_ex(writer, 1, ctypes.byref(close_task)),
+            "writer_close_ex",
+        )
+        close_submit_seconds = time.perf_counter() - started
+        if not close_task.value:
+            raise RuntimeError("async close returned an empty Close Task")
+
+        started = time.perf_counter()
+        check(lib.lv_tsfile_close_task_wait(close_task), "close_task_wait")
+        close_wait_seconds = time.perf_counter() - started
+        phases.update(
+            {
+                "close_submit_seconds": close_submit_seconds,
+                "close_wait_seconds": close_wait_seconds,
+                "close_total_seconds": close_submit_seconds + close_wait_seconds,
+            }
+        )
+    else:
+        started = time.perf_counter()
+        check(lib.lv_tsfile_writer_close(writer), "writer_close")
+        phases["close_seconds"] = time.perf_counter() - started
+    return phases
 
 
 def median(samples: list[dict[str, float]], key: str) -> float:
@@ -239,6 +271,7 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--output-dir", type=Path, default=Path.cwd())
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--async-close", action="store_true")
     args = parser.parse_args()
     if args.smoke:
         args.rows, args.cols, args.batches, args.repeats = 100, 3, 2, 2
@@ -267,7 +300,15 @@ def main() -> None:
     cell_path = args.output_dir / "lv_cell_benchmark.tsfile"
     block_path = args.output_dir / "lv_block_benchmark.tsfile"
     warmup_path = args.output_dir / "lv_block_benchmark_warmup.tsfile"
-    run_block(lib, warmup_path, columns, batches[:1], args.rows, args.cols)
+    run_block(
+        lib,
+        warmup_path,
+        columns,
+        batches[:1],
+        args.rows,
+        args.cols,
+        args.async_close,
+    )
     warmup_path.unlink(missing_ok=True)
 
     cell_samples = []
@@ -278,29 +319,55 @@ def main() -> None:
                 run_cell(lib, cell_path, columns, batches, args.rows, args.cols)
             )
             block_samples.append(
-                run_block(lib, block_path, columns, batches, args.rows, args.cols)
+                run_block(
+                    lib,
+                    block_path,
+                    columns,
+                    batches,
+                    args.rows,
+                    args.cols,
+                    args.async_close,
+                )
             )
         else:
             block_samples.append(
-                run_block(lib, block_path, columns, batches, args.rows, args.cols)
+                run_block(
+                    lib,
+                    block_path,
+                    columns,
+                    batches,
+                    args.rows,
+                    args.cols,
+                    args.async_close,
+                )
             )
             cell_samples.append(
                 run_cell(lib, cell_path, columns, batches, args.rows, args.cols)
             )
 
-    phases = {
+    phases: dict[str, float] = {
         "materialize_seconds": materialize_seconds,
         "writer_seconds": median(block_samples, "writer_seconds"),
         "flush_seconds": median(block_samples, "flush_seconds"),
-        "close_seconds": median(block_samples, "close_seconds"),
     }
+    close_key = "close_total_seconds" if args.async_close else "close_seconds"
+    if args.async_close:
+        phases.update(
+            {
+                "close_submit_seconds": median(block_samples, "close_submit_seconds"),
+                "close_wait_seconds": median(block_samples, "close_wait_seconds"),
+                "close_total_seconds": median(block_samples, close_key),
+            }
+        )
+    else:
+        phases[close_key] = median(block_samples, close_key)
     if args.smoke and any(value <= 0 for value in phases.values()):
         raise RuntimeError(f"non-positive smoke phase: {phases}")
 
     cell_seconds = statistics.median(cell_samples)
     block_seconds = sum(
         median(block_samples, key)
-        for key in ("open_seconds", "writer_seconds", "flush_seconds", "close_seconds")
+        for key in ("open_seconds", "writer_seconds", "flush_seconds", close_key)
     )
     points = args.rows * args.cols * args.batches
     print(

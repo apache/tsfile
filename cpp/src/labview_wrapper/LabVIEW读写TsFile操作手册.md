@@ -60,7 +60,8 @@ LabVIEW 使用 x64 DLL。`LV_Handle` 即使在 32 位 LabVIEW 中也配置为 U6
 5. 释放 Schema Builder。
 6. 每个采集块调用匹配类型的 `lv_tsfile_write_block_*`。
 7. 可在受控时机调用 `lv_tsfile_writer_flush`；它同步执行且 Writer 仍可继续写。
-8. 文件轮转或停止时调用一次 `lv_tsfile_writer_close`，随后把本地 Handle 置零。
+8. 文件轮转或停止时选择同步 `lv_tsfile_writer_close`，或使用下一节的两阶段
+   异步关闭；随后把本地 Writer Handle 置零。
 
 块写入参数：
 
@@ -80,7 +81,59 @@ data[row * ncols + column]
 缓存 Tablet 和暂存区；相同或更小的后续批次不会重新创建 Tablet，只有更大
 批次才扩容。建议从每批 1,000～10,000 行开始，用真实采样数据调优。
 
-## 4. 批量读取
+## 4. 单线程异步关闭
+
+异步开关只影响 close。块写入和显式 flush 仍然同步执行，并继续由同一个
+LabVIEW 写入循环串行调用。
+
+异步提交接口：
+
+```c
+lv_tsfile_writer_close_ex(writer, async_close, &close_task);
+```
+
+CLFN 参数配置：
+
+| 参数 | LabVIEW 配置 |
+|---|---|
+| 返回值 | Signed 32-bit Integer，by value |
+| `writer` | Unsigned 64-bit Integer，by value |
+| `async_close` | Signed 32-bit Integer，by value；只能为 0 或 1 |
+| `out_close_task` | Unsigned 64-bit Integer，Pointer to Value |
+
+`async_close=0` 时函数同步关闭，`close_task` 返回零。`async_close=1` 时
+Writer Handle 立即失效，函数返回非零 Close Task Handle，文件由进程内唯一
+的后台 close 线程收尾。调用返回后必须立即把 Writer shift register 置零，
+不能再对它执行 write 或 flush。
+
+等待接口：
+
+```c
+status = lv_tsfile_close_task_wait(close_task);
+```
+
+`close_task` 配置为 U64 by value。该调用不检查或接受等待时间，会一直阻塞到
+文件关闭完成；返回值是底层 close 的最终状态。返回后 Close Task 已被消费，
+必须把对应 shift register 置零，不能重复等待。
+
+整个进程最多有一个后台 close 线程。如果提交新异步 close 时上一次仍未
+结束，新提交会同步等待上一条线程结束，再启动本次 close，不会继续增加
+线程。推荐轮转流程：
+
+```text
+写当前文件
+    |
+close_ex(writer, 1, &new_task) ──> Writer 立即置零
+    |
+open 下一文件并继续写
+    |
+下一次轮转前 wait(previous_task) ──> 检查状态，Task 置零
+```
+
+程序最终停止或卸载 DLL 前必须等待最后一个 Close Task。显式 wait 应放在
+非 DAQ 定时循环中；库退出时的内部 join 只是安全网，不能替代错误检查。
+
+## 5. 批量读取
 
 首先创建 batch-mode ResultSet：
 
@@ -115,7 +168,7 @@ ResultSet 上调用块读取函数。批量路径仅支持所选值列全部为�
 
 读取结束后依次调用 `lv_tsfile_rs_free` 和 `lv_tsfile_reader_close`。
 
-## 5. 为什么通道不多，close 仍可能阻塞
+## 6. 为什么通道不多，close 仍可能阻塞
 
 通道数只影响工作量的一部分。`writer_close` 还可能执行：
 
@@ -140,12 +193,13 @@ DAQ 采集循环 ──> 有界 Queue/FIFO ──> TsFile 写入循环
 DAQ 循环只负责采集和入队，不能直接 close。Queue 必须有明确容量、溢出策略
 和水位监控；Writer Handle 只在写入循环使用，避免并发 write/flush/close。
 
-## 6. 性能测量
+## 7. 性能测量
 
 先执行小规模自检：
 
 ```bash
 python3 cpp/src/labview_wrapper/benchmark_block.py --smoke
+python3 cpp/src/labview_wrapper/benchmark_block.py --smoke --async-close
 python3 cpp/src/labview_wrapper/benchmark_read_block.py --smoke
 ```
 
@@ -163,7 +217,10 @@ python3 cpp/src/labview_wrapper/benchmark_read_block.py \
 的 Codec，并验证逐行与批量结果一致。Codec 选择必须用真实设备数据比较：
 合成正弦数据、噪声数据与现场振动波形的压缩率和 CPU 开销可能完全不同。
 
-## 7. 文件与错误处理
+写基准加 `--async-close` 后会把 close 拆成提交耗时、阻塞等待耗时和总耗时，
+用于观察关闭成本转移，不使用固定耗时阈值判断正确性。
+
+## 8. 文件与错误处理
 
 - 输出目录必须存在；Writer 使用新文件路径，轮转时生成唯一文件名。
 - Handle 为 0 表示无效。成功 close/free 后立即把 LabVIEW Shift Register

@@ -90,11 +90,37 @@ The streaming sequence is:
    Pointer.
 4. Optionally call `lv_tsfile_writer_flush` at a controlled point. It is
    synchronous and leaves the writer open.
-5. Call `lv_tsfile_writer_close` exactly once.
+5. Close the file with either `lv_tsfile_writer_close` or the optional
+   two-phase API described below.
 
 The writer caches and reuses its internal tablet and typed deinterleave buffer;
 only a larger batch grows them. The caller retains ownership of both input
 arrays, and the wrapper never stores their addresses after the call returns.
+
+## Optional asynchronous close
+
+Only `close` can move to the background; block writes and explicit flushes
+remain synchronous. Configure `lv_tsfile_writer_close_ex` as follows:
+
+| Parameter | LabVIEW configuration |
+|---|---|
+| return type | Signed 32-bit Integer, by value |
+| `writer` | Unsigned 64-bit Integer, by value |
+| `async_close` | Signed 32-bit Integer, by value (`0` or `1`) |
+| `out_close_task` | Unsigned 64-bit Integer, Pointer to Value |
+
+With `async_close=0`, the call closes synchronously and returns a zero task.
+With `async_close=1`, the Writer Handle becomes invalid immediately and the
+call returns a Close Task Handle. Pass that task by value to
+`lv_tsfile_close_task_wait`; it waits without a timeout, returns the final file
+close status, and consumes the task. Set both consumed Writer and Close Task
+shift-register values to zero.
+
+The process has one background close slot. If a new asynchronous close is
+submitted before the previous background close ends, the new submission waits
+for the previous thread and then starts its own close. This bounds the helper
+thread count at one. Always wait for the final Close Task before stopping the
+application or unloading the library.
 
 ## Batch reads
 
@@ -114,13 +140,18 @@ For exact LabVIEW CLFN mappings and acquisition-loop guidance, see
 
 ## Acquisition and file rotation
 
-`flush` and `close` are synchronous. File size is not the only factor in close
-latency: the writer may still need to encode buffered pages and serialize
-chunk metadata, indexes, Bloom filters, footer data, and filesystem writes.
+`flush` and the legacy `close` are synchronous. The optional two-phase API can
+move only close to one background thread. File size is not the only factor in
+close latency: the writer may still need to encode buffered pages and
+serialize chunk metadata, indexes, Bloom filters, footer data, and filesystem
+writes.
 Keep acquisition timing isolated with a Producer/Consumer design: the DAQ loop
 enqueues blocks, while one writer loop owns write, flush, rotation, and close.
 Typical starting batch sizes are 1,000 to 10,000 rows; benchmark real device
 data before selecting codecs or rotation thresholds.
+
+Use `benchmark_block.py --async-close` to report close submission, blocking
+wait, and their total separately.
 
 ## Build and package
 
