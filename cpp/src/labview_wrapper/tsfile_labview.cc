@@ -79,9 +79,14 @@ struct ReaderCtx {
     TsFileReader reader = nullptr;
 };
 
+enum class ResultSetMode { kRow, kBatch };
+
 struct ResultSetCtx {
     ResultSet rs = nullptr;
     std::vector<TSDataType> col_types;  // cached from metadata
+    ResultSetMode mode = ResultSetMode::kRow;
+    int32_t batch_rows = 0;
+    int32_t value_column_count = 0;
 };
 
 struct Entry {
@@ -466,6 +471,7 @@ LV_Status lv_tsfile_reader_open(const char* path, LV_Handle* out_reader) {
     if (path == nullptr || out_reader == nullptr) {
         return E_INVALID_ARG;
     }
+    *out_reader = 0;
     ERRNO err = E_OK;
     TsFileReader reader = tsfile_reader_new(path, &err);
     if (reader == nullptr || err != E_OK) {
@@ -686,8 +692,12 @@ LV_Status lv_tsfile_query_table(LV_Handle reader, const char* table_name,
                                 const char* columns_newline_separated,
                                 int64_t start_time, int64_t end_time,
                                 LV_Handle* out_result_set) {
+    if (out_result_set == nullptr) {
+        return E_INVALID_ARG;
+    }
+    *out_result_set = 0;
     auto* rctx = static_cast<ReaderCtx*>(lookup(reader, Kind::kReader));
-    if (rctx == nullptr || table_name == nullptr || out_result_set == nullptr) {
+    if (rctx == nullptr || table_name == nullptr) {
         return E_INVALID_ARG;
     }
     std::vector<std::string> cols = split_lines(columns_newline_separated);
@@ -709,6 +719,8 @@ LV_Status lv_tsfile_query_table(LV_Handle reader, const char* table_name,
 
     auto* ctx = new ResultSetCtx();
     ctx->rs = rs;
+    ctx->mode = ResultSetMode::kRow;
+    ctx->value_column_count = static_cast<int32_t>(cols.size());
     // Cache column types from metadata for fast type queries.
     // cwrapper metadata/result indexing is 1-based; column 1 is the
     // timestamp. This shim exposes 0-based indices to LabVIEW (column 0 =
@@ -726,10 +738,78 @@ LV_Status lv_tsfile_query_table(LV_Handle reader, const char* table_name,
     return E_OK;
 }
 
+LV_Status lv_tsfile_query_table_batch(LV_Handle reader, const char* table_name,
+                                      const char* columns_newline_separated,
+                                      int64_t start_time, int64_t end_time,
+                                      int32_t batch_rows,
+                                      LV_Handle* out_result_set) {
+    if (out_result_set == nullptr) {
+        return E_INVALID_ARG;
+    }
+    *out_result_set = 0;
+    auto* rctx = static_cast<ReaderCtx*>(lookup(reader, Kind::kReader));
+    if (rctx == nullptr || table_name == nullptr || batch_rows <= 0) {
+        return E_INVALID_ARG;
+    }
+
+    try {
+        std::vector<std::string> cols = split_lines(columns_newline_separated);
+        if (cols.empty() ||
+            cols.size() >
+                static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+            return E_INVALID_ARG;
+        }
+        std::vector<char*> col_ptrs(cols.size());
+        for (size_t i = 0; i < cols.size(); ++i) {
+            if (cols[i].empty()) {
+                return E_INVALID_ARG;
+            }
+            col_ptrs[i] = const_cast<char*>(cols[i].c_str());
+        }
+
+        ERRNO err = E_OK;
+        ResultSet result_set = tsfile_query_table_batch(
+            rctx->reader, table_name, col_ptrs.data(),
+            static_cast<uint32_t>(col_ptrs.size()), start_time, end_time,
+            nullptr, batch_rows, &err);
+        if (result_set == nullptr || err != E_OK) {
+            return err != E_OK ? err : E_INVALID_ARG;
+        }
+
+        ResultSetCtx* ctx = nullptr;
+        try {
+            ctx = new ResultSetCtx();
+            ctx->rs = result_set;
+            ctx->mode = ResultSetMode::kBatch;
+            ctx->batch_rows = batch_rows;
+            ctx->value_column_count = static_cast<int32_t>(cols.size());
+
+            ResultSetMetaData meta = tsfile_result_set_get_metadata(result_set);
+            int column_count = tsfile_result_set_metadata_get_column_num(meta);
+            ctx->col_types.reserve(column_count > 0 ? column_count : 0);
+            for (int i = 1; i <= column_count; ++i) {
+                ctx->col_types.push_back(
+                    tsfile_result_set_metadata_get_data_type(meta, i));
+            }
+            free_result_set_meta_data(meta);
+            *out_result_set = register_handle(Kind::kResultSet, ctx);
+            return E_OK;
+        } catch (...) {
+            delete ctx;
+            free_tsfile_result_set(&result_set);
+            throw;
+        }
+    } catch (const std::bad_alloc&) {
+        return RET_OOM;
+    } catch (...) {
+        return E_INVALID_ARG;
+    }
+}
+
 /* ===================== result set ===================== */
 int32_t lv_tsfile_rs_next(LV_Handle rs, LV_Status* out_err) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         if (out_err != nullptr) {
             *out_err = E_INVALID_ARG;
         }
@@ -761,7 +841,7 @@ uint8_t lv_tsfile_rs_column_type(LV_Handle rs, uint32_t col) {
 
 int32_t lv_tsfile_rs_is_null(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 1;
     }
     return tsfile_result_set_is_null_by_index(ctx->rs, col + 1) ? 1 : 0;
@@ -769,7 +849,7 @@ int32_t lv_tsfile_rs_is_null(LV_Handle rs, uint32_t col) {
 
 int32_t lv_tsfile_rs_get_i32(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 0;
     }
     return tsfile_result_set_get_value_by_index_int32_t(ctx->rs, col + 1);
@@ -777,7 +857,7 @@ int32_t lv_tsfile_rs_get_i32(LV_Handle rs, uint32_t col) {
 
 int64_t lv_tsfile_rs_get_i64(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 0;
     }
     return tsfile_result_set_get_value_by_index_int64_t(ctx->rs, col + 1);
@@ -785,7 +865,7 @@ int64_t lv_tsfile_rs_get_i64(LV_Handle rs, uint32_t col) {
 
 float lv_tsfile_rs_get_f32(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 0.0f;
     }
     return tsfile_result_set_get_value_by_index_float(ctx->rs, col + 1);
@@ -793,7 +873,7 @@ float lv_tsfile_rs_get_f32(LV_Handle rs, uint32_t col) {
 
 double lv_tsfile_rs_get_f64(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 0.0;
     }
     return tsfile_result_set_get_value_by_index_double(ctx->rs, col + 1);
@@ -801,7 +881,7 @@ double lv_tsfile_rs_get_f64(LV_Handle rs, uint32_t col) {
 
 int32_t lv_tsfile_rs_get_bool(LV_Handle rs, uint32_t col) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return 0;
     }
     return tsfile_result_set_get_value_by_index_bool(ctx->rs, col + 1) ? 1 : 0;
@@ -810,7 +890,7 @@ int32_t lv_tsfile_rs_get_bool(LV_Handle rs, uint32_t col) {
 LV_Status lv_tsfile_rs_get_str(LV_Handle rs, uint32_t col, char* out_buf,
                                int32_t buf_size, int32_t* out_actual_len) {
     auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
-    if (ctx == nullptr) {
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kRow) {
         return E_INVALID_ARG;
     }
     char* val = tsfile_result_set_get_value_by_index_string(ctx->rs, col + 1);
@@ -834,6 +914,80 @@ LV_Status lv_tsfile_rs_get_str(LV_Handle rs, uint32_t col, char* out_buf,
     }
     std::free(val);  // cwrapper transfers ownership of this string
     return E_OK;
+}
+
+namespace {
+
+template <typename T>
+LV_Status read_numeric_block(LV_Handle rs, int64_t* out_ts, T* out_data,
+                             uint8_t* out_is_null, int32_t capacity_rows,
+                             int32_t ncols, int32_t* out_rows,
+                             TSDataType expected_type) {
+    if (out_rows == nullptr) {
+        return E_INVALID_ARG;
+    }
+    *out_rows = 0;
+    auto* ctx = static_cast<ResultSetCtx*>(lookup(rs, Kind::kResultSet));
+    if (ctx == nullptr || ctx->mode != ResultSetMode::kBatch ||
+        out_ts == nullptr || out_data == nullptr || capacity_rows <= 0 ||
+        ncols <= 0 || capacity_rows < ctx->batch_rows ||
+        ncols != ctx->value_column_count) {
+        return E_INVALID_ARG;
+    }
+    const size_t rows = static_cast<size_t>(capacity_rows);
+    const size_t cols = static_cast<size_t>(ncols);
+    if (rows > std::numeric_limits<size_t>::max() / cols ||
+        rows * cols > std::numeric_limits<size_t>::max() / sizeof(T) ||
+        ctx->col_types.size() != cols + 1) {
+        return E_INVALID_ARG;
+    }
+    for (size_t col = 1; col < ctx->col_types.size(); ++col) {
+        if (ctx->col_types[col] != expected_type) {
+            return RET_TYPE_NOT_MATCH;
+        }
+    }
+
+    try {
+        uint32_t copied_rows = 0;
+        ERRNO err = tsfile_result_set_read_numeric_block(
+            ctx->rs, expected_type, out_ts, out_data, out_is_null,
+            static_cast<uint32_t>(capacity_rows), static_cast<uint32_t>(ncols),
+            &copied_rows);
+        if (err == E_OK) {
+            *out_rows = static_cast<int32_t>(copied_rows);
+        }
+        return err;
+    } catch (const std::bad_alloc&) {
+        return RET_OOM;
+    } catch (...) {
+        return E_INVALID_ARG;
+    }
+}
+
+}  // namespace
+
+LV_Status lv_tsfile_rs_read_block_i32(LV_Handle rs, int64_t* out_ts,
+                                      int32_t* out_data, uint8_t* out_is_null,
+                                      int32_t capacity_rows, int32_t ncols,
+                                      int32_t* out_rows) {
+    return read_numeric_block(rs, out_ts, out_data, out_is_null, capacity_rows,
+                              ncols, out_rows, TS_DATATYPE_INT32);
+}
+
+LV_Status lv_tsfile_rs_read_block_f32(LV_Handle rs, int64_t* out_ts,
+                                      float* out_data, uint8_t* out_is_null,
+                                      int32_t capacity_rows, int32_t ncols,
+                                      int32_t* out_rows) {
+    return read_numeric_block(rs, out_ts, out_data, out_is_null, capacity_rows,
+                              ncols, out_rows, TS_DATATYPE_FLOAT);
+}
+
+LV_Status lv_tsfile_rs_read_block_f64(LV_Handle rs, int64_t* out_ts,
+                                      double* out_data, uint8_t* out_is_null,
+                                      int32_t capacity_rows, int32_t ncols,
+                                      int32_t* out_rows) {
+    return read_numeric_block(rs, out_ts, out_data, out_is_null, capacity_rows,
+                              ncols, out_rows, TS_DATATYPE_DOUBLE);
 }
 
 void lv_tsfile_rs_free(LV_Handle rs) {

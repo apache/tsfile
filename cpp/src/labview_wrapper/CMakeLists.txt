@@ -41,7 +41,7 @@ install(FILES tsfile_labview.h DESTINATION include)
 option(BUILD_LABVIEW_WRAPPER_TESTS "Build LabVIEW shim standalone tests"
        ${BUILD_TEST})
 if (BUILD_LABVIEW_WRAPPER_TESTS)
-    foreach(test_name smoke read_only dump block)
+    foreach(test_name smoke read_only dump block block_read)
         add_executable(tsfile_labview_${test_name}_test test_${test_name}.c)
         target_link_libraries(tsfile_labview_${test_name}_test
                               PRIVATE tsfile_labview)

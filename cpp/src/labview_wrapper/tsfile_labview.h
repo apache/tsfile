@@ -130,6 +130,11 @@ LV_API LV_Status lv_tsfile_query_table(LV_Handle reader, const char* table_name,
                                        const char* columns_newline_separated,
                                        int64_t start_time, int64_t end_time,
                                        LV_Handle* out_result_set);
+/* Create a batch-mode result set. batch_rows must be positive. */
+LV_API LV_Status lv_tsfile_query_table_batch(
+    LV_Handle reader, const char* table_name,
+    const char* columns_newline_separated, int64_t start_time, int64_t end_time,
+    int32_t batch_rows, LV_Handle* out_result_set);
 
 /* ===================== result set ===================== */
 /* Returns 1 if a row is available, 0 if end-of-data; *out_err carries ERRNO. */
@@ -148,6 +153,24 @@ LV_API int32_t lv_tsfile_rs_get_bool(LV_Handle rs, uint32_t col);
 LV_API LV_Status lv_tsfile_rs_get_str(LV_Handle rs, uint32_t col, char* out_buf,
                                       int32_t buf_size,
                                       int32_t* out_actual_len);
+/* Read one homogeneous numeric block. Values and null flags are row-major;
+ * timestamps are returned separately. E_OK with out_rows == 0 means EOF.
+ * capacity_rows must be at least the batch_rows configured by the query. */
+LV_API LV_Status lv_tsfile_rs_read_block_i32(LV_Handle rs, int64_t* out_ts,
+                                             int32_t* out_data,
+                                             uint8_t* out_is_null,
+                                             int32_t capacity_rows,
+                                             int32_t ncols, int32_t* out_rows);
+LV_API LV_Status lv_tsfile_rs_read_block_f32(LV_Handle rs, int64_t* out_ts,
+                                             float* out_data,
+                                             uint8_t* out_is_null,
+                                             int32_t capacity_rows,
+                                             int32_t ncols, int32_t* out_rows);
+LV_API LV_Status lv_tsfile_rs_read_block_f64(LV_Handle rs, int64_t* out_ts,
+                                             double* out_data,
+                                             uint8_t* out_is_null,
+                                             int32_t capacity_rows,
+                                             int32_t ncols, int32_t* out_rows);
 LV_API void lv_tsfile_rs_free(LV_Handle rs);
 
 /* ===================== one-call convenience ===================== */

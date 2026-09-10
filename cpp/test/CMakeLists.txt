@@ -365,6 +365,8 @@ if(TARGET tsfile_labview_smoke_test)
              COMMAND $<TARGET_FILE:tsfile_labview_dump_test>)
     add_test(NAME LabVIEWBlockTest
              COMMAND $<TARGET_FILE:tsfile_labview_block_test>)
+    add_test(NAME LabVIEWBlockReadTest
+             COMMAND $<TARGET_FILE:tsfile_labview_block_read_test>)
     add_test(NAME LabVIEWConfigTest
              COMMAND $<TARGET_FILE:tsfile_labview_config_test>)
 endif()
