@@ -1254,3 +1254,152 @@ TEST_F(TsFileTableReaderTest, MultiTagColumnFilterOnSecondTag) {
     delete table_schema;
     delete tag_filter;
 }
+
+// TS_2DIFF columns with sparse nulls, crossing the 129-value block
+// boundary: the page-header point count bounds every block header, so the
+// two counts must use the same unit.  A value page counts only non-null
+// values, while the time page counts every row; a mismatch here would
+// reject legitimate data.
+TEST_F(TsFileTableReaderTest, Ts2DiffSparseNullsRoundTrip) {
+    const int kRows = 300;  // 129 + 129 + 42
+    std::string table_name = "t_sparse";
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("id1", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("s_i32", common::TSDataType::INT32,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s_i64", common::TSDataType::INT64,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s_f", common::TSDataType::FLOAT,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s_d", common::TSDataType::DOUBLE,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+        });
+    uint64_t memory_threshold = 128 * 1024 * 1024;
+    auto* writer =
+        new storage::TsFileTableWriter(&write_file_, schema, memory_threshold);
+    storage::Tablet tablet(
+        {"id1", "s_i32", "s_i64", "s_f", "s_d"},
+        {common::TSDataType::STRING, common::TSDataType::INT32,
+         common::TSDataType::INT64, common::TSDataType::FLOAT,
+         common::TSDataType::DOUBLE},
+        kRows);
+    int expected_non_null = 0;
+    for (int row = 0; row < kRows; row++) {
+        tablet.add_timestamp(row, row);
+        tablet.add_value(row, "id1", "dev");
+        // Every third row is null, so the value pages hold fewer values
+        // than the time page holds rows.
+        if (row % 3 != 0) {
+            tablet.add_value(row, "s_i32", row);
+            tablet.add_value(row, "s_i64", static_cast<int64_t>(row) * 3);
+            tablet.add_value(row, "s_f", static_cast<float>(row) * 0.5f);
+            tablet.add_value(row, "s_d", static_cast<double>(row) * 0.25);
+            expected_non_null++;
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+    delete writer;
+    delete schema;
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(write_file_.get_file_path()), common::E_OK);
+    storage::ResultSet* tmp = nullptr;
+    ASSERT_EQ(reader.query(table_name, {"s_i32", "s_i64", "s_f", "s_d"},
+                           INT64_MIN, INT64_MAX, tmp),
+              common::E_OK);
+    auto* rs = dynamic_cast<storage::TableResultSet*>(tmp);
+    ASSERT_NE(rs, nullptr);
+    bool has_next = false;
+    int rows = 0;
+    int non_null = 0;
+    while (IS_SUCC(rs->next(has_next)) && has_next) {
+        rows++;
+        if (!rs->is_null("s_i32")) {
+            non_null++;
+            ASSERT_FALSE(rs->is_null("s_i64"));
+            ASSERT_FALSE(rs->is_null("s_f"));
+            ASSERT_FALSE(rs->is_null("s_d"));
+        }
+    }
+    EXPECT_EQ(rows, kRows);
+    EXPECT_EQ(non_null, expected_non_null);
+    reader.destroy_query_data_set(rs);
+    ASSERT_EQ(reader.close(), common::E_OK);
+}
+
+// A TS_2DIFF column that is null for every row: the value page holds no
+// values, so its statistic count is 0.  The zero-count page bound must not
+// turn this legitimate page into a decode error.
+TEST_F(TsFileTableReaderTest, Ts2DiffFullyNullColumnRoundTrip) {
+    const int kRows = 200;
+    std::string table_name = "t_allnull";
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("id1", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("s_live", common::TSDataType::INT32,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s_null", common::TSDataType::INT32,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::TS_2DIFF,
+                                 common::ColumnCategory::FIELD),
+        });
+    uint64_t memory_threshold = 128 * 1024 * 1024;
+    auto* writer =
+        new storage::TsFileTableWriter(&write_file_, schema, memory_threshold);
+    storage::Tablet tablet(
+        {"id1", "s_live", "s_null"},
+        {common::TSDataType::STRING, common::TSDataType::INT32,
+         common::TSDataType::INT32},
+        kRows);
+    for (int row = 0; row < kRows; row++) {
+        tablet.add_timestamp(row, row);
+        tablet.add_value(row, "id1", "dev");
+        tablet.add_value(row, "s_live", row);
+        // s_null is never written: a fully-null TS_2DIFF value page.
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+    delete writer;
+    delete schema;
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(write_file_.get_file_path()), common::E_OK);
+    storage::ResultSet* tmp = nullptr;
+    ASSERT_EQ(reader.query(table_name, {"s_live", "s_null"}, INT64_MIN,
+                           INT64_MAX, tmp),
+              common::E_OK);
+    auto* rs = dynamic_cast<storage::TableResultSet*>(tmp);
+    ASSERT_NE(rs, nullptr);
+    bool has_next = false;
+    int rows = 0;
+    while (IS_SUCC(rs->next(has_next)) && has_next) {
+        rows++;
+        ASSERT_FALSE(rs->is_null("s_live"));
+        ASSERT_TRUE(rs->is_null("s_null"));
+    }
+    EXPECT_EQ(rows, kRows);
+    reader.destroy_query_data_set(rs);
+    ASSERT_EQ(reader.close(), common::E_OK);
+}

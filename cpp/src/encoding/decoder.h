@@ -39,6 +39,13 @@ class Decoder {
     virtual int read_String(common::String& ret_value, common::PageArena& pa,
                             common::ByteStream& in) = 0;
 
+    // Structural bound from the page header: the number of points in the
+    // page.  Decoders whose stream carries no per-page value count use it
+    // to reject block headers that cannot fit; the default ignores it.
+    virtual void set_page_value_count(int page_value_count) {
+        (void)page_value_count;
+    }
+
     virtual int read_batch_int32(int32_t* out, int capacity, int& actual,
                                  common::ByteStream& in) {
         actual = 0;
