@@ -165,7 +165,16 @@ jobs:
           apt-get install -y ./packages/*.deb cmake build-essential
 
       - name: Verify installed DEB packages
+        shell: bash
         run: |
+          cli_path="$(command -v tsfile-cli)"
+          cli_path="$(readlink -f -- "$cli_path")"
+          cli_owner="$(dpkg-query -S "$cli_path")"
+          cli_owner="${cli_owner%%:*}"
+          if [[ "$cli_owner" != "tsfile-tools" ]]; then
+            printf '%s is owned by %s, expected tsfile-tools\n' "$cli_path" "$cli_owner"
+            exit 1
+          fi
           tsfile-cli --version
           dpkg-query -W tsfile tsfile-dev tsfile-tools
 
@@ -300,7 +309,15 @@ jobs:
         run: dnf install -y packages/*.rpm cmake gcc-c++
 
       - name: Verify installed RPM packages
+        shell: bash
         run: |
+          cli_path="$(command -v tsfile-cli)"
+          cli_path="$(readlink -f -- "$cli_path")"
+          cli_owner="$(rpm -qf --queryformat '%{NAME}' "$cli_path")"
+          if [[ "$cli_owner" != "tsfile-tools" ]]; then
+            printf '%s is owned by %s, expected tsfile-tools\n' "$cli_path" "$cli_owner"
+            exit 1
+          fi
           tsfile-cli --version
           rpm -q tsfile tsfile-devel tsfile-tools
 
