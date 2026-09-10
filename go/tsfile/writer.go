@@ -49,7 +49,8 @@ func WithMemoryThreshold(bytes uint64) WriterOption {
 	}
 }
 
-// Writer writes batches for one table to a TsFile.
+// Writer writes batches for one table to a TsFile. Its methods serialize
+// access to the underlying native writer.
 type Writer struct {
 	mu     sync.Mutex
 	handle *writerHandle
@@ -98,8 +99,6 @@ func (w *Writer) writeTablet(tablet *Tablet) error {
 	if w.handle == nil || w.handle.ptr == nil {
 		return ErrClosed
 	}
-	tablet.mu.Lock()
-	defer tablet.mu.Unlock()
 	if tablet.handle == nil || tablet.handle.ptr == nil {
 		return ErrClosed
 	}

@@ -20,15 +20,18 @@ package tsfile
 import (
 	"fmt"
 	"strings"
-	"sync"
 )
 
-// Tablet is a fixed-capacity batch of table rows.
+// Tablet is a fixed-capacity batch of table rows. A Tablet is not safe for
+// concurrent use; callers must not modify or close it while it is being
+// written by a Writer.
 type Tablet struct {
-	mu      sync.Mutex
 	handle  *tabletHandle
 	columns []TabletColumn
 	maxRows int
+	// The native Tablet only records the highest timestamp row index. Track
+	// presence separately so WriteTableTablet can reject holes instead of
+	// passing uninitialized timestamps to C++.
 	timeSet []bool
 	rows    int
 }
@@ -69,25 +72,23 @@ func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 
 // SetBytes assigns a BLOB value without interpreting its contents.
 func (t *Tablet) SetBytes(row, column int, value []byte) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeBlob); err != nil {
+	if err := t.validate(row, column, DataTypeBlob); err != nil {
 		return err
 	}
 	if err := t.handle.addBytes(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
-func (t *Tablet) markRowLocked(row int) {
+func (t *Tablet) markRow(row int) {
 	if row >= t.rows {
 		t.rows = row + 1
 	}
 }
 
-func (t *Tablet) validateLocked(row, column int, allowed ...DataType) error {
+func (t *Tablet) validate(row, column int, allowed ...DataType) error {
 	if t.handle == nil || t.handle.ptr == nil {
 		return ErrClosed
 	}
@@ -105,8 +106,6 @@ func (t *Tablet) validateLocked(row, column int, allowed ...DataType) error {
 
 // AddTimestamp assigns the timestamp for a row.
 func (t *Tablet) AddTimestamp(row int, timestamp int64) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.handle == nil || t.handle.ptr == nil {
 		return ErrClosed
 	}
@@ -117,85 +116,73 @@ func (t *Tablet) AddTimestamp(row int, timestamp int64) error {
 		return err
 	}
 	t.timeSet[row] = true
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetBool assigns a BOOLEAN value by zero-based row and column.
 func (t *Tablet) SetBool(row, column int, value bool) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeBoolean); err != nil {
+	if err := t.validate(row, column, DataTypeBoolean); err != nil {
 		return err
 	}
 	if err := t.handle.addBool(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetInt32 assigns an INT32 or DATE value.
 func (t *Tablet) SetInt32(row, column int, value int32) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeInt32, DataTypeDate); err != nil {
+	if err := t.validate(row, column, DataTypeInt32, DataTypeDate); err != nil {
 		return err
 	}
 	if err := t.handle.addInt32(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetInt64 assigns an INT64 or TIMESTAMP value.
 func (t *Tablet) SetInt64(row, column int, value int64) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeInt64, DataTypeTimestamp); err != nil {
+	if err := t.validate(row, column, DataTypeInt64, DataTypeTimestamp); err != nil {
 		return err
 	}
 	if err := t.handle.addInt64(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetFloat32 assigns a FLOAT value.
 func (t *Tablet) SetFloat32(row, column int, value float32) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeFloat); err != nil {
+	if err := t.validate(row, column, DataTypeFloat); err != nil {
 		return err
 	}
 	if err := t.handle.addFloat32(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetFloat64 assigns a DOUBLE value.
 func (t *Tablet) SetFloat64(row, column int, value float64) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeDouble); err != nil {
+	if err := t.validate(row, column, DataTypeDouble); err != nil {
 		return err
 	}
 	if err := t.handle.addFloat64(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // SetString assigns a TEXT or STRING value.
 func (t *Tablet) SetString(row, column int, value string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if err := t.validateLocked(row, column, DataTypeText, DataTypeString); err != nil {
+	if err := t.validate(row, column, DataTypeText, DataTypeString); err != nil {
 		return err
 	}
 	if strings.IndexByte(value, 0) >= 0 {
@@ -204,15 +191,13 @@ func (t *Tablet) SetString(row, column int, value string) error {
 	if err := t.handle.addString(row, column, value); err != nil {
 		return err
 	}
-	t.markRowLocked(row)
+	t.markRow(row)
 	return nil
 }
 
 // Rows returns the number of rows currently present in the tablet. It returns
 // zero after the tablet has been closed.
 func (t *Tablet) Rows() int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.handle == nil || t.handle.ptr == nil {
 		return 0
 	}
@@ -221,8 +206,6 @@ func (t *Tablet) Rows() int {
 
 // Close releases the native tablet. It is safe to call more than once.
 func (t *Tablet) Close() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.handle == nil {
 		return nil
 	}

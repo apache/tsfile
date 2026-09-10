@@ -551,6 +551,9 @@ func newWriterHandle(path string, schema TableSchema, memoryThresholdBytes uint6
 	}, nil
 }
 
+// allocTableSchema copies schema into C-owned memory. The second return value
+// releases the TableSchema and all nested allocations and must be called once
+// the native constructor has finished copying the schema.
 func allocTableSchema(schema TableSchema) (*C.TableSchema, func(), error) {
 	tableName := cStringPtr(schema.Table)
 	names, err := marshalCStrings(columnNames(schema.Columns))

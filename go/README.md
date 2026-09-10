@@ -57,7 +57,9 @@ optional time-range, tag-filter, pagination, and batch-size options.
 arguments and manages the handle lifetime, while its setters populate the C++
 batch through cgo. Arrow batches are created with Arrow Go and passed through
 the Arrow C Data Interface; the C++ bridge converts them to a native Tablet
-before writing.
+before writing. Writer methods serialize access to the native writer. A Tablet
+is not safe for concurrent use; callers must not modify or close one while
+`WriteTableTablet` is using it.
 
 Result-set columns are one-based: column 1 is `time`, followed by the selected
 data columns. Tablet rows and columns retain Go's zero-based indexing. A query

@@ -67,6 +67,9 @@ func validDataType(value DataType) bool {
 	}
 }
 
+// validateAndCopyTableSchema returns an independently owned, normalized
+// schema because Writer retains it after NewWriter returns. Mutating the
+// caller's Columns slice must not change later Tablet validation.
 func validateAndCopyTableSchema(schema TableSchema) (TableSchema, error) {
 	if err := validateCString("validate table schema", "table name", schema.Table); err != nil {
 		return TableSchema{}, fmt.Errorf("%w: %v", ErrInvalidSchema, err)
@@ -74,9 +77,9 @@ func validateAndCopyTableSchema(schema TableSchema) (TableSchema, error) {
 	if len(schema.Columns) == 0 {
 		return TableSchema{}, fmt.Errorf("%w: table requires at least one column", ErrInvalidSchema)
 	}
-	copy := TableSchema{Table: normalizeIdentifier(schema.Table), Columns: append([]ColumnSchema(nil), schema.Columns...)}
-	seen := make(map[string]struct{}, len(copy.Columns))
-	for i, column := range copy.Columns {
+	normalized := TableSchema{Table: normalizeIdentifier(schema.Table), Columns: append([]ColumnSchema(nil), schema.Columns...)}
+	seen := make(map[string]struct{}, len(normalized.Columns))
+	for i, column := range normalized.Columns {
 		if err := validateCString("validate table schema", "column name", column.Name); err != nil {
 			return TableSchema{}, fmt.Errorf("%w: column %d: %v", ErrInvalidSchema, i, err)
 		}
@@ -94,9 +97,9 @@ func validateAndCopyTableSchema(schema TableSchema) (TableSchema, error) {
 		if column.Category == ColumnCategoryTag && column.DataType != DataTypeString {
 			return TableSchema{}, fmt.Errorf("%w: TAG column %q must use STRING", ErrInvalidSchema, column.Name)
 		}
-		copy.Columns[i].Name = name
+		normalized.Columns[i].Name = name
 	}
-	return copy, nil
+	return normalized, nil
 }
 
 func normalizeIdentifier(value string) string { return strings.ToLower(value) }
