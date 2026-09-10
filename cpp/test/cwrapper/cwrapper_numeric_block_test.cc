@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "cwrapper/tsfile_cwrapper.h"
 #include "utils/errno_define.h"
 
@@ -27,7 +29,10 @@ namespace cwrapper {
 class CWrapperNumericBlockTest : public testing::Test {
    protected:
     void SetUp() override {
-        remove(kPath);
+        path_ = std::string("cwrapper_numeric_block_") +
+                testing::UnitTest::GetInstance()->current_test_info()->name() +
+                ".tsfile";
+        remove(path_.c_str());
         char* names[] = {name_a_, name_b_};
         TSDataType types[] = {TS_DATATYPE_DOUBLE, TS_DATATYPE_DOUBLE};
         ColumnSchema columns[] = {{name_a_, TS_DATATYPE_DOUBLE, FIELD},
@@ -35,7 +40,7 @@ class CWrapperNumericBlockTest : public testing::Test {
         TableSchema schema = {table_name_, columns, 2};
 
         ERRNO err = common::E_OK;
-        WriteFile file = write_file_new(kPath, &err);
+        WriteFile file = write_file_new(path_.c_str(), &err);
         ASSERT_NE(nullptr, file);
         ASSERT_EQ(common::E_OK, err);
         TsFileWriter writer = tsfile_writer_new(file, &schema, &err);
@@ -60,11 +65,11 @@ class CWrapperNumericBlockTest : public testing::Test {
         free_write_file(&file);
     }
 
-    void TearDown() override { remove(kPath); }
+    void TearDown() override { remove(path_.c_str()); }
 
     ResultSet QueryBatch(int batch_size, ERRNO* err) {
         char* names[] = {name_a_, name_b_};
-        reader_ = tsfile_reader_new(kPath, err);
+        reader_ = tsfile_reader_new(path_.c_str(), err);
         EXPECT_NE(nullptr, reader_);
         return tsfile_query_table_batch(reader_, table_name_, names, 2, 0, 100,
                                         nullptr, batch_size, err);
@@ -72,7 +77,7 @@ class CWrapperNumericBlockTest : public testing::Test {
 
     ResultSet QueryRows(ERRNO* err) {
         char* names[] = {name_a_, name_b_};
-        reader_ = tsfile_reader_new(kPath, err);
+        reader_ = tsfile_reader_new(path_.c_str(), err);
         EXPECT_NE(nullptr, reader_);
         return tsfile_query_table(reader_, table_name_, names, 2, 0, 100, err);
     }
@@ -83,14 +88,12 @@ class CWrapperNumericBlockTest : public testing::Test {
         reader_ = nullptr;
     }
 
-    static constexpr const char* kPath = "cwrapper_numeric_block.tsfile";
+    std::string path_;
     char table_name_[16] = "signals";
     char name_a_[2] = "a";
     char name_b_[2] = "b";
     TsFileReader reader_ = nullptr;
 };
-
-constexpr const char* CWrapperNumericBlockTest::kPath;
 
 TEST_F(CWrapperNumericBlockTest, CopiesMultipleBlocksAndNulls) {
     ERRNO err = common::E_OK;
