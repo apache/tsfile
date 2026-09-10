@@ -805,7 +805,7 @@ ResultSet tsfile_reader_query_table(TsFileReader reader, const char* table_name,
     *err_code = common::E_INVALID_ARG;
     if (reader == nullptr || table_name == nullptr || column_names == nullptr ||
         column_names_len == 0 || end_time < start_time || offset < 0 ||
-        limit < -1 || batch_size < 0) {
+        batch_size < 0) {
         return nullptr;
     }
     try {
@@ -818,8 +818,9 @@ ResultSet tsfile_reader_query_table(TsFileReader reader, const char* table_name,
             columns.emplace_back(column_names[i]);
         }
         storage::ResultSet* result_set = nullptr;
+        const int normalized_limit = limit < 0 ? -1 : limit;
         *err_code = static_cast<storage::TsFileReader*>(reader)->query(
-            table_name, columns, start_time, end_time, offset, limit,
+            table_name, columns, start_time, end_time, offset, normalized_limit,
             result_set, static_cast<storage::Filter*>(tag_filter), batch_size);
         return result_set;
     } catch (const std::bad_alloc&) {

@@ -936,10 +936,14 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             }
             case common::INT32:
             case common::INT64:
+            case common::TIMESTAMP:
             case common::FLOAT:
             case common::DOUBLE: {
                 size_t elem_size =
-                    (dtype == common::INT64 || dtype == common::DOUBLE) ? 8 : 4;
+                    (dtype == common::INT64 || dtype == common::TIMESTAMP ||
+                     dtype == common::DOUBLE)
+                        ? 8
+                        : 4;
                 const void* data =
                     static_cast<const char*>(col_arr->buffers[1]) +
                     off * elem_size;

@@ -109,7 +109,7 @@ func TestTableRoundTripAndNull(t *testing.T) {
 	if _, err := reader.GetTableSchema("missing"); !errors.Is(err, ErrTableNotExist) {
 		t.Fatalf("missing schema error = %v", err)
 	}
-	result, err := reader.Query("metrics", []string{"device", "value", "enabled", "payload"})
+	result, err := reader.Query("metrics", []string{"device", "value", "enabled", "payload"}, WithLimit(-2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,6 +323,68 @@ func TestTabletWriteValidation(t *testing.T) {
 	}
 	if err := writer.WriteTableTablet(missingTime); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("missing timestamp error = %v", err)
+	}
+}
+
+func TestTabletCanBeReusedAcrossWriters(t *testing.T) {
+	tablet, err := NewTablet([]TabletColumn{
+		{Name: "device", DataType: DataTypeString},
+		{Name: "value", DataType: DataTypeInt64},
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tablet.Close()
+	if err := tablet.AddTimestamp(0, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := tablet.SetString(0, 0, "d1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tablet.SetInt64(0, 1, 42); err != nil {
+		t.Fatal(err)
+	}
+
+	newSchema := func(table string) TableSchema {
+		return TableSchema{Table: table, Columns: []ColumnSchema{
+			{Name: "device", DataType: DataTypeString, Category: ColumnCategoryTag},
+			{Name: "value", DataType: DataTypeInt64, Category: ColumnCategoryField},
+		}}
+	}
+	for _, table := range []string{"first", "second"} {
+		path := filepath.Join(t.TempDir(), table+".tsfile")
+		writer, err := NewWriter(path, newSchema(table))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.WriteTableTablet(tablet); err != nil {
+			_ = writer.Close()
+			t.Fatalf("write shared Tablet to %q: %v", table, err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		reader, err := NewReader(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := reader.Query(table, []string{"value"})
+		if err != nil {
+			_ = reader.Close()
+			t.Fatal(err)
+		}
+		ok, nextErr := result.Next()
+		value, valueErr := result.Int64(2)
+		if closeErr := result.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		if nextErr != nil || !ok || valueErr != nil || value != 42 {
+			t.Fatalf("read %q: Next = %v, %v; value = %d, %v", table, ok, nextErr, value, valueErr)
+		}
 	}
 }
 
@@ -585,5 +647,62 @@ func TestArrowBatchRoundTripAndModes(t *testing.T) {
 	defer empty.Close()
 	if _, err := empty.ReadArrowRecordBatch(); !errors.Is(err, io.EOF) {
 		t.Fatalf("empty Arrow query = %v", err)
+	}
+}
+
+func TestArrowTimestampFieldRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "arrow-timestamp.tsfile")
+	schema := TableSchema{Table: "events", Columns: []ColumnSchema{
+		{Name: "device", DataType: DataTypeString, Category: ColumnCategoryTag},
+		{Name: "observed_at", DataType: DataTypeTimestamp, Category: ColumnCategoryField},
+	}}
+	writer, err := NewWriter(path, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrowSchema := arrow.NewSchema([]arrow.Field{
+		{Name: "time", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "device", Type: arrow.BinaryTypes.String},
+		{Name: "observed_at", Type: &arrow.TimestampType{Unit: arrow.Nanosecond}, Nullable: true},
+	}, nil)
+	builder := array.NewRecordBuilder(memory.DefaultAllocator, arrowSchema)
+	builder.Field(0).(*array.Int64Builder).AppendValues([]int64{10, 20}, nil)
+	builder.Field(1).(*array.StringBuilder).AppendValues([]string{"d1", "d1"}, nil)
+	builder.Field(2).(*array.TimestampBuilder).AppendValues(
+		[]arrow.Timestamp{123456789, 0}, []bool{true, false})
+	record := builder.NewRecord()
+	if err := writer.WriteArrowBatch(record); err != nil {
+		record.Release()
+		builder.Release()
+		_ = writer.Close()
+		t.Fatal(err)
+	}
+	record.Release()
+	builder.Release()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := NewReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	result, err := reader.Query("events", []string{"observed_at"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.Close()
+	if ok, err := result.Next(); err != nil || !ok {
+		t.Fatalf("first Next = %v, %v", ok, err)
+	}
+	if value, err := result.Int64(2); err != nil || value != 123456789 {
+		t.Fatalf("first timestamp = %d, %v", value, err)
+	}
+	if ok, err := result.Next(); err != nil || !ok {
+		t.Fatalf("second Next = %v, %v", ok, err)
+	}
+	if isNull, err := result.IsNull(2); err != nil || !isNull {
+		t.Fatalf("second timestamp null = %v, %v", isNull, err)
 	}
 }

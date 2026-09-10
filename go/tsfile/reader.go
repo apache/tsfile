@@ -67,8 +67,9 @@ func WithOffset(offset int) QueryOption {
 
 func WithLimit(limit int) QueryOption {
 	return func(options *queryOptions) error {
-		if limit < -1 {
-			return fmt.Errorf("%w: limit must be -1 or nonnegative", ErrInvalidArgument)
+		if limit < 0 {
+			options.limit = -1
+			return nil
 		}
 		if err := validateCInt32("query", "limit", limit); err != nil {
 			return err

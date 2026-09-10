@@ -224,8 +224,11 @@ int TsFileReader::query(const std::string& table_name,
         schema_it->second == nullptr) {
         return E_TABLE_NOT_EXIST;
     }
-    if (end_time < start_time || offset < 0 || limit < -1) {
+    if (end_time < start_time || offset < 0) {
         return E_INVALID_ARG;
+    }
+    if (limit < 0) {
+        limit = -1;
     }
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);

@@ -102,7 +102,6 @@ func TestQueryOptionValidation(t *testing.T) {
 		nil,
 		WithTimeRange(2, 1),
 		WithOffset(-1),
-		WithLimit(-2),
 		WithTagFilter(nil),
 	}
 	for _, option := range cases {
@@ -113,6 +112,10 @@ func TestQueryOptionValidation(t *testing.T) {
 	options, err := buildQueryOptions(WithBatchSize(-1))
 	if err != nil || options.batchSize != 0 {
 		t.Fatalf("negative batch size should select row mode: %+v, %v", options, err)
+	}
+	options, err = buildQueryOptions(WithLimit(-2))
+	if err != nil || options.limit != -1 {
+		t.Fatalf("negative limit should mean unlimited: %+v, %v", options, err)
 	}
 }
 
