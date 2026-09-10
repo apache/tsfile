@@ -505,6 +505,14 @@ TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
 ERRNO tsfile_writer_close(TsFileWriter writer);
 
 /**
+ * @brief Flushes buffered table-model data while keeping the writer open.
+ *
+ * @param writer [in] Writer handle obtained from tsfile_writer_new().
+ * @return ERRNO - E_OK(0) on success, check error code in errno_define_c.h.
+ */
+ERRNO tsfile_writer_flush(TsFileWriter writer);
+
+/**
  * @brief Adds or replaces a file-level property while the table writer is open.
  *
  * The key and value are copied immediately. A NULL value with value_len == 0

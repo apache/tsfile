@@ -353,6 +353,20 @@ LV_Status lv_tsfile_write_block_f64(LV_Handle writer, const int64_t* ts,
     return write_block(writer, ts, data, nrows, ncols, TS_DATATYPE_DOUBLE);
 }
 
+LV_Status lv_tsfile_writer_flush(LV_Handle writer) {
+    auto* ctx = static_cast<WriterCtx*>(lookup(writer, Kind::kWriter));
+    if (ctx == nullptr || ctx->writer == nullptr) {
+        return E_INVALID_ARG;
+    }
+    try {
+        return tsfile_writer_flush(ctx->writer);
+    } catch (const std::bad_alloc&) {
+        return RET_OOM;
+    } catch (...) {
+        return RET_FILE_WRITE_ERR;
+    }
+}
+
 LV_Status lv_tsfile_writer_close(LV_Handle writer) {
     auto* ctx = static_cast<WriterCtx*>(unregister(writer, Kind::kWriter));
     if (ctx == nullptr) {

@@ -323,6 +323,14 @@ ERRNO tsfile_writer_close(TsFileWriter writer) {
     return ret;
 }
 
+ERRNO tsfile_writer_flush(TsFileWriter writer) {
+    if (writer == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    auto* w = static_cast<storage::TsFileTableWriter*>(writer);
+    return w->flush();
+}
+
 ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
                                         uint32_t key_len, const uint8_t* value,
                                         uint32_t value_len) {

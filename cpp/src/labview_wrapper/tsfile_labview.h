@@ -95,6 +95,8 @@ LV_API LV_Status lv_tsfile_write_block_f32(LV_Handle writer, const int64_t* ts,
 LV_API LV_Status lv_tsfile_write_block_f64(LV_Handle writer, const int64_t* ts,
                                            const double* data, int32_t nrows,
                                            int32_t ncols);
+/* Synchronously flush buffered chunks. The writer remains open. */
+LV_API LV_Status lv_tsfile_writer_flush(LV_Handle writer);
 LV_API LV_Status lv_tsfile_writer_close(LV_Handle writer);
 
 /* ===================== tablet builder ===================== */

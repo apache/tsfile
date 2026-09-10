@@ -205,6 +205,7 @@ static int test_f64(void) {
     CHECK_OK(lv_tsfile_write_block_f64(writer, ts, values, 2, NCOLS));
     CHECK_OK(lv_tsfile_write_block_f64(writer, ts + 2, values + 2 * NCOLS, 2,
                                        NCOLS));
+    CHECK_OK(lv_tsfile_writer_flush(writer));
     CHECK_OK(lv_tsfile_writer_close(writer));
     if (verify_f64(path, values) != 0) {
         return 1;
