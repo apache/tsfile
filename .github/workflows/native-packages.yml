@@ -581,6 +581,7 @@ jobs:
       - name: Merge both bottle tags into the Formula
         shell: bash
         run: |
+          brew trust apache/tsfile-dev
           brew bottle --merge --write --no-commit homebrew/bottles/*.json
           tap_path="$(brew --repository apache/tsfile-dev)"
           cp "$tap_path/Formula/tsfile-dev.rb" homebrew/Formula/tsfile-dev.rb

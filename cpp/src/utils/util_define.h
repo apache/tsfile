@@ -120,14 +120,14 @@ typedef int mode_t;
 #endif  // __GNUC__ >= 4
 
 /* ======== nullptr ======== */
-#if __cplusplus < 201103L
+#if __cplusplus < 201103L && !defined(_MSC_VER)
 #ifndef nullptr
 #define nullptr NULL
 #endif
 #define OVERRIDE
 #else
 #define OVERRIDE override
-#endif  // __cplusplus < 201103L
+#endif  // __cplusplus < 201103L && !defined(_MSC_VER)
 
 /* ======== cache line ======== */
 #ifndef CACHE_LINE_SIZE

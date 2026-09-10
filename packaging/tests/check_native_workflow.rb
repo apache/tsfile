@@ -41,6 +41,11 @@ raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-DTSF
 raise "All native target runtimes must be checked" unless windows.include?("CheckStaticMSVCRuntime.cmake")
 raise "Both staged and extracted PE imports must be checked" unless windows.scan("python packaging/scripts/verify_windows_runtime.py").size == 2
 
+homebrew_merge = jobs.fetch("merge-homebrew").fetch("steps").filter_map { |step| step["run"] }.join("\n")
+trust = homebrew_merge.index("brew trust apache/tsfile-dev")
+merge = homebrew_merge.index("brew bottle --merge")
+raise "Homebrew merge must trust its temporary tap before loading the Formula" unless trust && merge && trust < merge
+
 %w[test-deb test-rpm build-windows].each do |name|
   steps = jobs.fetch(name).fetch("steps")
   raise "#{name} must check out the consumer fixture" unless steps.any? { |step| step["uses"].to_s.start_with?("actions/checkout@") }

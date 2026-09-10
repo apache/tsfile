@@ -32,10 +32,44 @@ FIXTURES = ROOT / "cpp/cmake/tests/projects"
 
 
 class PublicHeaderCompatibilityTest(unittest.TestCase):
-    def test_static_assert_uses_the_native_keyword_for_msvc(self):
+    def test_simd_int64_reduction_normalizes_lane_types(self):
+        statistic = (ROOT / "cpp/src/common/statistic.h").read_text()
+        self.assertIn("std::min<int64_t>(simde_mm_cvtsi128_si64(vmin)", statistic)
+        self.assertIn("std::max<int64_t>(simde_mm_cvtsi128_si64(vmax)", statistic)
+        source = textwrap.dedent("""\
+            #include <algorithm>
+            #include <cstdint>
+
+            long simde_mm_cvtsi128_si64(int);
+            long long simde_mm_extract_epi64(int, int);
+
+            std::int64_t reduce_min(int value) {
+              return std::min<std::int64_t>(simde_mm_cvtsi128_si64(value),
+                                            simde_mm_extract_epi64(value, 1));
+            }
+            """)
+        result = subprocess.run(
+            [
+                *shlex.split(os.environ.get("CXX", "c++")),
+                "-fsyntax-only",
+                "-x",
+                "c++",
+                "-std=c++11",
+                "-",
+            ],
+            input=source,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_msvc_old_cplusplus_uses_native_cxx11_features(self):
         source = textwrap.dedent("""\
             #include "utils/util_define.h"
             class Probe { STATIC_ASSERT(true, MSVC_old_cplusplus); };
+            class Base { virtual void reset(); };
+            class Derived : public Base { void reset() OVERRIDE; };
             """)
         result = subprocess.run(
             [
@@ -59,6 +93,46 @@ class PublicHeaderCompatibilityTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout[-4000:])
         self.assertRegex(result.stdout, r"class Probe \{\s*(?:static_assert|_Static_assert)")
         self.assertNotIn("static_assertion_MSVC_old_cplusplus", result.stdout)
+        self.assertIn("void reset() override", result.stdout)
+
+    def test_msvc_old_cplusplus_does_not_define_nullptr(self):
+        compatibility = (ROOT / "cpp/src/utils/util_define.h").read_text()
+        section = re.search(
+            r"/\* ======== nullptr ======== \*/\n(.*?)\n/\* ======== cache line",
+            compatibility,
+            re.S,
+        )
+        self.assertIsNotNone(section)
+        source = section.group(1) + textwrap.dedent("""\
+
+            #ifdef nullptr
+            #error nullptr must remain a native MSVC keyword
+            #endif
+            class Base { virtual void reset(); };
+            class Derived : public Base { void reset() OVERRIDE; };
+            int* pointer = nullptr;
+            """)
+        result = subprocess.run(
+            [
+                *shlex.split(os.environ.get("CXX", "c++")),
+                "-E",
+                "-P",
+                "-nostdinc",
+                "-x",
+                "c++",
+                "-std=c++11",
+                "-D_MSC_VER=1930",
+                "-D__cplusplus=199711L",
+                "-",
+            ],
+            input=source,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("void reset() override", result.stdout)
+        self.assertRegex(result.stdout, r"int\s*\*\s*pointer\s*=\s*nullptr")
 
 
 class StaticANTLRPackageTest(unittest.TestCase):
