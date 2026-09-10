@@ -26,6 +26,11 @@ func TestTabletValidationAndClose(t *testing.T) {
 	if _, err := NewTablet(nil, 1); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("empty columns: %v", err)
 	}
+	if _, err := NewTablet([]TabletColumn{{
+		Name: "value", DataType: DataType(255),
+	}}, 1); !errors.Is(err, ErrTypeNotSupported) {
+		t.Fatalf("unsupported data type: %v", err)
+	}
 	tablet, err := NewTablet([]TabletColumn{
 		{Name: "text", DataType: DataTypeString},
 		{Name: "number", DataType: DataTypeInt64},

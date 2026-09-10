@@ -166,19 +166,36 @@ TEST_F(CWrapperPublicWriterTest, TableWriterRejectsInvalidSchema) {
 }
 
 TEST_F(CWrapperPublicWriterTest, PublicTableAndArrowNullArgs) {
-    EXPECT_EQ(tablet_new(nullptr, nullptr, 0, 1), nullptr);
-    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 1), nullptr);
-    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 0), nullptr);
+    ERRNO err = RET_OK;
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 0, 1, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 1, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 0, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+    EXPECT_EQ(tablet_new(nullptr, nullptr, 1, 1, nullptr), nullptr);
 
     char first[] = "value";
     char second[] = "VALUE";
     char* duplicate_names[] = {first, second};
     TSDataType duplicate_types[] = {TS_DATATYPE_INT64, TS_DATATYPE_INT64};
-    EXPECT_EQ(tablet_new(duplicate_names, duplicate_types, 2, 1), nullptr);
+    EXPECT_EQ(tablet_new(duplicate_names, duplicate_types, 2, 1, &err),
+              nullptr);
+    EXPECT_EQ(err, RET_INVALID_SCHEMA);
 
     char* one_name[] = {first};
     TSDataType one_type[] = {TS_DATATYPE_INT64};
-    EXPECT_EQ(tablet_new(one_name, one_type, 1, 1u << 30), nullptr);
+    EXPECT_EQ(tablet_new(one_name, one_type, 1, 1u << 30, &err), nullptr);
+    EXPECT_EQ(err, RET_INVALID_ARG);
+
+    TSDataType unsupported_type[] = {TS_DATATYPE_VECTOR};
+    EXPECT_EQ(tablet_new(one_name, unsupported_type, 1, 1, &err), nullptr);
+    EXPECT_EQ(err, RET_TYPE_NOT_SUPPORTED);
+
+    Tablet tablet = tablet_new(one_name, one_type, 1, 1, &err);
+    ASSERT_NE(tablet, nullptr);
+    EXPECT_EQ(err, RET_OK);
+    free_tablet(&tablet);
 
     ArrowArray array = {};
     ArrowSchema schema = {};

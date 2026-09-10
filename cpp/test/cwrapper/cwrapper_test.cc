@@ -264,7 +264,9 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
         data_types[i + id_schema_num] = TS_DATATYPE_INT64;
     }
 
-    Tablet tablet = tablet_new(column_names, data_types, column_num, 10);
+    Tablet tablet = tablet_new(column_names, data_types, column_num, 10, &code);
+    ASSERT_EQ(code, RET_OK);
+    ASSERT_NE(tablet, nullptr);
 
     int num_timestamp = 10;
     char* literal = new char[std::strlen("device_id") + 1];

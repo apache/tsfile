@@ -580,11 +580,13 @@ void tsfile_free_tsfile_properties(TsFileProperty* properties, uint32_t length);
  * @param data_types [in] Data types array. Size=column_num.
  * @param column_num [in] Number of columns. Must be ≥1.
  * @param max_rows [in] Pre-allocated row capacity. Must be ≥1.
- * @return Tablet Valid handle.
+ * @param err_code [out] Receives RET_OK on success or the failure code. Must
+ *        not be NULL.
+ * @return Tablet Valid handle, or NULL on failure.
  * @note Call free_tablet() to release resources.
  */
 Tablet tablet_new(char** column_name_list, TSDataType* data_types,
-                  uint32_t column_num, uint32_t max_rows);
+                  uint32_t column_num, uint32_t max_rows, ERRNO* err_code);
 
 /**
  * @brief Gets current row count in the Tablet.

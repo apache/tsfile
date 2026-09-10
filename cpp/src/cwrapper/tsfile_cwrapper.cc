@@ -365,7 +365,11 @@ ERRNO tsfile_reader_close(TsFileReader reader) {
 }
 
 Tablet tablet_new(char** column_name_list, TSDataType* data_types,
-                  uint32_t column_num, uint32_t max_rows) {
+                  uint32_t column_num, uint32_t max_rows, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
     if (column_num == 0 || max_rows == 0 || column_name_list == nullptr ||
         data_types == nullptr || max_rows >= (1u << 30)) {
         return nullptr;
@@ -376,21 +380,40 @@ Tablet tablet_new(char** column_name_list, TSDataType* data_types,
         std::set<std::string> names;
         for (uint32_t i = 0; i < column_num; i++) {
             if (column_name_list[i] == nullptr ||
-                column_name_list[i][0] == '\0' ||
-                !is_supported_table_type(data_types[i])) {
+                column_name_list[i][0] == '\0') {
+                return nullptr;
+            }
+            if (!is_supported_table_type(data_types[i])) {
+                *err_code = common::E_TYPE_NOT_SUPPORTED;
                 return nullptr;
             }
             std::string name = storage::to_lower(column_name_list[i]);
             if (!names.insert(name).second) {
+                *err_code = common::E_INVALID_SCHEMA;
                 return nullptr;
             }
             measurement_list.emplace_back(std::move(name));
             data_type_list.push_back(
                 static_cast<common::TSDataType>(*(data_types + i)));
         }
-        return new (std::nothrow)
+        auto* tablet = new (std::nothrow)
             storage::Tablet(measurement_list, data_type_list, max_rows);
+        if (tablet == nullptr) {
+            *err_code = common::E_OOM;
+            return nullptr;
+        }
+        if (tablet->err_code_ != common::E_OK) {
+            *err_code = tablet->err_code_;
+            delete tablet;
+            return nullptr;
+        }
+        *err_code = common::E_OK;
+        return tablet;
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
     } catch (...) {
+        *err_code = common::E_INVALID_SCHEMA;
         return nullptr;
     }
 }

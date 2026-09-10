@@ -45,7 +45,7 @@ func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 			return nil, fmt.Errorf("column %d: %w", i, err)
 		}
 		if !validDataType(column.DataType) {
-			return nil, fmt.Errorf("%w: unsupported data type %d for column %q", ErrInvalidSchema, column.DataType, column.Name)
+			return nil, fmt.Errorf("%w: data type %d for column %q", ErrTypeNotSupported, column.DataType, column.Name)
 		}
 		name := normalizeIdentifier(column.Name)
 		if _, ok := seen[name]; ok {

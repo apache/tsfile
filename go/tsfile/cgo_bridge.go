@@ -423,9 +423,10 @@ func newTabletHandle(columnNames []string, dataTypes []DataType, maxRows int) (*
 	for i, t := range dataTypes {
 		types[i] = C.TSDataType(t)
 	}
-	h := C.tablet_new(&names[0], &types[0], C.uint32_t(len(dataTypes)), C.uint32_t(maxRows))
+	var code C.ERRNO
+	h := C.tablet_new(&names[0], &types[0], C.uint32_t(len(dataTypes)), C.uint32_t(maxRows), &code)
 	if h == nil {
-		return nil, newError("new tablet", C.RET_OOM)
+		return nil, newError("new tablet", cerrno(code))
 	}
 	return &tabletHandle{nativeHandle{ptr: unsafe.Pointer(h), release: releaseTablet}}, nil
 }

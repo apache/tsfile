@@ -203,7 +203,9 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     type_list[0] = TS_DATATYPE_STRING;
     type_list[1] = TS_DATATYPE_STRING;
     type_list[2] = TS_DATATYPE_DOUBLE;
-    Tablet tablet = tablet_new(column_list, type_list, 3, 100);
+    Tablet tablet = tablet_new(column_list, type_list, 3, 100, &error_code);
+    ASSERT_EQ(RET_OK, error_code);
+    ASSERT_NE(nullptr, tablet);
     for (int i = 0; i < 100; i++) {
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
         tablet_add_value_by_name_string_with_len(
@@ -293,7 +295,9 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     type_list[3] = TS_DATATYPE_FLOAT;
     type_list[4] = TS_DATATYPE_DOUBLE;
     type_list[5] = TS_DATATYPE_BOOLEAN;
-    Tablet tablet = tablet_new(column_list, type_list, 6, 1000);
+    Tablet tablet = tablet_new(column_list, type_list, 6, 1000, &error_code);
+    ASSERT_EQ(RET_OK, error_code);
+    ASSERT_NE(nullptr, tablet);
     for (int i = 0; i < 1000; i++) {
         // negative timestamp included
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i - 10));
@@ -388,7 +392,9 @@ TEST_F(CReleaseTest, TsFileWriterConfTest) {
     type_list[0] = TS_DATATYPE_STRING;
     type_list[1] = TS_DATATYPE_INT64;
 
-    Tablet tablet = tablet_new(column_list, type_list, 2, 10);
+    Tablet tablet = tablet_new(column_list, type_list, 2, 10, &err_no);
+    ASSERT_EQ(RET_OK, err_no);
+    ASSERT_NE(nullptr, tablet);
     for (int i = 0; i < 10; i++) {
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
         tablet_add_value_by_name_string_with_len(tablet, i, "id", "device1",

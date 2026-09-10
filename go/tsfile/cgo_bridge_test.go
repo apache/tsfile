@@ -228,6 +228,39 @@ func TestBridgeTabletRejectsInvalidNames(t *testing.T) {
 	}
 }
 
+func TestBridgeTabletPreservesNativeErrorCodes(t *testing.T) {
+	tests := []struct {
+		name    string
+		columns []string
+		types   []DataType
+		want    error
+	}{
+		{
+			name:    "duplicate columns",
+			columns: []string{"value", "VALUE"},
+			types:   []DataType{DataTypeInt64, DataTypeInt64},
+			want:    ErrInvalidSchema,
+		},
+		{
+			name:    "unsupported type",
+			columns: []string{"value"},
+			types:   []DataType{DataType(255)},
+			want:    ErrTypeNotSupported,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, err := newTabletHandle(tt.columns, tt.types, 1)
+			if h != nil {
+				t.Fatal("expected no handle")
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
 // TestBridgeCopyCBytes pins the C-copy semantics: the returned pointer is a
 // C allocation (distinct from the Go slice, so cgocheck2 cannot observe a Go
 // pointer), the contents round-trip through C including embedded NUL bytes,

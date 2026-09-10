@@ -267,7 +267,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                         int column_num, int max_rows);
 
     Tablet tablet_new(char** column_name_list, TSDataType* data_types,
-                  uint32_t column_num, uint32_t max_rows);
+                  uint32_t column_num, uint32_t max_rows, ErrorCode* err_code);
 
     ErrorCode tablet_add_timestamp(Tablet tablet, uint32_t row_index, int64_t timestamp);
     ErrorCode tablet_add_value_by_index_int64_t(Tablet tablet, uint32_t row_index, uint32_t column_index,
