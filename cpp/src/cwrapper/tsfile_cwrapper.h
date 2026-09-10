@@ -885,6 +885,30 @@ ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
                                                   ArrowSchema* out_schema);
 
 /**
+ * @brief Copies one homogeneous numeric TsBlock into caller-owned buffers.
+ *
+ * The timestamp buffer has one int64_t per row. Values and optional null flags
+ * use row-major layout: row * value_column_count + column. A null numeric cell
+ * is written as zero and its null byte is 1; valid cells use null byte 0.
+ * End-of-data returns E_OK with out_rows set to zero.
+ *
+ * @param result_set [in] Batch-mode table ResultSet.
+ * @param expected_type [in] TS_DATATYPE_INT32, TS_DATATYPE_FLOAT, or
+ * TS_DATATYPE_DOUBLE; every requested value column must match.
+ * @param out_timestamps [out] Capacity for capacity_rows timestamps.
+ * @param out_values [out] Capacity for capacity_rows * value_column_count
+ * typed values.
+ * @param out_is_null [out] Optional byte-per-cell null flags.
+ * @param capacity_rows [in] Maximum rows available in output buffers.
+ * @param value_column_count [in] Number of value columns, excluding time.
+ * @param out_rows [out] Rows copied; initialized to zero on every call.
+ */
+ERRNO tsfile_result_set_read_numeric_block(
+    ResultSet result_set, TSDataType expected_type, int64_t* out_timestamps,
+    void* out_values, uint8_t* out_is_null, uint32_t capacity_rows,
+    uint32_t value_column_count, uint32_t* out_rows);
+
+/**
  * @brief Gets value from current row by column name (generic types).
  *
  * @param result_set [in] Valid ResultSet with active row (after next()=true).

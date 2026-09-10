@@ -47,6 +47,52 @@
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
 
+namespace {
+
+template <typename T>
+ERRNO copy_numeric_tsblock(common::TsBlock* block, int64_t* out_timestamps,
+                           void* out_values, uint8_t* out_is_null,
+                           uint32_t row_count, uint32_t value_column_count) {
+    common::ColIterator time_iter(0, block);
+    for (uint32_t row = 0; row < row_count; ++row) {
+        uint32_t len = 0;
+        bool is_null = false;
+        const char* value = time_iter.read(&len, &is_null);
+        if (is_null || value == nullptr || len != sizeof(int64_t)) {
+            return common::E_DATA_INCONSISTENCY;
+        }
+        std::memcpy(out_timestamps + row, value, sizeof(int64_t));
+        time_iter.next();
+    }
+
+    T* typed_values = static_cast<T*>(out_values);
+    for (uint32_t col = 0; col < value_column_count; ++col) {
+        common::ColIterator value_iter(col + 1, block);
+        for (uint32_t row = 0; row < row_count; ++row) {
+            uint32_t len = 0;
+            bool is_null = false;
+            const char* value = value_iter.read(&len, &is_null);
+            T copied_value = T();
+            if (!is_null) {
+                if (value == nullptr || len != sizeof(T)) {
+                    return common::E_DATA_INCONSISTENCY;
+                }
+                std::memcpy(&copied_value, value, sizeof(T));
+            }
+            const size_t output_index =
+                static_cast<size_t>(row) * value_column_count + col;
+            typed_values[output_index] = copied_value;
+            if (out_is_null != nullptr) {
+                out_is_null[output_index] = is_null ? 1 : 0;
+            }
+            value_iter.next();
+        }
+    }
+    return common::E_OK;
+}
+
+}  // namespace
+
 // Forward declarations for arrow namespace functions (defined in arrow_c.cc)
 namespace arrow {
 int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
@@ -767,6 +813,91 @@ ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
     }
 
     ret = arrow::TsBlockToArrowStruct(*tsblock, out_array, out_schema);
+    return ret;
+}
+
+ERRNO tsfile_result_set_read_numeric_block(
+    ResultSet result_set, TSDataType expected_type, int64_t* out_timestamps,
+    void* out_values, uint8_t* out_is_null, uint32_t capacity_rows,
+    uint32_t value_column_count, uint32_t* out_rows) {
+    if (out_rows == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_rows = 0;
+    if (result_set == nullptr || out_timestamps == nullptr ||
+        out_values == nullptr || capacity_rows == 0 ||
+        value_column_count == 0 ||
+        static_cast<size_t>(capacity_rows) >
+            std::numeric_limits<size_t>::max() / value_column_count) {
+        return common::E_INVALID_ARG;
+    }
+    if (expected_type != TS_DATATYPE_INT32 &&
+        expected_type != TS_DATATYPE_FLOAT &&
+        expected_type != TS_DATATYPE_DOUBLE) {
+        return common::E_TYPE_NOT_SUPPORTED;
+    }
+
+    auto* table_result_set = dynamic_cast<storage::TableResultSet*>(
+        static_cast<storage::ResultSet*>(result_set));
+    if (table_result_set == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+
+    common::TsBlock* block = nullptr;
+    int ret = table_result_set->get_next_tsblock(block);
+    if (ret == common::E_NO_MORE_DATA) {
+        return common::E_OK;
+    }
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    if (block == nullptr) {
+        return common::E_DATA_INCONSISTENCY;
+    }
+
+    const uint32_t row_count = block->get_row_count();
+    if (row_count > capacity_rows) {
+        return common::E_OUT_OF_RANGE;
+    }
+    if (value_column_count == std::numeric_limits<uint32_t>::max() ||
+        block->get_column_count() != value_column_count + 1) {
+        return common::E_INVALID_ARG;
+    }
+    common::TupleDesc* tuple_desc = block->get_tuple_desc();
+    if (tuple_desc == nullptr ||
+        (tuple_desc->get_column_type(0) != common::INT64 &&
+         tuple_desc->get_column_type(0) != common::TIMESTAMP)) {
+        return common::E_DATA_INCONSISTENCY;
+    }
+    for (uint32_t col = 0; col < value_column_count; ++col) {
+        if (tuple_desc->get_column_type(col + 1) !=
+            static_cast<common::TSDataType>(expected_type)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+    }
+
+    switch (expected_type) {
+        case TS_DATATYPE_INT32:
+            ret = copy_numeric_tsblock<int32_t>(block, out_timestamps,
+                                                out_values, out_is_null,
+                                                row_count, value_column_count);
+            break;
+        case TS_DATATYPE_FLOAT:
+            ret = copy_numeric_tsblock<float>(block, out_timestamps, out_values,
+                                              out_is_null, row_count,
+                                              value_column_count);
+            break;
+        case TS_DATATYPE_DOUBLE:
+            ret = copy_numeric_tsblock<double>(block, out_timestamps,
+                                               out_values, out_is_null,
+                                               row_count, value_column_count);
+            break;
+        default:
+            return common::E_TYPE_NOT_SUPPORTED;
+    }
+    if (ret == common::E_OK) {
+        *out_rows = row_count;
+    }
     return ret;
 }
 
