@@ -343,3 +343,136 @@ jobs:
           cmake -S consumer -B consumer/build
           cmake --build consumer/build --parallel
           ./consumer/build/installed_consumer
+
+  build-windows:
+    name: Build Windows MSVC x86_64 ZIP
+    needs: prepare
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure the MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure, build, and stage
+        env:
+          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          cmake -S cpp -B build/windows -G "Visual Studio 17 2022" -A x64 `
+            -DBUILD_TEST=OFF `
+            -DBUILD_TOOLS=ON `
+            -DTSFILE_ENABLE_CPACK=ON `
+            -DTSFILE_DEPENDENCY_SOURCE=BUNDLED `
+            -DTSFILE_ENABLE_NATIVE_ARCH=OFF `
+            -DTSFILE_ARCHIVE_VERSION="$env:TSFILE_ARCHIVE_VERSION"
+          cmake --build build/windows --config Release --parallel
+          cmake --install build/windows --config Release --prefix stage/windows
+
+      - name: Test staged CLI and SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $stage = (Resolve-Path stage/windows).Path
+          $requiredPaths = @(
+            "$stage/bin/tsfile-cli.exe"
+            "$stage/bin/tsfile.dll"
+            "$stage/lib/tsfile.lib"
+            "$stage/include/tsfile/cwrapper/tsfile_cwrapper.h"
+            "$stage/lib/cmake/TsFile/TsFileConfig.cmake"
+            "$stage/share/doc/tsfile/LICENSE"
+            "$stage/share/doc/tsfile/NOTICE"
+          )
+          foreach ($path in $requiredPaths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required staged file is absent: $path"
+            }
+          }
+
+          $env:PATH = "$stage/bin;$env:PATH"
+          tsfile-cli.exe --version
+
+          New-Item -ItemType Directory -Path consumer -Force | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.11)
+          project(TsFileInstalledConsumer LANGUAGES CXX)
+
+          find_package(TsFile CONFIG REQUIRED)
+          add_executable(installed_consumer main.cpp)
+          target_link_libraries(installed_consumer PRIVATE TsFile::tsfile)
+          '@ | Set-Content -Path consumer/CMakeLists.txt
+          @'
+          #include <tsfile/cwrapper/tsfile_cwrapper.h>
+
+          int main() {
+            return TS_DATATYPE_INT32 == 1 ? 0 : 1;
+          }
+          '@ | Set-Content -Path consumer/main.cpp
+          cmake -S consumer -B consumer/build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_PREFIX_PATH="$stage"
+          cmake --build consumer/build --config Release --parallel
+          & consumer/build/Release/installed_consumer.exe
+
+      - name: Build and inspect combined ZIP
+        env:
+          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $cpackConfig = Get-Content build/windows/CPackConfig.cmake -Raw
+          if ($cpackConfig -notmatch 'set\(CPACK_ARCHIVE_COMPONENT_INSTALL "OFF"\)') {
+            throw 'CPACK_ARCHIVE_COMPONENT_INSTALL must remain disabled'
+          }
+
+          New-Item -ItemType Directory -Path packages -Force | Out-Null
+          cpack -G ZIP --config build/windows/CPackConfig.cmake -B packages `
+            -D "CPACK_PACKAGE_VERSION=$env:TSFILE_ARCHIVE_VERSION"
+
+          $archives = @(Get-ChildItem -Path packages -Filter *.zip -File)
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one combined ZIP, found $($archives.Count)"
+          }
+          $expectedName = "tsfile-$env:TSFILE_ARCHIVE_VERSION-windows-x86_64.zip"
+          if ($archives[0].Name -cne $expectedName) {
+            throw "Unexpected ZIP name '$($archives[0].Name)'; expected '$expectedName'"
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
+          try {
+            $entryPaths = @($archive.Entries | ForEach-Object {
+              $_.FullName.Replace('\', '/')
+            })
+            $requiredSuffixes = @(
+              'bin/tsfile-cli.exe'
+              'bin/tsfile.dll'
+              'lib/tsfile.lib'
+              'include/tsfile/cwrapper/tsfile_cwrapper.h'
+            )
+            foreach ($suffix in $requiredSuffixes) {
+              $match = $entryPaths | Where-Object {
+                $_.EndsWith($suffix, [System.StringComparison]::Ordinal)
+              }
+              if (-not $match) {
+                throw "ZIP is missing a path ending in '$suffix'"
+              }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Upload Windows ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-windows-msvc-x86_64
+          path: packages/*.zip
+          if-no-files-found: error
+          retention-days: 14

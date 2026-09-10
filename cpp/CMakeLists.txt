@@ -545,7 +545,7 @@ unset(_TSFILE_PUBLIC_FEATURE)
 # target image provides every compatible dependency; AUTO remains the
 # reproducible fallback for distribution images with older packages.
 option(TSFILE_ENABLE_CPACK
-        "Enable CPack DEB/RPM package metadata generation" OFF)
+        "Enable CPack native package metadata generation" OFF)
 if (TSFILE_ENABLE_CPACK)
     set(CPACK_PACKAGE_NAME "tsfile")
     set(CPACK_PACKAGE_VENDOR "Apache Software Foundation")
@@ -565,6 +565,13 @@ if (TSFILE_ENABLE_CPACK)
     set(CPACK_COMPONENTS_ALL runtime development tools)
     set(CPACK_COMPONENT_DEVELOPMENT_DEPENDS runtime)
     set(CPACK_COMPONENT_TOOLS_DEPENDS runtime)
+    # Portable archives contain the complete runtime, SDK, and tools install
+    # tree in one file. Native DEB and RPM generators remain componentized.
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+    if (WIN32)
+        set(CPACK_PACKAGE_FILE_NAME
+                "tsfile-${TSFILE_ARCHIVE_VERSION}-windows-x86_64")
+    endif ()
     set(CPACK_DEB_COMPONENT_INSTALL ON)
     set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)

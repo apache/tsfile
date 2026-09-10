@@ -93,3 +93,19 @@ brew install ./packaging/homebrew/tsfile.rb
 
 The stable formula URL and checksum must be updated to the ASF source archive
 when the first release containing this packaging work is published.
+
+## Windows
+
+The manual workflow builds a 64-bit Release package with Visual Studio 2022 and
+bundled dependencies. It stages and tests the CLI plus an external CMake SDK
+consumer before producing
+`tsfile-<archive-version>-windows-x86_64.zip`. The archive is deliberately one
+combined ZIP rather than one archive per CPack component, and contains the
+runtime, development files, and tools under a relocatable prefix. In
+particular, the MSVC outputs are installed as `bin/tsfile.dll`,
+`lib/tsfile.lib`, and `bin/tsfile-cli.exe`.
+
+The workflow uploads that ZIP as the intermediate artifact
+`native-windows-msvc-x86_64` for 14 days. Like the Linux jobs, it validates the
+license files, CMake package config, staged executable, library, import library,
+and public headers without publishing the artifact.
