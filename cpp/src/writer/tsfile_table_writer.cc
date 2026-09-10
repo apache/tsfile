@@ -60,7 +60,10 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
     if (common::E_OK != error_number) {
         return error_number;
     }
-    if (tablet.get_table_name().empty()) {
+    // A targetless tablet is bound only for this call so callers can reuse it
+    // with another single-table writer.
+    const bool bind_exclusive_table = tablet.get_table_name().empty();
+    if (bind_exclusive_table) {
         tablet.set_table_name(exclusive_table_name_);
     } else if (!exclusive_table_name_.empty() &&
                tablet.get_table_name() != exclusive_table_name_) {
@@ -82,7 +85,19 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
     }
     tablet.set_schema_map(new_schema_map);
 
-    return tsfile_writer_->write_table(tablet);
+    const int ret = tsfile_writer_->write_table(tablet);
+    if (bind_exclusive_table) {
+        tablet.set_table_name("");
+    }
+    return ret;
+}
+
+std::shared_ptr<storage::TableSchema>
+storage::TsFileTableWriter::get_table_schema() const {
+    if (!tsfile_writer_ || exclusive_table_name_.empty()) {
+        return nullptr;
+    }
+    return tsfile_writer_->get_table_schema(exclusive_table_name_);
 }
 
 int storage::TsFileTableWriter::flush() {

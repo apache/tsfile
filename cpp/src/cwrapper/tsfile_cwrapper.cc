@@ -32,6 +32,7 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <new>
 #include <set>
 #include <vector>
@@ -56,6 +57,57 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const storage::TableSchema* reg_schema,
                         storage::Tablet** out_tablet, int time_col_index);
 }  // namespace arrow
+
+namespace {
+
+bool is_supported_table_type(TSDataType type) {
+    switch (type) {
+        case TS_DATATYPE_BOOLEAN:
+        case TS_DATATYPE_INT32:
+        case TS_DATATYPE_INT64:
+        case TS_DATATYPE_FLOAT:
+        case TS_DATATYPE_DOUBLE:
+        case TS_DATATYPE_TEXT:
+        case TS_DATATYPE_TIMESTAMP:
+        case TS_DATATYPE_DATE:
+        case TS_DATATYPE_BLOB:
+        case TS_DATATYPE_STRING:
+            return true;
+        default:
+            return false;
+    }
+}
+
+ERRNO validate_table_schema(const TableSchema* schema) {
+    if (schema == nullptr || schema->table_name == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    if (schema->table_name[0] == '\0' || schema->column_num <= 0) {
+        return common::E_INVALID_SCHEMA;
+    }
+    if (schema->column_schemas == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    std::set<std::string> names;
+    for (int i = 0; i < schema->column_num; ++i) {
+        const ColumnSchema& column = schema->column_schemas[i];
+        if (column.column_name == nullptr) {
+            return common::E_INVALID_ARG;
+        }
+        if (column.column_name[0] == '\0' ||
+            !names.insert(storage::to_lower(column.column_name)).second ||
+            !is_supported_table_type(column.data_type) ||
+            (column.column_category != TAG &&
+             column.column_category != FIELD) ||
+            (column.column_category == TAG &&
+             column.data_type != TS_DATATYPE_STRING)) {
+            return common::E_INVALID_SCHEMA;
+        }
+    }
+    return common::E_OK;
+}
+
+}  // namespace
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,15 +164,26 @@ TsFileReadBackend tsfile_get_file_read_backend() {
 }
 
 WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    if (pathname == nullptr || pathname[0] == '\0') {
+        *err_code = common::E_INVALID_ARG;
+        return nullptr;
+    }
     int ret;
     init_tsfile_config();
 
-    int flags = O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
+    int flags = O_RDWR | O_CREAT | O_TRUNC;
 #ifdef _WIN32
     flags |= O_BINARY;
 #endif
     mode_t mode = 0666;
-    storage::WriteFile* file = new storage::WriteFile;
+    storage::WriteFile* file = new (std::nothrow) storage::WriteFile;
+    if (file == nullptr) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    }
     ret = file->create(pathname, flags, mode);
     if (ret != common::E_OK) {
         delete file;
@@ -139,51 +202,44 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
     if (err_code == nullptr) {
         return nullptr;
     }
-    if (file == nullptr || schema == nullptr || schema->table_name == nullptr) {
+    if (file == nullptr) {
         *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
-    // An empty schema (no columns) is an invalid *schema*, not an invalid arg;
-    // check it before the column_schemas pointer, which is legitimately null
-    // when column_num == 0.  (Matches develop, which the C API test expects;
-    // otherwise an uninitialized/null column_schemas would flip the code.)
-    if (schema->column_num == 0) {
+    *err_code = validate_table_schema(schema);
+    if (*err_code != common::E_OK) {
+        return nullptr;
+    }
+
+    try {
+        init_tsfile_config();
+        std::vector<common::ColumnSchema> column_schemas;
+        for (int i = 0; i < schema->column_num; i++) {
+            ColumnSchema cur_schema = schema->column_schemas[i];
+            column_schemas.emplace_back(
+                cur_schema.column_name,
+                static_cast<common::TSDataType>(cur_schema.data_type),
+                static_cast<common::ColumnCategory>(
+                    cur_schema.column_category));
+        }
+
+        std::unique_ptr<storage::TableSchema> table_schema(
+            new storage::TableSchema(schema->table_name, column_schemas));
+        std::unique_ptr<storage::TsFileTableWriter> table_writer(
+            new storage::TsFileTableWriter(
+                static_cast<storage::WriteFile*>(file), table_schema.get()));
+        *err_code = table_writer->get_error();
+        if (*err_code != common::E_OK) {
+            return nullptr;
+        }
+        return table_writer.release();
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
         *err_code = common::E_INVALID_SCHEMA;
         return nullptr;
     }
-    if (schema->column_schemas == nullptr) {
-        *err_code = common::E_INVALID_ARG;
-        return nullptr;
-    }
-
-    init_tsfile_config();
-    std::vector<common::ColumnSchema> column_schemas;
-    std::set<std::string> column_names;
-    for (int i = 0; i < schema->column_num; i++) {
-        ColumnSchema cur_schema = schema->column_schemas[i];
-        if (column_names.find(cur_schema.column_name) != column_names.end()) {
-            *err_code = common::E_INVALID_SCHEMA;
-            return nullptr;
-        }
-        column_names.insert(cur_schema.column_name);
-        if (cur_schema.column_category == TAG &&
-            cur_schema.data_type != TS_DATATYPE_STRING) {
-            *err_code = common::E_INVALID_SCHEMA;
-            return nullptr;
-        }
-        column_schemas.emplace_back(
-            cur_schema.column_name,
-            static_cast<common::TSDataType>(cur_schema.data_type),
-            static_cast<common::ColumnCategory>(cur_schema.column_category));
-    }
-
-    storage::TableSchema* table_schema =
-        new storage::TableSchema(schema->table_name, column_schemas);
-    auto table_writer = new storage::TsFileTableWriter(
-        static_cast<storage::WriteFile*>(file), table_schema);
-    delete table_schema;
-    *err_code = common::E_OK;
-    return table_writer;
 }
 
 TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
@@ -194,59 +250,60 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
     if (err_code == nullptr) {
         return nullptr;
     }
-    if (file == nullptr || schema == nullptr || schema->table_name == nullptr) {
+    if (file == nullptr || memory_threshold == 0) {
         *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
-    // Empty schema is INVALID_SCHEMA; check before the (legitimately null when
-    // column_num == 0) column_schemas pointer.  See tsfile_writer_new().
-    if (schema->column_num == 0) {
+    *err_code = validate_table_schema(schema);
+    if (*err_code != common::E_OK) {
+        return nullptr;
+    }
+    try {
+        init_tsfile_config();
+        std::vector<common::ColumnSchema> column_schemas;
+        for (int i = 0; i < schema->column_num; i++) {
+            ColumnSchema cur_schema = schema->column_schemas[i];
+            column_schemas.emplace_back(
+                cur_schema.column_name,
+                static_cast<common::TSDataType>(cur_schema.data_type),
+                static_cast<common::ColumnCategory>(
+                    cur_schema.column_category));
+        }
+
+        std::unique_ptr<storage::TableSchema> table_schema(
+            new storage::TableSchema(schema->table_name, column_schemas));
+        std::unique_ptr<storage::TsFileTableWriter> table_writer(
+            new storage::TsFileTableWriter(
+                static_cast<storage::WriteFile*>(file), table_schema.get(),
+                memory_threshold));
+        *err_code = table_writer->get_error();
+        if (*err_code != common::E_OK) {
+            return nullptr;
+        }
+        return table_writer.release();
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
         *err_code = common::E_INVALID_SCHEMA;
         return nullptr;
     }
-    if (schema->column_schemas == nullptr) {
+}
+
+TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    if (pathname == nullptr || pathname[0] == '\0') {
         *err_code = common::E_INVALID_ARG;
         return nullptr;
     }
     init_tsfile_config();
-    std::vector<common::ColumnSchema> column_schemas;
-    std::set<std::string> column_names;
-    for (int i = 0; i < schema->column_num; i++) {
-        ColumnSchema cur_schema = schema->column_schemas[i];
-        // Reject only when the name has already been seen.  The previous
-        // condition was inverted, so the first column (always a fresh name)
-        // was rejected as a duplicate and this constructor was effectively
-        // unusable — tsfile_writer_new()'s loop above has the correct check
-        // for comparison.
-        if (column_names.find(cur_schema.column_name) != column_names.end()) {
-            *err_code = common::E_INVALID_SCHEMA;
-            return nullptr;
-        }
-        column_names.insert(cur_schema.column_name);
-        if (cur_schema.column_category == TAG &&
-            cur_schema.data_type != TS_DATATYPE_STRING) {
-            *err_code = common::E_INVALID_SCHEMA;
-            return nullptr;
-        }
-        column_schemas.emplace_back(
-            cur_schema.column_name,
-            static_cast<common::TSDataType>(cur_schema.data_type),
-            static_cast<common::ColumnCategory>(cur_schema.column_category));
+    auto reader = new (std::nothrow) storage::TsFileReader();
+    if (reader == nullptr) {
+        *err_code = common::E_OOM;
+        return nullptr;
     }
-
-    storage::TableSchema* table_schema =
-        new storage::TableSchema(schema->table_name, column_schemas);
-
-    auto table_writer = new storage::TsFileTableWriter(
-        static_cast<storage::WriteFile*>(file), table_schema, memory_threshold);
-    *err_code = common::E_OK;
-    delete table_schema;
-    return table_writer;
-}
-
-TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code) {
-    init_tsfile_config();
-    auto reader = new storage::TsFileReader();
     int ret = reader->open(pathname);
     if (ret != common::E_OK) {
         *err_code = ret;
@@ -294,6 +351,13 @@ ERRNO tsfile_writer_add_tsfile_property(TsFileWriter writer, const char* key,
     }
 }
 
+ERRNO tsfile_writer_flush(TsFileWriter writer) {
+    if (writer == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    return static_cast<storage::TsFileTableWriter*>(writer)->flush();
+}
+
 ERRNO tsfile_reader_close(TsFileReader reader) {
     auto* ts_reader = static_cast<storage::TsFileReader*>(reader);
     delete ts_reader;
@@ -301,15 +365,57 @@ ERRNO tsfile_reader_close(TsFileReader reader) {
 }
 
 Tablet tablet_new(char** column_name_list, TSDataType* data_types,
-                  uint32_t column_num, uint32_t max_rows) {
-    std::vector<std::string> measurement_list;
-    std::vector<common::TSDataType> data_type_list;
-    for (uint32_t i = 0; i < column_num; i++) {
-        measurement_list.emplace_back(storage::to_lower(column_name_list[i]));
-        data_type_list.push_back(
-            static_cast<common::TSDataType>(*(data_types + i)));
+                  uint32_t column_num, uint32_t max_rows, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
     }
-    return new storage::Tablet(measurement_list, data_type_list, max_rows);
+    *err_code = common::E_INVALID_ARG;
+    if (column_num == 0 || max_rows == 0 || column_name_list == nullptr ||
+        data_types == nullptr || max_rows >= (1u << 30)) {
+        return nullptr;
+    }
+    try {
+        std::vector<std::string> measurement_list;
+        std::vector<common::TSDataType> data_type_list;
+        std::set<std::string> names;
+        for (uint32_t i = 0; i < column_num; i++) {
+            if (column_name_list[i] == nullptr ||
+                column_name_list[i][0] == '\0') {
+                return nullptr;
+            }
+            if (!is_supported_table_type(data_types[i])) {
+                *err_code = common::E_TYPE_NOT_SUPPORTED;
+                return nullptr;
+            }
+            std::string name = storage::to_lower(column_name_list[i]);
+            if (!names.insert(name).second) {
+                *err_code = common::E_INVALID_SCHEMA;
+                return nullptr;
+            }
+            measurement_list.emplace_back(std::move(name));
+            data_type_list.push_back(
+                static_cast<common::TSDataType>(*(data_types + i)));
+        }
+        auto* tablet = new (std::nothrow)
+            storage::Tablet(measurement_list, data_type_list, max_rows);
+        if (tablet == nullptr) {
+            *err_code = common::E_OOM;
+            return nullptr;
+        }
+        if (tablet->err_code_ != common::E_OK) {
+            *err_code = tablet->err_code_;
+            delete tablet;
+            return nullptr;
+        }
+        *err_code = common::E_OK;
+        return tablet;
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
+        *err_code = common::E_INVALID_SCHEMA;
+        return nullptr;
+    }
 }
 
 uint32_t tablet_get_cur_row_size(Tablet tablet) {
@@ -420,9 +526,40 @@ return writer;
 
 */
 ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet) {
+    if (writer == nullptr || tablet == nullptr) {
+        return common::E_INVALID_ARG;
+    }
     auto* w = static_cast<storage::TsFileTableWriter*>(writer);
     auto* tbl = static_cast<storage::Tablet*>(tablet);
     return w->write_table(*tbl);
+}
+
+ERRNO tsfile_writer_write_arrow(TsFileWriter writer, ArrowArray* array,
+                                ArrowSchema* schema, int time_col_index) {
+    if (writer == nullptr || array == nullptr || schema == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        auto* w = static_cast<storage::TsFileTableWriter*>(writer);
+        std::shared_ptr<storage::TableSchema> registered_schema =
+            w->get_table_schema();
+        if (!registered_schema) {
+            return common::E_INVALID_SCHEMA;
+        }
+        storage::Tablet* raw_tablet = nullptr;
+        int ret = arrow::ArrowStructToTablet(w->get_table_name().c_str(), array,
+                                             schema, registered_schema.get(),
+                                             &raw_tablet, time_col_index);
+        std::unique_ptr<storage::Tablet> tablet(raw_tablet);
+        if (ret != common::E_OK) {
+            return ret;
+        }
+        return w->write_table(*tablet);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_INVALID_ARG;
+    }
 }
 
 // ERRNO tsfile_writer_flush_data(TsFileWriter writer) {
@@ -678,6 +815,46 @@ ResultSet tsfile_reader_query_table_by_row(
     return result_set;
 }
 
+ResultSet tsfile_reader_query_table(TsFileReader reader, const char* table_name,
+                                    char** column_names,
+                                    uint32_t column_names_len,
+                                    Timestamp start_time, Timestamp end_time,
+                                    int offset, int limit,
+                                    TagFilterHandle tag_filter, int batch_size,
+                                    ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
+    if (reader == nullptr || table_name == nullptr || column_names == nullptr ||
+        column_names_len == 0 || end_time < start_time || offset < 0 ||
+        batch_size < 0) {
+        return nullptr;
+    }
+    try {
+        std::vector<std::string> columns;
+        columns.reserve(column_names_len);
+        for (uint32_t i = 0; i < column_names_len; ++i) {
+            if (column_names[i] == nullptr) {
+                return nullptr;
+            }
+            columns.emplace_back(column_names[i]);
+        }
+        storage::ResultSet* result_set = nullptr;
+        const int normalized_limit = limit < 0 ? -1 : limit;
+        *err_code = static_cast<storage::TsFileReader*>(reader)->query(
+            table_name, columns, start_time, end_time, offset, normalized_limit,
+            result_set, static_cast<storage::Filter*>(tag_filter), batch_size);
+        return result_set;
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
+        *err_code = common::E_FILE_READ_ERR;
+        return nullptr;
+    }
+}
+
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
@@ -696,6 +873,13 @@ ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
 }
 
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return false;
+    }
+    if (result_set == nullptr) {
+        *err_code = common::E_INVALID_ARG;
+        return false;
+    }
     auto* r = static_cast<storage::ResultSet*>(result_set);
     bool has_next = true;
     int ret = common::E_OK;
@@ -714,6 +898,8 @@ ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
         out_schema == nullptr) {
         return common::E_INVALID_ARG;
     }
+    std::memset(out_array, 0, sizeof(*out_array));
+    std::memset(out_schema, 0, sizeof(*out_schema));
 
     auto* r = static_cast<storage::ResultSet*>(result_set);
     auto* table_result_set = dynamic_cast<storage::TableResultSet*>(r);
@@ -794,6 +980,34 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
     return dup;
 }
 
+ERRNO tsfile_result_set_get_value_by_index_binary(ResultSet result_set,
+                                                  uint32_t column_index,
+                                                  uint8_t** out_value,
+                                                  uint32_t* out_length) {
+    if (result_set == nullptr || column_index == 0 || out_value == nullptr ||
+        out_length == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_value = nullptr;
+    *out_length = 0;
+    auto* r = static_cast<storage::ResultSet*>(result_set);
+    common::String* value = r->get_value<common::String*>(column_index);
+    if (value == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    if (value->len_ == 0) {
+        return common::E_OK;
+    }
+    uint8_t* copied = static_cast<uint8_t*>(malloc(value->len_));
+    if (copied == nullptr) {
+        return common::E_OOM;
+    }
+    memcpy(copied, value->buf_, value->len_);
+    *out_value = copied;
+    *out_length = value->len_;
+    return common::E_OK;
+}
+
 bool tsfile_result_set_is_null_by_name(ResultSet result_set,
                                        const char* column_name) {
     auto* r = static_cast<storage::ResultSet*>(result_set);
@@ -839,7 +1053,8 @@ char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
 
 TSDataType tsfile_result_set_metadata_get_data_type(
     ResultSetMetaData result_set, uint32_t column_index) {
-    if (column_index > (uint32_t)result_set.column_num) {
+    if (column_index < 1 ||
+        column_index > static_cast<uint32_t>(result_set.column_num)) {
         return TS_DATATYPE_INVALID;
     }
     return result_set.data_types[column_index - 1];
@@ -870,6 +1085,64 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                 table_shcema->get_column_categories()[i]);
     }
     return ret_schema;
+}
+
+static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
+                               TableSchema* out_schema) {
+    if (!src || out_schema == nullptr) {
+        return common::E_TABLE_NOT_EXIST;
+    }
+    *out_schema = TableSchema{};
+    out_schema->table_name = strdup(src->get_table_name().c_str());
+    if (out_schema->table_name == nullptr) {
+        return common::E_OOM;
+    }
+    out_schema->column_num = src->get_columns_num();
+    if (out_schema->column_num == 0) {
+        return common::E_OK;
+    }
+    out_schema->column_schemas = static_cast<ColumnSchema*>(calloc(
+        static_cast<size_t>(out_schema->column_num), sizeof(ColumnSchema)));
+    if (out_schema->column_schemas == nullptr) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_OOM;
+    }
+    const auto& measurements = src->get_measurement_schemas();
+    const auto& categories = src->get_column_categories();
+    for (int i = 0; i < out_schema->column_num; ++i) {
+        out_schema->column_schemas[i].column_name =
+            strdup(measurements[i]->measurement_name_.c_str());
+        if (out_schema->column_schemas[i].column_name == nullptr) {
+            free_table_schema(*out_schema);
+            *out_schema = TableSchema{};
+            return common::E_OOM;
+        }
+        out_schema->column_schemas[i].data_type =
+            static_cast<TSDataType>(measurements[i]->data_type_);
+        out_schema->column_schemas[i].column_category =
+            static_cast<ColumnCategory>(categories[i]);
+    }
+    return common::E_OK;
+}
+
+ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
+                                             const char* table_name,
+                                             TableSchema* out_schema) {
+    if (reader == nullptr || table_name == nullptr || out_schema == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_schema = TableSchema{};
+    try {
+        auto schema =
+            static_cast<storage::TsFileReader*>(reader)->get_table_schema(
+                table_name);
+        return copy_table_schema(schema, out_schema);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
+    }
 }
 
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
@@ -920,6 +1193,45 @@ TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
     }
     *size = table_num;
     return ret;
+}
+
+ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
+                                                  TableSchema** out_schemas,
+                                                  uint32_t* out_size) {
+    if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_schemas = nullptr;
+    *out_size = 0;
+    try {
+        auto schemas = static_cast<storage::TsFileReader*>(reader)
+                           ->get_all_table_schemas();
+        if (schemas.empty()) {
+            return common::E_OK;
+        }
+        TableSchema* copied = static_cast<TableSchema*>(
+            calloc(schemas.size(), sizeof(TableSchema)));
+        if (copied == nullptr) {
+            return common::E_OOM;
+        }
+        for (size_t i = 0; i < schemas.size(); ++i) {
+            ERRNO ret = copy_table_schema(schemas[i], &copied[i]);
+            if (ret != common::E_OK) {
+                for (size_t j = 0; j < i; ++j) {
+                    free_table_schema(copied[j]);
+                }
+                free(copied);
+                return ret;
+            }
+        }
+        *out_schemas = copied;
+        *out_size = static_cast<uint32_t>(schemas.size());
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
+    }
 }
 
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
@@ -2293,6 +2605,10 @@ TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
             *err_code = common::E_INVALID_ARG;
             return nullptr;
     }
+    if (filter == nullptr) {
+        *err_code = common::E_COLUMN_NOT_EXIST;
+        return nullptr;
+    }
     *err_code = common::E_OK;
     return static_cast<void*>(filter);
 }
@@ -2302,6 +2618,14 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           const char* column_name,
                                           const char* lower, const char* upper,
                                           bool is_not, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    if (reader == nullptr || table_name == nullptr || column_name == nullptr ||
+        lower == nullptr || upper == nullptr) {
+        *err_code = common::E_INVALID_ARG;
+        return nullptr;
+    }
     auto* r = static_cast<storage::TsFileReader*>(reader);
     auto schema = r->get_table_schema(table_name);
     if (!schema) {
@@ -2312,6 +2636,10 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
     storage::Filter* filter =
         is_not ? builder.not_between_and(column_name, lower, upper)
                : builder.between_and(column_name, lower, upper);
+    if (filter == nullptr) {
+        *err_code = common::E_COLUMN_NOT_EXIST;
+        return nullptr;
+    }
     *err_code = common::E_OK;
     return static_cast<void*>(filter);
 }

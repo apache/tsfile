@@ -17,21 +17,10 @@
 
 package tsfile
 
-import "fmt"
-
-// TimeseriesSchema describes one tree-model measurement.
-type TimeseriesSchema struct {
-	Name        string
-	DataType    DataType
-	Encoding    Encoding
-	Compression Compression
-}
-
-// DeviceSchema groups tree-model measurements under one device.
-type DeviceSchema struct {
-	Device     string
-	TimeSeries []TimeseriesSchema
-}
+import (
+	"fmt"
+	"strings"
+)
 
 // ColumnSchema describes one table-model column.
 type ColumnSchema struct {
@@ -52,19 +41,11 @@ type TabletColumn struct {
 	DataType DataType
 }
 
-// ColumnMetadata describes one column in a query result. Column zero is the
-// timestamp column returned by the native result set.
+// ColumnMetadata describes one column in a query result. The timestamp is the
+// first column.
 type ColumnMetadata struct {
 	Name     string
 	DataType DataType
-}
-
-func timeseriesNames(series []TimeseriesSchema) []string {
-	names := make([]string, len(series))
-	for i := range series {
-		names[i] = series[i].Name
-	}
-	return names
 }
 
 func columnNames(columns []ColumnSchema) []string {
@@ -79,32 +60,46 @@ func validDataType(value DataType) bool {
 	switch value {
 	case DataTypeBoolean, DataTypeInt32, DataTypeInt64, DataTypeFloat,
 		DataTypeDouble, DataTypeText, DataTypeTimestamp, DataTypeDate,
-		DataTypeString:
+		DataTypeBlob, DataTypeString:
 		return true
 	default:
 		return false
 	}
 }
 
-func validEncoding(value Encoding) bool {
-	return value >= EncodingPlain && value <= EncodingCamel
-}
-
-func validCompression(value Compression) bool {
-	return value >= CompressionUncompressed && value <= CompressionLZMA2
-}
-
-func validColumnCategory(value ColumnCategory) bool {
-	return value >= ColumnCategoryTag && value <= ColumnCategoryTime
-}
-
-func validateTimeseriesSchema(op string, schema TimeseriesSchema) error {
-	if err := validateCString(op, "timeseries name", schema.Name); err != nil {
-		return err
+// validateAndCopyTableSchema returns an independently owned, normalized
+// schema because Writer retains it after NewWriter returns. Mutating the
+// caller's Columns slice must not change later Tablet validation.
+func validateAndCopyTableSchema(schema TableSchema) (TableSchema, error) {
+	if err := validateCString("validate table schema", "table name", schema.Table); err != nil {
+		return TableSchema{}, fmt.Errorf("%w: %v", ErrInvalidSchema, err)
 	}
-	if !validDataType(schema.DataType) || !validEncoding(schema.Encoding) ||
-		!validCompression(schema.Compression) {
-		return fmt.Errorf("%w: invalid timeseries schema for %q", newError(op, 8), schema.Name)
+	if len(schema.Columns) == 0 {
+		return TableSchema{}, fmt.Errorf("%w: table requires at least one column", ErrInvalidSchema)
 	}
-	return nil
+	normalized := TableSchema{Table: normalizeIdentifier(schema.Table), Columns: append([]ColumnSchema(nil), schema.Columns...)}
+	seen := make(map[string]struct{}, len(normalized.Columns))
+	for i, column := range normalized.Columns {
+		if err := validateCString("validate table schema", "column name", column.Name); err != nil {
+			return TableSchema{}, fmt.Errorf("%w: column %d: %v", ErrInvalidSchema, i, err)
+		}
+		name := normalizeIdentifier(column.Name)
+		if _, ok := seen[name]; ok {
+			return TableSchema{}, fmt.Errorf("%w: duplicate column %q", ErrInvalidSchema, column.Name)
+		}
+		seen[name] = struct{}{}
+		if !validDataType(column.DataType) {
+			return TableSchema{}, fmt.Errorf("%w: unsupported data type %d for column %q", ErrInvalidSchema, column.DataType, column.Name)
+		}
+		if column.Category != ColumnCategoryTag && column.Category != ColumnCategoryField {
+			return TableSchema{}, fmt.Errorf("%w: unsupported category %d for column %q", ErrInvalidSchema, column.Category, column.Name)
+		}
+		if column.Category == ColumnCategoryTag && column.DataType != DataTypeString {
+			return TableSchema{}, fmt.Errorf("%w: TAG column %q must use STRING", ErrInvalidSchema, column.Name)
+		}
+		normalized.Columns[i].Name = name
+	}
+	return normalized, nil
 }
+
+func normalizeIdentifier(value string) string { return strings.ToLower(value) }

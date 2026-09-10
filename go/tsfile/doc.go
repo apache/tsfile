@@ -15,7 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Package tsfile provides typed Go bindings to the Apache TsFile C++ reader
-// and writer. Native handles are safe to close more than once and serialize
-// calls against concurrent Close operations.
+// Package tsfile provides table-model Go bindings to the Apache TsFile C++
+// reader and writer. It supports Tablet and Arrow batch writes, typed row
+// reads, Arrow batch reads, tag filters, pagination, and table schema lookup.
+// ResultSet column indexes are one-based; Tablet indexes are zero-based.
 package tsfile

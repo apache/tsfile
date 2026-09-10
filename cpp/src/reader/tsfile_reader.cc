@@ -233,22 +233,37 @@ int TsFileReader::query(const std::string& table_name,
                         int64_t start_time, int64_t end_time,
                         ResultSet*& result_set, Filter* tag_filter,
                         int batch_size) {
+    return query(table_name, columns_names, start_time, end_time, 0, -1,
+                 result_set, tag_filter, batch_size);
+}
+
+int TsFileReader::query(const std::string& table_name,
+                        const std::vector<std::string>& columns_names,
+                        int64_t start_time, int64_t end_time, int offset,
+                        int limit, ResultSet*& result_set, Filter* tag_filter,
+                        int batch_size) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = nullptr;
     if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
         return ret;
     }
-    std::shared_ptr<TableSchema> table_schema =
-        tsfile_meta->table_schemas_.at(to_lower(table_name));
-    if (table_schema == nullptr) {
+    auto schema_it = tsfile_meta->table_schemas_.find(to_lower(table_name));
+    if (schema_it == tsfile_meta->table_schemas_.end() ||
+        schema_it->second == nullptr) {
         return E_TABLE_NOT_EXIST;
+    }
+    if (end_time < start_time || offset < 0) {
+        return E_INVALID_ARG;
+    }
+    if (limit < 0) {
+        limit = -1;
     }
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
     ensure_table_query_executor(batch_size);
     ret = table_query_executor_->query(to_lower(table_name), columns_names,
-                                       time_filter, tag_filter, nullptr,
-                                       result_set);
+                                       time_filter, tag_filter, nullptr, offset,
+                                       limit, result_set);
     return ret;
 }
 

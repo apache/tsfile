@@ -55,7 +55,7 @@ func TestBridgeMapsMissingFileError(t *testing.T) {
 // close must be idempotent (the second close is a no-op, not a
 // use-after-free) and must clear the stored pointer.
 func TestBridgeTabletHandleReleases(t *testing.T) {
-	h, err := newTabletHandle("bridge-dev", []string{"s1"}, []DataType{DataTypeInt64}, 8)
+	h, err := newTabletHandle([]string{"s1"}, []DataType{DataTypeInt64}, 8)
 	if err != nil {
 		t.Fatalf("newTabletHandle: %v", err)
 	}
@@ -79,7 +79,9 @@ func TestBridgeTabletHandleReleases(t *testing.T) {
 func TestBridgeWriterHandleLifecycle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bridge.tsfile")
-	h, err := newWriterHandle(path, 1<<20)
+	h, err := newWriterHandle(path, TableSchema{Table: "metrics", Columns: []ColumnSchema{
+		{Name: "value", DataType: DataTypeInt64, Category: ColumnCategoryField},
+	}}, 1<<20)
 	if err != nil {
 		t.Fatalf("newWriterHandle: %v", err)
 	}
@@ -104,7 +106,7 @@ func TestBridgeWriterHandleLifecycle(t *testing.T) {
 // TestBridgeTabletRowCount checks the tablet handle exposes its row count
 // through the C API before release.
 func TestBridgeTabletRowCount(t *testing.T) {
-	h, err := newTabletHandle("bridge-dev", []string{"s1"}, []DataType{DataTypeInt64}, 4)
+	h, err := newTabletHandle([]string{"s1"}, []DataType{DataTypeInt64}, 4)
 	if err != nil {
 		t.Fatalf("newTabletHandle: %v", err)
 	}
@@ -191,32 +193,29 @@ func TestBridgeReaderRejectsInvalidPath(t *testing.T) {
 // constructor.
 func TestBridgeWriterRejectsInvalidPath(t *testing.T) {
 	for _, path := range []string{"", "out\x00.tsfile"} {
-		if _, err := newWriterHandle(path, 1<<20); !errors.Is(err, ErrInvalidArgument) {
+		if _, err := newWriterHandle(path, validTestSchema(), 1<<20); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("newWriterHandle(%q) = %v, want ErrInvalidArgument", path, err)
 		}
 	}
 }
 
 // TestBridgeTabletRejectsInvalidNames pins empty/NUL validation for the
-// tablet target and column names: every case must fail with
+// tablet column names: every case must fail with
 // ErrInvalidArgument before any C call, so no native tablet is created.
 func TestBridgeTabletRejectsInvalidNames(t *testing.T) {
 	cases := []struct {
 		name    string
-		target  string
 		columns []string
 	}{
-		{"embedded NUL target", "dev\x00", []string{"s1"}},
-		{"embedded NUL column", "dev", []string{"s1", "s\x002"}},
-		{"empty target", "", []string{"s1"}},
-		{"empty column", "dev", []string{"s1", ""}},
+		{"embedded NUL column", []string{"s1", "s\x002"}},
+		{"empty column", []string{"s1", ""}},
 	}
 	for _, tc := range cases {
 		types := make([]DataType, len(tc.columns))
 		for i := range types {
 			types[i] = DataTypeInt64
 		}
-		h, err := newTabletHandle(tc.target, tc.columns, types, 4)
+		h, err := newTabletHandle(tc.columns, types, 4)
 		if h != nil {
 			t.Fatalf("%s: expected no handle", tc.name)
 		}
@@ -226,6 +225,39 @@ func TestBridgeTabletRejectsInvalidNames(t *testing.T) {
 		if !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("%s: got %v, want ErrInvalidArgument", tc.name, err)
 		}
+	}
+}
+
+func TestBridgeTabletPreservesNativeErrorCodes(t *testing.T) {
+	tests := []struct {
+		name    string
+		columns []string
+		types   []DataType
+		want    error
+	}{
+		{
+			name:    "duplicate columns",
+			columns: []string{"value", "VALUE"},
+			types:   []DataType{DataTypeInt64, DataTypeInt64},
+			want:    ErrInvalidSchema,
+		},
+		{
+			name:    "unsupported type",
+			columns: []string{"value"},
+			types:   []DataType{DataType(255)},
+			want:    ErrTypeNotSupported,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, err := newTabletHandle(tt.columns, tt.types, 1)
+			if h != nil {
+				t.Fatal("expected no handle")
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("error = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -392,7 +424,7 @@ func TestBridgeValidateCInt32(t *testing.T) {
 // created, so no row buffers are allocated.
 func TestBridgeTabletRejectsOversizedMaxRows(t *testing.T) {
 	for _, maxRows := range []int{cTabletMaxRowsMax, 1 << 31, 1 << 32, math.MaxInt32, math.MaxInt64} {
-		h, err := newTabletHandle("dev", []string{"s1"}, []DataType{DataTypeInt64}, maxRows)
+		h, err := newTabletHandle([]string{"s1"}, []DataType{DataTypeInt64}, maxRows)
 		if h != nil {
 			t.Fatalf("maxRows %d: expected no handle", maxRows)
 		}

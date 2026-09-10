@@ -134,10 +134,10 @@ ERRNO write_tsfile() {
     tablet = tablet_new((char*[]){"id1", "id2", "s1"},
                         (TSDataType[]){TS_DATATYPE_STRING, TS_DATATYPE_STRING,
                                        TS_DATATYPE_INT32},
-                        3, 5);
-    if (tablet == NULL) {
+                        3, 5, &code);
+    if (tablet == NULL || code != RET_OK) {
         return cleanup_write_tsfile_resources(&file, writer, &tablet,
-                                              &table_schema, RET_OOM);
+                                              &table_schema, code);
     }
 
     for (int row = 0; row < 5; row++) {

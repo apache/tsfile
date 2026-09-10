@@ -121,6 +121,16 @@ bool ExistsByWidePath() {
 #endif
 }
 
+int64_t FileSizeByWidePath() {
+#ifdef _WIN32
+    struct _stat64 st;
+    return ::_wstat64(WideName().c_str(), &st) == 0 ? st.st_size : -1;
+#else
+    struct stat st;
+    return ::stat(Utf8Name().c_str(), &st) == 0 ? st.st_size : -1;
+#endif
+}
+
 // Create the fixture through the wide API on Windows, so the file on disk
 // really carries the non-ASCII name regardless of the active code page.
 bool CreateFixtureByWidePath() {
@@ -199,17 +209,18 @@ TEST_F(Utf8PathTest, ExistingUtf8PathIsRejectedByTsFileWriter) {
     EXPECT_TRUE(MinimalTsFileIsUnchanged());
 }
 
-TEST_F(Utf8PathTest, ExistingUtf8PathIsRejectedByCWrapper) {
+TEST_F(Utf8PathTest, ExistingUtf8PathIsTruncatedByCWrapper) {
     ASSERT_TRUE(CreateFixtureByWidePath());
 
     int32_t error_code = E_OK;
     CWriteFile file = write_file_new(Utf8Name().c_str(), &error_code);
-    EXPECT_EQ(file, nullptr);
-    EXPECT_EQ(error_code, E_ALREADY_EXIST);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(error_code, E_OK);
     if (file != nullptr) {
         free_write_file(&file);
     }
-    EXPECT_TRUE(MinimalTsFileIsUnchanged());
+    EXPECT_TRUE(ExistsByWidePath());
+    EXPECT_EQ(FileSizeByWidePath(), 0);
 }
 
 // LocalRandomAccessReadFile must find a file that exists on disk under a
