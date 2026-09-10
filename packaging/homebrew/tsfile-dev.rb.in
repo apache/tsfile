@@ -22,6 +22,7 @@ class TsfileDev < Formula
   version "@HOMEBREW_VERSION@"
   sha256 "@SOURCE_SHA256@"
   license "Apache-2.0"
+  keg_only "development snapshots install their dependency header closure"
 
 @BOTTLE_BLOCK@
 

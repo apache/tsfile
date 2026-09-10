@@ -30,6 +30,11 @@ bootstrap = jobs.fetch("build-rpm").fetch("steps").find { |step| step["name"] ==
 packages = Shellwords.split(bootstrap.fetch("run").gsub("\\\n", " "))
 raise "AlmaLinux 9 curl-minimal conflicts with full curl" if packages.include?("curl")
 raise "RPM bootstrap must retain curl-minimal" unless packages.include?("curl-minimal")
+raise "AlmaLinux 9 default repositories do not provide ninja-build" if packages.include?("ninja-build")
+raise "RPM bootstrap must install make" unless packages.include?("make")
+
+rpm_build = jobs.fetch("build-rpm").fetch("steps").filter_map { |step| step["run"] }.join("\n")
+raise "RPM build must not require Ninja" if rpm_build.include?("-G Ninja")
 
 windows = jobs.fetch("build-windows").fetch("steps").filter_map { |step| step["run"] }.join("\n")
 raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-DTSFILE_MSVC_STATIC_RUNTIME=ON") && windows.include?("-DTSFILE_DEPENDENCY_SOURCE=BUNDLED")

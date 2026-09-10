@@ -117,7 +117,12 @@ Formula `tsfile-dev`, using `packaging/homebrew/tsfile-dev.rb.in`. This is not a
 Homebrew/core submission. Each build pins the full workflow commit from
 `ColinLeeo/tsfile`, hashes that source archive, and uses the generated immutable
 Homebrew development version. The Formula retains the CMake install behavior
-and tests the installed C++ consumer and CLI before bottling.
+and tests the installed C++ consumer and CLI before bottling. `tsfile-dev` is
+keg-only because the current SDK intentionally ships its dependency header
+closure; linking that closure into Homebrew's shared prefix would collide with
+headers owned by dependencies such as `simde`. After installation, invoke the
+CLI as `$(brew --prefix tsfile-dev)/bin/tsfile-cli`, or add that Formula's
+`bin` directory to `PATH`.
 
 The ARM64 job runs on `macos-latest` and the Intel job on `macos-15-intel`.
 Their `native-homebrew-macos-arm64` and `native-homebrew-macos-x86_64`

@@ -205,7 +205,7 @@ jobs:
           dnf install -y \
             cmake \
             gcc-c++ \
-            ninja-build \
+            make \
             pkgconf-pkg-config \
             rpm-build \
             git \
@@ -224,7 +224,7 @@ jobs:
           TSFILE_RPM_PACKAGE_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
         shell: bash
         run: |
-          cmake -S cpp -B build/rpm -G Ninja \
+          cmake -S cpp -B build/rpm \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TEST=OFF \
             -DBUILD_TOOLS=ON \

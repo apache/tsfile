@@ -128,6 +128,11 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
 
     def test_cli_renders_real_template_with_optional_bottle_file(self):
         self.renderer()
+        template = TEMPLATE_PATH.read_text(encoding="utf-8")
+        self.assertIn(
+            'keg_only "development snapshots install their dependency header closure"',
+            template,
+        )
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
             output = directory / "tsfile-dev.rb"

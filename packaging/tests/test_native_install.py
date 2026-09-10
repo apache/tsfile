@@ -31,6 +31,36 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "cpp/cmake/tests/projects"
 
 
+class PublicHeaderCompatibilityTest(unittest.TestCase):
+    def test_static_assert_uses_the_native_keyword_for_msvc(self):
+        source = textwrap.dedent("""\
+            #include "utils/util_define.h"
+            class Probe { STATIC_ASSERT(true, MSVC_old_cplusplus); };
+            """)
+        result = subprocess.run(
+            [
+                *shlex.split(os.environ.get("CXX", "c++")),
+                "-E",
+                "-P",
+                "-x",
+                "c++",
+                "-std=c++11",
+                "-D_MSC_VER=1930",
+                "-DTSFILE_STATIC",
+                "-D__cplusplus=199711L",
+                f"-I{ROOT / 'cpp/src'}",
+                "-",
+            ],
+            input=source,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+        self.assertRegex(result.stdout, r"class Probe \{\s*(?:static_assert|_Static_assert)")
+        self.assertNotIn("static_assertion_MSVC_old_cplusplus", result.stdout)
+
+
 class StaticANTLRPackageTest(unittest.TestCase):
     """Exercise installed metadata without compiling the ANTLR runtime."""
 
