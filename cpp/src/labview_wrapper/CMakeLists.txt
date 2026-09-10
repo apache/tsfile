@@ -53,4 +53,14 @@ if (BUILD_LABVIEW_WRAPPER_TESTS)
             C_STANDARD_REQUIRED ON
             RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
     endforeach()
+
+    add_executable(tsfile_labview_config_test test_config.c)
+    target_include_directories(tsfile_labview_config_test
+                               PRIVATE ${PROJECT_SRC_DIR})
+    target_link_libraries(tsfile_labview_config_test
+                          PRIVATE tsfile_labview tsfile)
+    set_target_properties(tsfile_labview_config_test PROPERTIES
+        C_STANDARD 99
+        C_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
 endif ()
