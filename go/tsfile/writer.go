@@ -120,12 +120,6 @@ func (w *Writer) writeTablet(tablet *Tablet) error {
 		}
 		delete(expected, column.Name)
 	}
-	rows := tablet.rows
-	for row := 0; row < rows; row++ {
-		if !tablet.timeSet[row] {
-			return fmt.Errorf("%w: Tablet row %d has no timestamp", ErrInvalidArgument, row)
-		}
-	}
 	return w.handle.writeTableTablet(tablet.handle)
 }
 

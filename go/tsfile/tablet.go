@@ -29,11 +29,6 @@ type Tablet struct {
 	handle  *tabletHandle
 	columns []TabletColumn
 	maxRows int
-	// The native Tablet only records the highest timestamp row index. Track
-	// presence separately so WriteTableTablet can reject holes instead of
-	// passing uninitialized timestamps to C++.
-	timeSet []bool
-	rows    int
 }
 
 // NewTablet allocates a tablet with fixed columns and row capacity.
@@ -64,10 +59,7 @@ func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Tablet{
-		handle: handle, columns: append([]TabletColumn(nil), columns...),
-		maxRows: maxRows, timeSet: make([]bool, maxRows),
-	}, nil
+	return &Tablet{handle: handle, columns: append([]TabletColumn(nil), columns...), maxRows: maxRows}, nil
 }
 
 // SetBytes assigns a BLOB value without interpreting its contents.
@@ -78,14 +70,7 @@ func (t *Tablet) SetBytes(row, column int, value []byte) error {
 	if err := t.handle.addBytes(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
-}
-
-func (t *Tablet) markRow(row int) {
-	if row >= t.rows {
-		t.rows = row + 1
-	}
 }
 
 func (t *Tablet) validate(row, column int, allowed ...DataType) error {
@@ -115,8 +100,6 @@ func (t *Tablet) AddTimestamp(row int, timestamp int64) error {
 	if err := t.handle.addTimestamp(row, timestamp); err != nil {
 		return err
 	}
-	t.timeSet[row] = true
-	t.markRow(row)
 	return nil
 }
 
@@ -128,7 +111,6 @@ func (t *Tablet) SetBool(row, column int, value bool) error {
 	if err := t.handle.addBool(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -140,7 +122,6 @@ func (t *Tablet) SetInt32(row, column int, value int32) error {
 	if err := t.handle.addInt32(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -152,7 +133,6 @@ func (t *Tablet) SetInt64(row, column int, value int64) error {
 	if err := t.handle.addInt64(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -164,7 +144,6 @@ func (t *Tablet) SetFloat32(row, column int, value float32) error {
 	if err := t.handle.addFloat32(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -176,7 +155,6 @@ func (t *Tablet) SetFloat64(row, column int, value float64) error {
 	if err := t.handle.addFloat64(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -191,7 +169,6 @@ func (t *Tablet) SetString(row, column int, value string) error {
 	if err := t.handle.addString(row, column, value); err != nil {
 		return err
 	}
-	t.markRow(row)
 	return nil
 }
 
@@ -201,7 +178,7 @@ func (t *Tablet) Rows() int {
 	if t.handle == nil || t.handle.ptr == nil {
 		return 0
 	}
-	return t.rows
+	return t.handle.rowCount()
 }
 
 // Close releases the native tablet. It is safe to call more than once.

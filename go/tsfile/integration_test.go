@@ -321,8 +321,8 @@ func TestTabletWriteValidation(t *testing.T) {
 	if err := missingTime.SetInt64(0, 0, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.WriteTableTablet(missingTime); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("missing timestamp error = %v", err)
+	if err := writer.WriteTableTablet(missingTime); err != nil {
+		t.Fatalf("native-accepted Tablet rejected by Go validation: %v", err)
 	}
 }
 

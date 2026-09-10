@@ -71,6 +71,27 @@ func TestTabletNormalizesAndOwnsColumnNames(t *testing.T) {
 	}
 }
 
+func TestTabletRowsFollowNativeTimestampRange(t *testing.T) {
+	tablet, err := NewTablet([]TabletColumn{{Name: "value", DataType: DataTypeInt64}}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tablet.Close()
+
+	if err := tablet.SetInt64(0, 0, 42); err != nil {
+		t.Fatal(err)
+	}
+	if got := tablet.Rows(); got != 0 {
+		t.Fatalf("Rows after setting only a value = %d, want native row count 0", got)
+	}
+	if err := tablet.AddTimestamp(1, 100); err != nil {
+		t.Fatal(err)
+	}
+	if got := tablet.Rows(); got != 2 {
+		t.Fatalf("Rows after setting timestamp row 1 = %d, want native row count 2", got)
+	}
+}
+
 func TestWriterOptionValidation(t *testing.T) {
 	if _, err := NewWriter("unused.tsfile", validTestSchema(), WithMemoryThreshold(0)); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("zero memory threshold: %v", err)
