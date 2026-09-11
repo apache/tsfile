@@ -171,6 +171,16 @@ func TestTableRoundTripAndNull(t *testing.T) {
 	if got, err := page.Float64(2); err != nil || got != 1.5 {
 		t.Fatalf("page value = %v, %v", got, err)
 	}
+
+	inverted, err := reader.Query("metrics", []string{"value"},
+		WithTimeRange(2, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inverted.Close()
+	if ok, err := inverted.Next(); err != nil || ok {
+		t.Fatalf("inverted range Next = %v, %v", ok, err)
+	}
 }
 
 func TestNewWriterTruncatesExistingFile(t *testing.T) {

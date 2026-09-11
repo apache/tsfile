@@ -737,8 +737,7 @@ ResultSet tsfile_reader_query_tree(TsFileReader reader, char** paths,
         return nullptr;
     }
     *err_code = common::E_INVALID_ARG;
-    if (reader == nullptr || paths == nullptr || path_num == 0 ||
-        end_time < start_time) {
+    if (reader == nullptr || paths == nullptr || path_num == 0) {
         return nullptr;
     }
     try {
@@ -827,8 +826,7 @@ ResultSet tsfile_reader_query_table(TsFileReader reader, const char* table_name,
     }
     *err_code = common::E_INVALID_ARG;
     if (reader == nullptr || table_name == nullptr || column_names == nullptr ||
-        column_names_len == 0 || end_time < start_time || offset < 0 ||
-        batch_size < 0) {
+        column_names_len == 0 || offset < 0 || batch_size < 0) {
         return nullptr;
     }
     try {
