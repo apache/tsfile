@@ -245,7 +245,7 @@ TEST_F(PreparedSeriesBatchTest,
 
     ResultSet* empty = nullptr;
     ASSERT_EQ(common::E_OK,
-              reader.query_prepared(prepared, 100000, 200000, 0, -1, empty));
+              reader.query_prepared(prepared, 200000, 100000, 0, -1, empty));
     auto* empty_table = dynamic_cast<TableResultSet*>(empty);
     ASSERT_NE(nullptr, empty_table);
     block = nullptr;
@@ -369,6 +369,18 @@ TEST_F(PreparedSeriesBatchTest,
     }
     EXPECT_EQ(10U, row);
     reader.destroy_query_data_set(result);
+
+    ResultSet* empty_multi = nullptr;
+    ASSERT_EQ(common::E_OK,
+              reader.query_prepared_multi({prepared_value2, prepared_value}, 9,
+                                          0, 0, -1, empty_multi));
+    auto* empty_multi_table = dynamic_cast<TableResultSet*>(empty_multi);
+    ASSERT_NE(nullptr, empty_multi_table);
+    block = nullptr;
+    EXPECT_EQ(common::E_NO_MORE_DATA,
+              empty_multi_table->get_next_tsblock(block));
+    EXPECT_EQ(nullptr, block);
+    reader.destroy_query_data_set(empty_multi);
     EXPECT_EQ(common::E_OK, reader.close());
 }
 

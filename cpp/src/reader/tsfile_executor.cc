@@ -128,7 +128,7 @@ int TsFileExecutor::execute_prepared(
     ResultSet*& ret_qds) {
     ASSERT(is_inited_);
     ret_qds = nullptr;
-    if (prepared == nullptr || start_time > end_time || offset < 0) {
+    if (prepared == nullptr || offset < 0) {
         return E_INVALID_ARG;
     }
     auto tsblock_reader = std::unique_ptr<PreparedSeriesTsBlockReader>(
@@ -153,7 +153,7 @@ int TsFileExecutor::execute_prepared_multi(
     ResultSet*& ret_qds) {
     ASSERT(is_inited_);
     ret_qds = nullptr;
-    if (prepared.empty() || start_time > end_time || offset < 0) {
+    if (prepared.empty() || offset < 0) {
         return E_INVALID_ARG;
     }
 
