@@ -30,6 +30,10 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.LongConsumer;
 
+/**
+ * Reads decoded records from one page. Implementations may consume decoder state; filtering,
+ * deletion handling, pagination, and empty-page behavior are defined by the methods below.
+ */
 public interface IPageReader extends IMetadata {
 
   default BatchData getAllSatisfiedPageData() throws IOException {
