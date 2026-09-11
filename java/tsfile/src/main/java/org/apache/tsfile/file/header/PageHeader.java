@@ -53,6 +53,10 @@ public class PageHeader implements IMetadata {
     return 2 * (Integer.BYTES + 1);
   }
 
+  /**
+   * Deserializes a page header from the input. This overload reads statistics only when
+   * hasStatistic is true; an empty page may have null statistics.
+   */
   public static PageHeader deserializeFrom(
       InputStream inputStream, TSDataType dataType, boolean hasStatistic) throws IOException {
     int uncompressedSize = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
@@ -173,7 +177,10 @@ public class PageHeader implements IMetadata {
     this.modified |= modified;
   }
 
-  /** max page header size without statistics. */
+  /**
+   * Returns the serialized size of this page header and its page body, including statistics when
+   * statistics are present.
+   */
   public int getSerializedPageSize() {
     if (uncompressedSize == 0) { // Empty page
       return ReadWriteForEncodingUtils.uVarIntSize(uncompressedSize);

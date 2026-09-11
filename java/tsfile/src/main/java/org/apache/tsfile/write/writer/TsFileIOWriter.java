@@ -331,8 +331,10 @@ public class TsFileIOWriter implements AutoCloseable {
    * @param measurementId - measurementId of this time series
    * @param compressionCodecName - compression name of this time series
    * @param tsDataType - data type
+   * @param encodingType - the encoding used by the chunk pages
    * @param statistics - Chunk statistics
    * @param dataSize - the serialized size of all pages
+   * @param numOfPages - the number of serialized pages
    * @param mask - 0x80 for time chunk, 0x40 for value chunk, 0x00 for common chunk
    * @throws IOException if I/O error occurs
    */
