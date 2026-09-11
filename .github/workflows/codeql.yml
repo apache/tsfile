@@ -50,8 +50,10 @@ jobs:
         include:
         - language: c-cpp
           build-mode: autobuild
-        - language: java-kotlin
+        - language: java
           build-mode: none # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
+        - language: go
+          build-mode: autobuild
         - language: python
           build-mode: none
         # CodeQL supports the following values keywords for 'language': 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'swift'
