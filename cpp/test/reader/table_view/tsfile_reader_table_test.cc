@@ -288,6 +288,31 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithTimeFilter) {
     test_table_model_query(10, 1, 2);
 }
 
+TEST_F(TsFileTableReaderTest, InvertedTimeRangeReturnsEmptyResult) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    auto tablet = gen_tablet(table_schema, 0, 1, 10);
+    ASSERT_EQ(tsfile_table_writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(
+        reader.query(table_schema->get_table_name(),
+                     table_schema->get_measurement_names(), 10, 0, result),
+        common::E_OK);
+    auto* table_result = static_cast<TableResultSet*>(result);
+    bool has_next = false;
+    ASSERT_EQ(table_result->next(has_next), common::E_OK);
+    EXPECT_FALSE(has_next);
+    reader.destroy_query_data_set(table_result);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+}
+
 TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =

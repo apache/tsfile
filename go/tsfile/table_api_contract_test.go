@@ -98,18 +98,17 @@ func TestQueryOptionDefaultsAndComposition(t *testing.T) {
 }
 
 func TestQueryOptionValidation(t *testing.T) {
-	cases := []QueryOption{
-		nil,
-		WithTimeRange(2, 1),
-		WithOffset(-1),
-		WithTagFilter(nil),
-	}
+	cases := []QueryOption{nil, WithOffset(-1), WithTagFilter(nil)}
 	for _, option := range cases {
 		if _, err := buildQueryOptions(option); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("option error = %v, want ErrInvalidArgument", err)
 		}
 	}
-	options, err := buildQueryOptions(WithBatchSize(-1))
+	options, err := buildQueryOptions(WithTimeRange(2, 1))
+	if err != nil || options.start != 2 || options.end != 1 {
+		t.Fatalf("inverted time range should be preserved: %+v, %v", options, err)
+	}
+	options, err = buildQueryOptions(WithBatchSize(-1))
 	if err != nil || options.batchSize != 0 {
 		t.Fatalf("negative batch size should select row mode: %+v, %v", options, err)
 	}

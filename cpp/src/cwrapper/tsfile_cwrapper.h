@@ -740,13 +740,19 @@ PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
  */
 void tsfile_prepared_series_free(PreparedSeriesHandle prepared);
 
-/** Query a prepared series without traversing the TsFile footer index. */
+/**
+ * Query a prepared series without traversing the TsFile footer index.
+ * An inverted time range succeeds with an empty result set.
+ */
 ResultSet tsfile_reader_query_prepared(TsFileReader reader,
                                        PreparedSeriesHandle prepared,
                                        Timestamp start_time, Timestamp end_time,
                                        int offset, int limit, ERRNO* err_code);
 
-/** Query multiple aligned prepared value columns sharing one time axis. */
+/**
+ * Query multiple aligned prepared value columns sharing one time axis.
+ * An inverted time range succeeds with an empty result set.
+ */
 ResultSet tsfile_reader_query_prepared_multi(
     TsFileReader reader, const PreparedSeriesHandle* prepared,
     uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
@@ -760,7 +766,8 @@ ResultSet tsfile_reader_query_prepared_multi(
  * @param columns [in] Array of column names to fetch.
  * @param column_num [in] Number of columns in array.
  * @param start_time [in] Start timestamp.
- * @param end_time [in] End timestamp. Must ≥ start_time.
+ * @param end_time [in] Inclusive end timestamp. If it precedes start_time,
+ * the query succeeds with an empty result set.
  * @return ResultSet Query results handle. Must be freed with
  * free_tsfile_result_set().
  */
@@ -769,6 +776,7 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              Timestamp start_time, Timestamp end_time,
                              ERRNO* err_code);
 
+/** Query tree-model columns; an inverted time range yields no rows. */
 ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
                                      uint32_t column_num, Timestamp start_time,
                                      Timestamp end_time, ERRNO* err_code);
@@ -780,7 +788,8 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
  * @param paths [in] Array of full paths such as root.device.measurement.
  * @param path_num [in] Number of paths; must be greater than zero.
  * @param start_time [in] Inclusive start timestamp.
- * @param end_time [in] Inclusive end timestamp.
+ * @param end_time [in] Inclusive end timestamp. If it precedes start_time,
+ * the query succeeds with an empty result set.
  * @param err_code [out] Error code; must not be NULL.
  * @return ResultSet handle on success, or NULL on failure.
  */

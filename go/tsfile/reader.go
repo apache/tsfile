@@ -32,11 +32,10 @@ type queryOptions struct {
 // QueryOption customizes one table query.
 type QueryOption func(*queryOptions) error
 
+// WithTimeRange limits the query to the inclusive [start, end] range.
+// When start is greater than end, the range is empty and the query returns no rows.
 func WithTimeRange(start, end int64) QueryOption {
 	return func(options *queryOptions) error {
-		if end < start {
-			return fmt.Errorf("%w: end must not precede start", ErrInvalidArgument)
-		}
 		options.start, options.end = start, end
 		return nil
 	}
