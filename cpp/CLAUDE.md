@@ -101,6 +101,9 @@ cpp/src/
 
 - **Formatter**: clang-format (Google style), configured in `.clang-format`
 - After modifying C++ code, run from the repo root to format: `./mvnw spotless:apply -P with-cpp`
+- Spotless uses clang-format 17.0.6. On supported Linux and Apple Silicon macOS
+  hosts, Maven downloads the LLVM release archive into `cpp/target/clang-format`
+  and runs that private binary; other hosts fall back to `clang-format` on `PATH`.
 
 ## Testing
 
