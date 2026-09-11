@@ -239,7 +239,7 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
 
     if (is_table_model(args, reader)) {
         const std::vector<std::shared_ptr<storage::TableSchema>> all_schemas =
-            reader.get_all_table_schemas();
+            sorted_table_schemas(reader);
         if (args.table.empty()) {
             for (const std::string& requested : args.measurements) {
                 const std::string canonical = storage::to_lower(requested);

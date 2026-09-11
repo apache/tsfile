@@ -74,12 +74,18 @@ class BothModels : public ::testing::TestWithParam<ModelFile> {
         ASSERT_EQ(chdir(fixture_directory_.c_str()), 0);
 #endif
 
-        const std::string generated =
-            GetParam().tree ? tsfile_cli_test::write_complex_tree_fixture()
-                            : tsfile_cli_test::write_complex_table_fixture();
         path_ = GetParam().tree ? "tsfile_cli_complex_tree_golden.tsfile"
                                 : "tsfile_cli_complex_table_golden.tsfile";
-        ASSERT_EQ(std::rename(generated.c_str(), path_.c_str()), 0);
+        const std::string fixture =
+            std::string(TSFILE_CPP_SOURCE_DIR) + "/test/tools/fixtures/" +
+            (GetParam().tree ? "complex_tree.tsfile" : "complex_table.tsfile");
+        std::ifstream source(fixture.c_str(), std::ios::binary);
+        ASSERT_TRUE(source.good()) << "missing fixed fixture " << fixture;
+        std::ofstream destination(path_.c_str(),
+                                  std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(destination.good()) << path_;
+        destination << source.rdbuf();
+        ASSERT_TRUE(destination.good()) << path_;
     }
     void TearDown() override {
         std::remove(path_.c_str());

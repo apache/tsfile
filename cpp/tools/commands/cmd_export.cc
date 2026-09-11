@@ -361,23 +361,4 @@ int cmd_export(const ParsedArgs& args, storage::TsFileReader& reader,
                                 rows, err);
 }
 
-int cmd_sketch(const ParsedArgs& args, storage::TsFileReader& reader,
-               std::ostream& out, std::ostream& err) {
-    std::ostringstream content;
-    content << "-------------------------------- TsFile Sketch "
-               "--------------------------------\n"
-            << "file path: " << args.file << "\n"
-            << "model: " << (is_table_model(args, reader) ? "table" : "tree")
-            << "\n"
-            << "---------------------------------- TsFile Sketch End "
-               "----------------------------------\n";
-    if (args.output.empty()) {
-        out << content.str();
-        out.flush();
-        return out.good() ? kExitOk : kExitRuntime;
-    }
-    return write_atomic_text(args.output, content.str(), args.file, args.force,
-                             err);
-}
-
 }  // namespace tsfile_cli
