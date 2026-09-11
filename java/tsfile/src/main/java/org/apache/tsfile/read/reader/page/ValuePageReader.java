@@ -54,6 +54,16 @@ public class ValuePageReader {
   /** decoder for value column */
   private final Decoder valueDecoder;
 
+  // Reuse the type-specific reader across per-row nextValue calls.
+  private PageDataTsPrimitiveValueReader valueReader;
+
+  // Reuse readers for batch and column-builder APIs across repeated page reads.
+  private PageDataValueReader batchDataValueReader;
+  private PageDataColumnBuilderValueReader columnBuilderValueReader;
+
+  // Reuse the bound predicate across page reads instead of creating a method reference per call.
+  private final LongPredicate deletePredicate = this::isDeleted;
+
   private byte[] bitmap;
 
   private int size;
@@ -118,17 +128,18 @@ public class ValuePageReader {
       throws IOException {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
-    PageDataValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
+    if (batchDataValueReader == null) {
+      batchDataValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     boolean allSatisfy = filter == null;
-    LongPredicate isDeleted = this::isDeleted;
     for (int i = 0; i < timeBatch.length; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         continue;
       }
       long timestamp = timeBatch[i];
-      valueReader.read(
-          valueDecoder, valueBuffer, filter, pageData, timestamp, allSatisfy, isDeleted);
+      batchDataValueReader.read(
+          valueDecoder, valueBuffer, filter, pageData, timestamp, allSatisfy, deletePredicate);
     }
     return pageData.flip();
   }
@@ -138,9 +149,12 @@ public class ValuePageReader {
     if (valueBuffer == null || ((bitmap[timeIndex / 8] & 0xFF) & (MASK >>> (timeIndex % 8))) == 0) {
       return null;
     }
-    PageDataTsPrimitiveValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(Type.fromTsDataType(dataType));
-    return valueReader.read(valueDecoder, valueBuffer, timestamp, this::isDeleted);
+    if (valueReader == null) {
+      valueReader =
+          TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(
+              Type.fromTsDataType(dataType));
+    }
+    return valueReader.read(valueDecoder, valueBuffer, timestamp, deletePredicate);
   }
 
   /**
@@ -153,14 +167,16 @@ public class ValuePageReader {
     if (valueBuffer == null) {
       return valueBatch;
     }
-    PageDataTsPrimitiveValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(Type.fromTsDataType(dataType));
-    LongPredicate isDeleted = this::isDeleted;
+    if (valueReader == null) {
+      valueReader =
+          TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(
+              Type.fromTsDataType(dataType));
+    }
     for (int i = 0; i < size; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         continue;
       }
-      valueBatch[i] = valueReader.read(valueDecoder, valueBuffer, timeBatch[i], isDeleted);
+      valueBatch[i] = valueReader.read(valueDecoder, valueBuffer, timeBatch[i], deletePredicate);
     }
     return valueBatch;
   }
@@ -177,8 +193,10 @@ public class ValuePageReader {
       }
       return;
     }
-    PageDataColumnBuilderValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    if (columnBuilderValueReader == null) {
+      columnBuilderValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     for (int i = 0; i < readEndIndex; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         if (keepCurrentRow[i]) {
@@ -186,7 +204,8 @@ public class ValuePageReader {
         }
         continue;
       }
-      valueReader.read(valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], isDeleted[i]);
+      columnBuilderValueReader.read(
+          valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], isDeleted[i]);
     }
   }
 
@@ -201,8 +220,10 @@ public class ValuePageReader {
       }
       return;
     }
-    PageDataColumnBuilderValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    if (columnBuilderValueReader == null) {
+      columnBuilderValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     for (int i = 0; i < readEndIndex; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
         if (keepCurrentRow[i]) {
@@ -210,7 +231,8 @@ public class ValuePageReader {
         }
         continue;
       }
-      valueReader.read(valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], false);
+      columnBuilderValueReader.read(
+          valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], false);
     }
   }
 
@@ -221,12 +243,14 @@ public class ValuePageReader {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
       return;
     }
-    PageDataColumnBuilderValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    if (columnBuilderValueReader == null) {
+      columnBuilderValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     // skip useless data
     for (int i = 0; i < readStartIndex; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) != 0) {
-        valueReader.read(valueDecoder, valueBuffer, columnBuilder, false, false);
+        columnBuilderValueReader.read(valueDecoder, valueBuffer, columnBuilder, false, false);
       }
     }
     for (int i = readStartIndex; i < readEndIndex; i++) {
@@ -234,7 +258,7 @@ public class ValuePageReader {
         columnBuilder.appendNull();
         continue;
       }
-      valueReader.read(valueDecoder, valueBuffer, columnBuilder, true, false);
+      columnBuilderValueReader.read(valueDecoder, valueBuffer, columnBuilder, true, false);
     }
   }
 

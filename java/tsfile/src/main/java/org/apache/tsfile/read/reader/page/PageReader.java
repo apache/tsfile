@@ -60,6 +60,11 @@ public class PageReader implements IPageReader {
   /** decoder for value column */
   private final Decoder valueDecoder;
 
+  // Reuse type-specific readers and the deletion predicate across repeated page reads.
+  private PageDataValueReader batchDataValueReader;
+  private PageDataBlockValueReader blockValueReader;
+  private final LongPredicate deletePredicate = this::isDeleted;
+
   /** decoder for time column */
   private final Decoder timeDecoder;
 
@@ -156,13 +161,20 @@ public class PageReader implements IPageReader {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
-    PageDataValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
-    LongPredicate isDeleted = this::isDeleted;
+    if (batchDataValueReader == null) {
+      batchDataValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     while (timeDecoder.hasNext(timeBuffer)) {
       long timestamp = timeDecoder.readLong(timeBuffer);
-      valueReader.read(
-          valueDecoder, valueBuffer, recordFilter, pageData, timestamp, allSatisfy, isDeleted);
+      batchDataValueReader.read(
+          valueDecoder,
+          valueBuffer,
+          recordFilter,
+          pageData,
+          timestamp,
+          allSatisfy,
+          deletePredicate);
     }
     return pageData.flip();
   }
@@ -185,20 +197,21 @@ public class PageReader implements IPageReader {
 
     long allFilteredRows = 0;
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
-    PageDataBlockValueReader valueReader =
-        TypeServices.READ_PAGE_VALUE_TO_TSBLOCK_SERVICE.call(Type.fromTsDataType(dataType));
-    LongPredicate isDeleted = this::isDeleted;
+    if (blockValueReader == null) {
+      blockValueReader =
+          TypeServices.READ_PAGE_VALUE_TO_TSBLOCK_SERVICE.call(Type.fromTsDataType(dataType));
+    }
     while (timeDecoder.hasNext(timeBuffer)) {
       long timestamp = timeDecoder.readLong(timeBuffer);
       PageDataReadStatus status =
-          valueReader.read(
+          blockValueReader.read(
               valueDecoder,
               valueBuffer,
               recordFilter,
               builder,
               timestamp,
               allSatisfy,
-              isDeleted,
+              deletePredicate,
               paginationController);
       if (status == PageDataReadStatus.FILTERED) {
         allFilteredRows++;
