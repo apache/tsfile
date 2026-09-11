@@ -77,22 +77,10 @@ public class EncryptUtils {
       throw new EncryptException(
           Messages.format("error.encrypt.type_not_supported", String.valueOf(encryptType)));
     }
-    String mappedClassName = IEncrypt.encryptTypeToClassMap.get(encryptType);
-    if (mappedClassName != null) {
-      return validateEncryptClassName(mappedClassName, encryptType);
-    }
-    String className =
-        encryptType.startsWith(encryptClassPrefix) ? encryptType : encryptClassPrefix + encryptType;
-    String previousClassName = IEncrypt.encryptTypeToClassMap.putIfAbsent(encryptType, className);
-    return validateEncryptClassName(
-        previousClassName == null ? className : previousClassName, encryptType);
-  }
-
-  private static String validateEncryptClassName(String className, String encryptType) {
-    if (!className.startsWith(encryptClassPrefix)) {
-      throw new EncryptException(Messages.format("error.encrypt.type_not_supported", encryptType));
-    }
-    return className;
+    // Fully qualified names also identify custom implementations outside the TsFile package.
+    // loadEncryptClass validates the interface before any implementation is initialized.
+    return IEncrypt.encryptTypeToClassMap.computeIfAbsent(
+        encryptType, type -> type.contains(".") ? type : encryptClassPrefix + type);
   }
 
   static Class<? extends IEncrypt> loadEncryptClass(String encryptType)

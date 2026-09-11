@@ -79,7 +79,7 @@ public class EncryptTest {
   }
 
   @Test
-  public void GetEncryptorDoesNotLoadExternalClassName() {
+  public void GetEncryptorRejectsNonEncryptClassName() {
     assertThrows(
         EncryptException.class,
         () ->
@@ -100,7 +100,7 @@ public class EncryptTest {
   }
 
   @Test
-  public void GetEncryptorRejectsExternalRegisteredClassMapping() {
+  public void GetEncryptorRejectsNonEncryptRegisteredClassMapping() {
     String type = "CUSTOM_EXTERNAL";
     IEncrypt.encryptTypeToClassMap.put(type, "java.io.ByteArrayInputStream");
     try {
