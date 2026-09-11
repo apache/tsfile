@@ -82,7 +82,31 @@ TsFileWriter::TsFileWriter()
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
+void TsFileWriter::clear_schema_check_cache() {
+    plain_schema_check_cache_.clear();
+    aligned_schema_check_cache_.clear();
+}
+
+bool TsFileWriter::plain_schema_cache_matches(
+    const std::shared_ptr<IDeviceID>& device_id,
+    const std::vector<std::string>& measurement_names) const {
+    return plain_schema_check_cache_.valid_ &&
+           plain_schema_check_cache_.device_id_ != nullptr &&
+           *plain_schema_check_cache_.device_id_ == *device_id &&
+           plain_schema_check_cache_.measurement_names_ == measurement_names;
+}
+
+bool TsFileWriter::aligned_schema_cache_matches(
+    const std::shared_ptr<IDeviceID>& device_id,
+    const std::vector<std::string>& measurement_names) const {
+    return aligned_schema_check_cache_.valid_ &&
+           aligned_schema_check_cache_.device_id_ != nullptr &&
+           *aligned_schema_check_cache_.device_id_ == *device_id &&
+           aligned_schema_check_cache_.measurement_names_ == measurement_names;
+}
+
 void TsFileWriter::destroy() {
+    clear_schema_check_cache();
     if (write_file_created_ && write_file_ != nullptr) {
         delete write_file_;
         write_file_ = nullptr;
@@ -135,6 +159,7 @@ int TsFileWriter::init(WriteFile* write_file) {
     // the new file and produce headerless output.
     enforce_recovered_last_time_order_ = false;
     unrecoverable_ = false;
+    clear_schema_check_cache();
     start_file_done_ = false;
     record_count_since_last_flush_ = 0;
     io_writer_ = new TsFileIOWriter();
@@ -159,6 +184,7 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     // Clear any unrecoverable_ latched from a previous lifecycle so the
     // re-init isn't immediately poisoned.
     unrecoverable_ = false;
+    clear_schema_check_cache();
     // Reject new writes whose timestamps fall back into the recovered range.
     enforce_recovered_last_time_order_ = true;
     io_writer_ = rw;
@@ -341,12 +367,14 @@ int TsFileWriter::register_timeseries(const std::string& device_path,
         if (UNLIKELY(!ins_res.second)) {
             return E_ALREADY_EXIST;
         }
+        clear_schema_check_cache();
     } else {
         MeasurementSchemaGroup* ms_group = new MeasurementSchemaGroup;
         ms_group->is_aligned_ = is_aligned;
         ms_group->measurement_schema_map_.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
         schemas_.insert(std::make_pair(device_id, ms_group));
+        clear_schema_check_cache();
     }
     return E_OK;
 }
@@ -477,40 +505,58 @@ int TsFileWriter::do_check_schema(
         IS_NULL(device_schema = dev_it->second)) {
         return E_DEVICE_NOT_EXIST;
     }
+
     MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
-    uint32_t measurement_count = measurement_names.get_count();
-    // chunk_writers.reserve(measurement_count);
-    for (uint32_t i = 0; i < measurement_count; i++) {
-        auto ms_iter = msm.find(measurement_names.next());
+    static thread_local std::vector<std::string> names;
+    names.clear();
+    names.reserve(measurement_names.get_count());
+    for (uint32_t i = 0; i < measurement_names.get_count(); ++i) {
+        names.push_back(measurement_names.next());
+    }
+    if (plain_schema_cache_matches(device_id, names)) {
+        for (size_t i = 0; i < plain_schema_check_cache_.chunk_writers_.size();
+             ++i) {
+            chunk_writers.push_back(
+                plain_schema_check_cache_.chunk_writers_[i]);
+            data_types.push_back(plain_schema_check_cache_.data_types_[i]);
+        }
+        return E_OK;
+    }
+
+    bool all_resolved = true;
+    for (uint32_t i = 0; i < names.size(); ++i) {
+        auto ms_iter = msm.find(names[i]);
         if (UNLIKELY(ms_iter == msm.end())) {
+            all_resolved = false;
             chunk_writers.push_back(NULL);
             data_types.push_back(common::NULL_TYPE);
-        } else {
-            // In Java we will check data_type. But in C++, no check here.
-            // Because checks are performed at the chunk layer and page layer
-            MeasurementSchema* ms = ms_iter->second;
-            if (IS_NULL(ms->chunk_writer_)) {
-                ms->chunk_writer_ = new ChunkWriter;
-                ret = ms->chunk_writer_->init(ms->measurement_name_,
-                                              ms->data_type_, ms->encoding_,
-                                              ms->compression_type_);
-                if (IS_SUCC(ret)) {
-                    chunk_writers.push_back(ms->chunk_writer_);
-                } else {
-                    for (size_t chunk_writer_idx = 0;
-                         chunk_writer_idx < chunk_writers.size();
-                         chunk_writer_idx++) {
-                        if (!chunk_writers[chunk_writer_idx]) {
-                            delete chunk_writers[chunk_writer_idx];
-                        }
-                    }
-                    ret = common::E_INVALID_ARG;
-                    return ret;
-                }
-            } else {
-                chunk_writers.push_back(ms->chunk_writer_);
+            continue;
+        }
+
+        MeasurementSchema* ms = ms_iter->second;
+        if (IS_NULL(ms->chunk_writer_)) {
+            ms->chunk_writer_ = new ChunkWriter;
+            ret = ms->chunk_writer_->init(ms->measurement_name_, ms->data_type_,
+                                          ms->encoding_, ms->compression_type_);
+            if (IS_FAIL(ret)) {
+                ret = common::E_INVALID_ARG;
+                return ret;
             }
-            data_types.push_back(ms->data_type_);
+        }
+        chunk_writers.push_back(ms->chunk_writer_);
+        data_types.push_back(ms->data_type_);
+    }
+
+    if (IS_SUCC(ret) && all_resolved) {
+        plain_schema_check_cache_.valid_ = true;
+        plain_schema_check_cache_.device_id_ = device_id;
+        plain_schema_check_cache_.measurement_names_ = names;
+        plain_schema_check_cache_.chunk_writers_.clear();
+        plain_schema_check_cache_.data_types_.clear();
+        for (uint32_t i = 0; i < names.size(); ++i) {
+            plain_schema_check_cache_.chunk_writers_.push_back(
+                chunk_writers[i]);
+            plain_schema_check_cache_.data_types_.push_back(data_types[i]);
         }
     }
     return ret;
@@ -537,40 +583,59 @@ int TsFileWriter::do_check_schema_aligned(
             g_config_value_.time_compress_type_);
     }
     time_chunk_writer = device_schema->time_chunk_writer_;
+
     MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
-    uint32_t measurement_count = measurement_names.get_count();
-    for (uint32_t i = 0; i < measurement_count; i++) {
-        auto ms_iter = msm.find(measurement_names.next());
+    static thread_local std::vector<std::string> names;
+    names.clear();
+    names.reserve(measurement_names.get_count());
+    for (uint32_t i = 0; i < measurement_names.get_count(); ++i) {
+        names.push_back(measurement_names.next());
+    }
+    if (aligned_schema_cache_matches(device_id, names)) {
+        for (size_t i = 0;
+             i < aligned_schema_check_cache_.value_chunk_writers_.size(); ++i) {
+            value_chunk_writers.push_back(
+                aligned_schema_check_cache_.value_chunk_writers_[i]);
+            data_types.push_back(aligned_schema_check_cache_.data_types_[i]);
+        }
+        return E_OK;
+    }
+
+    bool all_resolved = true;
+    for (uint32_t i = 0; i < names.size(); ++i) {
+        auto ms_iter = msm.find(names[i]);
         if (UNLIKELY(ms_iter == msm.end())) {
+            all_resolved = false;
             value_chunk_writers.push_back(NULL);
             data_types.push_back(common::NULL_TYPE);
-        } else {
-            // Here we may check data_type against ms_iter. But in Java
-            // libtsfile, no check here.
-            MeasurementSchema* ms = ms_iter->second;
-            if (IS_NULL(ms->value_chunk_writer_)) {
-                ms->value_chunk_writer_ = new ValueChunkWriter;
-                ret = ms->value_chunk_writer_->init(
-                    ms->measurement_name_, ms->data_type_, ms->encoding_,
-                    ms->compression_type_);
-                if (IS_SUCC(ret)) {
-                    value_chunk_writers.push_back(ms->value_chunk_writer_);
-                } else {
-                    value_chunk_writers.push_back(NULL);
-                    for (size_t chunk_writer_idx = 0;
-                         chunk_writer_idx < value_chunk_writers.size();
-                         chunk_writer_idx++) {
-                        if (!value_chunk_writers[chunk_writer_idx]) {
-                            delete value_chunk_writers[chunk_writer_idx];
-                        }
-                    }
-                    ret = common::E_INVALID_ARG;
-                    return ret;
-                }
-            } else {
-                value_chunk_writers.push_back(ms->value_chunk_writer_);
+            continue;
+        }
+
+        MeasurementSchema* ms = ms_iter->second;
+        if (IS_NULL(ms->value_chunk_writer_)) {
+            ms->value_chunk_writer_ = new ValueChunkWriter;
+            ret = ms->value_chunk_writer_->init(ms->measurement_name_,
+                                                ms->data_type_, ms->encoding_,
+                                                ms->compression_type_);
+            if (IS_FAIL(ret)) {
+                ret = common::E_INVALID_ARG;
+                return ret;
             }
-            data_types.push_back(ms->data_type_);
+        }
+        value_chunk_writers.push_back(ms->value_chunk_writer_);
+        data_types.push_back(ms->data_type_);
+    }
+
+    if (IS_SUCC(ret) && all_resolved) {
+        aligned_schema_check_cache_.valid_ = true;
+        aligned_schema_check_cache_.device_id_ = device_id;
+        aligned_schema_check_cache_.measurement_names_ = names;
+        aligned_schema_check_cache_.value_chunk_writers_.clear();
+        aligned_schema_check_cache_.data_types_.clear();
+        for (uint32_t i = 0; i < names.size(); ++i) {
+            aligned_schema_check_cache_.value_chunk_writers_.push_back(
+                value_chunk_writers[i]);
+            aligned_schema_check_cache_.data_types_.push_back(data_types[i]);
         }
     }
     return ret;

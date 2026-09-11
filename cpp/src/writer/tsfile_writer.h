@@ -183,6 +183,51 @@ class TsFileWriter {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
     split_tablet_by_device(const Tablet& tablet);
 
+    struct PlainSchemaCheckCache {
+        bool valid_ = false;
+        std::shared_ptr<IDeviceID> device_id_;
+        std::vector<std::string> measurement_names_;
+        std::vector<storage::ChunkWriter*> chunk_writers_;
+        std::vector<common::TSDataType> data_types_;
+
+        void clear() {
+            valid_ = false;
+            device_id_.reset();
+            measurement_names_.clear();
+            chunk_writers_.clear();
+            data_types_.clear();
+        }
+    };
+
+    struct AlignedSchemaCheckCache {
+        bool valid_ = false;
+        std::shared_ptr<IDeviceID> device_id_;
+        std::vector<std::string> measurement_names_;
+        std::vector<storage::ValueChunkWriter*> value_chunk_writers_;
+        std::vector<common::TSDataType> data_types_;
+
+        void clear() {
+            valid_ = false;
+            device_id_.reset();
+            measurement_names_.clear();
+            value_chunk_writers_.clear();
+            data_types_.clear();
+        }
+    };
+
+    void clear_schema_check_cache();
+    bool plain_schema_cache_matches(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_names) const;
+    bool aligned_schema_cache_matches(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_names) const;
+
+    // Each cache is a one-entry MRU cache. Entries contain non-owning writer
+    // pointers; MeasurementSchema remains responsible for their lifetime.
+    PlainSchemaCheckCache plain_schema_check_cache_;
+    AlignedSchemaCheckCache aligned_schema_check_cache_;
+
    private:
     storage::WriteFile* write_file_;
     storage::TsFileIOWriter* io_writer_;
