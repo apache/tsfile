@@ -46,6 +46,11 @@ import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.function.Function;
 
+/**
+ * Writes one measurement chunk by aggregating page data, serializing a chunk header and all page
+ * bodies, and producing chunk metadata. After the chunk is written, the writer resets its page
+ * state and can be reused.
+ */
 public class ChunkWriterImpl implements IChunkWriter {
 
   private static final Logger logger = LoggerFactory.getLogger(ChunkWriterImpl.class);

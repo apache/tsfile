@@ -282,6 +282,10 @@ public class PageReader implements IPageReader {
     // do nothing
   }
 
+  /**
+   * Tests whether timestamp is covered by the current deletion intervals. Intervals are inclusive
+   * and expected to be sorted; the deletion cursor advances monotonically for ascending timestamps.
+   */
   protected boolean isDeleted(long timestamp) {
     while (deleteIntervalList != null && deleteCursor < deleteIntervalList.size()) {
       if (deleteIntervalList.get(deleteCursor).contains(timestamp)) {

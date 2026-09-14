@@ -50,6 +50,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Writes an aligned chunk group consisting of one shared time chunk and one value chunk per
+ * measurement. Time and value pages remain synchronized, and bitmaps represent missing values at
+ * aligned row positions.
+ */
 public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   protected static final Logger LOG = LoggerFactory.getLogger(AlignedChunkGroupWriterImpl.class);
 
@@ -278,6 +283,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     return size;
   }
 
+  /**
+   * Adds empty value pages and null bitmap entries when a value measurement is introduced after
+   * time pages already exist, preserving page boundaries and row alignment across all value chunks.
+   */
   public void tryToAddEmptyPageAndData(ValueChunkWriter valueChunkWriter) throws IOException {
     // add empty page
     for (int i = 0; i < timeChunkWriter.getNumOfPages(); i++) {

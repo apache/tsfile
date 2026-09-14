@@ -32,6 +32,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Describes one measurement's name, data type, encoding, compression, statistic, and optional
+ * properties. Implementations must preserve these fields during schema serialization and copying.
+ */
 public interface IMeasurementSchema extends Accountable {
 
   MeasurementSchemaType getSchemaType();
