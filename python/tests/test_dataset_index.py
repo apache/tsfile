@@ -124,11 +124,10 @@ def test_build_publish_map_and_lookup(tmp_path):
         assert index.string(file_record[0]) == str(source)
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_hot_lookup_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
+def test_index_lookup_is_required_and_does_not_unpack_python_record_tuples(
+    tmp_path, monkeypatch
+):
+    assert index_module.IndexLookup is not None
     source = tmp_path / "source.tsfile"
     source.write_bytes(b"T" * 4096)
     output = tmp_path / "dataset.tsidx"
@@ -136,9 +135,11 @@ def test_hot_lookup_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
     write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
 
     with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        assert isinstance(index._lookup, index_module.IndexLookup)
+        assert not hasattr(index, "_fast_lookup")
 
         def fail_record(*_args, **_kwargs):
-            raise AssertionError("hot lookup should not unpack Python record tuples")
+            raise AssertionError("index lookup should not unpack Python record tuples")
 
         monkeypatch.setattr(index, "record", fail_record)
         assert index.find_device_id(0, "root.") == 0
@@ -146,13 +147,7 @@ def test_hot_lookup_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
         assert index.find_series_id(0, 0) == 0
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_fast_series_description_does_not_unpack_python_record_tuples(
-    tmp_path, monkeypatch
-):
+def test_series_description_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
     source = tmp_path / "source.tsfile"
     source.write_bytes(b"T" * 4096)
     output = tmp_path / "dataset.tsidx"
@@ -180,13 +175,7 @@ def test_fast_series_description_does_not_unpack_python_record_tuples(
         assert shards == [(span[1], span[2], expected_count, span[4], span[5])]
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_fast_span_and_locator_metadata_do_not_unpack_python_records(
-    tmp_path, monkeypatch
-):
+def test_span_and_locator_metadata_do_not_unpack_python_records(tmp_path, monkeypatch):
     source = tmp_path / "source.tsfile"
     source.write_bytes(b"T" * 4096)
     output = tmp_path / "dataset.tsidx"
@@ -218,11 +207,7 @@ def test_fast_span_and_locator_metadata_do_not_unpack_python_records(
         )
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_runtime_reader_span_lookup_uses_fast_metadata(tmp_path, monkeypatch):
+def test_runtime_reader_span_lookup_uses_index_metadata(tmp_path, monkeypatch):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
 
@@ -242,11 +227,7 @@ def test_runtime_reader_span_lookup_uses_fast_metadata(tmp_path, monkeypatch):
         assert length >= 0
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_fast_prepared_locator_metadata_does_not_unpack_python_records(
+def test_prepared_locator_metadata_does_not_unpack_python_records(
     tmp_path, monkeypatch
 ):
     source = tmp_path / "source.tsfile"
@@ -277,13 +258,7 @@ def test_fast_prepared_locator_metadata_does_not_unpack_python_records(
         )
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_fast_identity_and_device_bounds_do_not_unpack_python_records(
-    tmp_path, monkeypatch
-):
+def test_identity_and_device_bounds_do_not_unpack_python_records(tmp_path, monkeypatch):
     source = tmp_path / "source.tsfile"
     source.write_bytes(b"T" * 4096)
     output = tmp_path / "dataset.tsidx"
@@ -304,7 +279,7 @@ def test_fast_identity_and_device_bounds_do_not_unpack_python_records(
             raise AssertionError("identity metadata should not unpack records")
 
         def fail_string_bytes(*_args, **_kwargs):
-            raise AssertionError("fast string should not copy bytes")
+            raise AssertionError("index string lookup should not copy bytes")
 
         monkeypatch.setattr(index, "record", fail_record)
         monkeypatch.setattr(index, "string_bytes", fail_string_bytes)
@@ -315,11 +290,7 @@ def test_fast_identity_and_device_bounds_do_not_unpack_python_records(
         assert index.string(expected_column_name_id) == expected_name
 
 
-@pytest.mark.skipif(
-    index_module.FastIndexLookup is None,
-    reason="requires the built Cython Dataset Index lookup extension",
-)
-def test_fast_series_identity_does_not_unpack_python_records(tmp_path, monkeypatch):
+def test_series_identity_does_not_unpack_python_records(tmp_path, monkeypatch):
     source = tmp_path / "source.tsfile"
     source.write_bytes(b"T" * 4096)
     output = tmp_path / "dataset.tsidx"

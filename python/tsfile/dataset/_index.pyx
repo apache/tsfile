@@ -17,7 +17,7 @@
 
 # cython: boundscheck=False, wraparound=False, cdivision=True, language_level=3
 
-"""Cython hot lookups over the existing read-only Dataset Index mmap.
+"""Cython accessors for the existing read-only Dataset Index mmap.
 
 This module deliberately owns no index-sized data structures.  It receives the
 already-mapped byte view and section directory from ``MappedDatasetIndex`` and
@@ -159,7 +159,7 @@ cdef const char* _utf8_name(object name, Py_ssize_t* length):
     return data
 
 
-cdef class FastIndexLookup:
+cdef class IndexLookup:
     """Typed lookup kernel over a ``MappedDatasetIndex`` memoryview."""
 
     cdef const uint8_t[:] _view
