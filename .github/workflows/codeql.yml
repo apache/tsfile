@@ -50,8 +50,10 @@ jobs:
         include:
         - language: c-cpp
           build-mode: autobuild
-        - language: java-kotlin
+        - language: java
           build-mode: none # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
+        - language: go
+          build-mode: manual
         - language: python
           build-mode: none
         # CodeQL supports the following values keywords for 'language': 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'swift'
@@ -66,14 +68,45 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: Set up Java for native build
+      if: matrix.language == 'go'
+      uses: actions/setup-java@v5.6.0
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Set up Go
+      if: matrix.language == 'go'
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go/go.mod
+        cache-dependency-path: go/go.sum
+
+    - name: Install native dependencies
+      if: matrix.language == 'go'
+      run: sudo apt-get update && sudo apt-get install -y uuid-dev
+
+    # The Go bridge needs headers and libtsfile under cpp/target/build.
+    - name: Build native library for Go
+      if: matrix.language == 'go'
+      run: ./mvnw -P with-cpp -DskipTests -Dspotless.skip=true package
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4.37.9
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
-    - name: Manual build
-      if: matrix.build-mode == 'manual'
+    - name: Build Go for CodeQL
+      if: matrix.language == 'go' && matrix.build-mode == 'manual'
+      working-directory: go
+      env:
+        CGO_ENABLED: '1'
+      # Rebuild cached packages so CodeQL can observe their compilation.
+      run: go build -a ./...
+
+    - name: Manual C++ build
+      if: matrix.language == 'c-cpp' && matrix.build-mode == 'manual'
       run: |
         .\mvnw.cmd clean package -P with-cpp -Denable.lzma2=ON
 
