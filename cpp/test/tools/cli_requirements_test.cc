@@ -60,6 +60,37 @@ std::string read_file(const std::string& path) {
     return buf.str();
 }
 
+std::string global_usage() {
+    return "Usage: tsfile-cli <command> [options]\n"
+           "Commands: ls schema meta stats count sketch head cat export "
+           "write\n"
+           "Formats: table ndjson csv\n"
+           "Common read options:\n"
+           "  -f, --format table|ndjson|csv  output format (default: "
+           "table)\n"
+           "  -d, --device <name>            select one tree-model device\n"
+           "  -t, --table <name>             select one table-model table\n"
+           "  -m, --measurements <name>      repeat for FIELD projection\n"
+           "  -n, --limit N                  max rows for head/cat\n"
+           "      --offset N                 skip N matching rows\n"
+           "      --start <int64>            inclusive lower time bound\n"
+           "      --end <int64>              inclusive upper time bound\n"
+           "Export options:\n"
+           "  -o, --output <file>            single-object export target\n"
+           "      --type table|ndjson|csv    export file type\n"
+           "      --force                    replace a regular output file\n"
+           "Write options:\n"
+           "      --table <name>             target table name\n"
+           "      --tag <name> STRING        declare a TAG column\n"
+           "      --field <name> <type>      declare a FIELD column\n"
+           "  -i, --input <file.csv>         input CSV file\n"
+           "      --stdin                    read CSV from stdin\n"
+           "  -o, --output <file>            destination .tsfile\n"
+           "  -v, --verbose                  report write details to stderr\n"
+           "  -h, --help                     print help\n"
+           "      --version                  print version\n";
+}
+
 }  // namespace
 
 TEST(CliRequirements, HelpListsExactlyCurrentCommandSurface) {
@@ -883,10 +914,11 @@ TEST(CliRequirements, SketchRejectsRegularResultFormat) {
     std::ostringstream err;
     int code = tsfile_cli::run_cli({"sketch", "-f", "csv", f.path}, out, err);
     EXPECT_EQ(code, 1);
-    EXPECT_TRUE(out.str().empty());
-    EXPECT_NE(err.str().find("sketch does not accept --format"),
-              std::string::npos)
-        << err.str();
+    EXPECT_EQ(out.str(), "");
+    EXPECT_EQ(err.str(),
+              "Error: sketch does not accept --format; its output follows "
+              "printSketch\n" +
+                  global_usage());
 }
 
 TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
@@ -896,10 +928,7 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
     ASSERT_EQ(tsfile_cli::run_cli({"sketch", f.path}, stdout_out, stdout_err),
               0)
         << stdout_err.str();
-    EXPECT_NE(stdout_out.str().find("TsFile Sketch"), std::string::npos)
-        << stdout_out.str();
-    EXPECT_NE(stdout_out.str().find("model: table"), std::string::npos)
-        << stdout_out.str();
+    EXPECT_EQ(stdout_err.str(), "");
 
     std::string output =
         tsfile_cli_test::unique_temp_path("tsfile_cli_sketch", ".txt");
@@ -909,7 +938,8 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
                                   file_err),
               0)
         << file_err.str();
-    EXPECT_TRUE(file_out.str().empty());
+    EXPECT_EQ(file_out.str(), "");
+    EXPECT_EQ(file_err.str(), "");
     EXPECT_EQ(read_file(output), stdout_out.str());
 
     const std::string sentinel = "do not replace";
@@ -922,6 +952,10 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
     EXPECT_EQ(tsfile_cli::run_cli({"sketch", "-o", output, f.path},
                                   no_force_out, no_force_err),
               3);
+    EXPECT_EQ(no_force_out.str(), "");
+    EXPECT_EQ(no_force_err.str(),
+              "Error: output target '" + output +
+                  "' already exists; use --force to replace a regular file\n");
     EXPECT_EQ(read_file(output), sentinel);
 
     std::ostringstream force_out;
@@ -930,6 +964,8 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
                                   force_out, force_err),
               0)
         << force_err.str();
+    EXPECT_EQ(force_out.str(), "");
+    EXPECT_EQ(force_err.str(), "");
     EXPECT_EQ(read_file(output), stdout_out.str());
 
     const std::string source_before = read_file(f.path);
@@ -938,6 +974,10 @@ TEST(CliRequirements, SketchWritesStdoutAndAtomicOutput) {
     EXPECT_EQ(tsfile_cli::run_cli({"sketch", "-o", f.path, "--force", f.path},
                                   alias_out, alias_err),
               3);
+    EXPECT_EQ(alias_out.str(), "");
+    EXPECT_EQ(alias_err.str(), "Error: output target '" + f.path +
+                                   "' is the same as the input file '" +
+                                   f.path + "'\n");
     EXPECT_EQ(read_file(f.path), source_before);
     std::remove(output.c_str());
 }
