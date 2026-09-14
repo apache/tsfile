@@ -37,6 +37,11 @@ from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, 
 from ..constants import ColumnCategory
 from .metadata import MODEL_TREE, _join_series_path
 
+try:
+    from ._index_fast import FastIndexLookup
+except ImportError:  # pragma: no cover - source checkouts may lack built extensions
+    FastIndexLookup = None
+
 MAGIC = b"TSIDX\0\0\0"
 VERSION_MAJOR = 1
 VERSION_MINOR = 0
@@ -229,6 +234,7 @@ class MappedDatasetIndex:
 
     def __init__(self, path: str, verify_sections: bool = False):
         self.path = path
+        self._fast_lookup = None
         self._file = open(path, "rb")
         try:
             stat = os.fstat(self._file.fileno())
@@ -241,7 +247,10 @@ class MappedDatasetIndex:
             self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
             self._view = memoryview(self._mmap)
             self._entries = self._validate(verify_sections)
+            if FastIndexLookup is not None:
+                self._fast_lookup = FastIndexLookup(self._view, self._entries)
         except Exception:
+            self._fast_lookup = None
             if getattr(self, "_view", None) is not None:
                 self._view.release()
                 self._view = None
@@ -336,6 +345,7 @@ class MappedDatasetIndex:
         return entries
 
     def close(self):
+        self._fast_lookup = None
         if getattr(self, "_view", None) is not None:
             self._view.release()
             self._view = None
@@ -383,6 +393,8 @@ class MappedDatasetIndex:
         return bytes(self._view[strings[2] + start : strings[2] + end])
 
     def string(self, sid: int) -> str:
+        if self._fast_lookup is not None:
+            return self._fast_lookup.string(sid)
         return self.string_bytes(sid).decode("utf-8")
 
     def _equal_hash_range(self, section_type: int, hash_index: int, value_hash: int):
@@ -437,14 +449,20 @@ class MappedDatasetIndex:
         raise KeyError(name)
 
     def find_device_id(self, table_id: int, name: str) -> int:
+        if self._fast_lookup is not None:
+            return self._fast_lookup.find_device_id(table_id, name)
         table = self.record(TABLE_RECORD, table_id)
         return self._find_child(DEVICE_NAME_INDEX, table_id, name, table[2], table[3])
 
     def find_column_id(self, table_id: int, name: str) -> int:
+        if self._fast_lookup is not None:
+            return self._fast_lookup.find_column_id(table_id, name)
         table = self.record(TABLE_RECORD, table_id)
         return self._find_child(COLUMN_NAME_INDEX, table_id, name, table[4], table[5])
 
     def find_series_id(self, device_id: int, column_id: int) -> int:
+        if self._fast_lookup is not None:
+            return self._fast_lookup.find_series_id(device_id, column_id)
         device = self.record(DEVICE_RECORD, device_id)
         low, high = device[4], device[4] + device[5]
         while low < high:
@@ -459,6 +477,107 @@ class MappedDatasetIndex:
         ):
             return low
         raise KeyError(column_id)
+
+    def describe_series(self, series_id: int):
+        """Return scalar route metadata for one logical series.
+
+        The optional Cython backend reads the packed mmap directly and avoids
+        creating intermediate ``struct.unpack`` tuples for every span. The
+        Python fallback preserves the same shape for source checkouts without
+        a compiled extension.
+        """
+        if self._fast_lookup is not None:
+            return self._fast_lookup.describe_series(series_id)
+
+        series = self.record(LOGICAL_SERIES, series_id)
+        shards = []
+        count = 0
+        for span_id in range(series[2], series[2] + series[3]):
+            span = self.record(SERIES_FILE_SPAN, span_id)
+            locator = self.record(SERIES_LOCATOR, span[2])
+            device_span = self.record(DEVICE_FILE_SPAN, locator[0])
+            timeline_length = device_span[6] if device_span[4] == 1 else span[6]
+            count += timeline_length
+            shards.append((span[1], span[2], timeline_length, span[4], span[5]))
+        return series[0], series[1], series[4], series[5], count, shards
+
+    def series_identity(self, series_id: int):
+        """Return device and column ids for one logical series."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.series_identity(series_id)
+        series = self.record(LOGICAL_SERIES, series_id)
+        return series[0], series[1]
+
+    def find_series_span(self, series_id: int, file_id: int):
+        """Return one series span without exposing its full record tuple."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.find_series_span(series_id, file_id)
+        series = self.record(LOGICAL_SERIES, series_id)
+        for span_id in range(series[2], series[2] + series[3]):
+            span = self.record(SERIES_FILE_SPAN, span_id)
+            if span[1] == file_id:
+                return span[2], span[4], span[5], span[6]
+        raise KeyError((series_id, file_id))
+
+    def locator_metadata(self, locator_id: int):
+        """Return locator/device-span fields needed by the runtime reader."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.locator_metadata(locator_id)
+        locator = self.record(SERIES_LOCATOR, locator_id)
+        device_span = self.record(DEVICE_FILE_SPAN, locator[0])
+        return (
+            locator[0],
+            locator[1],
+            device_span[1],
+            device_span[4],
+            device_span[6],
+        )
+
+    def prepared_locator_metadata(self, file_id: int, locator_id: int):
+        """Return generation and locator fields used by native prepare."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.prepared_locator_metadata(file_id, locator_id)
+        locator = self.record(SERIES_LOCATOR, locator_id)
+        device_span = self.record(DEVICE_FILE_SPAN, locator[0])
+        file_record = self.record(TSFILE_RECORD, file_id)
+        if device_span[1] != file_id:
+            raise ValueError("series locator points at another TsFile")
+        return (
+            file_record[2],
+            file_record[3],
+            locator[1],
+            locator[2],
+            locator[3],
+            locator[4],
+            device_span[2],
+            device_span[3],
+        )
+
+    def device_route(self, device_id: int):
+        """Return table id and logical-path string id for one device."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.device_route(device_id)
+        device = self.record(DEVICE_RECORD, device_id)
+        return device[0], device[1]
+
+    def table_name_id(self, table_id: int):
+        """Return the string-pool id for one table name."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.table_name_id(table_id)
+        return self.record(TABLE_RECORD, table_id)[0]
+
+    def column_name_id(self, column_id: int):
+        """Return the string-pool id for one column name."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.column_name_id(column_id)
+        return self.record(COLUMN_SCHEMA, column_id)[1]
+
+    def device_time_bounds(self, device_id: int):
+        """Return min/max timestamps for one device."""
+        if self._fast_lookup is not None:
+            return self._fast_lookup.device_time_bounds(device_id)
+        device = self.record(DEVICE_RECORD, device_id)
+        return device[8], device[9]
 
 
 def index_path_for(paths: Sequence[str]) -> str:
