@@ -142,7 +142,7 @@ TAG_COLUMNS (device_id, region)
 
 - Each column must have the `VARCHAR` type.
 
-- TAG values cannot be NULL.
+- TAG values can be NULL.
 
 - A TAG column cannot also be the `TIME_COLUMN`.
 
@@ -173,7 +173,7 @@ TO '/data/field-only.tsfile'
 |BIGINT|INT64|FIELD NULL values are preserved; this type is also used for the time axis.|
 |FLOAT|FLOAT|FIELD NULL values are preserved.|
 |DOUBLE|DOUBLE|FIELD NULL values are preserved.|
-|VARCHAR|STRING|FIELD NULL values are preserved; TAG values cannot be NULL.|
+|VARCHAR|STRING|Both FIELD and TAG columns support NULL values.|
 |BLOB|BLOB|FIELD NULL values are preserved.|
 |TIMESTAMP\_NS|TIMESTAMP|Read as DuckDB `TIMESTAMP_NS`.|
 
@@ -215,7 +215,7 @@ The query returns three rows with timestamps `1760106022000`, `1760106023000`, a
 
 1. Confirm that `TIME_COLUMN` exists and has the `BIGINT` type.
 
-2. Confirm that the TIME and TAG columns contain no NULL values.
+2. Confirm that the TIME column contains no NULL values. TAG columns may contain NULL values.
 
 3. Confirm that the input is sorted by all TAG columns and then by the time column.
 
@@ -224,8 +224,6 @@ The query returns three rows with timestamps `1760106022000`, `1760106023000`, a
 ### Known Limitations
 
 - The current version supports one Table-model table in one local TsFile.
-
-- Tree-model TsFiles, automatic table discovery, multi-file scans, parallel scans, and appends are not supported.
 
 - FIELD filters are not pushed down. A `NOT (...)` TAG expression in any form is not pushed down.
 

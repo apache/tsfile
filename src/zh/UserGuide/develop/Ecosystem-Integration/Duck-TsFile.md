@@ -142,7 +142,7 @@ TAG_COLUMNS (device_id, region)
 
 - 列类型必须是 `VARCHAR`。
 
-- TAG 值不能为 NULL。
+- TAG 值可以为 NULL。
 
 - TAG 列不能同时是 `TIME_COLUMN`。
 
@@ -173,7 +173,7 @@ TO '/data/field-only.tsfile'
 |BIGINT|INT64|FIELD NULL 会保留；也用于时间轴。|
 |FLOAT|FLOAT|FIELD NULL 会保留。|
 |DOUBLE|DOUBLE|FIELD NULL 会保留。|
-|VARCHAR|STRING|FIELD NULL 会保留；TAG 不能为 NULL。|
+|VARCHAR|STRING|FIELD 和 TAG 均支持 NULL。|
 |BLOB|BLOB|FIELD NULL 会保留。|
 |TIMESTAMP\_NS|TIMESTAMP|读取时对应 DuckDB `TIMESTAMP_NS`。|
 
@@ -215,7 +215,7 @@ ORDER BY device_id, time;
 
 1. 确认 `TIME_COLUMN` 存在且类型为 `BIGINT`。
 
-2. 确认 TIME 和 TAG 列没有 NULL。
+2. 确认 TIME 列没有 NULL；TAG 列可以包含 NULL。
 
 3. 确认输入按所有 TAG 列、再按时间列排序。
 
@@ -224,8 +224,6 @@ ORDER BY device_id, time;
 ### 已知限制
 
 - 当前版本支持一个本地 TsFile 文件中的一个表模型表。
-
-- 不支持树模型 TsFile、自动表发现、多文件扫描、并行扫描和追加写入。
 
 - FIELD 过滤不会下推；任意 `NOT (...)` TAG 表达式不会下推。
 
