@@ -142,8 +142,6 @@ TAG_COLUMNS (device_id, region)
 
 - Each column must have the `VARCHAR` type.
 
-- TAG values can be NULL.
-
 - A TAG column cannot also be the `TIME_COLUMN`.
 
 - Column-name matching is case-insensitive.
@@ -173,7 +171,7 @@ TO '/data/field-only.tsfile'
 |BIGINT|INT64|FIELD NULL values are preserved; this type is also used for the time axis.|
 |FLOAT|FLOAT|FIELD NULL values are preserved.|
 |DOUBLE|DOUBLE|FIELD NULL values are preserved.|
-|VARCHAR|STRING|Both FIELD and TAG columns support NULL values.|
+|VARCHAR|STRING|FIELD NULL values are preserved.|
 |BLOB|BLOB|FIELD NULL values are preserved.|
 |TIMESTAMP\_NS|TIMESTAMP|Read as DuckDB `TIMESTAMP_NS`.|
 
@@ -215,7 +213,7 @@ The query returns three rows with timestamps `1760106022000`, `1760106023000`, a
 
 1. Confirm that `TIME_COLUMN` exists and has the `BIGINT` type.
 
-2. Confirm that the TIME column contains no NULL values. TAG columns may contain NULL values.
+2. Confirm that the TIME column contains no NULL values.
 
 3. Confirm that the input is sorted by all TAG columns and then by the time column.
 
