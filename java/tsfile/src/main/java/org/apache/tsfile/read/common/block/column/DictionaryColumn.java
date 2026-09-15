@@ -445,7 +445,7 @@ public final class DictionaryColumn implements Column {
 
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
-    return dictionary.getTsPrimitiveType(position);
+    return dictionary.getTsPrimitiveType(getId(position));
   }
 
   @Override
