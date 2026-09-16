@@ -21,8 +21,12 @@
 #include <common/schema.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <vector>
+
 #include "common/global.h"
 #include "compress/compressor_factory.h"
+#include "file/tsfile_io_writer.h"
 
 namespace storage {
 TEST(PageHeaderTest, DefaultConstructor) {
@@ -177,11 +181,14 @@ class TSMIteratorTest : public ::testing::Test {
         char measure_name[] = "measurement_1";
         common::String measurement_name(measure_name, sizeof(measure_name));
         stat_ = StatisticFactory::alloc_statistic(common::TSDataType::INT32);
+        statistics_.push_back(stat_);
+        stat_->update(100, static_cast<int32_t>(100));
         chunk_meta->init(measurement_name, common::TSDataType::INT32, 100,
                          stat_, 1, common::PLAIN, common::UNCOMPRESSED, arena);
 
         chunk_group_meta->chunk_meta_list_.push_back(chunk_meta);
         chunk_group_meta_list_->push_back(chunk_group_meta);
+        chunk_group_meta_ = chunk_group_meta;
     }
 
     void TearDown() override {
@@ -190,13 +197,41 @@ class TSMIteratorTest : public ::testing::Test {
             iter.get()->device_id_.reset();
         }
         delete chunk_group_meta_list_;
-        StatisticFactory::free(stat_);
+        for (Statistic* statistic : statistics_) {
+            StatisticFactory::free(statistic);
+        }
+    }
+
+    ChunkMeta* append_chunk(ChunkGroupMeta* chunk_group_meta,
+                            const char* measurement, int64_t offset) {
+        void* buf = arena.alloc(sizeof(ChunkMeta));
+        auto chunk_meta = new (buf) ChunkMeta();
+        common::String measurement_name(
+            const_cast<char*>(measurement),
+            static_cast<uint32_t>(std::strlen(measurement) + 1));
+        Statistic* statistic =
+            StatisticFactory::alloc_statistic(common::TSDataType::INT32);
+        statistics_.push_back(statistic);
+        statistic->update(offset, static_cast<int32_t>(offset));
+        EXPECT_EQ(chunk_meta->init(measurement_name, common::TSDataType::INT32,
+                                   offset, statistic, 1, common::PLAIN,
+                                   common::UNCOMPRESSED, arena),
+                  common::E_OK);
+        EXPECT_EQ(chunk_group_meta->chunk_meta_list_.push_back(chunk_meta),
+                  common::E_OK);
+        return chunk_meta;
     }
 
     common::PageArena arena;
     Statistic* stat_;
+    std::vector<Statistic*> statistics_;
+    ChunkGroupMeta* chunk_group_meta_;
     common::SimpleList<ChunkGroupMeta*>* chunk_group_meta_list_;
 };
+
+TEST(TsFileIOWriterTest, WriteStreamUses16KiBPages) {
+    EXPECT_EQ(TsFileIOWriter::WRITE_STREAM_PAGE_SIZE, 16U * 1024U);
+}
 
 TEST_F(TSMIteratorTest, InitSuccess) {
     TSMIterator iter(*chunk_group_meta_list_);
@@ -237,6 +272,54 @@ TEST_F(TSMIteratorTest, GetNext) {
     ASSERT_EQ(
         iter.get_next(ret_device_name, ret_measurement_name, ret_ts_index),
         common::E_NO_MORE_DATA);
+}
+
+TEST_F(TSMIteratorTest, InitDoesNotReorderSourceChunkMetadata) {
+    ChunkMeta* first = chunk_group_meta_->chunk_meta_list_.front();
+    ChunkMeta* second = append_chunk(chunk_group_meta_, "measurement_2", 75);
+    ChunkMeta* third = append_chunk(chunk_group_meta_, "measurement_1", 50);
+
+    TSMIterator iter(*chunk_group_meta_list_);
+    ASSERT_EQ(iter.init(), common::E_OK);
+
+    auto source_iter = chunk_group_meta_->chunk_meta_list_.begin();
+    ASSERT_NE(source_iter, chunk_group_meta_->chunk_meta_list_.end());
+    EXPECT_EQ(source_iter.get(), first);
+    source_iter++;
+    ASSERT_NE(source_iter, chunk_group_meta_->chunk_meta_list_.end());
+    EXPECT_EQ(source_iter.get(), second);
+    source_iter++;
+    ASSERT_NE(source_iter, chunk_group_meta_->chunk_meta_list_.end());
+    EXPECT_EQ(source_iter.get(), third);
+}
+
+TEST_F(TSMIteratorTest, SortsChunkOffsetsWithinChunkGroup) {
+    append_chunk(chunk_group_meta_, "measurement_1", 50);
+
+    TSMIterator iter(*chunk_group_meta_list_);
+    ASSERT_EQ(iter.init(), common::E_OK);
+
+    std::shared_ptr<IDeviceID> device_id;
+    common::String measurement_name;
+    TimeseriesIndex timeseries_index;
+    ASSERT_EQ(iter.get_next(device_id, measurement_name, timeseries_index),
+              common::E_OK);
+
+    common::ByteStream serialized(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(timeseries_index.serialize_to(serialized), common::E_OK);
+    common::PageArena deserialize_arena;
+    deserialize_arena.init(1024, common::MOD_DEFAULT);
+    TimeseriesIndex deserialized;
+    ASSERT_EQ(deserialized.deserialize_from(serialized, &deserialize_arena),
+              common::E_OK);
+
+    auto* chunk_meta_list = deserialized.get_chunk_meta_list();
+    ASSERT_NE(chunk_meta_list, nullptr);
+    ASSERT_EQ(chunk_meta_list->size(), 2U);
+    auto chunk_iter = chunk_meta_list->begin();
+    EXPECT_EQ(chunk_iter.get()->offset_of_chunk_header_, 50);
+    chunk_iter++;
+    EXPECT_EQ(chunk_iter.get()->offset_of_chunk_header_, 100);
 }
 
 class MetaIndexEntryTest : public ::testing::Test {
