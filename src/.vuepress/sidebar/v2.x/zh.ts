@@ -58,31 +58,25 @@ export const zhSidebar = {
         { text: '接口定义-C++', link: 'InterfaceDefinition-CPP' },
         { text: '接口定义-Java', link: 'InterfaceDefinition-Java' },
         { text: '接口定义-Python', link: 'InterfaceDefinition-Python' },
+        { text: 'TsFileDataFrame', link: '/zh/UserGuide/latest/DataFrame/TsFileDataFrame' },
       ],
     },
     {
-      text: 'TsFileDataFrame',
-      collapsible: true,
-      link: 'DataFrame/TsFileDataFrame',
-    },
-    {
-      text: '工具',
+      text: '工具体系',
       collapsible: true,
       prefix: 'Tools/',
       children: [
-        { text: 'tsfile-cli', link: 'Tsfile-CLI' },
-        { text: 'tsfile-viewer', link: 'Tsfile-Viewer' },
+        { text: 'TsFile CLI', link: 'Tsfile-CLI' },
+        { text: 'TsFile Viewer', link: 'Tsfile-Viewer' },
       ],
     },
-    /* {
+    {
       text: '生态集成',
       collapsible: true,
       prefix: 'Ecosystem-Integration/',
       children: [
-        { text: 'Apache Flink', link: 'Flink-TsFile' },
-        { text: 'Apache Spark', link: 'Spark-TsFile' },           
-        { text: 'Apache Hive', link: 'Hive-TsFile' },
+        { text: 'DuckDB TsFile 扩展', link: 'Duck-TsFile' },
       ],
-    }, */
+    },
   ]
 };
