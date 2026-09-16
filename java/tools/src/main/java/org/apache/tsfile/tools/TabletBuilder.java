@@ -117,7 +117,10 @@ public class TabletBuilder {
                   colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
         }
         Object converted = converter.apply(rawValue);
-        tablet.addValue(colName, i, converted);
+        type.addValue(i, converted, targetValues);
+        if (converted != null) {
+          nulls.unmark(i);
+        }
       }
     }
 

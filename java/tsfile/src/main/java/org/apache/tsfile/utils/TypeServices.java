@@ -22,21 +22,31 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.type.service.BinaryPageDataReader;
+import org.apache.tsfile.read.common.type.service.BinaryTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.BooleanPageDataReader;
+import org.apache.tsfile.read.common.type.service.BooleanTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.DatePageDataReader;
+import org.apache.tsfile.read.common.type.service.DateTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.DoublePageDataReader;
+import org.apache.tsfile.read.common.type.service.DoubleTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.FloatPageDataReader;
+import org.apache.tsfile.read.common.type.service.FloatTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.IntPageDataReader;
+import org.apache.tsfile.read.common.type.service.IntTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.LongPageDataReader;
+import org.apache.tsfile.read.common.type.service.LongTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.TabletWriteContext;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 
 import java.io.IOException;
@@ -61,7 +71,36 @@ public final class TypeServices {
                     .setChecked(true);
           };
 
+  /** Resolve the Tablet column type before entering its row loop. */
+  public static final TypeService<TabletColumnWriter> WRITE_TABLET_COLUMN_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> BooleanTabletColumnWriter.INSTANCE;
+            case INT32 -> IntTabletColumnWriter.INSTANCE;
+            case DATE -> DateTabletColumnWriter.INSTANCE;
+            case INT64, TIMESTAMP -> LongTabletColumnWriter.INSTANCE;
+            case FLOAT -> FloatTabletColumnWriter.INSTANCE;
+            case DOUBLE -> DoubleTabletColumnWriter.INSTANCE;
+            case TEXT, BLOB, STRING, OBJECT -> BinaryTabletColumnWriter.INSTANCE;
+            case ROW, UNKNOWN, VECTOR ->
+                throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                    .setChecked(true);
+          };
+
+  public interface TabletColumnWriter {
+    void write(
+        ChunkWriterImpl writer,
+        long[] times,
+        Object values,
+        BitMap nulls,
+        int start,
+        int end,
+        TabletWriteContext context)
+        throws WriteProcessException;
+  }
+
   static {
+    WRITE_TABLET_COLUMN_SERVICE.check();
     READ_PAGE_BATCH_SERVICE.check();
   }
 
