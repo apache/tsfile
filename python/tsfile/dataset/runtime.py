@@ -25,6 +25,7 @@ import contextlib
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 import os
+import sys
 import threading
 from typing import Dict, Optional, Tuple
 
@@ -57,9 +58,34 @@ from .metadata import (
 from .merge import build_aligned_matrix
 
 _SERIES_DESCRIPTOR_CACHE_SIZE = 4096
+_DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
-@dataclass(frozen=True)
+def _descriptor_cache_size_from_env() -> int:
+    """Return the bounded descriptor-cache size for this runtime.
+
+    The default remains the historical value, while allowing large random
+    workloads to disable or tune the cache without adding a dataset-sized
+    process-local map. Invalid values deliberately fall back to the default.
+    """
+    raw_value = os.environ.get("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE")
+    if raw_value is None:
+        return _SERIES_DESCRIPTOR_CACHE_SIZE
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        return _SERIES_DESCRIPTOR_CACHE_SIZE
+
+
+def _descriptor_cache_stats_enabled() -> bool:
+    return os.environ.get("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_STATS") in {
+        "1",
+        "true",
+        "True",
+    }
+
+
+@dataclass(frozen=True, **_DATACLASS_SLOTS)
 class RuntimeSeriesShard:
     """One immutable physical fragment already expanded from the mmap route."""
 
@@ -72,7 +98,7 @@ class RuntimeSeriesShard:
     max_time: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, **_DATACLASS_SLOTS)
 class RuntimeSeriesDescriptor:
     """Bounded process-local expansion of one logical series route."""
 
@@ -260,23 +286,28 @@ class PreparedSeriesCache:
         self._closed = False
 
     def _locator_tuple(self, file_id, locator_id):
-        locator = self._index.record(SERIES_LOCATOR, locator_id)
-        device_span = self._index.record(DEVICE_FILE_SPAN, locator[0])
-        file_record = self._index.record(TSFILE_RECORD, file_id)
-        if device_span[1] != file_id:
-            raise ValueError("series locator points at another TsFile")
+        (
+            file_size,
+            file_fingerprint_value,
+            locator_flags,
+            locator_layout,
+            locator_offset,
+            locator_length,
+            device_span_offset,
+            device_span_length,
+        ) = self._index.prepared_locator_metadata(file_id, locator_id)
         return (
             id(self._index),
             file_id,
-            file_record[2],
-            file_record[3],
+            file_size,
+            file_fingerprint_value,
             locator_id,
-            locator[1],
-            locator[2],
-            locator[3],
-            locator[4],
-            device_span[2],
-            device_span[3],
+            locator_flags,
+            locator_layout,
+            locator_offset,
+            locator_length,
+            device_span_offset,
+            device_span_length,
         )
 
     def get(self, file_id, locator_id, reader, time_owner=None):
@@ -592,50 +623,58 @@ class _RouteMapping(Mapping):
         self._cache = OrderedDict()
         self._cache_lock = threading.Lock()
 
+    def _record_cache_stat(self, name):
+        if self._catalog._descriptor_cache_stats_enabled:
+            self._catalog._descriptor_cache_stats[name] += 1
+
     def _series_id(self, ref):
         device_id, field_idx = ref
-        device = self._catalog.index.record(DEVICE_RECORD, device_id)
+        table_id, _path_string_id = self._catalog.index.device_route(device_id)
         table_name = self._catalog.index.string(
-            self._catalog.index.record(TABLE_RECORD, device[0])[0]
+            self._catalog.index.table_name_id(table_id)
         )
         field_name = self._catalog.table_entries[table_name].field_columns[field_idx]
-        column_id = self._catalog.index.find_column_id(device[0], field_name)
+        column_id = self._catalog.index.find_column_id(table_id, field_name)
         return self._catalog.index.find_series_id(device_id, column_id)
 
     def describe(self, ref, series_id=None, column_id=None):
-        with self._cache_lock:
-            result = self._cache.get(ref)
-            if result is not None:
-                self._cache.move_to_end(ref)
-                return result
+        if self._cache_size:
+            with self._cache_lock:
+                result = self._cache.get(ref)
+                if result is not None:
+                    self._record_cache_stat("hits")
+                    self._cache.move_to_end(ref)
+                    return result
+        self._record_cache_stat("misses")
 
         if series_id is None:
             series_id = self._series_id(ref)
-        series = self._catalog.index.record(LOGICAL_SERIES, series_id)
-        if series[0] != ref[0]:
+        (
+            series_device_id,
+            described_column_id,
+            series_min_time,
+            series_max_time,
+            count,
+            shard_infos,
+        ) = self._catalog.index.describe_series(series_id)
+        if series_device_id != ref[0]:
             raise KeyError(ref)
         if column_id is None:
-            column_id = series[1]
-        elif series[1] != column_id:
+            column_id = described_column_id
+        elif described_column_id != column_id:
             raise KeyError(ref)
 
         shards = []
-        count = 0
-        for span_id in range(series[2], series[2] + series[3]):
-            span = self._catalog.index.record(SERIES_FILE_SPAN, span_id)
-            locator = self._catalog.index.record(SERIES_LOCATOR, span[2])
-            device_span = self._catalog.index.record(DEVICE_FILE_SPAN, locator[0])
-            timeline_length = device_span[6] if device_span[4] == 1 else span[6]
-            count += timeline_length
+        for file_id, locator_id, timeline_length, min_time, max_time in shard_infos:
             shards.append(
                 RuntimeSeriesShard(
-                    self._catalog.reader_for(span[1]),
-                    series[0],
+                    self._catalog.reader_for(file_id),
+                    series_device_id,
                     column_id,
-                    span[2],
+                    locator_id,
                     timeline_length,
-                    span[4],
-                    span[5],
+                    min_time,
+                    max_time,
                 )
             )
 
@@ -644,19 +683,21 @@ class _RouteMapping(Mapping):
             series_id,
             column_id,
             tuple(shards),
-            series[4] if count else None,
-            series[5] if count else None,
+            series_min_time if count else None,
+            series_max_time if count else None,
             count,
         )
         if self._cache_size:
             with self._cache_lock:
                 existing = self._cache.get(ref)
                 if existing is not None:
+                    self._record_cache_stat("hits")
                     self._cache.move_to_end(ref)
                     return existing
                 self._cache[ref] = result
                 while len(self._cache) > self._cache_size:
                     self._cache.popitem(last=False)
+                    self._record_cache_stat("evictions")
         return result
 
     def __contains__(self, ref):
@@ -681,7 +722,13 @@ class MappedDataFrameCatalog:
         self.runtime = runtime
         self.index = runtime.index
         self.index_identity = runtime.index.identity
-        self._descriptor_cache_size = _SERIES_DESCRIPTOR_CACHE_SIZE
+        self._descriptor_cache_size = _descriptor_cache_size_from_env()
+        self._descriptor_cache_stats_enabled = _descriptor_cache_stats_enabled()
+        self._descriptor_cache_stats = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
+        }
         self._descriptor_cache = OrderedDict()
         self._descriptor_cache_lock = threading.Lock()
         self.table_entries = _TableMapping(self)
@@ -695,11 +742,16 @@ class MappedDataFrameCatalog:
 
     def resolve_series_descriptor(self, table_name, tags, field_name):
         key = (table_name, tuple(tags), field_name)
-        with self._descriptor_cache_lock:
-            result = self._descriptor_cache.get(key)
-            if result is not None:
-                self._descriptor_cache.move_to_end(key)
-                return result
+        if self._descriptor_cache_size:
+            with self._descriptor_cache_lock:
+                result = self._descriptor_cache.get(key)
+                if result is not None:
+                    if self._descriptor_cache_stats_enabled:
+                        self._descriptor_cache_stats["hits"] += 1
+                    self._descriptor_cache.move_to_end(key)
+                    return result
+        if self._descriptor_cache_stats_enabled:
+            self._descriptor_cache_stats["misses"] += 1
 
         table_id = self.table_entries.table_id(table_name)
         table = self.table_entries[table_name]
@@ -717,21 +769,33 @@ class MappedDataFrameCatalog:
             with self._descriptor_cache_lock:
                 existing = self._descriptor_cache.get(key)
                 if existing is not None:
+                    if self._descriptor_cache_stats_enabled:
+                        self._descriptor_cache_stats["hits"] += 1
                     self._descriptor_cache.move_to_end(key)
                     return existing
                 self._descriptor_cache[key] = result
                 while len(self._descriptor_cache) > self._descriptor_cache_size:
                     self._descriptor_cache.popitem(last=False)
+                    if self._descriptor_cache_stats_enabled:
+                        self._descriptor_cache_stats["evictions"] += 1
         return result
+
+    @property
+    def descriptor_cache_stats(self):
+        """Return a snapshot of descriptor cache activity for diagnostics."""
+        stats = dict(self._descriptor_cache_stats)
+        stats["size"] = len(self._descriptor_cache)
+        stats["capacity"] = self._descriptor_cache_size
+        return stats
 
     def resolve_series_descriptor_by_id(self, series_id, table_name, field_name):
         if series_id < 0 or series_id >= self.index.count(LOGICAL_SERIES):
             raise KeyError(series_id)
-        series = self.index.record(LOGICAL_SERIES, series_id)
+        device_id, column_id = self.index.series_identity(series_id)
         table = self.table_entries[table_name]
         field_idx = table.get_field_index(field_name)
         return self.series_shards.describe(
-            (series[0], field_idx), series_id=series_id, column_id=series[1]
+            (device_id, field_idx), series_id=series_id, column_id=column_id
         )
 
     def _infer_model(self):
@@ -760,8 +824,7 @@ class _DeviceTimeBounds(Sequence):
         return len(self._catalog.devices)
 
     def __getitem__(self, device_id):
-        record = self._catalog.index.record(DEVICE_RECORD, device_id)
-        return record[8], record[9]
+        return self._catalog.index.device_time_bounds(device_id)
 
 
 class RuntimeSeriesReader:
@@ -776,49 +839,50 @@ class RuntimeSeriesReader:
 
     def _span(self, device_id, column_id):
         series_id = self._series(device_id, column_id)
-        series = self.runtime.index.record(LOGICAL_SERIES, series_id)
-        for span_id in range(series[2], series[2] + series[3]):
-            span = self.runtime.index.record(SERIES_FILE_SPAN, span_id)
-            if span[1] == self.file_id:
-                return span
-        raise KeyError((device_id, column_id, self.file_id))
+        return self.runtime.index.find_series_span(series_id, self.file_id)
 
     def _identity(self, device_id, column_id):
         index = self.runtime.index
-        device = index.record(DEVICE_RECORD, device_id)
-        table = index.record(TABLE_RECORD, device[0])
-        table_name = index.string(table[0])
-        components = split_logical_series_path(index.string(device[1]))
+        table_id, path_string_id = index.device_route(device_id)
+        table_name = index.string(index.table_name_id(table_id))
+        components = split_logical_series_path(index.string(path_string_id))
         tags = tuple(components[1:-1])
         table_entry = self.runtime.catalog.table_entries[table_name]
-        column_name = index.string(index.record(COLUMN_SCHEMA, column_id)[1])
+        column_name = index.string(index.column_name_id(column_id))
         return table_name, tags, table_entry, column_name
 
     def get_device_info(self, device_id):
-        record = self.runtime.index.record(DEVICE_RECORD, device_id)
         table_name, tags = self.runtime.catalog.devices[device_id]
         table = self.runtime.catalog.table_entries[table_name]
+        min_time, max_time = self.runtime.index.device_time_bounds(device_id)
         return {
             "table_name": table_name,
             "tag_columns": table.tag_columns,
             "tag_values": dict(zip(table.tag_columns, tags)),
-            "min_time": record[8],
-            "max_time": record[9],
+            "min_time": min_time,
+            "max_time": max_time,
         }
 
     def get_series_info_by_ref(self, device_id, column_id):
-        span = self._span(device_id, column_id)
-        locator = self.runtime.index.record(SERIES_LOCATOR, span[2])
-        device_span = self.runtime.index.record(DEVICE_FILE_SPAN, locator[0])
+        locator_id, span_min_time, span_max_time, span_length = self._span(
+            device_id, column_id
+        )
+        (
+            _device_span_id,
+            _locator_flags,
+            _file_id,
+            layout,
+            device_timeline_length,
+        ) = self.runtime.index.locator_metadata(locator_id)
         table_name, tags, table, column_name = self._identity(device_id, column_id)
-        timeline_length = device_span[6] if device_span[4] == 1 else span[6]
+        timeline_length = device_timeline_length if layout == 1 else span_length
         return {
             "length": timeline_length,
-            "min_time": span[4],
-            "max_time": span[5],
+            "min_time": span_min_time,
+            "max_time": span_max_time,
             "timeline_length": timeline_length,
-            "timeline_min_time": span[4],
-            "timeline_max_time": span[5],
+            "timeline_min_time": span_min_time,
+            "timeline_max_time": span_max_time,
             "table_name": table_name,
             "column_name": column_name,
             "device_id": device_id,
@@ -904,7 +968,7 @@ class RuntimeSeriesReader:
     ):
         span = self._span(device_id, column_id)
         return self._query_at_locator(
-            span[2],
+            span[0],
             start_time=start_time,
             end_time=end_time,
             offset=offset,
@@ -950,19 +1014,17 @@ class RuntimeSeriesReader:
             return np.array([], dtype=np.int64), {}
 
         spans = [self._span(device_id, column_id) for column_id in column_ids]
-        locators = [
-            self.runtime.index.record(SERIES_LOCATOR, span[2]) for span in spans
+        locator_metadata = [
+            self.runtime.index.locator_metadata(span[0]) for span in spans
         ]
-        device_span_ids = {locator[0] for locator in locators}
+        device_span_ids = {metadata[0] for metadata in locator_metadata}
         can_read_aligned = len(device_span_ids) == 1
         if can_read_aligned:
-            device_span = self.runtime.index.record(
-                DEVICE_FILE_SPAN, next(iter(device_span_ids))
-            )
+            device_span = locator_metadata[0]
             can_read_aligned = (
-                device_span[1] == self.file_id
-                and device_span[4] == 1
-                and all(locator[1] == 1 for locator in locators)
+                device_span[2] == self.file_id
+                and device_span[3] == 1
+                and all(metadata[1] == 1 for metadata in locator_metadata)
             )
 
         if can_read_aligned:
@@ -974,7 +1036,7 @@ class RuntimeSeriesReader:
                 time_owner = None
                 for span in spans:
                     current = self.runtime.prepared.get(
-                        self.file_id, span[2], reader, time_owner=time_owner
+                        self.file_id, span[0], reader, time_owner=time_owner
                     )
                     prepared.append(current)
                     if time_owner is None:

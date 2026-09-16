@@ -124,6 +124,189 @@ def test_build_publish_map_and_lookup(tmp_path):
         assert index.string(file_record[0]) == str(source)
 
 
+def test_index_lookup_is_required_and_does_not_unpack_python_record_tuples(
+    tmp_path, monkeypatch
+):
+    assert index_module.IndexLookup is not None
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        assert isinstance(index._lookup, index_module.IndexLookup)
+        assert not hasattr(index, "_fast_lookup")
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("index lookup should not unpack Python record tuples")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.find_device_id(0, "root.") == 0
+        assert index.find_column_id(0, "s1") == 0
+        assert index.find_series_id(0, 0) == 0
+
+
+def test_series_description_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+        span = index.record(SERIES_FILE_SPAN, series[2])
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+        expected = (series[0], series[1], series[4], series[5])
+        expected_count = device_span[6] if device_span[4] == 1 else span[6]
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("series description should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        device_id, column_id, min_time, max_time, count, shards = index.describe_series(
+            0
+        )
+
+        assert (device_id, column_id, min_time, max_time) == expected
+        assert count == expected_count
+        assert shards == [(span[1], span[2], expected_count, span[4], span[5])]
+
+
+def test_span_and_locator_metadata_do_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+        span = index.record(SERIES_FILE_SPAN, series[2])
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("span metadata should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.find_series_span(0, span[1]) == (
+            span[2],
+            span[4],
+            span[5],
+            span[6],
+        )
+        assert index.locator_metadata(span[2]) == (
+            locator[0],
+            locator[1],
+            device_span[1],
+            device_span[4],
+            device_span[6],
+        )
+
+
+def test_runtime_reader_span_lookup_uses_index_metadata(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        reader = dataframe._runtime.catalog.reader_for(0)
+        series = dataframe._runtime.index.record(LOGICAL_SERIES, 0)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("runtime span lookup should not unpack records")
+
+        monkeypatch.setattr(dataframe._runtime.index, "record", fail_record)
+        locator_id, min_time, max_time, length = reader._span(series[0], series[1])
+
+        assert locator_id >= 0
+        assert min_time == 0
+        assert max_time == 1
+        assert length >= 0
+
+
+def test_prepared_locator_metadata_does_not_unpack_python_records(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        span = index.record(SERIES_FILE_SPAN, 0)
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+        file_record = index.record(TSFILE_RECORD, span[1])
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("prepared locator should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.prepared_locator_metadata(span[1], span[2]) == (
+            file_record[2],
+            file_record[3],
+            locator[1],
+            locator[2],
+            locator[3],
+            locator[4],
+            device_span[2],
+            device_span[3],
+        )
+
+
+def test_identity_and_device_bounds_do_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        device = index.record(index_module.DEVICE_RECORD, 0)
+        table = index.record(index_module.TABLE_RECORD, device[0])
+        column = index.record(COLUMN_SCHEMA, 0)
+        expected_device = (device[0], device[1])
+        expected_table_name_id = table[0]
+        expected_column_name_id = column[1]
+        expected_bounds = (device[8], device[9])
+        expected_name = index.string(expected_column_name_id)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("identity metadata should not unpack records")
+
+        def fail_string_bytes(*_args, **_kwargs):
+            raise AssertionError("index string lookup should not copy bytes")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        monkeypatch.setattr(index, "string_bytes", fail_string_bytes)
+        assert index.device_route(0) == expected_device
+        assert index.table_name_id(device[0]) == expected_table_name_id
+        assert index.column_name_id(0) == expected_column_name_id
+        assert index.device_time_bounds(0) == expected_bounds
+        assert index.string(expected_column_name_id) == expected_name
+
+
+def test_series_identity_does_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("series identity should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.series_identity(0) == (series[0], series[1])
+
+
 def test_child_lookup_checks_full_bytes_for_hash_collisions(monkeypatch):
     rows = [
         (0, 10, 42, 0, 0),
@@ -446,6 +629,44 @@ def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch
         # d0 was the least recently used name and must be resolved again.
         dataframe[names[0]].close()
         assert find_device_calls == 4
+
+
+def test_runtime_descriptor_objects_use_slots():
+    shard = runtime_module.RuntimeSeriesShard(None, 1, 2, 3, 4, 5, 6)
+    descriptor = runtime_module.RuntimeSeriesDescriptor((1, 2), 3, 4, (shard,), 5, 6, 7)
+
+    assert not hasattr(shard, "__dict__")
+    assert not hasattr(descriptor, "__dict__")
+
+
+def test_runtime_descriptor_cache_stats_report_hits_and_evictions(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "devices.tsfile"
+    _write_runtime_devices_file(source)
+    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 1)
+    monkeypatch.setenv("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_STATS", "1")
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        names = [str(name) for name in dataframe.list_timeseries()]
+        dataframe[names[0]].close()
+        dataframe[names[0]].close()
+        dataframe[names[1]].close()
+
+        stats = dataframe._index.descriptor_cache_stats
+        assert stats["hits"] >= 1
+        assert stats["misses"] >= 2
+        assert stats["evictions"] >= 1
+
+
+def test_runtime_descriptor_cache_size_can_be_configured(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    monkeypatch.setenv("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE", "0")
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        assert dataframe._index._descriptor_cache_size == 0
+        assert dataframe._index.series_shards._cache_size == 0
 
 
 def test_reader_pool_enforces_open_file_cap(tmp_path, monkeypatch):
