@@ -22,20 +22,77 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.decoder.PlainDecoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 public class AlignedNullWriteTest {
+  @Test
+  public void tabletWriterCacheKeepsLateColumnPagesAndFailureOrder() throws Exception {
+    TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
+    int oldLimit = config.getMaxNumberOfPointsInPage();
+    try {
+      config.setMaxNumberOfPointsInPage(8);
+      AlignedChunkGroupWriterImpl scalar =
+          new AlignedChunkGroupWriterImpl(IDeviceID.Factory.DEFAULT_FACTORY.create("root.tablet"));
+      AlignedChunkGroupWriterImpl batch =
+          new AlignedChunkGroupWriterImpl(IDeviceID.Factory.DEFAULT_FACTORY.create("root.tablet"));
+      MeasurementSchema missing =
+          new MeasurementSchema(
+              "missing", TSDataType.INT32, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED);
+      scalar.tryToAddSeriesWriter(missing);
+      batch.tryToAddSeriesWriter(missing);
+      for (int row = 0; row < 11; row++) {
+        scalar.write(row, Collections.emptyList());
+        batch.write(row, Collections.emptyList());
+      }
+      MeasurementSchema late =
+          new MeasurementSchema(
+              "late", TSDataType.INT32, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED);
+      scalar.tryToAddSeriesWriter(late);
+      Tablet tablet = new Tablet("root.tablet", Collections.singletonList(late), 24);
+      for (int row = 0; row < 24; row++) {
+        tablet.addTimestamp(row, row + 11);
+        tablet.addValue("late", row, row);
+        scalar.write(row + 11, Collections.singletonList(new IntDataPoint("late", row)));
+      }
+      batch.write(tablet);
+      for (String name : Arrays.asList("missing", "late")) {
+        ValueChunkWriter expected = scalar.valueChunkWriterMap.get(name);
+        ValueChunkWriter actual = batch.valueChunkWriterMap.get(name);
+        expected.sealCurrentPage();
+        actual.sealCurrentPage();
+        assertEquals(expected.getByteBuffer(), actual.getByteBuffer());
+        assertEquals(expected.getNumOfPages(), actual.getNumOfPages());
+        assertEquals(expected.getStatistics(), actual.getStatistics());
+      }
+      Tablet rejected =
+          new Tablet(
+              "root.tablet",
+              Collections.singletonList(new MeasurementSchema("rejected", TSDataType.INT32)),
+              1);
+      rejected.addTimestamp(0, 0);
+      rejected.addValue("rejected", 0, 42);
+      assertThrows(WriteProcessException.class, () -> batch.write(rejected));
+      assertEquals(2, batch.valueChunkWriterMap.size());
+    } finally {
+      config.setMaxNumberOfPointsInPage(oldLimit);
+    }
+  }
+
   @Test
   public void lateColumnsAndMissingRowsKeepPageBoundaries() throws Exception {
     TSFileConfig config = TSFileDescriptor.getInstance().getConfig();

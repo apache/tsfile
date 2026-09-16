@@ -22,6 +22,8 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -78,11 +80,18 @@ public class TabletBuilder {
     for (int col = 0; col < tableSchema.getColumnSchemas().size(); col++) {
       IMeasurementSchema colSchema = tableSchema.getColumnSchemas().get(col);
       String colName = colSchema.getMeasurementName();
+      Type type = Type.fromTsDataType(colSchema.getType());
+      Object targetValues = tablet.getValues()[col];
+      // addTimestamp initialized the API bitmap; resolve it and the column type only once.
+      BitMap nulls = rowCount == 0 ? null : tablet.getBitMaps()[col];
 
       if (tagDefaults.containsKey(colName)) {
         Object defaultValue = tagDefaults.get(colName);
         for (int i = 0; i < rowCount; i++) {
-          tablet.addValue(colName, i, defaultValue);
+          type.addValue(i, defaultValue, targetValues);
+          if (defaultValue != null) {
+            nulls.unmark(i);
+          }
         }
         continue;
       }
