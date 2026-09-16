@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public class TabletBuilder {
 
@@ -70,30 +71,43 @@ public class TabletBuilder {
       Object timeValue = batch.getValue(row, timeColumnSourceIndex);
       long timestamp = timeConverter.convert(timeValue, importSchema.getTimePrecision());
       tablet.addTimestamp(i, timestamp);
+    }
 
-      for (int col = 0; col < tableSchema.getColumnSchemas().size(); col++) {
-        IMeasurementSchema colSchema = tableSchema.getColumnSchemas().get(col);
-        String colName = colSchema.getMeasurementName();
+    // SourceBatch and Tablet are columnar. Keep schema lookup and type dispatch outside the row
+    // loop.
+    for (int col = 0; col < tableSchema.getColumnSchemas().size(); col++) {
+      IMeasurementSchema colSchema = tableSchema.getColumnSchemas().get(col);
+      String colName = colSchema.getMeasurementName();
 
-        if (tagDefaults.containsKey(colName)) {
-          tablet.addValue(colName, i, tagDefaults.get(colName));
-          continue;
+      if (tagDefaults.containsKey(colName)) {
+        Object defaultValue = tagDefaults.get(colName);
+        for (int i = 0; i < rowCount; i++) {
+          tablet.addValue(colName, i, defaultValue);
         }
+        continue;
+      }
 
-        Integer srcIdx = sourceColumnIndex.get(colName);
-        if (srcIdx == null) {
-          continue;
-        }
+      Integer srcIdx = sourceColumnIndex.get(colName);
+      if (srcIdx == null) {
+        continue;
+      }
 
-        Object rawValue = batch.getValue(row, srcIdx);
+      Object[] sourceValues = batch.getColumn(srcIdx);
+      Function<Object, Object> converter = null;
+      for (int i = 0; i < rowCount; i++) {
+        Object rawValue = sourceValues[sortedIndices[i]];
         if (isNull(rawValue)) {
           continue;
         }
 
-        boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
-        Object converted =
-            ValueConverter.convert(
-                rawValue, colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
+        // Preserve the no-conversion behavior of empty/all-null columns.
+        if (converter == null) {
+          boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
+          converter =
+              ValueConverter.converterFor(
+                  colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
+        }
+        Object converted = converter.apply(rawValue);
         tablet.addValue(colName, i, converted);
       }
     }

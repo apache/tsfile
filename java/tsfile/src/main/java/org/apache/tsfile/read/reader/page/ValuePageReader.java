@@ -32,9 +32,8 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.TypeServices;
-import org.apache.tsfile.utils.TypeServices.PageDataColumnBuilderValueReader;
+import org.apache.tsfile.utils.TypeServices.PageDataBatchReader;
 import org.apache.tsfile.utils.TypeServices.PageDataTsPrimitiveValueReader;
-import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -58,8 +57,7 @@ public class ValuePageReader {
   private PageDataTsPrimitiveValueReader valueReader;
 
   // Reuse readers for batch and column-builder APIs across repeated page reads.
-  private PageDataValueReader batchDataValueReader;
-  private PageDataColumnBuilderValueReader columnBuilderValueReader;
+  private PageDataBatchReader batchReader;
 
   // Reuse the bound predicate across page reads instead of creating a method reference per call.
   private final LongPredicate deletePredicate = this::isDeleted;
@@ -128,19 +126,9 @@ public class ValuePageReader {
       throws IOException {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
-    if (batchDataValueReader == null) {
-      batchDataValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
-    }
-    boolean allSatisfy = filter == null;
-    for (int i = 0; i < timeBatch.length; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        continue;
-      }
-      long timestamp = timeBatch[i];
-      batchDataValueReader.read(
-          valueDecoder, valueBuffer, filter, pageData, timestamp, allSatisfy, deletePredicate);
-    }
+    getBatchReader()
+        .readAlignedBatch(
+            timeBatch, bitmap, valueDecoder, valueBuffer, filter, pageData, deletePredicate);
     return pageData.flip();
   }
 
@@ -167,17 +155,8 @@ public class ValuePageReader {
     if (valueBuffer == null) {
       return valueBatch;
     }
-    if (valueReader == null) {
-      valueReader =
-          TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(
-              Type.fromTsDataType(dataType));
-    }
-    for (int i = 0; i < size; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        continue;
-      }
-      valueBatch[i] = valueReader.read(valueDecoder, valueBuffer, timeBatch[i], deletePredicate);
-    }
+    getBatchReader()
+        .readValues(timeBatch, bitmap, valueDecoder, valueBuffer, valueBatch, deletePredicate);
     return valueBatch;
   }
 
@@ -193,20 +172,15 @@ public class ValuePageReader {
       }
       return;
     }
-    if (columnBuilderValueReader == null) {
-      columnBuilderValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
-    }
-    for (int i = 0; i < readEndIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        if (keepCurrentRow[i]) {
-          columnBuilder.appendNull();
-        }
-        continue;
-      }
-      columnBuilderValueReader.read(
-          valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], isDeleted[i]);
-    }
+    getBatchReader()
+        .readColumn(
+            readEndIndex,
+            bitmap,
+            valueDecoder,
+            valueBuffer,
+            columnBuilder,
+            keepCurrentRow,
+            isDeleted);
   }
 
   public void writeColumnBuilderWithNextBatch(
@@ -220,20 +194,9 @@ public class ValuePageReader {
       }
       return;
     }
-    if (columnBuilderValueReader == null) {
-      columnBuilderValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
-    }
-    for (int i = 0; i < readEndIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        if (keepCurrentRow[i]) {
-          columnBuilder.appendNull();
-        }
-        continue;
-      }
-      columnBuilderValueReader.read(
-          valueDecoder, valueBuffer, columnBuilder, keepCurrentRow[i], false);
-    }
+    getBatchReader()
+        .readColumn(
+            readEndIndex, bitmap, valueDecoder, valueBuffer, columnBuilder, keepCurrentRow, null);
   }
 
   public void writeColumnBuilderWithNextBatch(
@@ -243,23 +206,15 @@ public class ValuePageReader {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
       return;
     }
-    if (columnBuilderValueReader == null) {
-      columnBuilderValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_COLUMNBUILDER_SERVICE.call(Type.fromTsDataType(dataType));
+    getBatchReader()
+        .readColumn(readStartIndex, readEndIndex, bitmap, valueDecoder, valueBuffer, columnBuilder);
+  }
+
+  private PageDataBatchReader getBatchReader() {
+    if (batchReader == null) {
+      batchReader = TypeServices.READ_PAGE_BATCH_SERVICE.call(Type.fromTsDataType(dataType));
     }
-    // skip useless data
-    for (int i = 0; i < readStartIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) != 0) {
-        columnBuilderValueReader.read(valueDecoder, valueBuffer, columnBuilder, false, false);
-      }
-    }
-    for (int i = readStartIndex; i < readEndIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        columnBuilder.appendNull();
-        continue;
-      }
-      columnBuilderValueReader.read(valueDecoder, valueBuffer, columnBuilder, true, false);
-    }
+    return batchReader;
   }
 
   public Statistics<? extends Serializable> getStatistics() {

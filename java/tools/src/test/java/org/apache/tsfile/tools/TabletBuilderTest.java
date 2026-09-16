@@ -35,6 +35,38 @@ import static org.junit.Assert.assertTrue;
 
 public class TabletBuilderTest {
 
+  @Test
+  public void testColumnConversionKeepsSortedRowsAndNulls() {
+    ImportSchema schema =
+        buildSchema(
+            "test",
+            "time",
+            Collections.singletonList(new ImportSchema.TagColumn("region", "beijing")),
+            new ImportSchema.SourceColumn("time", TSDataType.INT64),
+            new ImportSchema.SourceColumn("number", TSDataType.INT32),
+            new ImportSchema.SourceColumn("flag", TSDataType.BOOLEAN));
+    schema.setNullFormat("NULL");
+    SourceBatch batch =
+        SourceBatch.fromRows(
+            Arrays.asList("time", "number", "flag"),
+            Arrays.asList(
+                new Object[] {30L, "30", "true"},
+                new Object[] {10L, 10, false},
+                new Object[] {20L, "NULL", ""}));
+    Tablet result = new TabletBuilder(schema, new TimeConverter("ms")).build(batch);
+    assertEquals(3, result.getRowSize());
+    assertEquals(10L, result.getTimestamps()[0]);
+    assertEquals(10, result.getValue(0, 1));
+    assertEquals(false, result.getValue(0, 2));
+    assertTrue(result.isNull(1, 1));
+    assertTrue(result.isNull(1, 2));
+    assertEquals(30, result.getValue(2, 1));
+    assertEquals(true, result.getValue(2, 2));
+    for (int i = 0; i < 3; i++) {
+      assertTrue(result.getDeviceID(i).toString().contains("beijing"));
+    }
+  }
+
   private ImportSchema buildSchema(
       String tableName,
       String timeCol,
