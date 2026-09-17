@@ -36,6 +36,7 @@ from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, 
 
 from ..constants import ColumnCategory
 from .metadata import MODEL_TREE, _join_series_path
+from ._index import IndexLookup
 
 MAGIC = b"TSIDX\0\0\0"
 VERSION_MAJOR = 1
@@ -229,6 +230,7 @@ class MappedDatasetIndex:
 
     def __init__(self, path: str, verify_sections: bool = False):
         self.path = path
+        self._lookup = None
         self._file = open(path, "rb")
         try:
             stat = os.fstat(self._file.fileno())
@@ -241,7 +243,9 @@ class MappedDatasetIndex:
             self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
             self._view = memoryview(self._mmap)
             self._entries = self._validate(verify_sections)
+            self._lookup = IndexLookup(self._view, self._entries)
         except Exception:
+            self._lookup = None
             if getattr(self, "_view", None) is not None:
                 self._view.release()
                 self._view = None
@@ -336,6 +340,7 @@ class MappedDatasetIndex:
         return entries
 
     def close(self):
+        self._lookup = None
         if getattr(self, "_view", None) is not None:
             self._view.release()
             self._view = None
@@ -383,7 +388,7 @@ class MappedDatasetIndex:
         return bytes(self._view[strings[2] + start : strings[2] + end])
 
     def string(self, sid: int) -> str:
-        return self.string_bytes(sid).decode("utf-8")
+        return self._lookup.string(sid)
 
     def _equal_hash_range(self, section_type: int, hash_index: int, value_hash: int):
         low = 0
@@ -411,54 +416,50 @@ class MappedDatasetIndex:
             if self.string_bytes(sid) == encoded
         ]
 
-    def _find_child(
-        self, section_type: int, table_id: int, name: str, first: int, count: int
-    ):
-        encoded = name.encode("utf-8")
-        target_hash = name_hash(encoded)
-        low, high = first, first + count
-        while low < high:
-            middle = low + (high - low) // 2
-            row = self.record(section_type, middle)
-            key = (row[0], row[2], self.string_bytes(row[3]))
-            target = (table_id, target_hash, encoded)
-            if key < target:
-                low = middle + 1
-            else:
-                high = middle
-        if low < first + count:
-            row = self.record(section_type, low)
-            if (
-                row[0] == table_id
-                and row[2] == target_hash
-                and self.string_bytes(row[3]) == encoded
-            ):
-                return row[1]
-        raise KeyError(name)
-
     def find_device_id(self, table_id: int, name: str) -> int:
-        table = self.record(TABLE_RECORD, table_id)
-        return self._find_child(DEVICE_NAME_INDEX, table_id, name, table[2], table[3])
+        return self._lookup.find_device_id(table_id, name)
 
     def find_column_id(self, table_id: int, name: str) -> int:
-        table = self.record(TABLE_RECORD, table_id)
-        return self._find_child(COLUMN_NAME_INDEX, table_id, name, table[4], table[5])
+        return self._lookup.find_column_id(table_id, name)
 
     def find_series_id(self, device_id: int, column_id: int) -> int:
-        device = self.record(DEVICE_RECORD, device_id)
-        low, high = device[4], device[4] + device[5]
-        while low < high:
-            middle = low + (high - low) // 2
-            if self.record(LOGICAL_SERIES, middle)[1] < column_id:
-                low = middle + 1
-            else:
-                high = middle
-        if (
-            low < device[4] + device[5]
-            and self.record(LOGICAL_SERIES, low)[1] == column_id
-        ):
-            return low
-        raise KeyError(column_id)
+        return self._lookup.find_series_id(device_id, column_id)
+
+    def describe_series(self, series_id: int):
+        """Return scalar route metadata for one logical series."""
+        return self._lookup.describe_series(series_id)
+
+    def series_identity(self, series_id: int):
+        """Return device and column ids for one logical series."""
+        return self._lookup.series_identity(series_id)
+
+    def find_series_span(self, series_id: int, file_id: int):
+        """Return one series span without exposing its full record tuple."""
+        return self._lookup.find_series_span(series_id, file_id)
+
+    def locator_metadata(self, locator_id: int):
+        """Return locator/device-span fields needed by the runtime reader."""
+        return self._lookup.locator_metadata(locator_id)
+
+    def prepared_locator_metadata(self, file_id: int, locator_id: int):
+        """Return generation and locator fields used by native prepare."""
+        return self._lookup.prepared_locator_metadata(file_id, locator_id)
+
+    def device_route(self, device_id: int):
+        """Return table id and logical-path string id for one device."""
+        return self._lookup.device_route(device_id)
+
+    def table_name_id(self, table_id: int):
+        """Return the string-pool id for one table name."""
+        return self._lookup.table_name_id(table_id)
+
+    def column_name_id(self, column_id: int):
+        """Return the string-pool id for one column name."""
+        return self._lookup.column_name_id(column_id)
+
+    def device_time_bounds(self, device_id: int):
+        """Return min/max timestamps for one device."""
+        return self._lookup.device_time_bounds(device_id)
 
 
 def index_path_for(paths: Sequence[str]) -> str:
