@@ -72,7 +72,10 @@ public class MeasurementSchema
         null);
   }
 
-  /** set properties as an empty Map. */
+  /**
+   * Creates a measurement schema. The properties argument may be null; callers must not assume that
+   * an empty mutable map is created automatically.
+   */
   public MeasurementSchema(String measurementName, TSDataType dataType, TSEncoding encoding) {
     this(
         measurementName,

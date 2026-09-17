@@ -73,6 +73,9 @@ public class TsFileMetadata {
    * deserialize data from the buffer.
    *
    * @param buffer -buffer use to deserialize
+   * @param context -reader context used for version and encryption compatibility
+   * @param needTableSchemaMap -whether table schemas should be materialized and cached; disabling
+   *     it reduces memory usage.
    * @return -an instance of TsFileMetaData
    */
   public static TsFileMetadata deserializeFrom(
@@ -293,6 +296,10 @@ public class TsFileMetadata {
     return tableMetadataIndexNodeMap;
   }
 
+  /**
+   * Returns the metadata index for tableName. If no table-specific node exists, the default root
+   * keyed by the empty table name is used.
+   */
   public MetadataIndexNode getTableMetadataIndexNode(String tableName) {
     MetadataIndexNode metadataIndexNode = tableMetadataIndexNodeMap.get(tableName);
     if (metadataIndexNode == null) {
