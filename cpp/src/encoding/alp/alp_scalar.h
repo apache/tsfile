@@ -242,12 +242,61 @@ inline AlpStatus AlpDecodeValues(
 }
 
 template <typename T>
+inline uint64_t AlpEstimateCandidate(const T* samples, uint32_t sample_count,
+                                     uint32_t block_count, uint8_t factor,
+                                     uint8_t exponent, bool verify) {
+    typedef AlpTypeTraits<T> Traits;
+    typedef typename Traits::Encoded Encoded;
+    typedef typename Traits::Unsigned Unsigned;
+
+    uint32_t sample_exceptions = 0;
+    bool has_value = false;
+    Encoded min_value = 0;
+    Encoded max_value = 0;
+    for (uint32_t i = 0; i < sample_count; ++i) {
+        Encoded encoded = 0;
+        if (!Traits::EncodeValue(samples[i], factor, exponent, &encoded)) {
+            ++sample_exceptions;
+            continue;
+        }
+        if (verify &&
+            !Traits::BitwiseEqual(Traits::DecodeValue(encoded, factor, exponent),
+                                  samples[i])) {
+            ++sample_exceptions;
+            continue;
+        }
+        if (!has_value) {
+            min_value = encoded;
+            max_value = encoded;
+            has_value = true;
+        } else {
+            min_value = std::min(min_value, encoded);
+            max_value = std::max(max_value, encoded);
+        }
+    }
+
+    const uint64_t exception_estimate =
+        sample_count == 0
+            ? block_count
+            : static_cast<uint64_t>(sample_exceptions) * block_count /
+                  sample_count;
+    uint8_t bit_width = 0;
+    if (has_value) {
+        const Unsigned adjusted_max =
+            static_cast<Unsigned>(max_value) - static_cast<Unsigned>(min_value);
+        bit_width = AlpComputeBitWidth(adjusted_max);
+    }
+    const uint64_t body_bytes = AlpEstimatedBodyBytes<T>(block_count, bit_width);
+    const uint64_t bitmap_bytes = (static_cast<uint64_t>(block_count) + 7) / 8;
+    return body_bytes + bitmap_bytes +
+           exception_estimate * Traits::ValueSize();
+}
+
+template <typename T>
 inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
                                     uint8_t& best_factor,
                                     uint8_t& best_exponent) {
     typedef AlpTypeTraits<T> Traits;
-    typedef typename Traits::Encoded Encoded;
-    typedef typename Traits::Unsigned Unsigned;
 
     const uint32_t sample_count = std::min(count, ALP_SAMPLE_SIZE);
     std::vector<T> samples(sample_count);
@@ -257,56 +306,72 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
         samples[i] = values[index];
     }
 
-    uint64_t best_size = std::numeric_limits<uint64_t>::max();
-    bool found = false;
+    // Stage 1: cheap screen over a small prefix of the sample. The decode
+    // round-trip check is skipped here; stage 2 performs the exact check on
+    // the shortlisted candidates.
+    static const uint32_t kStage1Samples = 8;
+    static const uint32_t kShortlist = 8;
+    const uint32_t stage1_count = std::min(sample_count, kStage1Samples);
+    uint64_t top_estimate[kShortlist];
+    uint8_t top_factor[kShortlist];
+    uint8_t top_exponent[kShortlist];
+    uint32_t top_count = 0;
+
     for (uint8_t e = 0; e <= Traits::MaxExponent(); ++e) {
         for (uint8_t f = 0; f <= e; ++f) {
-            uint32_t sample_exceptions = 0;
-            bool has_value = false;
-            Encoded min_value = 0;
-            Encoded max_value = 0;
-            for (uint32_t i = 0; i < sample_count; ++i) {
-                Encoded encoded = 0;
-                if (!Traits::EncodeValue(samples[i], f, e, &encoded) ||
-                    !Traits::BitwiseEqual(
-                        Traits::DecodeValue(encoded, f, e), samples[i])) {
-                    ++sample_exceptions;
-                    continue;
-                }
-                if (!has_value) {
-                    min_value = encoded;
-                    max_value = encoded;
-                    has_value = true;
-                } else {
-                    min_value = std::min(min_value, encoded);
-                    max_value = std::max(max_value, encoded);
+            const uint64_t estimate = AlpEstimateCandidate(
+                samples.empty() ? NULL : &samples[0], stage1_count, count, f,
+                e, true);
+            int pos = static_cast<int>(top_count);
+            for (uint32_t i = 0; i < top_count; ++i) {
+                if (estimate < top_estimate[i] ||
+                    (estimate == top_estimate[i] &&
+                     (e > top_exponent[i] ||
+                      (e == top_exponent[i] && f > top_factor[i])))) {
+                    pos = static_cast<int>(i);
+                    break;
                 }
             }
+            if (pos < static_cast<int>(kShortlist)) {
+                const uint32_t last =
+                    std::min(top_count, kShortlist - 1);
+                for (uint32_t j = last; j > static_cast<uint32_t>(pos); --j) {
+                    top_estimate[j] = top_estimate[j - 1];
+                    top_factor[j] = top_factor[j - 1];
+                    top_exponent[j] = top_exponent[j - 1];
+                }
+                top_estimate[pos] = estimate;
+                top_factor[pos] = f;
+                top_exponent[pos] = e;
+                if (top_count < kShortlist) {
+                    ++top_count;
+                }
+            }
+        }
+    }
 
-            uint64_t exception_estimate =
-                static_cast<uint64_t>(sample_exceptions) * count /
-                sample_count;
-            uint8_t bit_width = 0;
-            if (has_value) {
-                const Unsigned adjusted_max =
-                    static_cast<Unsigned>(max_value) -
-                    static_cast<Unsigned>(min_value);
-                bit_width = AlpComputeBitWidth(adjusted_max);
-            }
-            const uint64_t body_bytes = AlpEstimatedBodyBytes<T>(count, bit_width);
-            const uint64_t bitmap_bytes = (static_cast<uint64_t>(count) + 7) / 8;
-            const uint64_t estimate =
-                body_bytes + bitmap_bytes +
-                exception_estimate * Traits::ValueSize();
-            if (!found || estimate < best_size ||
-                (estimate == best_size &&
-                 (e > best_exponent ||
-                  (e == best_exponent && f > best_factor)))) {
-                found = true;
-                best_size = estimate;
-                best_factor = f;
-                best_exponent = e;
-            }
+    if (top_count == 0) {
+        return false;
+    }
+
+    // Stage 2: exact round-trip check on the shortlisted candidates using the
+    // full sample.
+    uint64_t best_size = std::numeric_limits<uint64_t>::max();
+    bool found = false;
+    for (uint32_t i = 0; i < top_count; ++i) {
+        const uint8_t f = top_factor[i];
+        const uint8_t e = top_exponent[i];
+        const uint64_t estimate = AlpEstimateCandidate(
+            samples.empty() ? NULL : &samples[0], sample_count, count, f, e,
+            true);
+        if (!found || estimate < best_size ||
+            (estimate == best_size &&
+             (e > best_exponent ||
+              (e == best_exponent && f > best_factor)))) {
+            found = true;
+            best_size = estimate;
+            best_factor = f;
+            best_exponent = e;
         }
     }
     return found;

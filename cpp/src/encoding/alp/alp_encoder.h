@@ -94,6 +94,10 @@ class AlpEncoderBase : public Encoder {
         if (values_.empty()) {
             return common::E_OK;
         }
+        page_buffer_.reserve(
+            values_.size() * sizeof(T) +
+            (values_.size() / alp::ALP_BLOCK_SIZE + 1) *
+                alp::ALP_BLOCK_HEADER_SIZE);
         const alp::AlpStatus status = alp::AlpEncodePage(
             values_.empty() ? NULL : &values_[0],
             static_cast<uint32_t>(values_.size()), page_buffer_);
