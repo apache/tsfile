@@ -17,6 +17,8 @@
 
 from types import SimpleNamespace
 import os
+import struct
+import sys
 import threading
 
 import numpy as np
@@ -37,6 +39,8 @@ from tsfile.constants import TSDataType
 from tsfile.dataset.index import (
     COLUMN_SCHEMA,
     DEVICE_FILE_SPAN,
+    DEVICE_NAME_INDEX,
+    DEVICE_RECORD,
     DIRECTORY,
     HEADER,
     LOGICAL_SERIES,
@@ -44,6 +48,7 @@ from tsfile.dataset.index import (
     RECORDS,
     SERIES_FILE_SPAN,
     SERIES_LOCATOR,
+    TABLE_RECORD,
     TSFILE_RECORD,
     build_sections_from_dataframe,
     crc32c,
@@ -88,6 +93,22 @@ def _synthetic_dataframe(source_path):
         _readers={source_path: reader},
         _paths=[source_path],
     )
+
+
+def _index_section_entry(blob, section_type):
+    return DIRECTORY.unpack_from(
+        blob, HEADER.size + (section_type - 1) * DIRECTORY.size
+    )
+
+
+def _patch_index_field(path, section_type, field_offset, value, fmt="<I"):
+    """Rewrite one raw index field, invalidating that section's checksum."""
+    with open(path, "r+b") as stream:
+        blob = bytearray(stream.read())
+        entry = _index_section_entry(blob, section_type)
+        struct.pack_into(fmt, blob, entry[2] + field_offset, value)
+        stream.seek(0)
+        stream.write(blob)
 
 
 def test_binary_layout_matches_cpp_v1():
@@ -307,27 +328,105 @@ def test_series_identity_does_not_unpack_python_records(tmp_path, monkeypatch):
         assert index.series_identity(0) == (series[0], series[1])
 
 
-def test_child_lookup_checks_full_bytes_for_hash_collisions(monkeypatch):
-    rows = [
-        (0, 10, 42, 0, 0),
-        (0, 11, 42, 1, 0),
-        (0, 12, 42, 2, 0),
+def test_child_lookup_checks_full_bytes_for_hash_collisions(tmp_path):
+    """A stored hash match with different bytes must not resolve to that row."""
+    source = tmp_path / "devices.tsfile"
+    _write_runtime_devices_file(source)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        index_path = dataframe._runtime.index.path
+
+    with MappedDatasetIndex(index_path) as index:
+        rows = list(index.records(DEVICE_NAME_INDEX))
+        names = [index.string(row[3]) for row in rows]
+    assert len(rows) >= 3
+
+    # Same length as the row it must not match, so only the bytes can reject it.
+    tail = names[-1][:-1]
+    probe = None
+    for replacement in "xyz019":
+        value = tail[:-1] + replacement + "."
+        if (
+            len(value) == len(names[-1])
+            and value not in names
+            and index_module.name_hash(value.encode("utf-8")) >= rows[-1][2]
+        ):
+            probe = value
+            break
+    assert probe is not None
+
+    # Give the last row the probe's hash: the lookup finds that row by hash and
+    # can only reject it by comparing the stored bytes.
+    with open(index_path, "r+b") as stream:
+        blob = bytearray(stream.read())
+        entry = _index_section_entry(blob, DEVICE_NAME_INDEX)
+        struct.pack_into(
+            "<Q",
+            blob,
+            entry[2] + (entry[4] - 1) * entry[1] + 8,
+            index_module.name_hash(probe.encode("utf-8")),
+        )
+        stream.seek(0)
+        stream.write(blob)
+
+    with MappedDatasetIndex(index_path) as index:
+        untouched = list(index.records(DEVICE_NAME_INDEX))[:-1]
+        for table_id, device_id, _, sid, _ in untouched:
+            assert index.find_device_id(table_id, index.string(sid)) == device_id
+        with pytest.raises(KeyError):
+            index.find_device_id(untouched[0][0], probe)
+
+
+@pytest.mark.parametrize(
+    ("section_type", "field_offset", "lookup"),
+    [
+        (TABLE_RECORD, 12, lambda index: index.find_device_id(0, "root.")),
+        (TABLE_RECORD, 20, lambda index: index.find_column_id(0, "s1")),
+        (DEVICE_RECORD, 20, lambda index: index.find_series_id(0, 0)),
+    ],
+)
+def test_out_of_range_child_ranges_raise_instead_of_reading_out_of_bounds(
+    tmp_path, section_type, field_offset, lookup
+):
+    """Corrupt child ranges must raise, not walk past the mmap (SIGSEGV/SIGBUS)."""
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+    _patch_index_field(output, section_type, field_offset, 0xFFFFFF00)
+
+    # section checksums stay unverified here, matching DatasetRuntime's load path
+    with MappedDatasetIndex(str(output)) as index:
+        with pytest.raises(IndexError):
+            lookup(index)
+
+
+def test_lookup_rejects_negative_ids_with_index_error(tmp_path):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    calls = [
+        lambda index: index.find_device_id(-1, "root."),
+        lambda index: index.find_column_id(-1, "s1"),
+        lambda index: index.find_series_id(-1, 0),
+        lambda index: index.describe_series(-1),
+        lambda index: index.series_identity(-1),
+        lambda index: index.find_series_span(-1, 0),
+        lambda index: index.locator_metadata(-1),
+        lambda index: index.prepared_locator_metadata(-1, 0),
+        lambda index: index.device_route(-1),
+        lambda index: index.table_name_id(-1),
+        lambda index: index.column_name_id(-1),
+        lambda index: index.device_time_bounds(-1),
+        lambda index: index.string(-1),
     ]
-    names = [b"alpha", b"beta", b"gamma"]
-    monkeypatch.setattr(index_module, "name_hash", lambda _value: 42)
-
-    class _Index:
-        @staticmethod
-        def record(_section_type, record_id):
-            return rows[record_id]
-
-        @staticmethod
-        def string_bytes(sid):
-            return names[sid]
-
-    assert MappedDatasetIndex._find_child(_Index(), 0, 0, "beta", 0, 3) == 11
-    with pytest.raises(KeyError):
-        MappedDatasetIndex._find_child(_Index(), 0, 0, "missing", 0, 3)
+    with MappedDatasetIndex(str(output)) as index:
+        for call in calls:
+            with pytest.raises(IndexError):
+                call(index)
 
 
 def test_rejects_damaged_header_checksum(tmp_path):
@@ -631,6 +730,9 @@ def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch
         assert find_device_calls == 4
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="dataclasses only support slots on 3.10+"
+)
 def test_runtime_descriptor_objects_use_slots():
     shard = runtime_module.RuntimeSeriesShard(None, 1, 2, 3, 4, 5, 6)
     descriptor = runtime_module.RuntimeSeriesDescriptor((1, 2), 3, 4, (shard,), 5, 6, 7)

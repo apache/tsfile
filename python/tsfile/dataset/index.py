@@ -416,31 +416,6 @@ class MappedDatasetIndex:
             if self.string_bytes(sid) == encoded
         ]
 
-    def _find_child(
-        self, section_type: int, table_id: int, name: str, first: int, count: int
-    ):
-        encoded = name.encode("utf-8")
-        target_hash = name_hash(encoded)
-        low, high = first, first + count
-        while low < high:
-            middle = low + (high - low) // 2
-            row = self.record(section_type, middle)
-            key = (row[0], row[2], self.string_bytes(row[3]))
-            target = (table_id, target_hash, encoded)
-            if key < target:
-                low = middle + 1
-            else:
-                high = middle
-        if low < first + count:
-            row = self.record(section_type, low)
-            if (
-                row[0] == table_id
-                and row[2] == target_hash
-                and self.string_bytes(row[3]) == encoded
-            ):
-                return row[1]
-        raise KeyError(name)
-
     def find_device_id(self, table_id: int, name: str) -> int:
         return self._lookup.find_device_id(table_id, name)
 

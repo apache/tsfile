@@ -175,7 +175,7 @@ cdef class IndexLookup:
             self._section_sizes[section] = entries[section][1]
             self._section_counts[section] = entries[section][4]
 
-    def find_device_id(self, uint32_t table_id, object name):
+    def find_device_id(self, Py_ssize_t table_id, object name):
         cdef const char* data
         cdef Py_ssize_t length
         cdef const uint8_t[:] view = self._view
@@ -185,11 +185,13 @@ cdef class IndexLookup:
         cdef uint64_t target_hash
         cdef int64_t result
         data = _utf8_name(name, &length)
-        if table_id >= self._section_counts[4]:
+        if table_id < 0 or table_id >= self._section_counts[4]:
             raise IndexError(table_id)
         table_base = self._section_offsets[4] + <uint64_t>table_id * self._section_sizes[4]
         first = _read_u32(view, table_base + 8)
         count = _read_u32(view, table_base + 12)
+        if <uint64_t>first + count > self._section_counts[5]:
+            raise IndexError(table_id)
         target_hash = _fnv1a(data, length)
         with nogil:
             result = _find_child(
@@ -210,7 +212,7 @@ cdef class IndexLookup:
             raise KeyError(name)
         return result
 
-    def find_column_id(self, uint32_t table_id, object name):
+    def find_column_id(self, Py_ssize_t table_id, object name):
         cdef const char* data
         cdef Py_ssize_t length
         cdef const uint8_t[:] view = self._view
@@ -220,11 +222,13 @@ cdef class IndexLookup:
         cdef uint64_t target_hash
         cdef int64_t result
         data = _utf8_name(name, &length)
-        if table_id >= self._section_counts[4]:
+        if table_id < 0 or table_id >= self._section_counts[4]:
             raise IndexError(table_id)
         table_base = self._section_offsets[4] + <uint64_t>table_id * self._section_sizes[4]
         first = _read_u32(view, table_base + 16)
         count = _read_u32(view, table_base + 20)
+        if <uint64_t>first + count > self._section_counts[7]:
+            raise IndexError(table_id)
         target_hash = _fnv1a(data, length)
         with nogil:
             result = _find_child(
@@ -245,7 +249,7 @@ cdef class IndexLookup:
             raise KeyError(name)
         return result
 
-    def find_series_id(self, uint32_t device_id, uint32_t column_id):
+    def find_series_id(self, Py_ssize_t device_id, Py_ssize_t column_id):
         cdef const uint8_t[:] view = self._view
         cdef uint64_t device_base
         cdef uint32_t first
@@ -257,11 +261,13 @@ cdef class IndexLookup:
         cdef uint32_t row_column_id
         cdef uint32_t row_device_id
         cdef int64_t result = -1
-        if device_id >= self._section_counts[6]:
+        if device_id < 0 or device_id >= self._section_counts[6]:
             raise IndexError(device_id)
         device_base = self._section_offsets[6] + <uint64_t>device_id * self._section_sizes[6]
         first = _read_u32(view, device_base + 16)
         count = _read_u32(view, device_base + 20)
+        if <uint64_t>first + count > self._section_counts[9]:
+            raise IndexError(device_id)
         low = first
         high = first + count
         with nogil:
@@ -283,7 +289,7 @@ cdef class IndexLookup:
             raise KeyError(column_id)
         return result
 
-    def describe_series(self, uint32_t series_id):
+    def describe_series(self, Py_ssize_t series_id):
         """Expand one logical series without creating intermediate records."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t series_base
@@ -308,7 +314,7 @@ cdef class IndexLookup:
         cdef uint64_t count = 0
         cdef list shards = []
 
-        if series_id >= self._section_counts[9]:
+        if series_id < 0 or series_id >= self._section_counts[9]:
             raise IndexError(series_id)
 
         series_base = (
@@ -361,16 +367,16 @@ cdef class IndexLookup:
 
         return device_id, column_id, min_time, max_time, count, shards
 
-    def series_identity(self, uint32_t series_id):
+    def series_identity(self, Py_ssize_t series_id):
         """Return device and column ids for one logical series."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t base
-        if series_id >= self._section_counts[9]:
+        if series_id < 0 or series_id >= self._section_counts[9]:
             raise IndexError(series_id)
         base = self._section_offsets[9] + <uint64_t>series_id * self._section_sizes[9]
         return _read_u32(view, base), _read_u32(view, base + 4)
 
-    def find_series_span(self, uint32_t series_id, uint32_t file_id):
+    def find_series_span(self, Py_ssize_t series_id, Py_ssize_t file_id):
         """Find one series span and return locator/time/length scalars."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t series_base
@@ -380,7 +386,7 @@ cdef class IndexLookup:
         cdef uint32_t span_id
         cdef uint64_t span_base
 
-        if series_id >= self._section_counts[9]:
+        if series_id < 0 or series_id >= self._section_counts[9]:
             raise IndexError(series_id)
         series_base = (
             self._section_offsets[9]
@@ -405,14 +411,14 @@ cdef class IndexLookup:
                 )
         raise KeyError((series_id, file_id))
 
-    def locator_metadata(self, uint32_t locator_id):
+    def locator_metadata(self, Py_ssize_t locator_id):
         """Return locator and owning device-span scalars."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t locator_base
         cdef uint32_t device_span_id
         cdef uint64_t device_span_base
 
-        if locator_id >= self._section_counts[13]:
+        if locator_id < 0 or locator_id >= self._section_counts[13]:
             raise IndexError(locator_id)
         locator_base = (
             self._section_offsets[13]
@@ -433,7 +439,7 @@ cdef class IndexLookup:
             _read_u64(view, device_span_base + 24),
         )
 
-    def prepared_locator_metadata(self, uint32_t file_id, uint32_t locator_id):
+    def prepared_locator_metadata(self, Py_ssize_t file_id, Py_ssize_t locator_id):
         """Return the generation and locator fields used by native prepare."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t locator_base
@@ -442,9 +448,9 @@ cdef class IndexLookup:
         cdef uint32_t device_span_id
         cdef uint32_t device_file_id
 
-        if locator_id >= self._section_counts[13]:
+        if locator_id < 0 or locator_id >= self._section_counts[13]:
             raise IndexError(locator_id)
-        if file_id >= self._section_counts[10]:
+        if file_id < 0 or file_id >= self._section_counts[10]:
             raise IndexError(file_id)
         locator_base = (
             self._section_offsets[13]
@@ -475,38 +481,38 @@ cdef class IndexLookup:
             _read_u32(view, device_span_base + 16),
         )
 
-    def device_route(self, uint32_t device_id):
+    def device_route(self, Py_ssize_t device_id):
         """Return table id and logical-path string id for one device."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t base
-        if device_id >= self._section_counts[6]:
+        if device_id < 0 or device_id >= self._section_counts[6]:
             raise IndexError(device_id)
         base = self._section_offsets[6] + <uint64_t>device_id * self._section_sizes[6]
         return _read_u32(view, base), _read_u32(view, base + 4)
 
-    def table_name_id(self, uint32_t table_id):
+    def table_name_id(self, Py_ssize_t table_id):
         """Return the string-pool id for one table name."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t base
-        if table_id >= self._section_counts[4]:
+        if table_id < 0 or table_id >= self._section_counts[4]:
             raise IndexError(table_id)
         base = self._section_offsets[4] + <uint64_t>table_id * self._section_sizes[4]
         return _read_u32(view, base)
 
-    def column_name_id(self, uint32_t column_id):
+    def column_name_id(self, Py_ssize_t column_id):
         """Return the string-pool id for one column name."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t base
-        if column_id >= self._section_counts[8]:
+        if column_id < 0 or column_id >= self._section_counts[8]:
             raise IndexError(column_id)
         base = self._section_offsets[8] + <uint64_t>column_id * self._section_sizes[8]
         return _read_u32(view, base + 4)
 
-    def device_time_bounds(self, uint32_t device_id):
+    def device_time_bounds(self, Py_ssize_t device_id):
         """Return min/max timestamps for one device."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t base
-        if device_id >= self._section_counts[6]:
+        if device_id < 0 or device_id >= self._section_counts[6]:
             raise IndexError(device_id)
         base = self._section_offsets[6] + <uint64_t>device_id * self._section_sizes[6]
         return (
@@ -514,7 +520,7 @@ cdef class IndexLookup:
             <int64_t>_read_u64(view, base + 40),
         )
 
-    def string(self, uint32_t string_id):
+    def string(self, Py_ssize_t string_id):
         """Decode one string pool entry without a temporary bytes slice."""
         cdef const uint8_t[:] view = self._view
         cdef uint64_t offsets_base = self._section_offsets[1]
@@ -523,7 +529,7 @@ cdef class IndexLookup:
         cdef uint32_t start
         cdef uint32_t end
         cdef const char* data
-        if string_id + 1 >= string_count:
+        if string_id < 0 or string_id + 1 >= string_count:
             raise IndexError(string_id)
         start = _read_u32(view, offsets_base + <uint64_t>string_id * 4)
         end = _read_u32(view, offsets_base + <uint64_t>(string_id + 1) * 4)
