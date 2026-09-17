@@ -48,12 +48,12 @@ Flat profile:
 
 | Function | Flat | Cumulative |
 | --- | ---: | ---: |
-| `storage::AlpEncoderBase::flush` | 83.8% | 90.9% |
-| `storage::alp::AlpAppendU32` | 4.1% | 4.2% |
-| `storage::AlpDecoderBase::ensure_initialized` | 1.9% | 7.4% |
-| `storage::alp::AlpUnpackBits` | 1.8% | 1.8% |
-| `storage::alp::AlpDecodeValues` | 2.2% | 2.2% |
-| `storage::AlpDecoderBase::read_batch_float` | 0.6% | 8.0% |
+| `storage::AlpEncoderBase::flush` | 73.5% | 86.3% |
+| `storage::alp::AlpAppendU32` | 7.8% | 7.8% |
+| `storage::AlpDecoderBase::ensure_initialized` | 3.0% | 11.3% |
+| `storage::alp::AlpDecodeValues` | 2.7% | 2.7% |
+| `storage::alp::AlpUnpackBits` | 2.3% | 2.3% |
+| `storage::AlpDecoderBase::read_batch_float` | 0.5% | 11.8% |
 
 The encode path dominates. Decode is already a small fraction of total time.
 
@@ -84,24 +84,27 @@ pattern:
 | --- | ---: | ---: |
 | `AlpChooseFactorExponent` | 0.004 | 0.009 |
 | `AlpEncodeValues` (SIMD) | 0.001 | 0.001 |
-| `AlpPackBits` (scalar) | 0.009 | 0.006 |
-| `AlpEncodePage` total | 0.012 | 0.017 |
+| `AlpPackBits` (word-based) | 0.002 | 0.002 |
+| `AlpEncodePage` total | 0.006 | 0.013 |
 
-The SIMD value kernel is only about 6-8% of ALP encode time. The rest is the
-scalar exponent/factor search and the scalar bit-packing loop.
+After replacing the per-bit packing loop with word-based packing, the packing
+cost dropped to about 0.002 ms/block. The SIMD value kernel is still only about
+8-15% of encode time; the remaining dominant cost is the scalar
+exponent/factor search (about 67% of FLOAT and 69% of DOUBLE encode in this
+breakdown).
 
 ## Why ALP Still Loses
 
-1. **Encode is not end-to-end SIMD.**
-   The SIMD path covers `value -> integer` conversion and exception detection,
-   but `AlpPackBits` is scalar and, for FLOAT, accounts for roughly 75% of the
-   encode time. That is why ALP FLOAT encode is slower than Gorilla even though
-   the value kernel is SIMD.
-
-2. **The exponent/factor search is scalar.**
+1. **The remaining encode cost is the scalar e/f search.**
    `AlpChooseFactorExponent` evaluates candidate `(factor, exponent)` pairs on
-   sampled values. It is about 33% of FLOAT encode and about 53% of DOUBLE
-   encode. For DOUBLE, this is the largest single encode cost.
+   sampled values. After word-based packing it is the largest remaining encode
+   cost: about 67% of FLOAT and 69% of DOUBLE encode in the microbenchmark.
+   SIMD packing is no longer the bottleneck.
+
+2. **The SIMD value kernel is a small part of encode.**
+   `AlpEncodeValues` is only about 8-15% of encode time. End-to-end encode
+   speed therefore depends mostly on the search and packing decisions, not on
+   the value conversion itself.
 
 3. **Non-decimal data falls back to PLAIN.**
    Smooth/random/constant data often has too many exceptions for ALP to win.
@@ -117,29 +120,24 @@ scalar exponent/factor search and the scalar bit-packing loop.
 5. **The benchmark is on Apple Silicon.**
    SIMDe maps the AVX2-style kernels to NEON here. On x86, a native `-mavx2`
    translation unit and runtime dispatch are still required to get the AVX2
-   peak; without those flags SIMDe may emulated AVX2 with SSE2.
+   peak; without those flags SIMDe may emulate AVX2 with SSE2.
 
 ## Next Optimizations
 
-1. **SIMD bit packing.**
-   Pack four values at a time with the same 64-bit-window layout used by the
-   SIMD unpack kernel. This directly targets the largest FLOAT encode cost.
-
-2. **SIMD or cheaper exponent/factor selection.**
+1. **SIMD or cheaper exponent/factor selection.**
    Evaluate the candidate pairs on the 32-value sample with SIMD, or reduce the
-   candidate set with an early-exit estimate. This targets the DOUBLE encode
-   cost.
+   candidate set with a two-stage/early-exit estimate. This is now the largest
+   remaining encode cost for both FLOAT and DOUBLE.
 
-3. **Remove per-block allocations.**
-   Reuse scratch vectors for `encoded`, `adjusted`, `bitmap`, and `body`
-   instead of constructing them per block. Decode the final values directly
-   into the caller's output buffer rather than an intermediate `values_`
-   vector.
+2. **Remove per-block allocations and copies.**
+   Reuse scratch vectors for `encoded`, `adjusted`, `bitmap`, `body`, and the
+   exception list instead of constructing them per block. Decode directly into
+   the caller's output buffer rather than an intermediate `values_` vector.
 
-4. **Adaptive codec selection.**
+3. **Adaptive codec selection.**
    Choose Gorilla for constant/high-entropy columns and ALP for decimal-like
    columns. This avoids the PLAIN fallback cases where Gorilla is better.
 
-5. **Native x86 dispatch.**
+4. **Native x86 dispatch.**
    Add an AVX2 object library and CPU detection so x86 users get native AVX2
    without `-march=native`, plus an optional AVX-512 path for DOUBLE.
