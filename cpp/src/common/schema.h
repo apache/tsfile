@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "common/db_common.h"
 #include "writer/time_chunk_writer.h"
@@ -175,6 +176,30 @@ struct MeasurementSchemaGroup {
     bool is_aligned_ = false;
     TimeChunkWriter* time_chunk_writer_ = nullptr;
     int64_t last_time_ = INT64_MIN;
+
+    // Per-device schema-check cache (do_check_schema /
+    // do_check_schema_aligned): the resolved chunk writers + data types for
+    // the last fully-resolved measurement-name sequence, so repeated writes
+    // with an unchanged schema skip the per-column measurement_schema_map_
+    // string lookup (#885). Entries are the SAME non-owning pointers the
+    // uncached path returns, so the written file is byte-identical.
+    //
+    // Guarded by the measurement NAME SEQUENCE, not just the column count:
+    // entries are reused by position, so the same count with a different
+    // name order (or one column swapped) would silently write values into
+    // the wrong column AND with the wrong data type.
+    //
+    // The plain and aligned paths keep separate caches: sharing one flag
+    // would let whichever path ran first lock the other out permanently.
+    std::vector<ChunkWriter*> cached_chunk_writers_;
+    std::vector<common::TSDataType> cached_data_types_;
+    std::vector<std::string> cached_measurement_names_;
+    bool schema_check_cached_ = false;
+
+    std::vector<ValueChunkWriter*> cached_value_chunk_writers_;
+    std::vector<common::TSDataType> cached_aligned_data_types_;
+    std::vector<std::string> cached_aligned_measurement_names_;
+    bool schema_check_aligned_cached_ = false;
 
     ~MeasurementSchemaGroup() {
         if (time_chunk_writer_ != nullptr) {
