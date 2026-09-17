@@ -695,9 +695,7 @@ class TSMIterator {
    public:
     explicit TSMIterator(
         common::SimpleList<ChunkGroupMeta*>& chunk_group_meta_list)
-        : chunk_group_meta_list_(chunk_group_meta_list),
-          chunk_group_meta_iter_(),
-          chunk_meta_iter_() {}
+        : chunk_group_meta_list_(chunk_group_meta_list) {}
 
     // sort => iterate
     int init();
@@ -707,24 +705,22 @@ class TSMIterator {
                  TimeseriesIndex& ret_ts_index);
 
    private:
+    using MeasurementChunkMetaMap =
+        std::map<common::String, std::vector<ChunkMeta*>>;
+    using DeviceChunkMetaMap =
+        std::map<std::shared_ptr<IDeviceID>, MeasurementChunkMetaMap,
+                 IDeviceIDComparator>;
+
     common::SimpleList<ChunkGroupMeta*>& chunk_group_meta_list_;
-    common::SimpleList<ChunkGroupMeta*>::Iterator chunk_group_meta_iter_;
-    common::SimpleList<ChunkMeta*>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
-    std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>,
-             IDeviceIDComparator>
-        tsm_chunk_meta_info_;
+    DeviceChunkMetaMap tsm_chunk_meta_info_;
 
     // device iterator
-    std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>,
-             IDeviceIDComparator>::iterator tsm_device_iter_;
+    DeviceChunkMetaMap::iterator tsm_device_iter_;
 
     // measurement iterator
-    std::map<common::String, std::vector<ChunkMeta*>>::iterator
-        tsm_measurement_iter_;
+    MeasurementChunkMetaMap::iterator tsm_measurement_iter_;
 };
 
 /* =============== TsFile Index ================ */
