@@ -111,13 +111,22 @@ inline bool AlpUnpackBits(const uint8_t* body, uint32_t body_bytes,
     }
 
     // The body is padded with at least 16 zero bytes past the logical end.
-    // Two overlapping 64-bit loads let us extract any value of up to 64 bits
-    // without a per-bit loop, while remaining portable C++11.
+    // The SIMD path handles groups of four; the scalar tail uses two
+    // overlapping 64-bit loads and remains portable C++11.
+    uint32_t i = 0;
+#ifdef ENABLE_SIMD
+    const uint32_t simd_count = count & ~static_cast<uint32_t>(3);
+    if (simd_count > 0 &&
+        !AlpSimdUnpackBits(body, simd_count, bit_width, &out[0])) {
+        return false;
+    }
+    i = simd_count;
+#endif
     const uint64_t mask =
         bit_width >= 64 ? ~static_cast<uint64_t>(0)
                         : ((static_cast<uint64_t>(1) << bit_width) - 1);
-    uint64_t bit_pos = 0;
-    for (uint32_t i = 0; i < count; ++i) {
+    uint64_t bit_pos = static_cast<uint64_t>(i) * bit_width;
+    for (; i < count; ++i) {
         const uint32_t byte_pos = static_cast<uint32_t>(bit_pos >> 3);
         const uint32_t bit_offset = static_cast<uint32_t>(bit_pos & 7u);
         uint64_t low = 0;

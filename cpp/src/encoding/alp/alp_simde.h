@@ -297,6 +297,101 @@ inline AlpStatus AlpSimdDecodeValues(
                                           out);
 }
 
+
+template <typename Unsigned>
+struct AlpSimdUnpackKernel;
+
+template <>
+struct AlpSimdUnpackKernel<uint32_t> {
+    static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
+                       uint32_t* out) {
+        if (bit_width == 0) {
+            for (uint32_t i = 0; i < count; ++i) {
+                out[i] = 0;
+            }
+            return true;
+        }
+        const uint64_t mask64 =
+            bit_width >= 32 ? static_cast<uint64_t>(0xFFFFFFFFu)
+                            : ((static_cast<uint64_t>(1) << bit_width) - 1);
+        const simde__m256i mask = simde_mm256_set1_epi64x(
+            static_cast<int64_t>(mask64));
+        const simde__m256i perm = simde_mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
+        for (uint32_t i = 0; i + 3 < count; i += 4) {
+            int32_t byte_offsets[4];
+            int64_t bit_offsets[4];
+            for (int lane = 0; lane < 4; ++lane) {
+                const uint64_t bit_pos =
+                    static_cast<uint64_t>(i + lane) * bit_width;
+                byte_offsets[lane] = static_cast<int32_t>(bit_pos >> 3);
+                bit_offsets[lane] = static_cast<int64_t>(bit_pos & 7u);
+            }
+            const simde__m128i indices = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(byte_offsets));
+            const simde__m256i windows = simde_mm256_i32gather_epi64(
+                reinterpret_cast<const int64_t*>(body), indices, 1);
+            const simde__m256i shifts = simde_mm256_loadu_si256(
+                reinterpret_cast<const simde__m256i*>(bit_offsets));
+            const simde__m256i shifted =
+                simde_mm256_srlv_epi64(windows, shifts);
+            const simde__m256i masked =
+                simde_mm256_and_si256(shifted, mask);
+            const simde__m256i compact =
+                simde_mm256_permutevar8x32_epi32(masked, perm);
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(out + i),
+                                  simde_mm256_castsi256_si128(compact));
+        }
+        return true;
+    }
+};
+
+template <>
+struct AlpSimdUnpackKernel<uint64_t> {
+    static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
+                       uint64_t* out) {
+        if (bit_width == 0) {
+            for (uint32_t i = 0; i < count; ++i) {
+                out[i] = 0;
+            }
+            return true;
+        }
+        const uint64_t mask64 =
+            bit_width >= 64 ? ~static_cast<uint64_t>(0)
+                            : ((static_cast<uint64_t>(1) << bit_width) - 1);
+        const simde__m256i mask = simde_mm256_set1_epi64x(
+            static_cast<int64_t>(mask64));
+        for (uint32_t i = 0; i + 3 < count; i += 4) {
+            int32_t byte_offsets[4];
+            int64_t bit_offsets[4];
+            for (int lane = 0; lane < 4; ++lane) {
+                const uint64_t bit_pos =
+                    static_cast<uint64_t>(i + lane) * bit_width;
+                byte_offsets[lane] = static_cast<int32_t>(bit_pos >> 3);
+                bit_offsets[lane] = static_cast<int64_t>(bit_pos & 7u);
+            }
+            const simde__m128i indices = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(byte_offsets));
+            const simde__m256i windows = simde_mm256_i32gather_epi64(
+                reinterpret_cast<const int64_t*>(body), indices, 1);
+            const simde__m256i shifts = simde_mm256_loadu_si256(
+                reinterpret_cast<const simde__m256i*>(bit_offsets));
+            const simde__m256i shifted =
+                simde_mm256_srlv_epi64(windows, shifts);
+            const simde__m256i masked =
+                simde_mm256_and_si256(shifted, mask);
+            simde_mm256_storeu_si256(
+                reinterpret_cast<simde__m256i*>(out + i), masked);
+        }
+        return true;
+    }
+};
+
+template <typename Unsigned>
+inline bool AlpSimdUnpackBits(const uint8_t* body, uint32_t count,
+                              uint8_t bit_width, Unsigned* out) {
+    return AlpSimdUnpackKernel<Unsigned>::Unpack(body, count, bit_width, out);
+}
+
 }  // namespace alp
 }  // namespace storage
 
