@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "common/cache/lru_cache.h"
 #include "common/tsblock/tsblock.h"
 #include "file/random_access_read_file.h"
 #include "reader/chunk_reader.h"
@@ -50,9 +51,9 @@ class TsFileIOReader {
           tsfile_meta_page_arena_(),
           tsfile_meta_(&tsfile_meta_page_arena_),
           tsfile_meta_ready_(false),
-          read_file_created_(false) {
+          read_file_created_(false),
+          device_node_cache_(DEVICE_NODE_CACHE_CAPACITY, 0) {
         tsfile_meta_page_arena_.init(512, common::MOD_TSFILE_READER);
-        device_node_cache_pa_.init(512, common::MOD_TSFILE_READER);
     }
 
     // Free only the local source we own (created by init(const std::string&)).
@@ -222,9 +223,14 @@ class TsFileIOReader {
         common::PageArena& pa);
 
     struct CachedDeviceNode {
+        // Declared before top_node so top_node is destroyed first. MetaIndexNode
+        // and its children live in this arena.
+        std::shared_ptr<common::PageArena> arena;
         std::shared_ptr<MetaIndexNode> top_node;
-        bool is_aligned;
+        bool is_aligned = false;
     };
+
+    static constexpr size_t DEVICE_NODE_CACHE_CAPACITY = 64;
 
     // Returns E_OK on hit (out is filled), or an error code on miss / load
     // failure (E_DEVICE_NOT_EXIST when the device is absent, the propagated
@@ -232,6 +238,17 @@ class TsFileIOReader {
     // concurrent eviction of the cache map.
     int get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
                                common::PageArena& pa, CachedDeviceNode& out);
+
+#ifdef ENABLE_TEST
+   public:
+    size_t TEST_device_node_cache_size() const {
+        std::lock_guard<std::mutex> lk(device_node_cache_mu_);
+        return device_node_cache_.size();
+    }
+    static size_t TEST_device_node_cache_capacity() {
+        return DEVICE_NODE_CACHE_CAPACITY;
+    }
+#endif
 
    private:
     // Build a collision-free key for device_node_cache_.  get_device_name()
@@ -248,13 +265,12 @@ class TsFileIOReader {
     TsFileMeta tsfile_meta_;
     bool tsfile_meta_ready_;
     bool read_file_created_;
-    // Cache: device_name → deserialized measurement MetaIndexNode.
-    // Guarded by device_node_cache_mu_ — multiple SSIs and Result Sets can
-    // hit the cache concurrently on the same reader, and an unsynchronized
-    // unordered_map insert would race with a parallel lookup (rehash,
-    // bucket-list rewrite) and with the underlying PageArena allocation.
-    common::PageArena device_node_cache_pa_;
-    std::unordered_map<std::string, CachedDeviceNode> device_node_cache_;
+    // Bounded LRU: device key -> deserialized measurement MetaIndexNode. Each
+    // entry owns its arena so eviction releases the retained metadata pages.
+    // Cache operations are guarded because common::Cache is intentionally not
+    // internally synchronized. Callers copy CachedDeviceNode while locked, so
+    // shared ownership keeps an entry alive after a concurrent eviction.
+    common::Cache<std::string, CachedDeviceNode> device_node_cache_;
     mutable std::mutex device_node_cache_mu_;
 };
 
