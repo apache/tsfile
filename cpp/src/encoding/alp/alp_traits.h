@@ -44,14 +44,12 @@ struct AlpTypeTraits<float> {
 
     static bool EncodeValue(float value, uint8_t factor, uint8_t exponent,
                             int32_t* out) {
-        if (!std::isfinite(value) ||
-            (value == 0.0f && std::signbit(value))) {
+        if (!std::isfinite(value) || (value == 0.0f && std::signbit(value))) {
             return false;
         }
         const float scaled =
             value * ALP_FLOAT_EXP[exponent] * ALP_FLOAT_FRAC[factor];
-        if (!std::isfinite(scaled) ||
-            scaled < ALP_FLOAT_ENCODING_LOWER_LIMIT ||
+        if (!std::isfinite(scaled) || scaled < ALP_FLOAT_ENCODING_LOWER_LIMIT ||
             scaled > ALP_FLOAT_ENCODING_UPPER_LIMIT) {
             return false;
         }
@@ -105,8 +103,7 @@ struct AlpTypeTraits<double> {
 
     static bool EncodeValue(double value, uint8_t factor, uint8_t exponent,
                             int64_t* out) {
-        if (!std::isfinite(value) ||
-            (value == 0.0 && std::signbit(value))) {
+        if (!std::isfinite(value) || (value == 0.0 && std::signbit(value))) {
             return false;
         }
         const double scaled =

@@ -71,16 +71,16 @@ TEST_F(AlpTsFileTest, FloatAndDoubleRoundTrip) {
     const std::string device = "alp_device";
     const std::string float_name = "f";
     const std::string double_name = "d";
-    ASSERT_EQ(common::E_OK,
-              writer_->register_timeseries(
-                  device, MeasurementSchema(float_name, common::FLOAT,
-                                            common::ALP,
-                                            common::UNCOMPRESSED)));
-    ASSERT_EQ(common::E_OK,
-              writer_->register_timeseries(
-                  device, MeasurementSchema(double_name, common::DOUBLE,
-                                            common::ALP,
-                                            common::UNCOMPRESSED)));
+    ASSERT_EQ(
+        common::E_OK,
+        writer_->register_timeseries(
+            device, MeasurementSchema(float_name, common::FLOAT, common::ALP,
+                                      common::UNCOMPRESSED)));
+    ASSERT_EQ(
+        common::E_OK,
+        writer_->register_timeseries(
+            device, MeasurementSchema(double_name, common::DOUBLE, common::ALP,
+                                      common::UNCOMPRESSED)));
 
     const int row_count = 20000;
     const int64_t base_time = 1700000000000LL;
@@ -100,9 +100,8 @@ TEST_F(AlpTsFileTest, FloatAndDoubleRoundTrip) {
     std::vector<std::string> select_list = {device + "." + float_name,
                                             device + "." + double_name};
     ResultSet* result = nullptr;
-    ASSERT_EQ(common::E_OK,
-              reader.query(select_list, base_time, base_time + row_count,
-                           result));
+    ASSERT_EQ(common::E_OK, reader.query(select_list, base_time,
+                                         base_time + row_count, result));
     ASSERT_NE(nullptr, result);
     auto* qds = static_cast<QDSWithoutTimeGenerator*>(result);
 
@@ -110,12 +109,11 @@ TEST_F(AlpTsFileTest, FloatAndDoubleRoundTrip) {
     bool has_next = false;
     while (IS_SUCC(qds->next(has_next)) && has_next) {
         const int i = rows;
-        const float expected_f =
-            static_cast<float>(i % 1000) * 0.01f - 5.0f;
-        const double expected_d =
-            static_cast<double>(i % 10000) * 0.0001 - 0.5;
+        const float expected_f = static_cast<float>(i % 1000) * 0.01f - 5.0f;
+        const double expected_d = static_cast<double>(i % 10000) * 0.0001 - 0.5;
         EXPECT_EQ(expected_f, qds->get_value<float>(device + "." + float_name));
-        EXPECT_EQ(expected_d, qds->get_value<double>(device + "." + double_name));
+        EXPECT_EQ(expected_d,
+                  qds->get_value<double>(device + "." + double_name));
         ++rows;
     }
     EXPECT_EQ(row_count, rows);

@@ -148,10 +148,9 @@ const char* s_data_type_names[12] = {"BOOLEAN",   "INT32", "INT64",  "FLOAT",
                                      "TIMESTAMP", "DATE",  "BLOB",   "STRING"};
 
 const char* s_encoding_names[16] = {
-    "PLAIN",  "DICTIONARY", "RLE",     "DIFF",    "TS_2DIFF",
-    "BITMAP", "GORILLA_V1", "REGULAR", "GORILLA", "ZIGZAG",
-    "FREQ",   "CHIMP",      "SPRINTZ", "RLBE",    "CAMEL",
-    "ALP"};
+    "PLAIN",      "DICTIONARY", "RLE",     "DIFF",   "TS_2DIFF", "BITMAP",
+    "GORILLA_V1", "REGULAR",    "GORILLA", "ZIGZAG", "FREQ",     "CHIMP",
+    "SPRINTZ",    "RLBE",       "CAMEL",   "ALP"};
 
 const char* s_compression_names[10] = {
     "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO",  "SDT",

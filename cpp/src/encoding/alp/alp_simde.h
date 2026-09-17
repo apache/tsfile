@@ -24,9 +24,9 @@
 
 #include "alp_traits.h"
 #include "simde/x86/avx2.h"
-#include "simde/x86/sse4.1.h"
-#include "simde/x86/avx512/cvtt.h"
 #include "simde/x86/avx512/cvt.h"
+#include "simde/x86/avx512/cvtt.h"
+#include "simde/x86/sse4.1.h"
 
 namespace storage {
 namespace alp {
@@ -54,8 +54,8 @@ struct AlpSimdKernel<float> {
             simde_mm256_set1_ps(ALP_FLOAT_ENCODING_LOWER_LIMIT);
         const simde__m256 vupper =
             simde_mm256_set1_ps(ALP_FLOAT_ENCODING_UPPER_LIMIT);
-        const simde__m256i vnegzero = simde_mm256_set1_epi32(
-            static_cast<int32_t>(0x80000000u));
+        const simde__m256i vnegzero =
+            simde_mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
         const simde__m256i vall = simde_mm256_set1_epi32(-1);
 
         uint32_t ex_count = 0;
@@ -63,8 +63,8 @@ struct AlpSimdKernel<float> {
         for (; i + 7 < count; i += 8) {
             const simde__m256 v = simde_mm256_loadu_ps(values + i);
             const simde__m256 scaled = simde_mm256_mul_ps(v, vscale);
-            const simde__m256 rounded = simde_mm256_sub_ps(
-                simde_mm256_add_ps(scaled, vmagic), vmagic);
+            const simde__m256 rounded =
+                simde_mm256_sub_ps(simde_mm256_add_ps(scaled, vmagic), vmagic);
             const simde__m256i vi = simde_mm256_cvttps_epi32(rounded);
             const simde__m256 back = simde_mm256_mul_ps(
                 simde_mm256_mul_ps(simde_mm256_cvtepi32_ps(vi), vfactor),
@@ -80,8 +80,8 @@ struct AlpSimdKernel<float> {
                 simde_mm256_cmp_ps(v, v, SIMDE_CMP_ORD_Q);
             const simde__m256 equal =
                 simde_mm256_cmp_ps(back, v, SIMDE_CMP_EQ_OQ);
-            const simde__m256i is_negzero = simde_mm256_cmpeq_epi32(
-                simde_mm256_castps_si256(v), vnegzero);
+            const simde__m256i is_negzero =
+                simde_mm256_cmpeq_epi32(simde_mm256_castps_si256(v), vnegzero);
             const simde__m256 not_negzero = simde_mm256_castsi256_ps(
                 simde_mm256_xor_si256(is_negzero, vall));
             const simde__m256 ok = simde_mm256_and_ps(
@@ -124,10 +124,9 @@ struct AlpSimdKernel<float> {
                                   const float* exceptions,
                                   uint32_t exception_count, float* out) {
         typedef AlpTypeTraits<float> Traits;
-        const simde__m256 vfactor = simde_mm256_set1_ps(
-            static_cast<float>(ALP_FACT[factor]));
-        const simde__m256 vfrac =
-            simde_mm256_set1_ps(ALP_FLOAT_FRAC[exponent]);
+        const simde__m256 vfactor =
+            simde_mm256_set1_ps(static_cast<float>(ALP_FACT[factor]));
+        const simde__m256 vfrac = simde_mm256_set1_ps(ALP_FLOAT_FRAC[exponent]);
 
         uint32_t i = 0;
         for (; i + 7 < count; i += 8) {
@@ -165,8 +164,7 @@ struct AlpSimdKernel<double> {
                                   double* exceptions,
                                   uint32_t* exception_count) {
         typedef AlpTypeTraits<double> Traits;
-        const double scale =
-            ALP_DOUBLE_EXP[exponent] * ALP_DOUBLE_FRAC[factor];
+        const double scale = ALP_DOUBLE_EXP[exponent] * ALP_DOUBLE_FRAC[factor];
         const double factor_value = static_cast<double>(ALP_FACT[factor]);
         const double frac_value = ALP_DOUBLE_FRAC[exponent];
 
@@ -178,8 +176,8 @@ struct AlpSimdKernel<double> {
             simde_mm_set1_pd(ALP_DOUBLE_ENCODING_LOWER_LIMIT);
         const simde__m128d vupper =
             simde_mm_set1_pd(ALP_DOUBLE_ENCODING_UPPER_LIMIT);
-        const simde__m128i vnegzero = simde_mm_set1_epi64x(
-            static_cast<int64_t>(0x8000000000000000ULL));
+        const simde__m128i vnegzero =
+            simde_mm_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
         const simde__m128i vall = simde_mm_set1_epi32(-1);
 
         uint32_t ex_count = 0;
@@ -200,19 +198,19 @@ struct AlpSimdKernel<double> {
                 simde_mm_cmp_pd(rounded, vlower, SIMDE_CMP_GE_OQ),
                 simde_mm_cmp_pd(rounded, vupper, SIMDE_CMP_LE_OQ));
             const simde__m128d ordered = simde_mm_cmp_pd(v, v, SIMDE_CMP_ORD_Q);
-            const simde__m128d equal = simde_mm_cmp_pd(back, v, SIMDE_CMP_EQ_OQ);
-            const simde__m128i is_negzero = simde_mm_cmpeq_epi64(
-                simde_mm_castpd_si128(v), vnegzero);
-            const simde__m128d not_negzero = simde_mm_castsi128_pd(
-                simde_mm_xor_si128(is_negzero, vall));
+            const simde__m128d equal =
+                simde_mm_cmp_pd(back, v, SIMDE_CMP_EQ_OQ);
+            const simde__m128i is_negzero =
+                simde_mm_cmpeq_epi64(simde_mm_castpd_si128(v), vnegzero);
+            const simde__m128d not_negzero =
+                simde_mm_castsi128_pd(simde_mm_xor_si128(is_negzero, vall));
             const simde__m128d ok = simde_mm_and_pd(
                 simde_mm_and_pd(in_range, rounded_in_range),
-                simde_mm_and_pd(ordered,
-                                simde_mm_and_pd(equal, not_negzero)));
+                simde_mm_and_pd(ordered, simde_mm_and_pd(equal, not_negzero)));
             const int mask = simde_mm_movemask_pd(ok);
 
-            simde_mm_storeu_si128(
-                reinterpret_cast<simde__m128i*>(encoded + i), vi);
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(encoded + i),
+                                  vi);
             for (int lane = 0; lane < 2; ++lane) {
                 if ((mask & (1 << lane)) == 0) {
                     const uint32_t index = i + static_cast<uint32_t>(lane);
@@ -245,10 +243,9 @@ struct AlpSimdKernel<double> {
                                   const double* exceptions,
                                   uint32_t exception_count, double* out) {
         typedef AlpTypeTraits<double> Traits;
-        const simde__m128d vfactor = simde_mm_set1_pd(
-            static_cast<double>(ALP_FACT[factor]));
-        const simde__m128d vfrac =
-            simde_mm_set1_pd(ALP_DOUBLE_FRAC[exponent]);
+        const simde__m128d vfactor =
+            simde_mm_set1_pd(static_cast<double>(ALP_FACT[factor]));
+        const simde__m128d vfrac = simde_mm_set1_pd(ALP_DOUBLE_FRAC[exponent]);
 
         uint32_t i = 0;
         for (; i + 1 < count; i += 2) {
@@ -297,7 +294,6 @@ inline AlpStatus AlpSimdDecodeValues(
                                           out);
 }
 
-
 template <typename Unsigned>
 struct AlpSimdUnpackKernel;
 
@@ -314,9 +310,10 @@ struct AlpSimdUnpackKernel<uint32_t> {
         const uint64_t mask64 =
             bit_width >= 32 ? static_cast<uint64_t>(0xFFFFFFFFu)
                             : ((static_cast<uint64_t>(1) << bit_width) - 1);
-        const simde__m256i mask = simde_mm256_set1_epi64x(
-            static_cast<int64_t>(mask64));
-        const simde__m256i perm = simde_mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
+        const simde__m256i mask =
+            simde_mm256_set1_epi64x(static_cast<int64_t>(mask64));
+        const simde__m256i perm =
+            simde_mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
         for (uint32_t i = 0; i + 3 < count; i += 4) {
             int32_t byte_offsets[4];
             int64_t bit_offsets[4];
@@ -334,8 +331,7 @@ struct AlpSimdUnpackKernel<uint32_t> {
                 reinterpret_cast<const simde__m256i*>(bit_offsets));
             const simde__m256i shifted =
                 simde_mm256_srlv_epi64(windows, shifts);
-            const simde__m256i masked =
-                simde_mm256_and_si256(shifted, mask);
+            const simde__m256i masked = simde_mm256_and_si256(shifted, mask);
             const simde__m256i compact =
                 simde_mm256_permutevar8x32_epi32(masked, perm);
             simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(out + i),
@@ -358,8 +354,8 @@ struct AlpSimdUnpackKernel<uint64_t> {
         const uint64_t mask64 =
             bit_width >= 64 ? ~static_cast<uint64_t>(0)
                             : ((static_cast<uint64_t>(1) << bit_width) - 1);
-        const simde__m256i mask = simde_mm256_set1_epi64x(
-            static_cast<int64_t>(mask64));
+        const simde__m256i mask =
+            simde_mm256_set1_epi64x(static_cast<int64_t>(mask64));
         for (uint32_t i = 0; i + 3 < count; i += 4) {
             int32_t byte_offsets[4];
             int64_t bit_offsets[4];
@@ -377,10 +373,9 @@ struct AlpSimdUnpackKernel<uint64_t> {
                 reinterpret_cast<const simde__m256i*>(bit_offsets));
             const simde__m256i shifted =
                 simde_mm256_srlv_epi64(windows, shifts);
-            const simde__m256i masked =
-                simde_mm256_and_si256(shifted, mask);
-            simde_mm256_storeu_si256(
-                reinterpret_cast<simde__m256i*>(out + i), masked);
+            const simde__m256i masked = simde_mm256_and_si256(shifted, mask);
+            simde_mm256_storeu_si256(reinterpret_cast<simde__m256i*>(out + i),
+                                     masked);
         }
         return true;
     }
