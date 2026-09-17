@@ -22,7 +22,8 @@
 
 #include <math.h>
 #include <stdint.h>
-#include <string.h>
+
+#include <cstring>
 
 #include "alp_format.h"
 
