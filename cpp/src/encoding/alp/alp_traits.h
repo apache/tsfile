@@ -20,9 +20,9 @@
 #ifndef ENCODING_ALP_TRAITS_H
 #define ENCODING_ALP_TRAITS_H
 
-#include <math.h>
 #include <stdint.h>
 
+#include <cmath>
 #include <cstring>
 
 #include "alp_format.h"
