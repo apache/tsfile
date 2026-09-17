@@ -17,6 +17,7 @@
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,16 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPOSITORY_ROOT / "packaging/scripts/native_package_versions.py"
 CPP_CMAKE_FILE = REPOSITORY_ROOT / "cpp/CMakeLists.txt"
+CPP_VERSION_PATTERN = re.compile(r"^set\(TsFile_CPP_VERSION\s+(\S+)\)", re.MULTILINE)
+
+
+def repository_cpp_version():
+    """Return the C++ version declared by the checkout under test."""
+
+    match = CPP_VERSION_PATTERN.search(CPP_CMAKE_FILE.read_text(encoding="utf-8"))
+    if match is None:
+        raise AssertionError(f"cannot find TsFile_CPP_VERSION in {CPP_CMAKE_FILE}")
+    return match.group(1)
 
 
 def load_version_module():
@@ -54,7 +65,7 @@ class NativePackageVersionsTest(unittest.TestCase):
     def test_reads_development_version_from_cpp_cmake(self):
         module = self.require_module()
 
-        self.assertEqual(module.read_cpp_version(CPP_CMAKE_FILE), "2.5.0.dev")
+        self.assertEqual(module.read_cpp_version(CPP_CMAKE_FILE), repository_cpp_version())
 
     def test_builds_exact_development_package_versions(self):
         module = self.require_module()
@@ -106,7 +117,9 @@ class NativePackageVersionsTest(unittest.TestCase):
 
     def test_cli_writes_json_and_github_outputs(self):
         module = self.require_module()
-        expected = module.build_versions("2.5.0.dev", "20260910", 123, 1, "abcdef123456")
+        expected = module.build_versions(
+            repository_cpp_version(), "20260910", 123, 1, "abcdef123456"
+        )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
@@ -142,6 +155,11 @@ class NativePackageVersionsTest(unittest.TestCase):
             )
 
     def test_cli_separates_unterminated_github_output_without_changing_bytes(self):
+        module = self.require_module()
+        base_version = module.build_versions(
+            repository_cpp_version(), "20260910", 123, 1, "abcdef123456"
+        )["base_version"]
+
         for existing in (
             b"",
             b"existing=value",
@@ -177,7 +195,9 @@ class NativePackageVersionsTest(unittest.TestCase):
                 separator = b"\n" if existing and not existing.endswith(b"\n") else b""
                 self.assertTrue(
                     output.read_bytes().startswith(
-                        existing + separator + b"base_version=2.5.0\n"
+                        existing
+                        + separator
+                        + f"base_version={base_version}\n".encode("utf-8")
                     ),
                     output.read_bytes(),
                 )
