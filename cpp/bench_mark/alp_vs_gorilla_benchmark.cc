@@ -32,9 +32,13 @@
 #include "common/db_common.h"
 #include "encoding/decoder_factory.h"
 #include "encoding/encoder_factory.h"
+#include "encoding/ts2diff_encoder.h"
+#include "encoding/ts2diff_encoder.h"
 #include "utils/errno_define.h"
 
 namespace {
+
+int g_ts2diff_mpn = -1;
 
 using Clock = std::chrono::high_resolution_clock;
 
@@ -81,6 +85,15 @@ int EncodeOnce(common::TSEncoding encoding, common::TSDataType data_type,
         storage::EncoderFactory::alloc_value_encoder(encoding, data_type);
     if (encoder == NULL) {
         return common::E_NOT_SUPPORT;
+    }
+    if (encoding == common::TS_2DIFF && g_ts2diff_mpn >= 0) {
+        if (data_type == common::FLOAT) {
+            static_cast<storage::FloatTS2DIFFEncoder*>(encoder)
+                ->set_max_point_number(g_ts2diff_mpn);
+        } else if (data_type == common::DOUBLE) {
+            static_cast<storage::DoubleTS2DIFFEncoder*>(encoder)
+                ->set_max_point_number(g_ts2diff_mpn);
+        }
     }
     common::ByteStream stream(1024, common::MOD_DEFAULT);
     const Clock::time_point start = Clock::now();
@@ -320,6 +333,14 @@ void RunAll(const std::string& type_name, uint32_t repetitions,
             PrintResult(RunCase("GORILLA", common::GORILLA, cases[c].name,
                                 cases[c].values, repetitions));
         }
+        if (codec_filter.empty() || codec_filter == "TS_2DIFF") {
+            PrintResult(RunCase("TS_2DIFF", common::TS_2DIFF, cases[c].name,
+                                cases[c].values, repetitions));
+        }
+        if (codec_filter.empty() || codec_filter == "TS_2DIFF") {
+            PrintResult(RunCase("TS_2DIFF", common::TS_2DIFF, cases[c].name,
+                                cases[c].values, repetitions));
+        }
     }
     (void)data_type;
 }
@@ -334,12 +355,25 @@ int main(int argc, char** argv) {
     const std::string codec_filter = argc > 2 ? argv[2] : "";
     const std::string type_filter = argc > 3 ? argv[3] : "";
     const std::string pattern_filter = argc > 4 ? argv[4] : "";
-    std::cout << "ALP vs GORILLA codec benchmark, best of " << repetitions
-              << " runs" << std::endl;
+    g_ts2diff_mpn = argc > 5 ? atoi(argv[5]) : -1;
+    std::cout << "ALP vs GORILLA vs TS_2DIFF codec benchmark, best of "
+              << repetitions << " runs";
+    if (g_ts2diff_mpn >= 0) {
+        std::cout << ", TS_2DIFF mpn=" << g_ts2diff_mpn;
+    } else {
+        std::cout << ", TS_2DIFF mpn=2(float)/3(double)";
+    }
+    std::cout << std::endl;
     if (type_filter.empty() || type_filter == "FLOAT") {
+        if (g_ts2diff_mpn < 0) {
+            g_ts2diff_mpn = 2;
+        }
         RunAll<float>("FLOAT", repetitions, codec_filter, pattern_filter);
     }
     if (type_filter.empty() || type_filter == "DOUBLE") {
+        if (argc <= 5) {
+            g_ts2diff_mpn = 3;
+        }
         RunAll<double>("DOUBLE", repetitions, codec_filter, pattern_filter);
     }
     return 0;

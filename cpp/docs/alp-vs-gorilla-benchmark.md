@@ -19,11 +19,11 @@
 
 -->
 
-# ALP vs Gorilla Codec Benchmark
+# ALP vs Gorilla vs TS_2DIFF Codec Benchmark
 
-This document records the first C++ codec-level comparison between ALP and
-Gorilla on the `colin/alp-codec` branch. It is not an end-to-end TsFile I/O
-benchmark; it measures the codec path through the same
+This document records the C++ codec-level comparison between ALP, Gorilla,
+and TS_2DIFF on the `colin/alp-codec` branch. It is not an end-to-end TsFile
+I/O benchmark; it measures the codec path through the same
 `EncoderFactory` / `DecoderFactory` interfaces used by TsFile.
 
 ## Environment
@@ -79,6 +79,53 @@ AVX2/AVX-512 peak.
 | Gorilla | random | 8,650,764 | 0.970 | 277.1 | 2644.3 | yes |
 | ALP | constant | 8,417,296 | 0.997 | 861.9 | 2094.3 | yes |
 | Gorilla | constant | 131,090 | 63.991 | 3824.2 | 76646.7 | yes |
+
+## Three-Way Decimal Comparison (ALP vs Gorilla vs TS_2DIFF)
+
+TS_2DIFF's FLOAT/DOUBLE path is the direct competitor for fixed-precision
+decimal data. It scales the value by `10^maxPointNumber`, delta-encodes the
+resulting integers, and stores page-level overflow/rounding metadata. The
+benchmark now includes it as a reference row.
+
+### FLOAT decimal
+
+| Codec | Ratio | Encode MB/s | Decode MB/s | Lossless |
+| --- | ---: | ---: | ---: | --- |
+| ALP | 1.773 | 584.3 | 2749.7 | yes |
+| Gorilla | 1.457 | 353.2 | 1333.2 | yes |
+| TS_2DIFF (`mpn=2`) | **31.587** | **1419.7** | **1702.7** | **no** |
+
+### DOUBLE decimal
+
+| Codec | Ratio | Encode MB/s | Decode MB/s | Lossless |
+| --- | ---: | ---: | ---: | --- |
+| ALP | 5.882 | 1071.7 | **6398.5** | yes |
+| Gorilla | 0.970 | 284.5 | 2633.7 | yes |
+| TS_2DIFF (`mpn=3`) | **42.303** | **2839.6** | 3051.3 | **no** |
+
+The TS_2DIFF `Lossless = no` result is not a benchmark harness problem. A
+standalone probe found:
+
+- FLOAT: a tiny residual value (`2.08e-17`) was reconstructed as `0.0`.
+- DOUBLE: several fixed-3-decimal values were reconstructed with a 1-ULP
+  difference.
+
+TS_2DIFF is therefore excellent when the application accepts the scaled-value
+semantics and does not require bit-exact reconstruction. ALP is the safer
+choice when the original IEEE-754 bit pattern must be preserved exactly,
+because its encoder performs a round-trip check and stores an exception when
+the integer conversion cannot reproduce the input.
+
+The three-way trade-off is:
+
+- **TS_2DIFF**: best size on fixed-precision decimal data, fast encode/decode,
+  but the current C++ implementation is not bit-exact for all FLOAT/DOUBLE
+  values.
+- **ALP**: bit-exact by construction, strong encode/decode throughput, better
+  ratio than Gorilla on decimal data, but lower ratio than TS_2DIFF because it
+  stores exceptions that TS_2DIFF approximates.
+- **Gorilla**: best for constant and high-entropy shapes; not a decimal
+  specialist.
 
 ## Interpretation
 
