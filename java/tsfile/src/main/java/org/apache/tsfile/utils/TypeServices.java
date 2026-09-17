@@ -22,20 +22,150 @@ package org.apache.tsfile.utils;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
+import org.apache.tsfile.read.common.type.service.BinaryPageDataReader;
+import org.apache.tsfile.read.common.type.service.BinaryTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.BooleanPageDataReader;
+import org.apache.tsfile.read.common.type.service.BooleanTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.DatePageDataReader;
+import org.apache.tsfile.read.common.type.service.DateTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.DoublePageDataReader;
+import org.apache.tsfile.read.common.type.service.DoubleTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.FloatPageDataReader;
+import org.apache.tsfile.read.common.type.service.FloatTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.IntPageDataReader;
+import org.apache.tsfile.read.common.type.service.IntTabletColumnWriter;
+import org.apache.tsfile.read.common.type.service.LongPageDataReader;
+import org.apache.tsfile.read.common.type.service.LongTabletColumnWriter;
 import org.apache.tsfile.read.common.type.service.TypeService;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.TabletWriteContext;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.function.LongPredicate;
 
 public final class TypeServices {
+
+  /** Type-specialized loops avoid a polymorphic reader invocation for every decoded value. */
+  public static final TypeService<PageDataBatchReader> READ_PAGE_BATCH_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> BooleanPageDataReader.INSTANCE;
+            case INT32 -> IntPageDataReader.INSTANCE;
+            case DATE -> DatePageDataReader.INSTANCE;
+            case INT64, TIMESTAMP -> LongPageDataReader.INSTANCE;
+            case FLOAT -> FloatPageDataReader.INSTANCE;
+            case DOUBLE -> DoublePageDataReader.INSTANCE;
+            case TEXT, BLOB, STRING, OBJECT -> BinaryPageDataReader.INSTANCE;
+            case ROW, UNKNOWN, VECTOR ->
+                throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                    .setChecked(true);
+          };
+
+  /** Resolve the Tablet column type before entering its row loop. */
+  public static final TypeService<TabletColumnWriter> WRITE_TABLET_COLUMN_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case BOOLEAN -> BooleanTabletColumnWriter.INSTANCE;
+            case INT32 -> IntTabletColumnWriter.INSTANCE;
+            case DATE -> DateTabletColumnWriter.INSTANCE;
+            case INT64, TIMESTAMP -> LongTabletColumnWriter.INSTANCE;
+            case FLOAT -> FloatTabletColumnWriter.INSTANCE;
+            case DOUBLE -> DoubleTabletColumnWriter.INSTANCE;
+            case TEXT, BLOB, STRING, OBJECT -> BinaryTabletColumnWriter.INSTANCE;
+            case ROW, UNKNOWN, VECTOR ->
+                throw new UnSupportedDataTypeException(String.valueOf(type.getTypeEnum()))
+                    .setChecked(true);
+          };
+
+  public interface TabletColumnWriter {
+    void write(
+        ChunkWriterImpl writer,
+        long[] times,
+        Object values,
+        BitMap nulls,
+        int start,
+        int end,
+        TabletWriteContext context)
+        throws WriteProcessException;
+  }
+
+  static {
+    WRITE_TABLET_COLUMN_SERVICE.check();
+    READ_PAGE_BATCH_SERVICE.check();
+  }
+
+  /** Batch entry points; implementations own the loop and directly use typed decoder methods. */
+  public interface PageDataBatchReader {
+    void readBatch(
+        Decoder timeDecoder,
+        ByteBuffer timeBuffer,
+        Decoder decoder,
+        ByteBuffer buffer,
+        Filter filter,
+        BatchData output,
+        boolean allSatisfy,
+        LongPredicate isDeleted)
+        throws IOException;
+
+    void readAlignedBatch(
+        long[] timestamps,
+        byte[] bitmap,
+        Decoder decoder,
+        ByteBuffer buffer,
+        Filter filter,
+        BatchData output,
+        LongPredicate isDeleted);
+
+    /** Returns the number of rows rejected by the record filter, excluding deleted rows. */
+    long readBlock(
+        Decoder timeDecoder,
+        ByteBuffer timeBuffer,
+        Decoder decoder,
+        ByteBuffer buffer,
+        Filter filter,
+        TsBlockBuilder builder,
+        boolean allSatisfy,
+        LongPredicate isDeleted,
+        PaginationController pagination)
+        throws IOException;
+
+    void readValues(
+        long[] timestamps,
+        byte[] bitmap,
+        Decoder decoder,
+        ByteBuffer buffer,
+        TsPrimitiveType[] output,
+        LongPredicate isDeleted);
+
+    /** A null deletion mask means that no rows are deleted. */
+    void readColumn(
+        int end,
+        byte[] bitmap,
+        Decoder decoder,
+        ByteBuffer buffer,
+        ColumnBuilder builder,
+        boolean[] keep,
+        boolean[] deleted);
+
+    /** Consumes present values before start, then appends the range [start, end). */
+    void readColumn(
+        int start,
+        int end,
+        byte[] bitmap,
+        Decoder decoder,
+        ByteBuffer buffer,
+        ColumnBuilder builder);
+  }
 
   // Page value decoding services for BatchData and TsBlock outputs.
 

@@ -29,6 +29,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.function.Function;
 
 public class ValueConverter {
 
@@ -148,6 +149,22 @@ public class ValueConverter {
     return FROM_STRING_SERVICE
         .call(Type.fromTsDataType(targetType))
         .convert(value, isMeasurement, timePrecision);
+  }
+
+  /** Resolve both input representations once for a column whose target type is fixed. */
+  static Function<Object, Object> converterFor(
+      TSDataType targetType, boolean isMeasurement, String timePrecision) {
+    Type type = Type.fromTsDataType(targetType);
+    StringConverter strings = FROM_STRING_SERVICE.call(type);
+    ObjectConverter objects = FROM_OBJECT_SERVICE.call(type);
+    return value -> {
+      if (value == null) {
+        return null;
+      }
+      return value instanceof String string
+          ? strings.convert(string, isMeasurement, timePrecision)
+          : objects.convert(value, isMeasurement, timePrecision);
+    };
   }
 
   private static Object fromObject(

@@ -46,6 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 public class ParquetSourceReader implements SourceReader {
 
@@ -164,34 +165,29 @@ public class ParquetSourceReader implements SourceReader {
       Map<String, Integer> parquetColIndex = buildParquetColumnIndex();
 
       int numCols = schemaColumnNames.size();
-      List<Object[]> rows = new ArrayList<>((int) rowCount);
-
-      for (long r = 0; r < rowCount; r++) {
+      int count = Math.toIntExact(rowCount);
+      Object[][] columns = new Object[numCols][count];
+      List<Function<Group, Object>> extractors = new ArrayList<>(numCols);
+      for (String name : schemaColumnNames) {
+        Integer index = parquetColIndex.get(name);
+        extractors.add(index == null ? null : valueExtractor(index));
+      }
+      // The record reader is row-oriented, but its output can go directly into SourceBatch columns.
+      for (int row = 0; row < count; row++) {
         Group group = recordReader.read();
-        Object[] row = new Object[numCols];
-
-        for (int c = 0; c < numCols; c++) {
-          String colName = schemaColumnNames.get(c);
-          Integer pIdx = parquetColIndex.get(colName);
-          if (pIdx == null) {
-            row[c] = null;
-            continue;
-          }
-
-          try {
-            if (group.getFieldRepetitionCount(pIdx) == 0) {
-              row[c] = null;
-            } else {
-              row[c] = extractValue(group, pIdx);
+        for (int col = 0; col < numCols; col++) {
+          Function<Group, Object> extractor = extractors.get(col);
+          if (extractor != null) {
+            try {
+              columns[col][row] = extractor.apply(group);
+            } catch (RuntimeException e) {
+              // Preserve the existing treatment of missing or malformed field values as null.
+              columns[col][row] = null;
             }
-          } catch (RuntimeException e) {
-            row[c] = null;
           }
         }
-        rows.add(row);
       }
-
-      return SourceBatch.fromRows(schemaColumnNames, rows);
+      return new SourceBatch(schemaColumnNames.toArray(new String[0]), columns, count);
     } catch (IOException e) {
       LOGGER.error(
           Messages.format("log.tools.parquet_read_error", sourceFile.getAbsolutePath()), e);
@@ -281,37 +277,30 @@ public class ParquetSourceReader implements SourceReader {
     return index;
   }
 
-  private Object extractValue(Group group, int fieldIndex) {
+  private Function<Group, Object> valueExtractor(int fieldIndex) {
     Type fieldType = parquetSchema.getType(fieldIndex);
+    Function<Group, Object> extractor;
     if (!fieldType.isPrimitive()) {
-      return group.getGroup(fieldIndex, 0).toString();
+      extractor = group -> group.getGroup(fieldIndex, 0).toString();
+    } else {
+      PrimitiveType pt = fieldType.asPrimitiveType();
+      extractor =
+          switch (pt.getPrimitiveTypeName()) {
+            case BOOLEAN -> group -> group.getBoolean(fieldIndex, 0);
+            case INT32 -> group -> group.getInteger(fieldIndex, 0);
+            case INT64 -> group -> group.getLong(fieldIndex, 0);
+            case FLOAT -> group -> group.getFloat(fieldIndex, 0);
+            case DOUBLE -> group -> group.getDouble(fieldIndex, 0);
+            case BINARY, FIXED_LEN_BYTE_ARRAY ->
+                pt.getLogicalTypeAnnotation()
+                        instanceof LogicalTypeAnnotation.StringLogicalTypeAnnotation
+                    ? group -> group.getString(fieldIndex, 0)
+                    : group -> group.getBinary(fieldIndex, 0).getBytes();
+            // INT96 values require getInt96 rather than getBinary.
+            case INT96 -> group -> int96ToEpochNanos(group.getInt96(fieldIndex, 0).getBytes());
+          };
     }
-
-    PrimitiveType pt = fieldType.asPrimitiveType();
-    switch (pt.getPrimitiveTypeName()) {
-      case BOOLEAN:
-        return group.getBoolean(fieldIndex, 0);
-      case INT32:
-        return group.getInteger(fieldIndex, 0);
-      case INT64:
-        return group.getLong(fieldIndex, 0);
-      case FLOAT:
-        return group.getFloat(fieldIndex, 0);
-      case DOUBLE:
-        return group.getDouble(fieldIndex, 0);
-      case BINARY:
-      case FIXED_LEN_BYTE_ARRAY:
-        LogicalTypeAnnotation logical = pt.getLogicalTypeAnnotation();
-        if (logical instanceof LogicalTypeAnnotation.StringLogicalTypeAnnotation) {
-          return group.getString(fieldIndex, 0);
-        }
-        return group.getBinary(fieldIndex, 0).getBytes();
-      case INT96:
-        // Use getInt96 — INT96 values are Int96Value, not BinaryValue, so getBinary throws CCE.
-        return int96ToEpochNanos(group.getInt96(fieldIndex, 0).getBytes());
-      default:
-        return group.getValueToString(fieldIndex, 0);
-    }
+    return group -> group.getFieldRepetitionCount(fieldIndex) == 0 ? null : extractor.apply(group);
   }
 
   /**

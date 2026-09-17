@@ -164,6 +164,11 @@ public class ValueChunkWriter {
     pageWriter.write(time, value, isNull);
   }
 
+  /** Appends nulls to the current page without type dispatch, encoding, or statistics updates. */
+  public void writeNull(int count) {
+    pageWriter.writeNull(count);
+  }
+
   public void write(long[] timestamps, int[] values, boolean[] isNull, int batchSize, int pos) {
     pageWriter.write(timestamps, values, isNull, batchSize, pos);
   }
