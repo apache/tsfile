@@ -20,6 +20,7 @@
 #ifndef ENCODING_DECODER_FACTORY_H
 #define ENCODING_DECODER_FACTORY_H
 
+#include "alp/alp_decoder.h"
 #include "camel_decoder.h"
 #include "chimp_decoder.h"
 #include "common/global.h"
@@ -188,6 +189,16 @@ class DecoderFactory {
                         return nullptr;
                 }
 
+            case ALP:
+                switch (data_type) {
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatAlpDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleAlpDecoder);
+                    default:
+                        return nullptr;
+                }
+
             default:
                 // Not supported encoding
                 return nullptr;
@@ -195,7 +206,12 @@ class DecoderFactory {
         return nullptr;
     }
 
-    static void free(Decoder* decoder) { common::mem_free(decoder); }
+    static void free(Decoder* decoder) {
+        if (decoder != nullptr) {
+            decoder->destroy();
+        }
+        common::mem_free(decoder);
+    }
 };
 }  // end namespace storage
 #endif  // ENCODING_DECODER_FACTORY_H
