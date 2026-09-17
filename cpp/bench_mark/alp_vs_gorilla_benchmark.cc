@@ -283,7 +283,9 @@ std::vector<T> MakeConstantData(uint64_t count) {
 }
 
 template <typename T>
-void RunAll(const std::string& type_name, uint32_t repetitions) {
+void RunAll(const std::string& type_name, uint32_t repetitions,
+            const std::string& codec_filter,
+            const std::string& pattern_filter) {
     const uint64_t count = 1024 * 1024;
     const common::TSDataType data_type =
         sizeof(T) == sizeof(float) ? common::FLOAT : common::DOUBLE;
@@ -307,10 +309,17 @@ void RunAll(const std::string& type_name, uint32_t repetitions) {
               << std::setw(14) << "dec(MB/s)" << std::setw(10) << "ok"
               << std::endl;
     for (size_t c = 0; c < cases.size(); ++c) {
-        PrintResult(RunCase("ALP", common::ALP, cases[c].name, cases[c].values,
-                            repetitions));
-        PrintResult(RunCase("GORILLA", common::GORILLA, cases[c].name,
-                            cases[c].values, repetitions));
+        if (!pattern_filter.empty() && cases[c].name != pattern_filter) {
+            continue;
+        }
+        if (codec_filter.empty() || codec_filter == "ALP") {
+            PrintResult(RunCase("ALP", common::ALP, cases[c].name,
+                                cases[c].values, repetitions));
+        }
+        if (codec_filter.empty() || codec_filter == "GORILLA") {
+            PrintResult(RunCase("GORILLA", common::GORILLA, cases[c].name,
+                                cases[c].values, repetitions));
+        }
     }
     (void)data_type;
 }
@@ -322,9 +331,16 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         repetitions = static_cast<uint32_t>(std::max(1, atoi(argv[1])));
     }
+    const std::string codec_filter = argc > 2 ? argv[2] : "";
+    const std::string type_filter = argc > 3 ? argv[3] : "";
+    const std::string pattern_filter = argc > 4 ? argv[4] : "";
     std::cout << "ALP vs GORILLA codec benchmark, best of " << repetitions
               << " runs" << std::endl;
-    RunAll<float>("FLOAT", repetitions);
-    RunAll<double>("DOUBLE", repetitions);
+    if (type_filter.empty() || type_filter == "FLOAT") {
+        RunAll<float>("FLOAT", repetitions, codec_filter, pattern_filter);
+    }
+    if (type_filter.empty() || type_filter == "DOUBLE") {
+        RunAll<double>("DOUBLE", repetitions, codec_filter, pattern_filter);
+    }
     return 0;
 }
