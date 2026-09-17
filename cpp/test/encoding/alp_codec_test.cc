@@ -36,13 +36,13 @@ static bool BitEqual(T lhs, T rhs) {
 template <typename T>
 static void ExpectRoundTrip(const std::vector<T>& values) {
     std::vector<uint8_t> encoded;
-    ASSERT_EQ(ALP_OK, AlpEncodePage(values.empty() ? NULL : &values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(values.empty() ? NULL : &values[0],
+                            static_cast<uint32_t>(values.size()), encoded));
     std::vector<T> decoded;
-    ASSERT_EQ(ALP_OK, AlpDecodePage(encoded.empty() ? NULL : &encoded[0],
-                                    static_cast<uint32_t>(encoded.size()),
-                                    decoded));
+    ASSERT_EQ(ALP_OK,
+              AlpDecodePage(encoded.empty() ? NULL : &encoded[0],
+                            static_cast<uint32_t>(encoded.size()), decoded));
     ASSERT_EQ(values.size(), decoded.size());
     for (size_t i = 0; i < values.size(); ++i) {
         EXPECT_TRUE(BitEqual(values[i], decoded[i])) << "index " << i;
@@ -78,15 +78,25 @@ TEST(AlpCodecTest, SpecialValuesRoundTrip) {
     const double nan_d = std::numeric_limits<double>::quiet_NaN();
     const double inf_d = std::numeric_limits<double>::infinity();
 
-    std::vector<float> floats = {0.0f, -0.0f, 1.0f, -1.0f,
-                                 nan_f, inf_f, -inf_f,
+    std::vector<float> floats = {0.0f,
+                                 -0.0f,
+                                 1.0f,
+                                 -1.0f,
+                                 nan_f,
+                                 inf_f,
+                                 -inf_f,
                                  std::numeric_limits<float>::denorm_min(),
                                  std::numeric_limits<float>::max(),
                                  std::numeric_limits<float>::lowest()};
     ExpectRoundTrip(floats);
 
-    std::vector<double> doubles = {0.0, -0.0, 1.0, -1.0,
-                                   nan_d, inf_d, -inf_d,
+    std::vector<double> doubles = {0.0,
+                                   -0.0,
+                                   1.0,
+                                   -1.0,
+                                   nan_d,
+                                   inf_d,
+                                   -inf_d,
                                    std::numeric_limits<double>::denorm_min(),
                                    std::numeric_limits<double>::max(),
                                    std::numeric_limits<double>::lowest()};
@@ -122,9 +132,9 @@ TEST(AlpCodecTest, TruncatedPayloadReturnsError) {
         values.push_back(static_cast<double>(i) * 0.25);
     }
     std::vector<uint8_t> encoded;
-    ASSERT_EQ(ALP_OK, AlpEncodePage(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
     std::vector<double> decoded;
     EXPECT_NE(ALP_OK, AlpDecodePage(&encoded[0],
                                     static_cast<uint32_t>(encoded.size() / 2),
@@ -148,9 +158,9 @@ TEST(AlpCodecTest, DecimalDataUsesAlpScheme) {
         values[i] = static_cast<float>(i % 128) * 0.01f;
     }
     std::vector<uint8_t> encoded;
-    ASSERT_EQ(ALP_OK, AlpEncodePage(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
     const AlpBlockHeader header = FirstBlockHeader<float>(encoded);
     EXPECT_EQ(ALP_SCHEME_ALP, header.scheme);
     EXPECT_LT(header.body_bytes, values.size() * sizeof(float));
@@ -168,9 +178,9 @@ TEST(AlpCodecTest, HighEntropyUsesPlainScheme) {
         }
     }
     std::vector<uint8_t> encoded;
-    ASSERT_EQ(ALP_OK, AlpEncodePage(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
     const AlpBlockHeader header = FirstBlockHeader<double>(encoded);
     EXPECT_EQ(ALP_SCHEME_PLAIN, header.scheme);
 }
@@ -181,9 +191,9 @@ TEST(AlpCodecTest, SmallIntegerBitWidths) {
         values[i] = static_cast<double>(i % 256);
     }
     std::vector<uint8_t> encoded;
-    ASSERT_EQ(ALP_OK, AlpEncodePage(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
     const AlpBlockHeader header = FirstBlockHeader<double>(encoded);
     EXPECT_EQ(ALP_SCHEME_ALP, header.scheme);
     EXPECT_EQ(8, header.bit_width);

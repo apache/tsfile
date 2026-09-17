@@ -40,28 +40,24 @@ static const uint32_t ALP_BODY_ALIGNMENT = 32;
 static const uint8_t ALP_FLOAT_MAX_EXPONENT = 10;
 static const uint8_t ALP_DOUBLE_MAX_EXPONENT = 18;
 
-static const float ALP_FLOAT_MAGIC = 12582912.0f;  // 1.5 * 2^23
-static const double ALP_DOUBLE_MAGIC =
-    6755399441055744.0;  // 1.5 * 2^52
+static const float ALP_FLOAT_MAGIC = 12582912.0f;           // 1.5 * 2^23
+static const double ALP_DOUBLE_MAGIC = 6755399441055744.0;  // 1.5 * 2^52
 
 // Values outside these bounds cannot be cast to the corresponding integer type
 // without undefined behaviour.  The bounds intentionally leave a small margin
 // so the magic-number rounding itself cannot overflow.
 static const float ALP_FLOAT_ENCODING_LOWER_LIMIT = -2147483520.0f;
 static const float ALP_FLOAT_ENCODING_UPPER_LIMIT = 2147483520.0f;
-static const double ALP_DOUBLE_ENCODING_LOWER_LIMIT =
-    -9223372036854774784.0;
-static const double ALP_DOUBLE_ENCODING_UPPER_LIMIT =
-    9223372036854774784.0;
+static const double ALP_DOUBLE_ENCODING_LOWER_LIMIT = -9223372036854774784.0;
+static const double ALP_DOUBLE_ENCODING_UPPER_LIMIT = 9223372036854774784.0;
 
 static const float ALP_FLOAT_FRAC[ALP_FLOAT_MAX_EXPONENT + 1] = {
-    1.0f,         0.1f,         0.01f,         0.001f,
-    0.0001f,      0.00001f,     0.000001f,     0.0000001f,
-    0.00000001f,  0.000000001f, 0.0000000001f};
+    1.0f,      0.1f,       0.01f,       0.001f,       0.0001f,      0.00001f,
+    0.000001f, 0.0000001f, 0.00000001f, 0.000000001f, 0.0000000001f};
 
 static const float ALP_FLOAT_EXP[ALP_FLOAT_MAX_EXPONENT + 1] = {
-    1.0f,        10.0f,       100.0f,       1000.0f,
-    10000.0f,    100000.0f,   1000000.0f,   10000000.0f,
+    1.0f,         10.0f,         100.0f,        1000.0f,
+    10000.0f,     100000.0f,     1000000.0f,    10000000.0f,
     100000000.0f, 1000000000.0f, 10000000000.0f};
 
 static const double ALP_DOUBLE_FRAC[ALP_DOUBLE_MAX_EXPONENT + 1] = {

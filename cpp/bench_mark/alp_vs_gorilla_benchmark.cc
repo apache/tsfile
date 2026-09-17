@@ -33,7 +33,6 @@
 #include "encoding/decoder_factory.h"
 #include "encoding/encoder_factory.h"
 #include "encoding/ts2diff_encoder.h"
-#include "encoding/ts2diff_encoder.h"
 #include "utils/errno_define.h"
 
 namespace {
@@ -74,7 +73,7 @@ int CopyEncodedBytes(common::ByteStream& stream, std::vector<uint8_t>& bytes) {
         bytes.insert(bytes.end(), begin, begin + buffer.len_);
     }
     return bytes.size() == stream.total_size() ? common::E_OK
-                                                : common::E_PARTIAL_READ;
+                                               : common::E_PARTIAL_READ;
 }
 
 template <typename T>
@@ -97,9 +96,8 @@ int EncodeOnce(common::TSEncoding encoding, common::TSDataType data_type,
     }
     common::ByteStream stream(1024, common::MOD_DEFAULT);
     const Clock::time_point start = Clock::now();
-    int ret = encoder->encode_batch(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    stream);
+    int ret = encoder->encode_batch(
+        &values[0], static_cast<uint32_t>(values.size()), stream);
     if (ret == common::E_OK) {
         ret = encoder->flush(stream);
     }
@@ -150,10 +148,8 @@ int DecodeOnce(common::TSEncoding encoding, common::TSDataType data_type,
 
 template <typename T>
 BenchResult<T> RunCase(const std::string& encoding_name,
-                       common::TSEncoding encoding,
-                       const std::string& pattern,
-                       const std::vector<T>& values,
-                       uint32_t repetitions) {
+                       common::TSEncoding encoding, const std::string& pattern,
+                       const std::vector<T>& values, uint32_t repetitions) {
     const common::TSDataType data_type =
         sizeof(T) == sizeof(float) ? common::FLOAT : common::DOUBLE;
     BenchResult<T> result;
@@ -173,17 +169,16 @@ BenchResult<T> RunCase(const std::string& encoding_name,
     for (uint32_t rep = 0; rep < repetitions; ++rep) {
         std::vector<uint8_t> bytes;
         double encode_ms = 0.0;
-        const int encode_ret = EncodeOnce(encoding, data_type, values, bytes,
-                                          encode_ms);
+        const int encode_ret =
+            EncodeOnce(encoding, data_type, values, bytes, encode_ms);
         if (encode_ret != common::E_OK) {
             result.correct = false;
             return result;
         }
         double decode_ms = 0.0;
         std::vector<T> rep_decoded;
-        const int decode_ret = DecodeOnce(encoding, data_type, bytes,
-                                          values.size(), rep_decoded,
-                                          decode_ms);
+        const int decode_ret = DecodeOnce(
+            encoding, data_type, bytes, values.size(), rep_decoded, decode_ms);
         if (decode_ret != common::E_OK) {
             result.correct = false;
             return result;
@@ -224,11 +219,10 @@ BenchResult<T> RunCase(const std::string& encoding_name,
 
 template <typename T>
 void PrintResult(const BenchResult<T>& result) {
-    const double ratio =
-        result.encoded_bytes == 0
-            ? 0.0
-            : static_cast<double>(result.raw_bytes) /
-                  static_cast<double>(result.encoded_bytes);
+    const double ratio = result.encoded_bytes == 0
+                             ? 0.0
+                             : static_cast<double>(result.raw_bytes) /
+                                   static_cast<double>(result.encoded_bytes);
     std::cout << std::left << std::setw(8) << result.encoding << std::setw(12)
               << result.pattern << std::right << std::setw(10)
               << result.value_count << std::setw(14) << result.raw_bytes
@@ -241,8 +235,7 @@ void PrintResult(const BenchResult<T>& result) {
 }
 
 template <typename T>
-std::vector<T> MakeDecimalData(uint64_t count, double scale,
-                               double offset) {
+std::vector<T> MakeDecimalData(uint64_t count, double scale, double offset) {
     std::vector<T> values(static_cast<size_t>(count));
     for (uint64_t i = 0; i < count; ++i) {
         const double raw = static_cast<double>(i % 100000) * scale + offset;

@@ -61,9 +61,8 @@ static void ExpectSimdMatchesScalar(const std::vector<T>& values) {
     ASSERT_FALSE(values.empty());
     uint8_t factor = 0;
     uint8_t exponent = 0;
-    ASSERT_TRUE(AlpChooseFactorExponent(&values[0],
-                                        static_cast<uint32_t>(values.size()),
-                                        factor, exponent));
+    ASSERT_TRUE(AlpChooseFactorExponent(
+        &values[0], static_cast<uint32_t>(values.size()), factor, exponent));
 
     const uint32_t count = static_cast<uint32_t>(values.size());
     std::vector<typename Traits::Encoded> scalar_encoded(count, 0);
@@ -78,30 +77,27 @@ static void ExpectSimdMatchesScalar(const std::vector<T>& values) {
     ScalarEncodeValues(&values[0], count, factor, exponent, &scalar_encoded[0],
                        &scalar_bitmap[0], &scalar_exceptions[0],
                        &scalar_exception_count);
-    ASSERT_EQ(ALP_OK, AlpSimdEncodeValues(
-                          &values[0], count, factor, exponent, &simd_encoded[0],
-                          &simd_bitmap[0], &simd_exceptions[0],
-                          &simd_exception_count));
+    ASSERT_EQ(ALP_OK,
+              AlpSimdEncodeValues(&values[0], count, factor, exponent,
+                                  &simd_encoded[0], &simd_bitmap[0],
+                                  &simd_exceptions[0], &simd_exception_count));
 
     EXPECT_EQ(scalar_exception_count, simd_exception_count);
     EXPECT_EQ(scalar_bitmap, simd_bitmap);
     EXPECT_EQ(scalar_encoded, simd_encoded);
     ASSERT_EQ(scalar_exception_count, simd_exception_count);
     for (uint32_t i = 0; i < scalar_exception_count; ++i) {
-        EXPECT_TRUE(Traits::BitwiseEqual(scalar_exceptions[i],
-                                         simd_exceptions[i]));
+        EXPECT_TRUE(
+            Traits::BitwiseEqual(scalar_exceptions[i], simd_exceptions[i]));
     }
 
     std::vector<T> simd_decoded(count);
     ASSERT_EQ(ALP_OK,
-              AlpSimdDecodeValues(&scalar_encoded[0], count, factor, exponent,
-                                   scalar_exception_count == 0
-                                       ? NULL
-                                       : &scalar_bitmap[0],
-                                   scalar_exception_count == 0
-                                       ? NULL
-                                       : &scalar_exceptions[0],
-                                   scalar_exception_count, &simd_decoded[0]));
+              AlpSimdDecodeValues(
+                  &scalar_encoded[0], count, factor, exponent,
+                  scalar_exception_count == 0 ? NULL : &scalar_bitmap[0],
+                  scalar_exception_count == 0 ? NULL : &scalar_exceptions[0],
+                  scalar_exception_count, &simd_decoded[0]));
     for (uint32_t i = 0; i < count; ++i) {
         EXPECT_TRUE(Traits::BitwiseEqual(values[i], simd_decoded[i]))
             << "index " << i;
@@ -127,14 +123,22 @@ TEST(AlpSimdeTest, DoubleValuesMatchScalar) {
 TEST(AlpSimdeTest, SpecialValuesMatchScalar) {
     const float nan_f = std::numeric_limits<float>::quiet_NaN();
     const double nan_d = std::numeric_limits<double>::quiet_NaN();
-    std::vector<float> floats = {0.0f, -0.0f, 1.0f, -1.0f, nan_f,
+    std::vector<float> floats = {0.0f,
+                                 -0.0f,
+                                 1.0f,
+                                 -1.0f,
+                                 nan_f,
                                  std::numeric_limits<float>::infinity(),
                                  -std::numeric_limits<float>::infinity(),
                                  std::numeric_limits<float>::denorm_min(),
                                  std::numeric_limits<float>::max()};
     ExpectSimdMatchesScalar(floats);
 
-    std::vector<double> doubles = {0.0, -0.0, 1.0, -1.0, nan_d,
+    std::vector<double> doubles = {0.0,
+                                   -0.0,
+                                   1.0,
+                                   -1.0,
+                                   nan_d,
                                    std::numeric_limits<double>::infinity(),
                                    -std::numeric_limits<double>::infinity(),
                                    std::numeric_limits<double>::denorm_min(),

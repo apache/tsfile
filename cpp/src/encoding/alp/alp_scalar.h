@@ -54,9 +54,8 @@ inline void AlpPackBits(const Unsigned* values, uint32_t count,
     if (bit_width == 0 || count == 0) {
         return;
     }
-    const uint32_t raw_bytes =
-        static_cast<uint32_t>((static_cast<uint64_t>(count) * bit_width + 7) /
-                              8);
+    const uint32_t raw_bytes = static_cast<uint32_t>(
+        (static_cast<uint64_t>(count) * bit_width + 7) / 8);
     body.assign(AlpAlignUp(raw_bytes + 16, ALP_BODY_ALIGNMENT), 0);
 
     if (bit_width == sizeof(Unsigned) * 8) {
@@ -73,9 +72,9 @@ inline void AlpPackBits(const Unsigned* values, uint32_t count,
     // Word-based packing: build a 128-bit window for each value and OR it
     // into two adjacent 64-bit words. This removes the per-bit loop while
     // keeping the byte layout identical to the scalar reference.
-    const uint64_t mask =
-        bit_width >= 64 ? ~static_cast<uint64_t>(0)
-                        : ((static_cast<uint64_t>(1) << bit_width) - 1);
+    const uint64_t mask = bit_width >= 64
+                              ? ~static_cast<uint64_t>(0)
+                              : ((static_cast<uint64_t>(1) << bit_width) - 1);
     uint64_t bit_pos = 0;
     for (uint32_t i = 0; i < count; ++i) {
         const uint64_t value = static_cast<uint64_t>(values[i]) & mask;
@@ -89,9 +88,11 @@ inline void AlpPackBits(const Unsigned* values, uint32_t count,
         dst |= low;
         std::memcpy(body.data() + byte_pos, &dst, sizeof(dst));
         if (high != 0) {
-            std::memcpy(&dst, body.data() + byte_pos + sizeof(dst), sizeof(dst));
+            std::memcpy(&dst, body.data() + byte_pos + sizeof(dst),
+                        sizeof(dst));
             dst |= high;
-            std::memcpy(body.data() + byte_pos + sizeof(dst), &dst, sizeof(dst));
+            std::memcpy(body.data() + byte_pos + sizeof(dst), &dst,
+                        sizeof(dst));
         }
         bit_pos += bit_width;
     }
@@ -105,9 +106,8 @@ inline bool AlpUnpackBits(const uint8_t* body, uint32_t body_bytes,
     if (bit_width == 0 || count == 0) {
         return true;
     }
-    const uint32_t raw_bytes =
-        static_cast<uint32_t>((static_cast<uint64_t>(count) * bit_width + 7) /
-                              8);
+    const uint32_t raw_bytes = static_cast<uint32_t>(
+        (static_cast<uint64_t>(count) * bit_width + 7) / 8);
     if (body_bytes < raw_bytes) {
         return false;
     }
@@ -136,9 +136,9 @@ inline bool AlpUnpackBits(const uint8_t* body, uint32_t body_bytes,
     }
     i = simd_count;
 #endif
-    const uint64_t mask =
-        bit_width >= 64 ? ~static_cast<uint64_t>(0)
-                        : ((static_cast<uint64_t>(1) << bit_width) - 1);
+    const uint64_t mask = bit_width >= 64
+                              ? ~static_cast<uint64_t>(0)
+                              : ((static_cast<uint64_t>(1) << bit_width) - 1);
     uint64_t bit_pos = static_cast<uint64_t>(i) * bit_width;
     for (; i < count; ++i) {
         const uint32_t byte_pos = static_cast<uint32_t>(bit_pos >> 3);
@@ -164,9 +164,9 @@ inline uint64_t AlpEstimatedBodyBytes(uint32_t count, uint8_t bit_width) {
     }
     const uint64_t raw_bytes =
         (static_cast<uint64_t>(count) * bit_width + 7) / 8;
-    return AlpAlignUp(static_cast<uint32_t>(raw_bytes + 16), ALP_BODY_ALIGNMENT);
+    return AlpAlignUp(static_cast<uint32_t>(raw_bytes + 16),
+                      ALP_BODY_ALIGNMENT);
 }
-
 
 template <typename T>
 inline AlpStatus AlpEncodeValuesScalar(
@@ -214,10 +214,11 @@ inline AlpStatus AlpDecodeValuesScalar(
 }
 
 template <typename T>
-inline AlpStatus AlpEncodeValues(
-    const T* values, uint32_t count, uint8_t factor, uint8_t exponent,
-    typename AlpTypeTraits<T>::Encoded* encoded, uint8_t* bitmap, T* exceptions,
-    uint32_t* exception_count) {
+inline AlpStatus AlpEncodeValues(const T* values, uint32_t count,
+                                 uint8_t factor, uint8_t exponent,
+                                 typename AlpTypeTraits<T>::Encoded* encoded,
+                                 uint8_t* bitmap, T* exceptions,
+                                 uint32_t* exception_count) {
 #ifdef ENABLE_SIMD
     return AlpSimdEncodeValues(values, count, factor, exponent, encoded, bitmap,
                                exceptions, exception_count);
@@ -260,8 +261,8 @@ inline uint64_t AlpEstimateCandidate(const T* samples, uint32_t sample_count,
             continue;
         }
         if (verify &&
-            !Traits::BitwiseEqual(Traits::DecodeValue(encoded, factor, exponent),
-                                  samples[i])) {
+            !Traits::BitwiseEqual(
+                Traits::DecodeValue(encoded, factor, exponent), samples[i])) {
             ++sample_exceptions;
             continue;
         }
@@ -276,20 +277,19 @@ inline uint64_t AlpEstimateCandidate(const T* samples, uint32_t sample_count,
     }
 
     const uint64_t exception_estimate =
-        sample_count == 0
-            ? block_count
-            : static_cast<uint64_t>(sample_exceptions) * block_count /
-                  sample_count;
+        sample_count == 0 ? block_count
+                          : static_cast<uint64_t>(sample_exceptions) *
+                                block_count / sample_count;
     uint8_t bit_width = 0;
     if (has_value) {
         const Unsigned adjusted_max =
             static_cast<Unsigned>(max_value) - static_cast<Unsigned>(min_value);
         bit_width = AlpComputeBitWidth(adjusted_max);
     }
-    const uint64_t body_bytes = AlpEstimatedBodyBytes<T>(block_count, bit_width);
+    const uint64_t body_bytes =
+        AlpEstimatedBodyBytes<T>(block_count, bit_width);
     const uint64_t bitmap_bytes = (static_cast<uint64_t>(block_count) + 7) / 8;
-    return body_bytes + bitmap_bytes +
-           exception_estimate * Traits::ValueSize();
+    return body_bytes + bitmap_bytes + exception_estimate * Traits::ValueSize();
 }
 
 template <typename T>
@@ -319,9 +319,9 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
 
     for (uint8_t e = 0; e <= Traits::MaxExponent(); ++e) {
         for (uint8_t f = 0; f <= e; ++f) {
-            const uint64_t estimate = AlpEstimateCandidate(
-                samples.empty() ? NULL : &samples[0], stage1_count, count, f,
-                e, true);
+            const uint64_t estimate =
+                AlpEstimateCandidate(samples.empty() ? NULL : &samples[0],
+                                     stage1_count, count, f, e, true);
             int pos = static_cast<int>(top_count);
             for (uint32_t i = 0; i < top_count; ++i) {
                 if (estimate < top_estimate[i] ||
@@ -333,8 +333,7 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
                 }
             }
             if (pos < static_cast<int>(kShortlist)) {
-                const uint32_t last =
-                    std::min(top_count, kShortlist - 1);
+                const uint32_t last = std::min(top_count, kShortlist - 1);
                 for (uint32_t j = last; j > static_cast<uint32_t>(pos); --j) {
                     top_estimate[j] = top_estimate[j - 1];
                     top_factor[j] = top_factor[j - 1];
@@ -361,13 +360,12 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
     for (uint32_t i = 0; i < top_count; ++i) {
         const uint8_t f = top_factor[i];
         const uint8_t e = top_exponent[i];
-        const uint64_t estimate = AlpEstimateCandidate(
-            samples.empty() ? NULL : &samples[0], sample_count, count, f, e,
-            true);
+        const uint64_t estimate =
+            AlpEstimateCandidate(samples.empty() ? NULL : &samples[0],
+                                 sample_count, count, f, e, true);
         if (!found || estimate < best_size ||
             (estimate == best_size &&
-             (e > best_exponent ||
-              (e == best_exponent && f > best_factor)))) {
+             (e > best_exponent || (e == best_exponent && f > best_factor)))) {
             found = true;
             best_size = estimate;
             best_factor = f;
@@ -425,10 +423,10 @@ inline AlpStatus AlpEncodeBlock(const T* values, uint32_t count,
     }
 
     const Encoded for_base = has_value ? min_value : 0;
-    const Unsigned adjusted_max =
-        has_value ? static_cast<Unsigned>(max_value) -
-                        static_cast<Unsigned>(min_value)
-                  : 0;
+    const Unsigned adjusted_max = has_value
+                                      ? static_cast<Unsigned>(max_value) -
+                                            static_cast<Unsigned>(min_value)
+                                      : 0;
     const uint8_t bit_width = AlpComputeBitWidth(adjusted_max);
 
     std::vector<Unsigned> adjusted(count, 0);
@@ -443,13 +441,14 @@ inline AlpStatus AlpEncodeBlock(const T* values, uint32_t count,
     AlpPackBits(adjusted.empty() ? NULL : &adjusted[0], count, bit_width, body);
 
     const uint64_t bitmap_bytes = exception_count == 0 ? 0 : bitmap.size();
-    const uint64_t alp_payload_bytes = bitmap_bytes +
-                                       static_cast<uint64_t>(exceptions.size()) *
-                                           Traits::ValueSize() +
-                                       body.size();
+    const uint64_t alp_payload_bytes =
+        bitmap_bytes +
+        static_cast<uint64_t>(exceptions.size()) * Traits::ValueSize() +
+        body.size();
     const uint64_t plain_payload_bytes =
         static_cast<uint64_t>(count) * Traits::ValueSize();
-    const bool use_plain = !has_value || alp_payload_bytes >= plain_payload_bytes;
+    const bool use_plain =
+        !has_value || alp_payload_bytes >= plain_payload_bytes;
 
     AlpBlockHeader header;
     memset(&header, 0, sizeof(header));
@@ -547,16 +546,16 @@ inline AlpStatus AlpDecodeBlock(const uint8_t* data, uint32_t size,
     const uint32_t expected_raw_bytes =
         header.bit_width == 0
             ? 0
-            : static_cast<uint32_t>(
-                  (static_cast<uint64_t>(header.value_count) *
-                       header.bit_width +
-                   7) /
-                  8);
+            : static_cast<uint32_t>((static_cast<uint64_t>(header.value_count) *
+                                         header.bit_width +
+                                     7) /
+                                    8);
     const uint32_t expected_body_bytes =
         header.bit_width == 0
             ? 0
             : AlpAlignUp(expected_raw_bytes + 16, ALP_BODY_ALIGNMENT);
-    if (header.body_bytes != expected_body_bytes || pos + header.body_bytes > size) {
+    if (header.body_bytes != expected_body_bytes ||
+        pos + header.body_bytes > size) {
         return ALP_MALFORMED;
     }
 
@@ -575,13 +574,12 @@ inline AlpStatus AlpDecodeBlock(const uint8_t* data, uint32_t size,
     }
 
     std::vector<T> decoded(header.value_count);
-    const uint8_t* bitmap_ptr =
-        header.exception_count > 0 ? (bitmap.empty() ? NULL : &bitmap[0])
-                                   : NULL;
-    const T* exception_ptr =
-        header.exception_count > 0
-            ? (exceptions.empty() ? NULL : &exceptions[0])
-            : NULL;
+    const uint8_t* bitmap_ptr = header.exception_count > 0
+                                    ? (bitmap.empty() ? NULL : &bitmap[0])
+                                    : NULL;
+    const T* exception_ptr = header.exception_count > 0
+                                 ? (exceptions.empty() ? NULL : &exceptions[0])
+                                 : NULL;
     const AlpStatus decode_status = AlpDecodeValues(
         &encoded[0], header.value_count, header.factor, header.exponent,
         bitmap_ptr, exception_ptr, header.exception_count, &decoded[0]);

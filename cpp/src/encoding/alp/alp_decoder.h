@@ -156,9 +156,8 @@ class AlpDecoderBase : public Decoder {
         } else {
             page_buffer_.resize(static_cast<uint32_t>(remaining));
             uint32_t read_len = 0;
-            const int ret = in.read_buf(&page_buffer_[0],
-                                        static_cast<uint32_t>(remaining),
-                                        read_len);
+            const int ret = in.read_buf(
+                &page_buffer_[0], static_cast<uint32_t>(remaining), read_len);
             if (ret != common::E_OK && ret != common::E_PARTIAL_READ) {
                 return ret;
             }
@@ -167,8 +166,8 @@ class AlpDecoderBase : public Decoder {
             }
             data = &page_buffer_[0];
         }
-        const alp::AlpStatus status = alp::AlpDecodePage(
-            data, static_cast<uint32_t>(remaining), values_);
+        const alp::AlpStatus status =
+            alp::AlpDecodePage(data, static_cast<uint32_t>(remaining), values_);
         if (status != alp::ALP_OK) {
             values_.clear();
             return common::E_DECODE_ERR;
@@ -198,8 +197,7 @@ class AlpDecoderBase : public Decoder {
             return ret;
         }
         const size_t remaining = values_.size() - read_index_;
-        const size_t count =
-            std::min(static_cast<size_t>(capacity), remaining);
+        const size_t count = std::min(static_cast<size_t>(capacity), remaining);
         for (size_t i = 0; i < count; ++i) {
             out[i] = static_cast<Out>(values_[read_index_ + i]);
         }

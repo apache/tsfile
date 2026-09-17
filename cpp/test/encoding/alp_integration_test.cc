@@ -47,7 +47,7 @@ static int ReadAll(common::ByteStream& stream, std::vector<uint8_t>& bytes) {
         bytes.insert(bytes.end(), begin, begin + buffer.len_);
     }
     return bytes.size() == stream.total_size() ? common::E_OK
-                                                : common::E_PARTIAL_READ;
+                                               : common::E_PARTIAL_READ;
 }
 
 TEST(AlpIntegrationTest, EncodingNameIsRegistered) {
@@ -55,14 +55,14 @@ TEST(AlpIntegrationTest, EncodingNameIsRegistered) {
 }
 
 TEST(AlpIntegrationTest, FactoryRejectsNonFloatTypes) {
-    EXPECT_EQ(nullptr, EncoderFactory::alloc_value_encoder(
-                           common::ALP, common::INT32));
-    EXPECT_EQ(nullptr, EncoderFactory::alloc_value_encoder(
-                           common::ALP, common::INT64));
-    EXPECT_EQ(nullptr, DecoderFactory::alloc_value_decoder(
-                           common::ALP, common::INT32));
-    EXPECT_EQ(nullptr, DecoderFactory::alloc_value_decoder(
-                           common::ALP, common::INT64));
+    EXPECT_EQ(nullptr,
+              EncoderFactory::alloc_value_encoder(common::ALP, common::INT32));
+    EXPECT_EQ(nullptr,
+              EncoderFactory::alloc_value_encoder(common::ALP, common::INT64));
+    EXPECT_EQ(nullptr,
+              DecoderFactory::alloc_value_decoder(common::ALP, common::INT32));
+    EXPECT_EQ(nullptr,
+              DecoderFactory::alloc_value_decoder(common::ALP, common::INT64));
 }
 
 TEST(AlpIntegrationTest, FloatEncoderDecoderRoundTrip) {
@@ -73,14 +73,13 @@ TEST(AlpIntegrationTest, FloatEncoderDecoderRoundTrip) {
     values.push_back(std::numeric_limits<float>::quiet_NaN());
     values.push_back(-0.0f);
 
-    Encoder* encoder = EncoderFactory::alloc_value_encoder(
-        common::ALP, common::FLOAT);
+    Encoder* encoder =
+        EncoderFactory::alloc_value_encoder(common::ALP, common::FLOAT);
     ASSERT_NE(nullptr, encoder);
     common::ByteStream encoded(1024, common::MOD_DEFAULT);
     ASSERT_EQ(common::E_OK,
-              encoder->encode_batch(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+              encoder->encode_batch(
+                  &values[0], static_cast<uint32_t>(values.size()), encoded));
     ASSERT_EQ(common::E_OK, encoder->flush(encoded));
     EncoderFactory::free(encoder);
 
@@ -91,15 +90,14 @@ TEST(AlpIntegrationTest, FloatEncoderDecoderRoundTrip) {
     common::ByteStream wrapped;
     wrapped.wrap_from(reinterpret_cast<const char*>(&bytes[0]),
                       static_cast<int32_t>(bytes.size()));
-    Decoder* decoder = DecoderFactory::alloc_value_decoder(
-        common::ALP, common::FLOAT);
+    Decoder* decoder =
+        DecoderFactory::alloc_value_decoder(common::ALP, common::FLOAT);
     ASSERT_NE(nullptr, decoder);
     std::vector<float> decoded(values.size());
     int actual = 0;
     ASSERT_EQ(common::E_OK,
-              decoder->read_exact_float(&decoded[0],
-                                        static_cast<int>(values.size()),
-                                        wrapped));
+              decoder->read_exact_float(
+                  &decoded[0], static_cast<int>(values.size()), wrapped));
     (void)actual;
     DecoderFactory::free(decoder);
 
@@ -117,14 +115,13 @@ TEST(AlpIntegrationTest, DoubleEncoderDecoderRoundTrip) {
     values.push_back(std::numeric_limits<double>::quiet_NaN());
     values.push_back(-0.0);
 
-    Encoder* encoder = EncoderFactory::alloc_value_encoder(
-        common::ALP, common::DOUBLE);
+    Encoder* encoder =
+        EncoderFactory::alloc_value_encoder(common::ALP, common::DOUBLE);
     ASSERT_NE(nullptr, encoder);
     common::ByteStream encoded(1024, common::MOD_DEFAULT);
     ASSERT_EQ(common::E_OK,
-              encoder->encode_batch(&values[0],
-                                    static_cast<uint32_t>(values.size()),
-                                    encoded));
+              encoder->encode_batch(
+                  &values[0], static_cast<uint32_t>(values.size()), encoded));
     ASSERT_EQ(common::E_OK, encoder->flush(encoded));
     EncoderFactory::free(encoder);
 
@@ -135,14 +132,13 @@ TEST(AlpIntegrationTest, DoubleEncoderDecoderRoundTrip) {
     common::ByteStream wrapped;
     wrapped.wrap_from(reinterpret_cast<const char*>(&bytes[0]),
                       static_cast<int32_t>(bytes.size()));
-    Decoder* decoder = DecoderFactory::alloc_value_decoder(
-        common::ALP, common::DOUBLE);
+    Decoder* decoder =
+        DecoderFactory::alloc_value_decoder(common::ALP, common::DOUBLE);
     ASSERT_NE(nullptr, decoder);
     std::vector<double> decoded(values.size());
     ASSERT_EQ(common::E_OK,
-              decoder->read_exact_double(&decoded[0],
-                                         static_cast<int>(values.size()),
-                                         wrapped));
+              decoder->read_exact_double(
+                  &decoded[0], static_cast<int>(values.size()), wrapped));
     DecoderFactory::free(decoder);
 
     ASSERT_EQ(values.size(), decoded.size());
