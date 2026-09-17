@@ -32,10 +32,12 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
+    TS_DATATYPE_VECTOR = 6,
     TS_DATATYPE_TIMESTAMP = 8,
     TS_DATATYPE_DATE = 9,
     TS_DATATYPE_BLOB = 10,
     TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_NULL_TYPE = 254,
     TS_DATATYPE_INVALID = 255
 } TSDataType;
 
@@ -89,9 +91,45 @@ typedef struct result_set_meta_data {
     TSDataType* data_types;
     int column_num;
 } ResultSetMetaData;
+
+typedef struct arrow_schema ArrowSchema;
+typedef struct arrow_array ArrowArray;
+
+typedef struct TsFileStatisticBase {
+    bool has_statistic;
+    TSDataType type;
+    int32_t row_count;
+    int64_t start_time;
+    int64_t end_time;
+} TsFileStatisticBase;
+
+typedef struct TsFileBoolStatistic { TsFileStatisticBase base; double sum; bool first_bool; bool last_bool; } TsFileBoolStatistic;
+typedef struct TsFileIntStatistic { TsFileStatisticBase base; double sum; int64_t min_int64; int64_t max_int64; int64_t first_int64; int64_t last_int64; } TsFileIntStatistic;
+typedef struct TsFileFloatStatistic { TsFileStatisticBase base; double sum; double min_float64; double max_float64; double first_float64; double last_float64; } TsFileFloatStatistic;
+typedef struct TsFileStringStatistic { TsFileStatisticBase base; char* str_min; char* str_max; char* str_first; char* str_last; } TsFileStringStatistic;
+typedef struct TsFileTextStatistic { TsFileStatisticBase base; char* str_first; char* str_last; } TsFileTextStatistic;
+
+typedef union TimeseriesStatisticUnion {
+    TsFileBoolStatistic bool_s;
+    TsFileIntStatistic int_s;
+    TsFileFloatStatistic float_s;
+    TsFileStringStatistic string_s;
+    TsFileTextStatistic text_s;
+} TimeseriesStatisticUnion;
+
+typedef struct TimeseriesStatistic {
+    TimeseriesStatisticUnion u;
+} TimeseriesStatistic;
+
+#define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
 ```
 
 > `ColumnSchema` 不携带编码/压缩：写入时列遵循全局默认值（见[配置](#配置编码与压缩)），读取时按文件中的实际配置解码。
+> 上面列出的编码和压缩常量是当前 writer/configuration 路径实际接受的值。
+>
+> `TimeseriesStatistic` 是 `tsfile_cwrapper.h` 中的带标签 union。可通过
+> `tsfile_statistic_base(&statistic)` 读取通用字段，再根据数据类型读取
+> `int_s`、`float_s`、`bool_s`、`string_s` 或 `text_s`。
 
 ## 写入接口
 
@@ -207,9 +245,11 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
  *
  * @param value [输入] 以 '\0' 结尾的字符串，调用者保留所有权。
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
  // 支持多种数据类型插入
 ERRNO tablet_add_value_by_name_int32_t(Tablet tablet, uint32_t row_index,
@@ -236,9 +276,11 @@ ERRNO tablet_add_value_by_name_bool(Tablet tablet, uint32_t row_index,
  *
  * @param value [输入] 字符串会被内部复制。
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 
 ERRNO tablet_add_value_by_index_int32_t(Tablet tablet, uint32_t row_index,
@@ -314,6 +356,8 @@ uint8_t get_global_time_compression();
 | `FLOAT`、`DOUBLE` | `PLAIN`、`TS_2DIFF`、`GORILLA`、`SPRINTZ` | `GORILLA` |
 | `STRING`、`TEXT` | `PLAIN`、`DICTIONARY` | `PLAIN` |
 
+时间列使用全局时间配置，支持 `PLAIN`、`TS_2DIFF`、`GORILLA`、`ZIGZAG`、`RLE` 或 `SPRINTZ`。
+
 压缩适用于所有数据类型：`UNCOMPRESSED`、`SNAPPY`、`GZIP`、`LZO`、`LZ4`（默认 `LZ4`）。
 
 ```C
@@ -387,6 +431,31 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
 void free_tsfile_result_set(ResultSet* result_set);
 ```
 
+### Tree 查询
+
+```C
+/**
+ * @brief 按测点名在时间范围内查询 tree 模型数据。
+ */
+ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
+                                     uint32_t column_num, Timestamp start_time,
+                                     Timestamp end_time, ERRNO* err_code);
+
+/**
+ * @brief 按行查询 tree 模型数据，支持 offset/limit。
+ *
+ * @param device_ids 设备标识数组。
+ * @param measurement_names 测点名数组。
+ * @param offset 需要跳过的起始行数（>= 0）。
+ * @param limit 最多返回行数；< 0 表示不限制。
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+```
+
 
 
 ### 按标签过滤
@@ -409,6 +478,8 @@ typedef enum {
     TAG_FILTER_GTEQ = 5,        // 列 >= 值
     TAG_FILTER_REGEXP = 6,      // 列匹配正则 值
     TAG_FILTER_NOT_REGEXP = 7,  // 列不匹配正则 值
+    TAG_FILTER_IS_NULL = 8,     // 列为空
+    TAG_FILTER_IS_NOT_NULL = 9, // 列不为空
 } TagFilterOp;
 
 /**
@@ -417,7 +488,7 @@ typedef enum {
  * @param reader      [输入] 有效的 TsFileReader 句柄。
  * @param table_name  [输入] 其 schema 定义了这些标签列的表名。
  * @param column_name [输入] 要过滤的标签列名。
- * @param value       [输入] 比较值（标签列为 STRING 类型）。
+ * @param value       [输入] 比较值（IS NULL / IS NOT NULL 会忽略该参数）。
  * @param op          [输入] 比较运算符（TagFilterOp）。
  * @param err_code    [输出] 成功返回 RET_OK(0)，否则返回 errno_define_c.h 中的错误码。
  * @return 成功返回 TagFilterHandle，失败返回 NULL。
@@ -436,6 +507,20 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           const char* column_name,
                                           const char* lower, const char* upper,
                                           bool is_not, ERRNO* err_code);
+
+// 常用单列谓词的便捷构造函数。
+TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader, const char* table_name,
+                                      const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader, const char* table_name,
+                                       const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader, const char* table_name,
+                                     const char* column_name, const char* value);
+TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader, const char* table_name,
+                                       const char* column_name, const char* value);
 
 // 组合谓词。AND/OR/NOT 会接管其子节点的所有权，只需释放根节点。
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left, TagFilterHandle right);
@@ -491,6 +576,18 @@ ResultSet tsfile_query_table_with_tag_filter(
     TsFileReader reader, const char* table_name, char** columns,
     uint32_t column_num, Timestamp start_time, Timestamp end_time,
     TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
+```
+
+### 将批结果读取为 Arrow
+
+对 `batch_size > 0` 创建的批查询结果集，可以使用 Arrow C Data Interface 读取
+`ArrowArray` 和 `ArrowSchema`。调用者拥有返回的 Arrow 对象，使用完后必须调用
+它们的 `release` 回调。
+
+```C
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema);
 ```
 
 示例——只读取 `region` 标签等于 `shanghai` 的设备的 `temperature`：
@@ -648,4 +745,3 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
 
 void free_table_schema(TableSchema schema);
 ```
-
