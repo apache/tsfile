@@ -58,39 +58,39 @@ AVX2/AVX-512 peak.
 
 | Codec | Pattern | Encoded bytes | Ratio | Encode MB/s | Decode MB/s | Correct |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| ALP | decimal | 2,365,932 | 1.773 | 424.8 | 2719.7 | yes |
-| Gorilla | decimal | 2,878,091 | 1.457 | 334.8 | 1275.9 | yes |
-| ALP | smooth | 4,117,400 | 1.019 | 387.9 | 2281.3 | yes |
-| Gorilla | smooth | 4,453,445 | 0.942 | 233.8 | 1324.8 | yes |
-| ALP | random | 4,222,992 | 0.993 | 377.4 | 2249.6 | yes |
-| Gorilla | random | 4,456,456 | 0.941 | 229.4 | 1361.4 | yes |
-| ALP | constant | 28,688 | 146.204 | 853.0 | 7202.3 | yes |
-| Gorilla | constant | 131,082 | 31.998 | 1840.8 | 68965.5 | yes |
+| ALP | decimal | 2,365,932 | 1.773 | 539.3 | 2646.9 | yes |
+| Gorilla | decimal | 2,878,091 | 1.457 | 342.0 | 1389.3 | yes |
+| ALP | smooth | 4,124,940 | 1.017 | 528.5 | 2399.5 | yes |
+| Gorilla | smooth | 4,453,445 | 0.942 | 248.1 | 1384.7 | yes |
+| ALP | random | 4,222,992 | 0.993 | 506.2 | 2329.7 | yes |
+| Gorilla | random | 4,456,456 | 0.941 | 239.6 | 1378.9 | yes |
+| ALP | constant | 28,688 | 146.204 | 1335.4 | 7393.7 | yes |
+| Gorilla | constant | 131,082 | 31.998 | 1900.8 | 69214.9 | yes |
 
 ### DOUBLE
 
 | Codec | Pattern | Encoded bytes | Ratio | Encode MB/s | Decode MB/s | Correct |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| ALP | decimal | 1,423,880 | 5.891 | 562.6 | 6297.2 | yes |
-| Gorilla | decimal | 8,650,641 | 0.970 | 270.4 | 2534.7 | yes |
-| ALP | smooth | 8,343,184 | 1.005 | 479.5 | 2077.6 | yes |
-| Gorilla | smooth | 8,629,855 | 0.972 | 270.8 | 2615.2 | yes |
-| ALP | random | 8,417,296 | 0.997 | 511.7 | 2022.4 | yes |
-| Gorilla | random | 8,650,764 | 0.970 | 270.5 | 2607.3 | yes |
-| ALP | constant | 8,417,296 | 0.997 | 543.5 | 2012.7 | yes |
-| Gorilla | constant | 131,090 | 63.991 | 3689.6 | 80000.0 | yes |
+| ALP | decimal | 1,426,248 | 5.882 | 1055.3 | 6470.7 | yes |
+| Gorilla | decimal | 8,650,641 | 0.970 | 276.7 | 2546.8 | yes |
+| ALP | smooth | 8,348,616 | 1.005 | 780.8 | 2228.6 | yes |
+| Gorilla | smooth | 8,629,855 | 0.972 | 276.8 | 2600.1 | yes |
+| ALP | random | 8,417,296 | 0.997 | 753.6 | 2118.6 | yes |
+| Gorilla | random | 8,650,764 | 0.970 | 277.1 | 2644.3 | yes |
+| ALP | constant | 8,417,296 | 0.997 | 861.9 | 2094.3 | yes |
+| Gorilla | constant | 131,090 | 63.991 | 3824.2 | 76646.7 | yes |
 
 ## Interpretation
 
 - ALP is designed for decimal-like floating-point columns. On the decimal
   cases it improves both compression and decode throughput:
-  - FLOAT decimal: 1.22x better ratio, 1.27x faster encode, and 2.13x faster
+  - FLOAT decimal: 1.22x better ratio, 1.58x faster encode, and 1.91x faster
     decode than Gorilla.
-  - DOUBLE decimal: 6.07x better ratio, 2.08x faster encode, and 2.48x faster
+  - DOUBLE decimal: 6.06x better ratio, 3.81x faster encode, and 2.54x faster
     decode than Gorilla.
-- ALP now wins both encode and decode on the decimal cases. The word-based
-  bit-packing change removed the largest FLOAT encode cost; the remaining
-  encode cost is the scalar exponent/factor search.
+- ALP now wins both encode and decode on the decimal cases. Word-based packing
+  removed the largest FLOAT encode cost, and the two-stage exponent/factor
+  search cut the remaining scalar search cost substantially.
 - ALP falls back to PLAIN for non-decimal smooth/random data. In those cases
   Gorilla is the better choice, so ALP must remain opt-in.
 - Gorilla is extremely fast on constant blocks. ALP does not try to beat that

@@ -82,29 +82,28 @@ pattern:
 
 | Stage | FLOAT (ms/block) | DOUBLE (ms/block) |
 | --- | ---: | ---: |
-| `AlpChooseFactorExponent` | 0.004 | 0.009 |
+| `AlpChooseFactorExponent` (two-stage) | 0.002 | 0.003 |
 | `AlpEncodeValues` (SIMD) | 0.001 | 0.001 |
 | `AlpPackBits` (word-based) | 0.002 | 0.002 |
-| `AlpEncodePage` total | 0.006 | 0.013 |
+| `AlpEncodePage` total | 0.005 | 0.007 |
 
-After replacing the per-bit packing loop with word-based packing, the packing
-cost dropped to about 0.002 ms/block. The SIMD value kernel is still only about
-8-15% of encode time; the remaining dominant cost is the scalar
-exponent/factor search (about 67% of FLOAT and 69% of DOUBLE encode in this
-breakdown).
+After replacing the per-bit packing loop with word-based packing and adding a
+two-stage exponent/factor search, the block encode cost dropped to 0.005 ms
+(FLOAT) and 0.007 ms (DOUBLE). The two-stage search is still the largest single
+component (about 40% FLOAT and 43% DOUBLE), followed by word-based packing.
+The SIMD value kernel is about 14-20% of the block encode time.
 
 ## Why ALP Still Loses
 
-1. **The remaining encode cost is the scalar e/f search.**
-   `AlpChooseFactorExponent` evaluates candidate `(factor, exponent)` pairs on
-   sampled values. After word-based packing it is the largest remaining encode
-   cost: about 67% of FLOAT and 69% of DOUBLE encode in the microbenchmark.
-   SIMD packing is no longer the bottleneck.
+1. **The e/f search is still scalar.**
+   The two-stage search cut the cost substantially, but it remains the largest
+   single encode component. Stage 1 evaluates every candidate on an 8-value
+   sample; stage 2 runs the exact round-trip check on the shortlist. Further
+   gains require SIMD candidate evaluation or a cheaper estimator.
 
-2. **The SIMD value kernel is a small part of encode.**
-   `AlpEncodeValues` is only about 8-15% of encode time. End-to-end encode
-   speed therefore depends mostly on the search and packing decisions, not on
-   the value conversion itself.
+2. **The SIMD value kernel is still a minority of encode time.**
+   `AlpEncodeValues` is about 14-20% of the block encode time. End-to-end
+   encode speed also depends on the search and packing decisions.
 
 3. **Non-decimal data falls back to PLAIN.**
    Smooth/random/constant data often has too many exceptions for ALP to win.

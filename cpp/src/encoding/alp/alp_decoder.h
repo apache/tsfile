@@ -146,19 +146,29 @@ class AlpDecoderBase : public Decoder {
         if (remaining > static_cast<uint64_t>(UINT32_MAX)) {
             return common::E_INVALID_ARG;
         }
-        page_buffer_.resize(static_cast<uint32_t>(remaining));
-        uint32_t read_len = 0;
-        const int ret = in.read_buf(&page_buffer_[0],
-                                    static_cast<uint32_t>(remaining), read_len);
-        if (ret != common::E_OK && ret != common::E_PARTIAL_READ) {
-            return ret;
-        }
-        if (read_len != remaining) {
-            return common::E_PARTIAL_READ;
+        const uint8_t* data = NULL;
+        if (in.is_wrapped()) {
+            // The TsFile reader wraps the page value buffer directly. Decode
+            // from it without copying the whole page into page_buffer_.
+            data = reinterpret_cast<const uint8_t*>(in.get_wrapped_buf() +
+                                                    in.read_pos());
+            in.wrapped_buf_advance_read_pos(remaining);
+        } else {
+            page_buffer_.resize(static_cast<uint32_t>(remaining));
+            uint32_t read_len = 0;
+            const int ret = in.read_buf(&page_buffer_[0],
+                                        static_cast<uint32_t>(remaining),
+                                        read_len);
+            if (ret != common::E_OK && ret != common::E_PARTIAL_READ) {
+                return ret;
+            }
+            if (read_len != remaining) {
+                return common::E_PARTIAL_READ;
+            }
+            data = &page_buffer_[0];
         }
         const alp::AlpStatus status = alp::AlpDecodePage(
-            &page_buffer_[0], static_cast<uint32_t>(page_buffer_.size()),
-            values_);
+            data, static_cast<uint32_t>(remaining), values_);
         if (status != alp::ALP_OK) {
             values_.clear();
             return common::E_DECODE_ERR;
