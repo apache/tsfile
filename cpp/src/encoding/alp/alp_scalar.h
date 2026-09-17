@@ -30,6 +30,9 @@
 
 #include "alp_format.h"
 #include "alp_traits.h"
+#ifdef ENABLE_SIMD
+#include "alp_simde.h"
+#endif
 
 namespace storage {
 namespace alp {
@@ -54,7 +57,7 @@ inline void AlpPackBits(const Unsigned* values, uint32_t count,
     const uint32_t raw_bytes =
         static_cast<uint32_t>((static_cast<uint64_t>(count) * bit_width + 7) /
                               8);
-    body.assign(AlpAlignUp(raw_bytes, ALP_BODY_ALIGNMENT), 0);
+    body.assign(AlpAlignUp(raw_bytes + 16, ALP_BODY_ALIGNMENT), 0);
 
     if (bit_width == sizeof(Unsigned) * 8) {
         for (uint32_t i = 0; i < count; ++i) {
@@ -107,17 +110,26 @@ inline bool AlpUnpackBits(const uint8_t* body, uint32_t body_bytes,
         return true;
     }
 
+    // The body is padded with at least 16 zero bytes past the logical end.
+    // Two overlapping 64-bit loads let us extract any value of up to 64 bits
+    // without a per-bit loop, while remaining portable C++11.
+    const uint64_t mask =
+        bit_width >= 64 ? ~static_cast<uint64_t>(0)
+                        : ((static_cast<uint64_t>(1) << bit_width) - 1);
     uint64_t bit_pos = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        Unsigned value = 0;
-        for (uint8_t b = 0; b < bit_width; ++b) {
-            if (body[static_cast<uint32_t>(bit_pos >> 3)] &
-                static_cast<uint8_t>(1u << (bit_pos & 7u))) {
-                value |= static_cast<Unsigned>(1) << b;
-            }
-            ++bit_pos;
+        const uint32_t byte_pos = static_cast<uint32_t>(bit_pos >> 3);
+        const uint32_t bit_offset = static_cast<uint32_t>(bit_pos & 7u);
+        uint64_t low = 0;
+        uint64_t high = 0;
+        std::memcpy(&low, body + byte_pos, sizeof(low));
+        std::memcpy(&high, body + byte_pos + sizeof(low), sizeof(high));
+        uint64_t value = low >> bit_offset;
+        if (bit_offset != 0) {
+            value |= high << (64 - bit_offset);
         }
-        out[i] = value;
+        out[i] = static_cast<Unsigned>(value & mask);
+        bit_pos += bit_width;
     }
     return true;
 }
@@ -129,7 +141,81 @@ inline uint64_t AlpEstimatedBodyBytes(uint32_t count, uint8_t bit_width) {
     }
     const uint64_t raw_bytes =
         (static_cast<uint64_t>(count) * bit_width + 7) / 8;
-    return AlpAlignUp(static_cast<uint32_t>(raw_bytes), ALP_BODY_ALIGNMENT);
+    return AlpAlignUp(static_cast<uint32_t>(raw_bytes + 16), ALP_BODY_ALIGNMENT);
+}
+
+
+template <typename T>
+inline AlpStatus AlpEncodeValuesScalar(
+    const T* values, uint32_t count, uint8_t factor, uint8_t exponent,
+    typename AlpTypeTraits<T>::Encoded* encoded, uint8_t* bitmap, T* exceptions,
+    uint32_t* exception_count) {
+    typedef AlpTypeTraits<T> Traits;
+    typedef typename Traits::Encoded Encoded;
+    uint32_t ex_count = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        Encoded value = 0;
+        if (!Traits::EncodeValue(values[i], factor, exponent, &value) ||
+            !Traits::BitwiseEqual(Traits::DecodeValue(value, factor, exponent),
+                                  values[i])) {
+            bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
+            exceptions[ex_count++] = values[i];
+            encoded[i] = 0;
+        } else {
+            encoded[i] = value;
+        }
+    }
+    *exception_count = ex_count;
+    return ALP_OK;
+}
+
+template <typename T>
+inline AlpStatus AlpDecodeValuesScalar(
+    const typename AlpTypeTraits<T>::Encoded* encoded, uint32_t count,
+    uint8_t factor, uint8_t exponent, const uint8_t* bitmap,
+    const T* exceptions, uint32_t exception_count, T* out) {
+    typedef AlpTypeTraits<T> Traits;
+    uint32_t exception_index = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        T value = Traits::DecodeValue(encoded[i], factor, exponent);
+        if (bitmap != NULL &&
+            (bitmap[i >> 3] & static_cast<uint8_t>(1u << (i & 7u))) != 0) {
+            if (exception_index >= exception_count) {
+                return ALP_MALFORMED;
+            }
+            value = exceptions[exception_index++];
+        }
+        out[i] = value;
+    }
+    return exception_index == exception_count ? ALP_OK : ALP_MALFORMED;
+}
+
+template <typename T>
+inline AlpStatus AlpEncodeValues(
+    const T* values, uint32_t count, uint8_t factor, uint8_t exponent,
+    typename AlpTypeTraits<T>::Encoded* encoded, uint8_t* bitmap, T* exceptions,
+    uint32_t* exception_count) {
+#ifdef ENABLE_SIMD
+    return AlpSimdEncodeValues(values, count, factor, exponent, encoded, bitmap,
+                               exceptions, exception_count);
+#else
+    return AlpEncodeValuesScalar(values, count, factor, exponent, encoded,
+                                 bitmap, exceptions, exception_count);
+#endif
+}
+
+template <typename T>
+inline AlpStatus AlpDecodeValues(
+    const typename AlpTypeTraits<T>::Encoded* encoded, uint32_t count,
+    uint8_t factor, uint8_t exponent, const uint8_t* bitmap,
+    const T* exceptions, uint32_t exception_count, T* out) {
+#ifdef ENABLE_SIMD
+    return AlpSimdDecodeValues(encoded, count, factor, exponent, bitmap,
+                               exceptions, exception_count, out);
+#else
+    return AlpDecodeValuesScalar(encoded, count, factor, exponent, bitmap,
+                                 exceptions, exception_count, out);
+#endif
 }
 
 template <typename T>
@@ -222,24 +308,24 @@ inline AlpStatus AlpEncodeBlock(const T* values, uint32_t count,
 
     std::vector<Encoded> encoded(count, 0);
     std::vector<uint8_t> bitmap((count + 7) / 8, 0);
-    std::vector<T> exceptions;
-    exceptions.reserve(count / 8 + 1);
+    std::vector<T> exceptions(count);
+    uint32_t exception_count = 0;
+    AlpStatus encode_status =
+        AlpEncodeValues(values, count, factor, exponent, &encoded[0],
+                        &bitmap[0], &exceptions[0], &exception_count);
+    if (encode_status != ALP_OK) {
+        return encode_status;
+    }
+    exceptions.resize(exception_count);
 
     bool has_value = false;
     Encoded min_value = 0;
     Encoded max_value = 0;
-    uint32_t exception_count = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        Encoded value = 0;
-        if (!Traits::EncodeValue(values[i], factor, exponent, &value) ||
-            !Traits::BitwiseEqual(Traits::DecodeValue(value, factor, exponent),
-                                  values[i])) {
-            bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
-            exceptions.push_back(values[i]);
-            ++exception_count;
+        if ((bitmap[i >> 3] & static_cast<uint8_t>(1u << (i & 7u))) != 0) {
             continue;
         }
-        encoded[i] = value;
+        const Encoded value = encoded[i];
         if (!has_value) {
             min_value = value;
             max_value = value;
@@ -381,7 +467,7 @@ inline AlpStatus AlpDecodeBlock(const uint8_t* data, uint32_t size,
     const uint32_t expected_body_bytes =
         header.bit_width == 0
             ? 0
-            : AlpAlignUp(expected_raw_bytes, ALP_BODY_ALIGNMENT);
+            : AlpAlignUp(expected_raw_bytes + 16, ALP_BODY_ALIGNMENT);
     if (header.body_bytes != expected_body_bytes || pos + header.body_bytes > size) {
         return ALP_MALFORMED;
     }
@@ -393,25 +479,28 @@ inline AlpStatus AlpDecodeBlock(const uint8_t* data, uint32_t size,
     }
     pos += header.body_bytes;
 
-    uint32_t exception_index = 0;
+    std::vector<Encoded> encoded(header.value_count);
     for (uint32_t i = 0; i < header.value_count; ++i) {
         const Unsigned raw =
             adjusted[i] + static_cast<Unsigned>(header.for_base);
-        Encoded encoded = 0;
-        std::memcpy(&encoded, &raw, sizeof(encoded));
-        T value = Traits::DecodeValue(encoded, header.factor, header.exponent);
-        if (header.exception_count > 0 &&
-            (bitmap[i >> 3] & static_cast<uint8_t>(1u << (i & 7u))) != 0) {
-            if (exception_index >= exceptions.size()) {
-                return ALP_MALFORMED;
-            }
-            value = exceptions[exception_index++];
-        }
-        out.push_back(value);
+        std::memcpy(&encoded[i], &raw, sizeof(encoded[i]));
     }
-    if (exception_index != header.exception_count) {
-        return ALP_MALFORMED;
+
+    std::vector<T> decoded(header.value_count);
+    const uint8_t* bitmap_ptr =
+        header.exception_count > 0 ? (bitmap.empty() ? NULL : &bitmap[0])
+                                   : NULL;
+    const T* exception_ptr =
+        header.exception_count > 0
+            ? (exceptions.empty() ? NULL : &exceptions[0])
+            : NULL;
+    const AlpStatus decode_status = AlpDecodeValues(
+        &encoded[0], header.value_count, header.factor, header.exponent,
+        bitmap_ptr, exception_ptr, header.exception_count, &decoded[0]);
+    if (decode_status != ALP_OK) {
+        return decode_status;
     }
+    out.insert(out.end(), decoded.begin(), decoded.end());
     return ALP_OK;
 }
 

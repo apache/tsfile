@@ -83,8 +83,9 @@ The header is followed by:
 - for `scheme == ALP`: the bit-packed body;
 - for `scheme == PLAIN`: `value_count * value_size` raw values.
 
-The packed body is padded with zero bytes to a multiple of 32 bytes so SIMD
-kernels may load whole vectors. `body_bytes` records the padded size.
+The packed body is padded with zero bytes to a multiple of 32 bytes after
+adding 16 bytes of guard space, so SIMD/word loads may safely read past the
+logical end of the stream. `body_bytes` records the padded size.
 
 ### Bit packing
 
