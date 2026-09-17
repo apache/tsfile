@@ -77,19 +77,27 @@ inline void AlpAppendU8(std::vector<uint8_t>& out, uint8_t v) {
 }
 
 inline void AlpAppendU16(std::vector<uint8_t>& out, uint16_t v) {
-    out.push_back(static_cast<uint8_t>(v & 0xFFu));
-    out.push_back(static_cast<uint8_t>((v >> 8) & 0xFFu));
+    const size_t old_size = out.size();
+    out.resize(old_size + 2);
+    out[old_size] = static_cast<uint8_t>(v & 0xFFu);
+    out[old_size + 1] = static_cast<uint8_t>((v >> 8) & 0xFFu);
 }
 
 inline void AlpAppendU32(std::vector<uint8_t>& out, uint32_t v) {
-    for (int i = 0; i < 4; ++i) {
-        out.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFFu));
-    }
+    const size_t old_size = out.size();
+    out.resize(old_size + 4);
+    out[old_size] = static_cast<uint8_t>(v & 0xFFu);
+    out[old_size + 1] = static_cast<uint8_t>((v >> 8) & 0xFFu);
+    out[old_size + 2] = static_cast<uint8_t>((v >> 16) & 0xFFu);
+    out[old_size + 3] = static_cast<uint8_t>((v >> 24) & 0xFFu);
 }
 
 inline void AlpAppendU64(std::vector<uint8_t>& out, uint64_t v) {
+    const size_t old_size = out.size();
+    out.resize(old_size + 8);
     for (int i = 0; i < 8; ++i) {
-        out.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFFu));
+        out[old_size + static_cast<size_t>(i)] =
+            static_cast<uint8_t>((v >> (8 * i)) & 0xFFu);
     }
 }
 

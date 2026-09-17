@@ -70,16 +70,30 @@ inline void AlpPackBits(const Unsigned* values, uint32_t count,
         return;
     }
 
+    // Word-based packing: build a 128-bit window for each value and OR it
+    // into two adjacent 64-bit words. This removes the per-bit loop while
+    // keeping the byte layout identical to the scalar reference.
+    const uint64_t mask =
+        bit_width >= 64 ? ~static_cast<uint64_t>(0)
+                        : ((static_cast<uint64_t>(1) << bit_width) - 1);
     uint64_t bit_pos = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        const Unsigned value = values[i];
-        for (uint8_t b = 0; b < bit_width; ++b) {
-            if ((value >> b) & static_cast<Unsigned>(1)) {
-                body[static_cast<uint32_t>(bit_pos >> 3)] |= static_cast<uint8_t>(
-                    1u << (bit_pos & 7u));
-            }
-            ++bit_pos;
+        const uint64_t value = static_cast<uint64_t>(values[i]) & mask;
+        const uint32_t byte_pos = static_cast<uint32_t>(bit_pos >> 3);
+        const uint32_t bit_offset = static_cast<uint32_t>(bit_pos & 7u);
+        const uint64_t low = value << bit_offset;
+        const uint64_t high =
+            bit_offset == 0 ? 0 : (value >> (64 - bit_offset));
+        uint64_t dst = 0;
+        std::memcpy(&dst, body.data() + byte_pos, sizeof(dst));
+        dst |= low;
+        std::memcpy(body.data() + byte_pos, &dst, sizeof(dst));
+        if (high != 0) {
+            std::memcpy(&dst, body.data() + byte_pos + sizeof(dst), sizeof(dst));
+            dst |= high;
+            std::memcpy(body.data() + byte_pos + sizeof(dst), &dst, sizeof(dst));
         }
+        bit_pos += bit_width;
     }
 }
 
