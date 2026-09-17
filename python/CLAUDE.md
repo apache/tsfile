@@ -49,7 +49,7 @@ pytest tests/
 pytest tests/test_write_and_read.py -k "test_name"
 
 # Format code
-cd ../ && ./mvnw spotless:apply   # Uses Black 26.3.1
+cd ../ && ./mvnw initialize spotless:apply -P with-python   # Uses Black 26.3.1
 ```
 
 ## Source Structure
