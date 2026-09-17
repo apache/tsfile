@@ -741,36 +741,6 @@ def test_runtime_descriptor_objects_use_slots():
     assert not hasattr(descriptor, "__dict__")
 
 
-def test_runtime_descriptor_cache_stats_report_hits_and_evictions(
-    tmp_path, monkeypatch
-):
-    source = tmp_path / "devices.tsfile"
-    _write_runtime_devices_file(source)
-    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 1)
-    monkeypatch.setenv("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_STATS", "1")
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
-        names = [str(name) for name in dataframe.list_timeseries()]
-        dataframe[names[0]].close()
-        dataframe[names[0]].close()
-        dataframe[names[1]].close()
-
-        stats = dataframe._index.descriptor_cache_stats
-        assert stats["hits"] >= 1
-        assert stats["misses"] >= 2
-        assert stats["evictions"] >= 1
-
-
-def test_runtime_descriptor_cache_size_can_be_configured(tmp_path, monkeypatch):
-    source = tmp_path / "part.tsfile"
-    _write_runtime_file(source, 0)
-    monkeypatch.setenv("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE", "0")
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
-        assert dataframe._index._descriptor_cache_size == 0
-        assert dataframe._index.series_shards._cache_size == 0
-
-
 def test_reader_pool_enforces_open_file_cap(tmp_path, monkeypatch):
     first = tmp_path / "part1.tsfile"
     second = tmp_path / "part2.tsfile"

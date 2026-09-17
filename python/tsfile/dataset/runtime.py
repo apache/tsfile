@@ -61,30 +61,6 @@ _SERIES_DESCRIPTOR_CACHE_SIZE = 4096
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
-def _descriptor_cache_size_from_env() -> int:
-    """Return the bounded descriptor-cache size for this runtime.
-
-    The default remains the historical value, while allowing large random
-    workloads to disable or tune the cache without adding a dataset-sized
-    process-local map. Invalid values deliberately fall back to the default.
-    """
-    raw_value = os.environ.get("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE")
-    if raw_value is None:
-        return _SERIES_DESCRIPTOR_CACHE_SIZE
-    try:
-        return max(0, int(raw_value))
-    except ValueError:
-        return _SERIES_DESCRIPTOR_CACHE_SIZE
-
-
-def _descriptor_cache_stats_enabled() -> bool:
-    return os.environ.get("TSFILE_DATAFRAME_DESCRIPTOR_CACHE_STATS") in {
-        "1",
-        "true",
-        "True",
-    }
-
-
 @dataclass(frozen=True, **_DATACLASS_SLOTS)
 class RuntimeSeriesShard:
     """One immutable physical fragment already expanded from the mmap route."""
@@ -623,10 +599,6 @@ class _RouteMapping(Mapping):
         self._cache = OrderedDict()
         self._cache_lock = threading.Lock()
 
-    def _record_cache_stat(self, name):
-        if self._catalog._descriptor_cache_stats_enabled:
-            self._catalog._descriptor_cache_stats[name] += 1
-
     def _series_id(self, ref):
         device_id, field_idx = ref
         table_id, _path_string_id = self._catalog.index.device_route(device_id)
@@ -638,14 +610,11 @@ class _RouteMapping(Mapping):
         return self._catalog.index.find_series_id(device_id, column_id)
 
     def describe(self, ref, series_id=None, column_id=None):
-        if self._cache_size:
-            with self._cache_lock:
-                result = self._cache.get(ref)
-                if result is not None:
-                    self._record_cache_stat("hits")
-                    self._cache.move_to_end(ref)
-                    return result
-        self._record_cache_stat("misses")
+        with self._cache_lock:
+            result = self._cache.get(ref)
+            if result is not None:
+                self._cache.move_to_end(ref)
+                return result
 
         if series_id is None:
             series_id = self._series_id(ref)
@@ -691,13 +660,11 @@ class _RouteMapping(Mapping):
             with self._cache_lock:
                 existing = self._cache.get(ref)
                 if existing is not None:
-                    self._record_cache_stat("hits")
                     self._cache.move_to_end(ref)
                     return existing
                 self._cache[ref] = result
                 while len(self._cache) > self._cache_size:
                     self._cache.popitem(last=False)
-                    self._record_cache_stat("evictions")
         return result
 
     def __contains__(self, ref):
@@ -722,13 +689,7 @@ class MappedDataFrameCatalog:
         self.runtime = runtime
         self.index = runtime.index
         self.index_identity = runtime.index.identity
-        self._descriptor_cache_size = _descriptor_cache_size_from_env()
-        self._descriptor_cache_stats_enabled = _descriptor_cache_stats_enabled()
-        self._descriptor_cache_stats = {
-            "hits": 0,
-            "misses": 0,
-            "evictions": 0,
-        }
+        self._descriptor_cache_size = _SERIES_DESCRIPTOR_CACHE_SIZE
         self._descriptor_cache = OrderedDict()
         self._descriptor_cache_lock = threading.Lock()
         self.table_entries = _TableMapping(self)
@@ -742,16 +703,11 @@ class MappedDataFrameCatalog:
 
     def resolve_series_descriptor(self, table_name, tags, field_name):
         key = (table_name, tuple(tags), field_name)
-        if self._descriptor_cache_size:
-            with self._descriptor_cache_lock:
-                result = self._descriptor_cache.get(key)
-                if result is not None:
-                    if self._descriptor_cache_stats_enabled:
-                        self._descriptor_cache_stats["hits"] += 1
-                    self._descriptor_cache.move_to_end(key)
-                    return result
-        if self._descriptor_cache_stats_enabled:
-            self._descriptor_cache_stats["misses"] += 1
+        with self._descriptor_cache_lock:
+            result = self._descriptor_cache.get(key)
+            if result is not None:
+                self._descriptor_cache.move_to_end(key)
+                return result
 
         table_id = self.table_entries.table_id(table_name)
         table = self.table_entries[table_name]
@@ -769,24 +725,12 @@ class MappedDataFrameCatalog:
             with self._descriptor_cache_lock:
                 existing = self._descriptor_cache.get(key)
                 if existing is not None:
-                    if self._descriptor_cache_stats_enabled:
-                        self._descriptor_cache_stats["hits"] += 1
                     self._descriptor_cache.move_to_end(key)
                     return existing
                 self._descriptor_cache[key] = result
                 while len(self._descriptor_cache) > self._descriptor_cache_size:
                     self._descriptor_cache.popitem(last=False)
-                    if self._descriptor_cache_stats_enabled:
-                        self._descriptor_cache_stats["evictions"] += 1
         return result
-
-    @property
-    def descriptor_cache_stats(self):
-        """Return a snapshot of descriptor cache activity for diagnostics."""
-        stats = dict(self._descriptor_cache_stats)
-        stats["size"] = len(self._descriptor_cache)
-        stats["capacity"] = self._descriptor_cache_size
-        return stats
 
     def resolve_series_descriptor_by_id(self, series_id, table_name, field_name):
         if series_id < 0 or series_id >= self.index.count(LOGICAL_SERIES):
