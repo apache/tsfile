@@ -20,10 +20,10 @@
 #ifndef ENCODING_ALP_SCALAR_H
 #define ENCODING_ALP_SCALAR_H
 
-#include <math.h>
 #include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <vector>
