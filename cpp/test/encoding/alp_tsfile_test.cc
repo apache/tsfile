@@ -49,11 +49,14 @@ class AlpTsFileTest : public ::testing::Test {
 #else
         const int pid = static_cast<int>(getpid());
 #endif
-        file_name_ = std::string("/tmp/alp_tsfile_test_") +
-                     std::to_string(pid) + ".tsfile";
+        file_name_ =
+            std::string("alp_tsfile_test_") + std::to_string(pid) + ".tsfile";
         std::remove(file_name_.c_str());
-        ASSERT_EQ(common::E_OK,
-                  writer_->open(file_name_, O_RDWR | O_CREAT | O_TRUNC, 0666));
+        int flags = O_RDWR | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        ASSERT_EQ(common::E_OK, writer_->open(file_name_, flags, 0666));
     }
 
     void TearDown() override {
