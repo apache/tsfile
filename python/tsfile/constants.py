@@ -200,6 +200,7 @@ class TSEncoding(IntEnum):
     SPRINTZ = 12
     RLBE = 13
     CAMEL = 14
+    ALP = 15
 
 
 @unique
