@@ -680,10 +680,12 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
     if (IS_NULL(m_idx_node_buf)) {
         return E_OOM;
     }
-    auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(candidate.arena.get());
+    auto* top_node_ptr =
+        new (m_idx_node_buf) MetaIndexNode(candidate.arena.get());
     candidate.top_node = std::shared_ptr<MetaIndexNode>(
         top_node_ptr, MetaIndexNode::self_deleter);
-    if (RET_FAIL(candidate.top_node->deserialize_from(data_buf.get(), read_size))) {
+    if (RET_FAIL(
+            candidate.top_node->deserialize_from(data_buf.get(), read_size))) {
         return ret;
     }
     candidate.is_aligned = is_aligned_device(candidate.top_node);

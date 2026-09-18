@@ -223,8 +223,8 @@ class TsFileIOReader {
         common::PageArena& pa);
 
     struct CachedDeviceNode {
-        // Declared before top_node so top_node is destroyed first. MetaIndexNode
-        // and its children live in this arena.
+        // Declared before top_node so top_node is destroyed first.
+        // MetaIndexNode and its children live in this arena.
         std::shared_ptr<common::PageArena> arena;
         std::shared_ptr<MetaIndexNode> top_node;
         bool is_aligned = false;
