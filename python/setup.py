@@ -207,6 +207,9 @@ runtime_library_dirs = []
 libraries = []
 library_dirs = [str(PKG)]
 include_dirs = [str(PKG), np.get_include(), str(PKG / "include")]
+sdk_include = PKG / "include" / "tsfile"
+if sdk_include.is_dir():
+    include_dirs.append(str(sdk_include))
 
 if sys.platform.startswith("linux"):
     libraries = ["tsfile"]
