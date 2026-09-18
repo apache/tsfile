@@ -32,6 +32,14 @@
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <properties>
+        <!--
+            The C++ presence check only makes sense when the Python module is
+            built on its own ('-Pwith-python-only'). Under '-Pwith-python' the
+            cpp module is part of the same reactor, so the check is skipped and
+            the early phases stay usable. The with-python-only profile flips
+            this to false.
+        -->
+        <tsfile.cpp.check.skip>true</tsfile.cpp.check.skip>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
@@ -619,6 +627,22 @@
                 <module>cpp</module>
                 <module>python</module>
             </modules>
+        </profile>
+        <!--
+            Build only the Python module, reusing an existing C++ build.
+            Requires the artifacts produced by '-Pwith-cpp'; python/pom.xml
+            validates their presence at the 'validate' phase and fails with an
+            actionable message when they are missing.
+        -->
+        <profile>
+            <id>with-python-only</id>
+            <modules>
+                <module>python</module>
+            </modules>
+            <properties>
+                <tsfile.cpp.build>${maven.multiModuleProjectDirectory}/cpp/target/build</tsfile.cpp.build>
+                <tsfile.cpp.check.skip>false</tsfile.cpp.check.skip>
+            </properties>
         </profile>
         <profile>
             <id>.java-17-and-above</id>

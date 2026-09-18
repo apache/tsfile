@@ -17,6 +17,18 @@ specific language governing permissions and limitations
 under the License.
 ]]
 cmake_minimum_required(VERSION 3.11)
+option(TSFILE_MSVC_STATIC_RUNTIME
+        "Use the static MSVC runtime throughout a portable bundled build" OFF)
+if (TSFILE_MSVC_STATIC_RUNTIME)
+    if (NOT POLICY CMP0091)
+        message(FATAL_ERROR "TSFILE_MSVC_STATIC_RUNTIME requires CMake 3.15+")
+    endif ()
+    # The policy must be selected before the first project(), and inherited by
+    # upstream projects that reset their policy version in add_subdirectory().
+    cmake_policy(SET CMP0091 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif ()
 project(TsFile_CPP)
 
 if (DEFINED ToolChain)
@@ -34,7 +46,40 @@ if (POLICY CMP0074)
 endif ()
 set(TsFile_CPP_VERSION 2.3.2.dev)
 
+include(GNUInstallDirs)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TsFilePublicHeaders.cmake)
+
+# The package version identifies the source release. Development suffixes are
+# intentionally removed from generated package metadata and never enter the
+# SONAME.
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" TSFILE_PACKAGE_VERSION
+        "${TsFile_CPP_VERSION}")
+if ("${TSFILE_PACKAGE_VERSION}" STREQUAL "")
+    message(FATAL_ERROR
+            "TsFile_CPP_VERSION must start with a semantic version: "
+            "${TsFile_CPP_VERSION}")
+endif ()
+set(TSFILE_ARCHIVE_VERSION "${TSFILE_PACKAGE_VERSION}" CACHE STRING
+        "Version used in portable archive names")
+set(TSFILE_DEBIAN_PACKAGE_VERSION "${TSFILE_PACKAGE_VERSION}" CACHE STRING
+        "Complete Debian package version")
+set(TSFILE_RPM_PACKAGE_VERSION "${TSFILE_PACKAGE_VERSION}" CACHE STRING
+        "RPM Version value")
+set(TSFILE_RPM_PACKAGE_RELEASE "1" CACHE STRING
+        "RPM Release value")
+set(TSFILE_ABI_VERSION "1" CACHE STRING
+        "TsFile shared-library ABI epoch (changes only on ABI breaks)")
+if (NOT TSFILE_ABI_VERSION MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "TSFILE_ABI_VERSION must be a positive integer")
+endif ()
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
+if (TSFILE_MSVC_STATIC_RUNTIME AND
+        NOT TSFILE_DEPENDENCY_SOURCE STREQUAL "BUNDLED")
+    message(FATAL_ERROR
+            "TSFILE_MSVC_STATIC_RUNTIME requires TSFILE_DEPENDENCY_SOURCE=BUNDLED "
+            "so prebuilt dependencies cannot introduce a different MSVC runtime")
+endif ()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(TSFILE_BUILD_SHARED "Build libtsfile as a shared library" ON)
@@ -64,10 +109,18 @@ endif ()
 message("cmake using: USE_CPP11=${USE_CPP11}")
 # MSVC has no /std:c++11; CMake maps this to the closest supported standard
 # (C++14 default on MSVC), which compiles the C++11 codebase fine.
-set(CMAKE_CXX_STANDARD 11)
+set(TSFILE_CXX_STANDARD "11" CACHE STRING
+        "C++ language standard used to build TsFile (11, 14, or 17)")
+set_property(CACHE TSFILE_CXX_STANDARD PROPERTY STRINGS 11 14 17)
+if (NOT TSFILE_CXX_STANDARD MATCHES "^(11|14|17)$")
+    message(FATAL_ERROR
+            "TSFILE_CXX_STANDARD must be one of 11, 14, or 17")
+endif ()
+set(CMAKE_CXX_STANDARD ${TSFILE_CXX_STANDARD})
 set(CMAKE_CXX_STANDARD_REQUIRED OFF)
 if (NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+    set(CMAKE_CXX_FLAGS
+            "${CMAKE_CXX_FLAGS} -std=c++${TSFILE_CXX_STANDARD}")
 endif ()
 
 if (DEFINED ENV{CXX})
@@ -336,7 +389,8 @@ if (MSVC)
     # C++17 extensions), so we pin it explicitly for reproducibility.
     set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} /W3 /utf-8 /EHsc /bigobj /Zc:__cplusplus /std:c++14")
 else ()
-    set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -std=c++11")
+    set(CMAKE_CXX_FLAGS
+            "$ENV{CXXFLAGS} -Wall -std=c++${TSFILE_CXX_STANDARD}")
 endif ()
 add_subdirectory(third_party)
 
@@ -418,3 +472,159 @@ endif ()
 unset(_TSFILE_PROJECT_DEPENDENCIES)
 
 add_subdirectory(examples)
+
+# Install the compatibility header closure from the generated staging tree. The
+# staging tree is populated by the existing copy_* targets and contains only
+# headers selected by the reviewed closure manifest. The closure is retained
+# for source compatibility; it is not the final public API boundary.
+foreach (header_dir IN LISTS TSFILE_PUBLIC_HEADER_CLOSURE)
+    install(DIRECTORY "${LIBRARY_INCLUDE_DIR}/${header_dir}/"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/tsfile/${header_dir}"
+            COMPONENT development
+            FILES_MATCHING PATTERN "*.h")
+endforeach()
+if (ENABLE_SIMD AND TSFILE_SIMDE_INCLUDE_ROOT)
+    install(DIRECTORY "${TSFILE_SIMDE_INCLUDE_ROOT}/simde/"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/simde"
+            COMPONENT development
+            FILES_MATCHING PATTERN "*.h")
+endif ()
+if (ENABLE_ANTLR4 AND TSFILE_ANTLR4_INCLUDE_ROOT)
+    install(DIRECTORY "${TSFILE_ANTLR4_INCLUDE_ROOT}/"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            COMPONENT development
+            FILES_MATCHING PATTERN "*.h")
+endif ()
+if (ENABLE_ANTLR4 AND TSFILE_UTF8CPP_INCLUDE_ROOT)
+    install(DIRECTORY "${TSFILE_UTF8CPP_INCLUDE_ROOT}/"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            COMPONENT development
+            FILES_MATCHING PATTERN "*.h")
+endif ()
+
+set(TSFILE_LICENSE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE")
+set(TSFILE_NOTICE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../NOTICE")
+if (EXISTS "${TSFILE_LICENSE_FILE}")
+    install(FILES "${TSFILE_LICENSE_FILE}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/tsfile"
+            COMPONENT runtime)
+endif()
+if (EXISTS "${TSFILE_NOTICE_FILE}")
+    install(FILES "${TSFILE_NOTICE_FILE}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/tsfile"
+            COMPONENT runtime)
+endif()
+
+include(CMakePackageConfigHelpers)
+set(TSFILE_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/TsFile")
+configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TsFileConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake"
+        INSTALL_DESTINATION "${TSFILE_CMAKE_INSTALL_DIR}")
+write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfigVersion.cmake"
+        VERSION "${TSFILE_PACKAGE_VERSION}"
+        COMPATIBILITY SameMajorVersion)
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/TsFileConfigVersion.cmake"
+        DESTINATION "${TSFILE_CMAKE_INSTALL_DIR}"
+        COMPONENT development)
+
+set(TSFILE_PKGCONFIG_CFLAGS "")
+if (NOT TSFILE_BUILD_SHARED)
+    string(APPEND TSFILE_PKGCONFIG_CFLAGS " -DTSFILE_STATIC")
+    if (ENABLE_ANTLR4 AND (TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED" OR
+            TSFILE_ANTLR4_SYSTEM_STATIC))
+        string(APPEND TSFILE_PKGCONFIG_CFLAGS " -DANTLR4CPP_STATIC")
+    endif ()
+endif ()
+foreach (_TSFILE_PUBLIC_FEATURE
+        ENABLE_ANTLR4
+        ENABLE_MEM_STAT
+        ENABLE_SNAPPY
+        ENABLE_LZ4
+        ENABLE_LZOKAY
+        ENABLE_ZLIB
+        ENABLE_GZIP
+        ENABLE_ZSTD
+        ENABLE_LZMA2
+        ENABLE_THREADS
+        ENABLE_SIMD)
+    if (${_TSFILE_PUBLIC_FEATURE})
+        string(APPEND TSFILE_PKGCONFIG_CFLAGS
+                " -D${_TSFILE_PUBLIC_FEATURE}")
+    endif ()
+endforeach ()
+file(RELATIVE_PATH TSFILE_PKGCONFIG_PREFIX_RELATIVE
+        "${CMAKE_INSTALL_FULL_LIBDIR}/pkgconfig" "${CMAKE_INSTALL_PREFIX}")
+configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/libtsfile.pc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"
+        @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+        COMPONENT development)
+unset(_TSFILE_PUBLIC_FEATURE)
+
+# CPack is an opt-in local/package-builder integration. Native release jobs
+# can configure the project with TSFILE_DEPENDENCY_SOURCE=SYSTEM when the
+# target image provides every compatible dependency; AUTO remains the
+# reproducible fallback for distribution images with older packages.
+option(TSFILE_ENABLE_CPACK
+        "Enable CPack native package metadata generation" OFF)
+if (TSFILE_ENABLE_CPACK)
+    set(CPACK_PACKAGE_NAME "tsfile")
+    set(CPACK_PACKAGE_VENDOR "Apache Software Foundation")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Apache TsFile C++ library")
+    set(CPACK_PACKAGE_DESCRIPTION
+            "Columnar storage library and command-line tools for time series data")
+    set(CPACK_PACKAGE_HOMEPAGE_URL "https://tsfile.apache.org/")
+    set(CPACK_PACKAGE_CONTACT "dev@tsfile.apache.org")
+    set(CPACK_RESOURCE_FILE_LICENSE "${TSFILE_LICENSE_FILE}")
+    set(CPACK_PACKAGE_VERSION "${TSFILE_ARCHIVE_VERSION}")
+    string(REPLACE "." ";" _TSFILE_PACKAGE_VERSION_PARTS
+            "${TSFILE_PACKAGE_VERSION}")
+    list(GET _TSFILE_PACKAGE_VERSION_PARTS 0 CPACK_PACKAGE_VERSION_MAJOR)
+    list(GET _TSFILE_PACKAGE_VERSION_PARTS 1 CPACK_PACKAGE_VERSION_MINOR)
+    list(GET _TSFILE_PACKAGE_VERSION_PARTS 2 CPACK_PACKAGE_VERSION_PATCH)
+
+    set(CPACK_COMPONENTS_ALL runtime development tools)
+    set(CPACK_COMPONENT_DEVELOPMENT_DEPENDS runtime)
+    set(CPACK_COMPONENT_TOOLS_DEPENDS runtime)
+    # Portable archives contain the complete runtime, SDK, and tools install
+    # tree in one file. Native DEB and RPM generators remain componentized.
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+    if (WIN32)
+        set(CPACK_PACKAGE_FILE_NAME
+                "tsfile-${TSFILE_ARCHIVE_VERSION}-windows-x86_64")
+    endif ()
+    set(CPACK_DEB_COMPONENT_INSTALL ON)
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_VERSION "${TSFILE_DEBIAN_PACKAGE_VERSION}")
+    set(CPACK_DEBIAN_RUNTIME_PACKAGE_NAME "tsfile")
+    set(CPACK_DEBIAN_DEVELOPMENT_PACKAGE_NAME "tsfile-dev")
+    set(CPACK_DEBIAN_TOOLS_PACKAGE_NAME "tsfile-tools")
+    set(CPACK_DEBIAN_DEVELOPMENT_PACKAGE_DEPENDS
+            "tsfile (= ${TSFILE_DEBIAN_PACKAGE_VERSION})")
+    set(CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS
+            "tsfile (= ${TSFILE_DEBIAN_PACKAGE_VERSION})")
+
+    set(CPACK_RPM_COMPONENT_INSTALL ON)
+    set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+    set(CPACK_RPM_PACKAGE_LICENSE "Apache-2.0")
+    set(CPACK_RPM_PACKAGE_VERSION "${TSFILE_RPM_PACKAGE_VERSION}")
+    set(CPACK_RPM_PACKAGE_RELEASE "${TSFILE_RPM_PACKAGE_RELEASE}")
+    set(CPACK_RPM_PACKAGE_AUTOREQPROV ON)
+    set(CPACK_RPM_RUNTIME_PACKAGE_NAME "tsfile")
+    set(CPACK_RPM_DEVELOPMENT_PACKAGE_NAME "tsfile-devel")
+    set(CPACK_RPM_TOOLS_PACKAGE_NAME "tsfile-tools")
+    set(CPACK_RPM_DEVELOPMENT_PACKAGE_REQUIRES
+            "tsfile = ${TSFILE_RPM_PACKAGE_VERSION}-${TSFILE_RPM_PACKAGE_RELEASE}")
+    set(CPACK_RPM_TOOLS_PACKAGE_REQUIRES
+            "tsfile = ${TSFILE_RPM_PACKAGE_VERSION}-${TSFILE_RPM_PACKAGE_RELEASE}")
+
+    include(CPack)
+    unset(_TSFILE_PACKAGE_VERSION_PARTS)
+endif ()

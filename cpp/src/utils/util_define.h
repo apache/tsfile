@@ -120,14 +120,14 @@ typedef int mode_t;
 #endif  // __GNUC__ >= 4
 
 /* ======== nullptr ======== */
-#if __cplusplus < 201103L
+#if __cplusplus < 201103L && !defined(_MSC_VER)
 #ifndef nullptr
 #define nullptr NULL
 #endif
 #define OVERRIDE
 #else
 #define OVERRIDE override
-#endif  // __cplusplus < 201103L
+#endif  // __cplusplus < 201103L && !defined(_MSC_VER)
 
 /* ======== cache line ======== */
 #ifndef CACHE_LINE_SIZE
@@ -147,13 +147,13 @@ typedef int mode_t;
  * @msg should be a single word (use -/_ to concat)
  * such as This_should_be_TRUE
  */
-#if __cplusplus < 201103L
+#if __cplusplus < 201103L && !defined(_MSC_VER)
 // TODO only define this when DEBUG
 #define STATIC_ASSERT(cond, msg) \
     typedef char static_assertion_##msg[(cond) ? 1 : -1] __attribute__((unused))
 #else
 #define STATIC_ASSERT(cond, msg) static_assert((cond), #msg)
-#endif  // __cplusplus < 201103L
+#endif  // __cplusplus < 201103L && !defined(_MSC_VER)
 
 /* ======== atomic operation ========
  *
