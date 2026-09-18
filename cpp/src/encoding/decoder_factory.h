@@ -207,7 +207,7 @@ class DecoderFactory {
     }
 
     static void free(Decoder* decoder) {
-        if (decoder != nullptr) {
+        if (decoder != nullptr && decoder->owns_resources()) {
             decoder->destroy();
         }
         common::mem_free(decoder);
