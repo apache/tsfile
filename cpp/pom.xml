@@ -52,6 +52,13 @@
         <enable.lzma2>OFF</enable.lzma2>
         <enable.antlr4>ON</enable.antlr4>
         <enable.simd>ON</enable.simd>
+        <!--
+            Generate CPack configuration so the same build tree can produce
+            native packages (DEB/RPM/ZIP) without reconfiguring or rebuilding.
+            Off by default: consumers who only need the library should not pay
+            for packaging metadata.
+        -->
+        <enable.cpack>OFF</enable.cpack>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -105,6 +112,7 @@
                                 <option>-DENABLE_ZSTD=${enable.zstd}</option>
                                 <option>-DENABLE_LZMA2=${enable.lzma2}</option>
                                 <option>-DENABLE_SIMD=${enable.simd}</option>
+                                <option>-DTSFILE_ENABLE_CPACK=${enable.cpack}</option>
                                 <!--
                                     The Visual Studio generator additionally
                                     needs -DCMAKE_GENERATOR_PLATFORM (and
