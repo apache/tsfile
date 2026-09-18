@@ -200,8 +200,9 @@ python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
 ## Final native package bundle
 
 Only after the Ubuntu 22.04 and 24.04 DEB installation tests, AlmaLinux 9 RPM
-installation test, Homebrew bottle merge, and Windows SDK/CLI build all succeed,
-the workflow assembles `tsfile-native-packages-<archive-version>`. The final
+installation test, Go SDK tests, Linux Python wheel smoke test, Homebrew bottle
+merge, and Windows SDK/CLI build all succeed, the workflow assembles
+`tsfile-native-packages-<archive-version>`. The final
 GitHub Actions artifact retains the platform SDKs, the Linux Python wheel, the
 DEBs, RPMs, merged Formula and bottles, and Windows ZIP in their package-family
 layouts for 14 days. It also contains a
@@ -211,7 +212,8 @@ path, and properties required for later manual publication.
 
 The final job has no publishing credentials and does not upload to JFrog. A
 maintainer can later use the manifest to upload DEBs to `tsfile-debian` with the
-recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/x86_64`, and Homebrew
-SDKs, and Windows files to their immutable
-`tsfile/homebrew/dev/versions/<version>`,
-`tsfile/windows/dev/versions/<version>`, and `sdk/dev/versions/<version>` paths.
+recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/x86_64`, Homebrew
+formula/bottles to `tsfile/homebrew/dev/versions/<version>`, SDKs to
+`tsfile/sdk/dev/versions/<version>`, Windows ZIPs to
+`tsfile/windows/dev/versions/<version>`, and Python wheels to the
+`tsfile-python` repository recorded in the manifest.
