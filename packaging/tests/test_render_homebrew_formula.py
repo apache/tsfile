@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = ROOT / "packaging/scripts/render_homebrew_formula.py"
 TEMPLATE_PATH = ROOT / "packaging/homebrew/tsfile-dev.rb.in"
 VALUES = {
-    "SOURCE_REPOSITORY": "ColinLeeo/tsfile",
+    "SOURCE_REPOSITORY": "apache/tsfile",
     "GIT_SHA": "abcdef1234567890abcdef1234567890abcdef12",
     "HOMEBREW_VERSION": "2.5.0.dev0.20260910.123.1.gabcdef1",
     "SOURCE_SHA256": "0123456789abcdef" * 4,
@@ -66,7 +66,7 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
         self.assertEqual(
             rendered,
             """class TsfileDev < Formula
-  url "https://github.com/ColinLeeo/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"
+  url "https://github.com/apache/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"
   version "2.5.0.dev0.20260910.123.1.gabcdef1"
   sha256 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 """
@@ -115,7 +115,7 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
             ("GIT_SHA", ""),
             ("GIT_SHA", "abcdef1"),
             ("GIT_SHA", "develop"),
-            ("SOURCE_REPOSITORY", 'ColinLeeo/tsfile"'),
+            ("SOURCE_REPOSITORY", 'apache/tsfile"'),
             ("HOMEBREW_VERSION", 'bad"\nversion "injected'),
         ):
             with self.subTest(key=key, value=value):
@@ -162,7 +162,7 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
                 rendered = output.read_text(encoding="utf-8")
                 self.assertIn("class TsfileDev < Formula", rendered)
                 self.assertIn(
-                    'url "https://github.com/ColinLeeo/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"',
+                    'url "https://github.com/apache/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"',
                     rendered,
                 )
                 self.assertIn('version "2.5.0.dev0.20260910.123.1.gabcdef1"', rendered)

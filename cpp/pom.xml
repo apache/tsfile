@@ -59,6 +59,17 @@
             for packaging metadata.
         -->
         <enable.cpack>OFF</enable.cpack>
+        <!--
+            Windows native ZIPs use the static MSVC runtime. Maven is the
+            single parameter source, so this option is always passed even
+            though it is a no-op outside an MSVC build.
+        -->
+        <tsfile.msvc.static.runtime>OFF</tsfile.msvc.static.runtime>
+        <!--
+            Optional CMake project pre-include, used by the Windows package
+            job to run CheckStaticMSVCRuntime.cmake during configure.
+        -->
+        <tsfile.project.include/>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -113,6 +124,8 @@
                                 <option>-DENABLE_LZMA2=${enable.lzma2}</option>
                                 <option>-DENABLE_SIMD=${enable.simd}</option>
                                 <option>-DTSFILE_ENABLE_CPACK=${enable.cpack}</option>
+                                <option>-DTSFILE_MSVC_STATIC_RUNTIME=${tsfile.msvc.static.runtime}</option>
+                                <option>-DCMAKE_PROJECT_TsFile_CPP_INCLUDE=${tsfile.project.include}</option>
                                 <!--
                                     The Visual Studio generator additionally
                                     needs -DCMAKE_GENERATOR_PLATFORM (and
@@ -235,6 +248,42 @@
                                     <unpack>true</unpack>
                                     <outputDirectory>${project.build.directory}</outputDirectory>
                                     <skipCache>true</skipCache>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Native package jobs supply the complete version identity produced
+            by native_package_versions.py. The profile is activated only when
+            tsfile.archive.version is present; callers that enable CPack
+            directly keep the CMake defaults. All four values must be passed
+            together by packaging jobs.
+        -->
+        <profile>
+            <id>native-package-versions</id>
+            <activation>
+                <property>
+                    <name>tsfile.archive.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.cmake-maven-project</groupId>
+                        <artifactId>cmake-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>cmake-generate-test-compile</id>
+                                <configuration>
+                                    <options combine.children="append">
+                                        <option>-DTSFILE_ARCHIVE_VERSION=${tsfile.archive.version}</option>
+                                        <option>-DTSFILE_DEBIAN_PACKAGE_VERSION=${tsfile.debian.package.version}</option>
+                                        <option>-DTSFILE_RPM_PACKAGE_VERSION=${tsfile.rpm.package.version}</option>
+                                        <option>-DTSFILE_RPM_PACKAGE_RELEASE=${tsfile.rpm.package.release}</option>
+                                    </options>
                                 </configuration>
                             </execution>
                         </executions>

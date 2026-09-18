@@ -36,6 +36,12 @@ DEB_PROPERTIES = {
 }
 REQUIRED_VERSIONS = {"archive_version", "homebrew_version"}
 REQUIRED_SOURCE = {"commit", "repository"}
+SDK_PLATFORMS = {
+    "ubuntu22.04-amd64",
+    "almalinux9-x86_64",
+    "windows-msvc-x86_64",
+}
+PYTHON_PLATFORMS = {"ubuntu22.04-x86_64"}
 
 
 def _validate_metadata(values: dict[str, str], required: set[str], name: str) -> None:
@@ -141,6 +147,34 @@ def _artifact_description(
             "targetPath": f"homebrew/dev/versions/{versions['homebrew_version']}/{target.as_posix()[len('homebrew/'):]}",
             "properties": {},
         }
+    if len(parts) == 3 and parts[0] == "sdk" and filename.endswith(".tar.gz"):
+        platform = parts[1]
+        if platform not in SDK_PLATFORMS:
+            raise ValueError(f"unsupported SDK platform: {platform}")
+        target = Path("sdk") / platform / filename
+        return target, {
+            "family": "sdk",
+            "platform": platform,
+            "targetRepository": "tsfile",
+            "targetPath": (
+                f"sdk/dev/versions/{versions['archive_version']}/{platform}/{filename}"
+            ),
+            "properties": {},
+        }
+    if len(parts) == 3 and parts[0] == "python" and filename.endswith(".whl"):
+        platform = parts[1]
+        if platform not in PYTHON_PLATFORMS:
+            raise ValueError(f"unsupported Python wheel platform: {platform}")
+        target = Path("python/wheels") / platform / filename
+        return target, {
+            "family": "python",
+            "platform": platform,
+            "targetRepository": "tsfile-python",
+            "targetPath": (
+                f"python/dev/versions/{versions['archive_version']}/{platform}/{filename}"
+            ),
+            "properties": {},
+        }
     if len(parts) >= 2 and parts[0] == "windows" and filename.endswith(".zip"):
         target = Path("windows") / filename
         return target, {
@@ -163,6 +197,27 @@ def _require_complete_families(
         raise ValueError("missing RPM package input")
     if not any(family == "windows" for family in families):
         raise ValueError("missing Windows ZIP input")
+    sdk_platforms = {
+        metadata["platform"]
+        for _, _, metadata in planned
+        if metadata["family"] == "sdk"
+    }
+    missing_sdk_platforms = SDK_PLATFORMS - sdk_platforms
+    if missing_sdk_platforms:
+        raise ValueError(
+            "missing SDK inputs for: " + ", ".join(sorted(missing_sdk_platforms))
+        )
+    python_platforms = {
+        metadata["platform"]
+        for _, _, metadata in planned
+        if metadata["family"] == "python"
+    }
+    missing_python_platforms = PYTHON_PLATFORMS - python_platforms
+    if missing_python_platforms:
+        raise ValueError(
+            "missing Python wheel inputs for: "
+            + ", ".join(sorted(missing_python_platforms))
+        )
     homebrew_paths = {
         target.as_posix()
         for _, target, metadata in planned

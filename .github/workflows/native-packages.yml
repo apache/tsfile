@@ -68,13 +68,19 @@ jobs:
           retention-days: 14
 
   build-deb:
-    name: Build Ubuntu 22.04 DEB packages
+    name: Build Ubuntu 22.04 C++ SDK and DEB packages
     needs: prepare
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Install DEB build prerequisites
         run: |
@@ -82,26 +88,51 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             cmake \
-            ninja-build \
             pkg-config \
             dpkg-dev \
             uuid-dev
 
-      - name: Configure and build
+      - name: Build C++ core and CPack metadata with Maven
         env:
-          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
-          TSFILE_DEBIAN_PACKAGE_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
         run: |
-          cmake -S cpp -B build/deb -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TEST=OFF \
-            -DBUILD_TOOLS=ON \
-            -DTSFILE_ENABLE_CPACK=ON \
-            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
-            -DTSFILE_ENABLE_NATIVE_ARCH=OFF \
-            -DTSFILE_ARCHIVE_VERSION="$TSFILE_ARCHIVE_VERSION" \
-            -DTSFILE_DEBIAN_PACKAGE_VERSION="$TSFILE_DEBIAN_PACKAGE_VERSION"
-          cmake --build build/deb --parallel
+          ./mvnw -Pwith-cpp package \
+            -Dbuild.type=Release \
+            -Dbuild.test=OFF \
+            -DskipTests \
+            -Dspotless.skip=true \
+            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.version.sync.skip=true \
+            -Denable.cpack=ON \
+            -Dtsfile.archive.version="$ARCHIVE_VERSION" \
+            -Dtsfile.debian.package.version="$DEBIAN_VERSION" \
+            -Dtsfile.rpm.package.version="$RPM_VERSION" \
+            -Dtsfile.rpm.package.release="$RPM_RELEASE"
+          test -f cpp/target/build/CPackConfig.cmake
+
+      - name: Stage and verify the Ubuntu SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: bash
+        run: |
+          sdk_name="tsfile-sdk-ubuntu22.04-amd64-$ARCHIVE_VERSION"
+          sdk_root="sdk/$sdk_name"
+          cmake --install cpp/target/build --prefix "$sdk_root"
+          test -f "$sdk_root/bin/tsfile-cli"
+          test -d "$sdk_root/include"
+          test -d "$sdk_root/lib"
+          "$sdk_root/bin/tsfile-cli" --version
+          PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/deb \
+            -DCMAKE_PREFIX_PATH="$sdk_root"
+          cmake --build consumer/deb --parallel
+          ./consumer/deb/tsfile_installed_consumer
+          tar -C sdk -czf "$sdk_root.tar.gz" "$sdk_name"
+          rm -rf "$sdk_root"
 
       - name: Build and verify DEB packages
         env:
@@ -109,7 +140,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p packages
-          cpack -G DEB --config build/deb/CPackConfig.cmake -B packages
+          cpack -G DEB --config cpp/target/build/CPackConfig.cmake -B packages
 
           mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.deb' -print | sort)
           if [[ ${#packages[@]} -ne 3 ]]; then
@@ -136,6 +167,14 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Upload Ubuntu SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-ubuntu22.04-amd64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload DEB packages
         uses: actions/upload-artifact@v7
@@ -194,15 +233,16 @@ jobs:
           ./consumer/build/tsfile_installed_consumer
 
   build-rpm:
-    name: Build AlmaLinux 9 RPM packages
+    name: Build AlmaLinux 9 C++ SDK and RPM packages
     needs: prepare
     runs-on: ubuntu-24.04
     container: almalinux:9
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Install RPM build prerequisites
         run: |
           dnf install -y \
+            java-17-openjdk-devel \
             cmake \
             gcc-c++ \
             make \
@@ -217,24 +257,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Configure and build
+      - name: Build C++ core and CPack metadata with Maven
         env:
-          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
-          TSFILE_RPM_PACKAGE_VERSION: ${{ needs.prepare.outputs.rpm_version }}
-          TSFILE_RPM_PACKAGE_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
         shell: bash
         run: |
-          cmake -S cpp -B build/rpm \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TEST=OFF \
-            -DBUILD_TOOLS=ON \
-            -DTSFILE_ENABLE_CPACK=ON \
-            -DTSFILE_DEPENDENCY_SOURCE=AUTO \
-            -DTSFILE_ENABLE_NATIVE_ARCH=OFF \
-            -DTSFILE_ARCHIVE_VERSION="$TSFILE_ARCHIVE_VERSION" \
-            -DTSFILE_RPM_PACKAGE_VERSION="$TSFILE_RPM_PACKAGE_VERSION" \
-            -DTSFILE_RPM_PACKAGE_RELEASE="$TSFILE_RPM_PACKAGE_RELEASE"
-          cmake --build build/rpm --parallel
+          ./mvnw -Pwith-cpp package \
+            -Dbuild.type=Release \
+            -Dbuild.test=OFF \
+            -DskipTests \
+            -Dspotless.skip=true \
+            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.version.sync.skip=true \
+            -Denable.cpack=ON \
+            -Dtsfile.archive.version="$ARCHIVE_VERSION" \
+            -Dtsfile.debian.package.version="$DEBIAN_VERSION" \
+            -Dtsfile.rpm.package.version="$RPM_VERSION" \
+            -Dtsfile.rpm.package.release="$RPM_RELEASE"
+          test -f cpp/target/build/CPackConfig.cmake
+
+      - name: Stage and verify the AlmaLinux SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: bash
+        run: |
+          sdk_name="tsfile-sdk-almalinux9-x86_64-$ARCHIVE_VERSION"
+          sdk_root="sdk/$sdk_name"
+          cmake --install cpp/target/build --prefix "$sdk_root"
+          test -f "$sdk_root/bin/tsfile-cli"
+          test -d "$sdk_root/include"
+          test -d "$sdk_root/lib"
+          "$sdk_root/bin/tsfile-cli" --version
+          PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/rpm \
+            -DCMAKE_PREFIX_PATH="$sdk_root"
+          cmake --build consumer/rpm --parallel
+          ./consumer/rpm/tsfile_installed_consumer
+          tar -C sdk -czf "$sdk_root.tar.gz" "$sdk_name"
+          rm -rf "$sdk_root"
 
       - name: Build and verify RPM packages
         env:
@@ -243,7 +306,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p packages
-          cpack -G RPM --config build/rpm/CPackConfig.cmake -B packages
+          cpack -G RPM --config cpp/target/build/CPackConfig.cmake -B packages
 
           mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.rpm' -print | sort)
           if [[ ${#packages[@]} -ne 3 ]]; then
@@ -276,6 +339,14 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Upload AlmaLinux SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-almalinux9-x86_64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload RPM packages
         uses: actions/upload-artifact@v7
@@ -324,91 +395,112 @@ jobs:
           ./consumer/build/tsfile_installed_consumer
 
   build-windows:
-    name: Build Windows MSVC x86_64 ZIP
+    name: Build Windows MSVC C++ SDK and ZIP
     needs: prepare
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Configure the MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Configure, build, and stage
+      - name: Build C++ core and CPack metadata with Maven
         env:
-          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          cmake -S cpp -B build/windows -G "Visual Studio 17 2022" -A x64 `
-            -DBUILD_TEST=OFF `
-            -DBUILD_TOOLS=ON `
-            -DTSFILE_ENABLE_CPACK=ON `
-            -DTSFILE_DEPENDENCY_SOURCE=BUNDLED `
-            -DTSFILE_MSVC_STATIC_RUNTIME=ON `
-            -DCMAKE_PROJECT_TsFile_CPP_INCLUDE="$((Resolve-Path cpp/cmake/tests/CheckStaticMSVCRuntime.cmake).Path)" `
-            -DTSFILE_ENABLE_NATIVE_ARCH=OFF `
-            -DTSFILE_ARCHIVE_VERSION="$env:TSFILE_ARCHIVE_VERSION"
-          cmake --build build/windows --config Release --parallel
-          cmake --install build/windows --config Release --prefix stage/windows
+          $projectInclude = (Resolve-Path cpp/cmake/tests/CheckStaticMSVCRuntime.cmake).Path
+          .\mvnw.cmd -Pwith-cpp package `
+            -Dcpp.toolchain=msvc `
+            -Dbuild.type=Release `
+            -Dbuild.test=OFF `
+            -DskipTests `
+            -Dspotless.skip=true `
+            -Dtsfile.dependency.source=BUNDLED `
+            -Dtsfile.msvc.static.runtime=ON `
+            "-Dtsfile.project.include=$projectInclude" `
+            -Dtsfile.version.sync.skip=true `
+            -Denable.cpack=ON `
+            "-Dtsfile.archive.version=$env:ARCHIVE_VERSION" `
+            "-Dtsfile.debian.package.version=$env:DEBIAN_VERSION" `
+            "-Dtsfile.rpm.package.version=$env:RPM_VERSION" `
+            "-Dtsfile.rpm.package.release=$env:RPM_RELEASE"
+          if (-not (Test-Path -LiteralPath cpp/target/build/CPackConfig.cmake -PathType Leaf)) {
+            throw 'Maven did not generate cpp/target/build/CPackConfig.cmake'
+          }
 
-      - name: Test staged CLI and SDK
+      - name: Stage and verify the Windows SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $stage = (Resolve-Path stage/windows).Path
+          $sdkName = "tsfile-sdk-windows-msvc-x86_64-$env:ARCHIVE_VERSION"
+          $sdkRoot = "sdk/$sdkName"
+          cmake --install cpp/target/build --config Release --prefix $sdkRoot
           $requiredPaths = @(
-            "$stage/bin/tsfile-cli.exe"
-            "$stage/bin/tsfile.dll"
-            "$stage/lib/tsfile.lib"
-            "$stage/include/tsfile/cwrapper/tsfile_cwrapper.h"
-            "$stage/lib/cmake/TsFile/TsFileConfig.cmake"
-            "$stage/share/doc/tsfile/LICENSE"
-            "$stage/share/doc/tsfile/NOTICE"
+            "$sdkRoot/bin/tsfile-cli.exe"
+            "$sdkRoot/bin/tsfile.dll"
+            "$sdkRoot/lib/tsfile.lib"
+            "$sdkRoot/include/tsfile/cwrapper/tsfile_cwrapper.h"
+            "$sdkRoot/lib/cmake/TsFile/TsFileConfig.cmake"
+            "$sdkRoot/share/doc/tsfile/LICENSE"
+            "$sdkRoot/share/doc/tsfile/NOTICE"
           )
           foreach ($path in $requiredPaths) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-              throw "Required staged file is absent: $path"
+              throw "Required SDK file is absent: $path"
             }
           }
-
-          python packaging/scripts/verify_windows_runtime.py "$stage"
-          $env:PATH = "$stage/bin;$env:PATH"
-          tsfile-cli.exe --version
-
-          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build `
+          python packaging/scripts/verify_windows_runtime.py $sdkRoot
+          $env:PATH = "$sdkRoot/bin;$env:PATH"
+          & "$sdkRoot/bin/tsfile-cli.exe" --version
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/windows `
             -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
-            -DCMAKE_PREFIX_PATH="$stage"
-          cmake --build consumer/build --config Release --parallel
-          & consumer/build/Release/tsfile_installed_consumer.exe
+            "-DCMAKE_PREFIX_PATH=$sdkRoot"
+          cmake --build consumer/windows --config Release --parallel
+          & consumer/windows/Release/tsfile_installed_consumer.exe
+          tar.exe -czf "$sdkRoot.tar.gz" -C sdk $sdkName
+          Remove-Item -LiteralPath $sdkRoot -Recurse -Force
 
       - name: Build and inspect combined ZIP
         env:
-          TSFILE_ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $cpackConfig = Get-Content build/windows/CPackConfig.cmake -Raw
+          $cpackConfig = Get-Content cpp/target/build/CPackConfig.cmake -Raw
           if ($cpackConfig -notmatch 'set\(CPACK_ARCHIVE_COMPONENT_INSTALL "OFF"\)') {
             throw 'CPACK_ARCHIVE_COMPONENT_INSTALL must remain disabled'
           }
 
           New-Item -ItemType Directory -Path packages -Force | Out-Null
-          cpack -G ZIP -C Release --config build/windows/CPackConfig.cmake -B packages `
-            -D "CPACK_PACKAGE_VERSION=$env:TSFILE_ARCHIVE_VERSION"
+          cpack -G ZIP -C Release --config cpp/target/build/CPackConfig.cmake -B packages `
+            -D "CPACK_PACKAGE_VERSION=$env:ARCHIVE_VERSION"
 
           $archives = @(Get-ChildItem -Path packages -Filter *.zip -File)
           if ($archives.Count -ne 1) {
             throw "Expected exactly one combined ZIP, found $($archives.Count)"
           }
-          $expectedName = "tsfile-$env:TSFILE_ARCHIVE_VERSION-windows-x86_64.zip"
+          $expectedName = "tsfile-$env:ARCHIVE_VERSION-windows-x86_64.zip"
           if ($archives[0].Name -cne $expectedName) {
             throw "Unexpected ZIP name '$($archives[0].Name)'; expected '$expectedName'"
           }
@@ -444,11 +536,119 @@ jobs:
           $env:PATH = "$($zipCli[0].DirectoryName);$env:SystemRoot/System32"
           & $zipCli[0].FullName --version
 
+      - name: Upload Windows SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-windows-msvc-x86_64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload Windows ZIP
         uses: actions/upload-artifact@v7
         with:
           name: native-windows-msvc-x86_64
           path: packages/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  test-go-linux:
+    name: Test Go binding against the Ubuntu SDK
+    needs: build-deb
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: go/go.mod
+
+      - name: Download the Ubuntu SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-ubuntu22.04-amd64
+          path: sdk-download
+
+      - name: Stage the Ubuntu SDK
+        shell: bash
+        run: |
+          mkdir -p sdk-download sdk cpp/target/build
+          sdk_tar="$(find sdk-download -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$sdk_tar"
+          sdk_dir="$(tar -tzf "$sdk_tar" | head -n 1 | cut -d/ -f1)"
+          tar -xzf "$sdk_tar" -C sdk
+          cp -a "sdk/$sdk_dir/." cpp/target/build/
+          test -f cpp/target/build/include/tsfile/cwrapper/tsfile_cwrapper.h
+          test -e cpp/target/build/lib/libtsfile.so
+
+      - name: Run Go tests against the staged SDK
+        working-directory: go
+        shell: bash
+        run: |
+          go vet ./...
+          go test ./...
+          go test -race ./...
+
+  build-python-linux:
+    name: Build Python wheel from the Ubuntu SDK
+    needs: build-deb
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download the Ubuntu SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-ubuntu22.04-amd64
+          path: sdk-download
+
+      - name: Build the wheel with Maven using the SDK
+        shell: bash
+        run: |
+          sdk_tar="$(find sdk-download -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$sdk_tar"
+          sdk_dir="$(tar -tzf "$sdk_tar" | head -n 1 | cut -d/ -f1)"
+          mkdir -p sdk
+          tar -xzf "$sdk_tar" -C sdk
+          sdk_root="$PWD/sdk/$sdk_dir"
+          test -d "$sdk_root/include"
+          test -d "$sdk_root/lib"
+          ./mvnw -Pwith-python-only package \
+            -Dtsfile.cpp.build="$sdk_root" \
+            -Dspotless.skip=true \
+            -Dtsfile.version.sync.skip=true
+          test -n "$(find python/dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+
+      - name: Install and smoke-test the wheel
+        shell: bash
+        run: |
+          python3 -m venv wheel-test
+          wheel-test/bin/python -m pip install --upgrade pip
+          wheel-test/bin/python -m pip install python/dist/*.whl
+          wheel-test/bin/python -c "import tsfile; print('tsfile-import-ok')"
+
+      - name: Upload the Linux Python wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-python-wheel-ubuntu22.04-x86_64
+          path: python/dist/*.whl
           if-no-files-found: error
           retention-days: 14
 
@@ -469,7 +669,7 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
       TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
-      SOURCE_REPOSITORY: ColinLeeo/tsfile
+      SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_GIT_SHA: ${{ github.sha }}
       BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
     steps:
@@ -638,7 +838,14 @@ jobs:
 
   assemble:
     name: Assemble checksummed native package bundle
-    needs: [prepare, test-deb, test-rpm, merge-homebrew, build-windows]
+    needs:
+      - prepare
+      - test-deb
+      - test-rpm
+      - test-go-linux
+      - build-python-linux
+      - merge-homebrew
+      - build-windows
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -673,6 +880,30 @@ jobs:
         with:
           name: native-windows-msvc-x86_64
           path: input/windows
+
+      - name: Download Ubuntu SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-ubuntu22.04-amd64
+          path: input/sdk/ubuntu22.04-amd64
+
+      - name: Download AlmaLinux SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-almalinux9-x86_64
+          path: input/sdk/almalinux9-x86_64
+
+      - name: Download Windows SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-windows-msvc-x86_64
+          path: input/sdk/windows-msvc-x86_64
+
+      - name: Download Linux Python wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: native-python-wheel-ubuntu22.04-x86_64
+          path: input/python/ubuntu22.04-x86_64
 
       - name: Assemble the publishable bundle
         env:

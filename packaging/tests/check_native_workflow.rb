@@ -6,7 +6,7 @@
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
@@ -26,22 +26,51 @@ raise "Workflow must remain manual-only" unless triggers.keys == ["workflow_disp
 raise "Workflow permissions must remain read-only" unless workflow["permissions"] == { "contents" => "read" }
 
 jobs = workflow.fetch("jobs")
-bootstrap = jobs.fetch("build-rpm").fetch("steps").find { |step| step["name"] == "Install RPM build prerequisites" }
-packages = Shellwords.split(bootstrap.fetch("run").gsub("\\\n", " "))
+
+def run_text(job)
+  job.fetch("steps").filter_map { |step| step["run"] }.join("\n")
+end
+
+%w[build-deb build-rpm build-windows].each do |name|
+  text = run_text(jobs.fetch(name))
+  raise "#{name} must build C++ through Maven" unless text.include?("-Pwith-cpp package")
+  raise "#{name} must enable CPack through Maven" unless text.include?("-Denable.cpack=ON")
+  raise "#{name} must use the generated CPack config" unless text.include?("cpp/target/build/CPackConfig.cmake")
+  raise "#{name} must stage an SDK" unless text.include?("cmake --install cpp/target/build")
+  raise "#{name} must pass the generated archive version" unless text.include?("-Dtsfile.archive.version")
+  raise "#{name} must freeze source versions" unless text.include?("-Dtsfile.version.sync.skip=true")
+end
+
+rpm_bootstrap = jobs.fetch("build-rpm").fetch("steps").find { |step| step["name"] == "Install RPM build prerequisites" }
+packages = Shellwords.split(rpm_bootstrap.fetch("run").gsub("\\\n", " "))
 raise "AlmaLinux 9 curl-minimal conflicts with full curl" if packages.include?("curl")
 raise "RPM bootstrap must retain curl-minimal" unless packages.include?("curl-minimal")
 raise "AlmaLinux 9 default repositories do not provide ninja-build" if packages.include?("ninja-build")
 raise "RPM bootstrap must install make" unless packages.include?("make")
+raise "RPM bootstrap must install Java" unless packages.include?("java-17-openjdk-devel")
 
-rpm_build = jobs.fetch("build-rpm").fetch("steps").filter_map { |step| step["run"] }.join("\n")
-raise "RPM build must not require Ninja" if rpm_build.include?("-G Ninja")
-
-windows = jobs.fetch("build-windows").fetch("steps").filter_map { |step| step["run"] }.join("\n")
-raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-DTSFILE_MSVC_STATIC_RUNTIME=ON") && windows.include?("-DTSFILE_DEPENDENCY_SOURCE=BUNDLED")
-raise "All native target runtimes must be checked" unless windows.include?("CheckStaticMSVCRuntime.cmake")
+windows = run_text(jobs.fetch("build-windows"))
+raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-Dtsfile.msvc.static.runtime=ON") && windows.include?("-Dtsfile.dependency.source=BUNDLED")
+raise "Windows runtime check must be wired through Maven" unless windows.include?("CheckStaticMSVCRuntime.cmake") && windows.include?("-Dtsfile.project.include")
 raise "Both staged and extracted PE imports must be checked" unless windows.scan("python packaging/scripts/verify_windows_runtime.py").size == 2
 
-homebrew_merge = jobs.fetch("merge-homebrew").fetch("steps").filter_map { |step| step["run"] }.join("\n")
+go_job = jobs.fetch("test-go-linux")
+raise "Go test must consume the Ubuntu SDK" unless go_job.fetch("needs") == "build-deb"
+go_text = run_text(go_job)
+raise "Go test must download the SDK artifact" unless go_job.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-ubuntu22.04-amd64" }
+raise "Go test must run go test" unless go_text.include?("go test ./...")
+
+python_job = jobs.fetch("build-python-linux")
+raise "Python wheel must consume the Ubuntu SDK" unless python_job.fetch("needs") == "build-deb"
+python_text = run_text(python_job)
+raise "Python wheel must use with-python-only" unless python_text.include?("-Pwith-python-only package")
+raise "Python wheel must point at the downloaded SDK" unless python_text.include?("-Dtsfile.cpp.build")
+raise "Python wheel must freeze source versions" unless python_text.include?("-Dtsfile.version.sync.skip=true")
+
+homebrew = jobs.fetch("build-homebrew")
+raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"
+
+homebrew_merge = run_text(jobs.fetch("merge-homebrew"))
 trust = homebrew_merge.index("brew trust apache/tsfile-dev")
 merge = homebrew_merge.index("brew bottle --merge")
 raise "Homebrew merge must trust its temporary tap before loading the Formula" unless trust && merge && trust < merge
@@ -53,6 +82,18 @@ raise "Homebrew merge must trust its temporary tap before loading the Formula" u
   raise "#{name} must use the installed CMake consumer" unless runs.include?("-S cpp/cmake/tests/projects/InstalledConsumer")
 end
 
+assemble = jobs.fetch("assemble")
+needs = Array(assemble.fetch("needs"))
+%w[test-deb test-rpm test-go-linux build-python-linux merge-homebrew build-windows].each do |name|
+  raise "assemble must depend on #{name}" unless needs.include?(name)
+end
+assemble_text = run_text(assemble)
+%w[native-sdk-ubuntu22.04-amd64 native-sdk-almalinux9-x86_64 native-sdk-windows-msvc-x86_64 native-python-wheel-ubuntu22.04-x86_64].each do |name|
+  raise "assemble must download #{name}" unless assemble.fetch("steps").any? { |step| step["with"].to_h["name"] == name }
+end
+raise "assemble must verify the bundle" unless assemble_text.include?("--verify-bundle")
+raise "workflow must not hard-code a fork repository" if File.read(path).include?("ColinLeeo/tsfile")
+
 jobs.each_value do |job|
   job.fetch("steps").each do |step|
     next unless step["run"] && step.fetch("shell", "bash") == "bash"
@@ -60,4 +101,4 @@ jobs.each_value do |job|
     raise "Invalid shell in #{step['name']}: #{output}" unless status.success?
   end
 end
-puts "PASS: manual/read-only workflow, AlmaLinux bootstrap, Windows CRT checks, shared consumers, and Bash syntax"
+puts "PASS: manual/read-only Maven build hierarchy, artifact consumers, workflow contracts, and shell syntax"

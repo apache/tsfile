@@ -32,16 +32,20 @@ API; a separate API cleanup will narrow it in a future version.
 ## Manual artifact workflow
 
 `Build native package artifacts` (`.github/workflows/native-packages.yml`) is
-the authoritative native packaging workflow. In the fork's GitHub Actions tab,
+the authoritative native packaging workflow. In the Apache TsFile repository's GitHub Actions tab,
 select this workflow, choose **Run workflow**, select the branch containing the
 commit to build, and dispatch it manually. It runs only on `workflow_dispatch`,
 with read-only repository permissions; pushes and pull requests do not trigger
 native packaging.
 
-A successful run produces Ubuntu DEBs, AlmaLinux RPMs, an ARM64 and Intel
-Homebrew development bottle with a merged Formula, and a Windows x86_64 SDK/CLI
-ZIP. It combines these into `tsfile-native-packages-<archive-version>` with
-`manifest.json` and `SHA256SUMS`. Download this final artifact from the workflow
+A successful run builds the C++ core through Maven, stages one SDK per
+release platform, and then produces Ubuntu DEBs, AlmaLinux RPMs, an ARM64 and
+Intel Homebrew development bottle with a merged Formula, a Windows x86_64
+SDK/CLI ZIP, and a Linux Python wheel built from the staged Ubuntu SDK. It also
+runs the Go and Python consumers against the SDK rather than rebuilding the C++
+core downstream. The job combines these into
+`tsfile-native-packages-<archive-version>` with `manifest.json` and
+`SHA256SUMS`. Download this final artifact from the workflow
 run; both intermediate and final artifacts are retained for 14 days.
 
 Publishing is a separate, manual step. This workflow only builds, tests, and
@@ -51,39 +55,34 @@ implement RC/final release behavior.
 
 ## Portable archive
 
-Build a relocatable binary archive on any host with CMake and CPack:
+Build a relocatable SDK and portable archive through the Maven entry point:
 
 ```bash
-cmake -S cpp -B cpp/build/package \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_TEST=OFF \
-  -DBUILD_TOOLS=ON \
-  -DTSFILE_ENABLE_CPACK=ON \
-  -DTSFILE_DEPENDENCY_SOURCE=AUTO
-cmake --build cpp/build/package --parallel
-cpack --config cpp/build/package/CPackConfig.cmake -G TGZ
+./mvnw -Pwith-cpp package \
+  -Dbuild.test=OFF \
+  -Dtsfile.dependency.source=AUTO \
+  -Denable.cpack=ON
+cmake --install cpp/target/build --prefix cpp/build/sdk-root
+cpack --config cpp/target/build/CPackConfig.cmake -G TGZ -B cpp/build/packages
 ```
 
-The resulting `tsfile-<version>-<platform>.tar.gz` contains a standard
-prefix layout and can be unpacked at `/usr/local`, a user directory, or a
-relocated application prefix.
+The staged `cpp/build/sdk-root` contains a standard prefix layout and can be
+unpacked at `/usr/local`, a user directory, or a relocated application prefix.
 
 ## Native Linux packages
 
 DEB and RPM packages must be built in the target distribution environment so
 CPack can run the native dependency scanner (`dpkg-shlibdeps` or
-`rpmbuild`). On Debian/Ubuntu use `-G DEB`; on Fedora/RHEL use `-G RPM`:
+`rpmbuild`). Build the same Maven-driven tree once, then select the native
+generator in the same job:
 
 ```bash
-cmake -S cpp -B cpp/build/package \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_TEST=OFF \
-  -DBUILD_TOOLS=ON \
-  -DTSFILE_ENABLE_CPACK=ON \
-  -DTSFILE_DEPENDENCY_SOURCE=AUTO
-cmake --build cpp/build/package --parallel
-cpack --config cpp/build/package/CPackConfig.cmake -G DEB
-# or: cpack --config cpp/build/package/CPackConfig.cmake -G RPM
+./mvnw -Pwith-cpp package \
+  -Dbuild.test=OFF \
+  -Dtsfile.dependency.source=AUTO \
+  -Denable.cpack=ON
+cpack -G DEB --config cpp/target/build/CPackConfig.cmake -B cpp/build/packages
+# or: cpack -G RPM --config cpp/target/build/CPackConfig.cmake -B cpp/build/packages
 ```
 
 `SYSTEM` can be used instead of `AUTO` when the build image provides every
@@ -115,7 +114,7 @@ when the first release containing this packaging work is published.
 The manual native-package workflow also builds the self-hosted development
 Formula `tsfile-dev`, using `packaging/homebrew/tsfile-dev.rb.in`. This is not a
 Homebrew/core submission. Each build pins the full workflow commit from
-`ColinLeeo/tsfile`, hashes that source archive, and uses the generated immutable
+the Apache TsFile source repository, hashes that source archive, and uses the generated immutable
 Homebrew development version. The Formula retains the CMake install behavior
 and tests the installed C++ consumer and CLI before bottling. `tsfile-dev` is
 keg-only because the current SDK intentionally ships its dependency header
@@ -203,8 +202,9 @@ python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
 Only after the Ubuntu 22.04 and 24.04 DEB installation tests, AlmaLinux 9 RPM
 installation test, Homebrew bottle merge, and Windows SDK/CLI build all succeed,
 the workflow assembles `tsfile-native-packages-<archive-version>`. The final
-GitHub Actions artifact retains the DEBs, RPMs, merged Formula and bottles, and
-Windows ZIP in their package-family layouts for 14 days. It also contains a
+GitHub Actions artifact retains the platform SDKs, the Linux Python wheel, the
+DEBs, RPMs, merged Formula and bottles, and Windows ZIP in their package-family
+layouts for 14 days. It also contains a
 sorted `SHA256SUMS` and `manifest.json` with the source identity, generated
 versions, byte sizes, SHA-256 values, and the JFrog repository, immutable target
 path, and properties required for later manual publication.
@@ -212,5 +212,6 @@ path, and properties required for later manual publication.
 The final job has no publishing credentials and does not upload to JFrog. A
 maintainer can later use the manifest to upload DEBs to `tsfile-debian` with the
 recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/x86_64`, and Homebrew
-and Windows files to their immutable `tsfile/homebrew/dev/versions/<version>`
-and `tsfile/windows/dev/versions/<version>` paths.
+SDKs, and Windows files to their immutable
+`tsfile/homebrew/dev/versions/<version>`,
+`tsfile/windows/dev/versions/<version>`, and `sdk/dev/versions/<version>` paths.

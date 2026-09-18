@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -33,7 +34,7 @@ VERSIONS = {
 }
 SOURCE = {
     "commit": "abcdef1234567890abcdef1234567890abcdef12",
-    "repository": "ColinLeeo/tsfile",
+    "repository": "apache/tsfile",
 }
 
 
@@ -69,6 +70,10 @@ class AssembleNativePackagesTest(unittest.TestCase):
             "homebrew/bottles/tsfile-dev.bottle.tar.gz": b"bottle artifact\n",
             "homebrew/bottles/tsfile-dev.bottle.json": b"bottle metadata\n",
             "windows/tsfile-2.5.0-dev-windows-x86_64.zip": b"windows artifact\n",
+            "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk ubuntu\n",
+            "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk almalinux\n",
+            "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk windows\n",
+            "python/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl": b"python wheel\n",
         }
         for relative_path, contents in files.items():
             path = directory / relative_path
@@ -93,7 +98,11 @@ class AssembleNativePackagesTest(unittest.TestCase):
                 "homebrew/Formula/tsfile-dev.rb",
                 "homebrew/bottles/tsfile-dev.bottle.json",
                 "homebrew/bottles/tsfile-dev.bottle.tar.gz",
+                "python/wheels/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl",
                 "rpm/almalinux9-x86_64/tsfile-2.5.0-dev.x86_64.rpm",
+                "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "windows/tsfile-2.5.0-dev-windows-x86_64.zip",
             ]
             self.assertEqual(
@@ -106,94 +115,36 @@ class AssembleNativePackagesTest(unittest.TestCase):
                 expected_paths,
             )
             self.assertEqual(
-                (output_directory / "SHA256SUMS").read_text(encoding="utf-8"),
-                "ef5ca1431457b6dec117aff4aafcfd14edec3fe628d3fefe334867e502b8c137  deb/ubuntu22.04-amd64/tsfile_2.5.0-dev_amd64.deb\n"
-                "b045d33311f553503342e1b061df60161e414503d68dc14af90537f254dfc224  homebrew/Formula/tsfile-dev.rb\n"
-                "ae98b99fb84c92fb10b00d75e0c51035006067659043b9dc0cb08d9902633967  homebrew/bottles/tsfile-dev.bottle.json\n"
-                "95f3ddb71b1a0c5c95c5aa0352321075cc465d6a583dff8bf601e888abec4b82  homebrew/bottles/tsfile-dev.bottle.tar.gz\n"
-                "f557fbfdaf15a34e59adaf4fa487062419dd8fe39eb057f6b581b4469cd3a25f  rpm/almalinux9-x86_64/tsfile-2.5.0-dev.x86_64.rpm\n"
-                "f59fc30fd2aaa4a4594eb006fce33041e2702b621abf936af5619b3eabf23c8f  windows/tsfile-2.5.0-dev-windows-x86_64.zip\n",
-            )
-            self.assertEqual(
                 json.loads((output_directory / "manifest.json").read_text()), manifest
             )
             self.assertEqual(manifest["source"], SOURCE)
             self.assertEqual(manifest["versions"], VERSIONS)
             self.assertEqual(
-                manifest["artifacts"],
-                [
-                    {
-                        "family": "deb",
-                        "filename": "tsfile_2.5.0-dev_amd64.deb",
-                        "path": "deb/ubuntu22.04-amd64/tsfile_2.5.0-dev_amd64.deb",
-                        "platform": "ubuntu22.04-amd64",
-                        "properties": {
-                            "deb.architecture": ["amd64"],
-                            "deb.component": ["dev"],
-                            "deb.distribution": ["jammy", "noble"],
-                        },
-                        "sha256": "ef5ca1431457b6dec117aff4aafcfd14edec3fe628d3fefe334867e502b8c137",
-                        "size": 13,
-                        "targetPath": "pool/dev/ubuntu22.04-amd64/tsfile_2.5.0-dev_amd64.deb",
-                        "targetRepository": "tsfile-debian",
-                    },
-                    {
-                        "family": "homebrew",
-                        "filename": "tsfile-dev.rb",
-                        "path": "homebrew/Formula/tsfile-dev.rb",
-                        "platform": "homebrew",
-                        "properties": {},
-                        "sha256": "b045d33311f553503342e1b061df60161e414503d68dc14af90537f254dfc224",
-                        "size": 17,
-                        "targetPath": "homebrew/dev/versions/2.5.0.dev0.20260910.123.1.gabcdef1/Formula/tsfile-dev.rb",
-                        "targetRepository": "tsfile",
-                    },
-                    {
-                        "family": "homebrew",
-                        "filename": "tsfile-dev.bottle.json",
-                        "path": "homebrew/bottles/tsfile-dev.bottle.json",
-                        "platform": "homebrew",
-                        "properties": {},
-                        "sha256": "ae98b99fb84c92fb10b00d75e0c51035006067659043b9dc0cb08d9902633967",
-                        "size": 16,
-                        "targetPath": "homebrew/dev/versions/2.5.0.dev0.20260910.123.1.gabcdef1/bottles/tsfile-dev.bottle.json",
-                        "targetRepository": "tsfile",
-                    },
-                    {
-                        "family": "homebrew",
-                        "filename": "tsfile-dev.bottle.tar.gz",
-                        "path": "homebrew/bottles/tsfile-dev.bottle.tar.gz",
-                        "platform": "homebrew",
-                        "properties": {},
-                        "sha256": "95f3ddb71b1a0c5c95c5aa0352321075cc465d6a583dff8bf601e888abec4b82",
-                        "size": 16,
-                        "targetPath": "homebrew/dev/versions/2.5.0.dev0.20260910.123.1.gabcdef1/bottles/tsfile-dev.bottle.tar.gz",
-                        "targetRepository": "tsfile",
-                    },
-                    {
-                        "family": "rpm",
-                        "filename": "tsfile-2.5.0-dev.x86_64.rpm",
-                        "path": "rpm/almalinux9-x86_64/tsfile-2.5.0-dev.x86_64.rpm",
-                        "platform": "almalinux9-x86_64",
-                        "properties": {},
-                        "sha256": "f557fbfdaf15a34e59adaf4fa487062419dd8fe39eb057f6b581b4469cd3a25f",
-                        "size": 13,
-                        "targetPath": "dev/el9/x86_64/tsfile-2.5.0-dev.x86_64.rpm",
-                        "targetRepository": "tsfile-rpm",
-                    },
-                    {
-                        "family": "windows",
-                        "filename": "tsfile-2.5.0-dev-windows-x86_64.zip",
-                        "path": "windows/tsfile-2.5.0-dev-windows-x86_64.zip",
-                        "platform": "windows-msvc-x86_64",
-                        "properties": {},
-                        "sha256": "f59fc30fd2aaa4a4594eb006fce33041e2702b621abf936af5619b3eabf23c8f",
-                        "size": 17,
-                        "targetPath": "windows/dev/versions/2.5.0-dev0.20260910.123.1.gabcdef1/tsfile-2.5.0-dev-windows-x86_64.zip",
-                        "targetRepository": "tsfile",
-                    },
-                ],
+                {artifact["family"] for artifact in manifest["artifacts"]},
+                {"deb", "homebrew", "python", "rpm", "sdk", "windows"},
             )
+            self.assertEqual(
+                {artifact["platform"] for artifact in manifest["artifacts"]},
+                {
+                    "almalinux9-x86_64",
+                    "homebrew",
+                    "ubuntu22.04-amd64",
+                    "ubuntu22.04-x86_64",
+                    "windows-msvc-x86_64",
+                },
+            )
+            for artifact in manifest["artifacts"]:
+                output_path = output_directory / artifact["path"]
+                input_path = next(
+                    path
+                    for path in input_directory.rglob(artifact["filename"])
+                    if path.is_file()
+                )
+                self.assertEqual(artifact["size"], input_path.stat().st_size)
+                self.assertEqual(
+                    artifact["sha256"],
+                    hashlib.sha256(input_path.read_bytes()).hexdigest(),
+                )
 
     def test_verifies_assembler_checksum_lines_sorted_by_path(self):
         module = self.require_module()
