@@ -38,6 +38,9 @@ end
   raise "#{name} must use the generated CPack config" unless text.include?("cpp/target/build/CPackConfig.cmake")
   raise "#{name} must stage an SDK" unless text.include?("cmake --install cpp/target/build")
   raise "#{name} must use an absolute SDK prefix" unless text.include?("$PWD/sdk/") || text.include?('Join-Path $PWD "sdk/')
+  if name != "build-windows"
+    raise "#{name} must locate pkg-config without assuming lib" unless text.include?('dirname "$sdk_pkgconfig"')
+  end
   raise "#{name} must pass the generated archive version" unless text.include?("-Dtsfile.archive.version")
   raise "#{name} must freeze source versions" unless text.include?("-Dtsfile.version.sync.skip=true")
 end
@@ -61,6 +64,7 @@ raise "Go test must consume the Ubuntu SDK" unless go_job.fetch("needs") == "bui
 go_text = run_text(go_job)
 raise "Go test must download the SDK artifact" unless go_job.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-ubuntu22.04-amd64" }
 raise "Go test must run go test" unless go_text.include?("go test ./...")
+raise "Go SDK extraction must not fail on SIGPIPE" if go_text.include?("tar -tzf") && go_text.include?("head -n 1")
 
 python_job = jobs.fetch("build-python-linux")
 raise "Python wheel must consume the Ubuntu SDK" unless python_job.fetch("needs") == "build-deb"
@@ -68,6 +72,7 @@ python_text = run_text(python_job)
 raise "Python wheel must use with-python-only" unless python_text.include?("-Pwith-python-only package")
 raise "Python wheel must point at the downloaded SDK" unless python_text.include?("-Dtsfile.cpp.build")
 raise "Python wheel must freeze source versions" unless python_text.include?("-Dtsfile.version.sync.skip=true")
+raise "Python SDK extraction must not fail on SIGPIPE" if python_text.include?("tar -tzf") && python_text.include?("head -n 1")
 
 homebrew = jobs.fetch("build-homebrew")
 raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"

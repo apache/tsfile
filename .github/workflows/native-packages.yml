@@ -124,9 +124,11 @@ jobs:
           cmake --install cpp/target/build --prefix "$sdk_root"
           test -f "$sdk_root/bin/tsfile-cli"
           test -d "$sdk_root/include"
-          test -d "$sdk_root/lib"
+          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile.so*' -print -quit)"
+          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
+          test -n "$sdk_pkgconfig"
           "$sdk_root/bin/tsfile-cli" --version
-          PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
+          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
           cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/deb \
             -DCMAKE_PREFIX_PATH="$sdk_root"
           cmake --build consumer/deb --parallel
@@ -289,9 +291,11 @@ jobs:
           cmake --install cpp/target/build --prefix "$sdk_root"
           test -f "$sdk_root/bin/tsfile-cli"
           test -d "$sdk_root/include"
-          test -d "$sdk_root/lib"
+          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile.so*' -print -quit)"
+          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
+          test -n "$sdk_pkgconfig"
           "$sdk_root/bin/tsfile-cli" --version
-          PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
+          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
           cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/rpm \
             -DCMAKE_PREFIX_PATH="$sdk_root"
           cmake --build consumer/rpm --parallel
@@ -579,7 +583,7 @@ jobs:
           mkdir -p sdk-download sdk cpp/target/build
           sdk_tar="$(find sdk-download -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
           test -n "$sdk_tar"
-          sdk_dir="$(tar -tzf "$sdk_tar" | head -n 1 | cut -d/ -f1)"
+          sdk_dir="$(tar -tzf "$sdk_tar" | sed -n '1s#/.*##p')"
           tar -xzf "$sdk_tar" -C sdk
           cp -a "sdk/$sdk_dir/." cpp/target/build/
           test -f cpp/target/build/include/tsfile/cwrapper/tsfile_cwrapper.h
@@ -624,7 +628,7 @@ jobs:
         run: |
           sdk_tar="$(find sdk-download -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
           test -n "$sdk_tar"
-          sdk_dir="$(tar -tzf "$sdk_tar" | head -n 1 | cut -d/ -f1)"
+          sdk_dir="$(tar -tzf "$sdk_tar" | sed -n '1s#/.*##p')"
           mkdir -p sdk
           tar -xzf "$sdk_tar" -C sdk
           sdk_root="$PWD/sdk/$sdk_dir"
