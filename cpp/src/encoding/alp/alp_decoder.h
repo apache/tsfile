@@ -38,6 +38,8 @@ class AlpDecoderBase : public Decoder {
     AlpDecoderBase() : initialized_(false), read_index_(0) {}
     ~AlpDecoderBase() override { destroy(); }
 
+    bool owns_resources() const override { return true; }
+
     void destroy() override {
         std::vector<T>().swap(values_);
         std::vector<uint8_t>().swap(page_buffer_);
