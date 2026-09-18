@@ -37,6 +37,7 @@ end
   raise "#{name} must enable CPack through Maven" unless text.include?("-Denable.cpack=ON")
   raise "#{name} must use the generated CPack config" unless text.include?("cpp/target/build/CPackConfig.cmake")
   raise "#{name} must stage an SDK" unless text.include?("cmake --install cpp/target/build")
+  raise "#{name} must use an absolute SDK prefix" unless text.include?("$PWD/sdk/") || text.include?('Join-Path $PWD "sdk/')
   raise "#{name} must pass the generated archive version" unless text.include?("-Dtsfile.archive.version")
   raise "#{name} must freeze source versions" unless text.include?("-Dtsfile.version.sync.skip=true")
 end
@@ -52,6 +53,7 @@ raise "RPM bootstrap must install Java" unless packages.include?("java-17-openjd
 windows = run_text(jobs.fetch("build-windows"))
 raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-Dtsfile.msvc.static.runtime=ON") && windows.include?("-Dtsfile.dependency.source=BUNDLED")
 raise "Windows runtime check must be wired through Maven" unless windows.include?("CheckStaticMSVCRuntime.cmake") && windows.include?("-Dtsfile.project.include")
+raise "Windows Maven properties must be quoted for PowerShell" unless windows.include?('"-Dcpp.toolchain=msvc"') && windows.include?('"-Dbuild.type=Release"')
 raise "Both staged and extracted PE imports must be checked" unless windows.scan("python packaging/scripts/verify_windows_runtime.py").size == 2
 
 go_job = jobs.fetch("test-go-linux")

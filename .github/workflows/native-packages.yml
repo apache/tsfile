@@ -120,7 +120,7 @@ jobs:
         shell: bash
         run: |
           sdk_name="tsfile-sdk-ubuntu22.04-amd64-$ARCHIVE_VERSION"
-          sdk_root="sdk/$sdk_name"
+          sdk_root="$PWD/sdk/$sdk_name"
           cmake --install cpp/target/build --prefix "$sdk_root"
           test -f "$sdk_root/bin/tsfile-cli"
           test -d "$sdk_root/include"
@@ -285,7 +285,7 @@ jobs:
         shell: bash
         run: |
           sdk_name="tsfile-sdk-almalinux9-x86_64-$ARCHIVE_VERSION"
-          sdk_root="sdk/$sdk_name"
+          sdk_root="$PWD/sdk/$sdk_name"
           cmake --install cpp/target/build --prefix "$sdk_root"
           test -f "$sdk_root/bin/tsfile-cli"
           test -d "$sdk_root/include"
@@ -426,16 +426,16 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           $projectInclude = (Resolve-Path cpp/cmake/tests/CheckStaticMSVCRuntime.cmake).Path
           .\mvnw.cmd -Pwith-cpp package `
-            -Dcpp.toolchain=msvc `
-            -Dbuild.type=Release `
-            -Dbuild.test=OFF `
-            -DskipTests `
-            -Dspotless.skip=true `
-            -Dtsfile.dependency.source=BUNDLED `
-            -Dtsfile.msvc.static.runtime=ON `
+            "-Dcpp.toolchain=msvc" `
+            "-Dbuild.type=Release" `
+            "-Dbuild.test=OFF" `
+            "-DskipTests" `
+            "-Dspotless.skip=true" `
+            "-Dtsfile.dependency.source=BUNDLED" `
+            "-Dtsfile.msvc.static.runtime=ON" `
             "-Dtsfile.project.include=$projectInclude" `
-            -Dtsfile.version.sync.skip=true `
-            -Denable.cpack=ON `
+            "-Dtsfile.version.sync.skip=true" `
+            "-Denable.cpack=ON" `
             "-Dtsfile.archive.version=$env:ARCHIVE_VERSION" `
             "-Dtsfile.debian.package.version=$env:DEBIAN_VERSION" `
             "-Dtsfile.rpm.package.version=$env:RPM_VERSION" `
@@ -452,7 +452,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $sdkName = "tsfile-sdk-windows-msvc-x86_64-$env:ARCHIVE_VERSION"
-          $sdkRoot = "sdk/$sdkName"
+          $sdkRoot = Join-Path $PWD "sdk/$sdkName"
           cmake --install cpp/target/build --config Release --prefix $sdkRoot
           $requiredPaths = @(
             "$sdkRoot/bin/tsfile-cli.exe"
