@@ -92,10 +92,9 @@ if sys.platform.startswith("linux"):
     if not candidates:
         raise FileNotFoundError("missing libtsfile.so* in build output")
     src = candidates[0]
-    dst = PKG / src.name
-    shutil.copy2(src, dst)
-    link_name = PKG / "libtsfile.so"
-    shutil.copy2(src, link_name)
+    for candidate in candidates:
+        shutil.copy2(candidate, PKG / candidate.name)
+    shutil.copy2(src, PKG / "libtsfile.so")
 
 elif sys.platform == "darwin":
     candidates = sorted(CPP_LIB.rglob("libtsfile.*.dylib")) or list(
