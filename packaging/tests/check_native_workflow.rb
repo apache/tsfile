@@ -84,7 +84,10 @@ raise "Homebrew SDK must be archived from the staging root" unless homebrew_text
 raise "Homebrew prefix capture must tolerate extra stdout lines" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1")
 raise "Homebrew SDK verification must provide pkg-config" unless homebrew_text.include?("brew install pkgconf")
 raise "Homebrew SDK step must keep bash 3.2 compatibility" if homebrew_text.include?("set -euo pipefail")
-raise "Homebrew job must upload a macOS SDK artifact" unless homebrew.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-macos-${{ matrix.name }}" }
+raise "Homebrew job must upload a macOS SDK artifact" unless homebrew.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-${{ matrix.name }}" }
+raise "Homebrew SDK must drop keg bookkeeping" unless homebrew_text.include?("INSTALL_RECEIPT.json") && homebrew_text.include?("sbom.spdx.json")
+raise "Homebrew SDK must normalize the dylib identity" unless homebrew_text.include?("install_name_tool -id")
+raise "Homebrew SDK must re-sign the normalized dylib" unless homebrew_text.include?("codesign --force --sign -")
 
 homebrew_merge = run_text(jobs.fetch("merge-homebrew"))
 trust = homebrew_merge.index("brew trust apache/tsfile-dev")
@@ -112,6 +115,8 @@ raise "workflow must not hard-code a fork repository" if File.read(path).include
 
 jobs.each_value do |job|
   job.fetch("steps").each do |step|
+    artifact = step["with"].to_h["name"].to_s
+    raise "artifact names must not repeat the macOS matrix prefix" if artifact.include?("macos-macos")
     next unless step["run"] && step.fetch("shell", "bash") == "bash"
     output, status = Open3.capture2e("bash", "-n", stdin_data: step["run"])
     raise "Invalid shell in #{step['name']}: #{output}" unless status.success?

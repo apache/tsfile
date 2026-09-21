@@ -745,6 +745,24 @@ jobs:
           mkdir -p "$sdk_root"
           ditto "$keg_root" "$sdk_root"
 
+          # Drop Homebrew keg bookkeeping so the archive holds the same SDK
+          # layout as the Linux and Windows archives.
+          rm -rf "$sdk_root/.brew" "$sdk_root/INSTALL_RECEIPT.json" "$sdk_root/sbom.spdx.json"
+
+          # A keg records its own absolute path as the dylib identity, which
+          # would pin every downstream consumer to this runner's keg.
+          real_dylib=""
+          for candidate in "$sdk_root"/lib/libtsfile*.dylib; do
+            [ -L "$candidate" ] || real_dylib="$candidate"
+          done
+          [ -n "$real_dylib" ] || fail "missing real libtsfile dylib under $sdk_root/lib"
+          dylib_id="$(basename "$(otool -D "$real_dylib" | sed -n '2p')")"
+          [ -n "$dylib_id" ] || fail "cannot read the dylib identity from $real_dylib"
+          install_name_tool -id "@rpath/$dylib_id" "$real_dylib"
+          codesign --force --sign - "$real_dylib"
+          [ "$(otool -D "$real_dylib" | sed -n '2p')" = "@rpath/$dylib_id" ] ||
+            fail "dylib identity was not normalized to @rpath"
+
           "$sdk_root/bin/tsfile-cli" --version
           PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
           cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/macos \
@@ -765,7 +783,7 @@ jobs:
       - name: Upload macOS SDK
         uses: actions/upload-artifact@v7
         with:
-          name: native-sdk-macos-${{ matrix.name }}
+          name: native-sdk-${{ matrix.name }}
           path: sdk/*.tar.gz
           if-no-files-found: error
           retention-days: 14
