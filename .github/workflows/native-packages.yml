@@ -716,22 +716,43 @@ jobs:
       - name: Stage and verify the macOS SDK
         shell: bash
         run: |
+          # The runner's /bin/bash is 3.2, where "set -u" rejects empty arrays.
+          set -eo pipefail
+          fail() { printf '::error::%s\n' "$1"; exit 1; }
           sdk_name="tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION"
-          sdk_root="$(brew --prefix apache/tsfile-dev/tsfile-dev)"
-          test -d "$sdk_root/include"
-          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile*.dylib' -print -quit)"
-          test -x "$sdk_root/bin/tsfile-cli"
-          test -f "$sdk_root/lib/cmake/TsFile/TsFileConfig.cmake"
-          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
-          test -n "$sdk_pkgconfig"
+          # Homebrew may print advisory lines before the path, so keep the last line.
+          formula_prefix="$(brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1)"
+          [ -n "$formula_prefix" ] || fail "brew --prefix returned no formula path"
+          printf 'formula prefix: <%s>\n' "$formula_prefix"
+          keg_root="$(cd "$formula_prefix" && pwd -P)"
+          printf 'resolved keg: <%s>\n' "$keg_root"
+          command -v pkg-config > /dev/null 2>&1 || brew install pkgconf
+          command -v pkg-config > /dev/null 2>&1 || fail "pkg-config is unavailable on the runner"
+          shopt -s nullglob
+          dylibs=("$keg_root"/lib/libtsfile*.dylib)
+          pkgconfigs=("$keg_root"/lib/pkgconfig/libtsfile.pc)
+          [ -d "$keg_root/include" ] || fail "missing include/ under $keg_root"
+          [ ${#dylibs[@]} -gt 0 ] || fail "missing libtsfile*.dylib under $keg_root/lib"
+          [ -x "$keg_root/bin/tsfile-cli" ] || fail "missing bin/tsfile-cli under $keg_root"
+          [ -f "$keg_root/lib/cmake/TsFile/TsFileConfig.cmake" ] ||
+            fail "missing TsFileConfig.cmake under $keg_root/lib/cmake/TsFile"
+          [ ${#pkgconfigs[@]} -gt 0 ] || fail "missing libtsfile.pc under $keg_root/lib/pkgconfig"
+
+          # Stage a real tree: the keg lives at a symlinked opt path and must not
+          # be archived as a single link.
+          sdk_root="$PWD/sdk/$sdk_name"
+          rm -rf "$sdk_root"
+          mkdir -p "$sdk_root"
+          ditto "$keg_root" "$sdk_root"
+
           "$sdk_root/bin/tsfile-cli" --version
-          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
+          PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
           cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/macos \
             -DCMAKE_PREFIX_PATH="$sdk_root"
           cmake --build consumer/macos --parallel
           ./consumer/macos/tsfile_installed_consumer
-          mkdir -p sdk
-          tar -C "$(dirname "$sdk_root")" -czf "sdk/$sdk_name.tar.gz" "$(basename "$sdk_root")"
+          tar -C sdk -czf "sdk/$sdk_name.tar.gz" "$sdk_name"
+          rm -rf "$sdk_root"
 
       - name: Upload platform Homebrew bottle and source Formula
         uses: actions/upload-artifact@v7

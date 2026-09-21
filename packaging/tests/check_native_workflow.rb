@@ -79,6 +79,11 @@ raise "Homebrew must use the current repository" unless homebrew.fetch("env").fe
 homebrew_text = run_text(homebrew)
 raise "Homebrew job must stage a macOS SDK from the installed formula" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev")
 raise "Homebrew job must archive the staged macOS SDK" unless homebrew_text.include?("tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION")
+raise "Homebrew SDK must be verified from its own staged tree" unless homebrew_text.include?('sdk_root="$PWD/sdk/$sdk_name"')
+raise "Homebrew SDK must be archived from the staging root" unless homebrew_text.include?('tar -C sdk -czf "sdk/$sdk_name.tar.gz" "$sdk_name"')
+raise "Homebrew prefix capture must tolerate extra stdout lines" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1")
+raise "Homebrew SDK verification must provide pkg-config" unless homebrew_text.include?("brew install pkgconf")
+raise "Homebrew SDK step must keep bash 3.2 compatibility" if homebrew_text.include?("set -euo pipefail")
 raise "Homebrew job must upload a macOS SDK artifact" unless homebrew.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-macos-${{ matrix.name }}" }
 
 homebrew_merge = run_text(jobs.fetch("merge-homebrew"))
