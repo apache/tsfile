@@ -39,6 +39,8 @@ REQUIRED_SOURCE = {"commit", "repository"}
 SDK_PLATFORMS = {
     "ubuntu22.04-amd64",
     "almalinux9-x86_64",
+    "macos-arm64",
+    "macos-x86_64",
     "windows-msvc-x86_64",
 }
 PYTHON_PLATFORMS = {"ubuntu22.04-x86_64"}

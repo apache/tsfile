@@ -76,6 +76,10 @@ raise "Python SDK extraction must not fail on SIGPIPE" if python_text.include?("
 
 homebrew = jobs.fetch("build-homebrew")
 raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"
+homebrew_text = run_text(homebrew)
+raise "Homebrew job must stage a macOS SDK from the installed formula" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev")
+raise "Homebrew job must archive the staged macOS SDK" unless homebrew_text.include?("tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION")
+raise "Homebrew job must upload a macOS SDK artifact" unless homebrew.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-macos-${{ matrix.name }}" }
 
 homebrew_merge = run_text(jobs.fetch("merge-homebrew"))
 trust = homebrew_merge.index("brew trust apache/tsfile-dev")
@@ -95,7 +99,7 @@ needs = Array(assemble.fetch("needs"))
   raise "assemble must depend on #{name}" unless needs.include?(name)
 end
 assemble_text = run_text(assemble)
-%w[native-sdk-ubuntu22.04-amd64 native-sdk-almalinux9-x86_64 native-sdk-windows-msvc-x86_64 native-python-wheel-ubuntu22.04-x86_64].each do |name|
+%w[native-sdk-ubuntu22.04-amd64 native-sdk-almalinux9-x86_64 native-sdk-windows-msvc-x86_64 native-sdk-macos-arm64 native-sdk-macos-x86_64 native-python-wheel-ubuntu22.04-x86_64].each do |name|
   raise "assemble must download #{name}" unless assemble.fetch("steps").any? { |step| step["with"].to_h["name"] == name }
 end
 raise "assemble must verify the bundle" unless assemble_text.include?("--verify-bundle")

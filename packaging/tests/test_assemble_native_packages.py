@@ -72,6 +72,8 @@ class AssembleNativePackagesTest(unittest.TestCase):
             "windows/tsfile-2.5.0-dev-windows-x86_64.zip": b"windows artifact\n",
             "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk ubuntu\n",
             "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk almalinux\n",
+            "sdk/macos-arm64/tsfile-sdk-macos-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk macos arm64\n",
+            "sdk/macos-x86_64/tsfile-sdk-macos-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk macos x86_64\n",
             "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk windows\n",
             "python/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl": b"python wheel\n",
         }
@@ -101,6 +103,8 @@ class AssembleNativePackagesTest(unittest.TestCase):
                 "python/wheels/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl",
                 "rpm/almalinux9-x86_64/tsfile-2.5.0-dev.x86_64.rpm",
                 "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/macos-arm64/tsfile-sdk-macos-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/macos-x86_64/tsfile-sdk-macos-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "windows/tsfile-2.5.0-dev-windows-x86_64.zip",
@@ -128,6 +132,8 @@ class AssembleNativePackagesTest(unittest.TestCase):
                 {
                     "almalinux9-x86_64",
                     "homebrew",
+                    "macos-arm64",
+                    "macos-x86_64",
                     "ubuntu22.04-amd64",
                     "ubuntu22.04-x86_64",
                     "windows-msvc-x86_64",

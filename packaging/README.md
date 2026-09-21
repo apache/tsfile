@@ -125,7 +125,11 @@ CLI as `$(brew --prefix tsfile-dev)/bin/tsfile-cli`, or add that Formula's
 
 The ARM64 job runs on `macos-latest` and the Intel job on `macos-15-intel`.
 Their `native-homebrew-macos-arm64` and `native-homebrew-macos-x86_64`
-intermediate artifacts remain separate until merge. The merge job checks that
+intermediate artifacts remain separate until merge. Each job also archives its
+installed Formula prefix as a standalone SDK artifact,
+`native-sdk-macos-arm64` or `native-sdk-macos-x86_64`, so macOS C++ consumers
+do not have to depend on Homebrew. The SDK archive is checked with the CLI,
+pkg-config, and an installed CMake consumer before upload. The merge job checks that
 both source Formula files match, merges both platform JSON files with Homebrew,
 and checks both generated tags and checksums in the resulting Formula.
 
@@ -200,11 +204,11 @@ python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
 ## Final native package bundle
 
 Only after the Ubuntu 22.04 and 24.04 DEB installation tests, AlmaLinux 9 RPM
-installation test, Go SDK tests, Linux Python wheel smoke test, Homebrew bottle
-merge, and Windows SDK/CLI build all succeed, the workflow assembles
+installation test, Go SDK tests, Linux Python wheel smoke test, macOS SDK and
+Homebrew bottle merge, and Windows SDK/CLI build all succeed, the workflow assembles
 `tsfile-native-packages-<archive-version>`. The final
-GitHub Actions artifact retains the platform SDKs, the Linux Python wheel, the
-DEBs, RPMs, merged Formula and bottles, and Windows ZIP in their package-family
+GitHub Actions artifact retains the platform SDKs, including both macOS archives,
+the Linux Python wheel, the DEBs, RPMs, merged Formula and bottles, and Windows ZIP in their package-family
 layouts for 14 days. It also contains a
 sorted `SHA256SUMS` and `manifest.json` with the source identity, generated
 versions, byte sizes, SHA-256 values, and the JFrog repository, immutable target

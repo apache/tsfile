@@ -672,6 +672,7 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
       TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_GIT_SHA: ${{ github.sha }}
@@ -712,11 +713,39 @@ jobs:
           metadata=(*.bottle.json)
           [[ ${#bottles[@]} -eq 1 && ${#metadata[@]} -eq 1 ]]
 
+      - name: Stage and verify the macOS SDK
+        shell: bash
+        run: |
+          sdk_name="tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION"
+          sdk_root="$(brew --prefix apache/tsfile-dev/tsfile-dev)"
+          test -d "$sdk_root/include"
+          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile*.dylib' -print -quit)"
+          test -x "$sdk_root/bin/tsfile-cli"
+          test -f "$sdk_root/lib/cmake/TsFile/TsFileConfig.cmake"
+          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
+          test -n "$sdk_pkgconfig"
+          "$sdk_root/bin/tsfile-cli" --version
+          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/macos \
+            -DCMAKE_PREFIX_PATH="$sdk_root"
+          cmake --build consumer/macos --parallel
+          ./consumer/macos/tsfile_installed_consumer
+          mkdir -p sdk
+          tar -C "$(dirname "$sdk_root")" -czf "sdk/$sdk_name.tar.gz" "$(basename "$sdk_root")"
+
       - name: Upload platform Homebrew bottle and source Formula
         uses: actions/upload-artifact@v7
         with:
           name: native-homebrew-${{ matrix.name }}
           path: homebrew/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload macOS SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-macos-${{ matrix.name }}
+          path: sdk/*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -902,6 +931,18 @@ jobs:
         with:
           name: native-sdk-windows-msvc-x86_64
           path: input/sdk/windows-msvc-x86_64
+
+      - name: Download macOS arm64 SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-macos-arm64
+          path: input/sdk/macos-arm64
+
+      - name: Download macOS x86_64 SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-macos-x86_64
+          path: input/sdk/macos-x86_64
 
       - name: Download Linux Python wheel
         uses: actions/download-artifact@v8
