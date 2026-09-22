@@ -35,9 +35,7 @@ import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.TypeServices;
-import org.apache.tsfile.utils.TypeServices.PageDataBlockValueReader;
-import org.apache.tsfile.utils.TypeServices.PageDataReadStatus;
-import org.apache.tsfile.utils.TypeServices.PageDataValueReader;
+import org.apache.tsfile.utils.TypeServices.PageDataBatchReader;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -61,8 +59,7 @@ public class PageReader implements IPageReader {
   private final Decoder valueDecoder;
 
   // Reuse type-specific readers and the deletion predicate across repeated page reads.
-  private PageDataValueReader batchDataValueReader;
-  private PageDataBlockValueReader blockValueReader;
+  private PageDataBatchReader batchReader;
   private final LongPredicate deletePredicate = this::isDeleted;
 
   /** decoder for time column */
@@ -161,21 +158,16 @@ public class PageReader implements IPageReader {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
-    if (batchDataValueReader == null) {
-      batchDataValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_BATCHDATA_SERVICE.call(Type.fromTsDataType(dataType));
-    }
-    while (timeDecoder.hasNext(timeBuffer)) {
-      long timestamp = timeDecoder.readLong(timeBuffer);
-      batchDataValueReader.read(
-          valueDecoder,
-          valueBuffer,
-          recordFilter,
-          pageData,
-          timestamp,
-          allSatisfy,
-          deletePredicate);
-    }
+    getBatchReader()
+        .readBatch(
+            timeDecoder,
+            timeBuffer,
+            valueDecoder,
+            valueBuffer,
+            recordFilter,
+            pageData,
+            allSatisfy,
+            deletePredicate);
     return pageData.flip();
   }
 
@@ -195,34 +187,30 @@ public class PageReader implements IPageReader {
     }
     builder = new TsBlockBuilder(initialExpectedEntries, Collections.singletonList(dataType));
 
-    long allFilteredRows = 0;
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
-    if (blockValueReader == null) {
-      blockValueReader =
-          TypeServices.READ_PAGE_VALUE_TO_TSBLOCK_SERVICE.call(Type.fromTsDataType(dataType));
-    }
-    while (timeDecoder.hasNext(timeBuffer)) {
-      long timestamp = timeDecoder.readLong(timeBuffer);
-      PageDataReadStatus status =
-          blockValueReader.read(
-              valueDecoder,
-              valueBuffer,
-              recordFilter,
-              builder,
-              timestamp,
-              allSatisfy,
-              deletePredicate,
-              paginationController);
-      if (status == PageDataReadStatus.FILTERED) {
-        allFilteredRows++;
-      } else if (status == PageDataReadStatus.STOP) {
-        break;
-      }
-    }
+    long allFilteredRows =
+        getBatchReader()
+            .readBlock(
+                timeDecoder,
+                timeBuffer,
+                valueDecoder,
+                valueBuffer,
+                recordFilter,
+                builder,
+                allSatisfy,
+                deletePredicate,
+                paginationController);
     if (filterRowsRecorder != null && allFilteredRows > 0) {
       filterRowsRecorder.accept(allFilteredRows);
     }
     return builder.build();
+  }
+
+  private PageDataBatchReader getBatchReader() {
+    if (batchReader == null) {
+      batchReader = TypeServices.READ_PAGE_BATCH_SERVICE.call(Type.fromTsDataType(dataType));
+    }
+    return batchReader;
   }
 
   @Override
