@@ -1061,3 +1061,129 @@ TEST_F(RestorableTsFileIOWriterTest, RecoveryAlignedSparseStatRespectsBitmap) {
     }
     EXPECT_TRUE(found_value_chunk);
 }
+
+// Sparse aligned records (a row only carries a subset of the device's
+// measurements, without explicit NULL DataPoints) must survive a crash +
+// recovery: the recovered chunk statistics have to describe the rows that
+// really carry a value, and continued sparse writes have to stay row-aligned
+// with the time column.
+TEST_F(RestorableTsFileIOWriterTest,
+       AlignedTimeseriesRecoverAndWriteNullValue) {
+    using namespace std;
+    const string device = "d1";
+    // even rows carry s1..s3, odd rows carry s4..s6
+    vector<string> even_names = {"s1", "s2", "s3"};
+    vector<string> odd_names = {"s4", "s5", "s6"};
+    {
+        TsFileWriter tw;
+        ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+        std::vector<MeasurementSchema*> schemas;
+        schemas.push_back(new MeasurementSchema("s1", BOOLEAN));
+        schemas.push_back(new MeasurementSchema("s2", INT32));
+        schemas.push_back(new MeasurementSchema("s3", TEXT));
+        schemas.push_back(new MeasurementSchema("s4", INT64));
+        schemas.push_back(new MeasurementSchema("s5", FLOAT));
+        schemas.push_back(new MeasurementSchema("s6", STRING));
+        ASSERT_EQ(tw.register_aligned_timeseries(device, schemas), E_OK);
+        for (int i = 0; i < 10; i++) {
+            TsRecord record(i, device);
+            if (i % 2 == 0) {
+                record.add_point(even_names[0], true);
+                record.add_point(even_names[1], static_cast<int32_t>(i));
+                record.add_point(even_names[2], "even");
+            } else {
+                record.add_point(odd_names[0], static_cast<int64_t>(i));
+                record.add_point(odd_names[1], static_cast<float>(i));
+                record.add_point(odd_names[2], "odd");
+            }
+            ASSERT_EQ(tw.write_record_aligned(record), E_OK);
+        }
+        ASSERT_EQ(tw.flush(), E_OK);
+        ASSERT_EQ(tw.close(), E_OK);
+    }
+
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+    ASSERT_TRUE(rw.can_write());
+    {
+        // Keep writing sparse rows after the recovery point.
+        TsFileTreeWriter tw2(&rw);
+        for (int i = 10; i < 20; i++) {
+            TsRecord record(i, device);
+            if (i % 2 == 0) {
+                record.add_point(even_names[0], true);
+                record.add_point(even_names[1], static_cast<int32_t>(i));
+                record.add_point(even_names[2], "even");
+            } else {
+                record.add_point(odd_names[0], static_cast<int64_t>(i));
+                record.add_point(odd_names[1], static_cast<float>(i));
+                record.add_point(odd_names[2], "odd");
+            }
+            ASSERT_EQ(tw2.write(record), E_OK);
+        }
+        ASSERT_EQ(tw2.flush(), E_OK);
+        ASSERT_EQ(tw2.close(), E_OK);
+    }
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    DeviceTimeseriesMetadataMap metadata = reader.get_timeseries_metadata();
+    std::map<std::string, storage::ITimeseriesIndex*> meta_by_name;
+    for (auto& entry : metadata) {
+        for (auto& ts_idx : entry.second) {
+            meta_by_name[ts_idx->get_measurement_name().to_std_string()] =
+                ts_idx.get();
+        }
+    }
+    ASSERT_EQ(meta_by_name.size(), 6u);
+    // Columns carried by the even rows: 5 points before the crash + 5 after,
+    // spanning timestamp 0..18.
+    for (auto& name : even_names) {
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->count_, 10);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->start_time_, 0);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->end_time_, 18);
+    }
+    // Columns carried by the odd rows: first value at timestamp 1, last at 19.
+    for (auto& name : odd_names) {
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->count_, 10);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->start_time_, 1);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->end_time_, 19);
+    }
+
+    vector<string> measurement_names = {"s1", "s2", "s3", "s4", "s5", "s6"};
+    ASSERT_EQ(CountTreeReaderRows(reader, measurement_names), 20);
+
+    ResultSet* result_set = nullptr;
+    vector<string> device_ids = {device};
+    ASSERT_EQ(reader.query(device_ids, measurement_names, 0, 100, result_set),
+              E_OK);
+    auto it = result_set->iterator();
+    int row = 0;
+    while (it.hasNext()) {
+        RowRecord* rec = it.next();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), row);
+        for (int c = 0; c < 3; c++) {
+            Field* field = rec->get_field(c + 1);
+            if (row % 2 == 0) {
+                EXPECT_NE(field->type_, common::NULL_TYPE);
+            } else {
+                EXPECT_EQ(field->type_, common::NULL_TYPE);
+            }
+        }
+        for (int c = 3; c < 6; c++) {
+            Field* field = rec->get_field(c + 1);
+            if (row % 2 == 0) {
+                EXPECT_EQ(field->type_, common::NULL_TYPE);
+            } else {
+                EXPECT_NE(field->type_, common::NULL_TYPE);
+            }
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 20);
+    reader.destroy_query_data_set(result_set);
+    reader.close();
+}

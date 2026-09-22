@@ -21,6 +21,8 @@
 
 #include <chrono>
 #include <iomanip>
+#include <map>
+#include <set>
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
@@ -334,8 +336,30 @@ int TsFileWriter::register_timeseries(const std::string& device_path,
         std::make_shared<StringArrayDeviceID>(device_path);
     DeviceSchemasMapIter device_iter = schemas_.find(device_id);
     if (device_iter != schemas_.end()) {
-        MeasurementSchemaMap& msm =
-            device_iter->second->measurement_schema_map_;
+        MeasurementSchemaGroup* device_schema = device_iter->second;
+        MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
+        if (msm.find(measurement_schema->measurement_name_) != msm.end()) {
+            return E_ALREADY_EXIST;
+        }
+        if (device_schema->is_aligned_ &&
+            device_schema->time_chunk_writer_ != nullptr &&
+            device_schema->time_chunk_writer_->hasData()) {
+            // A column added now would have to be padded with the rows (and
+            // pages) that were already written, which the current page writer
+            // cannot express.  Java does not allow an aligned device to be
+            // expanded at all; refuse loudly instead of silently writing a
+            // chunk group whose value column row counts diverge from the time
+            // column.
+            return E_INVALID_ARG;
+        }
+        // Aligned devices advance every registered measurement on every row,
+        // so the value chunk writer has to exist before the first row.
+        if (device_schema->is_aligned_) {
+            int ret = ensure_aligned_value_chunk_writer(measurement_schema);
+            if (RET_FAIL(ret)) {
+                return ret;
+            }
+        }
         MeasurementSchemaMapInsertResult ins_res = msm.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
         if (UNLIKELY(!ins_res.second)) {
@@ -344,6 +368,13 @@ int TsFileWriter::register_timeseries(const std::string& device_path,
     } else {
         MeasurementSchemaGroup* ms_group = new MeasurementSchemaGroup;
         ms_group->is_aligned_ = is_aligned;
+        if (is_aligned) {
+            int ret = ensure_aligned_value_chunk_writer(measurement_schema);
+            if (RET_FAIL(ret)) {
+                delete ms_group;
+                return ret;
+            }
+        }
         ms_group->measurement_schema_map_.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
         schemas_.insert(std::make_pair(device_id, ms_group));
@@ -516,6 +547,26 @@ int TsFileWriter::do_check_schema(
     return ret;
 }
 
+int TsFileWriter::ensure_aligned_value_chunk_writer(
+    MeasurementSchema* measurement_schema) {
+    if (measurement_schema->value_chunk_writer_ != nullptr) {
+        return E_OK;
+    }
+    ValueChunkWriter* value_chunk_writer = new ValueChunkWriter;
+    if (IS_NULL(value_chunk_writer)) {
+        return E_OOM;
+    }
+    int ret = value_chunk_writer->init(
+        measurement_schema->measurement_name_, measurement_schema->data_type_,
+        measurement_schema->encoding_, measurement_schema->compression_type_);
+    if (RET_FAIL(ret)) {
+        delete value_chunk_writer;
+        return (ret == E_OOM) ? ret : common::E_INVALID_ARG;
+    }
+    measurement_schema->value_chunk_writer_ = value_chunk_writer;
+    return E_OK;
+}
+
 template <typename MeasurementNamesGetter>
 int TsFileWriter::do_check_schema_aligned(
     std::shared_ptr<IDeviceID> device_id,
@@ -548,28 +599,11 @@ int TsFileWriter::do_check_schema_aligned(
             // Here we may check data_type against ms_iter. But in Java
             // libtsfile, no check here.
             MeasurementSchema* ms = ms_iter->second;
-            if (IS_NULL(ms->value_chunk_writer_)) {
-                ms->value_chunk_writer_ = new ValueChunkWriter;
-                ret = ms->value_chunk_writer_->init(
-                    ms->measurement_name_, ms->data_type_, ms->encoding_,
-                    ms->compression_type_);
-                if (IS_SUCC(ret)) {
-                    value_chunk_writers.push_back(ms->value_chunk_writer_);
-                } else {
-                    value_chunk_writers.push_back(NULL);
-                    for (size_t chunk_writer_idx = 0;
-                         chunk_writer_idx < value_chunk_writers.size();
-                         chunk_writer_idx++) {
-                        if (!value_chunk_writers[chunk_writer_idx]) {
-                            delete value_chunk_writers[chunk_writer_idx];
-                        }
-                    }
-                    ret = common::E_INVALID_ARG;
-                    return ret;
-                }
-            } else {
-                value_chunk_writers.push_back(ms->value_chunk_writer_);
+            if (RET_FAIL(ensure_aligned_value_chunk_writer(ms))) {
+                value_chunk_writers.push_back(NULL);
+                return common::E_INVALID_ARG;
             }
+            value_chunk_writers.push_back(ms->value_chunk_writer_);
             data_types.push_back(ms->data_type_);
         }
     }
@@ -808,15 +842,50 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
     if (value_chunk_writers.size() != record.points_.size()) {
         return E_INVALID_ARG;
     }
+    DeviceSchemasMapIter dev_it = schemas_.find(device_id);
+    if (UNLIKELY(dev_it == schemas_.end()) || IS_NULL(dev_it->second)) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = dev_it->second;
+    // Index of the point that carries each measurement of this row.  A
+    // duplicate point for the same measurement keeps the last one, so that
+    // every value column advances exactly one row per timestamp.
+    std::map<std::string, uint32_t> row_point_index;
+    for (uint32_t c = 0; c < record.points_.size(); c++) {
+        row_point_index[record.points_[c].measurement_name_] = c;
+    }
+    // A record may only carry a subset of the device's measurements. The
+    // measurements it does not mention still have to advance one row (as a
+    // NULL) so that every value column's not-null bitmap stays aligned with
+    // the time column; otherwise the values of that column end up paired with
+    // the wrong timestamps on read.  Java behaves the same way
+    // (AlignedChunkGroupWriterImpl#write -> writeEmptyDataInOneRow).
+    SimpleVector<MeasurementSchema*> absent_schemas;
+    SimpleVector<ValueChunkWriter*> row_writers;
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        if (!IS_NULL(value_chunk_writers[c])) {
+            row_writers.push_back(value_chunk_writers[c]);
+        }
+    }
+    MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
+    for (MeasurementSchemaMapIter ms_iter = msm.begin(); ms_iter != msm.end();
+         ms_iter++) {
+        if (row_point_index.find(ms_iter->first) != row_point_index.end()) {
+            continue;
+        }
+        MeasurementSchema* ms = ms_iter->second;
+        if (RET_FAIL(ensure_aligned_value_chunk_writer(ms))) {
+            return ret;
+        }
+        absent_schemas.push_back(ms);
+        row_writers.push_back(ms->value_chunk_writer_);
+    }
     // Snapshot page counters before the write so we can detect any column
     // that crossed a page boundary and seal the rest in lockstep.
     int32_t time_pages_before = time_chunk_writer->num_of_pages();
-    std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
-    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-        if (!IS_NULL(value_chunk_writer)) {
-            value_pages_before[c] = value_chunk_writer->num_of_pages();
-        }
+    std::vector<int32_t> value_pages_before(row_writers.size(), 0);
+    for (uint32_t c = 0; c < row_writers.size(); c++) {
+        value_pages_before[c] = row_writers[c]->num_of_pages();
     }
     // Time first: a rejected timestamp (E_OUT_OF_ORDER, OOM, etc.) must
     // not silently advance the value writers — that would leave the time
@@ -829,8 +898,14 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
+        const DataPoint& point = record.points_[c];
+        if (row_point_index[point.measurement_name_] != c) {
+            // Duplicate point for this measurement: skipped, the last one is
+            // written below (one row per column per timestamp).
+            continue;
+        }
         if (RET_FAIL(write_point_aligned(value_chunk_writer, record.timestamp_,
-                                         data_types[c], record.points_[c]))) {
+                                         data_types[c], point))) {
             // Time wrote the row but at least one value column failed
             // mid-record; the per-column row counts no longer agree.
             // Mark the writer unrecoverable so flush/close refuses to
@@ -839,8 +914,15 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
             return ret;
         }
     }
+    for (uint32_t c = 0; c < absent_schemas.size(); c++) {
+        if (RET_FAIL(
+                absent_schemas[c]->value_chunk_writer_->write_null_batch(1))) {
+            unrecoverable_ = true;
+            return ret;
+        }
+    }
     if (RET_FAIL(maybe_seal_aligned_pages_together(
-            time_chunk_writer, value_chunk_writers, time_pages_before,
+            time_chunk_writer, row_writers, time_pages_before,
             value_pages_before))) {
         unrecoverable_ = true;
         return ret;
@@ -984,15 +1066,50 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             return E_TYPE_NOT_MATCH;
         }
     }
+    DeviceSchemasMapIter dev_it = schemas_.find(device_id);
+    if (UNLIKELY(dev_it == schemas_.end()) || IS_NULL(dev_it->second)) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = dev_it->second;
+    // Measurements of this aligned device that the tablet does not carry still
+    // have to advance one row per tablet row (as NULLs), otherwise their
+    // not-null bitmap would start at the wrong row index and their values
+    // would be paired with the wrong timestamps on read.  Java fills those
+    // rows in AlignedChunkGroupWriterImpl#write(Tablet).
+    SimpleVector<ValueChunkWriter*> absent_writers;
+    std::set<std::string> tablet_measurements;
+    for (size_t c = 0; c < tablet.get_column_count(); c++) {
+        tablet_measurements.insert(tablet.schema_vec_->at(c).measurement_name_);
+    }
+    MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
+    for (MeasurementSchemaMapIter ms_iter = msm.begin(); ms_iter != msm.end();
+         ms_iter++) {
+        if (tablet_measurements.find(ms_iter->first) !=
+            tablet_measurements.end()) {
+            continue;
+        }
+        if (RET_FAIL(ensure_aligned_value_chunk_writer(ms_iter->second))) {
+            return ret;
+        }
+        absent_writers.push_back(ms_iter->second->value_chunk_writer_);
+    }
+    // Every column that takes part in this batch: the tablet's own columns
+    // plus the ones that only advance with NULL rows.
+    SimpleVector<ValueChunkWriter*> row_writers;
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        if (!IS_NULL(value_chunk_writers[c])) {
+            row_writers.push_back(value_chunk_writers[c]);
+        }
+    }
+    for (uint32_t c = 0; c < absent_writers.size(); c++) {
+        row_writers.push_back(absent_writers[c]);
+    }
     // Snapshot page counters before the batch so we can detect any column
     // that crossed a page boundary mid-tablet and seal the rest in lockstep.
     int32_t time_pages_before = time_chunk_writer->num_of_pages();
-    std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
-    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-        if (!IS_NULL(value_chunk_writer)) {
-            value_pages_before[c] = value_chunk_writer->num_of_pages();
-        }
+    std::vector<int32_t> value_pages_before(row_writers.size(), 0);
+    for (uint32_t c = 0; c < row_writers.size(); c++) {
+        value_pages_before[c] = row_writers[c]->num_of_pages();
     }
     // Suppress memory-driven page sealing on every column for the duration of
     // the batch. The count-driven seals inside write_batch still fire at the
@@ -1004,18 +1121,13 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     // (e.g. when a sealed value column ended a page that the time column did
     // not).
     time_chunk_writer->set_enable_page_seal_if_full(false);
-    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-        if (!IS_NULL(value_chunk_writer)) {
-            value_chunk_writer->set_enable_page_seal_if_full(false);
-        }
+    for (uint32_t c = 0; c < row_writers.size(); c++) {
+        row_writers[c]->set_enable_page_seal_if_full(false);
     }
     auto restore_seal = [&]() {
         time_chunk_writer->set_enable_page_seal_if_full(true);
-        for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-            if (!IS_NULL(value_chunk_writers[k])) {
-                value_chunk_writers[k]->set_enable_page_seal_if_full(true);
-            }
+        for (uint32_t k = 0; k < row_writers.size(); k++) {
+            row_writers[k]->set_enable_page_seal_if_full(true);
         }
     };
     // Any failure (out-of-order timestamps, OOM, etc.) must abort before we
@@ -1043,9 +1155,16 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             return ret;
         }
     }
+    for (uint32_t c = 0; c < absent_writers.size(); c++) {
+        if (RET_FAIL(absent_writers[c]->write_null_batch(total_rows))) {
+            restore_seal();
+            unrecoverable_ = true;
+            return ret;
+        }
+    }
     restore_seal();
     if (RET_FAIL(maybe_seal_aligned_pages_together(
-            time_chunk_writer, value_chunk_writers, time_pages_before,
+            time_chunk_writer, row_writers, time_pages_before,
             value_pages_before))) {
         unrecoverable_ = true;
         return ret;

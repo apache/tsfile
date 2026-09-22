@@ -174,6 +174,41 @@ class ValueChunkWriter {
         return ret;
     }
 
+    /**
+     * Advance this column by `count` all-NULL rows.
+     *
+     * Aligned chunk groups keep every value column row-aligned with the time
+     * column, so a column whose row has no value still has to consume one row
+     * (with a null bit) for that timestamp.  Page boundaries follow the same
+     * `page_writer_max_point_num_` rule as write_batch() so the page lists of
+     * the time column and of every value column stay in step.
+     */
+    int write_null_batch(uint32_t count) {
+        int ret = common::E_OK;
+        uint32_t offset = 0;
+        const uint32_t page_cap =
+            common::g_config_value_.page_writer_max_point_num_;
+        while (offset < count) {
+            uint32_t cur_points = value_page_writer_.get_point_numer();
+            if (cur_points >= page_cap) {
+                if (RET_FAIL(seal_cur_page(false))) {
+                    return ret;
+                }
+                cur_points = 0;
+            }
+            uint32_t batch_size =
+                std::min(count - offset, page_cap - cur_points);
+            if (RET_FAIL(value_page_writer_.write_null_rows(batch_size))) {
+                return ret;
+            }
+            offset += batch_size;
+            if (RET_FAIL(seal_cur_page_if_full())) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+
     int end_encode_chunk();
     common::ByteStream& get_chunk_data() { return chunk_data_; }
     Statistic* get_chunk_statistic() { return chunk_statistic_; }
