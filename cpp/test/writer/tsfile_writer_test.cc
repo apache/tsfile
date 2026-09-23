@@ -1969,17 +1969,23 @@ TEST_F(TsFileWriterTest, AlignedRegisterAfterWriteIsRejected) {
     record.add_point("s0", static_cast<int64_t>(1));
     ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
 
-    std::vector<MeasurementSchema*> extra;
-    extra.push_back(new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED));
+    // The writer only takes ownership of a schema when the registration
+    // succeeds, so a rejected one has to be released by the caller.
+    MeasurementSchema* extra_schema =
+        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED);
+    std::vector<MeasurementSchema*> extra{extra_schema};
     EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, extra),
               E_INVALID_ARG);
+    delete extra_schema;
 
     // A second registration of the same measurement is still reported as a
     // duplicate, not as a late registration.
-    std::vector<MeasurementSchema*> dup;
-    dup.push_back(new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
+    MeasurementSchema* dup_schema =
+        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED);
+    std::vector<MeasurementSchema*> dup{dup_schema};
     EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, dup),
               E_ALREADY_EXIST);
+    delete dup_schema;
 
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
