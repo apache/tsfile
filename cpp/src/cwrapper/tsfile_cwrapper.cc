@@ -318,11 +318,7 @@ ERRNO tsfile_writer_close(TsFileWriter writer) {
         return common::E_OK;
     }
     auto* w = static_cast<storage::TsFileTableWriter*>(writer);
-    int ret = w->flush();
-    if (ret != common::E_OK) {
-        return ret;
-    }
-    ret = w->close();
+    int ret = w->close();
     if (ret != common::E_OK) {
         return ret;
     }
@@ -2300,11 +2296,7 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {
 
 ERRNO _tsfile_writer_close(TsFileWriter writer) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
-    int ret = w->flush();
-    if (ret != common::E_OK) {
-        return ret;
-    }
-    ret = w->close();
+    int ret = w->close();
     if (ret != common::E_OK) {
         return ret;
     }

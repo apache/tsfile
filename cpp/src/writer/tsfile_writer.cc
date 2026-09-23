@@ -1986,6 +1986,10 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
 
 int TsFileWriter::close() {
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
+    int ret = flush();
+    if (ret != E_OK) {
+        return ret;
+    }
     return io_writer_->end_file();
 }
 

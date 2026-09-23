@@ -496,7 +496,8 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
 TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
 
 /**
- * @brief Releases resources associated with a TsFileWriter.
+ * @brief Flushes pending data, finalizes the TsFile, and releases resources
+ * associated with a TsFileWriter.
  *
  * @param writer [in] Writer handle obtained from tsfile_writer_new().
  *                    After call: handle becomes invalid and must not be reused.
