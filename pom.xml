@@ -847,6 +847,25 @@
                 <cmake.generator>${msvc.generator}</cmake.generator>
             </properties>
         </profile>
+        <!--
+            Native Windows ARM64 builds run on ARM64 GitHub-hosted runners.
+            Use Ninja Multi-Config with the ARM64-hosted ARM64 MSVC environment:
+            the CMake version bundled with the Maven plugin predates the VS 2026
+            generator, while Ninja consumes the native compiler from PATH.
+            Activate with -Dcpp.toolchain=msvc-arm64-native.
+        -->
+        <profile>
+            <id>cpp-msvc-arm64-native</id>
+            <activation>
+                <property>
+                    <name>cpp.toolchain</name>
+                    <value>msvc-arm64-native</value>
+                </property>
+            </activation>
+            <properties>
+                <cmake.generator>Ninja Multi-Config</cmake.generator>
+            </properties>
+        </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
         <profile>
             <id>.skipTests</id>

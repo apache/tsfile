@@ -65,16 +65,22 @@ class AssembleNativePackagesTest(unittest.TestCase):
     def write_fixture(self, directory):
         files = {
             "deb/tsfile_2.5.0-dev_amd64.deb": b"deb artifact\n",
+            "deb/tsfile_2.5.0-dev_arm64.deb": b"arm64 deb artifact\n",
             "rpm/tsfile-2.5.0-dev.x86_64.rpm": b"rpm artifact\n",
+            "rpm/tsfile-2.5.0-dev.aarch64.rpm": b"aarch64 rpm artifact\n",
             "homebrew/Formula/tsfile-dev.rb": b"formula artifact\n",
             "homebrew/bottles/tsfile-dev.bottle.tar.gz": b"bottle artifact\n",
             "homebrew/bottles/tsfile-dev.bottle.json": b"bottle metadata\n",
             "windows/tsfile-2.5.0-dev-windows-x86_64.zip": b"windows artifact\n",
+            "windows/tsfile-2.5.0-dev-windows-arm64.zip": b"windows arm64 artifact\n",
             "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk ubuntu\n",
+            "sdk/ubuntu22.04-arm64/tsfile-sdk-ubuntu22.04-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk ubuntu arm64\n",
             "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk almalinux\n",
+            "sdk/almalinux9-aarch64/tsfile-sdk-almalinux9-aarch64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk almalinux arm64\n",
             "sdk/macos-arm64/tsfile-sdk-macos-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk macos arm64\n",
             "sdk/macos-x86_64/tsfile-sdk-macos-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk macos x86_64\n",
             "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk windows\n",
+            "sdk/windows-msvc-arm64/tsfile-sdk-windows-msvc-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz": b"sdk windows arm64\n",
             "python/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl": b"python wheel\n",
         }
         for relative_path, contents in files.items():
@@ -97,16 +103,22 @@ class AssembleNativePackagesTest(unittest.TestCase):
 
             expected_paths = [
                 "deb/ubuntu22.04-amd64/tsfile_2.5.0-dev_amd64.deb",
+                "deb/ubuntu22.04-arm64/tsfile_2.5.0-dev_arm64.deb",
                 "homebrew/Formula/tsfile-dev.rb",
                 "homebrew/bottles/tsfile-dev.bottle.json",
                 "homebrew/bottles/tsfile-dev.bottle.tar.gz",
                 "python/wheels/ubuntu22.04-x86_64/tsfile-2.5.0.dev0.20260910.123.1.gabcdef1-cp311-cp311-linux_x86_64.whl",
+                "rpm/almalinux9-aarch64/tsfile-2.5.0-dev.aarch64.rpm",
                 "rpm/almalinux9-x86_64/tsfile-2.5.0-dev.x86_64.rpm",
+                "sdk/almalinux9-aarch64/tsfile-sdk-almalinux9-aarch64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/almalinux9-x86_64/tsfile-sdk-almalinux9-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/macos-arm64/tsfile-sdk-macos-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/macos-x86_64/tsfile-sdk-macos-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/ubuntu22.04-amd64/tsfile-sdk-ubuntu22.04-amd64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/ubuntu22.04-arm64/tsfile-sdk-ubuntu22.04-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "sdk/windows-msvc-arm64/tsfile-sdk-windows-msvc-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
                 "sdk/windows-msvc-x86_64/tsfile-sdk-windows-msvc-x86_64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                "windows/tsfile-2.5.0-dev-windows-arm64.zip",
                 "windows/tsfile-2.5.0-dev-windows-x86_64.zip",
             ]
             self.assertEqual(
@@ -130,14 +142,48 @@ class AssembleNativePackagesTest(unittest.TestCase):
             self.assertEqual(
                 {artifact["platform"] for artifact in manifest["artifacts"]},
                 {
+                    "almalinux9-aarch64",
                     "almalinux9-x86_64",
                     "homebrew",
                     "macos-arm64",
                     "macos-x86_64",
                     "ubuntu22.04-amd64",
+                    "ubuntu22.04-arm64",
                     "ubuntu22.04-x86_64",
+                    "windows-msvc-arm64",
                     "windows-msvc-x86_64",
                 },
+            )
+            artifact_platforms = {
+                artifact["filename"]: artifact["platform"]
+                for artifact in manifest["artifacts"]
+            }
+            self.assertEqual(
+                artifact_platforms["tsfile_2.5.0-dev_arm64.deb"],
+                "ubuntu22.04-arm64",
+            )
+            self.assertEqual(
+                artifact_platforms["tsfile-2.5.0-dev.aarch64.rpm"],
+                "almalinux9-aarch64",
+            )
+            self.assertEqual(
+                artifact_platforms["tsfile-2.5.0-dev-windows-arm64.zip"],
+                "windows-msvc-arm64",
+            )
+            deb_arm64 = next(
+                artifact
+                for artifact in manifest["artifacts"]
+                if artifact["filename"] == "tsfile_2.5.0-dev_arm64.deb"
+            )
+            self.assertEqual(deb_arm64["properties"]["deb.architecture"], ["arm64"])
+            rpm_arm64 = next(
+                artifact
+                for artifact in manifest["artifacts"]
+                if artifact["filename"] == "tsfile-2.5.0-dev.aarch64.rpm"
+            )
+            self.assertEqual(
+                rpm_arm64["targetPath"],
+                "dev/el9/aarch64/tsfile-2.5.0-dev.aarch64.rpm",
             )
             for artifact in manifest["artifacts"]:
                 output_path = output_directory / artifact["path"]
@@ -151,6 +197,50 @@ class AssembleNativePackagesTest(unittest.TestCase):
                     artifact["sha256"],
                     hashlib.sha256(input_path.read_bytes()).hexdigest(),
                 )
+
+    def test_rejects_bundles_missing_arm_architectures(self):
+        module = self.require_module()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            missing_artifacts = (
+                (
+                    "deb/tsfile_2.5.0-dev_arm64.deb",
+                    "missing DEB inputs for: ubuntu22.04-arm64",
+                ),
+                (
+                    "rpm/tsfile-2.5.0-dev.aarch64.rpm",
+                    "missing RPM inputs for: almalinux9-aarch64",
+                ),
+                (
+                    "windows/tsfile-2.5.0-dev-windows-arm64.zip",
+                    "missing WINDOWS inputs for: windows-msvc-arm64",
+                ),
+                (
+                    "sdk/ubuntu22.04-arm64/tsfile-sdk-ubuntu22.04-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                    "missing SDK inputs for: ubuntu22.04-arm64",
+                ),
+                (
+                    "sdk/almalinux9-aarch64/tsfile-sdk-almalinux9-aarch64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                    "missing SDK inputs for: almalinux9-aarch64",
+                ),
+                (
+                    "sdk/windows-msvc-arm64/tsfile-sdk-windows-msvc-arm64-2.5.0-dev0.20260910.123.1.gabcdef1.tar.gz",
+                    "missing SDK inputs for: windows-msvc-arm64",
+                ),
+            )
+            for index, (missing_path, error_message) in enumerate(missing_artifacts):
+                with self.subTest(missing=missing_path):
+                    input_directory = Path(temporary_directory) / f"input-{index}"
+                    self.write_fixture(input_directory)
+                    (input_directory / missing_path).unlink()
+
+                    with self.assertRaisesRegex(ValueError, error_message):
+                        module.assemble(
+                            input_directory,
+                            Path(temporary_directory) / f"incomplete-{index}",
+                            VERSIONS,
+                            SOURCE,
+                        )
 
     def test_verifies_assembler_checksum_lines_sorted_by_path(self):
         module = self.require_module()

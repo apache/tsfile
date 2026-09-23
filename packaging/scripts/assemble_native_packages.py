@@ -32,16 +32,21 @@ from typing import Sequence
 DEB_PROPERTIES = {
     "deb.distribution": ["jammy", "noble"],
     "deb.component": ["dev"],
-    "deb.architecture": ["amd64"],
 }
+DEB_PLATFORMS = {"ubuntu22.04-amd64", "ubuntu22.04-arm64"}
+RPM_PLATFORMS = {"almalinux9-x86_64", "almalinux9-aarch64"}
+WINDOWS_PLATFORMS = {"windows-msvc-x86_64", "windows-msvc-arm64"}
 REQUIRED_VERSIONS = {"archive_version", "homebrew_version"}
 REQUIRED_SOURCE = {"commit", "repository"}
 SDK_PLATFORMS = {
     "ubuntu22.04-amd64",
+    "ubuntu22.04-arm64",
     "almalinux9-x86_64",
+    "almalinux9-aarch64",
     "macos-arm64",
     "macos-x86_64",
     "windows-msvc-x86_64",
+    "windows-msvc-arm64",
 }
 PYTHON_PLATFORMS = {"ubuntu22.04-x86_64"}
 
@@ -106,21 +111,34 @@ def _artifact_description(
     parts = relative_path.parts
     filename = source_path.name
     if len(parts) >= 2 and parts[0] == "deb" and filename.endswith(".deb"):
-        target = Path("deb/ubuntu22.04-amd64") / filename
+        match = re.search(r"_(amd64|arm64)\.deb$", filename)
+        if not match:
+            raise ValueError(f"unsupported DEB architecture: {filename}")
+        architecture = match.group(1)
+        platform = f"ubuntu22.04-{architecture}"
+        target = Path("deb") / platform / filename
         return target, {
             "family": "deb",
-            "platform": "ubuntu22.04-amd64",
+            "platform": platform,
             "targetRepository": "tsfile-debian",
-            "targetPath": f"pool/dev/ubuntu22.04-amd64/{filename}",
-            "properties": DEB_PROPERTIES,
+            "targetPath": f"pool/dev/{platform}/{filename}",
+            "properties": {
+                **DEB_PROPERTIES,
+                "deb.architecture": [architecture],
+            },
         }
     if len(parts) >= 2 and parts[0] == "rpm" and filename.endswith(".rpm"):
-        target = Path("rpm/almalinux9-x86_64") / filename
+        match = re.search(r"\.(x86_64|aarch64)\.rpm$", filename)
+        if not match:
+            raise ValueError(f"unsupported RPM architecture: {filename}")
+        architecture = match.group(1)
+        platform = f"almalinux9-{architecture}"
+        target = Path("rpm") / platform / filename
         return target, {
             "family": "rpm",
-            "platform": "almalinux9-x86_64",
+            "platform": platform,
             "targetRepository": "tsfile-rpm",
-            "targetPath": f"dev/el9/x86_64/{filename}",
+            "targetPath": f"dev/el9/{architecture}/{filename}",
             "properties": {},
         }
     if (
@@ -178,10 +196,14 @@ def _artifact_description(
             "properties": {},
         }
     if len(parts) >= 2 and parts[0] == "windows" and filename.endswith(".zip"):
+        match = re.search(r"-windows-(x86_64|arm64)\.zip$", filename)
+        if not match:
+            raise ValueError(f"unsupported Windows ZIP architecture: {filename}")
+        platform = f"windows-msvc-{match.group(1)}"
         target = Path("windows") / filename
         return target, {
             "family": "windows",
-            "platform": "windows-msvc-x86_64",
+            "platform": platform,
             "targetRepository": "tsfile",
             "targetPath": f"windows/dev/versions/{versions['archive_version']}/{filename}",
             "properties": {},
@@ -192,13 +214,25 @@ def _artifact_description(
 def _require_complete_families(
     planned: list[tuple[Path, Path, dict[str, object]]],
 ) -> None:
-    families = [metadata["family"] for _, _, metadata in planned]
-    if not any(family == "deb" for family in families):
-        raise ValueError("missing DEB package input")
-    if not any(family == "rpm" for family in families):
-        raise ValueError("missing RPM package input")
-    if not any(family == "windows" for family in families):
-        raise ValueError("missing Windows ZIP input")
+    platforms_by_family = {
+        family: {
+            metadata["platform"]
+            for _, _, metadata in planned
+            if metadata["family"] == family
+        }
+        for family in ("deb", "rpm", "windows")
+    }
+    for family, required_platforms in (
+        ("deb", DEB_PLATFORMS),
+        ("rpm", RPM_PLATFORMS),
+        ("windows", WINDOWS_PLATFORMS),
+    ):
+        missing_platforms = required_platforms - platforms_by_family[family]
+        if missing_platforms:
+            raise ValueError(
+                f"missing {family.upper()} inputs for: "
+                + ", ".join(sorted(missing_platforms))
+            )
     sdk_platforms = {
         metadata["platform"]
         for _, _, metadata in planned

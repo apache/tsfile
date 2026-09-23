@@ -234,6 +234,156 @@ jobs:
           cmake --build consumer/build --parallel
           ./consumer/build/tsfile_installed_consumer
 
+  build-deb-arm64:
+    name: Build Ubuntu 22.04 ARM64 C++ SDK and DEB packages
+    needs: prepare
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install DEB build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            pkg-config \
+            dpkg-dev \
+            uuid-dev
+
+      - name: Verify native ARM64 runner
+        run: test "$(dpkg --print-architecture)" = arm64
+
+      - name: Build C++ core and CPack metadata with Maven
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
+        run: |
+          ./mvnw -Pwith-cpp package \
+            -Dbuild.type=Release \
+            -Dbuild.test=OFF \
+            -DskipTests \
+            -Dspotless.skip=true \
+            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.version.sync.skip=true \
+            -Denable.cpack=ON \
+            -Dtsfile.archive.version="$ARCHIVE_VERSION" \
+            -Dtsfile.debian.package.version="$DEBIAN_VERSION" \
+            -Dtsfile.rpm.package.version="$RPM_VERSION" \
+            -Dtsfile.rpm.package.release="$RPM_RELEASE"
+          test -f cpp/target/build/CPackConfig.cmake
+
+      - name: Stage and verify the Ubuntu ARM64 SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: bash
+        run: |
+          sdk_name="tsfile-sdk-ubuntu22.04-arm64-$ARCHIVE_VERSION"
+          sdk_root="$PWD/sdk/$sdk_name"
+          cmake --install cpp/target/build --prefix "$sdk_root"
+          test -f "$sdk_root/bin/tsfile-cli"
+          test -d "$sdk_root/include"
+          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile.so*' -print -quit)"
+          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
+          test -n "$sdk_pkgconfig"
+          "$sdk_root/bin/tsfile-cli" --version
+          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/deb-arm64 \
+            -DCMAKE_PREFIX_PATH="$sdk_root"
+          cmake --build consumer/deb-arm64 --parallel
+          ./consumer/deb-arm64/tsfile_installed_consumer
+          tar -C sdk -czf "$sdk_root.tar.gz" "$sdk_name"
+          rm -rf "$sdk_root"
+
+      - name: Build and verify ARM64 DEB packages
+        env:
+          EXPECTED_DEB_VERSION: ${{ needs.prepare.outputs.deb_version }}
+        shell: bash
+        run: |
+          mkdir -p packages
+          cpack -G DEB --config cpp/target/build/CPackConfig.cmake -B packages
+          mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.deb' -print | sort)
+          [[ ${#packages[@]} -eq 3 ]]
+          actual_names="$({ for package in "${packages[@]}"; do dpkg-deb --field "$package" Package; done; } | sort)"
+          expected_names="$(printf '%s\n' tsfile tsfile-dev tsfile-tools | sort)"
+          [[ "$actual_names" == "$expected_names" ]]
+          for package in "${packages[@]}"; do
+            [[ "$(dpkg-deb --field "$package" Architecture)" == arm64 ]]
+            [[ "$(dpkg-deb --field "$package" Version)" == "$EXPECTED_DEB_VERSION" ]]
+          done
+
+      - name: Upload Ubuntu ARM64 SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-ubuntu22.04-arm64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload ARM64 DEB packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-deb-ubuntu22.04-arm64
+          path: packages/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  test-deb-arm64:
+    name: Test ARM64 DEB packages on ${{ matrix.container }}
+    needs: build-deb-arm64
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - ubuntu:22.04
+          - ubuntu:24.04
+    container: ${{ matrix.container }}
+    steps:
+      - name: Checkout installed-consumer fixture
+        uses: actions/checkout@v7
+
+      - name: Download ARM64 DEB packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-deb-ubuntu22.04-arm64
+          path: packages
+
+      - name: Install ARM64 DEB packages
+        shell: bash
+        run: |
+          test "$(dpkg --print-architecture)" = arm64
+          apt-get update
+          apt-get install -y ./packages/*.deb cmake build-essential
+
+      - name: Verify installed ARM64 DEB packages
+        shell: bash
+        run: |
+          cli_path="$(readlink -f -- "$(command -v tsfile-cli)")"
+          cli_owner="$(dpkg-query -S "$cli_path")"
+          cli_owner="${cli_owner%%:*}"
+          [[ "$cli_owner" == tsfile-tools ]]
+          tsfile-cli --version
+          dpkg-query -W tsfile tsfile-dev tsfile-tools
+
+      - name: Build and run an installed-package consumer
+        shell: bash
+        run: |
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build
+          cmake --build consumer/build --parallel
+          ./consumer/build/tsfile_installed_consumer
+
   build-rpm:
     name: Build AlmaLinux 9 C++ SDK and RPM packages
     needs: prepare
@@ -398,6 +548,147 @@ jobs:
           cmake --build consumer/build --parallel
           ./consumer/build/tsfile_installed_consumer
 
+  build-rpm-aarch64:
+    name: Build AlmaLinux 9 aarch64 C++ SDK and RPM packages
+    needs: prepare
+    runs-on: ubuntu-24.04-arm
+    container: almalinux:9
+    timeout-minutes: 45
+    steps:
+      - name: Install RPM build prerequisites
+        run: |
+          test "$(uname -m)" = aarch64
+          dnf install -y \
+            java-17-openjdk-devel \
+            cmake \
+            gcc-c++ \
+            make \
+            pkgconf-pkg-config \
+            rpm-build \
+            git \
+            curl-minimal \
+            tar \
+            gzip \
+            libuuid-devel
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build C++ core and CPack metadata with Maven
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
+        run: |
+          ./mvnw -Pwith-cpp package \
+            -Dbuild.type=Release \
+            -Dbuild.test=OFF \
+            -DskipTests \
+            -Dspotless.skip=true \
+            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.version.sync.skip=true \
+            -Denable.cpack=ON \
+            -Dtsfile.archive.version="$ARCHIVE_VERSION" \
+            -Dtsfile.debian.package.version="$DEBIAN_VERSION" \
+            -Dtsfile.rpm.package.version="$RPM_VERSION" \
+            -Dtsfile.rpm.package.release="$RPM_RELEASE"
+          test -f cpp/target/build/CPackConfig.cmake
+
+      - name: Stage and verify the AlmaLinux aarch64 SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: bash
+        run: |
+          sdk_name="tsfile-sdk-almalinux9-aarch64-$ARCHIVE_VERSION"
+          sdk_root="$PWD/sdk/$sdk_name"
+          cmake --install cpp/target/build --prefix "$sdk_root"
+          test -f "$sdk_root/bin/tsfile-cli"
+          test -d "$sdk_root/include"
+          test -n "$(find "$sdk_root" -maxdepth 2 -name 'libtsfile.so*' -print -quit)"
+          sdk_pkgconfig="$(find "$sdk_root" -type f -name libtsfile.pc -print -quit)"
+          test -n "$sdk_pkgconfig"
+          "$sdk_root/bin/tsfile-cli" --version
+          PKG_CONFIG_PATH="$(dirname "$sdk_pkgconfig")" pkg-config --cflags --libs libtsfile
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/rpm-aarch64 \
+            -DCMAKE_PREFIX_PATH="$sdk_root"
+          cmake --build consumer/rpm-aarch64 --parallel
+          ./consumer/rpm-aarch64/tsfile_installed_consumer
+          tar -C sdk -czf "$sdk_root.tar.gz" "$sdk_name"
+          rm -rf "$sdk_root"
+
+      - name: Build and verify aarch64 RPM packages
+        env:
+          EXPECTED_RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          EXPECTED_RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: bash
+        run: |
+          mkdir -p packages
+          cpack -G RPM --config cpp/target/build/CPackConfig.cmake -B packages
+          mapfile -t packages < <(find packages -maxdepth 1 -type f -name '*.rpm' -print | sort)
+          [[ ${#packages[@]} -eq 3 ]]
+          actual_names="$({ for package in "${packages[@]}"; do rpm -qp --queryformat '%{NAME}\n' "$package"; done; } | sort)"
+          expected_names="$(printf '%s\n' tsfile tsfile-devel tsfile-tools | sort)"
+          [[ "$actual_names" == "$expected_names" ]]
+          for package in "${packages[@]}"; do
+            [[ "$(rpm -qp --queryformat '%{ARCH}' "$package")" == aarch64 ]]
+            [[ "$(rpm -qp --queryformat '%{VERSION}' "$package")" == "$EXPECTED_RPM_VERSION" ]]
+            [[ "$(rpm -qp --queryformat '%{RELEASE}' "$package")" == "$EXPECTED_RPM_RELEASE" ]]
+          done
+
+      - name: Upload AlmaLinux aarch64 SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-almalinux9-aarch64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload aarch64 RPM packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-rpm-almalinux9-aarch64
+          path: packages/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+
+  test-rpm-aarch64:
+    name: Test RPM packages on AlmaLinux 9 aarch64
+    needs: build-rpm-aarch64
+    runs-on: ubuntu-24.04-arm
+    container: almalinux:9
+    steps:
+      - name: Checkout installed-consumer fixture
+        uses: actions/checkout@v7
+
+      - name: Download aarch64 RPM packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-rpm-almalinux9-aarch64
+          path: packages
+
+      - name: Install aarch64 RPM packages
+        run: |
+          test "$(uname -m)" = aarch64
+          dnf install -y packages/*.rpm cmake gcc-c++
+
+      - name: Verify installed aarch64 RPM packages
+        shell: bash
+        run: |
+          cli_path="$(readlink -f -- "$(command -v tsfile-cli)")"
+          cli_owner="$(rpm -qf --queryformat '%{NAME}' "$cli_path")"
+          [[ "$cli_owner" == tsfile-tools ]]
+          tsfile-cli --version
+          rpm -q tsfile tsfile-devel tsfile-tools
+
+      - name: Build and run an installed-package consumer
+        shell: bash
+        run: |
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/build
+          cmake --build consumer/build --parallel
+          ./consumer/build/tsfile_installed_consumer
+
   build-windows:
     name: Build Windows MSVC C++ SDK and ZIP
     needs: prepare
@@ -552,6 +843,164 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: native-windows-msvc-x86_64
+          path: packages/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows-arm64:
+    name: Build Windows MSVC ARM64 C++ SDK and ZIP
+    needs: prepare
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 50
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Select the native ARM64 Java runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:JAVA_HOME_21_AARCH64) {
+            throw 'The native ARM64 Java runtime is missing from the runner image'
+          }
+          "JAVA_HOME=$env:JAVA_HOME_21_AARCH64" >> $env:GITHUB_ENV
+          "$env:JAVA_HOME_21_AARCH64\bin" >> $env:GITHUB_PATH
+          java -version
+
+      - name: Configure the native ARM64 MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+
+      - name: Verify native ARM64 MSVC compiler
+        shell: pwsh
+        run: |
+          $compiler = (Get-Command cl.exe).Source
+          Write-Host "Native compiler: $compiler"
+          if ($compiler -notmatch 'HostARM64\\ARM64\\cl\.exe$') {
+            throw "Expected the ARM64-hosted ARM64 compiler, got $compiler"
+          }
+
+      - name: Build C++ core and CPack metadata with Maven
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+          DEBIAN_VERSION: ${{ needs.prepare.outputs.deb_version }}
+          RPM_VERSION: ${{ needs.prepare.outputs.rpm_version }}
+          RPM_RELEASE: ${{ needs.prepare.outputs.rpm_release }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $projectInclude = (Resolve-Path cpp/cmake/tests/CheckStaticMSVCRuntime.cmake).Path
+          .\mvnw.cmd -Pwith-cpp package `
+            "-Dcpp.toolchain=msvc-arm64-native" `
+            "-Dbuild.type=Release" `
+            "-Dbuild.test=OFF" `
+            "-DskipTests" `
+            "-Dspotless.skip=true" `
+            "-Dtsfile.dependency.source=BUNDLED" `
+            "-Dtsfile.msvc.static.runtime=ON" `
+            "-Dtsfile.project.include=$projectInclude" `
+            "-Dtsfile.version.sync.skip=true" `
+            "-Denable.cpack=ON" `
+            "-Dtsfile.archive.version=$env:ARCHIVE_VERSION" `
+            "-Dtsfile.debian.package.version=$env:DEBIAN_VERSION" `
+            "-Dtsfile.rpm.package.version=$env:RPM_VERSION" `
+            "-Dtsfile.rpm.package.release=$env:RPM_RELEASE"
+          if (-not (Test-Path -LiteralPath cpp/target/build/CPackConfig.cmake -PathType Leaf)) {
+            throw 'Maven did not generate cpp/target/build/CPackConfig.cmake'
+          }
+
+      - name: Stage and verify the Windows ARM64 SDK
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $sdkName = "tsfile-sdk-windows-msvc-arm64-$env:ARCHIVE_VERSION"
+          $sdkRoot = Join-Path $PWD "sdk/$sdkName"
+          cmake --install cpp/target/build --config Release --prefix $sdkRoot
+          $requiredPaths = @(
+            "$sdkRoot/bin/tsfile-cli.exe"
+            "$sdkRoot/bin/tsfile.dll"
+            "$sdkRoot/lib/tsfile.lib"
+            "$sdkRoot/include/tsfile/cwrapper/tsfile_cwrapper.h"
+            "$sdkRoot/lib/cmake/TsFile/TsFileConfig.cmake"
+            "$sdkRoot/share/doc/tsfile/LICENSE"
+            "$sdkRoot/share/doc/tsfile/NOTICE"
+          )
+          foreach ($path in $requiredPaths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required ARM64 SDK file is absent: $path"
+            }
+          }
+          python packaging/scripts/verify_windows_runtime.py $sdkRoot
+          $env:PATH = "$sdkRoot/bin;$env:PATH"
+          & "$sdkRoot/bin/tsfile-cli.exe" --version
+          cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/windows-arm64 `
+            -G "Ninja Multi-Config" `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            "-DCMAKE_PREFIX_PATH=$sdkRoot"
+          cmake --build consumer/windows-arm64 --config Release --parallel
+          & consumer/windows-arm64/Release/tsfile_installed_consumer.exe
+          tar.exe -czf "$sdkRoot.tar.gz" -C sdk $sdkName
+          Remove-Item -LiteralPath $sdkRoot -Recurse -Force
+
+      - name: Build and inspect the Windows ARM64 ZIP
+        env:
+          ARCHIVE_VERSION: ${{ needs.prepare.outputs.archive_version }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $cpackConfig = Get-Content cpp/target/build/CPackConfig.cmake -Raw
+          if ($cpackConfig -notmatch 'set\(CPACK_ARCHIVE_COMPONENT_INSTALL "OFF"\)') {
+            throw 'CPACK_ARCHIVE_COMPONENT_INSTALL must remain disabled'
+          }
+          New-Item -ItemType Directory -Path packages -Force | Out-Null
+          cpack -G ZIP -C Release --config cpp/target/build/CPackConfig.cmake -B packages `
+            -D "CPACK_PACKAGE_VERSION=$env:ARCHIVE_VERSION" `
+            -D "CPACK_PACKAGE_FILE_NAME=tsfile-$env:ARCHIVE_VERSION-windows-arm64"
+          $archives = @(Get-ChildItem -Path packages -Filter *.zip -File)
+          if ($archives.Count -ne 1) { throw "Expected exactly one ARM64 ZIP, found $($archives.Count)" }
+          $expectedName = "tsfile-$env:ARCHIVE_VERSION-windows-arm64.zip"
+          if ($archives[0].Name -cne $expectedName) {
+            throw "Unexpected ZIP name '$($archives[0].Name)'; expected '$expectedName'"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
+          try {
+            $entryPaths = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+            foreach ($suffix in @(
+              'bin/tsfile-cli.exe'
+              'bin/tsfile.dll'
+              'lib/tsfile.lib'
+              'include/tsfile/cwrapper/tsfile_cwrapper.h'
+            )) {
+              if (-not ($entryPaths | Where-Object { $_.EndsWith($suffix, [System.StringComparison]::Ordinal) })) {
+                throw "ARM64 ZIP is missing a path ending in '$suffix'"
+              }
+            }
+          } finally { $archive.Dispose() }
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath extracted/windows-arm64
+          python packaging/scripts/verify_windows_runtime.py extracted/windows-arm64
+          $zipCli = @(Get-ChildItem extracted/windows-arm64 -Recurse -Filter tsfile-cli.exe -File)
+          if ($zipCli.Count -ne 1) { throw 'Expected exactly one ARM64 CLI' }
+          & $zipCli[0].FullName --version
+
+      - name: Upload Windows ARM64 SDK
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-sdk-windows-msvc-arm64
+          path: sdk/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows ARM64 ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-windows-msvc-arm64
           path: packages/*.zip
           if-no-files-found: error
           retention-days: 14
@@ -913,11 +1362,14 @@ jobs:
     needs:
       - prepare
       - test-deb
+      - test-deb-arm64
       - test-rpm
+      - test-rpm-aarch64
       - test-go-linux
       - build-python-linux
       - merge-homebrew
       - build-windows
+      - build-windows-arm64
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -933,13 +1385,25 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: native-deb-ubuntu22.04-amd64
-          path: input/deb
+          path: input/deb/amd64
+
+      - name: Download ARM64 DEB packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-deb-ubuntu22.04-arm64
+          path: input/deb/arm64
 
       - name: Download RPM packages
         uses: actions/download-artifact@v8
         with:
           name: native-rpm-almalinux9-x86_64
-          path: input/rpm
+          path: input/rpm/x86_64
+
+      - name: Download aarch64 RPM packages
+        uses: actions/download-artifact@v8
+        with:
+          name: native-rpm-almalinux9-aarch64
+          path: input/rpm/aarch64
 
       - name: Download Homebrew Formula and bottles
         uses: actions/download-artifact@v8
@@ -951,7 +1415,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: native-windows-msvc-x86_64
-          path: input/windows
+          path: input/windows/x86_64
+
+      - name: Download Windows ARM64 ZIP
+        uses: actions/download-artifact@v8
+        with:
+          name: native-windows-msvc-arm64
+          path: input/windows/arm64
 
       - name: Download Ubuntu SDK
         uses: actions/download-artifact@v8
@@ -959,17 +1429,35 @@ jobs:
           name: native-sdk-ubuntu22.04-amd64
           path: input/sdk/ubuntu22.04-amd64
 
+      - name: Download Ubuntu ARM64 SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-ubuntu22.04-arm64
+          path: input/sdk/ubuntu22.04-arm64
+
       - name: Download AlmaLinux SDK
         uses: actions/download-artifact@v8
         with:
           name: native-sdk-almalinux9-x86_64
           path: input/sdk/almalinux9-x86_64
 
+      - name: Download AlmaLinux aarch64 SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-almalinux9-aarch64
+          path: input/sdk/almalinux9-aarch64
+
       - name: Download Windows SDK
         uses: actions/download-artifact@v8
         with:
           name: native-sdk-windows-msvc-x86_64
           path: input/sdk/windows-msvc-x86_64
+
+      - name: Download Windows ARM64 SDK
+        uses: actions/download-artifact@v8
+        with:
+          name: native-sdk-windows-msvc-arm64
+          path: input/sdk/windows-msvc-arm64
 
       - name: Download macOS arm64 SDK
         uses: actions/download-artifact@v8

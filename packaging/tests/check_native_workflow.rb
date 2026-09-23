@@ -31,14 +31,14 @@ def run_text(job)
   job.fetch("steps").filter_map { |step| step["run"] }.join("\n")
 end
 
-%w[build-deb build-rpm build-windows].each do |name|
+%w[build-deb build-deb-arm64 build-rpm build-rpm-aarch64 build-windows build-windows-arm64].each do |name|
   text = run_text(jobs.fetch(name))
   raise "#{name} must build C++ through Maven" unless text.include?("-Pwith-cpp package")
   raise "#{name} must enable CPack through Maven" unless text.include?("-Denable.cpack=ON")
   raise "#{name} must use the generated CPack config" unless text.include?("cpp/target/build/CPackConfig.cmake")
   raise "#{name} must stage an SDK" unless text.include?("cmake --install cpp/target/build")
   raise "#{name} must use an absolute SDK prefix" unless text.include?("$PWD/sdk/") || text.include?('Join-Path $PWD "sdk/')
-  if name != "build-windows"
+  unless name.start_with?("build-windows")
     raise "#{name} must locate pkg-config without assuming lib" unless text.include?('dirname "$sdk_pkgconfig"')
   end
   raise "#{name} must pass the generated archive version" unless text.include?("-Dtsfile.archive.version")
@@ -58,6 +58,25 @@ raise "Windows ZIP needs a consistent static CRT" unless windows.include?("-Dtsf
 raise "Windows runtime check must be wired through Maven" unless windows.include?("CheckStaticMSVCRuntime.cmake") && windows.include?("-Dtsfile.project.include")
 raise "Windows Maven properties must be quoted for PowerShell" unless windows.include?('"-Dcpp.toolchain=msvc"') && windows.include?('"-Dbuild.type=Release"')
 raise "Both staged and extracted PE imports must be checked" unless windows.scan("python packaging/scripts/verify_windows_runtime.py").size == 2
+
+raise "Ubuntu ARM64 packages must use a native ARM runner" unless jobs.fetch("build-deb-arm64").fetch("runs-on") == "ubuntu-22.04-arm"
+raise "AlmaLinux ARM64 packages must use a native ARM runner" unless jobs.fetch("build-rpm-aarch64").fetch("runs-on") == "ubuntu-24.04-arm"
+raise "Windows ARM64 binaries must use the pinned native ARM runner" unless jobs.fetch("build-windows-arm64").fetch("runs-on") == "windows-11-vs2026-arm"
+windows_arm = run_text(jobs.fetch("build-windows-arm64"))
+raise "Windows ARM64 build must use its Maven toolchain profile" unless windows_arm.include?("-Dcpp.toolchain=msvc-arm64-native")
+raise "Windows ARM64 build must put the native compiler first on PATH" unless windows_arm.include?("HostARM64") && windows_arm.include?("Get-Command cl.exe")
+raise "Windows ARM64 consumer must use the same Ninja Multi-Config toolchain" unless windows_arm.include?('-G "Ninja Multi-Config"')
+raise "Windows ARM64 ZIP must have an architecture-specific name" unless windows_arm.include?("windows-arm64")
+raise "Windows ARM64 must not add signed MSIX/AppX packaging" if windows_arm.match?(/msix|appx|signtool/i)
+root_pom = File.read(File.expand_path("../../pom.xml", __dir__))
+raise "Windows ARM64 Maven profile must use Ninja Multi-Config" unless root_pom.include?("<id>cpp-msvc-arm64-native</id>") && root_pom.include?("<cmake.generator>Ninja Multi-Config</cmake.generator>")
+
+%w[test-deb-arm64 test-rpm-aarch64].each do |name|
+  job = jobs.fetch(name)
+  raise "#{name} must run on a native ARM runner" unless job.fetch("runs-on").end_with?("-arm")
+  runs = run_text(job)
+  raise "#{name} must build and run an installed CMake consumer" unless runs.include?("cpp/cmake/tests/projects/InstalledConsumer")
+end
 
 go_job = jobs.fetch("test-go-linux")
 raise "Go test must consume the Ubuntu SDK" unless go_job.fetch("needs") == "build-deb"
@@ -94,7 +113,7 @@ trust = homebrew_merge.index("brew trust apache/tsfile-dev")
 merge = homebrew_merge.index("brew bottle --merge")
 raise "Homebrew merge must trust its temporary tap before loading the Formula" unless trust && merge && trust < merge
 
-%w[test-deb test-rpm build-windows].each do |name|
+%w[test-deb test-deb-arm64 test-rpm test-rpm-aarch64 build-windows build-windows-arm64].each do |name|
   steps = jobs.fetch(name).fetch("steps")
   raise "#{name} must check out the consumer fixture" unless steps.any? { |step| step["uses"].to_s.start_with?("actions/checkout@") }
   runs = steps.filter_map { |step| step["run"] }.join("\n")
@@ -103,11 +122,11 @@ end
 
 assemble = jobs.fetch("assemble")
 needs = Array(assemble.fetch("needs"))
-%w[test-deb test-rpm test-go-linux build-python-linux merge-homebrew build-windows].each do |name|
+%w[test-deb test-deb-arm64 test-rpm test-rpm-aarch64 test-go-linux build-python-linux merge-homebrew build-windows build-windows-arm64].each do |name|
   raise "assemble must depend on #{name}" unless needs.include?(name)
 end
 assemble_text = run_text(assemble)
-%w[native-sdk-ubuntu22.04-amd64 native-sdk-almalinux9-x86_64 native-sdk-windows-msvc-x86_64 native-sdk-macos-arm64 native-sdk-macos-x86_64 native-python-wheel-ubuntu22.04-x86_64].each do |name|
+%w[native-deb-ubuntu22.04-arm64 native-rpm-almalinux9-aarch64 native-windows-msvc-arm64 native-sdk-ubuntu22.04-amd64 native-sdk-ubuntu22.04-arm64 native-sdk-almalinux9-x86_64 native-sdk-almalinux9-aarch64 native-sdk-windows-msvc-x86_64 native-sdk-windows-msvc-arm64 native-sdk-macos-arm64 native-sdk-macos-x86_64 native-python-wheel-ubuntu22.04-x86_64].each do |name|
   raise "assemble must download #{name}" unless assemble.fetch("steps").any? { |step| step["with"].to_h["name"] == name }
 end
 raise "assemble must verify the bundle" unless assemble_text.include?("--verify-bundle")

@@ -39,11 +39,12 @@ with read-only repository permissions; pushes and pull requests do not trigger
 native packaging.
 
 A successful run builds the C++ core through Maven, stages one SDK per
-release platform, and then produces Ubuntu DEBs, AlmaLinux RPMs, an ARM64 and
-Intel Homebrew development bottle with a merged Formula, a Windows x86_64
-SDK/CLI ZIP, and a Linux Python wheel built from the staged Ubuntu SDK. It also
-runs the Go and Python consumers against the SDK rather than rebuilding the C++
-core downstream. The job combines these into
+release platform, and then produces Ubuntu amd64 and arm64 DEBs, AlmaLinux
+x86_64 and aarch64 RPMs, ARM64 and Intel Homebrew development bottles with a
+merged Formula, Windows x86_64 and ARM64 SDK/CLI ZIPs, and a Linux Python wheel
+built from the staged Ubuntu SDK. It also runs the Go and Python consumers
+against the SDK rather than rebuilding the C++ core downstream. The job combines
+these into
 `tsfile-native-packages-<archive-version>` with `manifest.json` and
 `SHA256SUMS`. Download this final artifact from the workflow
 run; both intermediate and final artifacts are retained for 14 days.
@@ -92,9 +93,10 @@ unavailable or incompatible distro versions.
 
 The manual `Build native package artifacts` workflow is the authoritative
 native package build. Its Linux jobs create `tsfile`, `tsfile-dev`, and
-`tsfile-tools` DEBs on Ubuntu 22.04 and `tsfile`, `tsfile-devel`, and
-`tsfile-tools` RPMs on AlmaLinux 9. Fresh Ubuntu 22.04, Ubuntu 24.04, and
-AlmaLinux 9 containers install the packages and verify both `tsfile-cli` and an
+`tsfile-tools` DEBs on native Ubuntu 22.04 amd64 and arm64 runners, and
+`tsfile`, `tsfile-devel`, and `tsfile-tools` RPMs on native AlmaLinux 9
+x86_64 and aarch64 runners. Fresh Ubuntu 22.04, Ubuntu 24.04, and AlmaLinux 9
+containers install the matching packages and verify both `tsfile-cli` and an
 external CMake consumer. The workflow uploads intermediate artifacts for 14
 days and does not publish packages.
 
@@ -146,14 +148,14 @@ artifacts for 14 days; it does not publish to that root or update `latest`.
 
 ## Windows
 
-The manual workflow builds a 64-bit Release package with Visual Studio 2022 and
-bundled dependencies. It stages and tests the CLI plus an external CMake SDK
-consumer before producing
-`tsfile-<archive-version>-windows-x86_64.zip`. The archive is deliberately one
-combined ZIP rather than one archive per CPack component, and contains the
-runtime, development files, and tools under a relocatable prefix. In
-particular, the MSVC outputs are installed as `bin/tsfile.dll`,
-`lib/tsfile.lib`, and `bin/tsfile-cli.exe`.
+The manual workflow builds native x86_64 and ARM64 Release packages with
+Visual Studio 2022 and bundled dependencies. Each job stages and tests the CLI
+plus an external CMake SDK consumer before producing
+`tsfile-<archive-version>-windows-x86_64.zip` or
+`tsfile-<archive-version>-windows-arm64.zip`. Each archive is one combined ZIP
+rather than one archive per CPack component, and contains the runtime,
+development files, and tools under a relocatable prefix. The MSVC outputs are
+installed as `bin/tsfile.dll`, `lib/tsfile.lib`, and `bin/tsfile-cli.exe`.
 
 The portable ZIP targets Windows 10 / Windows Server 2022 or newer and uses
 the static MSVC runtime (`/MT`) in Release. `TSFILE_MSVC_STATIC_RUNTIME=ON`
@@ -166,17 +168,20 @@ does not require a separate Visual C++ Redistributable installation. Microsoft
 redistributable DLLs are not copied from the runner or included in the ZIP;
 runtime security updates require rebuilding the static-runtime package.
 
-C++ SDK consumers should use the matching MSVC v143 Release toolset and `/MT`
+C++ SDK consumers should use an MSVC Release toolset compatible with the
+compiler used to build that architecture and `/MT`
 (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, with CMake policy CMP0091 set to
 NEW before `project()`). Keep allocation and release paired through the public
 APIs; CRT-owned objects such as `FILE*` must not cross DLL boundaries. The
 installed-consumer fixture demonstrates a public setting/getter round trip
 that requires real symbols from `tsfile.dll`.
 
-The workflow uploads that ZIP as the intermediate artifact
-`native-windows-msvc-x86_64` for 14 days. Like the Linux jobs, it validates the
+The workflow uploads the ZIPs as `native-windows-msvc-x86_64` and
+`native-windows-msvc-arm64` for 14 days. Like the Linux jobs, it validates the
 license files, CMake package config, staged executable, library, import library,
-and public headers without publishing the artifact.
+and public headers without publishing the artifacts. Windows ARM uses the
+native ARM64 compiler and produces unsigned binary archives; no MSIX/AppX
+signing step is part of this workflow.
 
 ## Static SDK and install regressions
 
@@ -203,21 +208,23 @@ python3 -m unittest discover -s packaging/tests -p 'test_*.py' -v
 
 ## Final native package bundle
 
-Only after the Ubuntu 22.04 and 24.04 DEB installation tests, AlmaLinux 9 RPM
-installation test, Go SDK tests, Linux Python wheel smoke test, macOS SDK and
-Homebrew bottle merge, and Windows SDK/CLI build all succeed, the workflow assembles
+Only after the Ubuntu amd64 and arm64 DEB installation tests, AlmaLinux x86_64
+and aarch64 RPM installation tests, Go SDK tests, Linux Python wheel smoke test,
+macOS SDK and Homebrew bottle merge, and Windows x86_64 and ARM64 SDK/CLI builds
+all succeed, the workflow assembles
 `tsfile-native-packages-<archive-version>`. The final
-GitHub Actions artifact retains the platform SDKs, including both macOS archives,
-the Linux Python wheel, the DEBs, RPMs, merged Formula and bottles, and Windows ZIP in their package-family
-layouts for 14 days. It also contains a
+GitHub Actions artifact retains the platform SDKs, including both Linux ARM
+archives, both macOS archives, the Windows ARM64 archive, the Linux Python
+wheel, the DEBs, RPMs, merged Formula and bottles, and Windows ZIPs in their
+package-family layouts for 14 days. It also contains a
 sorted `SHA256SUMS` and `manifest.json` with the source identity, generated
 versions, byte sizes, SHA-256 values, and the JFrog repository, immutable target
 path, and properties required for later manual publication.
 
 The final job has no publishing credentials and does not upload to JFrog. A
 maintainer can later use the manifest to upload DEBs to `tsfile-debian` with the
-recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/x86_64`, Homebrew
-formula/bottles to `tsfile/homebrew/dev/versions/<version>`, SDKs to
+recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/<architecture>`,
+Homebrew formula/bottles to `tsfile/homebrew/dev/versions/<version>`, SDKs to
 `tsfile/sdk/dev/versions/<version>`, Windows ZIPs to
 `tsfile/windows/dev/versions/<version>`, and Python wheels to the
 `tsfile-python` repository recorded in the manifest.
