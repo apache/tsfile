@@ -871,6 +871,49 @@ TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
+TEST_F(TsFileWriterTest, CloseFlushesDataWrittenAfterLastFlush) {
+    const std::string device_path = "device_close_flush";
+    const std::string measurement_name = "value";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device_path, storage::MeasurementSchema(
+                                   measurement_name, common::TSDataType::INT64,
+                                   common::TSEncoding::PLAIN,
+                                   common::CompressionType::UNCOMPRESSED)),
+              E_OK);
+
+    TsRecord first_record(100, device_path);
+    first_record.add_point(measurement_name, static_cast<int64_t>(1));
+    ASSERT_EQ(tsfile_writer_->write_record(first_record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+
+    TsRecord final_record(101, device_path);
+    final_record.add_point(measurement_name, static_cast<int64_t>(2));
+    ASSERT_EQ(tsfile_writer_->write_record(final_record), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result_set = nullptr;
+    std::vector<std::string> select_list = {device_path + "." +
+                                            measurement_name};
+    ASSERT_EQ(reader.query(select_list, 100, 102, result_set), E_OK);
+    auto* query_result = static_cast<QDSWithoutTimeGenerator*>(result_set);
+    bool has_next = false;
+    ASSERT_EQ(query_result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(query_result->get_value<int64_t>(1), 100);
+    EXPECT_EQ(query_result->get_value<int64_t>(2), 1);
+    ASSERT_EQ(query_result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(query_result->get_value<int64_t>(1), 101);
+    EXPECT_EQ(query_result->get_value<int64_t>(2), 2);
+    ASSERT_EQ(query_result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result_set);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
 TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
     int measurement_num = 100, row_num = 150;
     std::string device_name = "device";
