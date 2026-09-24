@@ -39,6 +39,7 @@ from tsfile import (
     TsFileWriter,
 )
 from tsfile.exceptions import FileOpenError, FileReadError
+from tsfile.tag_filter import BetweenTagFilter, ComparisonTagFilter
 
 RESOURCES = Path(__file__).parent / "resources"
 
@@ -404,7 +405,9 @@ def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, st
     assert source.close_calls == 0
 
 
-@pytest.mark.parametrize("method", ["get_all_devices", "get_all_table_schemas"])
+@pytest.mark.parametrize(
+    "method", ["get_all_devices", "get_all_table_schemas", "get_table_schema"]
+)
 def test_metadata_read_failure_is_not_an_empty_result(method):
     class FailingBytesIO(TrackingBytesIO):
         fail_reads = False
@@ -420,8 +423,11 @@ def test_metadata_read_failure_is_not_an_empty_result(method):
     source.seek(17)
     with TsFileReader(source) as reader:
         source.fail_reads = True
+        args = ("test",) if method == "get_table_schema" else ()
         with pytest.raises(FileReadError):
-            getattr(reader, method)()
+            getattr(reader, method)(*args)
+        source.fail_reads = False
+        assert getattr(reader, method)(*args) is not None
     assert source.failed
     assert source.tell() == 17
     assert source.close_calls == 0
@@ -461,3 +467,90 @@ def test_device_index_read_failure_does_not_return_partial_devices(tmp_path):
     assert source.failed
     assert source.tell() == 17
     assert source.close_calls == 0
+
+
+@pytest.mark.parametrize("method", ["query_table", "query_table_by_row"])
+@pytest.mark.parametrize("tag_kind", [None, "eq", "between"])
+@pytest.mark.parametrize("batch_size", [0, 16])
+@pytest.mark.parametrize("short_read", [False, True])
+@pytest.mark.parametrize("persistent", [False, True])
+def test_table_queries_propagate_every_read_failure(
+    method, tag_kind, batch_size, short_read, persistent
+):
+    class FailingBytesIO(TrackingBytesIO):
+        read_calls = 0
+        fail_at = None
+        failed = False
+
+        def read(self, size=-1):
+            self.read_calls += 1
+            if self.fail_at is not None and (
+                self.read_calls >= self.fail_at
+                if persistent
+                else self.read_calls == self.fail_at
+            ):
+                self.failed = True
+                if short_read:
+                    return b""
+                raise OSError("table read failed")
+            return super().read(size)
+
+    data = (RESOURCES / "simple_table_t1.tsfile").read_bytes()
+
+    def query(reader):
+        tag_filter = None
+        if tag_kind == "eq":
+            tag_filter = ComparisonTagFilter("s0", "a", ComparisonTagFilter.EQ)
+        elif tag_kind == "between":
+            tag_filter = BetweenTagFilter("s0", "a", "a")
+        return getattr(reader, method)(
+            "test", ["s0", "s2"], tag_filter=tag_filter, batch_size=batch_size
+        )
+
+    def consume(result):
+        rows = 0
+        if batch_size:
+            while True:
+                batch = result.read_arrow_record_batch()
+                if batch is None:
+                    break
+                rows += batch.num_rows
+        else:
+            while result.next():
+                rows += 1
+        return rows
+
+    baseline = FailingBytesIO(data)
+    with TsFileReader(baseline) as reader:
+        open_reads = baseline.read_calls
+        with query(reader) as result:
+            assert consume(result) == (60 if tag_kind is None else 30)
+
+    # Sweep actual reads rather than hard-coding call numbers: metadata may
+    # be prefetched or cached differently as the implementation evolves.
+    for fail_at in range(open_reads + 1, baseline.read_calls + 1):
+        source = FailingBytesIO(data)
+        source.seek(17)
+        with TsFileReader(source) as reader:
+            source.fail_at = fail_at
+            result = None
+            try:
+                with pytest.raises(FileReadError):
+                    result = query(reader)
+                    consume(result)
+                assert source.failed, f"read {fail_at} was not reached"
+                if result is not None:
+                    # Recovery of the source must not turn a failed result
+                    # into successful EOF or resume it after skipped devices.
+                    source.fail_at = None
+                    with pytest.raises(FileReadError):
+                        result.next()
+                    if batch_size:
+                        with pytest.raises(FileReadError):
+                            result.read_arrow_record_batch()
+            finally:
+                if result is not None:
+                    result.close()
+        assert source.tell() == 17
+        assert not source.closed
+        assert source.close_calls == 0

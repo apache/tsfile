@@ -1060,25 +1060,9 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
 
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name) {
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto table_shcema = r->get_table_schema(table_name);
-    TableSchema ret_schema;
-    ret_schema.table_name = strdup(table_shcema->get_table_name().c_str());
-    int column_num = table_shcema->get_columns_num();
-    ret_schema.column_num = column_num;
-    ret_schema.column_schemas =
-        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * column_num));
-    for (int i = 0; i < column_num; i++) {
-        auto column_schema = table_shcema->get_measurement_schemas()[i];
-        ret_schema.column_schemas[i].column_name =
-            strdup(column_schema->measurement_name_.c_str());
-        ret_schema.column_schemas[i].data_type =
-            static_cast<TSDataType>(column_schema->data_type_);
-        ret_schema.column_schemas[i].column_category =
-            static_cast<ColumnCategory>(
-                table_shcema->get_column_categories()[i]);
-    }
-    return ret_schema;
+    TableSchema schema{};
+    tsfile_reader_get_table_schema_checked(reader, table_name, &schema);
+    return schema;
 }
 
 static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
@@ -1128,9 +1112,13 @@ ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
     }
     *out_schema = TableSchema{};
     try {
-        auto schema =
+        std::shared_ptr<storage::TableSchema> schema;
+        const int ret =
             static_cast<storage::TsFileReader*>(reader)->get_table_schema(
-                table_name);
+                table_name, schema);
+        if (ret != common::E_OK) {
+            return ret;
+        }
         return copy_table_schema(schema, out_schema);
     } catch (const std::bad_alloc&) {
         return common::E_OOM;
@@ -2553,9 +2541,13 @@ TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
         return nullptr;
     }
     auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto schema = r->get_table_schema(table_name);
-    if (!schema) {
-        *err_code = common::E_INVALID_ARG;
+    std::shared_ptr<storage::TableSchema> schema;
+    const int ret = r->get_table_schema(table_name, schema);
+    if (ret != common::E_OK) {
+        // Preserve the existing missing-table contract, but not at the cost
+        // of disguising metadata I/O errors as invalid filter arguments.
+        *err_code =
+            ret == common::E_TABLE_NOT_EXIST ? common::E_INVALID_ARG : ret;
         return nullptr;
     }
     storage::TagFilterBuilder builder(schema.get());
@@ -2617,9 +2609,13 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
         return nullptr;
     }
     auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto schema = r->get_table_schema(table_name);
-    if (!schema) {
-        *err_code = common::E_INVALID_ARG;
+    std::shared_ptr<storage::TableSchema> schema;
+    const int ret = r->get_table_schema(table_name, schema);
+    if (ret != common::E_OK) {
+        // Preserve the existing missing-table contract, but not at the cost
+        // of disguising metadata I/O errors as invalid filter arguments.
+        *err_code =
+            ret == common::E_TABLE_NOT_EXIST ? common::E_INVALID_ARG : ret;
         return nullptr;
     }
     storage::TagFilterBuilder builder(schema.get());

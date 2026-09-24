@@ -357,6 +357,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                                const char * table_name);
+    ErrorCode tsfile_reader_get_table_schema_checked(
+        TsFileReader reader, const char * table_name, TableSchema * out_schema);
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);

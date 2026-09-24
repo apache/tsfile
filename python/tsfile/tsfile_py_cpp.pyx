@@ -1236,7 +1236,10 @@ cdef ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, 
 cdef object get_table_schema(TsFileReader reader, object table_name):
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
     cdef const char * table_name_c = table_name_bytes
-    cdef TableSchema schema = tsfile_reader_get_table_schema(reader, table_name_c)
+    cdef TableSchema schema
+    cdef ErrorCode code = tsfile_reader_get_table_schema_checked(
+        reader, table_name_c, &schema)
+    check_error(code)
     return from_c_table_schema(schema)
 
 cdef object get_all_table_schema(TsFileReader reader):

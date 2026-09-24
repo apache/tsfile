@@ -41,7 +41,7 @@ class DeviceMetaIterator {
         // A valid schema-only table has no device index.  Treat a null root as
         // an empty iterator instead of dereferencing it during has_next().
         if (meat_index_node != nullptr) {
-            meta_index_nodes_.push(meat_index_node);
+            meta_index_nodes_.push({meat_index_node, false});
         }
         pa_.init(512, common::MOD_DEVICE_META_ITER);
         try_setup_direct_lookup(meat_index_node);
@@ -54,7 +54,7 @@ class DeviceMetaIterator {
           id_filter_(id_filter),
           direct_lookup_done_(false) {
         for (auto meta_index_node : meta_index_node_list) {
-            meta_index_nodes_.push(meta_index_node);
+            meta_index_nodes_.push({meta_index_node, false});
         }
         should_split_device_name = true;
         pa_.init(512, common::MOD_DEVICE_META_ITER);
@@ -64,7 +64,7 @@ class DeviceMetaIterator {
 
     void destroy_remaining_cached_devices();
 
-    bool has_next();
+    int has_next(bool& has_next);
 
     int next(std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>& ret_meta);
 
@@ -77,13 +77,15 @@ class DeviceMetaIterator {
     int load_results_direct();
 
     TsFileIOReader* io_reader_;
-    std::queue<MetaIndexNode*> meta_index_nodes_;
+    // Roots are borrowed from file metadata; descendant nodes belong to pa_.
+    std::queue<std::pair<MetaIndexNode*, bool>> meta_index_nodes_;
     std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>>
         result_cache_;
     const Filter* id_filter_;
     common::PageArena pa_;
     bool should_split_device_name;
 
+    int read_error_ = common::E_OK;
     bool direct_lookup_done_;
     std::shared_ptr<IDeviceID> direct_device_id_;
     MetaIndexNode* direct_root_node_ = nullptr;

@@ -51,7 +51,10 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
             has_next = false;
             return common::E_OK;
         }
-        if (!device_task_iterator_->has_next()) {
+        if (RET_FAIL(device_task_iterator_->has_next(has_next))) {
+            return ret;
+        }
+        if (!has_next) {
             break;
         }
         DeviceQueryTask* task = nullptr;

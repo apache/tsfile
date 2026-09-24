@@ -263,6 +263,10 @@ class TsFileReader {
      */
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name);
+
+    /** Error-reporting overload. The output is null on failure. */
+    int get_table_schema(const std::string& table_name,
+                         std::shared_ptr<TableSchema>& table_schema);
     /**
      * @brief get all table schemas in the tsfile
      *
