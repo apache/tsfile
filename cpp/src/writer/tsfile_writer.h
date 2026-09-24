@@ -129,6 +129,14 @@ class TsFileWriter {
     int write_point_aligned(ValueChunkWriter* value_chunk_writer,
                             int64_t timestamp, common::TSDataType data_type,
                             const DataPoint& point);
+    /*
+     * Create (once) the value chunk writer that carries one measurement of an
+     * aligned device.  Aligned devices keep every registered measurement in
+     * lock-step with the time column, so the writer has to exist before the
+     * first row of that device is written.
+     */
+    int ensure_aligned_value_chunk_writer(
+        storage::MeasurementSchema* measurement_schema);
     int maybe_seal_aligned_pages_together(
         TimeChunkWriter* time_chunk_writer,
         common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
