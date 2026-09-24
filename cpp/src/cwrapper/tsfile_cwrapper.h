@@ -1017,33 +1017,14 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
 //                                              const char* device_id);
 
 /**
- * @brief Gets specific table's schema in the tsfile.
- *
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema to free the tableschema.
+ * @brief Gets one table schema and reports lookup or read failures.
+ * @return Allocated TableSchema, or NULL on error. Check error_code to
+ * distinguish a missing table from a metadata read failure.
+ * @note Caller must call free_table_schema(*schema), then free(schema).
  */
-TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
-                                           const char* table_name);
-
-/** Retrieves one table schema and reports missing tables through ERRNO. */
-ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
-                                             const char* table_name,
-                                             TableSchema* out_schema);
-/**
- * @brief Gets all table schema in the tsfile.
- *
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema and free to free the ptr.
- * @note Use tsfile_reader_get_all_table_schemas_with_error to distinguish
- *       metadata read failures from an empty schema list.
- */
-TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
-                                                 uint32_t* size);
-
-/** Retrieves every table schema into a caller-freed array. */
-ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
-                                                  TableSchema** out_schemas,
-                                                  uint32_t* out_size);
+TableSchema* tsfile_reader_get_table_schema(TsFileReader reader,
+                                            const char* table_name,
+                                            ERRNO* error_code);
 
 /**
  * @brief Gets all table schemas and reports metadata read failures.
@@ -1052,18 +1033,20 @@ ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
  * @note Caller must free each schema with free_table_schema, then free the
  * array.
  */
-TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
-                                                            uint32_t* size,
-                                                            ERRNO* error_code);
+TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
+                                                 uint32_t* size,
+                                                 ERRNO* error_code);
 
 /**
- * @brief Gets all timeseries schema in the tsfile.
- *
- * @return DeviceSchema list, contains timeseries info.
- * @note Caller should call free_device_schema and free to free the ptr.
+ * @brief Gets all timeseries schemas and reports metadata read failures.
+ * @return Allocated schema array, or NULL when there are no devices or on
+ * error. Check error_code to distinguish these cases.
+ * @note Caller must free each schema with free_device_schema, then free the
+ * array.
  */
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
-                                                       uint32_t* size);
+                                                       uint32_t* size,
+                                                       ERRNO* error_code);
 
 // ---------- Tag Filter API ----------
 
@@ -1110,45 +1093,6 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           const char* column_name,
                                           const char* lower, const char* upper,
                                           bool is_not, ERRNO* err_code);
-
-/**
- * @brief Create a tag equality filter: column == value.
- *
- * @param reader [in] Valid TsFileReader handle (used to resolve column index).
- * @param table_name [in] Target table name.
- * @param column_name [in] Tag column name.
- * @param value [in] Value to compare against.
- * @return TagFilterHandle on success, NULL on failure.
- */
-TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
-                                     const char* table_name,
-                                     const char* column_name,
-                                     const char* value);
-
-TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
-                                      const char* table_name,
-                                      const char* column_name,
-                                      const char* value);
-
-TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
-                                     const char* table_name,
-                                     const char* column_name,
-                                     const char* value);
-
-TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
-                                       const char* table_name,
-                                       const char* column_name,
-                                       const char* value);
-
-TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
-                                     const char* table_name,
-                                     const char* column_name,
-                                     const char* value);
-
-TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
-                                       const char* table_name,
-                                       const char* column_name,
-                                       const char* value);
 
 /**
  * @brief Logical AND of two tag filters. Takes ownership of left and right.

@@ -728,13 +728,6 @@ ResultSet* TsFileReader::read_timeseries(
     return nullptr;
 }
 
-std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
-    const std::string& table_name) {
-    std::shared_ptr<TableSchema> table_schema;
-    get_table_schema(table_name, table_schema);
-    return table_schema;
-}
-
 int TsFileReader::get_table_schema(const std::string& table_name,
                                    std::shared_ptr<TableSchema>& table_schema) {
     table_schema.reset();

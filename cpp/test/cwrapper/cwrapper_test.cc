@@ -328,10 +328,13 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
         row++;
     }
     ASSERT_EQ(row, num_timestamp);
-    uint32_t size;
+    uint32_t size = 0;
+    ERRNO all_schema_error = RET_OK;
     TableSchema* all_schema =
-        tsfile_reader_get_all_table_schemas(reader, &size);
+        tsfile_reader_get_all_table_schemas(reader, &size, &all_schema_error);
+    ASSERT_EQ(all_schema_error, RET_OK);
     ASSERT_EQ(1, size);
+    ASSERT_NE(all_schema, nullptr);
     ASSERT_EQ(std::string(all_schema[0].table_name),
               std::string(schema.table_name));
     ASSERT_EQ(all_schema[0].column_num, schema.column_num);
@@ -464,23 +467,6 @@ TEST(TagFilterCApiTest, RejectsNullInputs) {
     const char* table = "t";
     const char* col = "c";
     const char* val = "v";
-
-    EXPECT_EQ(tsfile_tag_filter_eq(nullptr, table, col, val), nullptr);
-    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), nullptr,
-                                   col, val),
-              nullptr);
-    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), table,
-                                   nullptr, val),
-              nullptr);
-    EXPECT_EQ(tsfile_tag_filter_eq(reinterpret_cast<TsFileReader>(1), table,
-                                   col, nullptr),
-              nullptr);
-
-    EXPECT_EQ(tsfile_tag_filter_neq(nullptr, table, col, val), nullptr);
-    EXPECT_EQ(tsfile_tag_filter_lt(nullptr, table, col, val), nullptr);
-    EXPECT_EQ(tsfile_tag_filter_lteq(nullptr, table, col, val), nullptr);
-    EXPECT_EQ(tsfile_tag_filter_gt(nullptr, table, col, val), nullptr);
-    EXPECT_EQ(tsfile_tag_filter_gteq(nullptr, table, col, val), nullptr);
 
     ERRNO err = common::E_OK;
     EXPECT_EQ(

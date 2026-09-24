@@ -235,8 +235,8 @@ TEST_P(TableReadFailureTest, EveryReadFailureReachesCaller) {
     }
 }
 
-TEST_P(TableReadFailureTest, CheckedSchemaAndTagFactoriesPreserveReadErrors) {
-    for (int operation = 0; operation < 3; ++operation) {
+TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
+    for (int operation = 0; operation < 4; ++operation) {
         storage::TsFileReader reader;
         auto* source = new FailingReadFile(bytes_);
         ASSERT_EQ(
@@ -244,12 +244,21 @@ TEST_P(TableReadFailureTest, CheckedSchemaAndTagFactoriesPreserveReadErrors) {
             common::E_OK);
         source->fail_at = source->reads + 1;
         source->persistent = true;
-        ::TableSchema schema{};
+        TableSchema* schema = nullptr;
+        ERRNO schema_error = common::E_OK;
         if (operation == 0) {
-            EXPECT_EQ(tsfile_reader_get_table_schema_checked(&reader, "test",
-                                                             &schema),
-                      common::E_FILE_READ_ERR);
-            EXPECT_EQ(schema.table_name, nullptr);
+            schema =
+                tsfile_reader_get_table_schema(&reader, "test", &schema_error);
+            EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
+            EXPECT_EQ(schema, nullptr);
+        } else if (operation == 3) {
+            uint32_t count = 0;
+            DeviceSchema* device_schemas =
+                tsfile_reader_get_all_timeseries_schemas(&reader, &count,
+                                                         &schema_error);
+            EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
+            EXPECT_EQ(count, 0u);
+            EXPECT_EQ(device_schemas, nullptr);
         } else {
             ERRNO error = common::E_OK;
             TagFilterHandle filter =
@@ -266,11 +275,27 @@ TEST_P(TableReadFailureTest, CheckedSchemaAndTagFactoriesPreserveReadErrors) {
         // Metadata failures must not poison the reader or cache an empty
         // schema.
         source->fail_at = 0;
-        ASSERT_EQ(
-            tsfile_reader_get_table_schema_checked(&reader, "test", &schema),
-            common::E_OK);
-        EXPECT_STREQ(schema.table_name, "test");
-        free_table_schema(schema);
+        if (operation == 3) {
+            uint32_t count = 0;
+            DeviceSchema* device_schemas =
+                tsfile_reader_get_all_timeseries_schemas(&reader, &count,
+                                                         &schema_error);
+            ASSERT_EQ(schema_error, common::E_OK);
+            ASSERT_NE(device_schemas, nullptr);
+            ASSERT_GT(count, 0u);
+            for (uint32_t i = 0; i < count; ++i) {
+                free_device_schema(device_schemas[i]);
+            }
+            free(device_schemas);
+        } else {
+            schema =
+                tsfile_reader_get_table_schema(&reader, "test", &schema_error);
+            ASSERT_EQ(schema_error, common::E_OK);
+            ASSERT_NE(schema, nullptr);
+            EXPECT_STREQ(schema->table_name, "test");
+            free_table_schema(*schema);
+            free(schema);
+        }
     }
 }
 

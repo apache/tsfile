@@ -355,17 +355,12 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                           char ** sensor_name, uint32_t sensor_num,
                                           int64_t start_time, int64_t end_time, ErrorCode *err_code)
 
-    TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
-                                               const char * table_name);
-    ErrorCode tsfile_reader_get_table_schema_checked(
-        TsFileReader reader, const char * table_name, TableSchema * out_schema);
-
-    TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
-                                                      uint32_t * size);
-    TableSchema * tsfile_reader_get_all_table_schemas_with_error(
+    TableSchema * tsfile_reader_get_table_schema(
+        TsFileReader reader, const char * table_name, ErrorCode * error_code);
+    TableSchema * tsfile_reader_get_all_table_schemas(
         TsFileReader reader, uint32_t * size, ErrorCode * error_code);
-    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
-                                                            uint32_t * size);
+    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(
+        TsFileReader reader, uint32_t * size, ErrorCode * error_code);
 
     void tsfile_device_id_free_contents(DeviceID * d)
 

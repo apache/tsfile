@@ -93,11 +93,16 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
                         TableCountSummary& summary, std::ostream& err,
                         bool require_all_measurements) {
     std::string table_name = storage::to_lower(args.table);
-    std::shared_ptr<storage::TableSchema> schema =
-        reader.get_table_schema(table_name);
-    if (!schema) {
-        err << "Error: table '" << args.table << "' does not exist\n";
-        return kExitUsage;
+    std::shared_ptr<storage::TableSchema> schema;
+    const int schema_ret = reader.get_table_schema(table_name, schema);
+    if (schema_ret != common::E_OK) {
+        if (schema_ret == common::E_TABLE_NOT_EXIST) {
+            err << "Error: table '" << args.table << "' does not exist\n";
+            return kExitUsage;
+        }
+        err << "Error: failed to read schema for table '" << args.table
+            << "': " << error_code_message(schema_ret) << "\n";
+        return kExitFile;
     }
     summary.table_name = schema->get_table_name();
 

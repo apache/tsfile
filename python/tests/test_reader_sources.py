@@ -406,7 +406,13 @@ def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, st
 
 
 @pytest.mark.parametrize(
-    "method", ["get_all_devices", "get_all_table_schemas", "get_table_schema"]
+    "method",
+    [
+        "get_all_devices",
+        "get_all_table_schemas",
+        "get_table_schema",
+        "get_all_timeseries_schemas",
+    ],
 )
 def test_metadata_read_failure_is_not_an_empty_result(method):
     class FailingBytesIO(TrackingBytesIO):

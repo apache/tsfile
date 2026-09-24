@@ -256,15 +256,13 @@ class TsFileReader {
     TsFileProperties get_tsfile_properties();
 
     /**
-     * @brief get the table schema by the table name
+     * @brief Get the table schema by table name.
      *
      * @param table_name the table name
-     * @return std::shared_ptr<TableSchema> the table schema
+     * @param[out] table_schema the resolved schema, null on failure
+     * @return Returns 0 on success, E_TABLE_NOT_EXIST when the table is
+     *         absent, or a non-zero read error code on metadata failure.
      */
-    std::shared_ptr<TableSchema> get_table_schema(
-        const std::string& table_name);
-
-    /** Error-reporting overload. The output is null on failure. */
     int get_table_schema(const std::string& table_name,
                          std::shared_ptr<TableSchema>& table_schema);
     /**

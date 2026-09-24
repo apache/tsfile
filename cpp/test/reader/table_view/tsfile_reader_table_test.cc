@@ -393,7 +393,10 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
         }
     }
 
-    auto table_schema = reader.get_table_schema("testtable0");
+    std::shared_ptr<storage::TableSchema> table_schema;
+    ASSERT_EQ(reader.get_table_schema("testtable0", table_schema),
+              common::E_OK);
+    ASSERT_NE(table_schema, nullptr);
     ASSERT_EQ(table_schema->get_table_name(), "testtable0");
     for (int i = 0; i < 5; i++) {
         ASSERT_EQ(table_schema->get_data_types()[i], TSDataType::STRING);
