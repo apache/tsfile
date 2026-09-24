@@ -56,8 +56,10 @@ void TsFileIOReader::reset() {
         }
         read_file_ = nullptr;
         tsfile_meta_page_arena_.destroy();
-        device_node_cache_.clear();
-        device_node_cache_pa_.destroy();
+        {
+            std::lock_guard<std::mutex> lk(device_node_cache_mu_);
+            device_node_cache_.clear();
+        }
         tsfile_meta_ready_ = false;
     }
 }
@@ -623,22 +625,18 @@ std::string TsFileIOReader::device_node_cache_key(
 int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
                                            common::PageArena& pa,
                                            CachedDeviceNode& out) {
+    (void)pa;
     std::string dev_name = device_node_cache_key(device_id);
 
     {
         std::lock_guard<std::mutex> lk(device_node_cache_mu_);
-        auto it = device_node_cache_.find(dev_name);
-        if (it != device_node_cache_.end()) {
-            out = it->second;
+        if (device_node_cache_.tryGetCopy(dev_name, out)) {
             return E_OK;
         }
     }
 
-    // Read the device meta index outside the lock — load_device_index_entry()
-    // and the file read can block on I/O, and we don't want to serialize all
-    // concurrent first-time lookups behind one slow disk fetch.  Two callers
-    // racing on the same missing device may both do the read; that's wasted
-    // work but not corruption — the second insert is dropped below.
+    // Read the device meta index outside the lock. Concurrent misses may do
+    // duplicate I/O, but the cache is re-checked before insertion below.
     int ret = E_OK;
     std::shared_ptr<IMetaIndexEntry> device_index_entry;
     int64_t device_ie_end_offset = 0;
@@ -652,10 +650,6 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
             end_offset = device_ie_end_offset;
     ASSERT(start_offset < end_offset);
     const int64_t read_size_i64 = end_offset - start_offset;
-    // read_file_->read() takes int32_t; a meta index node larger than 2 GiB
-    // is implausible but explicitly reject it instead of silently truncating
-    // the read length and corrupting the parse.  Distinguish the two cases:
-    // an inverted/empty range is corruption, an oversized one is an overflow.
     if (read_size_i64 <= 0) {
         return E_TSFILE_CORRUPTED;
     }
@@ -665,14 +659,6 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
     const int32_t read_size = static_cast<int32_t>(read_size_i64);
     int32_t ret_read_len = 0;
 
-    // Read into a heap-owned buffer outside the lock.  The previous
-    // implementation allocated data_buf inside device_node_cache_pa_ before
-    // the read happened — every failed read or parse left that allocation
-    // pinned forever in the shared arena, and repeated disk errors on the
-    // same device let a long-lived reader grow it without bound.  Using a
-    // unique_ptr here means the read buffer is released on every failure
-    // path, and only the small MetaIndexNode allocations inside the lock
-    // share the arena.
     std::unique_ptr<char[]> data_buf(new (std::nothrow) char[read_size]);
     if (data_buf == nullptr) {
         return E_OOM;
@@ -684,37 +670,34 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
         return E_FILE_READ_ERR;
     }
 
-    CachedDeviceNode cached;
+    // Give every cached node its own arena. The CachedDeviceNode keeps this
+    // arena alive for users that copied the entry, while LRU eviction releases
+    // the cache's ownership and therefore reclaims unused metadata pages.
+    CachedDeviceNode candidate;
+    candidate.arena = std::make_shared<common::PageArena>();
+    candidate.arena->init(512, common::MOD_TSFILE_READER);
+    void* m_idx_node_buf = candidate.arena->alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(m_idx_node_buf)) {
+        return E_OOM;
+    }
+    auto* top_node_ptr =
+        new (m_idx_node_buf) MetaIndexNode(candidate.arena.get());
+    candidate.top_node = std::shared_ptr<MetaIndexNode>(
+        top_node_ptr, MetaIndexNode::self_deleter);
+    if (RET_FAIL(
+            candidate.top_node->deserialize_from(data_buf.get(), read_size))) {
+        return ret;
+    }
+    candidate.is_aligned = is_aligned_device(candidate.top_node);
+
     {
-        // Allocations into device_node_cache_pa_ and the map insert must be
-        // serialized — PageArena is not thread-safe, and unordered_map's
-        // rehash invalidates concurrent lookups.
         std::lock_guard<std::mutex> lk(device_node_cache_mu_);
-        // Re-check: another thread may have populated the entry while we
-        // were doing I/O.
-        auto it = device_node_cache_.find(dev_name);
-        if (it != device_node_cache_.end()) {
-            out = it->second;
+        if (device_node_cache_.tryGetCopy(dev_name, out)) {
             return E_OK;
         }
-
-        void* m_idx_node_buf =
-            device_node_cache_pa_.alloc(sizeof(MetaIndexNode));
-        if (IS_NULL(m_idx_node_buf)) {
-            return E_OOM;
-        }
-        auto* top_node_ptr =
-            new (m_idx_node_buf) MetaIndexNode(&device_node_cache_pa_);
-        auto top_node = std::shared_ptr<MetaIndexNode>(
-            top_node_ptr, MetaIndexNode::self_deleter);
-        if (RET_FAIL(top_node->deserialize_from(data_buf.get(), read_size))) {
-            return ret;
-        }
-        cached.top_node = top_node;
-        cached.is_aligned = is_aligned_device(top_node);
-        device_node_cache_.emplace(std::move(dev_name), cached);
+        device_node_cache_.insert(dev_name, candidate);
+        out = candidate;
     }
-    out = cached;
     return E_OK;
 }
 
