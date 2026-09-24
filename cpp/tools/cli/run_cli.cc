@@ -652,7 +652,7 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
     } else if (p.command == "export") {
         code = cmd_export(p, reader, fmt, out, err);
     } else if (p.command == "sketch") {
-        code = cmd_sketch(p, reader, out, err);
+        code = cmd_sketch(p, out, err);
     } else {
         err << "Unknown command: " << p.command << "\n";
         code = kExitUsage;
