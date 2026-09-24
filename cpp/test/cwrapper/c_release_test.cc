@@ -407,18 +407,25 @@ TEST_F(CReleaseTest, TsFileWriterConfTest) {
     free_write_file(&file);
     TsFileReader reader = tsfile_reader_new("plain_file.tsfile", &err_no);
     ASSERT_EQ(RET_OK, err_no);
-    TableSchema schema = tsfile_reader_get_table_schema(reader, "plain_table");
-    ASSERT_EQ(schema.column_num, 2);
+    ERRNO schema_error = RET_OK;
+    TableSchema* schema =
+        tsfile_reader_get_table_schema(reader, "plain_table", &schema_error);
+    ASSERT_EQ(schema_error, RET_OK);
+    ASSERT_NE(schema, nullptr);
+    ASSERT_EQ(schema->column_num, 2);
     uint32_t size = 0;
-    DeviceSchema* device_schema =
-        tsfile_reader_get_all_timeseries_schemas(reader, &size);
+    ERRNO timeseries_schema_error = RET_OK;
+    DeviceSchema* device_schema = tsfile_reader_get_all_timeseries_schemas(
+        reader, &size, &timeseries_schema_error);
+    ASSERT_EQ(timeseries_schema_error, RET_OK);
     ASSERT_EQ(1, size);
     ASSERT_EQ(1, device_schema->timeseries_num);
     ASSERT_EQ(device_schema->timeseries_schema[0].encoding, TS_ENCODING_PLAIN);
     ASSERT_EQ(device_schema->timeseries_schema[0].compression,
               TS_COMPRESSION_UNCOMPRESSED);
     tsfile_reader_close(reader);
-    free_table_schema(schema);
+    free_table_schema(*schema);
+    free(schema);
     free_device_schema(*device_schema);
     free(device_schema);
     free(column_list[0]);

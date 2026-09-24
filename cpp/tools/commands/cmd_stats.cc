@@ -415,14 +415,25 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                     OutputFormat fmt, std::ostream& out, std::ostream& err) {
     std::vector<std::shared_ptr<storage::TableSchema>> schemas;
     if (!args.table.empty()) {
-        schemas.push_back(
-            reader.get_table_schema(storage::to_lower(args.table)));
+        std::shared_ptr<storage::TableSchema> schema;
+        const int schema_ret =
+            reader.get_table_schema(storage::to_lower(args.table), schema);
+        if (schema_ret != common::E_OK) {
+            if (schema_ret == common::E_TABLE_NOT_EXIST) {
+                err << "Error: table '" << args.table << "' does not exist\n";
+                return kExitUsage;
+            }
+            err << "Error: failed to read schema for table '" << args.table
+                << "': " << error_code_message(schema_ret) << "\n";
+            return kExitFile;
+        }
+        schemas.push_back(schema);
     } else {
         schemas = reader.get_all_table_schemas();
-    }
-    if (schemas.empty() || !schemas[0]) {
-        err << "Error: table '" << args.table << "' does not exist\n";
-        return kExitUsage;
+        if (schemas.empty() || !schemas[0]) {
+            err << "Error: table '" << args.table << "' does not exist\n";
+            return kExitUsage;
+        }
     }
 
     if (args.table.empty()) {

@@ -152,16 +152,23 @@ int resolve_tree_paths(const ParsedArgs& args, storage::TsFileReader& reader,
 
 }  // namespace
 
-std::unique_ptr<storage::Filter> build_table_tag_filter(
-    const ParsedArgs& args, storage::TsFileReader& reader,
-    const std::string& table_name, std::ostream& err) {
+int build_table_tag_filter(const ParsedArgs& args,
+                           storage::TsFileReader& reader,
+                           const std::string& table_name, std::ostream& err,
+                           std::unique_ptr<storage::Filter>& ret_filter) {
     if (!args.has_tag_filter) {
-        return std::unique_ptr<storage::Filter>();
+        return kExitOk;
     }
-    auto schema = reader.get_table_schema(table_name);
-    if (!schema) {
-        err << "Error: no schema found for table " << table_name << "\n";
-        return std::unique_ptr<storage::Filter>();
+    std::shared_ptr<storage::TableSchema> schema;
+    const int schema_ret = reader.get_table_schema(table_name, schema);
+    if (schema_ret != common::E_OK) {
+        if (schema_ret == common::E_TABLE_NOT_EXIST) {
+            err << "Error: no schema found for table " << table_name << "\n";
+            return kExitUsage;
+        }
+        err << "Error: failed to read schema for table " << table_name << ": "
+            << error_code_message(schema_ret) << "\n";
+        return kExitFile;
     }
 
     storage::TagFilterBuilder builder(schema.get());
@@ -182,7 +189,7 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
                 } catch (const std::regex_error&) {
                     err << "Error: invalid regular expression for TAG '"
                         << spec.column << "'\n";
-                    return std::unique_ptr<storage::Filter>();
+                    return kExitUsage;
                 }
                 {
                     int tag_order = schema->find_id_column_order(spec.column);
@@ -204,7 +211,7 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
         if (filter == nullptr) {
             err << "Error: invalid tag filter column '" << spec.column
                 << "' for table " << table_name << "\n";
-            return std::unique_ptr<storage::Filter>();
+            return kExitUsage;
         }
         if (!combined) {
             combined.reset(filter);
@@ -216,7 +223,8 @@ std::unique_ptr<storage::Filter> build_table_tag_filter(
                 combined.release(), filter));
         }
     }
-    return combined;
+    ret_filter = std::move(combined);
+    return kExitOk;
 }
 
 std::vector<std::string> collect_tree_query_paths(
@@ -296,15 +304,27 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             }
             table_name = schemas[0]->get_table_name();
         }
-        auto table_schema = reader.get_table_schema(table_name);
+        std::shared_ptr<storage::TableSchema> table_schema;
+        const int schema_ret =
+            reader.get_table_schema(table_name, table_schema);
+        if (schema_ret != common::E_OK) {
+            if (schema_ret == common::E_TABLE_NOT_EXIST) {
+                err << "Error: table '" << table_name << "' does not exist\n";
+                return kExitUsage;
+            }
+            err << "Error: failed to read schema for table '" << table_name
+                << "': " << error_code_message(schema_ret) << "\n";
+            return kExitFile;
+        }
         std::vector<std::string> cols;
         int selection_ret = resolve_table_fields(args, table_schema, cols, err);
         if (selection_ret != kExitOk) {
             return selection_ret;
         }
-        tag_filter = build_table_tag_filter(args, reader, table_name, err);
-        if (args.has_tag_filter && tag_filter == nullptr) {
-            return kExitUsage;
+        int filter_ret =
+            build_table_tag_filter(args, reader, table_name, err, tag_filter);
+        if (filter_ret != kExitOk) {
+            return filter_ret;
         }
         if (push_down) {
             qret = reader.queryByRow(

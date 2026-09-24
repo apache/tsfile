@@ -1236,8 +1236,16 @@ cdef ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, 
 cdef object get_table_schema(TsFileReader reader, object table_name):
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
     cdef const char * table_name_c = table_name_bytes
-    cdef TableSchema schema = tsfile_reader_get_table_schema(reader, table_name_c)
-    return from_c_table_schema(schema)
+    cdef TableSchema * schema
+    cdef ErrorCode code = 0
+    schema = tsfile_reader_get_table_schema(
+        reader, table_name_c, &code)
+    check_error(code)
+    if schema == NULL:
+        raise RuntimeError("tsfile_reader_get_table_schema returned NULL")
+    schema_py = from_c_table_schema(schema[0])
+    free(schema)
+    return schema_py
 
 cdef object get_all_table_schema(TsFileReader reader):
     cdef uint32_t table_num = 0
@@ -1246,7 +1254,7 @@ cdef object get_all_table_schema(TsFileReader reader):
     cdef int i
 
     table_schemas = {}
-    schemas = tsfile_reader_get_all_table_schemas_with_error(reader, &table_num, &error_code)
+    schemas = tsfile_reader_get_all_table_schemas(reader, &table_num, &error_code)
     check_error(error_code)
     for i in range(table_num):
         schema_py = from_c_table_schema(schemas[i])
@@ -1257,10 +1265,13 @@ cdef object get_all_table_schema(TsFileReader reader):
 cdef object get_all_timeseries_schema(TsFileReader reader):
     cdef uint32_t device_num = 0
     cdef DeviceSchema * schemas
+    cdef ErrorCode error_code = 0
     cdef int i
 
     device_schemas = {}
-    schemas = tsfile_reader_get_all_timeseries_schemas(reader, &device_num)
+    schemas = tsfile_reader_get_all_timeseries_schemas(
+        reader, &device_num, &error_code)
+    check_error(error_code)
     for i in range(device_num):
         schema_py = from_c_device_schema(schemas[i])
         device_schemas.update([(schema_py.get_device_name(), schema_py)])

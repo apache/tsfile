@@ -70,7 +70,6 @@ class MetadataQuerier : public IMetadataQuerier {
 
    private:
     TsFileIOReader* io_reader_;
-    TsFileMeta* file_metadata_;
     std::unique_ptr<
         common::Cache<std::string, /*Todo std::pair<IDeviceID, std::string>*/
                       std::vector<std::shared_ptr<ChunkMeta>>, std::mutex>>

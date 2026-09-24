@@ -728,16 +728,19 @@ ResultSet* TsFileReader::read_timeseries(
     return nullptr;
 }
 
-std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
-    const std::string& table_name) {
-    TsFileMeta* file_metadata = tsfile_executor_->get_tsfile_meta();
-    std::shared_ptr<TableSchema> table_schema;
-    // A schema-only table has no device-level metadata index.  Schema lookup
-    // must therefore be independent of the presence of data pages; callers
-    // can still construct an empty result set from the returned schema.
-    if (file_metadata == nullptr) return table_schema;
-    file_metadata->get_table_schema(to_lower(table_name), table_schema);
-    return table_schema;
+int TsFileReader::get_table_schema(const std::string& table_name,
+                                   std::shared_ptr<TableSchema>& table_schema) {
+    table_schema.reset();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* file_metadata = nullptr;
+    const int ret = tsfile_executor_->get_tsfile_meta(file_metadata);
+    if (ret != E_OK) {
+        return ret;
+    }
+    // Schema-only tables have no device index, but still have a valid schema.
+    return file_metadata->get_table_schema(to_lower(table_name), table_schema);
 }
 
 std::vector<std::shared_ptr<TableSchema>>

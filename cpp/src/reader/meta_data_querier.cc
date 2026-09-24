@@ -25,7 +25,6 @@ namespace storage {
 
 MetadataQuerier::MetadataQuerier(TsFileIOReader* tsfile_io_reader)
     : io_reader_(tsfile_io_reader) {
-    file_metadata_ = io_reader_->get_tsfile_meta();
     device_chunk_meta_cache_ = std::unique_ptr<
         common::Cache<std::string /*ToDO: Device ID*/,
                       std::vector<std::shared_ptr<ChunkMeta>>, std::mutex>>(
@@ -69,8 +68,7 @@ MetadataQuerier::get_chunk_metadata_map(const std::vector<Path>& paths) const {
 }
 
 int MetadataQuerier::get_whole_file_metadata(TsFileMeta* tsfile_meta) const {
-    tsfile_meta = io_reader_->get_tsfile_meta();
-    return common::E_OK;
+    return io_reader_->get_tsfile_meta(tsfile_meta);
 }
 
 void MetadataQuerier::load_chunk_metadatas(const std::vector<Path>& paths) {

@@ -61,6 +61,7 @@ class TableResultSet : public ResultSet {
 
    private:
     void init();
+    int next_internal(bool& has_next);
     // Lazy materialization: fill row_record_ from the current row when a
     // caller actually requests the RowRecord (or a non-fast accessor).
     void materialize_current_row();
@@ -74,6 +75,9 @@ class TableResultSet : public ResultSet {
     std::vector<common::TSDataType> data_types_;
     const int return_mode_;
     bool closed_ = false;
+    // A failed read may have advanced device/page state. Never resume it as
+    // EOF.
+    int read_error_ = common::E_OK;
     // True when row_iterator_ points at a row that hasn't been consumed yet.
     bool row_ready_ = false;
     // True when row_record_ has been populated for the current row.

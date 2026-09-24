@@ -39,6 +39,21 @@ void TableResultSet::init() {
 TableResultSet::~TableResultSet() { close(); }
 
 int TableResultSet::next(bool& has_next) {
+    has_next = false;
+    if (read_error_ != common::E_OK) {
+        return read_error_;
+    }
+    const int ret = next_internal(has_next);
+    if (ret != common::E_OK) {
+        read_error_ = ret;
+        has_next = false;
+        row_ready_ = false;
+        row_materialized_ = false;
+    }
+    return ret;
+}
+
+int TableResultSet::next_internal(bool& has_next) {
     if (return_mode_ != RETURN_ROW) {
         return tsblock_reader_->has_next(has_next);
     }
@@ -177,6 +192,9 @@ std::shared_ptr<ResultSetMetadata> TableResultSet::get_metadata() {
 int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
     int ret = common::E_OK;
     block = nullptr;
+    if (read_error_ != common::E_OK) {
+        return read_error_;
+    }
 
     if (return_mode_ == RETURN_ROW) {
         return common::E_INVALID_ARG;
@@ -184,7 +202,7 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
 
     bool has_next = false;
     if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
-        return ret;
+        return read_error_ = ret;
     }
 
     if (!has_next) {
@@ -192,7 +210,7 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
     }
 
     if (RET_FAIL(tsblock_reader_->next(tsblock_))) {
-        return ret;
+        return read_error_ = ret;
     }
 
     if (tsblock_ == nullptr) {
