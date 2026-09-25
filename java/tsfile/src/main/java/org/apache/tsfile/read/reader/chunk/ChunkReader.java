@@ -79,6 +79,10 @@ public class ChunkReader extends AbstractChunkReader {
     this(chunk, readStopTime, null, null);
   }
 
+  /**
+   * Parses all page headers and creates page readers. For a single-page chunk, the chunk statistic
+   * may be reused; for multiple pages, each page follows its own statistic and data boundaries.
+   */
   private void initAllPageReaders(Statistics<? extends Serializable> chunkStatistic) {
     // construct next satisfied page header
     while (chunkDataBuffer.remaining() > 0) {
@@ -105,6 +109,7 @@ public class ChunkReader extends AbstractChunkReader {
     }
   }
 
+  /** Determines whether a page can be skipped by time/statistic filters or deletion intervals. */
   private boolean pageCanSkip(PageHeader pageHeader) {
     if (queryFilter != null
         && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime())) {
@@ -116,6 +121,10 @@ public class ChunkReader extends AbstractChunkReader {
     return false;
   }
 
+  /**
+   * A fully deleted page is skipped; a partially deleted page remains readable and is marked for
+   * record-level filtering.
+   */
   protected boolean pageDeleted(PageHeader pageHeader) {
     if (readStopTime > pageHeader.getEndTime()) {
       // used for chunk reader by timestamp

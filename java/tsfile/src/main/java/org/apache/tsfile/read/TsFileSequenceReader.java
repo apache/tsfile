@@ -160,6 +160,13 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(file, true, null);
   }
 
+  /**
+   * Scans the file and counts chunks in each chunk group. The current file position is used during
+   * scanning and the returned result may be incomplete when a malformed tail is encountered.
+   *
+   * @return the number of chunks for each scanned chunk group
+   * @throws IOException if the file cannot be read
+   */
   public Map<IDeviceID, Integer> countChunksPerChunkGroup() throws IOException {
     Map<IDeviceID, Integer> result = new LinkedHashMap<>();
 
