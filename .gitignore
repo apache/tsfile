@@ -40,6 +40,8 @@ python/tsfile/**/*so*
 python/data
 python/venv/*
 python/tests/__pycache__/*
+packaging/**/__pycache__/
+packaging/**/*.py[cod]
 python/tests/*.tsfile
 python/tsfile/include
 
