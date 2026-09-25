@@ -1,0 +1,86 @@
+#!/usr/bin/env sh
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+set -eu
+
+VERSION="${CLANG_FORMAT_VERSION:-17.0.6}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+CPP_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
+TOOL_DIR="${CPP_DIR}/target/clang-format"
+BASE_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${VERSION}"
+
+check_version() {
+    exe="$1"
+    actual="$("${exe}" --version 2>/dev/null || true)"
+    case "${actual}" in
+        *"${VERSION}"*) ;;
+        *)
+            echo "Expected clang-format ${VERSION}, but found: ${actual:-not executable}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+download() {
+    url="$1"
+    output="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL "${url}" -o "${output}"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "${output}" "${url}"
+    else
+        echo "Neither curl nor wget is available to download clang-format ${VERSION}." >&2
+        exit 1
+    fi
+}
+
+asset=""
+case "$(uname -s):$(uname -m)" in
+    Linux:x86_64 | Linux:amd64)
+        asset="clang+llvm-${VERSION}-x86_64-linux-gnu-ubuntu-22.04"
+        ;;
+    Linux:aarch64 | Linux:arm64)
+        asset="clang+llvm-${VERSION}-aarch64-linux-gnu"
+        ;;
+    Darwin:arm64)
+        asset="clang+llvm-${VERSION}-arm64-apple-darwin22.0"
+        ;;
+esac
+
+if [ -n "${asset}" ]; then
+    exe="${TOOL_DIR}/${asset}/bin/clang-format"
+    archive="${TOOL_DIR}/${asset}.tar.xz"
+    if [ ! -x "${exe}" ]; then
+        mkdir -p "${TOOL_DIR}"
+        if [ ! -f "${archive}" ]; then
+            download "${BASE_URL}/${asset}.tar.xz" "${archive}"
+        fi
+        tar -xJf "${archive}" -C "${TOOL_DIR}"
+    fi
+else
+    exe="$(command -v clang-format || true)"
+    if [ -z "${exe}" ]; then
+        echo "No bundled clang-format ${VERSION} is available for $(uname -s) $(uname -m), and clang-format is not on PATH." >&2
+        exit 1
+    fi
+fi
+
+check_version "${exe}"
+exec "${exe}" "$@"
