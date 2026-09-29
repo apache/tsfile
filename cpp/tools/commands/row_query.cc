@@ -292,7 +292,13 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     if (is_table_model(args, reader)) {
         std::string table_name = args.table;
         if (table_name.empty()) {
-            auto schemas = reader.get_all_table_schemas();
+            std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+            const int schemas_ret = reader.get_all_table_schemas(schemas);
+            if (schemas_ret != common::E_OK) {
+                err << "Error: failed to read table schemas: "
+                    << error_code_message(schemas_ret) << "\n";
+                return kExitFile;
+            }
             if (schemas.empty() || !schemas[0]) {
                 err << "Error: no table found in file\n";
                 return kExitRuntime;

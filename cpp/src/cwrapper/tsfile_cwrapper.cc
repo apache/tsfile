@@ -1060,10 +1060,13 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
 
 static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
                                TableSchema* out_schema) {
-    if (!src || out_schema == nullptr) {
-        return common::E_TABLE_NOT_EXIST;
+    if (out_schema == nullptr) {
+        return common::E_INVALID_ARG;
     }
     *out_schema = TableSchema{};
+    if (!src) {
+        return common::E_TABLE_NOT_EXIST;
+    }
     out_schema->table_name = strdup(src->get_table_name().c_str());
     if (out_schema->table_name == nullptr) {
         return common::E_OOM;
@@ -1081,7 +1084,18 @@ static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
     }
     const auto& measurements = src->get_measurement_schemas();
     const auto& categories = src->get_column_categories();
+    if (measurements.size() < static_cast<size_t>(out_schema->column_num) ||
+        categories.size() < static_cast<size_t>(out_schema->column_num)) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_INVALID_SCHEMA;
+    }
     for (int i = 0; i < out_schema->column_num; ++i) {
+        if (!measurements[i]) {
+            free_table_schema(*out_schema);
+            *out_schema = TableSchema{};
+            return common::E_INVALID_SCHEMA;
+        }
         out_schema->column_schemas[i].column_name =
             strdup(measurements[i]->measurement_name_.c_str());
         if (out_schema->column_schemas[i].column_name == nullptr) {
@@ -1097,6 +1111,26 @@ static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
     return common::E_OK;
 }
 
+static void free_table_schema_array(TableSchema* schemas, size_t size) {
+    if (schemas == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        free_table_schema(schemas[i]);
+    }
+    free(schemas);
+}
+
+static void free_device_schema_array(DeviceSchema* schemas, size_t size) {
+    if (schemas == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        free_device_schema(schemas[i]);
+    }
+    free(schemas);
+}
+
 TableSchema* tsfile_reader_get_table_schema(TsFileReader reader,
                                             const char* table_name,
                                             ERRNO* error_code) {
@@ -1107,6 +1141,7 @@ TableSchema* tsfile_reader_get_table_schema(TsFileReader reader,
     if (reader == nullptr || table_name == nullptr) {
         return nullptr;
     }
+    TableSchema* result = nullptr;
     try {
         std::shared_ptr<storage::TableSchema> schema;
         const int ret =
@@ -1116,7 +1151,7 @@ TableSchema* tsfile_reader_get_table_schema(TsFileReader reader,
             *error_code = ret;
             return nullptr;
         }
-        auto* result = static_cast<TableSchema*>(malloc(sizeof(TableSchema)));
+        result = static_cast<TableSchema*>(calloc(1, sizeof(TableSchema)));
         if (result == nullptr) {
             *error_code = common::E_OOM;
             return nullptr;
@@ -1128,9 +1163,17 @@ TableSchema* tsfile_reader_get_table_schema(TsFileReader reader,
         }
         return result;
     } catch (const std::bad_alloc&) {
+        if (result != nullptr) {
+            free_table_schema(*result);
+            free(result);
+        }
         *error_code = common::E_OOM;
         return nullptr;
     } catch (...) {
+        if (result != nullptr) {
+            free_table_schema(*result);
+            free(result);
+        }
         *error_code = common::E_FILE_READ_ERR;
         return nullptr;
     }
@@ -1149,34 +1192,47 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
     if (reader == nullptr || size == nullptr) {
         return nullptr;
     }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    std::vector<std::shared_ptr<storage::TableSchema>> table_schemas;
-    *error_code = r->get_all_table_schemas(table_schemas);
-    if (*error_code != common::E_OK || table_schemas.empty()) {
+    TableSchema* result = nullptr;
+    size_t initialized = 0;
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::TableSchema>> table_schemas;
+        *error_code = r->get_all_table_schemas(table_schemas);
+        if (*error_code != common::E_OK || table_schemas.empty()) {
+            return nullptr;
+        }
+        const size_t table_num = table_schemas.size();
+        if (table_num > std::numeric_limits<uint32_t>::max()) {
+            *error_code = common::E_OVERFLOW;
+            return nullptr;
+        }
+        result =
+            static_cast<TableSchema*>(calloc(table_num, sizeof(TableSchema)));
+        if (result == nullptr) {
+            *error_code = common::E_OOM;
+            return nullptr;
+        }
+        for (size_t i = 0; i < table_num; ++i) {
+            initialized = i + 1;
+            const ERRNO ret = copy_table_schema(table_schemas[i], &result[i]);
+            if (ret != common::E_OK) {
+                *error_code = ret;
+                free_table_schema_array(result, initialized);
+                return nullptr;
+            }
+        }
+        *size = static_cast<uint32_t>(table_num);
+        *error_code = common::E_OK;
+        return result;
+    } catch (const std::bad_alloc&) {
+        free_table_schema_array(result, initialized);
+        *error_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
+        free_table_schema_array(result, initialized);
+        *error_code = common::E_FILE_READ_ERR;
         return nullptr;
     }
-    size_t table_num = table_schemas.size();
-    TableSchema* ret =
-        static_cast<TableSchema*>(malloc(sizeof(TableSchema) * table_num));
-    for (size_t i = 0; i < table_schemas.size(); i++) {
-        ret[i].table_name = strdup(table_schemas[i]->get_table_name().c_str());
-        int column_num = table_schemas[i]->get_columns_num();
-        ret[i].column_num = column_num;
-        ret[i].column_schemas = static_cast<ColumnSchema*>(
-            malloc(column_num * sizeof(ColumnSchema)));
-        auto column_schemas = table_schemas[i]->get_measurement_schemas();
-        for (int j = 0; j < column_num; j++) {
-            ret[i].column_schemas[j].column_name =
-                strdup(column_schemas[j]->measurement_name_.c_str());
-            ret[i].column_schemas[j].data_type =
-                static_cast<TSDataType>(column_schemas[j]->data_type_);
-            ret[i].column_schemas[j].column_category =
-                static_cast<ColumnCategory>(
-                    table_schemas[i]->get_column_categories()[j]);
-        }
-    }
-    *size = table_num;
-    return ret;
 }
 
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
@@ -1192,83 +1248,97 @@ DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
     if (reader == nullptr || size == nullptr) {
         return nullptr;
     }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    std::vector<std::shared_ptr<storage::IDeviceID>> device_ids;
-    *error_code = r->get_all_devices(device_ids);
-    if (*error_code != common::E_OK) {
-        return nullptr;
-    }
-    if (device_ids.empty()) {
-        *error_code = common::E_OK;
-        return nullptr;
-    }
-
-    auto* device_schemas = static_cast<DeviceSchema*>(
-        calloc(device_ids.size(), sizeof(DeviceSchema)));
-    if (device_schemas == nullptr) {
-        *error_code = common::E_OOM;
-        return nullptr;
-    }
-    auto free_partial = [&]() {
-        for (size_t i = 0; i < device_ids.size(); ++i) {
-            free_device_schema(device_schemas[i]);
+    DeviceSchema* result = nullptr;
+    size_t initialized = 0;
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::IDeviceID>> device_ids;
+        *error_code = r->get_all_devices(device_ids);
+        if (*error_code != common::E_OK || device_ids.empty()) {
+            return nullptr;
         }
-        free(device_schemas);
-    };
-
-    for (size_t device_index = 0; device_index < device_ids.size();
-         ++device_index) {
-        const auto& device_id = device_ids[device_index];
-        DeviceSchema& cur_schema = device_schemas[device_index];
-        std::string device_name =
-            device_id == nullptr ? "" : device_id->get_device_name();
-        cur_schema.device_name = strdup(device_name.c_str());
-        if (cur_schema.device_name == nullptr) {
-            free_partial();
+        const size_t device_count = device_ids.size();
+        if (device_count > std::numeric_limits<uint32_t>::max()) {
+            *error_code = common::E_OVERFLOW;
+            return nullptr;
+        }
+        result = static_cast<DeviceSchema*>(
+            calloc(device_count, sizeof(DeviceSchema)));
+        if (result == nullptr) {
             *error_code = common::E_OOM;
             return nullptr;
         }
 
-        std::vector<storage::MeasurementSchema> schemas;
-        const int ret = r->get_timeseries_schema(device_id, schemas);
-        if (ret != common::E_OK) {
-            free_partial();
-            *error_code = ret;
-            return nullptr;
-        }
-        if (schemas.empty()) {
-            continue;
-        }
-
-        cur_schema.timeseries_num = static_cast<int>(schemas.size());
-        cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
-            calloc(schemas.size(), sizeof(TimeseriesSchema)));
-        if (cur_schema.timeseries_schema == nullptr) {
-            free_partial();
-            *error_code = common::E_OOM;
-            return nullptr;
-        }
-        for (size_t i = 0; i < schemas.size(); ++i) {
-            const auto& measurement_schema = schemas[i];
-            cur_schema.timeseries_schema[i].timeseries_name =
-                strdup(measurement_schema.measurement_name_.c_str());
-            if (cur_schema.timeseries_schema[i].timeseries_name == nullptr) {
-                free_partial();
+        for (size_t device_index = 0; device_index < device_count;
+             ++device_index) {
+            initialized = device_index + 1;
+            const auto& device_id = device_ids[device_index];
+            DeviceSchema& cur_schema = result[device_index];
+            std::string device_name =
+                device_id == nullptr ? "" : device_id->get_device_name();
+            cur_schema.device_name = strdup(device_name.c_str());
+            if (cur_schema.device_name == nullptr) {
                 *error_code = common::E_OOM;
+                free_device_schema_array(result, initialized);
                 return nullptr;
             }
-            cur_schema.timeseries_schema[i].data_type =
-                static_cast<TSDataType>(measurement_schema.data_type_);
-            cur_schema.timeseries_schema[i].encoding =
-                static_cast<TSEncoding>(measurement_schema.encoding_);
-            cur_schema.timeseries_schema[i].compression =
-                static_cast<CompressionType>(
-                    measurement_schema.compression_type_);
+
+            std::vector<storage::MeasurementSchema> schemas;
+            const int ret = r->get_timeseries_schema(device_id, schemas);
+            if (ret != common::E_OK) {
+                *error_code = ret;
+                free_device_schema_array(result, initialized);
+                return nullptr;
+            }
+            if (schemas.empty()) {
+                continue;
+            }
+            if (schemas.size() >
+                static_cast<size_t>(std::numeric_limits<int>::max())) {
+                *error_code = common::E_OVERFLOW;
+                free_device_schema_array(result, initialized);
+                return nullptr;
+            }
+
+            cur_schema.timeseries_num = static_cast<int>(schemas.size());
+            cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
+                calloc(schemas.size(), sizeof(TimeseriesSchema)));
+            if (cur_schema.timeseries_schema == nullptr) {
+                *error_code = common::E_OOM;
+                free_device_schema_array(result, initialized);
+                return nullptr;
+            }
+            for (size_t i = 0; i < schemas.size(); ++i) {
+                const auto& measurement_schema = schemas[i];
+                cur_schema.timeseries_schema[i].timeseries_name =
+                    strdup(measurement_schema.measurement_name_.c_str());
+                if (cur_schema.timeseries_schema[i].timeseries_name ==
+                    nullptr) {
+                    *error_code = common::E_OOM;
+                    free_device_schema_array(result, initialized);
+                    return nullptr;
+                }
+                cur_schema.timeseries_schema[i].data_type =
+                    static_cast<TSDataType>(measurement_schema.data_type_);
+                cur_schema.timeseries_schema[i].encoding =
+                    static_cast<TSEncoding>(measurement_schema.encoding_);
+                cur_schema.timeseries_schema[i].compression =
+                    static_cast<CompressionType>(
+                        measurement_schema.compression_type_);
+            }
         }
+        *size = static_cast<uint32_t>(device_count);
+        *error_code = common::E_OK;
+        return result;
+    } catch (const std::bad_alloc&) {
+        free_device_schema_array(result, initialized);
+        *error_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
+        free_device_schema_array(result, initialized);
+        *error_code = common::E_FILE_READ_ERR;
+        return nullptr;
     }
-    *size = static_cast<uint32_t>(device_ids.size());
-    *error_code = common::E_OK;
-    return device_schemas;
 }
 
 void tsfile_device_id_free_contents(DeviceID* d) {

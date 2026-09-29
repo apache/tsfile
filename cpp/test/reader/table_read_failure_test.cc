@@ -5,7 +5,7 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * License); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License a
+ * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -236,7 +236,7 @@ TEST_P(TableReadFailureTest, EveryReadFailureReachesCaller) {
 }
 
 TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
-    for (int operation = 0; operation < 4; ++operation) {
+    for (int operation = 0; operation < 5; ++operation) {
         storage::TsFileReader reader;
         auto* source = new FailingReadFile(bytes_);
         ASSERT_EQ(
@@ -259,6 +259,13 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
             EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
             EXPECT_EQ(count, 0u);
             EXPECT_EQ(device_schemas, nullptr);
+        } else if (operation == 4) {
+            uint32_t count = 0;
+            TableSchema* schemas = tsfile_reader_get_all_table_schemas(
+                &reader, &count, &schema_error);
+            EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
+            EXPECT_EQ(count, 0u);
+            EXPECT_EQ(schemas, nullptr);
         } else {
             ERRNO error = common::E_OK;
             TagFilterHandle filter =
@@ -287,6 +294,17 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
                 free_device_schema(device_schemas[i]);
             }
             free(device_schemas);
+        } else if (operation == 4) {
+            uint32_t count = 0;
+            TableSchema* schemas = tsfile_reader_get_all_table_schemas(
+                &reader, &count, &schema_error);
+            ASSERT_EQ(schema_error, common::E_OK);
+            ASSERT_NE(schemas, nullptr);
+            ASSERT_GT(count, 0u);
+            for (uint32_t i = 0; i < count; ++i) {
+                free_table_schema(schemas[i]);
+            }
+            free(schemas);
         } else {
             schema =
                 tsfile_reader_get_table_schema(&reader, "test", &schema_error);

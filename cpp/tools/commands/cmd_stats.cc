@@ -429,7 +429,12 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         }
         schemas.push_back(schema);
     } else {
-        schemas = reader.get_all_table_schemas();
+        const int schemas_ret = reader.get_all_table_schemas(schemas);
+        if (schemas_ret != common::E_OK) {
+            err << "Error: failed to read table schemas: "
+                << error_code_message(schemas_ret) << "\n";
+            return kExitFile;
+        }
         if (schemas.empty() || !schemas[0]) {
             err << "Error: table '" << args.table << "' does not exist\n";
             return kExitUsage;
