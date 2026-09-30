@@ -235,6 +235,45 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
+// The readable `table` format renders control characters as fixed visible
+// escapes: backslash, newline, carriage return and tab become the two-character
+// literals \\, \n, \r and \t, and every other non-printable control byte
+// (C0 controls plus DEL) becomes \uXXXX. This keeps one logical record on one
+// physical line regardless of embedded control characters.
+std::string table_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for (unsigned char c : s) {
+        switch (c) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                // C0 controls (0x00-0x1f) plus DEL (0x7f) are the complete
+                // set of non-printable control bytes per C iscntrl(). Bytes
+                // >= 0x80 are UTF-8 continuation/lead bytes and must pass
+                // through untouched so multi-byte sequences survive.
+                if (c < 0x20 || c == 0x7f) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
+    }
+    return out;
+}
+
 namespace {
 
 // FLOAT/DOUBLE cells render non-finite values as nan/inf tokens, which have
@@ -271,7 +310,7 @@ RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
       table_widths_(header_.size(), 0) {
     if (!no_header_) {
         for (size_t i = 0; i < header_.size(); ++i) {
-            table_widths_[i] = header_[i].size();
+            table_widths_[i] = table_escape(header_[i]).size();
         }
     }
 }
@@ -360,7 +399,8 @@ bool RowWriter::write(const std::vector<std::string>& cells,
                 return false;
             }
             table_widths_[i] =
-                std::max(table_widths_[i], format_cell(type, value).size());
+                std::max(table_widths_[i],
+                         table_escape(format_cell(type, value)).size());
         }
         return true;
     }
@@ -444,9 +484,9 @@ bool RowWriter::finish() {
         for (size_t i = 0; i < ncols; ++i) {
             std::string cell =
                 (i < cells.size() && !(i < nulls.size() && nulls[i]))
-                    ? format_cell(
+                    ? table_escape(format_cell(
                           i < row_types.size() ? row_types[i] : common::STRING,
-                          cells[i])
+                          cells[i]))
                     : "";
             out_ << cell;
             if (i + 1 < ncols) {
