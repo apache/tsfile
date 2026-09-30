@@ -662,6 +662,33 @@ TEST(CliE2E, TreeCountAndStatsUseDeviceTimestampUnion) {
         << stats_out.str();
 }
 
+TEST(CliE2E, TreeHeadWithoutDeviceUsesBareMeasurementNames) {
+    // A single-device tree file queried without -d resolves the only device
+    // implicitly. Result columns must still be bare measurement names (FIELD),
+    // not "device.measurement" (TsFile-143 / requirement 3.1.4.2 examples).
+    SparseTreeFixture f;
+
+    std::ostringstream ndjson_out;
+    std::ostringstream ndjson_err;
+    EXPECT_EQ(tsfile_cli::run_cli(
+                  {"head", "-m", "left", "-n", "1", "-f", "ndjson", f.path},
+                  ndjson_out, ndjson_err),
+              0)
+        << ndjson_err.str();
+    EXPECT_EQ(ndjson_out.str(), "{\"time\":\"0\",\"left\":10}\n");
+
+    std::ostringstream csv_out;
+    std::ostringstream csv_err;
+    EXPECT_EQ(
+        tsfile_cli::run_cli({"head", "-f", "csv", f.path}, csv_out, csv_err), 0)
+        << csv_err.str();
+    EXPECT_EQ(csv_out.str(),
+              "time,left,right\n"
+              "0,10,\\N\n"
+              "1,\\N,true\n"
+              "2,20,false\n");
+}
+
 TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
     Fixture f;
 
