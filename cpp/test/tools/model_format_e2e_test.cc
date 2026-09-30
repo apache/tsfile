@@ -642,6 +642,37 @@ TEST(IndependentFixtures, SpecialCsvInputsHaveExactCodesAndErrors) {
     }
 }
 
+TEST(IndependentFixtures, ControlCharCellsRenderAsVisibleEscapes) {
+    const std::string fixture = tsfile_cli_test::write_control_char_fixture();
+
+    // `table` keeps one logical record on one physical line by escaping
+    // newline, tab and backslash into visible two-character sequences.
+    expect_cli_exact({"cat", "-t", "t1", "-f", "table", fixture}, 0,
+                     "time  site  note\n"
+                     "1000  s1    line1\\nline2\n"
+                     "2000  s2    tab\\there\n"
+                     "3000  s3    back\\\\slash\n",
+                     "");
+
+    // CSV/NDJSON keep their machine-format semantics unchanged: the embedded
+    // newline/tab/backslash survive verbatim inside CSV quotes or as JSON
+    // escapes, never flattened into the visible table representation.
+    expect_cli_exact({"cat", "-t", "t1", "-f", "csv", fixture}, 0,
+                     "time,site,note\n"
+                     "1000,s1,\"line1\nline2\"\n"
+                     "2000,s2,tab\there\n"
+                     "3000,s3,back\\slash\n",
+                     "");
+    expect_cli_exact(
+        {"cat", "-t", "t1", "-f", "ndjson", fixture}, 0,
+        "{\"time\":\"1000\",\"site\":\"s1\",\"note\":\"line1\\nline2\"}\n"
+        "{\"time\":\"2000\",\"site\":\"s2\",\"note\":\"tab\\there\"}\n"
+        "{\"time\":\"3000\",\"site\":\"s3\",\"note\":\"back\\\\slash\"}\n",
+        "");
+
+    std::remove(fixture.c_str());
+}
+
 INSTANTIATE_TEST_SUITE_P(TreeAndTable, BothModels,
                          ::testing::Values(ModelFile{true,
                                                      {"-d", "root.test.d1"}},

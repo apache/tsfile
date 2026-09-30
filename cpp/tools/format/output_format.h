@@ -44,6 +44,7 @@ const char* compression_name(common::CompressionType c);
 
 std::string csv_escape(const std::string& field);
 std::string json_escape(const std::string& s);
+std::string table_escape(const std::string& s);
 
 class RowWriter {
    public:
