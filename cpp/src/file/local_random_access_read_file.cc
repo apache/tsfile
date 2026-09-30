@@ -176,6 +176,20 @@ int LocalRandomAccessReadFile::open(const std::string& file_path) {
         return E_INVALID_PATH;
     }
 #endif
+#ifndef _WIN32
+    // POSIX open(O_RDONLY) blocks on a FIFO until a writer appears, and
+    // succeeds on directories/device files.  Preflight with stat() (which
+    // follows symlinks) so non-regular paths fail fast with the same stable
+    // E_INVALID_PATH code the post-open fstat() check below produces, instead
+    // of hanging forever.  If stat() itself fails (missing file, dangling
+    // symlink), fall through to the normal open() path so those continue to
+    // report E_FILE_OPEN_ERR.
+    struct stat preopen_stat;
+    if (::stat(file_path_.c_str(), &preopen_stat) == 0 &&
+        !S_ISREG(preopen_stat.st_mode)) {
+        return E_INVALID_PATH;
+    }
+#endif
     fd_ = file_internal::open_utf8(file_path_, flags);
     if (fd_ < 0) {
         return E_FILE_OPEN_ERR;
