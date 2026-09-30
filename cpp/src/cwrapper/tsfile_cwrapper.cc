@@ -1141,24 +1141,14 @@ ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
     if (reader == nullptr || table_name == nullptr) {
         return common::E_INVALID_ARG;
     }
-    try {
-        std::shared_ptr<storage::TableSchema> schema;
-        const int ret =
-            static_cast<storage::TsFileReader*>(reader)->get_table_schema(
-                table_name, schema);
-        if (ret != common::E_OK) {
-            return ret;
-        }
-        return copy_table_schema(schema, out_schema);
-    } catch (const std::bad_alloc&) {
-        free_table_schema(*out_schema);
-        *out_schema = TableSchema{};
-        return common::E_OOM;
-    } catch (...) {
-        free_table_schema(*out_schema);
-        *out_schema = TableSchema{};
-        return common::E_FILE_READ_ERR;
+    std::shared_ptr<storage::TableSchema> schema;
+    const int ret =
+        static_cast<storage::TsFileReader*>(reader)->get_table_schema(
+            table_name, schema);
+    if (ret != common::E_OK) {
+        return ret;
     }
+    return copy_table_schema(schema, out_schema);
 }
 
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
