@@ -330,8 +330,8 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     ASSERT_EQ(row, num_timestamp);
     uint32_t size = 0;
     ERRNO all_schema_error = RET_OK;
-    TableSchema* all_schema =
-        tsfile_reader_get_all_table_schemas(reader, &size, &all_schema_error);
+    TableSchema* all_schema = tsfile_reader_get_all_table_schemas_with_error(
+        reader, &size, &all_schema_error);
     ASSERT_EQ(all_schema_error, RET_OK);
     ASSERT_EQ(1, size);
     ASSERT_NE(all_schema, nullptr);
@@ -495,6 +495,48 @@ TEST(TagFilterCApiTest, RejectsNullInputs) {
     // err_code itself is null — must not crash, must return null.
     EXPECT_EQ(tsfile_tag_filter_create(reinterpret_cast<TsFileReader>(1), table,
                                        col, val, TAG_FILTER_EQ, nullptr),
+              nullptr);
+}
+
+TEST(CApiCompatibilityTest, KeepsLegacySchemaAndTagFilterEntryPoints) {
+    TableSchema legacy_schema =
+        tsfile_reader_get_table_schema(nullptr, "missing");
+    EXPECT_EQ(legacy_schema.table_name, nullptr);
+    EXPECT_EQ(legacy_schema.column_num, 0);
+    EXPECT_EQ(legacy_schema.column_schemas, nullptr);
+
+    uint32_t table_count = 7;
+    EXPECT_EQ(tsfile_reader_get_all_table_schemas(nullptr, &table_count),
+              nullptr);
+    EXPECT_EQ(table_count, 0);
+
+    uint32_t device_count = 7;
+    EXPECT_EQ(tsfile_reader_get_all_timeseries_schemas(nullptr, &device_count),
+              nullptr);
+    EXPECT_EQ(device_count, 0);
+
+    TableSchema checked_schema{};
+    EXPECT_EQ(tsfile_reader_get_table_schema_checked(nullptr, "missing",
+                                                     &checked_schema),
+              common::E_INVALID_ARG);
+
+    TableSchema* checked_tables = nullptr;
+    table_count = 7;
+    EXPECT_EQ(tsfile_reader_get_all_table_schemas_checked(
+                  nullptr, &checked_tables, &table_count),
+              common::E_INVALID_ARG);
+    EXPECT_EQ(checked_tables, nullptr);
+    EXPECT_EQ(table_count, 0);
+
+    DeviceSchema* checked_devices = nullptr;
+    device_count = 7;
+    EXPECT_EQ(tsfile_reader_get_all_timeseries_schemas_checked(
+                  nullptr, &checked_devices, &device_count),
+              common::E_INVALID_ARG);
+    EXPECT_EQ(checked_devices, nullptr);
+    EXPECT_EQ(device_count, 0);
+
+    EXPECT_EQ(tsfile_tag_filter_eq(nullptr, "missing", "tag", "value"),
               nullptr);
 }
 

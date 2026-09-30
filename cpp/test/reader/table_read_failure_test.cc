@@ -244,25 +244,28 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
             common::E_OK);
         source->fail_at = source->reads + 1;
         source->persistent = true;
-        TableSchema* schema = nullptr;
+        TableSchema schema{};
         ERRNO schema_error = common::E_OK;
         if (operation == 0) {
-            schema =
-                tsfile_reader_get_table_schema(&reader, "test", &schema_error);
+            schema_error = tsfile_reader_get_table_schema_checked(
+                &reader, "test", &schema);
             EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
-            EXPECT_EQ(schema, nullptr);
+            EXPECT_EQ(schema.table_name, nullptr);
+            EXPECT_EQ(schema.column_num, 0);
+            EXPECT_EQ(schema.column_schemas, nullptr);
         } else if (operation == 3) {
             uint32_t count = 0;
-            DeviceSchema* device_schemas =
-                tsfile_reader_get_all_timeseries_schemas(&reader, &count,
-                                                         &schema_error);
+            DeviceSchema* device_schemas = nullptr;
+            schema_error = tsfile_reader_get_all_timeseries_schemas_checked(
+                &reader, &device_schemas, &count);
             EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
             EXPECT_EQ(count, 0u);
             EXPECT_EQ(device_schemas, nullptr);
         } else if (operation == 4) {
             uint32_t count = 0;
-            TableSchema* schemas = tsfile_reader_get_all_table_schemas(
-                &reader, &count, &schema_error);
+            TableSchema* schemas = nullptr;
+            schema_error = tsfile_reader_get_all_table_schemas_checked(
+                &reader, &schemas, &count);
             EXPECT_EQ(schema_error, common::E_FILE_READ_ERR);
             EXPECT_EQ(count, 0u);
             EXPECT_EQ(schemas, nullptr);
@@ -284,9 +287,9 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
         source->fail_at = 0;
         if (operation == 3) {
             uint32_t count = 0;
-            DeviceSchema* device_schemas =
-                tsfile_reader_get_all_timeseries_schemas(&reader, &count,
-                                                         &schema_error);
+            DeviceSchema* device_schemas = nullptr;
+            schema_error = tsfile_reader_get_all_timeseries_schemas_checked(
+                &reader, &device_schemas, &count);
             ASSERT_EQ(schema_error, common::E_OK);
             ASSERT_NE(device_schemas, nullptr);
             ASSERT_GT(count, 0u);
@@ -296,8 +299,9 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
             free(device_schemas);
         } else if (operation == 4) {
             uint32_t count = 0;
-            TableSchema* schemas = tsfile_reader_get_all_table_schemas(
-                &reader, &count, &schema_error);
+            TableSchema* schemas = nullptr;
+            schema_error = tsfile_reader_get_all_table_schemas_checked(
+                &reader, &schemas, &count);
             ASSERT_EQ(schema_error, common::E_OK);
             ASSERT_NE(schemas, nullptr);
             ASSERT_GT(count, 0u);
@@ -306,15 +310,116 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
             }
             free(schemas);
         } else {
-            schema =
-                tsfile_reader_get_table_schema(&reader, "test", &schema_error);
+            schema_error = tsfile_reader_get_table_schema_checked(
+                &reader, "test", &schema);
             ASSERT_EQ(schema_error, common::E_OK);
-            ASSERT_NE(schema, nullptr);
-            EXPECT_STREQ(schema->table_name, "test");
-            free_table_schema(*schema);
-            free(schema);
+            EXPECT_STREQ(schema.table_name, "test");
+            free_table_schema(schema);
         }
     }
+}
+
+TEST_P(TableReadFailureTest, LegacySchemaApisReturnEmptyOnReadFailure) {
+    for (int operation = 0; operation < 4; ++operation) {
+        SCOPED_TRACE(operation);
+        storage::TsFileReader reader;
+        auto* source = new FailingReadFile(bytes_);
+        ASSERT_EQ(
+            reader.open(std::unique_ptr<storage::RandomAccessReadFile>(source)),
+            common::E_OK);
+        source->fail_at = source->reads + 1;
+        source->persistent = true;
+        if (operation == 0) {
+            TableSchema schema =
+                tsfile_reader_get_table_schema(&reader, "test");
+            EXPECT_EQ(schema.table_name, nullptr);
+            EXPECT_EQ(schema.column_num, 0);
+            EXPECT_EQ(schema.column_schemas, nullptr);
+            free_table_schema(schema);
+        } else if (operation == 1) {
+            uint32_t count = 7;
+            TableSchema* schemas =
+                tsfile_reader_get_all_table_schemas(&reader, &count);
+            EXPECT_EQ(schemas, nullptr);
+            EXPECT_EQ(count, 0u);
+            if (schemas != nullptr) {
+                for (uint32_t i = 0; i < count; ++i)
+                    free_table_schema(schemas[i]);
+                free(schemas);
+            }
+        } else if (operation == 2) {
+            uint32_t count = 7;
+            DeviceSchema* schemas =
+                tsfile_reader_get_all_timeseries_schemas(&reader, &count);
+            EXPECT_EQ(schemas, nullptr);
+            EXPECT_EQ(count, 0u);
+            if (schemas != nullptr) {
+                for (uint32_t i = 0; i < count; ++i)
+                    free_device_schema(schemas[i]);
+                free(schemas);
+            }
+        } else {
+            EXPECT_EQ(reader.get_table_schema("test"), nullptr);
+        }
+        EXPECT_TRUE(source->failed);
+        source->fail_at = 0;
+        auto schema = reader.get_table_schema("test");
+        ASSERT_NE(schema, nullptr);
+        EXPECT_EQ(schema->get_table_name(), "test");
+    }
+}
+
+TEST_P(TableReadFailureTest, LegacyTagFactoriesReturnNullOnReadFailure) {
+    using Factory = TagFilterHandle (*)(TsFileReader, const char*, const char*,
+                                        const char*);
+    const Factory factories[] = {tsfile_tag_filter_eq, tsfile_tag_filter_neq,
+                                 tsfile_tag_filter_lt, tsfile_tag_filter_lteq,
+                                 tsfile_tag_filter_gt, tsfile_tag_filter_gteq};
+    for (auto factory : factories) {
+        storage::TsFileReader reader;
+        auto* source = new FailingReadFile(bytes_);
+        ASSERT_EQ(
+            reader.open(std::unique_ptr<storage::RandomAccessReadFile>(source)),
+            common::E_OK);
+        source->fail_at = source->reads + 1;
+        source->persistent = true;
+        TagFilterHandle filter = factory(&reader, "test", "id0", "d0");
+        EXPECT_EQ(filter, nullptr);
+        tsfile_tag_filter_free(filter);
+        EXPECT_TRUE(source->failed);
+        source->fail_at = 0;
+        filter = factory(&reader, "test", "id0", "d0");
+        ASSERT_NE(filter, nullptr);
+        tsfile_tag_filter_free(filter);
+    }
+}
+
+TEST_P(TableReadFailureTest, CheckedTagFactoriesPreserveMissingTableError) {
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                  new FailingReadFile(bytes_))),
+              common::E_OK);
+    TagFilterHandle filter = &reader;
+    EXPECT_EQ(tsfile_tag_filter_create_checked(&reader, "missing", "id0", "d0",
+                                               TAG_FILTER_EQ, &filter),
+              common::E_TABLE_NOT_EXIST);
+    ASSERT_EQ(filter, nullptr);
+    filter = &reader;
+    EXPECT_EQ(tsfile_tag_filter_between_checked(&reader, "missing", "id0", "d0",
+                                                "d1", false, &filter),
+              common::E_TABLE_NOT_EXIST);
+    ASSERT_EQ(filter, nullptr);
+
+    ERRNO code = common::E_OK;
+    EXPECT_EQ(tsfile_tag_filter_create(&reader, "missing", "id0", "d0",
+                                       TAG_FILTER_EQ, &code),
+              nullptr);
+    EXPECT_EQ(code, common::E_INVALID_ARG);
+    code = common::E_OK;
+    EXPECT_EQ(tsfile_tag_filter_between(&reader, "missing", "id0", "d0", "d1",
+                                        false, &code),
+              nullptr);
+    EXPECT_EQ(code, common::E_INVALID_ARG);
 }
 
 INSTANTIATE_TEST_SUITE_P(LeafAndInternalDeviceIndexes, TableReadFailureTest,

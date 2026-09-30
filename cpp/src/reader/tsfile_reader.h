@@ -256,6 +256,14 @@ class TsFileReader {
     TsFileProperties get_tsfile_properties();
 
     /**
+     * @brief Legacy lookup returning null on failure.
+     * Use the error-reporting overload to distinguish a missing table from
+     * a metadata read failure.
+     */
+    std::shared_ptr<TableSchema> get_table_schema(
+        const std::string& table_name);
+
+    /**
      * @brief Get the table schema by table name.
      *
      * @param table_name the table name

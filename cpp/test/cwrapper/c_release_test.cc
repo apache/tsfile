@@ -408,24 +408,46 @@ TEST_F(CReleaseTest, TsFileWriterConfTest) {
     TsFileReader reader = tsfile_reader_new("plain_file.tsfile", &err_no);
     ASSERT_EQ(RET_OK, err_no);
     ERRNO schema_error = RET_OK;
-    TableSchema* schema =
-        tsfile_reader_get_table_schema(reader, "plain_table", &schema_error);
+    TableSchema schema{};
+    schema_error =
+        tsfile_reader_get_table_schema_checked(reader, "plain_table", &schema);
     ASSERT_EQ(schema_error, RET_OK);
-    ASSERT_NE(schema, nullptr);
-    ASSERT_EQ(schema->column_num, 2);
+    ASSERT_EQ(schema.column_num, 2);
     uint32_t size = 0;
     ERRNO timeseries_schema_error = RET_OK;
-    DeviceSchema* device_schema = tsfile_reader_get_all_timeseries_schemas(
-        reader, &size, &timeseries_schema_error);
+    DeviceSchema* device_schema = nullptr;
+    timeseries_schema_error = tsfile_reader_get_all_timeseries_schemas_checked(
+        reader, &device_schema, &size);
     ASSERT_EQ(timeseries_schema_error, RET_OK);
     ASSERT_EQ(1, size);
     ASSERT_EQ(1, device_schema->timeseries_num);
     ASSERT_EQ(device_schema->timeseries_schema[0].encoding, TS_ENCODING_PLAIN);
     ASSERT_EQ(device_schema->timeseries_schema[0].compression,
               TS_COMPRESSION_UNCOMPRESSED);
+
+    TableSchema legacy_schema =
+        tsfile_reader_get_table_schema(reader, "plain_table");
+    ASSERT_EQ(legacy_schema.column_num, 2);
+    free_table_schema(legacy_schema);
+
+    uint32_t legacy_table_count = 0;
+    TableSchema* legacy_tables =
+        tsfile_reader_get_all_table_schemas(reader, &legacy_table_count);
+    ASSERT_EQ(legacy_table_count, 1);
+    ASSERT_NE(legacy_tables, nullptr);
+    free_table_schema(legacy_tables[0]);
+    free(legacy_tables);
+
+    uint32_t legacy_device_count = 0;
+    DeviceSchema* legacy_devices =
+        tsfile_reader_get_all_timeseries_schemas(reader, &legacy_device_count);
+    ASSERT_EQ(legacy_device_count, 1);
+    ASSERT_NE(legacy_devices, nullptr);
+    free_device_schema(legacy_devices[0]);
+    free(legacy_devices);
+
     tsfile_reader_close(reader);
-    free_table_schema(*schema);
-    free(schema);
+    free_table_schema(schema);
     free_device_schema(*device_schema);
     free(device_schema);
     free(column_list[0]);
