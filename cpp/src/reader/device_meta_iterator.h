@@ -77,7 +77,8 @@ class DeviceMetaIterator {
     int load_results_direct();
 
     TsFileIOReader* io_reader_;
-    // Roots are borrowed from file metadata; descendant nodes belong to pa_.
+    // The bool tracks ownership: roots borrowed from file metadata are false;
+    // descendants allocated in pa_ are true and need explicit destruction.
     std::queue<std::pair<MetaIndexNode*, bool>> meta_index_nodes_;
     std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>>
         result_cache_;

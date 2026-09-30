@@ -435,6 +435,14 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                 << error_code_message(schemas_ret) << "\n";
             return kExitFile;
         }
+        std::sort(
+            schemas.begin(), schemas.end(),
+            [](const std::shared_ptr<storage::TableSchema>& lhs,
+               const std::shared_ptr<storage::TableSchema>& rhs) {
+                if (!lhs) return false;
+                if (!rhs) return true;
+                return lhs->get_table_name() < rhs->get_table_name();
+            });
         if (schemas.empty() || !schemas[0]) {
             err << "Error: table '" << args.table << "' does not exist\n";
             return kExitUsage;

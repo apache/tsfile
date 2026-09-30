@@ -1,4 +1,55 @@
 -------------------------------- TsFile Sketch --------------------------------
 file path: tsfile_cli_empty_field_golden.tsfile
-model: table
+file length: 457
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of sensors.beijing.r1, num of Chunks:2
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] sensors.beijing.r1 size=20
+                  28|	[Chunk] of sensors.beijing.r1., startTime: 1000 endTime: 2000 count: 2
+                  28|		[Chunk Header] marker=-123, measurementID=, dataSize=21, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                  34|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:19
+                  36|			[Page Data]  Size:19
+                  55|	[Chunk] of sensors.beijing.r1.temp, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                  55|		[Chunk Header] marker=69, measurementID=temp, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=10
+                  65|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                  67|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of sensors.beijing.r1 ends
+                  89|	[marker] 2
+                  90|	[TimeseriesMetadata] of sensors.beijing.r1., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 1000 endTime: 2000 count: 2
+                 111|		[ChunkMetadata] offset=28, size=8
+                 119|	[TimeseriesMetadata] of sensors.beijing.r1.temp, tsDataType:DOUBLE, sizeWithoutChunkMetadata:65, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                 184|		[ChunkMetadata] offset=55, size=8
+                 192|	[MetadataIndexNode]
+                 192|		 childrenCnt=1
+                 193|		<, 90>
+                 202|		endOffset=192
+                 210|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                 211|	TableIndexRootCnt=1
+                 215|	[Table Name] sensors, size=11
+                 226|	[MetadataIndexNode]
+                 226|		 childrenCnt=1
+                 227|		<sensors.beijing.r1, 192>
+                 255|		endOffset=211
+                 263|		nodeType=LEAF_DEVICE
+                 264|	TableSchemaCnt=1
+                 268|	[TableSchema] TableSchema{tableName='sensors', columnSchemas=[[site,STRING,PLAIN,,UNCOMPRESSED], [room,STRING,PLAIN,,UNCOMPRESSED], [temp,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, FIELD]}, size=58
+                 337|	[Meta Offset] 89
+                 345|	[Bloom Filter Size] bit vector byte array length=325
+                 349|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                 447|	[TsFileMetadataSize] 236
+                 451|	[magic tail] TsFile
+                 457|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+sensors
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[sensors.beijing.r1,192]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,90]
 ---------------------------------- TsFile Sketch End ----------------------------------
