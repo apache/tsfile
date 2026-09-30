@@ -57,7 +57,8 @@ namespace {
 
 struct CsvCell {
     std::string value;
-    bool quoted;
+    bool quoted = false;
+    bool leading_backslash_escaped = false;
 };
 
 struct DataRow {
@@ -395,7 +396,18 @@ std::vector<CsvCell> split_csv_cells(const std::string& line, char delim,
 }
 
 bool is_csv_null(const CsvCell& cell) {
-    return !cell.quoted && cell.value == "\\N";
+    return !cell.quoted && !cell.leading_backslash_escaped &&
+           cell.value == "\\N";
+}
+
+void unescape_csv_text(CsvCell& cell) {
+    if (is_csv_null(cell) || cell.value.size() < 2 || cell.value[0] != '\\' ||
+        cell.value[1] != '\\') {
+        return;
+    }
+    cell.value.erase(0, 1);
+    // The decoded literal \N must not be mistaken for a NULL marker.
+    cell.leading_backslash_escaped = true;
 }
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
@@ -721,6 +733,10 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
         r.cells.resize(columns.size());
         for (size_t j = 0; j < columns.size(); ++j) {
             r.cells[j] = fields[field_indexes[j]];
+            if (columns[j].type == common::STRING ||
+                columns[j].type == common::TEXT) {
+                unescape_csv_text(r.cells[j]);
+            }
         }
 
         std::string device_key;

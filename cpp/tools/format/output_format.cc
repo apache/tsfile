@@ -454,6 +454,10 @@ bool RowWriter::write(const std::vector<std::string>& cells,
         const std::string cell = format_cell(type, cells[i]);
         if (fmt_ == OutputFormat::kCsv && cell.empty()) {
             out_ << "\"\"";
+        } else if (fmt_ == OutputFormat::kCsv &&
+                   (type == common::STRING || type == common::TEXT) &&
+                   !cell.empty() && cell[0] == '\\') {
+            out_ << csv_escape(std::string(1, '\\') + cell);
         } else {
             out_ << (fmt_ == OutputFormat::kCsv ? csv_escape(cell) : cell);
         }

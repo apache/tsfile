@@ -1624,3 +1624,84 @@ TEST(CliE2E, WriteDistinguishesCsvNullAndEmptyString) {
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
 }
+
+TEST(CliE2E, WriteCatCsvWritePreservesLeadingBackslashes) {
+    const std::string input =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_slash_input", ".csv");
+    const std::string first =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_slash_first", ".tsfile");
+    const std::string exported =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_slash_export", ".csv");
+    const std::string second =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_slash_second", ".tsfile");
+    {
+        std::ofstream csv(input.c_str(), std::ios::binary);
+        ASSERT_TRUE(csv.good());
+        csv << R"csv(time,site,note
+1000,s1,\N
+2000,s1,"\N"
+3000,s1,\leading
+4000,s1,back\slash
+5000,s1,"\with,comma"
+6000,\site,tag\end
+7000,\\site,\\N
+)csv";
+    }
+    const auto write = [&](const std::string& source,
+                           const std::string& target) {
+        std::ostringstream out, err;
+        int code = tsfile_cli::run_cli(
+            {"write", "--table", "t", "--tag", "site", "STRING", "--field",
+             "note", "TEXT", "-i", source, "-o", target},
+            out, err);
+        EXPECT_EQ(code, 0) << err.str();
+        return code;
+    };
+    ASSERT_EQ(write(input, first), 0);
+
+    std::ostringstream before, before_err, csv_out, csv_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-t", "t", "-f", "ndjson", first},
+                                  before, before_err),
+              0)
+        << before_err.str();
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-t", "t", "-f", "csv", first},
+                                  csv_out, csv_err),
+              0)
+        << csv_err.str();
+    const std::string csv = csv_out.str();
+    EXPECT_NE(csv.find(R"csv(1000,s1,\N
+)csv"),
+              std::string::npos);
+    EXPECT_NE(csv.find(R"csv(2000,s1,\\N
+)csv"),
+              std::string::npos);
+    EXPECT_NE(csv.find(R"csv(3000,s1,\\leading
+)csv"),
+              std::string::npos);
+    EXPECT_NE(csv.find(R"csv(4000,s1,back\slash
+)csv"),
+              std::string::npos);
+    EXPECT_NE(csv.find(R"csv(5000,s1,"\\with,comma"
+)csv"),
+              std::string::npos);
+    EXPECT_NE(csv.find(R"csv(6000,\\site,tag\end
+)csv"),
+              std::string::npos);
+    {
+        std::ofstream file(exported.c_str(), std::ios::binary);
+        ASSERT_TRUE(file.good());
+        file << csv;
+    }
+    ASSERT_EQ(write(exported, second), 0);
+    std::ostringstream after, after_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"cat", "-t", "t", "-f", "ndjson", second},
+                                  after, after_err),
+              0)
+        << after_err.str();
+    EXPECT_EQ(before.str(), after.str());
+
+    std::remove(input.c_str());
+    std::remove(first.c_str());
+    std::remove(exported.c_str());
+    std::remove(second.c_str());
+}

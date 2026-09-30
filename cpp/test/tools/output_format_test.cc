@@ -264,3 +264,16 @@ TEST(RowWriterTest, ReportsFlushFailure) {
     ASSERT_TRUE(writer.write({"value"}, {false}));
     EXPECT_FALSE(writer.finish());
 }
+
+TEST(RowWriterTest, CsvEscapesLeadingBackslashesOnlyInTextValues) {
+    std::ostringstream out;
+    RowWriter writer(out, OutputFormat::kCsv, {R"(\header)", "note"},
+                     {common::STRING, common::TEXT}, false);
+    writer.write({R"(\N)", R"(\a,b)"}, {false, false});
+    writer.write({R"(back\slash)", ""}, {false, true});
+    ASSERT_TRUE(writer.finish());
+    EXPECT_EQ(out.str(), R"csv(\header,note
+\\N,"\\a,b"
+back\slash,\N
+)csv");
+}
