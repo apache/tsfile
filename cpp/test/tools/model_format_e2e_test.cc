@@ -493,6 +493,24 @@ TEST(IndependentFixtures, EmptyTreeAndInputFailuresHaveExactDiagnostics) {
         expect_cli_exact(input_args(command, "."), 2, "",
                          "Error: cannot open .: invalid path (code 37)\n");
     }
+#ifndef _WIN32
+    // A FIFO (named pipe) is a special file, not a TsFile.  POSIX
+    // open(O_RDONLY) would otherwise block until a writer appears, so the
+    // reader must preflight the file type and fail fast with the same stable
+    // diagnostic instead of hanging.
+    {
+        const std::string fifo = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_fifo_input", ".tsfile");
+        ASSERT_EQ(mkfifo(fifo.c_str(), 0600), 0);
+        for (const std::string& command : commands) {
+            std::remove("tsfile_cli_input_error.csv");
+            expect_cli_exact(
+                input_args(command, fifo), 2, "",
+                "Error: cannot open " + fifo + ": invalid path (code 37)\n");
+        }
+        std::remove(fifo.c_str());
+    }
+#endif
     std::remove("tsfile_cli_input_error.csv");
 }
 
