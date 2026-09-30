@@ -508,7 +508,8 @@ RestorableTsFileIOWriter::RestorableTsFileIOWriter()
       write_file_owned_(false),
       truncated_size_(-1),
       crashed_(false),
-      can_write_(false) {
+      can_write_(false),
+      append_on_complete_(false) {
     self_check_arena_.init(512, MOD_TSFILE_READER);
 }
 
@@ -535,13 +536,9 @@ void RestorableTsFileIOWriter::close() {
     self_check_arena_.destroy();
 }
 
-int RestorableTsFileIOWriter::open(const std::string& file_path,
-                                   bool truncate_corrupted) {
-    if (write_file_ != nullptr) {
-        return E_ALREADY_EXIST;
-    }
-
+int RestorableTsFileIOWriter::open_write_file(const std::string& file_path) {
     file_path_ = file_path;
+    append_on_complete_ = false;
     write_file_ = new WriteFile();
     write_file_owned_ = true;
 
@@ -553,13 +550,22 @@ int RestorableTsFileIOWriter::open(const std::string& file_path,
 #endif
     const mode_t mode = 0644;
 
-    int ret = write_file_->create(file_path_, flags, mode);
+    return write_file_->create(file_path_, flags, mode);
+}
+
+int RestorableTsFileIOWriter::open(const std::string& file_path,
+                                   bool truncate_corrupted) {
+    if (write_file_ != nullptr) {
+        return E_ALREADY_EXIST;
+    }
+
+    int ret = open_write_file(file_path);
     if (ret != E_OK) {
         close();
         return ret;
     }
 
-    ret = self_check(truncate_corrupted);
+    ret = self_check(truncate_corrupted, kSalvage);
     if (ret != E_OK) {
         close();
         return ret;
@@ -568,7 +574,78 @@ int RestorableTsFileIOWriter::open(const std::string& file_path,
     return E_OK;
 }
 
-int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
+int RestorableTsFileIOWriter::open_for_append(const std::string& file_path) {
+    if (write_file_ != nullptr) {
+        return E_ALREADY_EXIST;
+    }
+
+    int ret = open_write_file(file_path);
+    if (ret != E_OK) {
+        close();
+        return ret;
+    }
+
+    // A file that never got a footer has to go through the salvage path to
+    // become writable at all, so trimming an unreadable tail is not optional
+    // here even though the caller asked to append.
+    ret = self_check(true, kAppend);
+    if (ret != E_OK) {
+        close();
+        return ret;
+    }
+
+    return E_OK;
+}
+
+int RestorableTsFileIOWriter::adopt_recovered_file(
+    int64_t truncate_to, bool salvage_happened,
+    const std::vector<ChunkGroupMeta*>& recovered_cgm_list) {
+    // truncate_to is -1 when the caller decided the file's length already is
+    // right: recovery without truncation, or nothing to remove.
+    if (truncate_to >= 0) {
+        int ret = write_file_->truncate(truncate_to);
+        if (ret != E_OK) {
+            return ret;
+        }
+    }
+
+    if (write_file_->seek_to_end() != E_OK) {
+        return E_FILE_READ_ERR;
+    }
+
+    // Only now is the file really writable, and only now is it known whether
+    // anything was lost: a caller that reads has_crashed() to decide whether it
+    // needs to look for missing data must not be told a clean append crashed.
+    crashed_ = salvage_happened;
+    can_write_ = true;
+
+    int ret = init(write_file_);
+    if (ret != E_OK) {
+        return ret;
+    }
+
+    // --- Restore write_stream_ logical position from existing file size ---
+    const int64_t restored_size = write_file_->get_position();
+    if (restored_size > 0) {
+        ret = restore_recovered_file_position(restored_size);
+        if (ret != E_OK) {
+            return ret;
+        }
+    }
+
+    // Attach recovered ChunkGroupMeta entries to the base writer.  These
+    // live in self_check_arena_ and are *not* tracked in
+    // appended_chunk_group_metas_ — base destroy() leaves them alone, and
+    // close() resets their device_id_ refs before tearing down the arena.
+    for (ChunkGroupMeta* cgm : recovered_cgm_list) {
+        push_chunk_group_meta(cgm);
+    }
+
+    return E_OK;
+}
+
+int RestorableTsFileIOWriter::self_check(bool truncate_corrupted,
+                                         CheckMode mode) {
     SelfCheckReader reader;
     // Use a separate read-only handle for self-check: on Windows, sharing the
     // O_RDWR fd can cause stale/cached reads when detecting a complete file.
@@ -641,17 +718,60 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         }
     }
 
-    // --- File is complete: no recovery, close write handle and return ---
+    // The scan walks the chunk region. For a file that was written but never
+    // closed that region ends at the end of the file; for a closed file being
+    // opened for append it ends where its metadata tail begins, so that the
+    // scan never reads metadata bytes as if they were chunks.
+    int64_t scan_limit = file_size;
+    int64_t metadata_start = -1;
+    // True when the file carries a footer and the caller asked to append, so
+    // the footer's metadata body is what gets discarded below.
+    bool trim_tail = false;
+
+    // --- File is complete ---
     if (is_complete) {
-        reader.close();
-        truncated_size_ = TSFILE_CHECK_COMPLETE;
-        crashed_ = false;
-        can_write_ = false;
-        write_file_->close();
-        delete write_file_;
-        write_file_ = nullptr;
-        write_file_owned_ = false;
-        return E_OK;
+        if (mode == kSalvage) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_COMPLETE;
+            crashed_ = false;
+            can_write_ = false;
+            write_file_->close();
+            delete write_file_;
+            write_file_ = nullptr;
+            write_file_owned_ = false;
+            return E_OK;
+        }
+
+        // Appending: the footer says how long the metadata body is, so the tail
+        // to discard starts one byte before it, at the separator the writer
+        // put down. Like Java's append helper, the byte there is not inspected
+        // — only its offset is used as the cut.
+        const int64_t tail_len = MAGIC_STRING_TSFILE_LEN + 4;  // magic + i32
+        char size_buf[4];
+        ret = reader.read(static_cast<int32_t>(file_size - tail_len), size_buf,
+                          4, read_len);
+        if (ret != E_OK || read_len != 4) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        const uint32_t meta_size =
+            common::SerializationUtil::read_ui32(size_buf);
+        if (meta_size == 0 || static_cast<int64_t>(meta_size) + tail_len + 1 >
+                                  static_cast<int64_t>(file_size)) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        metadata_start =
+            static_cast<int64_t>(file_size) - tail_len - meta_size - 1;
+        if (metadata_start < HEADER_LEN) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        scan_limit = metadata_start;
+        trim_tail = true;
     }
 
     // --- Recovery path: scan from header to find last valid truncation point
@@ -678,7 +798,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         }
     };
 
-    while (pos < file_size) {
+    while (pos < scan_limit) {
         unsigned char marker;
         ret = reader.read(static_cast<int32_t>(pos),
                           reinterpret_cast<char*>(&marker), 1, read_len);
@@ -722,7 +842,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
             truncated = pos - 1;
             flush_chunk_group();
             cur_device_id.reset();
-            if (pos + 2 * 8 > static_cast<int64_t>(file_size)) {
+            if (pos + 2 * 8 > scan_limit) {
                 break;
             }
             char range_buf[16];
@@ -773,8 +893,8 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                 if (chdr.data_size_ > 0) {
                     const int32_t header_len =
                         static_cast<int32_t>(consumed) - chdr.data_size_;
-                    if (header_len > 0 && chunk_start + consumed <=
-                                              static_cast<int64_t>(file_size)) {
+                    if (header_len > 0 &&
+                        chunk_start + consumed <= scan_limit) {
                         std::vector<char> chunk_data(chdr.data_size_);
                         int32_t read_len = 0;
                         ret = reader.read(
@@ -789,6 +909,13 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                         if (ret != E_OK) {
                             break;
                         }
+                    } else if (mode == kAppend) {
+                        // Salvage is content to record a chunk it cannot decode
+                        // and leave its statistics empty. Appending is not:
+                        // those statistics are what the footer this call
+                        // regenerates will claim the file holds.
+                        ret = E_TSFILE_CORRUPTED;
+                        break;
                     }
                 }
                 cm->init(mname,
@@ -820,46 +947,32 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     flush_chunk_group();
     get_schema()->finalize_table_schemas();
     reader.close();
+
+    if (trim_tail) {
+        // This region came from a file that was closed normally, so the scan
+        // had to consume it exactly. Stopping anywhere short of the footer
+        // means a chunk in it could not be read back, and cutting where the
+        // scan gave up would discard data that is still valid — the opposite of
+        // what an append is for. Refuse, and leave the file byte-identical.
+        if (ret != E_OK) {
+            return ret;
+        }
+        if (truncated != metadata_start) {
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        truncated_size_ = static_cast<int64_t>(file_size) - metadata_start;
+        append_on_complete_ = true;
+        return adopt_recovered_file(metadata_start, false, recovered_cgm_list);
+    }
+
     truncated_size_ = truncated;
 
     // --- Optionally truncate file to last valid offset ---
-    if (truncate_corrupted && truncated < static_cast<int64_t>(file_size)) {
-        ret = write_file_->truncate(truncated);
-        if (ret != E_OK) {
-            return ret;
-        }
-    }
-
-    if (write_file_->seek_to_end() != E_OK) {
-        return E_FILE_READ_ERR;
-    }
-
-    crashed_ = true;
-    can_write_ = true;
-
-    ret = init(write_file_);
-    if (ret != E_OK) {
-        return ret;
-    }
-
-    // --- Restore write_stream_ logical position from existing file size ---
-    const int64_t restored_size = write_file_->get_position();
-    if (restored_size > 0) {
-        ret = restore_recovered_file_position(restored_size);
-        if (ret != E_OK) {
-            return ret;
-        }
-    }
-
-    // Attach recovered ChunkGroupMeta entries to the base writer.  These
-    // live in self_check_arena_ and are *not* tracked in
-    // appended_chunk_group_metas_ — base destroy() leaves them alone, and
-    // close() resets their device_id_ refs before tearing down the arena.
-    for (ChunkGroupMeta* cgm : recovered_cgm_list) {
-        push_chunk_group_meta(cgm);
-    }
-
-    return E_OK;
+    const bool do_truncate =
+        truncate_corrupted && truncated < static_cast<int64_t>(file_size);
+    return adopt_recovered_file(do_truncate ? truncated : -1, true,
+                                recovered_cgm_list);
 }
 
 bool RestorableTsFileIOWriter::is_device_aligned(
