@@ -391,8 +391,10 @@ cdef class TsFileReaderPy:
         """
         cdef ResultSet result
         cdef TagFilterHandle c_tag_filter = NULL
+        pyresult = ResultSetPy(self)
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        pyresult._tag_filter_handle = c_tag_filter
         if batch_size <= 0:
             result = tsfile_reader_query_table_with_tag_filter_c(
                 self.reader, table_name.lower(),
@@ -403,8 +405,6 @@ cdef class TsFileReaderPy:
                 self.reader, table_name.lower(),
                 [column_name.lower() for column_name in column_names],
                 start_time, end_time, c_tag_filter, batch_size)
-        pyresult = ResultSetPy(self)
-        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
@@ -494,13 +494,13 @@ cdef class TsFileReaderPy:
         """
         cdef ResultSet result
         cdef TagFilterHandle c_tag_filter = NULL
+        pyresult = ResultSetPy(self)
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        pyresult._tag_filter_handle = c_tag_filter
         result = tsfile_reader_query_table_by_row_c(self.reader, table_name.lower(),
                                                       [column_name.lower() for column_name in column_names],
                                                       offset, limit, c_tag_filter, batch_size)
-        pyresult = ResultSetPy(self)
-        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult

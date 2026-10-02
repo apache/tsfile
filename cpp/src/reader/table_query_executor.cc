@@ -28,7 +28,11 @@ int TableQueryExecutor::query(const std::string& table_name,
                               Filter* field_filter, ResultSet*& ret_qds) {
     int ret = common::E_OK;
     TsFileMeta* file_metadata = nullptr;
-    file_metadata = tsfile_io_reader_->get_tsfile_meta();
+    ret_qds = nullptr;
+    if (RET_FAIL(tsfile_io_reader_->get_tsfile_meta(file_metadata))) {
+        delete time_filter;
+        return ret;
+    }
     common::PageArena pa;
     pa.init(512, common::MOD_TSFILE_READER);
     MetaIndexNode* table_root = nullptr;
@@ -98,7 +102,11 @@ int TableQueryExecutor::query(const std::string& table_name,
                               ResultSet*& ret_qds) {
     int ret = common::E_OK;
     TsFileMeta* file_metadata = nullptr;
-    file_metadata = tsfile_io_reader_->get_tsfile_meta();
+    ret_qds = nullptr;
+    if (RET_FAIL(tsfile_io_reader_->get_tsfile_meta(file_metadata))) {
+        delete time_filter;
+        return ret;
+    }
     common::PageArena pa;
     pa.init(512, common::MOD_TSFILE_READER);
     MetaIndexNode* table_root = nullptr;
@@ -165,13 +173,20 @@ int TableQueryExecutor::query_on_tree(
     common::PageArena pa;
     pa.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;
-    TsFileMeta* file_meta = tsfile_io_reader_->get_tsfile_meta();
+    ret_qds = nullptr;
+    TsFileMeta* file_meta = nullptr;
+    if (RET_FAIL(tsfile_io_reader_->get_tsfile_meta(file_meta))) {
+        delete time_filter;
+        return ret;
+    }
     std::unordered_set<MetaIndexNode*> table_inodes;
     for (auto const& device : devices) {
-        MetaIndexNode* table_inode;
+        MetaIndexNode* table_inode = nullptr;
         if (RET_FAIL(file_meta->get_table_metaindex_node(
                 device->get_table_name(), table_inode))) {
-        };
+            delete time_filter;
+            return ret;
+        }
         table_inodes.insert(table_inode);
     }
 

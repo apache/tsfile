@@ -371,20 +371,29 @@ int collect_table_stats(const ParsedArgs& args,
         summary.entity_order.push_back(key);
     }
 
-    bool missing_value_statistics = false;
+    // A row count is required to derive a numeric null_count.  It comes
+    // either from the entity timeline statistic or, when that statistic is
+    // absent/unreliable, from a row scan.  Trigger the scan whenever any
+    // entity still lacks a timeline (even if every selected field carries a
+    // value statistic), otherwise null_count would stay empty.
+    bool need_scan = false;
     for (const std::string& key : summary.entity_order) {
         const auto it = summary.entities.find(key);
         if (it == summary.entities.end()) continue;
+        if (!it->second.has_timeline_statistic) {
+            need_scan = true;
+            break;
+        }
         for (size_t index : summary.field_indexes) {
             const std::string& field = summary.columns[index].name;
             if (it->second.fields.find(field) == it->second.fields.end()) {
-                missing_value_statistics = true;
+                need_scan = true;
                 break;
             }
         }
-        if (missing_value_statistics) break;
+        if (need_scan) break;
     }
-    if (missing_value_statistics && !devices.empty()) {
+    if (need_scan && !devices.empty()) {
         std::vector<std::string> query_columns;
         std::vector<uint32_t> tag_result_indexes;
         for (size_t i = 0; i < measurements.size(); ++i) {
@@ -415,14 +424,38 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                     OutputFormat fmt, std::ostream& out, std::ostream& err) {
     std::vector<std::shared_ptr<storage::TableSchema>> schemas;
     if (!args.table.empty()) {
-        schemas.push_back(
-            reader.get_table_schema(storage::to_lower(args.table)));
+        std::shared_ptr<storage::TableSchema> schema;
+        const int schema_ret =
+            reader.get_table_schema(storage::to_lower(args.table), schema);
+        if (schema_ret != common::E_OK) {
+            if (schema_ret == common::E_TABLE_NOT_EXIST) {
+                err << "Error: table '" << args.table << "' does not exist\n";
+                return kExitUsage;
+            }
+            err << "Error: failed to read schema for table '" << args.table
+                << "': " << error_code_message(schema_ret) << "\n";
+            return kExitFile;
+        }
+        schemas.push_back(schema);
     } else {
-        schemas = sorted_table_schemas(reader);
-    }
-    if (schemas.empty() || !schemas[0]) {
-        err << "Error: table '" << args.table << "' does not exist\n";
-        return kExitUsage;
+        const int schemas_ret = reader.get_all_table_schemas(schemas);
+        if (schemas_ret != common::E_OK) {
+            err << "Error: failed to read table schemas: "
+                << error_code_message(schemas_ret) << "\n";
+            return kExitFile;
+        }
+        std::sort(
+            schemas.begin(), schemas.end(),
+            [](const std::shared_ptr<storage::TableSchema>& lhs,
+               const std::shared_ptr<storage::TableSchema>& rhs) {
+                if (!lhs) return false;
+                if (!rhs) return true;
+                return lhs->get_table_name() < rhs->get_table_name();
+            });
+        if (schemas.empty() || !schemas[0]) {
+            err << "Error: table '" << args.table << "' does not exist\n";
+            return kExitUsage;
+        }
     }
 
     if (args.table.empty()) {

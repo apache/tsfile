@@ -757,19 +757,24 @@ func copyTableSchemaFromC(schema *C.TableSchema) TableSchema {
 func (h *readerHandle) tableSchema(table string) (TableSchema, error) {
 	tableName := cStringPtr(table)
 	defer freeCString(tableName)
+	var code C.ERRNO
 	var native C.TableSchema
-	code := C.tsfile_reader_get_table_schema_checked(C.TsFileReader(h.ptr), tableName, &native)
+	code = C.tsfile_reader_get_table_schema_checked(
+		C.TsFileReader(h.ptr), tableName, &native)
 	if code != C.RET_OK {
 		return TableSchema{}, newError("get table schema", cerrno(code))
 	}
-	defer C.free_table_schema(native)
-	return copyTableSchemaFromC(&native), nil
+	result := copyTableSchemaFromC(&native)
+	C.free_table_schema(native)
+	return result, nil
 }
 
 func (h *readerHandle) allTableSchemas() ([]TableSchema, error) {
 	var native *C.TableSchema
 	var count C.uint32_t
-	code := C.tsfile_reader_get_all_table_schemas_checked(C.TsFileReader(h.ptr), &native, &count)
+	var code C.ERRNO
+	code = C.tsfile_reader_get_all_table_schemas_checked(
+		C.TsFileReader(h.ptr), &native, &count)
 	if code != C.RET_OK {
 		return nil, newError("get all table schemas", cerrno(code))
 	}
