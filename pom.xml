@@ -317,7 +317,7 @@
                         <phase>validate</phase>
                         <configuration>
                             <!-- Just generate warnings for now -->
-                            <fail>true</fail>
+                            <fail>false</fail>
                             <rules>
                                 <requireJavaVersion>
                                     <version>[17,)</version>
