@@ -493,6 +493,65 @@ TEST_F(TsFileReaderTest, ReadsThroughRandomAccessReadFile) {
     reader.close();
 }
 
+TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
+    const size_t capacity = TsFileIOReader::TEST_device_node_cache_capacity();
+    const size_t device_count = capacity + 8;
+    const std::string measurement = "value";
+
+    for (size_t i = 0; i < device_count; ++i) {
+        const std::string device = "root.cache.d" + std::to_string(i);
+        ASSERT_EQ(tsfile_writer_->register_timeseries(
+                      device, MeasurementSchema(measurement, INT32, PLAIN,
+                                                UNCOMPRESSED)),
+                  E_OK);
+        TsRecord record(static_cast<int64_t>(i), device);
+        record.add_point(measurement, static_cast<int32_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+
+    auto load_device = [&](size_t i) {
+        const std::string device = "root.cache.d" + std::to_string(i);
+        auto device_id = std::make_shared<StringArrayDeviceID>(device);
+        TsFileSeriesScanIterator* ssi = nullptr;
+        ASSERT_EQ(io_reader.alloc_ssi(device_id, measurement, ssi, pa), E_OK);
+        ASSERT_NE(ssi, nullptr);
+        io_reader.revert_ssi(ssi);
+        pa.reset();
+        EXPECT_LE(io_reader.TEST_device_node_cache_size(), capacity);
+    };
+
+    for (size_t i = 0; i < capacity; ++i) {
+        load_device(i);
+    }
+    ASSERT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+    const int64_t memory_at_capacity =
+        ModStat::get_instance().get_stat(MOD_TSFILE_READER);
+    ASSERT_GT(memory_at_capacity, 0);
+
+    // Filling beyond capacity must evict old nodes and reclaim their per-entry
+    // arenas rather than retaining more reader metadata memory.
+    for (size_t i = capacity; i < device_count; ++i) {
+        load_device(i);
+    }
+    EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+    EXPECT_EQ(ModStat::get_instance().get_stat(MOD_TSFILE_READER),
+              memory_at_capacity);
+
+    // d0 was the least-recently-used entry and has been evicted. Loading it
+    // again must still work, evict another entry, and keep memory flat.
+    load_device(0);
+    EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+    EXPECT_EQ(ModStat::get_instance().get_stat(MOD_TSFILE_READER),
+              memory_at_capacity);
+}
+
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";

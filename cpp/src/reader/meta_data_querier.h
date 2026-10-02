@@ -20,9 +20,6 @@
 #ifndef READER_META_DATA_QUERIER_H
 #define READER_META_DATA_QUERIER_H
 
-#include <mutex>
-
-#include "common/cache/lru_cache.h"
 #include "common/device_id.h"
 #include "device_meta_iterator.h"
 #include "file/tsfile_io_reader.h"
@@ -32,8 +29,6 @@ namespace storage {
 
 class MetadataQuerier : public IMetadataQuerier {
    public:
-    static constexpr int CACHED_ENTRY_NUMBER = 1000;
-
     enum class LocateStatus { BEFORE, IN, AFTER };
 
     explicit MetadataQuerier(TsFileIOReader* tsfile_io_reader);
@@ -71,11 +66,6 @@ class MetadataQuerier : public IMetadataQuerier {
    private:
     TsFileIOReader* io_reader_;
     TsFileMeta* file_metadata_;
-    std::unique_ptr<
-        common::Cache<std::string, /*Todo std::pair<IDeviceID, std::string>*/
-                      std::vector<std::shared_ptr<ChunkMeta>>, std::mutex>>
-        device_chunk_meta_cache_;
-
     int load_chunk_meta(const std::pair<IDeviceID, std::string>& key,
                         std::vector<ChunkMeta*>& chunk_meta_list);
 
