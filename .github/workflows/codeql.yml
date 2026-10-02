@@ -93,7 +93,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4.37.9
+      uses: github/codeql-action/init@v4.38.2
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
@@ -111,6 +111,6 @@ jobs:
         .\mvnw.cmd clean package -P with-cpp -Denable.lzma2=ON
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4.37.9
+      uses: github/codeql-action/analyze@v4.38.2
       with:
         category: "/language:${{matrix.language}}"
