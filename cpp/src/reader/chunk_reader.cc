@@ -153,7 +153,7 @@ int ChunkReader::alloc_compressor_and_value_decoder(
     // fall through DecoderFactory and be reported as an allocation failure.
     // Distinguish malformed file metadata from a genuine OOM before creating
     // any decoder object.
-    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+    if (encoding < common::PLAIN || encoding > common::ALP) {
         return E_TSFILE_CORRUPTED;
     }
     if (value_decoder_ != nullptr) {

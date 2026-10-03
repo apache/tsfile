@@ -128,6 +128,7 @@ cdef dict TS_ENCODING_MAP = {
     TSEncodingPy.SPRINTZ: TSEncoding.TS_ENCODING_SPRINTZ,
     TSEncodingPy.RLBE: TSEncoding.TS_ENCODING_RLBE,
     TSEncodingPy.CAMEL: TSEncoding.TS_ENCODING_CAMEL,
+    TSEncodingPy.ALP: TSEncoding.TS_ENCODING_ALP,
 }
 
 cdef dict COMPRESSION_TYPE_MAP = {
