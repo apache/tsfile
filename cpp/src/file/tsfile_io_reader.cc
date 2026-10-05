@@ -24,6 +24,9 @@
 #include "common/allocator/alloc_base.h"
 #include "file/local_random_access_read_file.h"
 #include "reader/prepared_series.h"
+#ifdef ENABLE_TEST
+#include "utils/injection.h"
+#endif
 
 using namespace common;
 
@@ -409,6 +412,26 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
                    meta_index_entry->get_offset(), end_offset,
                    timeseries_indexs, pa))) {
     }
+#ifdef ENABLE_TEST
+    // Simulate incomplete footer metadata without altering the query path.
+    if (IS_SUCC(ret)) {
+        for (ITimeseriesIndex*& index : timeseries_indexs) {
+            auto* aligned = dynamic_cast<AlignedTimeseriesIndex*>(index);
+            if (aligned == nullptr || aligned->time_ts_idx_ == nullptr) {
+                continue;
+            }
+            DBUG_EXECUTE_IF("table_metadata_missing_timeline",
+                            index = aligned->value_ts_idx_;);
+            Statistic* statistic = aligned->time_ts_idx_->get_statistic();
+            if (statistic != nullptr) {
+                DBUG_EXECUTE_IF("table_metadata_zero_timeline",
+                                statistic->count_ = 0;);
+                DBUG_EXECUTE_IF("table_metadata_short_timeline",
+                                statistic->count_ = 1;);
+            }
+        }
+    }
+#endif
     return ret;
 }
 

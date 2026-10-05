@@ -26,6 +26,7 @@
 
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
+#include "utils/injection.h"
 
 namespace {
 
@@ -57,6 +58,32 @@ struct SparseTreeFixture {
 struct DisjointTreeFixture {
     std::string path = tsfile_cli_test::write_disjoint_tree_fixture();
     ~DisjointTreeFixture() { std::remove(path.c_str()); }
+};
+
+class InjectionGuard {
+   public:
+    explicit InjectionGuard(const char* point) : point_(point) {
+        if (point_ != nullptr) common::enable_injection(point_, 0);
+    }
+    ~InjectionGuard() {
+        if (point_ != nullptr) common::disable_injection(point_);
+    }
+
+   private:
+    const char* point_;
+};
+
+class TableStatsTimelineTest : public ::testing::TestWithParam<int> {
+   protected:
+    std::string csv_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".csv");
+    std::string out_path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".tsfile");
+
+    void TearDown() override {
+        std::remove(csv_path.c_str());
+        std::remove(out_path.c_str());
+    }
 };
 
 class FlushFailingStreamBuf : public std::stringbuf {
@@ -170,15 +197,10 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
         << out.str();
 }
 
-TEST(CliE2E, StatsReportsNumericNullCountForTableFields) {
-    // A FIELD whose value statistic is present but whose entity timeline
-    // statistic is unavailable must still get a numeric null_count by
-    // scanning (TsFile-143): null_count previously stayed empty even though
-    // the field's non-null count was known.
-    const std::string csv_path =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".csv");
-    const std::string out_path =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".tsfile");
+TEST_P(TableStatsTimelineTest, StatsReportsNumericNullCountForTableFields) {
+    // -1 removes the timeline; 0 and 1 undercount its two rows. In each case,
+    // the field statistics remain available and scanning must recover the
+    // actual row counts. A count of 2 exercises the intact footer path.
     {
         std::ofstream csv(csv_path.c_str(), std::ios::binary);
         ASSERT_TRUE(csv.good());
@@ -197,22 +219,65 @@ TEST(CliE2E, StatsReportsNumericNullCountForTableFields) {
         0)
         << werr.str();
 
+    const char* injection = nullptr;
+    if (GetParam() == -1) {
+        injection = "table_metadata_missing_timeline";
+    } else if (GetParam() == 0) {
+        injection = "table_metadata_zero_timeline";
+    } else if (GetParam() == 1) {
+        injection = "table_metadata_short_timeline";
+    }
+    InjectionGuard guard(injection);
+    {
+        storage::TsFileReader reader;
+        ASSERT_EQ(reader.open(out_path), common::E_OK);
+        auto metadata =
+            reader.get_timeseries_metadata(reader.get_all_devices("sensors"));
+        ASSERT_EQ(metadata.size(), 2);
+        for (const auto& device : metadata) {
+            ASSERT_EQ(device.second.size(), 2);
+            for (const auto& index : device.second) {
+                auto* aligned =
+                    dynamic_cast<storage::AlignedTimeseriesIndex*>(index.get());
+                storage::ITimeseriesIndex* value_index = index.get();
+                if (GetParam() == -1) {
+                    ASSERT_EQ(aligned, nullptr);
+                } else {
+                    ASSERT_NE(aligned, nullptr);
+                    ASSERT_NE(aligned->time_ts_idx_, nullptr);
+                    ASSERT_NE(aligned->time_ts_idx_->get_statistic(), nullptr);
+                    ASSERT_EQ(
+                        aligned->time_ts_idx_->get_statistic()->get_count(),
+                        GetParam());
+                    value_index = aligned->value_ts_idx_;
+                }
+                ASSERT_NE(value_index, nullptr);
+                ASSERT_NE(value_index->get_statistic(), nullptr);
+                ASSERT_GT(value_index->get_statistic()->get_count(), 0);
+            }
+        }
+    }
+
     std::ostringstream out, err;
     ASSERT_EQ(tsfile_cli::run_cli({"stats", "-t", "sensors", "-m", "note", "-f",
                                    "csv", out_path},
                                   out, err),
               0)
         << err.str();
-    EXPECT_NE(out.str().find("table,sensors,beijing,note,TEXT,1,1,1000,1000"),
-              std::string::npos)
-        << out.str();
-    EXPECT_NE(out.str().find("table,sensors,shanghai,note,TEXT,2,0,2000,4000"),
-              std::string::npos)
-        << out.str();
-
-    std::remove(csv_path.c_str());
-    std::remove(out_path.c_str());
+    EXPECT_TRUE(err.str().empty()) << err.str();
+    // Value aggregates still come from statistics; only row_count falls back
+    // to scanning. The sparse field must retain a positive null_count.
+    EXPECT_EQ(out.str(),
+              "model,object,tag.site,field,data_type,non_null_count,null_count,"
+              "min_time,max_time,min,max,first,last,sum,stats_source\n"
+              "table,sensors,beijing,note,TEXT,1,1,1000,1000,\\N,\\N,n0,n0,"
+              "\\N,statistics\n"
+              "table,sensors,shanghai,note,TEXT,2,0,2000,4000,\\N,\\N,n1,n3,"
+              "\\N,statistics\n");
 }
+
+INSTANTIATE_TEST_SUITE_P(TimelineMetadata, TableStatsTimelineTest,
+                         ::testing::Values(-1, 0, 1, 2));
 
 TEST(CliE2E, HeadProjectsAndLimits) {
     Fixture f;

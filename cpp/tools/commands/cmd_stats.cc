@@ -373,9 +373,9 @@ int collect_table_stats(const ParsedArgs& args,
 
     // A row count is required to derive a numeric null_count.  It comes
     // either from the entity timeline statistic or, when that statistic is
-    // absent/unreliable, from a row scan.  Trigger the scan whenever any
-    // entity still lacks a timeline (even if every selected field carries a
-    // value statistic), otherwise null_count would stay empty.
+    // absent/unreliable, from a row scan. Scan when a timeline is missing
+    // or its row count is below a selected field's non-null count, even if
+    // every selected field carries a value statistic.
     bool need_scan = false;
     for (const std::string& key : summary.entity_order) {
         const auto it = summary.entities.find(key);
@@ -386,7 +386,9 @@ int collect_table_stats(const ParsedArgs& args,
         }
         for (size_t index : summary.field_indexes) {
             const std::string& field = summary.columns[index].name;
-            if (it->second.fields.find(field) == it->second.fields.end()) {
+            const auto field_it = it->second.fields.find(field);
+            if (field_it == it->second.fields.end() ||
+                it->second.row_count < field_it->second.count) {
                 need_scan = true;
                 break;
             }
