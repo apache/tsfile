@@ -184,6 +184,9 @@ int LocalRandomAccessReadFile::open(const std::string& file_path) {
     // of hanging forever.  If stat() itself fails (missing file, dangling
     // symlink), fall through to the normal open() path so those continue to
     // report E_FILE_OPEN_ERR.
+    // Close the stat/open race: regular files ignore O_NONBLOCK, while a FIFO
+    // replacement cannot block before the descriptor check below.
+    flags |= O_NONBLOCK;
     struct stat preopen_stat;
     if (::stat(file_path_.c_str(), &preopen_stat) == 0 &&
         !S_ISREG(preopen_stat.st_mode)) {
