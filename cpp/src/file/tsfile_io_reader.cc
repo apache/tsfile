@@ -393,24 +393,20 @@ void TsFileIOReader::revert_ssi(TsFileSeriesScanIterator* ssi) {
 int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     std::shared_ptr<IDeviceID> device_id,
     std::vector<ITimeseriesIndex*>& timeseries_indexs, PageArena& pa) {
-    int ret = E_OK;
-    if (RET_FAIL(load_tsfile_meta_if_necessary())) {
-        return ret;
-    }
+    int ret = load_tsfile_meta_if_necessary();
+    if (RET_FAIL(ret)) return ret;
     std::shared_ptr<IMetaIndexEntry> meta_index_entry;
     int64_t end_offset;
-    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
-        meta_index_entry_list;
-    if (RET_FAIL(load_device_index_entry(
-            std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
-            end_offset))) {
-    } else if (RET_FAIL(load_all_measurement_index_entry(
-                   meta_index_entry->get_offset(), end_offset, pa,
-                   meta_index_entry_list))) {
-    } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
-                                                     timeseries_indexs))) {
-    }
-    return ret;
+    ret =
+        load_device_index_entry(std::make_shared<DeviceIDComparable>(device_id),
+                                meta_index_entry, end_offset);
+    if (RET_FAIL(ret)) return ret;
+
+    // Reuse the offset-based path so filtered metadata keeps the aligned time
+    // index alongside each value index.  Without this wrapping, table stats
+    // cannot read the footer's time statistic and fall back to a full scan.
+    return get_device_timeseries_meta_by_offset(
+        meta_index_entry->get_offset(), end_offset, timeseries_indexs, pa);
 }
 
 int TsFileIOReader::get_device_timeseries_meta_by_offset(
