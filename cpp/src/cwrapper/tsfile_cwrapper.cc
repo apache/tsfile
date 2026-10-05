@@ -1269,14 +1269,12 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
     if (device_count > std::numeric_limits<uint32_t>::max()) {
         return common::E_OVERFLOW;
     }
-    result =
-        static_cast<DeviceSchema*>(calloc(device_count, sizeof(*result)));
+    result = static_cast<DeviceSchema*>(calloc(device_count, sizeof(*result)));
     if (result == nullptr) {
         return common::E_OOM;
     }
 
-    for (size_t device_index = 0; device_index < device_count;
-         ++device_index) {
+    for (size_t device_index = 0; device_index < device_count; ++device_index) {
         initialized = device_index + 1;
         const auto& device_id = device_ids[device_index];
         DeviceSchema& cur_schema = result[device_index];

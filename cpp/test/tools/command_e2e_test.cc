@@ -189,26 +189,25 @@ TEST(CliE2E, StatsReportsNumericNullCountForTableFields) {
                "4000,shanghai,23,n3\n";
     }
     std::ostringstream wout, werr;
-    ASSERT_EQ(tsfile_cli::run_cli(
-                  {"write", "--table", "sensors", "--tag", "site", "STRING",
-                   "--field", "temp", "FLOAT", "--field", "note", "TEXT", "-i",
-                   csv_path, "-o", out_path},
-                  wout, werr),
-              0)
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"write", "--table", "sensors", "--tag", "site",
+                             "STRING", "--field", "temp", "FLOAT", "--field",
+                             "note", "TEXT", "-i", csv_path, "-o", out_path},
+                            wout, werr),
+        0)
         << werr.str();
 
     std::ostringstream out, err;
-    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-t", "sensors", "-m", "note",
-                                   "-f", "csv", out_path},
+    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-t", "sensors", "-m", "note", "-f",
+                                   "csv", out_path},
                                   out, err),
               0)
         << err.str();
     EXPECT_NE(out.str().find("table,sensors,beijing,note,TEXT,1,1,1000,1000"),
               std::string::npos)
         << out.str();
-    EXPECT_NE(
-        out.str().find("table,sensors,shanghai,note,TEXT,2,0,2000,4000"),
-        std::string::npos)
+    EXPECT_NE(out.str().find("table,sensors,shanghai,note,TEXT,2,0,2000,4000"),
+              std::string::npos)
         << out.str();
 
     std::remove(csv_path.c_str());

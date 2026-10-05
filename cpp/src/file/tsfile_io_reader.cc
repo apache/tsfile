@@ -397,9 +397,9 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     if (RET_FAIL(ret)) return ret;
     std::shared_ptr<IMetaIndexEntry> meta_index_entry;
     int64_t end_offset;
-    ret = load_device_index_entry(
-        std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
-        end_offset);
+    ret =
+        load_device_index_entry(std::make_shared<DeviceIDComparable>(device_id),
+                                meta_index_entry, end_offset);
     if (RET_FAIL(ret)) return ret;
 
     // Reuse the offset-based path so filtered metadata keeps the aligned time
