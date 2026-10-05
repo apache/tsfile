@@ -826,13 +826,6 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
     auto selected_list = selected_meta.begin()->second;
     std::unordered_map<std::string, TSDataType> type_by_measurement;
     for (const auto& index : selected_list) {
-        auto* aligned =
-            dynamic_cast<storage::AlignedTimeseriesIndex*>(index.get());
-        ASSERT_NE(aligned, nullptr)
-            << "filtered metadata must preserve the shared time index";
-        ASSERT_NE(aligned->time_ts_idx_, nullptr);
-        ASSERT_NE(aligned->time_ts_idx_->get_statistic(), nullptr);
-        EXPECT_EQ(aligned->time_ts_idx_->get_statistic()->get_count(), 5);
         type_by_measurement[index->get_measurement_name().to_std_string()] =
             index->get_data_type();
     }

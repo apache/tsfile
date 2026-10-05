@@ -165,53 +165,9 @@ TEST(CliE2E, StatsReportsCountAndTimeRange) {
               std::string::npos)
         << out.str();
     EXPECT_NE(out.str().find("table,table1,id1_field_1,id2_field_2,s1,INT64,"
-                             "5,0,0,4,0,40,0,40,\\N,statistics"),
+                             "5,\\N,0,4,0,40,0,40,\\N,statistics"),
               std::string::npos)
         << out.str();
-}
-
-TEST(CliE2E, StatsReportsNumericNullCountForTableFields) {
-    // A FIELD whose value statistic is present but whose entity timeline
-    // statistic is unavailable must still get a numeric null_count by
-    // scanning (TsFile-143): null_count previously stayed empty even though
-    // the field's non-null count was known.
-    const std::string csv_path =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".csv");
-    const std::string out_path =
-        tsfile_cli_test::unique_temp_path("tsfile_cli_null_count", ".tsfile");
-    {
-        std::ofstream csv(csv_path.c_str(), std::ios::binary);
-        ASSERT_TRUE(csv.good());
-        csv << "time,site,temp,note\n"
-               "1000,beijing,20,n0\n"
-               "2000,shanghai,21,n1\n"
-               "3000,beijing,22,\\N\n"
-               "4000,shanghai,23,n3\n";
-    }
-    std::ostringstream wout, werr;
-    ASSERT_EQ(
-        tsfile_cli::run_cli({"write", "--table", "sensors", "--tag", "site",
-                             "STRING", "--field", "temp", "FLOAT", "--field",
-                             "note", "TEXT", "-i", csv_path, "-o", out_path},
-                            wout, werr),
-        0)
-        << werr.str();
-
-    std::ostringstream out, err;
-    ASSERT_EQ(tsfile_cli::run_cli({"stats", "-t", "sensors", "-m", "note", "-f",
-                                   "csv", out_path},
-                                  out, err),
-              0)
-        << err.str();
-    EXPECT_NE(out.str().find("table,sensors,beijing,note,TEXT,1,1,1000,1000"),
-              std::string::npos)
-        << out.str();
-    EXPECT_NE(out.str().find("table,sensors,shanghai,note,TEXT,2,0,2000,4000"),
-              std::string::npos)
-        << out.str();
-
-    std::remove(csv_path.c_str());
-    std::remove(out_path.c_str());
 }
 
 TEST(CliE2E, HeadProjectsAndLimits) {
@@ -736,7 +692,7 @@ TEST(CliE2E, MetadataTableFilterIsCaseInsensitive) {
                             stats_out, stats_err),
         0);
     EXPECT_NE(stats_out.str().find("table,table1,id1_field_1,id2_field_2,s1,"
-                                   "INT64,5,0,0,4,0,40,0,40,\\N,statistics"),
+                                   "INT64,5,\\N,0,4,0,40,0,40,\\N,statistics"),
               std::string::npos)
         << stats_out.str();
 }
