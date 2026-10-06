@@ -24,9 +24,6 @@
 #include "common/allocator/alloc_base.h"
 #include "file/local_random_access_read_file.h"
 #include "reader/prepared_series.h"
-#ifdef ENABLE_TEST
-#include "utils/injection.h"
-#endif
 
 using namespace common;
 
@@ -402,9 +399,8 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     }
     std::shared_ptr<IMetaIndexEntry> meta_index_entry;
     int64_t end_offset;
-    // Reuse the offset-based path so filtered metadata keeps the aligned time
-    // index alongside each value index.  Without this wrapping, table stats
-    // cannot read the footer's time statistic and fall back to a full scan.
+    // Keep the shared time index in filtered metadata so table statistics
+    // can derive null counts from the footer.
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
             end_offset))) {
@@ -412,26 +408,6 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
                    meta_index_entry->get_offset(), end_offset,
                    timeseries_indexs, pa))) {
     }
-#ifdef ENABLE_TEST
-    // Simulate incomplete footer metadata without altering the query path.
-    if (IS_SUCC(ret)) {
-        for (ITimeseriesIndex*& index : timeseries_indexs) {
-            auto* aligned = dynamic_cast<AlignedTimeseriesIndex*>(index);
-            if (aligned == nullptr || aligned->time_ts_idx_ == nullptr) {
-                continue;
-            }
-            DBUG_EXECUTE_IF("table_metadata_missing_timeline",
-                            index = aligned->value_ts_idx_;);
-            Statistic* statistic = aligned->time_ts_idx_->get_statistic();
-            if (statistic != nullptr) {
-                DBUG_EXECUTE_IF("table_metadata_zero_timeline",
-                                statistic->count_ = 0;);
-                DBUG_EXECUTE_IF("table_metadata_short_timeline",
-                                statistic->count_ = 1;);
-            }
-        }
-    }
-#endif
     return ret;
 }
 

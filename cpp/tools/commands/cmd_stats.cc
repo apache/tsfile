@@ -371,31 +371,20 @@ int collect_table_stats(const ParsedArgs& args,
         summary.entity_order.push_back(key);
     }
 
-    // A row count is required to derive a numeric null_count.  It comes
-    // either from the entity timeline statistic or, when that statistic is
-    // absent/unreliable, from a row scan. Scan when a timeline is missing
-    // or its row count is below a selected field's non-null count, even if
-    // every selected field carries a value statistic.
-    bool need_scan = false;
+    bool missing_value_statistics = false;
     for (const std::string& key : summary.entity_order) {
         const auto it = summary.entities.find(key);
         if (it == summary.entities.end()) continue;
-        if (!it->second.has_timeline_statistic) {
-            need_scan = true;
-            break;
-        }
         for (size_t index : summary.field_indexes) {
             const std::string& field = summary.columns[index].name;
-            const auto field_it = it->second.fields.find(field);
-            if (field_it == it->second.fields.end() ||
-                it->second.row_count < field_it->second.count) {
-                need_scan = true;
+            if (it->second.fields.find(field) == it->second.fields.end()) {
+                missing_value_statistics = true;
                 break;
             }
         }
-        if (need_scan) break;
+        if (missing_value_statistics) break;
     }
-    if (need_scan && !devices.empty()) {
+    if (missing_value_statistics && !devices.empty()) {
         std::vector<std::string> query_columns;
         std::vector<uint32_t> tag_result_indexes;
         for (size_t i = 0; i < measurements.size(); ++i) {
