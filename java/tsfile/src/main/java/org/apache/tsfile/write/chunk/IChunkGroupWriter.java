@@ -52,6 +52,12 @@ public interface IChunkGroupWriter {
    */
   int write(Tablet tablet) throws WriteProcessException, IOException;
 
+  /**
+   * Writes rows in the half-open range [startRowIndex, endRowIndex).
+   *
+   * @param startRowIndex inclusive first row
+   * @param endRowIndex exclusive end row
+   */
   int write(Tablet table, int startRowIndex, int endRowIndex)
       throws WriteProcessException, IOException;
 

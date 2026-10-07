@@ -24,6 +24,10 @@ import org.apache.tsfile.read.common.BatchData;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * Provides page readers for one chunk and exposes chunk-level skip and deletion decisions.
+ * Implementations may defer decompression and decryption until a page is read.
+ */
 public interface IChunkReader {
 
   boolean hasNextSatisfiedPage() throws IOException;

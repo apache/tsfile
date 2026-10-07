@@ -502,7 +502,11 @@ public class TsFileWriter implements AutoCloseable {
     }
   }
 
-  /** Check whether all measurements of dataPoints list are in the measurementGroup. */
+  /**
+   * Validates measurement schemas against the registered group schema. For non-aligned writes,
+   * unknown measurements are filtered from a private copy; for aligned writes, an unknown
+   * measurement is rejected. The caller's list is not modified.
+   */
   private List<IMeasurementSchema> checkIsAllMeasurementsInGroup(
       List<DataPoint> dataPoints, MeasurementGroup measurementGroup, boolean isAligned)
       throws NoMeasurementException {
