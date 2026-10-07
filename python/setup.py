@@ -92,10 +92,9 @@ if sys.platform.startswith("linux"):
     if not candidates:
         raise FileNotFoundError("missing libtsfile.so* in build output")
     src = candidates[0]
-    dst = PKG / src.name
-    shutil.copy2(src, dst)
-    link_name = PKG / "libtsfile.so"
-    shutil.copy2(src, link_name)
+    for candidate in candidates:
+        shutil.copy2(candidate, PKG / candidate.name)
+    shutil.copy2(src, PKG / "libtsfile.so")
 
 elif sys.platform == "darwin":
     candidates = sorted(CPP_LIB.rglob("libtsfile.*.dylib")) or list(
@@ -207,6 +206,9 @@ runtime_library_dirs = []
 libraries = []
 library_dirs = [str(PKG)]
 include_dirs = [str(PKG), np.get_include(), str(PKG / "include")]
+sdk_include = PKG / "include" / "tsfile"
+if sdk_include.is_dir():
+    include_dirs.append(str(sdk_include))
 
 if sys.platform.startswith("linux"):
     libraries = ["tsfile"]

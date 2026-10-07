@@ -19,6 +19,17 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Synchronize the version in setup.py and the one used in the maven pom.
+
+// Native package jobs derive their identity from native_package_versions.py.
+// Keep that identity stable by leaving source versions untouched in those jobs.
+def skipVersionSync = project.properties.getProperty("tsfile.version.sync.skip")
+if (skipVersionSync == null) {
+    skipVersionSync = System.getProperty("tsfile.version.sync.skip")
+}
+if (skipVersionSync != null && skipVersionSync.equalsIgnoreCase("true")) {
+    println "Skipping source version synchronization for native packaging"
+    return
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def currentMavenVersion = project.version as String
