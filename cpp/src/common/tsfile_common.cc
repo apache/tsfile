@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <utility>
 
 #include "common/logger/elog.h"
 #include "common/schema.h"
@@ -52,74 +53,56 @@ int TimeseriesIndex::add_chunk_meta(ChunkMeta* chunk_meta,
 
 /* ================ TSMIterator ================ */
 int TSMIterator::init() {
-    // sort chunk_group_meta_list_ ： {[measurementA, offsetA1], [measurementB,
-    // offsetB1], [measurementA, offsetA2], [measurementB, offsetB2]} ->
-    // {[measurementA, offsetA1], [measurementA, offsetA2], [measurementB,
-    // offsetB1], [measurementB, offsetB2]}
+    tsm_chunk_meta_info_.clear();
+    const auto offset_less = [](const ChunkMeta* lhs, const ChunkMeta* rhs) {
+        return lhs->offset_of_chunk_header_ < rhs->offset_of_chunk_header_;
+    };
     for (auto chunk_group_meta_iter = chunk_group_meta_list_.begin();
          chunk_group_meta_iter != chunk_group_meta_list_.end();
          chunk_group_meta_iter++) {
-        auto chunk_meta_list = chunk_group_meta_iter.get()->chunk_meta_list_;
-        // Use a map to group chunks by measurement_name_
-        std::map<common::String, std::vector<ChunkMeta*>> groups;
-        std::vector<common::String> order;
-        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end();
-             it++) {
-            auto* chunk_meta = it.get();
-            if (groups.find(chunk_meta->measurement_name_) == groups.end()) {
-                order.push_back(chunk_meta->measurement_name_);
-            }
-            groups[chunk_meta->measurement_name_].push_back(chunk_meta);
+        ChunkGroupMeta* chunk_group_meta = chunk_group_meta_iter.get();
+        MeasurementChunkMetaMap chunk_group_map;
+        for (auto chunk_meta_iter = chunk_group_meta->chunk_meta_list_.begin();
+             chunk_meta_iter != chunk_group_meta->chunk_meta_list_.end();
+             chunk_meta_iter++) {
+            ChunkMeta* chunk_meta = chunk_meta_iter.get();
+            chunk_group_map[chunk_meta->measurement_name_].push_back(
+                chunk_meta);
         }
-
-        // Sort each group of chunk metas by offset
-        for (auto it = groups.begin(); it != groups.end(); ++it) {
-            std::vector<ChunkMeta*>& group = it->second;
-            std::sort(group.begin(), group.end(),
-                      [](ChunkMeta* a, ChunkMeta* b) {
-                          return a->offset_of_chunk_header_ <
-                                 b->offset_of_chunk_header_;
-                      });
-        }
-        // Clear and refill chunk_group_meta_list
-        chunk_group_meta_iter.get()->chunk_meta_list_.clear();
-        for (const auto& measurement_name : order) {
-            for (auto chunk_meta : groups[measurement_name]) {
-                chunk_group_meta_iter.get()->chunk_meta_list_.push_back(
-                    chunk_meta);
-            }
-        }
-    }
-
-    // FIXME empty list
-    chunk_group_meta_iter_ = chunk_group_meta_list_.begin();
-    while (chunk_group_meta_iter_ != chunk_group_meta_list_.end()) {
-        chunk_meta_iter_ =
-            chunk_group_meta_iter_.get()->chunk_meta_list_.begin();
-        std::map<common::String, std::vector<ChunkMeta*>> tmp;
-        while (chunk_meta_iter_ !=
-               chunk_group_meta_iter_.get()->chunk_meta_list_.end()) {
-            tmp[chunk_meta_iter_.get()->measurement_name_].emplace_back(
-                chunk_meta_iter_.get());
-            chunk_meta_iter_++;
-        }
-        if (!tmp.empty()) {
-            auto& merged =
-                tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_id_];
-            for (auto& m_entry : tmp) {
-                auto& vec = merged[m_entry.first];
-                vec.insert(vec.end(), m_entry.second.begin(),
-                           m_entry.second.end());
+        for (auto& measurement_entry : chunk_group_map) {
+            auto& chunk_metas = measurement_entry.second;
+            if (!std::is_sorted(chunk_metas.begin(), chunk_metas.end(),
+                                offset_less)) {
+                std::sort(chunk_metas.begin(), chunk_metas.end(), offset_less);
             }
         }
 
-        chunk_group_meta_iter_++;
+        auto device_pos =
+            tsm_chunk_meta_info_.lower_bound(chunk_group_meta->device_id_);
+        IDeviceIDComparator comparator;
+        const bool device_exists =
+            device_pos != tsm_chunk_meta_info_.end() &&
+            !comparator(chunk_group_meta->device_id_, device_pos->first);
+        if (!device_exists) {
+            tsm_chunk_meta_info_.emplace_hint(device_pos,
+                                              chunk_group_meta->device_id_,
+                                              std::move(chunk_group_map));
+            continue;
+        }
+
+        auto& measurement_map = device_pos->second;
+        for (auto& measurement_entry : chunk_group_map) {
+            auto& chunk_metas = measurement_entry.second;
+            auto& merged_chunk_metas = measurement_map[measurement_entry.first];
+            merged_chunk_metas.insert(merged_chunk_metas.end(),
+                                      chunk_metas.begin(), chunk_metas.end());
+        }
     }
-    if (!tsm_chunk_meta_info_.empty() &&
-        !tsm_chunk_meta_info_.begin()->second.empty()) {
-        tsm_measurement_iter_ = tsm_chunk_meta_info_.begin()->second.begin();
-    }
+
     tsm_device_iter_ = tsm_chunk_meta_info_.begin();
+    if (tsm_device_iter_ != tsm_chunk_meta_info_.end()) {
+        tsm_measurement_iter_ = tsm_device_iter_->second.begin();
+    }
     return E_OK;
 }
 
@@ -131,8 +114,6 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID>& ret_device_id,
                           String& ret_measurement_name,
                           TimeseriesIndex& ret_ts_index) {
     int ret = E_OK;
-    SimpleList<ChunkMeta*> chunk_meta_list_of_this_ts(
-        1024, MOD_TIMESERIES_INDEX_OBJ);  // FIXME
     if (tsm_measurement_iter_ == tsm_device_iter_->second.end()) {
         tsm_device_iter_++;
         if (!has_next()) {
@@ -143,15 +124,13 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID>& ret_device_id,
     }
     ret_device_id = tsm_device_iter_->first;
     ret_measurement_name.shallow_copy_from(tsm_measurement_iter_->first);
-    for (auto meta : tsm_measurement_iter_->second) {
-        chunk_meta_list_of_this_ts.push_back(meta);
-    }
-    if (chunk_meta_list_of_this_ts.size() == 0) {
+    const std::vector<ChunkMeta*>& chunk_metas = tsm_measurement_iter_->second;
+    if (chunk_metas.empty()) {
         return E_TSFILE_WRITER_META_ERR;
     }
 
-    const bool multi_chunks = chunk_meta_list_of_this_ts.size() > 1;
-    ChunkMeta* first_chunk_meta = chunk_meta_list_of_this_ts.front();
+    const bool multi_chunks = chunk_metas.size() > 1;
+    ChunkMeta* first_chunk_meta = chunk_metas.front();
     const char meta_type = (multi_chunks ? 1 : 0) | (first_chunk_meta->mask_);
     const TSDataType data_type = first_chunk_meta->data_type_;
 
@@ -160,13 +139,9 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID>& ret_device_id,
     ret_ts_index.set_data_type(data_type);
     ret_ts_index.init_statistic(data_type);
 
-    SimpleList<ChunkMeta*>::Iterator ts_chunk_meta_iter =
-        chunk_meta_list_of_this_ts.begin();
-    for (;
-         IS_SUCC(ret) && ts_chunk_meta_iter != chunk_meta_list_of_this_ts.end();
-         ts_chunk_meta_iter++) {
-        ChunkMeta* chunk_meta = ts_chunk_meta_iter.get();
+    for (ChunkMeta* chunk_meta : chunk_metas) {
         if (RET_FAIL(ret_ts_index.add_chunk_meta(chunk_meta, multi_chunks))) {
+            break;
         }
     }
     if (IS_SUCC(ret)) {
