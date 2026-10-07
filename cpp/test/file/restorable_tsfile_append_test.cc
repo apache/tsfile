@@ -472,7 +472,7 @@ TEST_F(RestorableTsFileAppendTest, AppendRefusesBytesThatAreNotATsFile) {
 // append still works.
 TEST_F(RestorableTsFileAppendTest, AppendToIncompleteFileSalvagesThenWrites) {
     WriteCompleteTreeFile(3);
-    CorruptFileTail(5);
+    CorruptFileTail(file_name_, 5);
 
     RestorableTsFileIOWriter rw;
     ASSERT_EQ(rw.open_for_append(file_name_), E_OK);
