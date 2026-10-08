@@ -531,8 +531,7 @@ TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
         load_device(i);
     }
     ASSERT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
-    const int64_t memory_at_capacity =
-        ModStat::get_instance().get_stat(MOD_TSFILE_READER);
+    const int64_t memory_at_capacity = io_reader.TEST_reader_memory_bytes();
     ASSERT_GT(memory_at_capacity, 0);
 
     // Filling beyond capacity must evict old nodes and reclaim their per-entry
@@ -541,15 +540,13 @@ TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
         load_device(i);
     }
     EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
-    EXPECT_EQ(ModStat::get_instance().get_stat(MOD_TSFILE_READER),
-              memory_at_capacity);
+    EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
 
     // d0 was the least-recently-used entry and has been evicted. Loading it
     // again must still work, evict another entry, and keep memory flat.
     load_device(0);
     EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
-    EXPECT_EQ(ModStat::get_instance().get_stat(MOD_TSFILE_READER),
-              memory_at_capacity);
+    EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
 }
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {

@@ -241,6 +241,10 @@ class TsFileIOReader {
 
 #ifdef ENABLE_TEST
    public:
+    // Read memory accounting from libtsfile's allocator instance, not a
+    // potentially distinct copy of the header-local singleton in the test.
+    int64_t TEST_reader_memory_bytes() const;
+
     size_t TEST_device_node_cache_size() const {
         std::lock_guard<std::mutex> lk(device_node_cache_mu_);
         return device_node_cache_.size();

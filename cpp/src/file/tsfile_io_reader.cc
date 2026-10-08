@@ -28,6 +28,12 @@
 using namespace common;
 
 namespace storage {
+#ifdef ENABLE_TEST
+int64_t TsFileIOReader::TEST_reader_memory_bytes() const {
+    return ModStat::get_instance().get_stat(MOD_TSFILE_READER);
+}
+#endif
+
 int TsFileIOReader::init(const std::string& file_path) {
     int ret = E_OK;
     LocalRandomAccessReadFile* local_file = new LocalRandomAccessReadFile;
