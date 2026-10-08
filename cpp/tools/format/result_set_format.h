@@ -32,9 +32,11 @@ namespace tsfile_cli {
 std::string cell_to_string(storage::ResultSet* rs, uint32_t col_index,
                            common::TSDataType type);
 
+// output_error receives a diagnostic when output column names are invalid.
 int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                     std::ostream& out, long long offset = 0,
-                    long long limit = -1, long long* emitted_rows = nullptr);
+                    long long limit = -1, long long* emitted_rows = nullptr,
+                    std::string* output_error = nullptr);
 
 int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
                             bool no_header, std::ostream& out, long long limit,

@@ -202,13 +202,11 @@ void print_command_usage(const std::string& command, std::ostream& os) {
               "and resolved column physical settings to stderr.\n"
               "Default: success is silent; target must not exist; CSV header "
               "must contain time and declared TAG/FIELD names.\n"
-              "CSV values: unquoted \\N is NULL; \"\" is an empty string.\n"
-              "STRING/TEXT: prepend one extra \\ to values starting with \\, "
-              "including inside quoted cells.\n"
-              "write removes exactly one leading \\ from STRING/TEXT cells "
-              "starting with \\\\; backslashes elsewhere are unchanged.\n"
-              R"(CSV examples: \\N -> literal \N; \\path -> \path; \\\path -> \\path.)"
-              "\n"
+              R"(CSV values: unquoted \N is NULL; "" is an empty string.
+STRING/TEXT: prepend one extra \ to values starting with \, including inside quoted cells.
+write removes exactly one leading \ from STRING/TEXT cells starting with \\; backslashes elsewhere are unchanged.
+CSV examples: \\N -> literal \N; \\path -> \path; \\\path -> \\path.
+)"
               "Examples:\n"
               "  tsfile-cli write --table sensors --tag site STRING "
               "--field temperature DOUBLE -i input.csv -o out.tsfile\n";

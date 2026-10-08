@@ -74,7 +74,10 @@ std::string cell_to_string(storage::ResultSet* rs, uint32_t i,
 
 int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                     std::ostream& out, long long offset, long long limit,
-                    long long* emitted_rows) {
+                    long long* emitted_rows, std::string* output_error) {
+    if (output_error != nullptr) {
+        output_error->clear();
+    }
     auto meta = rs->get_metadata();
     const uint32_t ncol = meta->get_column_count();
     std::vector<std::string> header;
@@ -87,6 +90,12 @@ int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
     }
 
     RowWriter writer(out, fmt, header, types, no_header);
+    if (!writer.error().empty()) {
+        if (output_error != nullptr) {
+            *output_error = writer.error();
+        }
+        return common::E_INVALID_ARG;
+    }
     bool has_next = false;
     int code = common::E_OK;
     long long skipped = 0;
