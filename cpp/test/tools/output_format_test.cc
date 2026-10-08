@@ -93,6 +93,35 @@ TEST(JsonEscapeTest, EscapesQuotesBackslashAndControls) {
     EXPECT_EQ(tsfile_cli::json_escape("tab\there"), "tab\\there");
 }
 
+TEST(TableEscapeTest, EscapesBackslashAndNamedControls) {
+    EXPECT_EQ(tsfile_cli::table_escape("a\\b"), "a\\\\b");
+    EXPECT_EQ(tsfile_cli::table_escape("line\nbreak"), "line\\nbreak");
+    EXPECT_EQ(tsfile_cli::table_escape("car\rret"), "car\\rret");
+    EXPECT_EQ(tsfile_cli::table_escape("tab\there"), "tab\\there");
+}
+
+TEST(TableEscapeTest, OtherControlsBecomeUnicodeEscapes) {
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("a\bb", 3)), "a\\u0008b");
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("a\fb", 3)), "a\\u000cb");
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("\x01\x1f", 2)),
+              "\\u0001\\u001f");
+}
+
+TEST(TableEscapeTest, ControlByteBoundaries) {
+    // NUL is the lowest C0 control; DEL (0x7f) is the only non-C0 control in
+    // the C iscntrl() set and must also become \uXXXX rather than pass through.
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("\x00", 1)), "\\u0000");
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("\x7f", 1)), "\\u007f");
+    EXPECT_EQ(tsfile_cli::table_escape(std::string("a\177b", 3)), "a\\u007fb");
+
+    // Space (0x20) is printable: it must survive verbatim, never be escaped.
+    EXPECT_EQ(tsfile_cli::table_escape("a b"), "a b");
+
+    // Bytes >= 0x80 are UTF-8 lead/continuation bytes; escaping them would
+    // corrupt multi-byte sequences, so they must pass through unchanged.
+    EXPECT_EQ(tsfile_cli::table_escape("\xe4\xb8\xad"), "\xe4\xb8\xad");
+}
+
 TEST(TypeNameTest, KnownTypesMapToNames) {
     EXPECT_STREQ(tsfile_cli::tsdatatype_name(common::INT64), "INT64");
     EXPECT_STREQ(tsfile_cli::tsdatatype_name(common::STRING), "STRING");
@@ -186,6 +215,36 @@ TEST(RowWriterTest, TableAlignsColumns) {
               "name      type\n"
               "s1        INT64\n"
               "longname  BOOLEAN\n");
+}
+
+TEST(RowWriterTest, TableEscapesControlCharactersOnOneLine) {
+    std::ostringstream out;
+    RowWriter w(out, OutputFormat::kTable, {"time", "note"},
+                {common::INT64, common::STRING}, false);
+    w.write({"1000", "line1\nline2"}, {false, false});
+    w.write({"2000", "tab\there"}, {false, false});
+    w.write({"3000", "back\\slash"}, {false, false});
+    w.finish();
+    EXPECT_EQ(out.str(),
+              "time  note\n"
+              "1000  line1\\nline2\n"
+              "2000  tab\\there\n"
+              "3000  back\\\\slash\n");
+}
+
+TEST(RowWriterTest, TableEscapingKeepsColumnAlignment) {
+    // When several cells in one row contain controls, each expanded escape
+    // must still be padded to the same visual width computed at write time.
+    std::ostringstream out;
+    RowWriter w(out, OutputFormat::kTable, {"a", "b"},
+                {common::STRING, common::STRING}, false);
+    w.write({"x\ty", "long\nvalue"}, {false, false});
+    w.write({"p", "q"}, {false, false});
+    w.finish();
+    EXPECT_EQ(out.str(),
+              "a     b\n"
+              "x\\ty  long\\nvalue\n"
+              "p     q\n");
 }
 
 TEST(RowWriterTest, ReportsStreamWriteFailure) {
