@@ -110,11 +110,11 @@ ERRNO validate_table_schema(const TableSchema* schema) {
 
 }  // namespace
 
-// Public definitions inherit C linkage from tsfile_cwrapper.h. Keep internal
-// helpers under C++ linkage so MSVC /EHsc permits their exceptions to unwind
-// into the public entry points' exception handlers.
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-extern "C" void init_tsfile_config() { storage::libtsfile_init(); }
+void init_tsfile_config() { storage::libtsfile_init(); }
 
 uint8_t get_global_time_encoding() {
     return common::get_global_time_encoding();
@@ -1068,6 +1068,7 @@ static ColumnSchema* allocate_table_schema_columns(size_t count) {
     return static_cast<ColumnSchema*>(calloc(count, sizeof(ColumnSchema)));
 }
 
+// MSVC /EHsc assumes C-linkage helpers do not let exceptions escape.
 static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
                                TableSchema* out_schema) {
     if (out_schema == nullptr) {
@@ -1077,54 +1078,66 @@ static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
     if (!src) {
         return common::E_TABLE_NOT_EXIST;
     }
-    out_schema->table_name = strdup(src->get_table_name().c_str());
-    if (out_schema->table_name == nullptr) {
-        return common::E_OOM;
-    }
-    const int column_num = src->get_columns_num();
-    if (column_num == 0) {
-        return common::E_OK;
-    }
-    out_schema->column_schemas =
-        allocate_table_schema_columns(static_cast<size_t>(column_num));
-    if (out_schema->column_schemas == nullptr) {
-        free_table_schema(*out_schema);
-        *out_schema = TableSchema{};
-        return common::E_OOM;
-    }
-    out_schema->column_num = column_num;
-#ifdef ENABLE_TEST
-    using common::g_all_inject_points;
-    using common::InjectPoint;
-    DBUG_EXECUTE_IF("table_schema_copy_oom", throw std::bad_alloc(););
-#endif
-    const auto& measurements = src->get_measurement_schemas();
-    const auto& categories = src->get_column_categories();
-    if (measurements.size() < static_cast<size_t>(out_schema->column_num) ||
-        categories.size() < static_cast<size_t>(out_schema->column_num)) {
-        free_table_schema(*out_schema);
-        *out_schema = TableSchema{};
-        return common::E_INVALID_SCHEMA;
-    }
-    for (int i = 0; i < out_schema->column_num; ++i) {
-        if (!measurements[i]) {
-            free_table_schema(*out_schema);
-            *out_schema = TableSchema{};
-            return common::E_INVALID_SCHEMA;
+    try {
+        out_schema->table_name = strdup(src->get_table_name().c_str());
+        if (out_schema->table_name == nullptr) {
+            return common::E_OOM;
         }
-        out_schema->column_schemas[i].column_name =
-            strdup(measurements[i]->measurement_name_.c_str());
-        if (out_schema->column_schemas[i].column_name == nullptr) {
+        const int column_num = src->get_columns_num();
+        if (column_num == 0) {
+            return common::E_OK;
+        }
+        out_schema->column_schemas =
+            allocate_table_schema_columns(static_cast<size_t>(column_num));
+        if (out_schema->column_schemas == nullptr) {
             free_table_schema(*out_schema);
             *out_schema = TableSchema{};
             return common::E_OOM;
         }
-        out_schema->column_schemas[i].data_type =
-            static_cast<TSDataType>(measurements[i]->data_type_);
-        out_schema->column_schemas[i].column_category =
-            static_cast<ColumnCategory>(categories[i]);
+        out_schema->column_num = column_num;
+#ifdef ENABLE_TEST
+        using common::g_all_inject_points;
+        using common::InjectPoint;
+        DBUG_EXECUTE_IF("table_schema_copy_oom", throw std::bad_alloc(););
+        DBUG_EXECUTE_IF("table_schema_copy_error",
+                        throw common::E_FILE_READ_ERR;);
+#endif
+        const auto& measurements = src->get_measurement_schemas();
+        const auto& categories = src->get_column_categories();
+        if (measurements.size() < static_cast<size_t>(out_schema->column_num) ||
+            categories.size() < static_cast<size_t>(out_schema->column_num)) {
+            free_table_schema(*out_schema);
+            *out_schema = TableSchema{};
+            return common::E_INVALID_SCHEMA;
+        }
+        for (int i = 0; i < out_schema->column_num; ++i) {
+            if (!measurements[i]) {
+                free_table_schema(*out_schema);
+                *out_schema = TableSchema{};
+                return common::E_INVALID_SCHEMA;
+            }
+            out_schema->column_schemas[i].column_name =
+                strdup(measurements[i]->measurement_name_.c_str());
+            if (out_schema->column_schemas[i].column_name == nullptr) {
+                free_table_schema(*out_schema);
+                *out_schema = TableSchema{};
+                return common::E_OOM;
+            }
+            out_schema->column_schemas[i].data_type =
+                static_cast<TSDataType>(measurements[i]->data_type_);
+            out_schema->column_schemas[i].column_category =
+                static_cast<ColumnCategory>(categories[i]);
+        }
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_OOM;
+    } catch (...) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_FILE_READ_ERR;
     }
-    return common::E_OK;
 }
 
 static void free_table_schema_array(TableSchema* schemas, size_t size) {
@@ -1736,7 +1749,7 @@ void free_device_timeseries_metadata_entries_partial(
 
 /**
  * Copies path, table name, and segment strings from IDeviceID into heap
- * buffers. On failure, frees any partial allocations and returns E_OOM.
+ * buffers. On failure, frees any partial allocations and returns an error code.
  */
 int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
                                          char** out_path, char** out_table_name,
@@ -1746,70 +1759,90 @@ int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
     *out_table_name = nullptr;
     *out_segment_count = 0;
     *out_segments = nullptr;
-    if (id == nullptr) {
-        *out_path = strdup("");
-        *out_table_name = strdup("");
-        if (*out_path == nullptr || *out_table_name == nullptr) {
-            free(*out_path);
-            free(*out_table_name);
-            *out_path = nullptr;
-            *out_table_name = nullptr;
-            return common::E_OOM;
-        }
-        return common::E_OK;
-    }
-    const std::string dname = id->get_device_name();
-    *out_path = strdup(dname.c_str());
-    if (*out_path == nullptr) {
-        return common::E_OOM;
-    }
-    const std::string tname = id->get_table_name();
-    *out_table_name = strdup(tname.c_str());
-    if (*out_table_name == nullptr) {
+    auto cleanup = [&]() {
         free(*out_path);
-        *out_path = nullptr;
-        return common::E_OOM;
-    }
-    const int n = id->segment_num();
-    if (n <= 0) {
-        return common::E_OK;
-    }
-    auto* seg_arr =
-        static_cast<char**>(malloc(sizeof(char*) * static_cast<size_t>(n)));
-    if (seg_arr == nullptr) {
         free(*out_table_name);
-        *out_table_name = nullptr;
-        free(*out_path);
         *out_path = nullptr;
-        return common::E_OOM;
-    }
-    memset(seg_arr, 0, sizeof(char*) * static_cast<size_t>(n));
-    const auto& segs = id->get_segments();
-    for (int i = 0; i < n; i++) {
-        const std::string* ps =
-            (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
-        // A null tag segment is exposed as a NULL pointer so callers can
-        // distinguish a missing/null tag from the literal string "null".
-        if (ps == nullptr) {
-            seg_arr[i] = nullptr;
-            continue;
-        }
-        seg_arr[i] = strdup(ps->c_str());
-        if (seg_arr[i] == nullptr) {
-            for (int j = 0; j < i; j++) {
-                free(seg_arr[j]);
+        *out_table_name = nullptr;
+    };
+    try {
+        if (id == nullptr) {
+            *out_path = strdup("");
+            *out_table_name = strdup("");
+            if (*out_path == nullptr || *out_table_name == nullptr) {
+                free(*out_path);
+                free(*out_table_name);
+                *out_path = nullptr;
+                *out_table_name = nullptr;
+                return common::E_OOM;
             }
-            free(seg_arr);
+            return common::E_OK;
+        }
+        const std::string dname = id->get_device_name();
+        *out_path = strdup(dname.c_str());
+        if (*out_path == nullptr) {
+            return common::E_OOM;
+        }
+#ifdef ENABLE_TEST
+        using common::g_all_inject_points;
+        using common::InjectPoint;
+        DBUG_EXECUTE_IF("device_id_copy_oom", throw std::bad_alloc(););
+        DBUG_EXECUTE_IF("device_id_copy_error", throw common::E_FILE_READ_ERR;);
+#endif
+        const std::string tname = id->get_table_name();
+        *out_table_name = strdup(tname.c_str());
+        if (*out_table_name == nullptr) {
+            free(*out_path);
+            *out_path = nullptr;
+            return common::E_OOM;
+        }
+        const int n = id->segment_num();
+        if (n <= 0) {
+            return common::E_OK;
+        }
+        const auto& segs = id->get_segments();
+        auto* seg_arr =
+            static_cast<char**>(malloc(sizeof(char*) * static_cast<size_t>(n)));
+        if (seg_arr == nullptr) {
             free(*out_table_name);
             *out_table_name = nullptr;
             free(*out_path);
             *out_path = nullptr;
             return common::E_OOM;
         }
+        memset(seg_arr, 0, sizeof(char*) * static_cast<size_t>(n));
+        for (int i = 0; i < n; i++) {
+            const std::string* ps =
+                (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
+            // A null tag segment is exposed as a NULL pointer so callers can
+            // distinguish a missing/null tag from the literal string "null".
+            if (ps == nullptr) {
+                seg_arr[i] = nullptr;
+                continue;
+            }
+            seg_arr[i] = strdup(ps->c_str());
+            if (seg_arr[i] == nullptr) {
+                for (int j = 0; j < i; j++) {
+                    free(seg_arr[j]);
+                }
+                free(seg_arr);
+                free(*out_table_name);
+                *out_table_name = nullptr;
+                free(*out_path);
+                *out_path = nullptr;
+                return common::E_OOM;
+            }
+        }
+        *out_segment_count = static_cast<uint32_t>(n);
+        *out_segments = seg_arr;
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        cleanup();
+        return common::E_OOM;
+    } catch (...) {
+        cleanup();
+        return common::E_FILE_READ_ERR;
     }
-    *out_segment_count = static_cast<uint32_t>(n);
-    *out_segments = seg_arr;
-    return common::E_OK;
 }
 
 int fill_device_id_from_ideviceid(storage::IDeviceID* id, DeviceID* out) {
@@ -1821,140 +1854,151 @@ int fill_device_id_from_ideviceid(storage::IDeviceID* id, DeviceID* out) {
 ERRNO populate_c_metadata_map_from_cpp(
     storage::DeviceTimeseriesMetadataMap& cpp_map,
     DeviceTimeseriesMetadataMap* out_map) {
-    if (cpp_map.empty()) {
-        return common::E_OK;
-    }
-    const uint32_t dev_n = static_cast<uint32_t>(cpp_map.size());
-    auto* entries = static_cast<DeviceTimeseriesMetadataEntry*>(
-        malloc(sizeof(DeviceTimeseriesMetadataEntry) * dev_n));
-    if (entries == nullptr) {
-        return common::E_OOM;
-    }
-    memset(entries, 0, sizeof(DeviceTimeseriesMetadataEntry) * dev_n);
-    auto cleanup = [dev_n](DeviceTimeseriesMetadataEntry* data) {
-        free_device_timeseries_metadata_entries_partial(data, dev_n);
-    };
-    std::unique_ptr<DeviceTimeseriesMetadataEntry, decltype(cleanup)> guard(
-        entries, cleanup);
-    size_t di = 0;
-    for (const auto& kv : cpp_map) {
-        DeviceTimeseriesMetadataEntry& e = entries[di];
-        const int dup_rc = fill_device_id_from_ideviceid(
-            kv.first ? kv.first.get() : nullptr, &e.device);
-        if (dup_rc != common::E_OK) {
-            return dup_rc;
+    try {
+        if (cpp_map.empty()) {
+            return common::E_OK;
         }
-        const auto& vec = kv.second;
-        uint32_t n_ts = 0;
-        for (const auto& idx_nz : vec) {
-            if (idx_nz != nullptr) {
-                n_ts++;
-            }
-        }
-        e.timeseries_count = n_ts;
-        if (e.timeseries_count == 0) {
-            e.timeseries = nullptr;
-            di++;
-            continue;
-        }
-        e.timeseries = static_cast<TimeseriesMetadata*>(
-            malloc(sizeof(TimeseriesMetadata) * e.timeseries_count));
-        if (e.timeseries == nullptr) {
+        const uint32_t dev_n = static_cast<uint32_t>(cpp_map.size());
+        auto* entries = static_cast<DeviceTimeseriesMetadataEntry*>(
+            malloc(sizeof(DeviceTimeseriesMetadataEntry) * dev_n));
+        if (entries == nullptr) {
             return common::E_OOM;
         }
-        memset(e.timeseries, 0,
-               sizeof(TimeseriesMetadata) * e.timeseries_count);
-        uint32_t slot = 0;
-        for (const auto& idx : vec) {
-            if (idx == nullptr) {
+        memset(entries, 0, sizeof(DeviceTimeseriesMetadataEntry) * dev_n);
+        auto cleanup = [dev_n](DeviceTimeseriesMetadataEntry* data) {
+            free_device_timeseries_metadata_entries_partial(data, dev_n);
+        };
+        std::unique_ptr<DeviceTimeseriesMetadataEntry, decltype(cleanup)> guard(
+            entries, cleanup);
+        size_t di = 0;
+        for (const auto& kv : cpp_map) {
+            DeviceTimeseriesMetadataEntry& e = entries[di];
+            const int dup_rc = fill_device_id_from_ideviceid(
+                kv.first ? kv.first.get() : nullptr, &e.device);
+            if (dup_rc != common::E_OK) {
+                return dup_rc;
+            }
+            const auto& vec = kv.second;
+            uint32_t n_ts = 0;
+            for (const auto& idx_nz : vec) {
+                if (idx_nz != nullptr) {
+                    n_ts++;
+                }
+            }
+            e.timeseries_count = n_ts;
+            if (e.timeseries_count == 0) {
+                e.timeseries = nullptr;
+                di++;
                 continue;
             }
-            TimeseriesMetadata& m = e.timeseries[slot];
-            common::String mn = idx->get_measurement_name();
-            m.measurement_name = strdup(mn.to_std_string().c_str());
-            if (m.measurement_name == nullptr) {
+            e.timeseries = static_cast<TimeseriesMetadata*>(
+                malloc(sizeof(TimeseriesMetadata) * e.timeseries_count));
+            if (e.timeseries == nullptr) {
                 return common::E_OOM;
             }
+            memset(e.timeseries, 0,
+                   sizeof(TimeseriesMetadata) * e.timeseries_count);
+            uint32_t slot = 0;
+            for (const auto& idx : vec) {
+                if (idx == nullptr) {
+                    continue;
+                }
+                TimeseriesMetadata& m = e.timeseries[slot];
+                common::String mn = idx->get_measurement_name();
+                m.measurement_name = strdup(mn.to_std_string().c_str());
+                if (m.measurement_name == nullptr) {
+                    return common::E_OOM;
+                }
 #ifdef ENABLE_TEST
-            using common::g_all_inject_points;
-            using common::InjectPoint;
-            DBUG_EXECUTE_IF("timeseries_metadata_copy_oom",
-                            throw std::bad_alloc(););
-            DBUG_EXECUTE_IF("timeseries_metadata_copy_error",
-                            throw common::E_FILE_READ_ERR;);
+                using common::g_all_inject_points;
+                using common::InjectPoint;
+                DBUG_EXECUTE_IF("timeseries_metadata_copy_oom",
+                                throw std::bad_alloc(););
+                DBUG_EXECUTE_IF("timeseries_metadata_copy_error",
+                                throw common::E_FILE_READ_ERR;);
 #endif
-            auto* aligned_idx =
-                dynamic_cast<storage::AlignedTimeseriesIndex*>(idx.get());
-            if (aligned_idx != nullptr &&
-                aligned_idx->value_ts_idx_ != nullptr) {
-                m.data_type = static_cast<TSDataType>(
-                    aligned_idx->value_ts_idx_->get_data_type());
-                const storage::TimeseriesIndex* value_idx =
-                    aligned_idx->value_ts_idx_;
-                const storage::TimeseriesIndex* time_idx =
-                    aligned_idx->time_ts_idx_;
-                if (value_idx->get_metadata_offset() >= 0) {
-                    m.value_metadata_offset =
-                        static_cast<uint64_t>(value_idx->get_metadata_offset());
-                    m.value_metadata_length = value_idx->get_metadata_length();
+                auto* aligned_idx =
+                    dynamic_cast<storage::AlignedTimeseriesIndex*>(idx.get());
+                if (aligned_idx != nullptr &&
+                    aligned_idx->value_ts_idx_ != nullptr) {
+                    m.data_type = static_cast<TSDataType>(
+                        aligned_idx->value_ts_idx_->get_data_type());
+                    const storage::TimeseriesIndex* value_idx =
+                        aligned_idx->value_ts_idx_;
+                    const storage::TimeseriesIndex* time_idx =
+                        aligned_idx->time_ts_idx_;
+                    if (value_idx->get_metadata_offset() >= 0) {
+                        m.value_metadata_offset = static_cast<uint64_t>(
+                            value_idx->get_metadata_offset());
+                        m.value_metadata_length =
+                            value_idx->get_metadata_length();
+                    }
+                    if (time_idx != nullptr &&
+                        time_idx->get_metadata_offset() >= 0) {
+                        m.time_metadata_offset = static_cast<uint64_t>(
+                            time_idx->get_metadata_offset());
+                        m.time_metadata_length =
+                            time_idx->get_metadata_length();
+                    }
+                    m.layout = 1;
+                } else {
+                    m.data_type = static_cast<TSDataType>(idx->get_data_type());
+                    const storage::TimeseriesIndex* value_idx =
+                        dynamic_cast<const storage::TimeseriesIndex*>(
+                            idx.get());
+                    if (value_idx != nullptr &&
+                        value_idx->get_metadata_offset() >= 0) {
+                        m.value_metadata_offset = static_cast<uint64_t>(
+                            value_idx->get_metadata_offset());
+                        m.value_metadata_length =
+                            value_idx->get_metadata_length();
+                    }
                 }
-                if (time_idx != nullptr &&
-                    time_idx->get_metadata_offset() >= 0) {
-                    m.time_metadata_offset =
-                        static_cast<uint64_t>(time_idx->get_metadata_offset());
-                    m.time_metadata_length = time_idx->get_metadata_length();
+                storage::Statistic* st = idx->get_statistic();
+                int32_t chunk_cnt = 0;
+                auto* cl = aligned_idx != nullptr
+                               ? idx->get_value_chunk_meta_list()
+                               : idx->get_chunk_meta_list();
+                if (cl != nullptr) {
+                    chunk_cnt = static_cast<int32_t>(cl->size());
                 }
-                m.layout = 1;
-            } else {
-                m.data_type = static_cast<TSDataType>(idx->get_data_type());
-                const storage::TimeseriesIndex* value_idx =
-                    dynamic_cast<const storage::TimeseriesIndex*>(idx.get());
-                if (value_idx != nullptr &&
-                    value_idx->get_metadata_offset() >= 0) {
-                    m.value_metadata_offset =
-                        static_cast<uint64_t>(value_idx->get_metadata_offset());
-                    m.value_metadata_length = value_idx->get_metadata_length();
+                m.chunk_meta_count = chunk_cnt;
+                if (chunk_cnt >= 0 && m.value_metadata_length > 0) {
+                    m.locator_flags |= 1;
                 }
-            }
-            storage::Statistic* st = idx->get_statistic();
-            int32_t chunk_cnt = 0;
-            auto* cl = aligned_idx != nullptr ? idx->get_value_chunk_meta_list()
-                                              : idx->get_chunk_meta_list();
-            if (cl != nullptr) {
-                chunk_cnt = static_cast<int32_t>(cl->size());
-            }
-            m.chunk_meta_count = chunk_cnt;
-            if (chunk_cnt >= 0 && m.value_metadata_length > 0) {
-                m.locator_flags |= 1;
-            }
-            if (aligned_idx != nullptr) {
-                auto* time_chunks = idx->get_time_chunk_meta_list();
-                if (time_chunks != nullptr) {
-                    m.time_chunk_meta_count =
-                        static_cast<uint32_t>(time_chunks->size());
+                if (aligned_idx != nullptr) {
+                    auto* time_chunks = idx->get_time_chunk_meta_list();
+                    if (time_chunks != nullptr) {
+                        m.time_chunk_meta_count =
+                            static_cast<uint32_t>(time_chunks->size());
+                    }
+                    if (m.time_metadata_length == 0 ||
+                        m.time_chunk_meta_count !=
+                            static_cast<uint32_t>(chunk_cnt)) {
+                        m.locator_flags &= ~static_cast<uint16_t>(1);
+                    }
                 }
-                if (m.time_metadata_length == 0 ||
-                    m.time_chunk_meta_count !=
-                        static_cast<uint32_t>(chunk_cnt)) {
-                    m.locator_flags &= ~static_cast<uint16_t>(1);
+                const int st_rc = fill_timeseries_statistic(st, &m.statistic);
+                if (st_rc != common::E_OK) {
+                    return st_rc;
                 }
+                const int timeline_st_rc =
+                    fill_timeline_statistic(idx.get(), &m.timeline_statistic);
+                if (timeline_st_rc != common::E_OK) {
+                    return timeline_st_rc;
+                }
+                slot++;
             }
-            const int st_rc = fill_timeseries_statistic(st, &m.statistic);
-            if (st_rc != common::E_OK) {
-                return st_rc;
-            }
-            const int timeline_st_rc =
-                fill_timeline_statistic(idx.get(), &m.timeline_statistic);
-            if (timeline_st_rc != common::E_OK) {
-                return timeline_st_rc;
-            }
-            slot++;
+            di++;
         }
-        di++;
+        out_map->entries = guard.release();
+        out_map->device_count = dev_n;
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
     }
-    out_map->entries = guard.release();
-    out_map->device_count = dev_n;
-    return common::E_OK;
 }
 
 }  // namespace
@@ -2815,3 +2859,7 @@ ResultSet tsfile_query_table_with_tag_filter(
                          static_cast<storage::Filter*>(tag_filter), batch_size);
     return table_result_set;
 }
+
+#ifdef __cplusplus
+}
+#endif

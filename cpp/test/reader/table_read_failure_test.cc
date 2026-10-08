@@ -651,23 +651,28 @@ TEST_P(TableReadFailureTest, CMetadataCopyExceptionsClearOutput) {
                             : tsfile_reader_get_timeseries_metadata_all(&reader,
                                                                         result);
         };
-        for (bool oom : {false, true}) {
-            DeviceTimeseriesMetadataMap result{};
-            {
-                // Fail after one entry has been copied to exercise cleanup
-                // of both completed and partially populated C structures.
-                InjectionGuard injection(oom ? "timeseries_metadata_copy_oom"
-                                             : "timeseries_metadata_copy_error",
-                                         1);
-                EXPECT_EQ(invoke(&result),
-                          oom ? common::E_OOM : common::E_FILE_READ_ERR);
-                EXPECT_EQ(result.entries, nullptr);
-                EXPECT_EQ(result.device_count, 0u);
+        for (bool device_copy : {false, true}) {
+            for (bool oom : {false, true}) {
+                DeviceTimeseriesMetadataMap result{};
+                {
+                    // Fail after one entry has been copied to exercise cleanup
+                    // of both completed and partially populated C structures.
+                    const char* point =
+                        device_copy ? (oom ? "device_id_copy_oom"
+                                           : "device_id_copy_error")
+                                    : (oom ? "timeseries_metadata_copy_oom"
+                                           : "timeseries_metadata_copy_error");
+                    InjectionGuard injection(point, 1);
+                    EXPECT_EQ(invoke(&result),
+                              oom ? common::E_OOM : common::E_FILE_READ_ERR);
+                    EXPECT_EQ(result.entries, nullptr);
+                    EXPECT_EQ(result.device_count, 0u);
+                    tsfile_free_device_timeseries_metadata_map(&result);
+                }
+                ASSERT_EQ(invoke(&result), common::E_OK);
+                EXPECT_EQ(result.device_count, count);
                 tsfile_free_device_timeseries_metadata_map(&result);
             }
-            ASSERT_EQ(invoke(&result), common::E_OK);
-            EXPECT_EQ(result.device_count, count);
-            tsfile_free_device_timeseries_metadata_map(&result);
         }
     }
     tsfile_free_device_id_array(devices, count);
@@ -742,30 +747,34 @@ TEST_P(TableReadFailureTest, ColumnArrayAllocationFailureReturnsOOM) {
 }
 
 TEST_P(TableReadFailureTest, SchemaCopyExceptionsClearOutput) {
-    for (bool all_tables : {false, true}) {
-        SCOPED_TRACE(all_tables);
-        storage::TsFileReader reader;
-        ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
-                      new FailingReadFile(bytes_))),
-                  common::E_OK);
-        InjectionGuard injection("table_schema_copy_oom");
-        if (all_tables) {
-            TableSchema* schemas = nullptr;
-            uint32_t size = 1;
-            EXPECT_EQ(tsfile_reader_get_all_table_schemas_checked(
-                          &reader, &schemas, &size),
-                      common::E_OOM);
-            EXPECT_EQ(schemas, nullptr);
-            EXPECT_EQ(size, 0u);
-        } else {
-            TableSchema schema{};
-            EXPECT_EQ(tsfile_reader_get_table_schema_checked(&reader, "test",
-                                                             &schema),
-                      common::E_OOM);
-            EXPECT_EQ(schema.table_name, nullptr);
-            EXPECT_EQ(schema.column_num, 0);
-            EXPECT_EQ(schema.column_schemas, nullptr);
-            free_table_schema(schema);
+    for (bool oom : {false, true}) {
+        for (bool all_tables : {false, true}) {
+            SCOPED_TRACE(all_tables);
+            storage::TsFileReader reader;
+            ASSERT_EQ(
+                reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                    new FailingReadFile(bytes_))),
+                common::E_OK);
+            InjectionGuard injection(oom ? "table_schema_copy_oom"
+                                         : "table_schema_copy_error");
+            if (all_tables) {
+                TableSchema* schemas = nullptr;
+                uint32_t size = 1;
+                EXPECT_EQ(tsfile_reader_get_all_table_schemas_checked(
+                              &reader, &schemas, &size),
+                          oom ? common::E_OOM : common::E_FILE_READ_ERR);
+                EXPECT_EQ(schemas, nullptr);
+                EXPECT_EQ(size, 0u);
+            } else {
+                TableSchema schema{};
+                EXPECT_EQ(tsfile_reader_get_table_schema_checked(
+                              &reader, "test", &schema),
+                          oom ? common::E_OOM : common::E_FILE_READ_ERR);
+                EXPECT_EQ(schema.table_name, nullptr);
+                EXPECT_EQ(schema.column_num, 0);
+                EXPECT_EQ(schema.column_schemas, nullptr);
+                free_table_schema(schema);
+            }
         }
     }
 }
