@@ -110,11 +110,11 @@ ERRNO validate_table_schema(const TableSchema* schema) {
 
 }  // namespace
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Public definitions inherit C linkage from tsfile_cwrapper.h. Keep internal
+// helpers under C++ linkage so MSVC /EHsc permits their exceptions to unwind
+// into the public entry points' exception handlers.
 
-void init_tsfile_config() { storage::libtsfile_init(); }
+extern "C" void init_tsfile_config() { storage::libtsfile_init(); }
 
 uint8_t get_global_time_encoding() {
     return common::get_global_time_encoding();
@@ -2815,7 +2815,3 @@ ResultSet tsfile_query_table_with_tag_filter(
                          static_cast<storage::Filter*>(tag_filter), batch_size);
     return table_result_set;
 }
-
-#ifdef __cplusplus
-}
-#endif
