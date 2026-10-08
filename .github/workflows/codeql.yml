@@ -70,14 +70,14 @@ jobs:
 
     - name: Set up Java for native build
       if: matrix.language == 'go'
-      uses: actions/setup-java@v5.6.0
+      uses: actions/setup-java@v6.0.1
       with:
         distribution: temurin
         java-version: '17'
 
     - name: Set up Go
       if: matrix.language == 'go'
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go/go.mod
         cache-dependency-path: go/go.sum
@@ -93,7 +93,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4.37.9
+      uses: github/codeql-action/init@v4.38.2
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
@@ -111,6 +111,6 @@ jobs:
         .\mvnw.cmd clean package -P with-cpp -Denable.lzma2=ON
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4.37.9
+      uses: github/codeql-action/analyze@v4.38.2
       with:
         category: "/language:${{matrix.language}}"
