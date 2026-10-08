@@ -94,7 +94,7 @@ class TsFileReaderTest : public ::testing::Test {
 
     void TearDown() override {
         delete tsfile_writer_;
-        // remove(file_name_.c_str());
+        remove(file_name_.c_str());
         libtsfile_destroy();
     }
 
