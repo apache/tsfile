@@ -25,6 +25,8 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <new>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -42,6 +44,8 @@ namespace {
 
 class FailingReadFile : public storage::RandomAccessReadFile {
    public:
+    enum class ReadException { None, BadAlloc, Other };
+
     explicit FailingReadFile(const std::vector<char>& bytes) : bytes_(bytes) {}
     bool is_opened() const override { return opened_; }
     int64_t file_size() const override { return bytes_.size(); }
@@ -57,6 +61,12 @@ class FailingReadFile : public storage::RandomAccessReadFile {
         read_size = 0;
         if (fail_at > 0 && (persistent ? reads >= fail_at : reads == fail_at)) {
             failed = true;
+            if (read_exception == ReadException::BadAlloc) {
+                throw std::bad_alloc();
+            }
+            if (read_exception == ReadException::Other) {
+                throw std::runtime_error("injected read exception");
+            }
             return short_read ? common::E_OK : common::E_FILE_READ_ERR;
         }
         if (offset < 0 || size < 0) return common::E_INVALID_ARG;
@@ -73,6 +83,7 @@ class FailingReadFile : public storage::RandomAccessReadFile {
     bool persistent = false;
     bool short_read = false;
     bool failed = false;
+    ReadException read_exception = ReadException::None;
 
    private:
     const std::vector<char>& bytes_;
@@ -315,6 +326,89 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
             ASSERT_EQ(schema_error, common::E_OK);
             EXPECT_STREQ(schema.table_name, "test");
             free_table_schema(schema);
+        }
+    }
+}
+
+TEST_P(TableReadFailureTest, CheckedMetadataApisContainReadExceptions) {
+    using ReadException = FailingReadFile::ReadException;
+    // Enumerating every read also covers exceptions after device-schema
+    // entries have been partially initialized.
+    for (int operation = 0; operation < 3; ++operation) {
+        auto invoke = [operation](storage::TsFileReader& reader,
+                                  bool expect_failure) {
+            if (operation == 0) {
+                auto* schemas = reinterpret_cast<DeviceSchema*>(&reader);
+                uint32_t count = 7;
+                const ERRNO ret =
+                    tsfile_reader_get_all_timeseries_schemas_checked(
+                        &reader, &schemas, &count);
+                if (expect_failure) {
+                    EXPECT_EQ(schemas, nullptr);
+                    EXPECT_EQ(count, 0u);
+                } else {
+                    EXPECT_NE(schemas, nullptr);
+                    EXPECT_GT(count, 0u);
+                }
+                if (schemas != nullptr) {
+                    for (uint32_t i = 0; i < count; ++i) {
+                        free_device_schema(schemas[i]);
+                    }
+                    free(schemas);
+                }
+                return ret;
+            }
+            TagFilterHandle filter = &reader;
+            const ERRNO ret =
+                operation == 1
+                    ? tsfile_tag_filter_create_checked(
+                          &reader, "test", "id0", "d0", TAG_FILTER_EQ, &filter)
+                    : tsfile_tag_filter_between_checked(
+                          &reader, "test", "id0", "d0", "d1", false, &filter);
+            if (expect_failure) {
+                EXPECT_EQ(filter, nullptr);
+            } else {
+                EXPECT_NE(filter, nullptr);
+            }
+            tsfile_tag_filter_free(filter);
+            return ret;
+        };
+
+        int first_read = 0;
+        int last_read = 0;
+        {
+            storage::TsFileReader reader;
+            auto* source = new FailingReadFile(bytes_);
+            ASSERT_EQ(
+                reader.open(
+                    std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                common::E_OK);
+            first_read = source->reads + 1;
+            ASSERT_EQ(invoke(reader, false), common::E_OK);
+            last_read = source->reads;
+            ASSERT_GE(last_read, first_read);
+        }
+        for (ReadException exception :
+             {ReadException::BadAlloc, ReadException::Other}) {
+            const int expected = exception == ReadException::BadAlloc
+                                     ? common::E_OOM
+                                     : common::E_FILE_READ_ERR;
+            for (int fail_at = first_read; fail_at <= last_read; ++fail_at) {
+                SCOPED_TRACE(::testing::Message()
+                             << operation << ":" << expected << ":" << fail_at);
+                storage::TsFileReader reader;
+                auto* source = new FailingReadFile(bytes_);
+                ASSERT_EQ(
+                    reader.open(
+                        std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                    common::E_OK);
+                source->fail_at = fail_at;
+                source->read_exception = exception;
+                ERRNO ret = common::E_OK;
+                EXPECT_NO_THROW(ret = invoke(reader, true));
+                EXPECT_TRUE(source->failed);
+                EXPECT_EQ(ret, expected);
+            }
         }
     }
 }
