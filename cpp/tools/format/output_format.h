@@ -42,6 +42,8 @@ const char* tsdatatype_name(common::TSDataType t);
 const char* tsencoding_name(common::TSEncoding e);
 const char* compression_name(common::CompressionType c);
 
+// Replace each maximal ill-formed UTF-8 subpart with U+FFFD (Unicode 3.9.6).
+std::string replace_invalid_utf8(const std::string& s);
 std::string csv_escape(const std::string& field);
 std::string json_escape(const std::string& s);
 std::string table_escape(const std::string& s);

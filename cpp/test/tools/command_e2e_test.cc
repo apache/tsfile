@@ -24,8 +24,13 @@
 #include <sstream>
 #include <string>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
+#include "format/input_format.h"
 
 namespace {
 
@@ -1623,4 +1628,116 @@ TEST(CliE2E, WriteDistinguishesCsvNullAndEmptyString) {
 
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
+}
+
+TEST(CliE2E, InvalidUtf8IdentifiersAreReplacedOnlyInOutput) {
+    storage::libtsfile_init();
+    const std::string path =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_utf8_names", ".tsfile");
+    std::string device = "root.device\xff";
+    std::string valid_device = "root.\xe4\xb8\xad\xe6\x96\x87";
+    const std::string measurement = "value\xe1\x80";
+    const std::string valid_measurement = "\xe6\xb8\xa9\xe5\xba\xa6";
+    const std::string replacement = "\xef\xbf\xbd";
+    {
+        storage::WriteFile file;
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        ASSERT_EQ(file.create(path, flags, 0666), common::E_OK);
+        storage::MeasurementSchema schema(measurement, common::INT64,
+                                          common::PLAIN, common::UNCOMPRESSED);
+        storage::MeasurementSchema valid_schema(valid_measurement,
+                                                common::INT64, common::PLAIN,
+                                                common::UNCOMPRESSED);
+        storage::TsFileTreeWriter writer(&file);
+        ASSERT_EQ(writer.register_timeseries(device, &schema), common::E_OK);
+        ASSERT_EQ(writer.register_timeseries(valid_device, &valid_schema),
+                  common::E_OK);
+        storage::TsRecord record(device, 0);
+        record.add_point(measurement, static_cast<int64_t>(42));
+        ASSERT_EQ(writer.write(record), common::E_OK);
+        storage::TsRecord valid_record(valid_device, 0);
+        valid_record.add_point(valid_measurement, static_cast<int64_t>(7));
+        ASSERT_EQ(writer.write(valid_record), common::E_OK);
+        ASSERT_EQ(writer.flush(), common::E_OK);
+        ASSERT_EQ(writer.close(), common::E_OK);
+    }
+
+    const std::string formats[] = {"csv", "ndjson", "table"};
+    for (const std::string& format : formats) {
+        for (const std::string& command : {"ls", "schema", "stats", "count"}) {
+            SCOPED_TRACE(command + " " + format);
+            std::ostringstream out, err;
+            ASSERT_EQ(
+                tsfile_cli::run_cli({command, "-f", format, path}, out, err), 0)
+                << err.str();
+            EXPECT_TRUE(tsfile_cli::is_valid_utf8(out.str()));
+            EXPECT_NE(out.str().find("root.device" + replacement),
+                      std::string::npos);
+            EXPECT_NE(out.str().find(valid_device), std::string::npos);
+        }
+        for (const std::string& command : {"head", "cat"}) {
+            SCOPED_TRACE(command + " " + format);
+            std::ostringstream out, err;
+            ASSERT_EQ(tsfile_cli::run_cli({command, "-d", device, "-m",
+                                           measurement, "-f", format, path},
+                                          out, err),
+                      0)
+                << err.str();
+            EXPECT_TRUE(tsfile_cli::is_valid_utf8(out.str()));
+            EXPECT_NE(out.str().find("value" + replacement), std::string::npos);
+            EXPECT_NE(out.str().find("42"), std::string::npos);
+        }
+
+        const std::string output = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_utf8_export", "." + format);
+        std::ostringstream out, err;
+        ASSERT_EQ(tsfile_cli::run_cli({"export", "-d", device, "--type", format,
+                                       "-o", output, path},
+                                      out, err),
+                  0)
+            << err.str();
+        std::ifstream file(output.c_str(), std::ios::binary);
+        std::ostringstream content;
+        content << file.rdbuf();
+        EXPECT_TRUE(tsfile_cli::is_valid_utf8(content.str()));
+        EXPECT_NE(content.str().find("value" + replacement), std::string::npos);
+        file.close();
+        std::remove(output.c_str());
+    }
+
+    std::ostringstream sketch, sketch_err;
+    ASSERT_EQ(tsfile_cli::run_cli({"sketch", path}, sketch, sketch_err), 0)
+        << sketch_err.str();
+    EXPECT_TRUE(tsfile_cli::is_valid_utf8(sketch.str()));
+    EXPECT_NE(sketch.str().find("value" + replacement), std::string::npos);
+
+    const std::string dir =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_utf8_manifest", "");
+    std::ostringstream out, err;
+    ASSERT_EQ(
+        tsfile_cli::run_cli({"export", "-d", device, "-d", valid_device,
+                             "--type", "ndjson", "--output-dir", dir, path},
+                            out, err),
+        0)
+        << err.str();
+    std::ifstream manifest((dir + "/_manifest.json").c_str(), std::ios::binary);
+    std::ostringstream content;
+    content << manifest.rdbuf();
+    EXPECT_TRUE(tsfile_cli::is_valid_utf8(content.str()));
+    EXPECT_NE(content.str().find("root.device" + replacement),
+              std::string::npos);
+    EXPECT_NE(content.str().find(valid_device), std::string::npos);
+    manifest.close();
+    std::remove((dir + "/0001.ndjson").c_str());
+    std::remove((dir + "/0002.ndjson").c_str());
+    std::remove((dir + "/_manifest.json").c_str());
+#ifdef _WIN32
+    _rmdir(dir.c_str());
+#else
+    rmdir(dir.c_str());
+#endif
+    std::remove(path.c_str());
 }

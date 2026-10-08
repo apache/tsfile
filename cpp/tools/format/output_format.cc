@@ -192,14 +192,55 @@ const char* compression_name(common::CompressionType c) {
     }
 }
 
+std::string replace_invalid_utf8(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    size_t i = 0;
+    while (i < s.size()) {
+        const unsigned char lead = static_cast<unsigned char>(s[i]);
+        size_t length = 0;
+        if (lead <= 0x7f) {
+            length = 1;
+        } else if (lead >= 0xc2 && lead <= 0xdf) {
+            length = 2;
+        } else if (lead >= 0xe0 && lead <= 0xef) {
+            length = 3;
+        } else if (lead >= 0xf0 && lead <= 0xf4) {
+            length = 4;
+        }
+        size_t consumed = 1;
+        while (consumed < length && consumed < s.size() - i) {
+            const unsigned char next =
+                static_cast<unsigned char>(s[i + consumed]);
+            if (next < 0x80 || next > 0xbf ||
+                (consumed == 1 && ((lead == 0xe0 && next < 0xa0) ||
+                                   (lead == 0xed && next > 0x9f) ||
+                                   (lead == 0xf0 && next < 0x90) ||
+                                   (lead == 0xf4 && next > 0x8f)))) {
+                break;
+            }
+            ++consumed;
+        }
+        if (consumed == length) {
+            out.append(s, i, consumed);
+        } else {
+            out += "\xef\xbf\xbd";
+        }
+        // Consume only a valid prefix of this character, leaving subsequent
+        // ASCII or valid UTF-8 for the next iteration, even after truncation.
+        i += consumed;
+    }
+    return out;
+}
+
 std::string csv_escape(const std::string& field) {
-    return common::csv_escape(field, ',');
+    return common::csv_escape(replace_invalid_utf8(field), ',');
 }
 
 std::string json_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 2);
-    for (unsigned char c : s) {
+    for (unsigned char c : replace_invalid_utf8(s)) {
         switch (c) {
             case '"':
                 out += "\\\"";
@@ -243,7 +284,7 @@ std::string json_escape(const std::string& s) {
 std::string table_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 2);
-    for (unsigned char c : s) {
+    for (unsigned char c : replace_invalid_utf8(s)) {
         switch (c) {
             case '\\':
                 out += "\\\\";
@@ -260,8 +301,8 @@ std::string table_escape(const std::string& s) {
             default:
                 // C0 controls (0x00-0x1f) plus DEL (0x7f) are the complete
                 // set of non-printable control bytes per C iscntrl(). Bytes
-                // >= 0x80 are UTF-8 continuation/lead bytes and must pass
-                // through untouched so multi-byte sequences survive.
+                // >= 0x80 now belong to well-formed UTF-8 and pass through
+                // untouched so multi-byte sequences survive.
                 if (c < 0x20 || c == 0x7f) {
                     char buf[8];
                     std::snprintf(buf, sizeof(buf), "\\u%04x", c);
