@@ -1624,3 +1624,90 @@ TEST(CliE2E, WriteDistinguishesCsvNullAndEmptyString) {
     std::remove(csv.c_str());
     std::remove(out_path.c_str());
 }
+
+TEST(CliE2E, WriteCatAndExportCsvPreserveQuotedLineEndings) {
+    const std::string input =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_crlf_input", ".csv");
+    const std::string first =
+        tsfile_cli_test::unique_temp_path("tsfile_cli_crlf_first", ".tsfile");
+    const std::string expected_csv =
+        "time,site,message,note\n"
+        "0,\"s\r\n1\",\"first\r\nsecond\",\"\"\"quoted\"\"\r\n\r\nlast\"\n"
+        "1,\"s\r\n1\",\"lf\nonly\",\"mixed\r\nand\nmore\"\n"
+        "2,\"s\r\n1\",\"carriage\rreturn\",\"\r\n\"\n"
+        "3,\"s\r\n1\",\"ends\r\",\"line\r\nend\"\n";
+    {
+        std::ofstream csv(input.c_str(), std::ios::binary);
+        ASSERT_TRUE(csv.good());
+        // CRLF record boundaries, embedded CRLF/LF/CR, and no final newline.
+        csv << "time,site,message,note\r\n"
+               "0,\"s\r\n1\",\"first\r\nsecond\","
+               "\"\"\"quoted\"\"\r\n\r\nlast\"\r\n"
+               "1,\"s\r\n1\",\"lf\nonly\",\"mixed\r\nand\nmore\"\r\n"
+               "2,\"s\r\n1\",\"carriage\rreturn\",\"\r\n\"\r\n"
+               "3,\"s\r\n1\",\"ends\r\",\"line\r\nend\"";
+    }
+    const auto write = [&](const std::string& source,
+                           const std::string& target) {
+        std::ostringstream out, err;
+        const int code = tsfile_cli::run_cli(
+            {"write", "--table", "t", "--tag", "site", "STRING", "--field",
+             "message", "STRING", "--field", "note", "TEXT", "-i", source, "-o",
+             target},
+            out, err);
+        EXPECT_EQ(code, 0) << err.str();
+        return code;
+    };
+    const auto read = [&](const std::string& path, const std::string& format) {
+        std::ostringstream out, err;
+        EXPECT_EQ(tsfile_cli::run_cli({"cat", "-t", "t", "-f", format, path},
+                                      out, err),
+                  0)
+            << err.str();
+        return out.str();
+    };
+    const std::string expected_ndjson =
+        R"json({"time":"0","site":"s\r\n1","message":"first\r\nsecond","note":"\"quoted\"\r\n\r\nlast"})json"
+        "\n"
+        R"json({"time":"1","site":"s\r\n1","message":"lf\nonly","note":"mixed\r\nand\nmore"})json"
+        "\n"
+        R"json({"time":"2","site":"s\r\n1","message":"carriage\rreturn","note":"\r\n"})json"
+        "\n"
+        R"json({"time":"3","site":"s\r\n1","message":"ends\r","note":"line\r\nend"})json"
+        "\n";
+    ASSERT_EQ(write(input, first), 0);
+    EXPECT_EQ(read(first, "ndjson"), expected_ndjson);
+
+    for (const std::string command : {"cat", "export"}) {
+        SCOPED_TRACE(command);
+        const std::string exported = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_crlf_" + command, ".csv");
+        const std::string second = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_crlf_" + command, ".tsfile");
+        if (command == "cat") {
+            const std::string csv = read(first, "csv");
+            EXPECT_EQ(csv, expected_csv);
+            std::ofstream file(exported.c_str(), std::ios::binary);
+            ASSERT_TRUE(file.good());
+            file << csv;
+        } else {
+            std::ostringstream out, err;
+            ASSERT_EQ(tsfile_cli::run_cli({"export", "-t", "t", "--type", "csv",
+                                           "-o", exported, first},
+                                          out, err),
+                      0)
+                << err.str();
+            std::ifstream file(exported.c_str(), std::ios::binary);
+            ASSERT_TRUE(file.good());
+            std::ostringstream bytes;
+            bytes << file.rdbuf();
+            EXPECT_EQ(bytes.str(), expected_csv);
+        }
+        ASSERT_EQ(write(exported, second), 0);
+        EXPECT_EQ(read(second, "ndjson"), expected_ndjson);
+        std::remove(exported.c_str());
+        std::remove(second.c_str());
+    }
+    std::remove(input.c_str());
+    std::remove(first.c_str());
+}
