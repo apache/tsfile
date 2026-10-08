@@ -412,6 +412,7 @@ def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, st
         "get_all_table_schemas",
         "get_table_schema",
         "get_all_timeseries_schemas",
+        "get_timeseries_metadata",
     ],
 )
 def test_metadata_read_failure_is_not_an_empty_result(method):
@@ -475,13 +476,23 @@ def test_device_index_read_failure_does_not_return_partial_devices(tmp_path):
     assert source.close_calls == 0
 
 
-@pytest.mark.parametrize("method", ["query_table", "query_table_by_row"])
+@pytest.mark.parametrize(
+    "method,columns,offset",
+    [
+        ("query_table", ["s0", "s2"], 0),
+        ("query_table_by_row", ["s0", "s2"], 0),
+        ("query_table", ["s0", "s2", "s3"], 0),
+        ("query_table_by_row", ["s0", "s2", "s3"], 0),
+        ("query_table_by_row", ["s0", "s2"], 1),
+        ("query_table_by_row", ["s0", "s2", "s3"], 1),
+    ],
+)
 @pytest.mark.parametrize("tag_kind", [None, "eq", "between"])
 @pytest.mark.parametrize("batch_size", [0, 16])
 @pytest.mark.parametrize("short_read", [False, True])
 @pytest.mark.parametrize("persistent", [False, True])
 def test_table_queries_propagate_every_read_failure(
-    method, tag_kind, batch_size, short_read, persistent
+    method, columns, offset, tag_kind, batch_size, short_read, persistent
 ):
     class FailingBytesIO(TrackingBytesIO):
         read_calls = 0
@@ -509,8 +520,9 @@ def test_table_queries_propagate_every_read_failure(
             tag_filter = ComparisonTagFilter("s0", "a", ComparisonTagFilter.EQ)
         elif tag_kind == "between":
             tag_filter = BetweenTagFilter("s0", "a", "a")
+        kwargs = {"offset": offset} if method == "query_table_by_row" else {}
         return getattr(reader, method)(
-            "test", ["s0", "s2"], tag_filter=tag_filter, batch_size=batch_size
+            "test", columns, tag_filter=tag_filter, batch_size=batch_size, **kwargs
         )
 
     def consume(result):
@@ -530,7 +542,7 @@ def test_table_queries_propagate_every_read_failure(
     with TsFileReader(baseline) as reader:
         open_reads = baseline.read_calls
         with query(reader) as result:
-            assert consume(result) == (60 if tag_kind is None else 30)
+            assert consume(result) == (60 if tag_kind is None else 30) - offset
 
     # Sweep actual reads rather than hard-coding call numbers: metadata may
     # be prefetched or cached differently as the implementation evolves.

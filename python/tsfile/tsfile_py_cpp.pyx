@@ -1431,9 +1431,9 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
     cdef DeviceID* q = NULL
     cdef uint32_t qlen = 0
     cdef uint32_t i
+    cdef uint32_t j
     cdef int err
     cdef bytes bpath
-    cdef const char* raw
     memset(&mmap, 0, sizeof(DeviceTimeseriesMetadataMap))
     if device_ids is None:
         err = tsfile_reader_get_timeseries_metadata_all(reader, &mmap)
@@ -1455,18 +1455,29 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                     path_s = dev.path
                 except AttributeError:
                     path_s = str(dev)
-                bpath = path_s.encode('utf-8')
-                raw = PyBytes_AsString(bpath)
-                q[i].path = strdup(raw)
-                if q[i].path == NULL:
-                    raise MemoryError()
+                if path_s is not None:
+                    bpath = path_s.encode('utf-8')
+                    q[i].path = strdup(PyBytes_AsString(bpath))
+                    if q[i].path == NULL:
+                        raise MemoryError()
+                segments = getattr(dev, 'segments', ())
+                if segments:
+                    q[i].segment_count = <uint32_t>len(segments)
+                    q[i].segments = <char**>malloc(sizeof(char*) * len(segments))
+                    if q[i].segments == NULL:
+                        raise MemoryError()
+                    memset(q[i].segments, 0, sizeof(char*) * len(segments))
+                    for j in range(q[i].segment_count):
+                        if segments[j] is not None:
+                            bpath = segments[j].encode('utf-8')
+                            q[i].segments[j] = strdup(PyBytes_AsString(bpath))
+                            if q[i].segments[j] == NULL:
+                                raise MemoryError()
             err = tsfile_reader_get_timeseries_metadata_for_devices(
                 reader, q, qlen, &mmap)
             check_error(err)
         finally:
-            for i in range(qlen):
-                free(q[i].path)
-            free(q)
+            tsfile_free_device_id_array(q, qlen)
     try:
         return device_timeseries_metadata_map_to_py(&mmap)
     finally:

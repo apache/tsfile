@@ -31,6 +31,8 @@
 #include "cli/run_cli.h"
 #include "cli_test_util.h"
 #include "commands/commands.h"
+#include "commands/statistics.h"
+#include "common/config/config.h"
 #include "file/local_random_access_read_file.h"
 #include "reader/tsfile_reader.h"
 
@@ -54,11 +56,13 @@ class FailingMetadataReadFile : public storage::LocalRandomAccessReadFile {
    public:
     int read(int64_t offset, char* buffer, int32_t size,
              int32_t& read_size) override {
-        if (fail_reads) {
+        ++reads;
+        if (fail_reads || (fail_at > 0 && (persistent ? reads >= fail_at
+                                                      : reads == fail_at))) {
             failed = true;
             fail_reads = persistent;
             read_size = 0;
-            return common::E_FILE_READ_ERR;
+            return short_read ? common::E_OK : common::E_FILE_READ_ERR;
         }
         return LocalRandomAccessReadFile::read(offset, buffer, size, read_size);
     }
@@ -66,6 +70,9 @@ class FailingMetadataReadFile : public storage::LocalRandomAccessReadFile {
     bool fail_reads = false;
     bool persistent = false;
     bool failed = false;
+    bool short_read = false;
+    int reads = 0;
+    int fail_at = 0;
 };
 
 bool file_exists(const std::string& path) {
@@ -112,6 +119,77 @@ std::string global_usage() {
 }
 
 }  // namespace
+
+TEST(CliRequirements, FileSummaryPropagatesEveryMetadataReadFailure) {
+    for (bool internal_indexes : {false, true}) {
+        TableFixture fixture;
+        if (internal_indexes) {
+            const uint32_t saved =
+                common::g_config_value_.max_degree_of_index_node_;
+            ASSERT_EQ(storage::set_max_degree_of_index_node(2), common::E_OK);
+            std::remove(fixture.path.c_str());
+            fixture.path = tsfile_cli_test::write_tag_filter_fixture();
+            ASSERT_EQ(storage::set_max_degree_of_index_node(saved),
+                      common::E_OK);
+        }
+        tsfile_cli::ParsedArgs args;
+        args.file = fixture.path;
+        int first_read = 0;
+        int last_read = 0;
+        {
+            auto* source = new FailingMetadataReadFile;
+            ASSERT_EQ(source->open(fixture.path), common::E_OK);
+            storage::TsFileReader reader;
+            ASSERT_EQ(
+                reader.open(
+                    std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                common::E_OK);
+            first_read = source->reads + 1;
+            tsfile_cli::FileSummary summary;
+            std::ostringstream err;
+            ASSERT_EQ(
+                tsfile_cli::collect_file_summary(args, reader, summary, err), 0)
+                << err.str();
+            EXPECT_EQ(summary.device_count, internal_indexes ? 3 : 1);
+            EXPECT_GT(summary.series_count, 0);
+            last_read = source->reads;
+        }
+        for (bool persistent : {false, true}) {
+            for (bool short_read : {false, true}) {
+                for (int fail_at = first_read; fail_at <= last_read;
+                     ++fail_at) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << internal_indexes << ":" << persistent << ":"
+                                 << short_read << ":" << fail_at);
+                    auto* source = new FailingMetadataReadFile;
+                    ASSERT_EQ(source->open(fixture.path), common::E_OK);
+                    storage::TsFileReader reader;
+                    ASSERT_EQ(
+                        reader.open(
+                            std::unique_ptr<storage::RandomAccessReadFile>(
+                                source)),
+                        common::E_OK);
+                    source->fail_at = fail_at;
+                    source->persistent = persistent;
+                    source->short_read = short_read;
+                    tsfile_cli::FileSummary summary;
+                    summary.file = "unchanged";
+                    summary.device_count = -1;
+                    std::ostringstream err;
+                    EXPECT_EQ(tsfile_cli::collect_file_summary(args, reader,
+                                                               summary, err),
+                              2);
+                    EXPECT_TRUE(source->failed);
+                    EXPECT_EQ(summary.file, "unchanged");
+                    EXPECT_EQ(summary.device_count, -1);
+                    EXPECT_NE(err.str().find("failed to read"),
+                              std::string::npos)
+                        << err.str();
+                }
+            }
+        }
+    }
+}
 
 TEST(CliRequirements, ModelDetectionPropagatesMetadataReadErrors) {
     TableFixture fixture;

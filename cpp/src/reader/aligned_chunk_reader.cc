@@ -1421,7 +1421,7 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     // bytes would feed garbage to the decompressor.
     if (read_len != static_cast<int32_t>(page_info.time_compressed_size)) {
         if (heap) common::mem_free(compressed_buf);
-        return E_TSFILE_CORRUPTED;
+        return E_FILE_READ_ERR;
     }
 
     char* uncompressed_buf = nullptr;
@@ -1668,7 +1668,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     if (read_len !=
         static_cast<int32_t>(page_info.value_compressed_sizes[col_idx])) {
         if (heap) common::mem_free(compressed_buf);
-        return E_TSFILE_CORRUPTED;
+        return E_FILE_READ_ERR;
     }
 
     char* uncompressed_buf = nullptr;

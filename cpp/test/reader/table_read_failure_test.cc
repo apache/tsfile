@@ -41,9 +41,22 @@
 #include "reader/meta_data_querier.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
+#include "utils/injection.h"
 #include "writer/tsfile_table_writer.h"
 
 namespace {
+
+class InjectionGuard {
+   public:
+    explicit InjectionGuard(const char* point, int count_down = 0)
+        : point_(point) {
+        common::enable_injection(point_, count_down);
+    }
+    ~InjectionGuard() { common::disable_injection(point_); }
+
+   private:
+    const char* point_;
+};
 
 class FailingReadFile : public storage::RandomAccessReadFile {
    public:
@@ -472,6 +485,288 @@ TEST_P(TableReadFailureTest, LegacySchemaApisReturnEmptyOnReadFailure) {
         auto schema = reader.get_table_schema("test");
         ASSERT_NE(schema, nullptr);
         EXPECT_EQ(schema->get_table_name(), "test");
+    }
+}
+
+TEST_P(TableReadFailureTest, TimeseriesMetadataPropagatesEveryReadFailure) {
+    for (bool selected_devices : {false, true}) {
+        auto invoke = [this, selected_devices](
+                          storage::TsFileReader& reader,
+                          storage::DeviceTimeseriesMetadataMap& result) {
+            if (!selected_devices)
+                return reader.get_timeseries_metadata(result);
+            std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+            for (int i = 0; i < 5; ++i) {
+                std::vector<std::string> segments{"test",
+                                                  "d" + std::to_string(i)};
+                if (std::get<0>(GetParam()) == 2) segments.push_back("tag");
+                devices.emplace_back(
+                    new storage::StringArrayDeviceID(segments));
+            }
+            return reader.get_timeseries_metadata(devices, result);
+        };
+        int first_read = 0;
+        int last_read = 0;
+        {
+            storage::TsFileReader reader;
+            auto* source = new FailingReadFile(bytes_);
+            ASSERT_EQ(
+                reader.open(
+                    std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                common::E_OK);
+            first_read = source->reads + 1;
+            storage::DeviceTimeseriesMetadataMap result;
+            ASSERT_EQ(invoke(reader, result), common::E_OK);
+            ASSERT_EQ(result.size(),
+                      static_cast<size_t>(std::get<1>(GetParam())));
+            last_read = source->reads;
+            ASSERT_GE(last_read, first_read);
+        }
+        for (bool persistent : {false, true}) {
+            for (bool short_read : {false, true}) {
+                for (int fail_at = first_read; fail_at <= last_read;
+                     ++fail_at) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << selected_devices << ":" << persistent << ":"
+                                 << short_read << ":" << fail_at);
+                    storage::TsFileReader reader;
+                    auto* source = new FailingReadFile(bytes_);
+                    ASSERT_EQ(
+                        reader.open(
+                            std::unique_ptr<storage::RandomAccessReadFile>(
+                                source)),
+                        common::E_OK);
+                    source->fail_at = fail_at;
+                    source->persistent = persistent;
+                    source->short_read = short_read;
+                    storage::DeviceTimeseriesMetadataMap result;
+                    result[nullptr] = {};
+                    EXPECT_EQ(invoke(reader, result), common::E_FILE_READ_ERR);
+                    EXPECT_TRUE(source->failed);
+                    EXPECT_TRUE(result.empty());
+                    source->fail_at = 0;
+                    ASSERT_EQ(invoke(reader, result), common::E_OK);
+                    EXPECT_EQ(result.size(),
+                              static_cast<size_t>(std::get<1>(GetParam())));
+                }
+            }
+        }
+    }
+}
+
+TEST_P(TableReadFailureTest, CMetadataPropagatesEveryReadFailureAndException) {
+    std::vector<std::string> names;
+    for (int i = 0; i < 5; ++i) names.push_back("d" + std::to_string(i));
+    DeviceID devices[5]{};
+    char* segments[5][3]{};
+    for (int i = 0; i < 5; ++i) {
+        segments[i][0] = const_cast<char*>("test");
+        segments[i][1] = const_cast<char*>(names[i].c_str());
+        segments[i][2] = const_cast<char*>("tag");
+        devices[i].segment_count = 1 + std::get<0>(GetParam());
+        devices[i].segments = segments[i];
+    }
+    for (bool selected : {false, true}) {
+        auto invoke = [&](storage::TsFileReader& reader) {
+            DeviceTimeseriesMetadataMap result{};
+            const int ret =
+                selected ? tsfile_reader_get_timeseries_metadata_for_devices(
+                               &reader, devices, 5, &result)
+                         : tsfile_reader_get_timeseries_metadata_all(&reader,
+                                                                     &result);
+            if (ret == common::E_OK) {
+                EXPECT_EQ(result.device_count,
+                          static_cast<uint32_t>(std::get<1>(GetParam())));
+                EXPECT_NE(result.entries, nullptr);
+            } else {
+                EXPECT_EQ(result.device_count, 0u);
+                EXPECT_EQ(result.entries, nullptr);
+            }
+            tsfile_free_device_timeseries_metadata_map(&result);
+            return ret;
+        };
+        int first_read = 0;
+        int last_read = 0;
+        {
+            storage::TsFileReader reader;
+            auto* source = new FailingReadFile(bytes_);
+            ASSERT_EQ(
+                reader.open(
+                    std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                common::E_OK);
+            first_read = source->reads + 1;
+            ASSERT_EQ(invoke(reader), common::E_OK);
+            last_read = source->reads;
+            ASSERT_GE(last_read, first_read);
+        }
+        for (bool persistent : {false, true}) {
+            for (int mode = 0; mode < 4; ++mode) {
+                for (int fail_at = first_read; fail_at <= last_read;
+                     ++fail_at) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << selected << ":" << persistent << ":" << mode
+                                 << ":" << fail_at);
+                    storage::TsFileReader reader;
+                    auto* source = new FailingReadFile(bytes_);
+                    ASSERT_EQ(
+                        reader.open(
+                            std::unique_ptr<storage::RandomAccessReadFile>(
+                                source)),
+                        common::E_OK);
+                    source->fail_at = fail_at;
+                    source->persistent = persistent;
+                    source->short_read = mode == 1;
+                    if (mode == 2)
+                        source->read_exception =
+                            FailingReadFile::ReadException::BadAlloc;
+                    if (mode == 3)
+                        source->read_exception =
+                            FailingReadFile::ReadException::Other;
+                    EXPECT_EQ(invoke(reader), mode == 2
+                                                  ? common::E_OOM
+                                                  : common::E_FILE_READ_ERR);
+                    EXPECT_TRUE(source->failed);
+                    source->fail_at = 0;
+                    ASSERT_EQ(invoke(reader), common::E_OK);
+                }
+            }
+        }
+    }
+}
+
+TEST_P(TableReadFailureTest, CMetadataCopyExceptionsClearOutput) {
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                  new FailingReadFile(bytes_))),
+              common::E_OK);
+    DeviceID* devices = nullptr;
+    uint32_t count = 0;
+    ASSERT_EQ(tsfile_reader_get_all_devices(&reader, &devices, &count),
+              common::E_OK);
+    ASSERT_GE(count, 2u);
+    for (bool selected : {false, true}) {
+        auto invoke = [&](DeviceTimeseriesMetadataMap* result) {
+            return selected ? tsfile_reader_get_timeseries_metadata_for_devices(
+                                  &reader, devices, count, result)
+                            : tsfile_reader_get_timeseries_metadata_all(&reader,
+                                                                        result);
+        };
+        for (bool oom : {false, true}) {
+            DeviceTimeseriesMetadataMap result{};
+            {
+                // Fail after one entry has been copied to exercise cleanup
+                // of both completed and partially populated C structures.
+                InjectionGuard injection(oom ? "timeseries_metadata_copy_oom"
+                                             : "timeseries_metadata_copy_error",
+                                         1);
+                EXPECT_EQ(invoke(&result),
+                          oom ? common::E_OOM : common::E_FILE_READ_ERR);
+                EXPECT_EQ(result.entries, nullptr);
+                EXPECT_EQ(result.device_count, 0u);
+                tsfile_free_device_timeseries_metadata_map(&result);
+            }
+            ASSERT_EQ(invoke(&result), common::E_OK);
+            EXPECT_EQ(result.device_count, count);
+            tsfile_free_device_timeseries_metadata_map(&result);
+        }
+    }
+    tsfile_free_device_id_array(devices, count);
+}
+
+TEST_P(TableReadFailureTest, TimeseriesMetadataValidatesInputs) {
+    storage::TsFileReader reader;
+    storage::DeviceTimeseriesMetadataMap result;
+    result[nullptr] = {};
+    EXPECT_EQ(reader.get_timeseries_metadata(result), common::E_INVALID_ARG);
+    EXPECT_TRUE(result.empty());
+    const std::vector<std::shared_ptr<storage::IDeviceID>> no_devices;
+    result[nullptr] = {};
+    EXPECT_EQ(reader.get_timeseries_metadata(no_devices, result),
+              common::E_INVALID_ARG);
+    EXPECT_TRUE(result.empty());
+    ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                  new FailingReadFile(bytes_))),
+              common::E_OK);
+    EXPECT_EQ(reader.get_timeseries_metadata(no_devices, result), common::E_OK);
+    EXPECT_TRUE(result.empty());
+    result[nullptr] = {};
+    EXPECT_EQ(reader.get_timeseries_metadata({nullptr}, result),
+              common::E_INVALID_ARG);
+    EXPECT_TRUE(result.empty());
+    DeviceTimeseriesMetadataMap c_result{};
+    EXPECT_EQ(tsfile_reader_get_timeseries_metadata_all(nullptr, &c_result),
+              common::E_INVALID_ARG);
+    EXPECT_EQ(c_result.entries, nullptr);
+    EXPECT_EQ(c_result.device_count, 0u);
+    char* invalid_segments[] = {nullptr, const_cast<char*>("d0")};
+    DeviceID invalid_device{};
+    invalid_device.path = const_cast<char*>("test.d0");
+    invalid_device.segment_count = 2;
+    invalid_device.segments = invalid_segments;
+    EXPECT_EQ(tsfile_reader_get_timeseries_metadata_for_devices(
+                  &reader, &invalid_device, 1, &c_result),
+              common::E_INVALID_ARG);
+    invalid_device.segments = nullptr;
+    EXPECT_EQ(tsfile_reader_get_timeseries_metadata_for_devices(
+                  &reader, &invalid_device, 1, &c_result),
+              common::E_INVALID_ARG);
+}
+
+TEST_P(TableReadFailureTest, ColumnArrayAllocationFailureReturnsOOM) {
+    for (bool all_tables : {false, true}) {
+        SCOPED_TRACE(all_tables);
+        storage::TsFileReader reader;
+        ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                      new FailingReadFile(bytes_))),
+                  common::E_OK);
+        InjectionGuard injection("table_schema_column_alloc_fail");
+        if (all_tables) {
+            TableSchema* schemas = nullptr;
+            uint32_t size = 1;
+            EXPECT_EQ(tsfile_reader_get_all_table_schemas_checked(
+                          &reader, &schemas, &size),
+                      common::E_OOM);
+            EXPECT_EQ(schemas, nullptr);
+            EXPECT_EQ(size, 0u);
+        } else {
+            TableSchema schema{};
+            EXPECT_EQ(tsfile_reader_get_table_schema_checked(&reader, "test",
+                                                             &schema),
+                      common::E_OOM);
+            EXPECT_EQ(schema.table_name, nullptr);
+            EXPECT_EQ(schema.column_num, 0);
+            EXPECT_EQ(schema.column_schemas, nullptr);
+            free_table_schema(schema);
+        }
+    }
+}
+
+TEST_P(TableReadFailureTest, SchemaCopyExceptionsClearOutput) {
+    for (bool all_tables : {false, true}) {
+        SCOPED_TRACE(all_tables);
+        storage::TsFileReader reader;
+        ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                      new FailingReadFile(bytes_))),
+                  common::E_OK);
+        InjectionGuard injection("table_schema_copy_oom");
+        if (all_tables) {
+            TableSchema* schemas = nullptr;
+            uint32_t size = 1;
+            EXPECT_EQ(tsfile_reader_get_all_table_schemas_checked(
+                          &reader, &schemas, &size),
+                      common::E_OOM);
+            EXPECT_EQ(schemas, nullptr);
+            EXPECT_EQ(size, 0u);
+        } else {
+            TableSchema schema{};
+            EXPECT_EQ(tsfile_reader_get_table_schema_checked(&reader, "test",
+                                                             &schema),
+                      common::E_OOM);
+            EXPECT_EQ(schema.table_name, nullptr);
+            EXPECT_EQ(schema.column_num, 0);
+            EXPECT_EQ(schema.column_schemas, nullptr);
+            free_table_schema(schema);
+        }
     }
 }
 

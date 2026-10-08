@@ -552,7 +552,9 @@ ERRNO tsfile_reader_get_timeseries_metadata_all(
  *
  * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
  * (E_OK); @p devices is not read.
- * For each entry, @p path must be non-NULL (canonical device path).
+ * Nonempty @p segments are used as the exact device ID, preserving null tags.
+ * The segment array and its first (table name) entry must be non-NULL.
+ * With segment_count==0, @p path must be a non-NULL legacy tree device path.
  */
 ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
     TsFileReader reader, const DeviceID* devices, uint32_t length,
@@ -1191,19 +1193,22 @@ TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
                                        const char* value);
 
 /**
- * @brief Logical AND of two tag filters. Takes ownership of left and right.
+ * @brief Logical AND of two tag filters. Takes ownership of left and right
+ * only on success. Returns NULL on failure; the caller still owns the inputs.
  */
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
                                       TagFilterHandle right);
 
 /**
- * @brief Logical OR of two tag filters. Takes ownership of left and right.
+ * @brief Logical OR of two tag filters. Takes ownership of left and right
+ * only on success. Returns NULL on failure; the caller still owns the inputs.
  */
 TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
                                      TagFilterHandle right);
 
 /**
- * @brief Logical NOT of a tag filter. Takes ownership of filter.
+ * @brief Logical NOT of a tag filter. Takes ownership of filter only on
+ * success. Returns NULL on failure; the caller still owns the input.
  */
 TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
 

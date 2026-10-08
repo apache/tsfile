@@ -653,6 +653,18 @@ int TsFileReader::get_timeseries_metadata_impl(
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    DeviceTimeseriesMetadataMap result;
+    get_timeseries_metadata(device_ids, result);
+    return result;
+}
+
+int TsFileReader::get_timeseries_metadata(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+    DeviceTimeseriesMetadataMap& result) {
+    result.clear();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     // Reset the shared meta arena up front: every call writes fresh
     // timeseries-index metadata into it via _impl(), and the previous
     // implementation only ever appended.  A long-lived reader that repeats
@@ -662,22 +674,40 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     // shared_ptrs handed back use a noop deleter pointing into this arena.
     tsfile_reader_meta_pa_.destroy();
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
-    DeviceTimeseriesMetadataMap result;
+    DeviceTimeseriesMetadataMap collected;
     for (const auto& device_id : device_ids) {
-        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
-            result.insert(std::make_pair(device_id, std::move(list)));
+        if (!device_id) {
+            return E_INVALID_ARG;
         }
-        // Skip non-existent devices (not inserted)
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        const int ret = get_timeseries_metadata_impl(device_id, list);
+        if (ret == E_DEVICE_NOT_EXIST) {
+            continue;
+        }
+        if (ret != E_OK) {
+            return ret;
+        }
+        collected.emplace(device_id, std::move(list));
     }
-    return result;
+    result.swap(collected);
+    return E_OK;
 }
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     DeviceTimeseriesMetadataMap result;
-    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
-    if (tsfile_meta == nullptr) {
-        return result;
+    get_timeseries_metadata(result);
+    return result;
+}
+
+int TsFileReader::get_timeseries_metadata(DeviceTimeseriesMetadataMap& result) {
+    result.clear();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* tsfile_meta = nullptr;
+    int ret = tsfile_executor_->get_tsfile_meta(tsfile_meta);
+    if (ret != E_OK) {
+        return ret;
     }
 
     // Same arena-reset rationale as the device_ids overload above.
@@ -688,29 +718,33 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     pa.init(512, MOD_TSFILE_READER);
     std::vector<DeviceMetaEntry> entries;
     for (auto& table_entry : tsfile_meta->table_metadata_index_node_map_) {
-        if (get_all_device_entries(entries, table_entry.second,
-                                   read_file_.get(), pa) != E_OK) {
-            return result;
+        ret = get_all_device_entries(entries, table_entry.second,
+                                     read_file_.get(), pa);
+        if (ret != E_OK) {
+            return ret;
         }
     }
 
     auto noop_deleter = [](ITimeseriesIndex*) {};
+    DeviceTimeseriesMetadataMap collected;
     for (auto& device_entry : entries) {
         std::vector<ITimeseriesIndex*> raw_ts_indexes;
-        if (tsfile_executor_->get_tsfile_io_reader()
-                ->get_device_timeseries_meta_by_offset(
-                    device_entry.start_offset, device_entry.end_offset,
-                    raw_ts_indexes, tsfile_reader_meta_pa_) == E_OK) {
-            std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-            for (auto ts_idx : raw_ts_indexes) {
-                list.emplace_back(
-                    std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
-            }
-            result.insert(
-                std::make_pair(device_entry.device_id, std::move(list)));
+        ret = tsfile_executor_->get_tsfile_io_reader()
+                  ->get_device_timeseries_meta_by_offset(
+                      device_entry.start_offset, device_entry.end_offset,
+                      raw_ts_indexes, tsfile_reader_meta_pa_);
+        if (ret != E_OK) {
+            return ret;
         }
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        for (auto ts_idx : raw_ts_indexes) {
+            list.emplace_back(
+                std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
+        }
+        collected.emplace(device_entry.device_id, std::move(list));
     }
-    return result;
+    result.swap(collected);
+    return E_OK;
 }
 
 TsFileProperties TsFileReader::get_tsfile_properties() {

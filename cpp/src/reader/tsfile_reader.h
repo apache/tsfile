@@ -245,12 +245,22 @@ class TsFileReader {
     DeviceTimeseriesMetadataMap get_timeseries_metadata(
         const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
 
+    /** Error-reporting overload. Missing devices are skipped; the output is
+     * empty on read failure. Metadata remains valid until the next metadata
+     * call or until the reader is closed, as with the legacy overload. */
+    int get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+        DeviceTimeseriesMetadataMap& result);
+
     /**
      * @brief Get timeseries metadata for all devices in the file.
      *
      * @return map: IDeviceID -> list of timeseries metadata
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_timeseries_metadata(DeviceTimeseriesMetadataMap& result);
 
     /** Return a copy of all file-level properties, preserving null values. */
     TsFileProperties get_tsfile_properties();

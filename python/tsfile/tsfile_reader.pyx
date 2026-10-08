@@ -413,6 +413,9 @@ cdef class TsFileReaderPy:
         """Recursively build C TagFilterHandle from Python TagFilter tree."""
         cdef ErrorCode code = 0
         cdef TagFilterHandle handle = NULL
+        cdef TagFilterHandle left = NULL
+        cdef TagFilterHandle right = NULL
+        cdef TagFilterHandle inner = NULL
         cdef bytes table_bytes
         cdef bytes col_bytes
         cdef bytes val_bytes
@@ -440,17 +443,33 @@ cdef class TsFileReaderPy:
                 <const char*>upper_bytes, tag_filter.is_not, &code)
             check_error(code)
             return handle
-        elif isinstance(tag_filter, AndTagFilter):
-            left = self._build_c_tag_filter(table_name, tag_filter.left)
-            right = self._build_c_tag_filter(table_name, tag_filter.right)
-            return tsfile_tag_filter_and(left, right)
-        elif isinstance(tag_filter, OrTagFilter):
-            left = self._build_c_tag_filter(table_name, tag_filter.left)
-            right = self._build_c_tag_filter(table_name, tag_filter.right)
-            return tsfile_tag_filter_or(left, right)
+        elif isinstance(tag_filter, (AndTagFilter, OrTagFilter)):
+            try:
+                left = self._build_c_tag_filter(table_name, tag_filter.left)
+                right = self._build_c_tag_filter(table_name, tag_filter.right)
+                if isinstance(tag_filter, AndTagFilter):
+                    handle = tsfile_tag_filter_and(left, right)
+                else:
+                    handle = tsfile_tag_filter_or(left, right)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                # The compound filter now owns both children.
+                left = NULL
+                right = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(left)
+                tsfile_tag_filter_free(right)
         elif isinstance(tag_filter, NotTagFilter):
-            inner = self._build_c_tag_filter(table_name, tag_filter.filter)
-            return tsfile_tag_filter_not(inner)
+            try:
+                inner = self._build_c_tag_filter(table_name, tag_filter.filter)
+                handle = tsfile_tag_filter_not(inner)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                inner = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(inner)
         else:
             raise TypeError(f"Unknown tag filter type: {type(tag_filter)}")
     def query_table_on_tree(self, column_names : List[str],

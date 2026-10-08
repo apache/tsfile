@@ -33,6 +33,8 @@ from tsfile import (
     tag_gteq,
     TIME_COLUMN,
 )
+from tsfile.exceptions import ColumnNotExistError
+from tsfile.tag_filter import AndTagFilter, OrTagFilter, NotTagFilter
 
 TSFILE_PATH = "test_tag_filter_query.tsfile"
 
@@ -43,6 +45,27 @@ COLUMNS = [
     ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD),
 ]
 SCHEMA = TableSchema(TABLE_NAME, COLUMNS)
+
+
+@pytest.mark.parametrize("combine", [AndTagFilter, OrTagFilter])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("invalid_type", [False, True])
+def test_failed_compound_filter_construction_allows_recovery(
+    combine, nested, invalid_type
+):
+    good = tag_eq("region", "north")
+    bad = object() if invalid_type else tag_eq("missing", "north")
+    left = good & tag_eq("device", "dev_a") if nested else good
+    tag_filter = combine(left, NotTagFilter(bad) if nested else bad)
+    error = TypeError if invalid_type else ColumnNotExistError
+    with TsFileReader(TSFILE_PATH) as reader:
+        for _ in range(20):
+            with pytest.raises(error):
+                reader.query_table(TABLE_NAME, ["value"], tag_filter=tag_filter)
+            assert not reader.get_active_query_result()
+        with reader.query_table(TABLE_NAME, ["value"], tag_filter=good) as result:
+            assert sum(1 for _ in iter(result.next, False)) == 10
+
 
 # Test data:
 # region  | device   | timestamps | values
