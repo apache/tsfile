@@ -25,9 +25,12 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "file/local_random_access_read_file.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "reader/filter/tag_filter.h"
+#include "reader/filter/time_operator.h"
+#include "reader/table_query_executor.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/chunk_writer.h"
@@ -289,6 +292,64 @@ TEST_P(TsFileTableReaderTimeFilterTest, QueryStartingInSecondChunk) {
         }
     }
     ASSERT_EQ(reader.close(), common::E_OK);
+}
+
+TEST_P(TsFileTableReaderTimeFilterTest, QueryContinuesAfterEmptyPageInChunk) {
+    g_config_value_.page_writer_max_point_num_ = 2;
+    std::unique_ptr<TableSchema> table_schema(gen_table_schema(0));
+    TsFileTableWriter writer(&write_file_, table_schema.get());
+    auto tablet = gen_tablet(table_schema.get(), 0, 1, 4);
+    for (int row = 0; row < 4; ++row) {
+        const int64_t time = row * 10;
+        ASSERT_EQ(tablet.add_timestamp(row, time), common::E_OK);
+        ASSERT_EQ(tablet.add_value(row, "s0", time), common::E_OK);
+        ASSERT_EQ(tablet.add_value(row, "s1", time * 2), common::E_OK);
+    }
+    // One flush produces a chunk with pages [0, 10] and [20, 30].
+    ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer.flush(), common::E_OK);
+    ASSERT_EQ(writer.close(), common::E_OK);
+
+    LocalRandomAccessReadFile read_file;
+    ASSERT_EQ(read_file.open(file_name_), common::E_OK);
+    TableQueryExecutor executor(&read_file);
+    for (int column_count : {1, 2}) {
+        std::vector<std::string> columns{"s0"};
+        if (column_count == 2) columns.push_back("s1");
+        for (const auto& selected_times :
+             {std::vector<int64_t>{5, 20, 30}, std::vector<int64_t>{5}}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "parallel=" << GetParam()
+                         << ", columns=" << column_count << ", selected_times="
+                         << ::testing::PrintToString(selected_times));
+            // TimeIn conservatively accepts page statistics, so the first
+            // page is decoded with no matching rows rather than skipped.
+            // The second filter also checks exhaustion after two empty pages.
+            ResultSet* raw_result = nullptr;
+            ASSERT_EQ(executor.query(table_schema->get_table_name(), columns,
+                                     new TimeIn(selected_times, false), nullptr,
+                                     nullptr, raw_result),
+                      common::E_OK);
+            std::unique_ptr<ResultSet> result(raw_result);
+            ASSERT_NE(result, nullptr);
+            std::vector<int64_t> actual_times;
+            bool has_next = false;
+            int ret = common::E_OK;
+            while ((ret = result->next(has_next)) == common::E_OK && has_next) {
+                const int64_t time = result->get_value<int64_t>(1);
+                actual_times.push_back(time);
+                EXPECT_EQ(result->get_value<int64_t>("s0"), time);
+                if (column_count == 2) {
+                    EXPECT_EQ(result->get_value<int64_t>("s1"), time * 2);
+                }
+            }
+            EXPECT_EQ(ret, common::E_OK);
+            const std::vector<int64_t> expected_times =
+                selected_times.size() == 1 ? std::vector<int64_t>{}
+                                           : std::vector<int64_t>{20, 30};
+            EXPECT_EQ(actual_times, expected_times);
+        }
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(SerialAndParallel, TsFileTableReaderTimeFilterTest,
