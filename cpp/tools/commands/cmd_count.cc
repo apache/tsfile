@@ -233,6 +233,11 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
 
 int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     RowWriter w(
         out, fmt,
         {"model", "object", "column", "category", "row_count", "entity_count",
@@ -242,7 +247,7 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
          common::INT64, common::INT64, common::STRING},
         args.no_header);
 
-    if (is_table_model(args, reader)) {
+    if (table_model) {
         const std::vector<std::shared_ptr<storage::TableSchema>> all_schemas =
             sorted_table_schemas(reader);
         if (args.table.empty()) {

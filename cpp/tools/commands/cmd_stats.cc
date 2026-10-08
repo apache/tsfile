@@ -643,7 +643,12 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
 
 int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err) {
-    if (is_table_model(args, reader)) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
+    if (table_model) {
         return cmd_table_stats(args, reader, fmt, out, err);
     }
 

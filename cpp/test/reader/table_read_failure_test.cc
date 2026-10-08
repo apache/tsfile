@@ -38,6 +38,7 @@
 #include "file/tsfile_io_reader.h"
 #include "file/write_file.h"
 #include "reader/filter/tag_filter.h"
+#include "reader/meta_data_querier.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_table_writer.h"
@@ -471,6 +472,79 @@ TEST_P(TableReadFailureTest, LegacySchemaApisReturnEmptyOnReadFailure) {
         auto schema = reader.get_table_schema("test");
         ASSERT_NE(schema, nullptr);
         EXPECT_EQ(schema->get_table_name(), "test");
+    }
+}
+
+TEST_P(TableReadFailureTest, WholeFileMetadataUpdatesCallerOutput) {
+    for (bool fail : {false, true}) {
+        SCOPED_TRACE(fail);
+        FailingReadFile source(bytes_);
+        source.fail_at = fail ? 1 : 0;
+        storage::TsFileIOReader io_reader;
+        ASSERT_EQ(io_reader.init(&source), common::E_OK);
+        storage::MetadataQuerier querier(&io_reader);
+        storage::IMetadataQuerier& interface = querier;
+        storage::TsFileMeta* metadata = nullptr;
+        if (fail) {
+            metadata = reinterpret_cast<storage::TsFileMeta*>(&querier);
+            EXPECT_EQ(interface.get_whole_file_metadata(metadata),
+                      common::E_FILE_READ_ERR);
+            EXPECT_EQ(metadata, nullptr);
+        } else {
+            ASSERT_EQ(interface.get_whole_file_metadata(metadata),
+                      common::E_OK);
+            ASSERT_NE(metadata, nullptr);
+            EXPECT_EQ(metadata->table_schemas_.count("test"), 1u);
+        }
+    }
+}
+
+TEST_P(TableReadFailureTest, NullTagOperatorsAcceptNullValues) {
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(std::unique_ptr<storage::RandomAccessReadFile>(
+                  new FailingReadFile(bytes_))),
+              common::E_OK);
+    for (TagFilterOp op : {TAG_FILTER_IS_NULL, TAG_FILTER_IS_NOT_NULL}) {
+        for (bool checked : {false, true}) {
+            SCOPED_TRACE(::testing::Message() << op << ":" << checked);
+            TagFilterHandle filter = nullptr;
+            ERRNO ret = common::E_OK;
+            if (checked) {
+                ret = tsfile_tag_filter_create_checked(&reader, "test", "id0",
+                                                       nullptr, op, &filter);
+            } else {
+                filter = tsfile_tag_filter_create(&reader, "test", "id0",
+                                                  nullptr, op, &ret);
+            }
+            ASSERT_EQ(ret, common::E_OK);
+            ASSERT_NE(filter, nullptr);
+            storage::ResultSet* result = nullptr;
+            ret = reader.query("test", {"value"}, 0, INT64_MAX, result,
+                               static_cast<storage::Filter*>(filter));
+            EXPECT_EQ(ret, common::E_OK);
+            int rows = 0;
+            bool next = false;
+            if (result != nullptr) {
+                while ((ret = result->next(next)) == common::E_OK && next) {
+                    ++rows;
+                }
+                reader.destroy_query_data_set(result);
+            }
+            tsfile_tag_filter_free(filter);
+            EXPECT_EQ(ret, common::E_OK);
+            EXPECT_EQ(rows, op == TAG_FILTER_IS_NULL
+                                ? 0
+                                : std::get<1>(GetParam()) * 30);
+        }
+    }
+    for (TagFilterOp op : {TAG_FILTER_EQ, TAG_FILTER_NEQ, TAG_FILTER_LT,
+                           TAG_FILTER_LTEQ, TAG_FILTER_GT, TAG_FILTER_GTEQ,
+                           TAG_FILTER_REGEXP, TAG_FILTER_NOT_REGEXP}) {
+        TagFilterHandle filter = &reader;
+        EXPECT_EQ(tsfile_tag_filter_create_checked(&reader, "test", "id0",
+                                                   nullptr, op, &filter),
+                  common::E_INVALID_ARG);
+        EXPECT_EQ(filter, nullptr);
     }
 }
 

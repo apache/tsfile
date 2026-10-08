@@ -2585,7 +2585,9 @@ ERRNO tsfile_tag_filter_create_checked(TsFileReader reader,
         *out_filter = nullptr;
     }
     if (reader == nullptr || table_name == nullptr || column_name == nullptr ||
-        value == nullptr || out_filter == nullptr) {
+        out_filter == nullptr ||
+        (value == nullptr && op != TAG_FILTER_IS_NULL &&
+         op != TAG_FILTER_IS_NOT_NULL)) {
         return common::E_INVALID_ARG;
     }
     try {

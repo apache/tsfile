@@ -289,7 +289,12 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     const bool push_down = can_push_down_row_window(args, offset, limit);
     std::unique_ptr<storage::Filter> tag_filter;
 
-    if (is_table_model(args, reader)) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
+    if (table_model) {
         std::string table_name = args.table;
         if (table_name.empty()) {
             std::vector<std::shared_ptr<storage::TableSchema>> schemas;

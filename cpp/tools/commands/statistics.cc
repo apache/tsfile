@@ -26,6 +26,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
@@ -315,11 +316,16 @@ int collect_series_stats(const ParsedArgs& args, storage::TsFileReader& reader,
     return kExitOk;
 }
 
-FileSummary collect_file_summary(const ParsedArgs& args,
-                                 storage::TsFileReader& reader) {
+int collect_file_summary(const ParsedArgs& args, storage::TsFileReader& reader,
+                         FileSummary& summary, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     FileSummary s;
     s.file = args.file;
-    s.model = is_table_model(args, reader) ? "table" : "tree";
+    s.model = table_model ? "table" : "tree";
     s.device_count = static_cast<long long>(reader.get_all_device_ids().size());
     s.table_count =
         static_cast<long long>(reader.get_all_table_schemas().size());
@@ -348,7 +354,8 @@ FileSummary collect_file_summary(const ParsedArgs& args,
         s.start_time = min_start;
         s.end_time = max_end;
     }
-    return s;
+    summary = std::move(s);
+    return kExitOk;
 }
 
 }  // namespace tsfile_cli

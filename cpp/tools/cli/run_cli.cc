@@ -210,10 +210,16 @@ void print_command_usage(const std::string& command, std::ostream& os) {
     }
 }
 
-bool has_mixed_model_metadata(storage::TsFileReader& reader) {
-    const auto schemas = reader.get_all_table_schemas();
+int validate_file_model(storage::TsFileReader& reader, std::ostream& err) {
+    std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+    const int schemas_ret = reader.get_all_table_schemas(schemas);
+    if (schemas_ret != common::E_OK) {
+        err << "Error: failed to read table schemas: "
+            << error_code_message(schemas_ret) << "\n";
+        return kExitFile;
+    }
     if (schemas.empty()) {
-        return false;
+        return kExitOk;
     }
 
     std::set<std::string> table_names;
@@ -222,7 +228,14 @@ bool has_mixed_model_metadata(storage::TsFileReader& reader) {
             table_names.insert(storage::to_lower(schema->get_table_name()));
         }
     }
-    for (const auto& device : reader.get_all_device_ids()) {
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+    const int devices_ret = reader.get_all_devices(devices);
+    if (devices_ret != common::E_OK) {
+        err << "Error: failed to read devices: "
+            << error_code_message(devices_ret) << "\n";
+        return kExitFile;
+    }
+    for (const auto& device : devices) {
         if (device == nullptr) {
             continue;
         }
@@ -232,10 +245,12 @@ bool has_mixed_model_metadata(storage::TsFileReader& reader) {
         // the CLI and must be reported as an input error.
         if (table_names.find(storage::to_lower(device->get_table_name())) ==
             table_names.end()) {
-            return true;
+            err << "Error: input TsFile must be a pure tree-model or pure "
+                   "table-model file\n";
+            return kExitFile;
         }
     }
-    return false;
+    return kExitOk;
 }
 
 bool is_known_command(const std::string& c) {
@@ -603,18 +618,22 @@ int run_cli(const std::vector<std::string>& args, std::ostream& out,
         return kExitFile;
     }
 
-    if (has_mixed_model_metadata(reader)) {
-        err << "Error: input TsFile must be a pure tree-model or pure "
-               "table-model file\n";
+    const int file_model_ret = validate_file_model(reader, err);
+    if (file_model_ret != kExitOk) {
         reader.close();
-        return kExitFile;
+        return file_model_ret;
     }
 
     // head/cat/export/schema dispatch on the data model and would silently
     // ignore the scope flag of the other model; reject that instead.
     if (p.command == "head" || p.command == "cat" || p.command == "export" ||
         p.command == "schema") {
-        const bool table_model = is_table_model(p, reader);
+        bool table_model = false;
+        const int model_ret = resolve_table_model(p, reader, table_model, err);
+        if (model_ret != kExitOk) {
+            reader.close();
+            return model_ret;
+        }
         if (table_model && !p.device.empty()) {
             err << "Error: -d/--device does not apply to the table model; "
                    "use -t/--table (or force --model tree)\n";

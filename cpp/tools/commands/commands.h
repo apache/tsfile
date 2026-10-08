@@ -36,7 +36,8 @@ class TsFileReader;
 
 namespace tsfile_cli {
 
-bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader);
+int resolve_table_model(const ParsedArgs& args, storage::TsFileReader& reader,
+                        bool& table_model, std::ostream& err);
 
 std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
     storage::TsFileReader& reader);
