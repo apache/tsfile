@@ -31,9 +31,11 @@
 #include <tuple>
 #include <vector>
 
+#include "common/allocator/alloc_base.h"
 #include "common/config/config.h"
 #include "common/tablet.h"
 #include "cwrapper/tsfile_cwrapper.h"
+#include "file/tsfile_io_reader.h"
 #include "file/write_file.h"
 #include "reader/filter/tag_filter.h"
 #include "reader/table_result_set.h"
@@ -396,18 +398,27 @@ TEST_P(TableReadFailureTest, CheckedMetadataApisContainReadExceptions) {
             for (int fail_at = first_read; fail_at <= last_read; ++fail_at) {
                 SCOPED_TRACE(::testing::Message()
                              << operation << ":" << expected << ":" << fail_at);
-                storage::TsFileReader reader;
-                auto* source = new FailingReadFile(bytes_);
-                ASSERT_EQ(
-                    reader.open(
-                        std::unique_ptr<storage::RandomAccessReadFile>(source)),
-                    common::E_OK);
-                source->fail_at = fail_at;
-                source->read_exception = exception;
-                ERRNO ret = common::E_OK;
-                EXPECT_NO_THROW(ret = invoke(reader, true));
-                EXPECT_TRUE(source->failed);
-                EXPECT_EQ(ret, expected);
+                const int64_t allocated_before =
+                    common::ModStat::get_instance().get_stat(
+                        common::MOD_TSFILE_READER);
+                {
+                    storage::TsFileReader reader;
+                    auto* source = new FailingReadFile(bytes_);
+                    ASSERT_EQ(
+                        reader.open(
+                            std::unique_ptr<storage::RandomAccessReadFile>(
+                                source)),
+                        common::E_OK);
+                    source->fail_at = fail_at;
+                    source->read_exception = exception;
+                    ERRNO ret = common::E_OK;
+                    EXPECT_NO_THROW(ret = invoke(reader, true));
+                    EXPECT_TRUE(source->failed);
+                    EXPECT_EQ(ret, expected);
+                }
+                EXPECT_EQ(common::ModStat::get_instance().get_stat(
+                              common::MOD_TSFILE_READER),
+                          allocated_before);
             }
         }
     }
@@ -519,6 +530,48 @@ TEST_P(TableReadFailureTest, CheckedTagFactoriesPreserveMissingTableError) {
 INSTANTIATE_TEST_SUITE_P(LeafAndInternalDeviceIndexes, TableReadFailureTest,
                          ::testing::Combine(::testing::Values(1, 2),
                                             ::testing::Values(2, 5)));
+
+TEST(TableMetadataReadFailureTest, ResizedBufferIsReleasedOnReadFailure) {
+    // A metadata tail larger than the initial 1 KiB buffer forces another
+    // read before deserialization. Inject the failure into that second read.
+    std::vector<char> bytes(2048, 0);
+    const uint32_t metadata_size = 1536;
+    for (int i = 0; i < 4; ++i) {
+        bytes[bytes.size() - 10 + i] =
+            static_cast<char>(metadata_size >> (8 * (3 - i)));
+    }
+    for (int failure = 0; failure < 4; ++failure) {
+        SCOPED_TRACE(failure);
+        const int64_t allocated_before =
+            common::ModStat::get_instance().get_stat(common::MOD_TSFILE_READER);
+        {
+            FailingReadFile source(bytes);
+            source.fail_at = 2;
+            storage::TsFileIOReader reader;
+            ASSERT_EQ(reader.init(&source), common::E_OK);
+            storage::TsFileMeta* metadata = nullptr;
+            if (failure == 0) {
+                EXPECT_EQ(reader.get_tsfile_meta(metadata),
+                          common::E_FILE_READ_ERR);
+            } else if (failure == 1) {
+                source.read_exception =
+                    FailingReadFile::ReadException::BadAlloc;
+                EXPECT_THROW(reader.get_tsfile_meta(metadata), std::bad_alloc);
+            } else if (failure == 2) {
+                source.read_exception = FailingReadFile::ReadException::Other;
+                EXPECT_THROW(reader.get_tsfile_meta(metadata),
+                             std::runtime_error);
+            } else {
+                common::TEST_fail_next_mem_realloc();
+                EXPECT_EQ(reader.get_tsfile_meta(metadata), common::E_OOM);
+            }
+            EXPECT_EQ(source.reads, failure == 3 ? 1 : 2);
+        }
+        EXPECT_EQ(
+            common::ModStat::get_instance().get_stat(common::MOD_TSFILE_READER),
+            allocated_before);
+    }
+}
 
 class FailingBlockReader : public storage::TsBlockReader {
    public:
