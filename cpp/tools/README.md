@@ -121,6 +121,12 @@ values. The `table` format uses a temporary spool to align columns with bounded
 memory; prefer `csv`/`ndjson` when temporary disk use is undesirable. `sketch`
 does not accept `--format`.
 
+Text output preserves well-formed UTF-8 and replaces malformed UTF-8 in names
+and text with U+FFFD (`�`). This also applies to sketch output and export
+manifests. BLOB values remain hexadecimal strings.
+NDJSON output fails before writing rows if replacement would produce duplicate
+column names.
+
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli
 $BIN ls -f csv data.tsfile                          # list tables / devices

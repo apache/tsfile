@@ -128,8 +128,7 @@ int write_atomic_text(const std::string& path, const std::string& content,
         return code;
     }
     {
-        std::ofstream output(tmp.c_str(),
-                             std::ios::binary | std::ios::trunc);
+        std::ofstream output(tmp.c_str(), std::ios::binary | std::ios::trunc);
         if (!output.is_open()) {
             err << "Error: cannot create output target '" << path << "'\n";
             remove_atomic_temp(tmp, err);
@@ -460,8 +459,7 @@ class SketchPrinter {
                     to_string_u32(layout_.footer_.bloom_filter_hash_count));
             std::ostringstream bloom;
             bloom << "[Bloom Filter] , filterCapacity="
-                  << layout_.footer_.bloom_filter_size
-                  << ", hashFunctionSize="
+                  << layout_.footer_.bloom_filter_size << ", hashFunctionSize="
                   << layout_.footer_.bloom_filter_hash_count;
             print_line(out, layout_.footer_.bloom_filter_offset, bloom.str());
         }
@@ -587,21 +585,16 @@ int cmd_sketch(const ParsedArgs& args, std::ostream& out, std::ostream& err) {
     SketchPrinter printer;
     std::ostringstream content;
     int code = printer.run(args, content, err);
-    if (code != kExitOk) {
-        if (args.output.empty()) {
-            out << content.str();
-            out.flush();
-            return out.good() ? code : kExitRuntime;
-        }
+    if (code != kExitOk && !args.output.empty()) {
         return code;
     }
+    const std::string text = replace_invalid_utf8(content.str());
     if (!args.output.empty()) {
-        return write_atomic_text(args.output, content.str(), args.file,
-                                 args.force, err);
+        return write_atomic_text(args.output, text, args.file, args.force, err);
     }
-    out << content.str();
+    out << text;
     out.flush();
-    return out.good() ? kExitOk : kExitRuntime;
+    return out.good() ? code : kExitRuntime;
 }
 
 }  // namespace tsfile_cli
