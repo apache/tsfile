@@ -62,6 +62,9 @@ class RowWriter {
                const std::vector<common::TSDataType>& row_types);
     bool finish();
 
+    // Header validation failures are reported before any output is written.
+    const std::string& error() const { return error_; }
+
    private:
     bool ensure_header();
     bool emits_json_bare(common::TSDataType type) const;
@@ -71,6 +74,8 @@ class RowWriter {
     std::ostream& out_;
     OutputFormat fmt_;
     std::vector<std::string> header_;
+    std::vector<std::string> json_keys_;
+    std::string error_;
     std::vector<common::TSDataType> types_;
     bool no_header_;
     bool header_done_ = false;

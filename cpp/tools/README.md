@@ -124,6 +124,8 @@ does not accept `--format`.
 Text output preserves well-formed UTF-8 and replaces malformed UTF-8 in names
 and text with U+FFFD (`�`). This also applies to sketch output and export
 manifests. BLOB values remain hexadecimal strings.
+NDJSON output fails before writing rows if replacement would produce duplicate
+column names.
 
 ```bash
 BIN=cpp/build/Debug/bin/tsfile-cli

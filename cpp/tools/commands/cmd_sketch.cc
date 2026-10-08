@@ -585,21 +585,16 @@ int cmd_sketch(const ParsedArgs& args, std::ostream& out, std::ostream& err) {
     SketchPrinter printer;
     std::ostringstream content;
     int code = printer.run(args, content, err);
-    const std::string text = replace_invalid_utf8(content.str());
-    if (code != kExitOk) {
-        if (args.output.empty()) {
-            out << text;
-            out.flush();
-            return out.good() ? code : kExitRuntime;
-        }
+    if (code != kExitOk && !args.output.empty()) {
         return code;
     }
+    const std::string text = replace_invalid_utf8(content.str());
     if (!args.output.empty()) {
         return write_atomic_text(args.output, text, args.file, args.force, err);
     }
     out << text;
     out.flush();
-    return out.good() ? kExitOk : kExitRuntime;
+    return out.good() ? code : kExitRuntime;
 }
 
 }  // namespace tsfile_cli

@@ -345,3 +345,28 @@ TEST(RowWriterTest, PreservesNonUtf8BlobBytesAsHex) {
         EXPECT_NE(out.str().find("0xff0080"), std::string::npos);
     }
 }
+
+TEST(RowWriterTest, RejectsJsonKeyCollisionsAfterUtf8Replacement) {
+    const std::vector<std::vector<std::string>> headers = {
+        {"bad\xff", "bad\xfe"},
+        {"bad\xff", "bad\xef\xbf\xbd"},
+    };
+    for (const auto& header : headers) {
+        for (bool no_header : {false, true}) {
+            std::ostringstream out;
+            RowWriter writer(out, OutputFormat::kJson, header,
+                             {common::INT64, common::INT64}, no_header);
+            EXPECT_FALSE(writer.write({"42", "7"}, {false, false}));
+            EXPECT_FALSE(writer.finish());
+            EXPECT_TRUE(out.str().empty());
+        }
+    }
+}
+
+TEST(RowWriterTest, RejectsJsonKeyCollisionsWithoutRows) {
+    std::ostringstream out;
+    RowWriter writer(out, OutputFormat::kJson, {"bad\xff", "bad\xfe"},
+                     {common::STRING, common::STRING}, false);
+    EXPECT_FALSE(writer.finish());
+    EXPECT_TRUE(out.str().empty());
+}
