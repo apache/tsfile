@@ -30,7 +30,7 @@
 #include "common/constant/tsfile_constant.h"
 #include "common/schema.h"
 #include "common/tsfile_common.h"
-#include "file/read_file.h"
+#include "file/local_random_access_read_file.h"
 
 namespace tsfile_cli {
 
@@ -208,7 +208,7 @@ class SketchLayout {
 
     common::PageArena pa_;
     storage::TsFileMeta tsfile_meta_;
-    storage::ReadFile file_;
+    storage::LocalRandomAccessReadFile file_;
     std::vector<char> metadata_buf_;
     std::map<int64_t, std::string> chunk_path_by_offset_;
     std::map<int64_t, std::string> chunk_stat_by_offset_;
