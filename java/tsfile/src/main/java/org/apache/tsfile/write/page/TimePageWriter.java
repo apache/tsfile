@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.util.Arrays;
 
 /**
  * This writer is used to write time into a page. It consists of a time encoder and respective
@@ -59,6 +60,9 @@ public class TimePageWriter {
    */
   private TimeStatistics statistics;
 
+  private long[] clusterTimestamps;
+  private int clusterTimeCount;
+
   public TimePageWriter(Encoder timeEncoder, ICompressor compressor) {
     this.timeOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
@@ -78,6 +82,7 @@ public class TimePageWriter {
 
   /** write a time into encoder */
   public void write(long time) {
+    captureClusterTime(time);
     timeEncoder.encode(time, timeOut);
     statistics.update(time);
   }
@@ -85,6 +90,7 @@ public class TimePageWriter {
   /** write time series into encoder */
   public void write(long[] timestamps, int batchSize, int arrayOffset) {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      captureClusterTime(timestamps[i]);
       timeEncoder.encode(timestamps[i], timeOut);
     }
     if (batchSize != 0) {
@@ -190,13 +196,37 @@ public class TimePageWriter {
    * @return allocated size in time, value and outputStream
    */
   public long estimateMaxMemSize() {
-    return timeOut.size() + timeEncoder.getMaxByteSize();
+    return timeOut.size()
+        + timeEncoder.getMaxByteSize()
+        + (clusterTimestamps == null ? 0 : 8L * clusterTimestamps.length);
   }
 
   /** reset this page */
   public void reset() {
+    clusterTimeCount = 0;
     timeOut.reset();
     statistics = new TimeStatistics();
+  }
+
+  public void enableClusterTimestamps() {
+    if (clusterTimestamps == null) {
+      if (statistics.getCount() != 0)
+        throw new IllegalStateException("Register cluster columns before writing rows");
+      clusterTimestamps = new long[128];
+    }
+  }
+
+  private void captureClusterTime(long time) {
+    if (clusterTimestamps == null) return;
+    if (clusterTimeCount == clusterTimestamps.length)
+      clusterTimestamps = Arrays.copyOf(clusterTimestamps, clusterTimestamps.length * 2);
+    clusterTimestamps[clusterTimeCount++] = time;
+  }
+
+  public long[] getClusterTimestamps() {
+    if (clusterTimestamps == null || clusterTimeCount != statistics.getCount())
+      throw new IllegalStateException("Missing native cluster time keys");
+    return Arrays.copyOf(clusterTimestamps, clusterTimeCount);
   }
 
   public void setTimeEncoder(Encoder encoder) {

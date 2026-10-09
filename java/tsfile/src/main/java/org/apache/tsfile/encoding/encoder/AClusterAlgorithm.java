@@ -32,18 +32,16 @@ public final class AClusterAlgorithm {
 
   /**
    * The main entry point for the ACluster algorithm. It processes a page of data and returns the
-   * results as an Object array.
+   * frequency-sorted references, assignments and counts.
    *
    * @param data The input time series data for a single page, represented as a long array.
-   * @return An Object array where: <br>
-   *     - index 0: long[] medoids (sorted by cluster frequency) <br>
-   *     - index 1: int[] clusterAssignments (mapped to the sorted medoids) <br>
-   *     - index 2: long[] clusterFrequencies (sorted)
+   * @return References sorted by frequency, with matching assignments and counts.
    */
-  public static Object[] run(long[] data) {
+  public static ClusterResult run(long[] data) {
+    ClusterResult.validateInput(data);
     int n = data.length;
     if (n == 0) {
-      return new Object[] {new long[0], new int[0], new long[0]};
+      return new ClusterResult(new long[0], new int[0], new long[0]);
     }
 
     // --- Initialization ---
@@ -84,7 +82,8 @@ public final class AClusterAlgorithm {
       }
 
       // --- Step 4: Calculate potential savings ---
-      long savingsFromCurrentPoint = minCostToExistingMedoid;
+      long savingsFromCurrentPoint =
+          minCostToExistingMedoid - calculateResidualCost(currentPoint, currentPoint);
       long savingsFromReassignment = 0;
       Set<Integer> pointsInBestCluster = pointsInClusters.get(bestMedoidIndex);
       for (int pointIndexInCluster : pointsInBestCluster) {
@@ -161,9 +160,10 @@ public final class AClusterAlgorithm {
    * @param medoids The discovered medoids.
    * @param clusterAssignment The assignment map for each data point.
    * @param clusterSize The frequency of each cluster.
-   * @return A sorted and correctly mapped Object array.
+   * @return Sorted references with matching assignments and counts.
    */
-  private static Object[] sortResults(long[] medoids, int[] clusterAssignment, long[] clusterSize) {
+  private static ClusterResult sortResults(
+      long[] medoids, int[] clusterAssignment, long[] clusterSize) {
     int k = medoids.length;
     List<MedoidSortHelper> sorters = new ArrayList<>();
     for (int i = 0; i < k; i++) {
@@ -188,7 +188,7 @@ public final class AClusterAlgorithm {
       sortedClusterAssignment[i] = oldToNewIndexMap[oldIndex];
     }
 
-    return new Object[] {sortedMedoids, sortedClusterAssignment, sortedClusterSize};
+    return new ClusterResult(sortedMedoids, sortedClusterAssignment, sortedClusterSize);
   }
 
   // --- Cost Calculation Functions ---

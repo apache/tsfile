@@ -32,6 +32,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.page.ClusterAlignedPageWriter;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.VectorMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -46,6 +47,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   protected TimeChunkWriter timeChunkWriter;
   protected List<ValueChunkWriter> valueChunkWriterList;
+  private final ClusterAlignedPageWriter clusterPages = new ClusterAlignedPageWriter();
   protected int valueIndex;
 
   protected EncryptParameter encryptParam;
@@ -84,6 +86,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     }
 
     this.valueIndex = 0;
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -115,6 +118,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     }
 
     this.valueIndex = 0;
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -149,6 +153,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     }
 
     this.valueIndex = 0;
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -178,6 +183,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     }
 
     this.valueIndex = 0;
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -216,6 +222,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
     this.valueIndex = 0;
 
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -248,6 +255,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
     this.valueIndex = 0;
 
+    ClusterAlignedPageWriter.attach(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
@@ -450,6 +458,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   protected void writePageToPageBuffer() {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     timeChunkWriter.writePageToPageBuffer();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.writePageToPageBuffer();
@@ -468,6 +477,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   @Override
   public void writeToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     timeChunkWriter.writeToFileWriter(tsfileWriter);
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.writeToFileWriter(tsfileWriter);
@@ -493,6 +503,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   @Override
   public void sealCurrentPage() {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     timeChunkWriter.sealCurrentPage();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.sealCurrentPage();
@@ -500,10 +511,12 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   public void sealCurrentTimePage() {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     timeChunkWriter.sealCurrentPage();
   }
 
   public void sealCurrentValuePage(int valueIndex) {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterList);
     valueChunkWriterList.get(valueIndex).sealCurrentPage();
   }
 

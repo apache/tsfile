@@ -181,10 +181,12 @@ public abstract class Decoder {
       case KCLUSTER:
         switch (dataType) {
           case INT32:
+          case DATE:
           case INT64:
+          case TIMESTAMP:
           case FLOAT:
           case DOUBLE:
-            return new ClusterDecoder(dataType);
+            return new ClusterDecoder(encoding, dataType);
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }

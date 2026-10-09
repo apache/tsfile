@@ -21,7 +21,10 @@ package org.apache.tsfile.read.reader.page;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.PlainDecoder;
+import org.apache.tsfile.encoding.table.ClusterNativePageCodec;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
@@ -48,7 +51,7 @@ public class ValuePageReader {
   private final TSDataType dataType;
 
   /** decoder for value column */
-  private final Decoder valueDecoder;
+  private Decoder valueDecoder;
 
   private byte[] bitmap;
 
@@ -72,7 +75,6 @@ public class ValuePageReader {
     if (pageData != null) {
       splitDataToBitmapAndValue(pageData);
     }
-    this.valueBuffer = pageData;
   }
 
   public ValuePageReader(
@@ -90,6 +92,18 @@ public class ValuePageReader {
     if (!pageData.hasRemaining()) { // Empty Page
       return;
     }
+    if (ClusterNativePageCodec.isNativePage(pageData)) {
+      try {
+        ClusterNativePageCodec.Decoded decoded = ClusterNativePageCodec.decode(pageData, dataType);
+        this.size = decoded.times.length;
+        this.bitmap = decoded.bitmap;
+        this.valueBuffer = decoded.values;
+        this.valueDecoder = new PlainDecoder();
+        return;
+      } catch (IOException invalid) {
+        throw new TsFileDecodingException("Invalid native cluster page: " + invalid.getMessage());
+      }
+    }
     this.size = ReadWriteIOUtils.readInt(pageData);
     this.bitmap = new byte[(size + 7) / 8];
     pageData.get(bitmap);
@@ -101,7 +115,6 @@ public class ValuePageReader {
     if (lazyLoadPageData != null && valueBuffer == null) {
       ByteBuffer pageData = lazyLoadPageData.uncompressPageData(pageHeader);
       splitDataToBitmapAndValue(pageData);
-      this.valueBuffer = pageData;
       lazyLoadPageData = null;
     }
   }
