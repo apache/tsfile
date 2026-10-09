@@ -280,6 +280,7 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     int qret = 0;
     const bool push_down = can_push_down_row_window(args, offset, limit);
     std::unique_ptr<storage::Filter> tag_filter;
+    std::string tree_device_prefix;
 
     if (is_table_model(args, reader)) {
         std::string table_name = args.table;
@@ -333,6 +334,7 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
             }
             effective_args.device = devices[0]->get_device_name();
         }
+        tree_device_prefix = effective_args.device;
         std::vector<std::string> paths;
         int selection_ret =
             resolve_tree_paths(effective_args, reader, paths, err);
@@ -362,11 +364,12 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     // still checked separately so stdout errors remain runtime failures.
     std::ostringstream staged;
     std::string output_error;
-    int wret = push_down
-                   ? emit_result_set(rs, fmt, args.no_header, staged, 0, -1,
-                                     emitted_rows, &output_error)
-                   : emit_result_set(rs, fmt, args.no_header, staged, offset,
-                                     limit, emitted_rows, &output_error);
+    int wret =
+        push_down
+            ? emit_result_set(rs, fmt, args.no_header, staged, 0, -1,
+                              emitted_rows, &output_error, tree_device_prefix)
+            : emit_result_set(rs, fmt, args.no_header, staged, offset, limit,
+                              emitted_rows, &output_error, tree_device_prefix);
     reader.destroy_query_data_set(rs);
     if (!output_error.empty()) {
         err << "Error: " << output_error << "\n";
