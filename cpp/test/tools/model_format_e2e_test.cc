@@ -294,8 +294,7 @@ TEST(ComplexTreeFixture, CsvAnswersMatchByteForByte) {
     const std::string path = tsfile_cli_test::write_complex_tree_fixture();
     expect_cli_exact(
         {"head", "-d", "root.test.d1", "-n", "2", "-f", "csv", path}, 0,
-        "time,root.test.d1.m1,root.test.d1.m2,root.test.d1.m3,"
-        "root.test.d1.m4,root.test.d1.m5\n"
+        "time,m1,m2,m3,m4,m5\n"
         "0,0,0.5,value_0,0,100.5\n"
         "1,1,1.5,value_1,2,101.5\n",
         "");
@@ -493,6 +492,24 @@ TEST(IndependentFixtures, EmptyTreeAndInputFailuresHaveExactDiagnostics) {
         expect_cli_exact(input_args(command, "."), 2, "",
                          "Error: cannot open .: invalid path (code 37)\n");
     }
+#ifndef _WIN32
+    // A FIFO (named pipe) is a special file, not a TsFile.  POSIX
+    // open(O_RDONLY) would otherwise block until a writer appears, so the
+    // reader must preflight the file type and fail fast with the same stable
+    // diagnostic instead of hanging.
+    {
+        const std::string fifo = tsfile_cli_test::unique_temp_path(
+            "tsfile_cli_fifo_input", ".tsfile");
+        ASSERT_EQ(mkfifo(fifo.c_str(), 0600), 0);
+        for (const std::string& command : commands) {
+            std::remove("tsfile_cli_input_error.csv");
+            expect_cli_exact(
+                input_args(command, fifo), 2, "",
+                "Error: cannot open " + fifo + ": invalid path (code 37)\n");
+        }
+        std::remove(fifo.c_str());
+    }
+#endif
     std::remove("tsfile_cli_input_error.csv");
 }
 
@@ -640,6 +657,37 @@ TEST(IndependentFixtures, SpecialCsvInputsHaveExactCodesAndErrors) {
         std::remove(csv_path.c_str());
         std::remove(output_path.c_str());
     }
+}
+
+TEST(IndependentFixtures, ControlCharCellsRenderAsVisibleEscapes) {
+    const std::string fixture = tsfile_cli_test::write_control_char_fixture();
+
+    // `table` keeps one logical record on one physical line by escaping
+    // newline, tab and backslash into visible two-character sequences.
+    expect_cli_exact({"cat", "-t", "t1", "-f", "table", fixture}, 0,
+                     "time  site  note\n"
+                     "1000  s1    line1\\nline2\n"
+                     "2000  s2    tab\\there\n"
+                     "3000  s3    back\\\\slash\n",
+                     "");
+
+    // CSV/NDJSON keep their machine-format semantics unchanged: the embedded
+    // newline/tab/backslash survive verbatim inside CSV quotes or as JSON
+    // escapes, never flattened into the visible table representation.
+    expect_cli_exact({"cat", "-t", "t1", "-f", "csv", fixture}, 0,
+                     "time,site,note\n"
+                     "1000,s1,\"line1\nline2\"\n"
+                     "2000,s2,tab\there\n"
+                     "3000,s3,back\\slash\n",
+                     "");
+    expect_cli_exact(
+        {"cat", "-t", "t1", "-f", "ndjson", fixture}, 0,
+        "{\"time\":\"1000\",\"site\":\"s1\",\"note\":\"line1\\nline2\"}\n"
+        "{\"time\":\"2000\",\"site\":\"s2\",\"note\":\"tab\\there\"}\n"
+        "{\"time\":\"3000\",\"site\":\"s3\",\"note\":\"back\\\\slash\"}\n",
+        "");
+
+    std::remove(fixture.c_str());
 }
 
 INSTANTIATE_TEST_SUITE_P(TreeAndTable, BothModels,

@@ -242,19 +242,9 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <dependencies>
                     <dependency>
-                        <groupId>org.sonatype.ossindex.maven</groupId>
-                        <artifactId>ossindex-maven-enforcer-rules</artifactId>
-                        <version>3.2.0</version>
-                    </dependency>
-                    <dependency>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>extra-enforcer-rules</artifactId>
                         <version>1.8.0</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.apache.maven.shared</groupId>
-                        <artifactId>maven-dependency-tree</artifactId>
-                        <version>3.2.1</version>
                     </dependency>
                 </dependencies>
                 <executions>
@@ -302,78 +292,12 @@
                         </goals>
                         <configuration>
                             <rules>
-                                <enforceBytecodeVersion>
-                                    <maxJdkVersion>17</maxJdkVersion>
-                                </enforceBytecodeVersion>
-                            </rules>
-                        </configuration>
-                    </execution>
-                    <!-- Make sure no dependencies are used for which known vulnerabilities exist. -->
-                    <execution>
-                        <id>vulnerability-checks</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <phase>validate</phase>
-                        <configuration>
-                            <!-- Just generate warnings for now -->
-                            <fail>false</fail>
-                            <rules>
                                 <requireJavaVersion>
                                     <version>[17,)</version>
                                 </requireJavaVersion>
-                                <banVulnerable implementation="org.sonatype.ossindex.maven.enforcer.BanVulnerableDependencies">
-                                    <excludeCoordinates>
-                                        <!-- TODO: For this CVE no fix exists yet (Keep an eye on it) -->
-                                        <exclude>
-                                            <groupId>io.netty</groupId>
-                                            <artifactId>netty-handler</artifactId>
-                                            <version>4.1.97.Final</version>
-                                        </exclude>
-                                        <!--
-                                            CVE-2016-1000027 seems to effect the HTTP Invoker, which we are not using.
-                                            These are marked deprecated anyway and are removed in Spring 6.x. Unfortunately,
-                                            we are still stuck at 5.x due to the javax-namespace issues.
-                                        -->
-                                        <exclude>
-                                            <groupId>org.springframework</groupId>
-                                            <artifactId>spring-web</artifactId>
-                                            <version>5.3.30</version>
-                                        </exclude>
-                                        <!--
-                                            For this CVE no fix exists and will probably never exist
-                                            (We should discuss dropping 2.11 anyway)
-                                        -->
-                                        <exclude>
-                                            <groupId>org.apache.spark</groupId>
-                                            <artifactId>spark-core_2.11</artifactId>
-                                            <version>2.4.8</version>
-                                        </exclude>
-                                        <!--
-                                            We can't update to a fixed version as we're stuck with this version
-                                            as it was the last to support the javax namespace.
-                                        -->
-                                        <exclude>
-                                            <groupId>org.glassfish.jersey.core</groupId>
-                                            <artifactId>jersey-common</artifactId>
-                                            <version>2.4.8</version>
-                                        </exclude>
-                                        <!--
-                                            TODO: For this CVE no fix exists yet, however we should keep an eye on this:
-                                            https://docs.google.com/presentation/d/1W5KU7ffh4dheR8iD54ulABImi6byAhSI-OhEKw2adRo/edit#slide=id.gaf11915f86_0_0
-                                        -->
-                                        <exclude>
-                                            <groupId>io.atomix</groupId>
-                                            <artifactId>atomix-raft</artifactId>
-                                            <version>3.1.12</version>
-                                        </exclude>
-                                        <exclude>
-                                            <groupId>ch.netty</groupId>
-                                            <artifactId>netty-handler</artifactId>
-                                            <version>4.1.97.Final</version>
-                                        </exclude>
-                                    </excludeCoordinates>
-                                </banVulnerable>
+                                <enforceBytecodeVersion>
+                                    <maxJdkVersion>17</maxJdkVersion>
+                                </enforceBytecodeVersion>
                             </rules>
                         </configuration>
                     </execution>

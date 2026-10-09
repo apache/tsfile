@@ -500,6 +500,10 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         types.push_back(common::STRING);
     }
     RowWriter w(out, fmt, headers, types, args.no_header);
+    if (!w.error().empty()) {
+        err << "Error: " << w.error() << "\n";
+        return kExitRuntime;
+    }
     for (const TableStatsSummary& summary : summaries) {
         std::map<std::string, size_t> local_tag_positions;
         for (size_t i = 0; i < summary.tag_indexes.size(); ++i) {

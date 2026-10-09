@@ -74,19 +74,36 @@ std::string cell_to_string(storage::ResultSet* rs, uint32_t i,
 
 int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                     std::ostream& out, long long offset, long long limit,
-                    long long* emitted_rows) {
+                    long long* emitted_rows, std::string* output_error,
+                    const std::string& strip_device_prefix) {
+    if (output_error != nullptr) {
+        output_error->clear();
+    }
     auto meta = rs->get_metadata();
     const uint32_t ncol = meta->get_column_count();
+    const std::string device_prefix =
+        strip_device_prefix.empty() ? std::string() : strip_device_prefix + ".";
     std::vector<std::string> header;
     std::vector<common::TSDataType> types;
     header.reserve(ncol);
     types.reserve(ncol);
     for (uint32_t i = 1; i <= ncol; ++i) {
-        header.push_back(meta->get_column_name(i));
+        std::string name = meta->get_column_name(i);
+        if (!device_prefix.empty() && name.size() > device_prefix.size() &&
+            name.compare(0, device_prefix.size(), device_prefix) == 0) {
+            name = name.substr(device_prefix.size());
+        }
+        header.push_back(std::move(name));
         types.push_back(meta->get_column_type(i));
     }
 
     RowWriter writer(out, fmt, header, types, no_header);
+    if (!writer.error().empty()) {
+        if (output_error != nullptr) {
+            *output_error = writer.error();
+        }
+        return common::E_INVALID_ARG;
+    }
     bool has_next = false;
     int code = common::E_OK;
     long long skipped = 0;

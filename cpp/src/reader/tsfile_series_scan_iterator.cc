@@ -373,6 +373,19 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
             ret_tsblock->get_row_count() > 0) {
             return E_OK;
         }
+        // A page can decode successfully with every row filtered out. Keep
+        // scanning instead of exposing an empty block as the end of the series.
+        if (IS_SUCC(ret) && ret_tsblock != nullptr &&
+            ret_tsblock->get_row_count() == 0) {
+            if (chunk_reader_->has_more_data()) {
+                continue;
+            }
+            if (has_next_chunk()) {
+                force_load_next_chunk = true;
+                continue;
+            }
+            return common::E_NO_MORE_DATA;
+        }
         // When current chunk is exhausted (e.g. all pages skipped by offset)
         // but there are more chunks, load next chunk and retry.  Set the
         // force flag so the next iteration bypasses has_more_data() (which
