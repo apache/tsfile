@@ -61,9 +61,11 @@ public class PageCryptoContextTest {
       IEncryptor encryptor = IEncryptor.getEncryptor(parameter);
       IDecryptor decryptor = IDecryptor.getDecryptor(parameter);
       PageCryptoContext page0 =
-          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 0);
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 0, 0);
       PageCryptoContext page1 =
-          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 1);
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 1, 0);
+      PageCryptoContext anotherChunkPage0 =
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 0, 1);
 
       byte[] encryptedPage0 = encryptor.encryptPage(plaintext, 0, plaintext.length, page0);
       byte[] encryptedPage1 = encryptor.encryptPage(plaintext, 0, plaintext.length, page1);
@@ -75,6 +77,9 @@ public class PageCryptoContextTest {
       assertThrows(
           EncryptException.class,
           () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, page1));
+      assertThrows(
+          EncryptException.class,
+          () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, anotherChunkPage0));
 
       encryptedPage0[encryptedPage0.length - 1] ^= 1;
       assertThrows(
@@ -82,6 +87,24 @@ public class PageCryptoContextTest {
           () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, page0));
 
       assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testChunkOrdinalAllocationSurvivesCopyAndRecovery() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      assertEquals(0, parameter.nextChunkOrdinal());
+      try (EncryptParameter copy = parameter.copy()) {
+        assertEquals(1, copy.nextChunkOrdinal());
+        parameter.resumeAfterChunkOrdinal(10);
+        assertEquals(11, copy.nextChunkOrdinal());
+      }
+      assertEquals(12, parameter.nextChunkOrdinal());
     } finally {
       parameter.close();
     }

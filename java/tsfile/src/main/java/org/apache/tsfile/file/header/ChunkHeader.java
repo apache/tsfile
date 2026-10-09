@@ -34,6 +34,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -63,6 +64,7 @@ public class ChunkHeader {
   private final TSDataType dataType;
   private final CompressionType compressionType;
   private final TSEncoding encodingType;
+  private final long chunkOrdinal;
 
   // the following fields do not need to be serialized.
   private int numOfPages;
@@ -87,16 +89,29 @@ public class ChunkHeader {
       TSEncoding encoding,
       int numOfPages,
       int mask) {
+    this(measurementID, dataSize, dataType, compressionType, encoding, numOfPages, mask, -1);
+  }
+
+  public ChunkHeader(
+      String measurementID,
+      int dataSize,
+      TSDataType dataType,
+      CompressionType compressionType,
+      TSEncoding encoding,
+      int numOfPages,
+      int mask,
+      long chunkOrdinal) {
     this(
         (byte)
             ((numOfPages <= 1 ? MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER : MetaMarker.CHUNK_HEADER)
                 | (byte) mask),
         measurementID,
         dataSize,
-        getSerializedSize(measurementID, dataSize),
+        getSerializedSize(measurementID, dataSize, chunkOrdinal >= 0),
         dataType,
         compressionType,
-        encoding);
+        encoding,
+        chunkOrdinal);
     this.numOfPages = numOfPages;
   }
 
@@ -121,16 +136,48 @@ public class ChunkHeader {
       byte chunkType,
       String measurementID,
       int dataSize,
+      TSDataType dataType,
+      CompressionType compressionType,
+      TSEncoding encoding,
+      long chunkOrdinal) {
+    this(
+        chunkType,
+        measurementID,
+        dataSize,
+        getSerializedSize(measurementID, dataSize, chunkOrdinal >= 0),
+        dataType,
+        compressionType,
+        encoding,
+        chunkOrdinal);
+  }
+
+  public ChunkHeader(
+      byte chunkType,
+      String measurementID,
+      int dataSize,
       int headerSize,
       TSDataType dataType,
       CompressionType compressionType,
       TSEncoding encoding) {
+    this(chunkType, measurementID, dataSize, headerSize, dataType, compressionType, encoding, -1);
+  }
+
+  private ChunkHeader(
+      byte chunkType,
+      String measurementID,
+      int dataSize,
+      int headerSize,
+      TSDataType dataType,
+      CompressionType compressionType,
+      TSEncoding encoding,
+      long chunkOrdinal) {
     this.chunkType = chunkType;
     this.measurementID = measurementID;
     this.dataSize = dataSize;
     this.dataType = dataType;
     this.compressionType = compressionType;
     this.encodingType = encoding;
+    this.chunkOrdinal = chunkOrdinal;
     this.serializedSize = headerSize;
   }
 
@@ -145,6 +192,10 @@ public class ChunkHeader {
         + TSDataType.getSerializedSize() // dataTypex
         + CompressionType.getSerializedSize() // compressionType
         + TSEncoding.getSerializedSize(); // encodingType
+  }
+
+  public static int getSerializedSize(String measurementID, int dataSize, boolean pageAead) {
+    return getSerializedSize(measurementID, dataSize) + (pageAead ? Long.BYTES : 0);
   }
 
   /**
@@ -176,13 +227,34 @@ public class ChunkHeader {
    */
   public static ChunkHeader deserializeFrom(InputStream inputStream, byte chunkType)
       throws IOException {
+    return deserializeFrom(inputStream, chunkType, false);
+  }
+
+  public static ChunkHeader deserializeFrom(
+      InputStream inputStream, byte chunkType, boolean pageAead) throws IOException {
     // read measurementID
     String measurementID = ReadWriteIOUtils.readVarIntString(inputStream);
     int dataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
     TSDataType dataType = ReadWriteIOUtils.readDataType(inputStream);
     CompressionType type = ReadWriteIOUtils.readCompressionType(inputStream);
     TSEncoding encoding = ReadWriteIOUtils.readEncoding(inputStream);
-    return new ChunkHeader(chunkType, measurementID, dataSize, dataType, type, encoding);
+    long chunkOrdinal = -1;
+    if (pageAead) {
+      byte[] ordinalBytes = inputStream.readNBytes(Long.BYTES);
+      if (ordinalBytes.length != Long.BYTES) {
+        throw new EOFException();
+      }
+      chunkOrdinal = ByteBuffer.wrap(ordinalBytes).getLong();
+    }
+    return new ChunkHeader(
+        chunkType,
+        measurementID,
+        dataSize,
+        getSerializedSize(measurementID, dataSize, pageAead),
+        dataType,
+        type,
+        encoding,
+        chunkOrdinal);
   }
 
   /**
@@ -194,7 +266,7 @@ public class ChunkHeader {
    * @throws IOException IOException
    */
   public static ChunkHeader deserializeFrom(TsFileInput input, long offset) throws IOException {
-    return deserializeFrom(input, offset, null);
+    return deserializeFrom(input, offset, null, false);
   }
 
   /**
@@ -208,6 +280,12 @@ public class ChunkHeader {
    */
   public static ChunkHeader deserializeFrom(
       TsFileInput input, long offset, LongConsumer ioSizeRecorder) throws IOException {
+    return deserializeFrom(input, offset, ioSizeRecorder, false);
+  }
+
+  public static ChunkHeader deserializeFrom(
+      TsFileInput input, long offset, LongConsumer ioSizeRecorder, boolean pageAead)
+      throws IOException {
 
     // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining read
     // operation
@@ -226,7 +304,8 @@ public class ChunkHeader {
             + 1 // uVarInt dataSize
             + TSDataType.getSerializedSize() // dataType
             + CompressionType.getSerializedSize() // compressionType
-            + TSEncoding.getSerializedSize();
+            + TSEncoding.getSerializedSize()
+            + (pageAead ? Long.BYTES : 0);
     buffer = ByteBuffer.allocate(remainingBytes);
 
     if (ioSizeRecorder != null) {
@@ -242,9 +321,23 @@ public class ChunkHeader {
     TSDataType dataType = ReadWriteIOUtils.readDataType(buffer);
     CompressionType type = ReadWriteIOUtils.readCompressionType(buffer);
     TSEncoding encoding = ReadWriteIOUtils.readEncoding(buffer);
+    long chunkOrdinal = -1;
+    if (pageAead) {
+      if (buffer.remaining() < Long.BYTES) {
+        throw new EOFException();
+      }
+      chunkOrdinal = buffer.getLong();
+    }
     int chunkHeaderSize = alreadyReadLength + buffer.position();
     return new ChunkHeader(
-        chunkType, measurementID, dataSize, chunkHeaderSize, dataType, type, encoding);
+        chunkType,
+        measurementID,
+        dataSize,
+        chunkHeaderSize,
+        dataType,
+        type,
+        encoding,
+        chunkOrdinal);
   }
 
   /**
@@ -267,6 +360,10 @@ public class ChunkHeader {
 
   public String getMeasurementID() {
     return measurementID;
+  }
+
+  public long getChunkOrdinal() {
+    return chunkOrdinal;
   }
 
   public void setMeasurementID(String measurementID) {
@@ -312,6 +409,9 @@ public class ChunkHeader {
     length += ReadWriteIOUtils.write(dataType, outputStream);
     length += ReadWriteIOUtils.write(compressionType, outputStream);
     length += ReadWriteIOUtils.write(encodingType, outputStream);
+    if (chunkOrdinal >= 0) {
+      length += ReadWriteIOUtils.write(chunkOrdinal, outputStream);
+    }
     return length;
   }
 
@@ -329,6 +429,9 @@ public class ChunkHeader {
     length += ReadWriteIOUtils.write(dataType, buffer);
     length += ReadWriteIOUtils.write(compressionType, buffer);
     length += ReadWriteIOUtils.write(encodingType, buffer);
+    if (chunkOrdinal >= 0) {
+      length += ReadWriteIOUtils.write(chunkOrdinal, buffer);
+    }
     return length;
   }
 

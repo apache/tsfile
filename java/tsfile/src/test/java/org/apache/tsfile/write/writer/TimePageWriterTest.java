@@ -196,6 +196,8 @@ public class TimePageWriterTest {
     EncryptParameter encryptParameter =
         TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16]);
     TimePageWriter pageWriter = new TimePageWriter(timeEncoder, compressor, encryptParameter);
+    long chunkOrdinal = encryptParameter.nextChunkOrdinal();
+    pageWriter.setChunkOrdinal(chunkOrdinal);
     PublicBAOS publicBAOS = new PublicBAOS();
 
     try {
@@ -216,7 +218,9 @@ public class TimePageWriterTest {
               TSDataType.INT64,
               CompressionType.UNCOMPRESSED,
               TSEncoding.PLAIN,
-              1);
+              1,
+              0,
+              chunkOrdinal);
       IDecryptor decryptor = IDecryptor.getDecryptor(encryptParameter);
       ByteBuffer uncompressedPageData =
           ChunkReader.deserializePageData(

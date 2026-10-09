@@ -63,7 +63,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -389,6 +388,34 @@ public class TsFileIOWriter implements AutoCloseable {
       int numOfPages,
       int mask)
       throws IOException {
+    startFlushChunk(
+        measurementId,
+        compressionCodecName,
+        tsDataType,
+        encodingType,
+        statistics,
+        dataSize,
+        numOfPages,
+        mask,
+        -1);
+  }
+
+  public void startFlushChunk(
+      String measurementId,
+      CompressionType compressionCodecName,
+      TSDataType tsDataType,
+      TSEncoding encodingType,
+      Statistics<? extends Serializable> statistics,
+      int dataSize,
+      int numOfPages,
+      int mask,
+      long chunkOrdinal)
+      throws IOException {
+
+    boolean pageAead = encryptParameter != null && encryptParameter.isTdePageAead();
+    if (pageAead != (chunkOrdinal >= 0)) {
+      throw new IOException(Messages.get("error.write.invalid_chunk_ordinal"));
+    }
 
     writeEncryptionHeaderIfNecessary();
 
@@ -410,7 +437,8 @@ public class TsFileIOWriter implements AutoCloseable {
             compressionCodecName,
             encodingType,
             numOfPages,
-            mask);
+            mask,
+            chunkOrdinal);
     header.serializeTo(out.wrapAsStream());
   }
 
@@ -465,7 +493,10 @@ public class TsFileIOWriter implements AutoCloseable {
             compressionType,
             encodingType,
             0,
-            TsFileConstant.VALUE_COLUMN_MASK);
+            TsFileConstant.VALUE_COLUMN_MASK,
+            encryptParameter != null && encryptParameter.isTdePageAead()
+                ? encryptParameter.nextChunkOrdinal()
+                : -1);
     emptyChunkHeader.serializeTo(out.wrapAsStream());
     endCurrentChunk();
   }
@@ -777,17 +808,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (!targetUsesPageAead && !sourceUsesPageAead) {
       return;
     }
-    if (!targetUsesPageAead
-        || !sourceUsesPageAead
-        || !Objects.equals(encryptParameter.getProviderId(), sourceParameter.getProviderId())
-        || !Objects.equals(encryptParameter.getProfileId(), sourceParameter.getProfileId())
-        || !Objects.equals(encryptParameter.getKeyId(), sourceParameter.getKeyId())
-        || !Objects.equals(encryptParameter.getKeyVersion(), sourceParameter.getKeyVersion())
-        || !Arrays.equals(encryptParameter.getFileCryptoId(), sourceParameter.getFileCryptoId())
-        || !Arrays.equals(
-            encryptParameter.getWrappedDataKey(), sourceParameter.getWrappedDataKey())) {
-      throw new IOException(Messages.get("error.write.encrypted_chunk_context_mismatch"));
-    }
+    throw new IOException(Messages.get("error.write.encrypted_chunk_copy_unsupported"));
   }
 
   public void truncate(long offset) throws IOException {

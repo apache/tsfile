@@ -158,7 +158,8 @@ public class ChunkReader extends AbstractChunkReader {
                 currentPagePosition,
                 unCompressor,
                 encryptParam,
-                pageIndex),
+                pageIndex,
+                chunkHeader.getChunkOrdinal()),
             chunkHeader.getDataType(),
             chunkHeader.calculateDecoderForNonTimeChunk(),
             getConfiguredTimeDecoder(),
@@ -249,7 +250,8 @@ public class ChunkReader extends AbstractChunkReader {
       ByteBuffer compressedPageData,
       IDecryptor decryptor,
       EncryptParameter encryptParameter,
-      int pageIndex)
+      int pageIndex,
+      long chunkOrdinal)
       throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
@@ -259,7 +261,8 @@ public class ChunkReader extends AbstractChunkReader {
               encryptParameter,
               pageHeader.getUncompressedSize(),
               compressedPageBodyLength,
-              pageIndex);
+              pageIndex,
+              chunkOrdinal);
       byte[] decryptedPageData =
           decryptor.decryptPage(
               compressedPageData.array(),
@@ -312,7 +315,13 @@ public class ChunkReader extends AbstractChunkReader {
     ByteBuffer compressedPageBody = readCompressedPageData(pageHeader, chunkBuffer);
     if (encryptParameter != null && encryptParameter.isTdePageAead()) {
       return decryptAndUncompressPageData(
-          pageHeader, unCompressor, compressedPageBody, decryptor, encryptParameter, pageIndex);
+          pageHeader,
+          unCompressor,
+          compressedPageBody,
+          decryptor,
+          encryptParameter,
+          pageIndex,
+          chunkHeader.getChunkOrdinal());
     } else if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
       return uncompressPageData(pageHeader, unCompressor, compressedPageBody);
     } else {

@@ -22,6 +22,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
 import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.fileSystem.fsFactory.FSFactory;
@@ -49,6 +50,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -147,6 +149,8 @@ public class ForceAppendTsFileWriterTest {
     fileCryptoId[0] = 1;
     EncryptParameter encryptParameter =
         TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
+    EncryptParameter appendParameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
 
     try {
       try (TsFileWriter writer = new TsFileWriter(file, encryptParameter)) {
@@ -155,19 +159,27 @@ public class ForceAppendTsFileWriterTest {
         writer.writeRecord(new TSRecord("d1", 1).addTuple(new FloatDataPoint("s1", 5)));
       }
 
-      ForceAppendTsFileWriter appendWriter = new ForceAppendTsFileWriter(file, encryptParameter);
+      ForceAppendTsFileWriter appendWriter = new ForceAppendTsFileWriter(file, appendParameter);
       EncryptParameter ownedParameter = appendWriter.getEncryptParameter();
       Assert.assertNotSame(encryptParameter, ownedParameter);
       appendWriter.doTruncate();
-      try (TsFileWriter writer = new TsFileWriter(appendWriter, encryptParameter)) {
+      try (TsFileWriter writer = new TsFileWriter(appendWriter, appendParameter)) {
         writer.registerTimeseries(
             new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
         writer.writeRecord(new TSRecord("d1", 2).addTuple(new FloatDataPoint("s1", 6)));
       }
       assertTrue(ownedParameter.isDestroyed());
       assertFalse(encryptParameter.isDestroyed());
+      assertFalse(appendParameter.isDestroyed());
 
-      try (TsFileReader reader = new TsFileReader(new TsFileSequenceReader(file.getPath()))) {
+      try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(file.getPath());
+          TsFileReader reader = new TsFileReader(sequenceReader)) {
+        List<ChunkMetadata> chunks =
+            sequenceReader.getChunkMetadataList(new Path("d1", "s1", true));
+        assertEquals(2, chunks.size());
+        assertNotEquals(
+            sequenceReader.readMemChunk(chunks.get(0)).getHeader().getChunkOrdinal(),
+            sequenceReader.readMemChunk(chunks.get(1)).getHeader().getChunkOrdinal());
         QueryDataSet dataSet =
             reader.query(
                 QueryExpression.create(
@@ -182,6 +194,7 @@ public class ForceAppendTsFileWriterTest {
       }
     } finally {
       encryptParameter.close();
+      appendParameter.close();
       file.delete();
     }
   }

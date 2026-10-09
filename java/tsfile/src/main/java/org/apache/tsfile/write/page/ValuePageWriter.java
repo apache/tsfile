@@ -46,6 +46,7 @@ public class ValuePageWriter {
   private final ICompressor compressor;
 
   private final EncryptParameter encryptParam;
+  private long chunkOrdinal = -1;
 
   // value
   private Encoder valueEncoder;
@@ -416,7 +417,8 @@ public class ValuePageWriter {
     ByteBuffer pageData = getUncompressedBytes();
     int uncompressedSize = pageData.remaining();
     EncodedPageBody pageBody =
-        PageBodyEncoder.encode(pageData, uncompressedSize, compressor, encryptParam, pageIndex);
+        PageBodyEncoder.encode(
+            pageData, uncompressedSize, compressor, encryptParam, pageIndex, chunkOrdinal);
     int pageBodySize = pageBody.size();
 
     // write the page header to IOWriter
@@ -455,6 +457,10 @@ public class ValuePageWriter {
     bitmap = 0;
     valueOut.reset();
     statistics = Statistics.getStatsByType(dataType);
+  }
+
+  public void setChunkOrdinal(long chunkOrdinal) {
+    this.chunkOrdinal = chunkOrdinal;
   }
 
   public void setValueEncoder(Encoder encoder) {

@@ -157,6 +157,9 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
           markExistingFileStarted(recoveredParameter != null && recoveredParameter.isTdePageAead());
           schema.setEnabledUpdateSchema(false);
           truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
+          if (this.param != null && this.param.isTdePageAead()) {
+            this.param.resumeAfterChunkOrdinal(reader.getMaxChunkOrdinal());
+          }
           minPlanIndex = reader.getMinPlanIndex();
           maxPlanIndex = reader.getMaxPlanIndex();
           if (truncatedSize == TsFileCheckStatus.COMPLETE_FILE) {

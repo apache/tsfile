@@ -153,6 +153,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   private EncryptParameter dataEncryptParam = null;
 
   private EncryptParameter fileEncryptionParam;
+  private long maxChunkOrdinal = -1;
 
   private long dataStartOffset = BASE_FILE_HEADER_SIZE;
 
@@ -2082,7 +2083,11 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public ChunkHeader readChunkHeader(byte chunkType) throws IOException {
     try {
-      return ChunkHeader.deserializeFrom(tsFileInput.wrapAsInputStream(), chunkType);
+      ChunkHeader header =
+          ChunkHeader.deserializeFrom(
+              tsFileInput.wrapAsInputStream(), chunkType, fileEncryptionParam != null);
+      recordChunkOrdinal(header);
+      return header;
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -2101,7 +2106,11 @@ public class TsFileSequenceReader implements AutoCloseable {
   private ChunkHeader readChunkHeader(long position, LongConsumer ioSizeRecorder)
       throws IOException {
     try {
-      return ChunkHeader.deserializeFrom(tsFileInput, position, ioSizeRecorder);
+      ChunkHeader header =
+          ChunkHeader.deserializeFrom(
+              tsFileInput, position, ioSizeRecorder, fileEncryptionParam != null);
+      recordChunkOrdinal(header);
+      return header;
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -2109,6 +2118,17 @@ public class TsFileSequenceReader implements AutoCloseable {
           Messages.get("log.read.sequence_reader_chunk_header_error"), t.getMessage(), file);
       throw t;
     }
+  }
+
+  private void recordChunkOrdinal(ChunkHeader header) throws IOException {
+    if (fileEncryptionParam != null && header.getChunkOrdinal() < 0) {
+      throw new IOException(Messages.get("error.write.invalid_chunk_ordinal"));
+    }
+    maxChunkOrdinal = Math.max(maxChunkOrdinal, header.getChunkOrdinal());
+  }
+
+  public long getMaxChunkOrdinal() {
+    return maxChunkOrdinal;
   }
 
   /**
@@ -2287,13 +2307,20 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public ByteBuffer readPage(PageHeader header, CompressionType type, int pageIndex)
       throws IOException {
+    return readPage(header, type, pageIndex, -1);
+  }
+
+  public ByteBuffer readPage(
+      PageHeader header, CompressionType type, int pageIndex, long chunkOrdinal)
+      throws IOException {
     ByteBuffer buffer = readData(-1, header.getCompressedSize());
     EncryptParameter encryptParameter = getEncryptParam();
     IDecryptor decryptor = IDecryptor.getDecryptor(encryptParameter);
     if (header.getUncompressedSize() == 0) {
       return buffer;
     }
-    ByteBuffer finalBuffer = decrypt(decryptor, encryptParameter, buffer, header, pageIndex);
+    ByteBuffer finalBuffer =
+        decrypt(decryptor, encryptParameter, buffer, header, pageIndex, chunkOrdinal);
     finalBuffer = uncompress(type, finalBuffer, header.getUncompressedSize());
     return finalBuffer;
   }
@@ -2303,12 +2330,17 @@ public class TsFileSequenceReader implements AutoCloseable {
       EncryptParameter encryptParameter,
       ByteBuffer buffer,
       PageHeader header,
-      int pageIndex)
+      int pageIndex,
+      long chunkOrdinal)
       throws IOException {
     if (encryptParameter != null && encryptParameter.isTdePageAead()) {
       PageCryptoContext pageCryptoContext =
           PageCryptoContext.forDecryption(
-              encryptParameter, header.getUncompressedSize(), buffer.remaining(), pageIndex);
+              encryptParameter,
+              header.getUncompressedSize(),
+              buffer.remaining(),
+              pageIndex,
+              chunkOrdinal);
       byte[] plaintext =
           decryptor.decryptPage(
               buffer.array(),
@@ -2608,7 +2640,12 @@ public class TsFileSequenceReader implements AutoCloseable {
                 Decoder valueDecoder =
                     Decoder.getDecoderByType(
                         chunkHeader.getEncodingType(), chunkHeader.getDataType());
-                ByteBuffer pageData = readPage(pageHeader, chunkHeader.getCompressionType());
+                ByteBuffer pageData =
+                    readPage(
+                        pageHeader,
+                        chunkHeader.getCompressionType(),
+                        0,
+                        chunkHeader.getChunkOrdinal());
                 TSEncoding configuredTimeEncoding =
                     TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
                 boolean isTimeColumn =
@@ -2860,7 +2897,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       PageHeader pageHeader = this.readPageHeader(chunkHeader.getDataType(), false);
       Decoder valueDecoder =
           Decoder.getDecoderByType(chunkHeader.getEncodingType(), chunkHeader.getDataType());
-      ByteBuffer pageData = readPage(pageHeader, chunkHeader.getCompressionType());
+      ByteBuffer pageData =
+          readPage(pageHeader, chunkHeader.getCompressionType(), 0, chunkHeader.getChunkOrdinal());
       Decoder timeDecoder =
           Decoder.getDecoderByType(
               TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),

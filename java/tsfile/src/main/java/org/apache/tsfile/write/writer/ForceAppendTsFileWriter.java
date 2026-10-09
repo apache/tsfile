@@ -93,8 +93,17 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
       for (IDeviceID device : devices) {
         List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
         reader.readChunkMetadataInDevice(device).values().forEach(chunkMetadataList::addAll);
+        if (ownedEncryptParameter != null) {
+          for (ChunkMetadata chunkMetadata : chunkMetadataList) {
+            reader.position(chunkMetadata.getOffsetOfChunkHeader());
+            reader.readChunkHeader(reader.readMarker());
+          }
+        }
         ChunkGroupMetadata chunkGroupMetadata = new ChunkGroupMetadata(device, chunkMetadataList);
         chunkGroupMetadataList.add(chunkGroupMetadata);
+      }
+      if (ownedEncryptParameter != null) {
+        ownedEncryptParameter.resumeAfterChunkOrdinal(reader.getMaxChunkOrdinal());
       }
     } catch (IOException | RuntimeException e) {
       closeAfterFailedInitialization(e);

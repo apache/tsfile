@@ -39,7 +39,8 @@ class PageBodyEncoder {
       int uncompressedSize,
       ICompressor compressor,
       EncryptParameter encryptParameter,
-      int pageIndex)
+      int pageIndex,
+      long chunkOrdinal)
       throws IOException {
     byte[] plaintext;
     int plaintextOffset = 0;
@@ -63,7 +64,7 @@ class PageBodyEncoder {
     if (encryptParameter != null && encryptParameter.isTdePageAead()) {
       PageCryptoContext pageCryptoContext =
           PageCryptoContext.forEncryption(
-              encryptParameter, uncompressedSize, compressedSize, pageIndex);
+              encryptParameter, uncompressedSize, compressedSize, pageIndex, chunkOrdinal);
       encryptedPageBody =
           encryptor.encryptPage(plaintext, plaintextOffset, compressedSize, pageCryptoContext);
       if (encryptedPageBody.length != pageCryptoContext.getEncryptedPageBodySize()) {

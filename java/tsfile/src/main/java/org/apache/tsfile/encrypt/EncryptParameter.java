@@ -24,6 +24,7 @@ import org.apache.tsfile.i18n.Messages;
 import javax.security.auth.Destroyable;
 
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Parameters required to encrypt or decrypt one TsFile.
@@ -46,6 +47,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
   private final String keyVersion;
   private final byte[] wrappedDataKey;
   private final byte[] fileCryptoId;
+  private final AtomicLong nextChunkOrdinal;
 
   private transient volatile IEncrypt fileEncrypt;
   private transient volatile boolean destroyed;
@@ -60,6 +62,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.keyVersion = null;
     this.wrappedDataKey = null;
     this.fileCryptoId = null;
+    this.nextChunkOrdinal = new AtomicLong();
   }
 
   private EncryptParameter(Builder builder) {
@@ -72,6 +75,8 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.keyVersion = builder.keyVersion;
     this.wrappedDataKey = copy(builder.wrappedDataKey);
     this.fileCryptoId = copy(builder.fileCryptoId);
+    this.nextChunkOrdinal =
+        builder.nextChunkOrdinal == null ? new AtomicLong() : builder.nextChunkOrdinal;
   }
 
   public static Builder pageAeadBuilder() {
@@ -94,7 +99,34 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
         .keyVersion(keyVersion)
         .wrappedDataKey(wrappedDataKey)
         .fileCryptoId(fileCryptoId)
+        .nextChunkOrdinal(nextChunkOrdinal)
         .build();
+  }
+
+  /** Allocates a file-unique identity before the first page of a chunk is encrypted. */
+  public long nextChunkOrdinal() {
+    if (!pageAead || destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
+    }
+    long ordinal =
+        nextChunkOrdinal.getAndUpdate(value -> value == Long.MAX_VALUE ? value : value + 1);
+    if (ordinal == Long.MAX_VALUE) {
+      throw new EncryptException(Messages.get("error.encrypt.chunk_ordinal_exhausted"));
+    }
+    return ordinal;
+  }
+
+  /** Continues allocation after the highest retained chunk during append or crash recovery. */
+  public void resumeAfterChunkOrdinal(long ordinal) {
+    if (!pageAead || destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
+    }
+    if (ordinal == Long.MAX_VALUE) {
+      throw new EncryptException(Messages.get("error.encrypt.chunk_ordinal_exhausted"));
+    }
+    if (ordinal >= 0) {
+      nextChunkOrdinal.accumulateAndGet(ordinal + 1, Math::max);
+    }
   }
 
   public byte[] getKey() {
@@ -204,6 +236,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     private String keyVersion;
     private byte[] wrappedDataKey;
     private byte[] fileCryptoId;
+    private AtomicLong nextChunkOrdinal;
 
     private Builder() {}
 
@@ -239,6 +272,11 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
 
     public Builder fileCryptoId(byte[] fileCryptoId) {
       this.fileCryptoId = copy(fileCryptoId);
+      return this;
+    }
+
+    private Builder nextChunkOrdinal(AtomicLong nextChunkOrdinal) {
+      this.nextChunkOrdinal = nextChunkOrdinal;
       return this;
     }
 

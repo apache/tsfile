@@ -39,7 +39,7 @@ import java.nio.ByteBuffer;
  */
 public final class FileEncryptionHeader {
 
-  public static final byte VERSION = 1;
+  public static final byte VERSION = 2;
   public static final int MAX_HEADER_SIZE = 1024 * 1024;
 
   private FileEncryptionHeader() {}

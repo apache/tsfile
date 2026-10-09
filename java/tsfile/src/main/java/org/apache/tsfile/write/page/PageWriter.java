@@ -47,6 +47,7 @@ public class PageWriter {
   private ICompressor compressor;
 
   private EncryptParameter encryptParam;
+  private long chunkOrdinal = -1;
 
   // time
   private Encoder timeEncoder;
@@ -239,7 +240,8 @@ public class PageWriter {
     ByteBuffer pageData = getUncompressedBytes();
     int uncompressedSize = pageData.remaining();
     EncodedPageBody pageBody =
-        PageBodyEncoder.encode(pageData, uncompressedSize, compressor, encryptParam, pageIndex);
+        PageBodyEncoder.encode(
+            pageData, uncompressedSize, compressor, encryptParam, pageIndex, chunkOrdinal);
     int pageBodySize = pageBody.size();
 
     // write the page header to IOWriter
@@ -280,6 +282,10 @@ public class PageWriter {
     timeOut.reset();
     valueOut.reset();
     statistics = Statistics.getStatsByType(measurementSchema.getType());
+  }
+
+  public void setChunkOrdinal(long chunkOrdinal) {
+    this.chunkOrdinal = chunkOrdinal;
   }
 
   public void setTimeEncoder(Encoder encoder) {

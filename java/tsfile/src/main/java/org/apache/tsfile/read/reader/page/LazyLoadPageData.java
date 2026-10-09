@@ -42,6 +42,7 @@ public class LazyLoadPageData {
   private final EncryptParameter encryptParam;
 
   private final int pageIndex;
+  private final long chunkOrdinal;
 
   public LazyLoadPageData(byte[] data, int offset, IUnCompressor unCompressor) {
     this.chunkData = data;
@@ -49,6 +50,7 @@ public class LazyLoadPageData {
     this.unCompressor = unCompressor;
     this.encryptParam = EncryptUtils.getEncryptParameter();
     this.pageIndex = -1;
+    this.chunkOrdinal = -1;
   }
 
   public LazyLoadPageData(
@@ -58,6 +60,7 @@ public class LazyLoadPageData {
     this.unCompressor = unCompressor;
     this.encryptParam = encryptParam;
     this.pageIndex = -1;
+    this.chunkOrdinal = -1;
   }
 
   public LazyLoadPageData(
@@ -66,11 +69,22 @@ public class LazyLoadPageData {
       IUnCompressor unCompressor,
       EncryptParameter encryptParam,
       int pageIndex) {
+    this(data, offset, unCompressor, encryptParam, pageIndex, -1);
+  }
+
+  public LazyLoadPageData(
+      byte[] data,
+      int offset,
+      IUnCompressor unCompressor,
+      EncryptParameter encryptParam,
+      int pageIndex,
+      long chunkOrdinal) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
     this.encryptParam = encryptParam;
     this.pageIndex = pageIndex;
+    this.chunkOrdinal = chunkOrdinal;
   }
 
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
@@ -81,7 +95,11 @@ public class LazyLoadPageData {
     if (encryptParam != null && encryptParam.isTdePageAead()) {
       PageCryptoContext pageCryptoContext =
           PageCryptoContext.forDecryption(
-              encryptParam, pageHeader.getUncompressedSize(), compressedPageBodyLength, pageIndex);
+              encryptParam,
+              pageHeader.getUncompressedSize(),
+              compressedPageBodyLength,
+              pageIndex,
+              chunkOrdinal);
       decryptedPageData =
           decryptor.decryptPage(
               chunkData, pageDataOffset, compressedPageBodyLength, pageCryptoContext);

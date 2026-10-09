@@ -55,6 +55,7 @@ public class ChunkWriterImpl implements IChunkWriter {
   private final ICompressor compressor;
 
   private final EncryptParameter encryptParam;
+  private long chunkOrdinal = -1;
 
   /** all pages of this chunk. */
   private final PublicBAOS pageBuffer;
@@ -106,6 +107,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
     this.encryptParam = EncryptUtils.getEncryptParameter();
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -118,6 +120,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
 
     this.pageWriter = new PageWriter(measurementSchema, encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
@@ -130,6 +133,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
     this.encryptParam = encryptParam;
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -142,6 +146,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
 
     this.pageWriter = new PageWriter(measurementSchema, this.encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
@@ -159,6 +164,12 @@ public class ChunkWriterImpl implements IChunkWriter {
       IMeasurementSchema schema, boolean isMerging, EncryptParameter encryptParam) {
     this(schema, encryptParam);
     this.isMerging = isMerging;
+  }
+
+  private long nextChunkOrdinal() {
+    return encryptParam != null && encryptParam.isTdePageAead()
+        ? encryptParam.nextChunkOrdinal()
+        : -1;
   }
 
   private void checkSdtEncoding() {
@@ -365,6 +376,8 @@ public class ChunkWriterImpl implements IChunkWriter {
     sizeWithoutStatistic = 0;
     firstPageStatistics = null;
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
+    this.chunkOrdinal = nextChunkOrdinal();
+    pageWriter.setChunkOrdinal(chunkOrdinal);
   }
 
   @Override
@@ -381,7 +394,8 @@ public class ChunkWriterImpl implements IChunkWriter {
       return 0;
     }
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementSchema.getMeasurementName(), pageBuffer.size())
+    return ChunkHeader.getSerializedSize(
+            measurementSchema.getMeasurementName(), pageBuffer.size(), chunkOrdinal >= 0)
         + (long) pageBuffer.size();
   }
 
@@ -506,7 +520,8 @@ public class ChunkWriterImpl implements IChunkWriter {
         statistics,
         pageBuffer.size(),
         numOfPages,
-        0);
+        0,
+        chunkOrdinal);
 
     long dataOffset = writer.getPos();
 
@@ -541,6 +556,10 @@ public class ChunkWriterImpl implements IChunkWriter {
 
   public int getNumOfPages() {
     return numOfPages;
+  }
+
+  public long getChunkOrdinal() {
+    return chunkOrdinal;
   }
 
   public ByteBuffer getByteBuffer() {

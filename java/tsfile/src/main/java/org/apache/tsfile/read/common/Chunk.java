@@ -224,6 +224,10 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.resumeAfterChunkOrdinal(chunkHeader.getChunkOrdinal());
+      encryptParam.resumeAfterChunkOrdinal(timeChunk.getHeader().getChunkOrdinal());
+    }
     TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
@@ -274,7 +278,8 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            encoding);
+            encoding,
+            chunkWriter.getChunkOrdinal());
     chunkData.flip();
     timeChunk.chunkData.flip();
     return new Chunk(
@@ -288,6 +293,9 @@ public class Chunk {
   public Chunk rewrite(TSDataType newType) throws IOException {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
+    }
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.resumeAfterChunkOrdinal(chunkHeader.getChunkOrdinal());
     }
     TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
@@ -321,7 +329,8 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            encoding);
+            encoding,
+            chunkWriter.getChunkOrdinal());
     chunkData.flip();
     return new Chunk(
         newChunkHeader,

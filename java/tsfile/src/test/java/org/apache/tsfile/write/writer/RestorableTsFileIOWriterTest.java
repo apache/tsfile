@@ -154,6 +154,51 @@ public class RestorableTsFileIOWriterTest {
   }
 
   @Test
+  public void testEncryptedChunkOrdinalContinuesAfterRecovery() throws Exception {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      TsFileWriter writer = new TsFileWriter(file, parameter);
+      writer.registerTimeseries(
+          new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
+      writer.writeRecord(new TSRecord("d1", 1).addTuple(new FloatDataPoint("s1", 1.0f)));
+      writer.flush();
+      writer.getIOWriter().writePlanIndices();
+      ChunkMetadata firstMetadata =
+          writer.getIOWriter().getChunkGroupMetadataList().get(0).getChunkMetadataList().get(0);
+      long firstOrdinal;
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+        firstOrdinal = reader.readMemChunk(firstMetadata).getHeader().getChunkOrdinal();
+      }
+      writer.getIOWriter().close();
+      writer.getIOWriter().getEncryptParameter().close();
+
+      try (EncryptParameter recoveryParameter =
+          TestAeadEncryptionProvider.createParameter(
+              new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+        RestorableTsFileIOWriter restorableWriter =
+            new RestorableTsFileIOWriter(file, recoveryParameter);
+        try (TsFileWriter recoveredWriter = new TsFileWriter(restorableWriter, recoveryParameter)) {
+          recoveredWriter.writeRecord(
+              new TSRecord("d1", 2).addTuple(new FloatDataPoint("s1", 2.0f)));
+        }
+      }
+
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath())) {
+        List<ChunkMetadata> chunks = reader.getChunkMetadataList(new Path("d1", "s1", true));
+        assertEquals(2, chunks.size());
+        assertEquals(
+            firstOrdinal, reader.readMemChunk(chunks.get(0)).getHeader().getChunkOrdinal());
+        Assert.assertTrue(
+            reader.readMemChunk(chunks.get(1)).getHeader().getChunkOrdinal() > firstOrdinal);
+      }
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
   public void testCloseDestroysOwnedTdeParameter() throws Exception {
     EncryptParameter parameter =
         TestAeadEncryptionProvider.createParameter(

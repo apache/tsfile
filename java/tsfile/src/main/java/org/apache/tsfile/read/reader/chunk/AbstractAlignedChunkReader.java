@@ -250,7 +250,8 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
                 currentPagePosition,
                 IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()),
                 encryptParam,
-                pageIndex);
+                pageIndex,
+                valueChunkHeader.getChunkOrdinal());
         valueDataTypeList.add(valueChunkHeader.getDataType());
         valueDecoderList.add(valueChunkHeader.calculateDecoderForNonTimeChunk());
         isAllNull = false;

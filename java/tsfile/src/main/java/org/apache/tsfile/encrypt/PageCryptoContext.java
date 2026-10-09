@@ -34,7 +34,7 @@ import java.util.Arrays;
  */
 public final class PageCryptoContext {
 
-  private static final int ASSOCIATED_DATA_VERSION = 1;
+  private static final int ASSOCIATED_DATA_VERSION = 2;
 
   private final int uncompressedSize;
   private final int compressedPlaintextSize;
@@ -47,31 +47,43 @@ public final class PageCryptoContext {
       int uncompressedSize,
       int compressedPlaintextSize,
       int encryptedPageBodySize,
-      int pageIndex) {
-    validate(parameter, uncompressedSize, compressedPlaintextSize, pageIndex);
+      int pageIndex,
+      long chunkOrdinal) {
+    validate(parameter, uncompressedSize, compressedPlaintextSize, pageIndex, chunkOrdinal);
     this.uncompressedSize = uncompressedSize;
     this.compressedPlaintextSize = compressedPlaintextSize;
     this.encryptedPageBodySize = encryptedPageBodySize;
     this.pageIndex = pageIndex;
     this.associatedData =
-        buildAssociatedData(parameter, uncompressedSize, compressedPlaintextSize, pageIndex);
+        buildAssociatedData(
+            parameter, uncompressedSize, compressedPlaintextSize, pageIndex, chunkOrdinal);
   }
 
   public static PageCryptoContext forEncryption(
       EncryptParameter parameter,
       int uncompressedSize,
       int compressedPlaintextSize,
-      int pageIndex) {
-    validate(parameter, uncompressedSize, compressedPlaintextSize, pageIndex);
+      int pageIndex,
+      long chunkOrdinal) {
+    validate(parameter, uncompressedSize, compressedPlaintextSize, pageIndex, chunkOrdinal);
     int encryptedPageBodySize =
         Math.addExact(compressedPlaintextSize, parameter.getPageBodyOverhead());
     return new PageCryptoContext(
-        parameter, uncompressedSize, compressedPlaintextSize, encryptedPageBodySize, pageIndex);
+        parameter,
+        uncompressedSize,
+        compressedPlaintextSize,
+        encryptedPageBodySize,
+        pageIndex,
+        chunkOrdinal);
   }
 
   public static PageCryptoContext forDecryption(
-      EncryptParameter parameter, int uncompressedSize, int encryptedPageBodySize, int pageIndex) {
-    validate(parameter, uncompressedSize, 0, pageIndex);
+      EncryptParameter parameter,
+      int uncompressedSize,
+      int encryptedPageBodySize,
+      int pageIndex,
+      long chunkOrdinal) {
+    validate(parameter, uncompressedSize, 0, pageIndex, chunkOrdinal);
     int compressedPlaintextSize = encryptedPageBodySize - parameter.getPageBodyOverhead();
     if (compressedPlaintextSize < 0) {
       throw new EncryptException(
@@ -81,7 +93,12 @@ public final class PageCryptoContext {
               parameter.getPageBodyOverhead()));
     }
     return new PageCryptoContext(
-        parameter, uncompressedSize, compressedPlaintextSize, encryptedPageBodySize, pageIndex);
+        parameter,
+        uncompressedSize,
+        compressedPlaintextSize,
+        encryptedPageBodySize,
+        pageIndex,
+        chunkOrdinal);
   }
 
   public int getUncompressedSize() {
@@ -117,13 +134,17 @@ public final class PageCryptoContext {
       EncryptParameter parameter,
       int uncompressedSize,
       int compressedPlaintextSize,
-      int pageIndex) {
+      int pageIndex,
+      long chunkOrdinal) {
     if (parameter == null || !parameter.isTdePageAead()) {
       throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
     }
     if (parameter.getFileCryptoId() == null
         || parameter.getFileCryptoId().length != EncryptParameter.FILE_CRYPTO_ID_LENGTH) {
       throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_file_id"));
+    }
+    if (chunkOrdinal < 0) {
+      throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_chunk_ordinal"));
     }
     if (uncompressedSize < 0 || compressedPlaintextSize < 0 || pageIndex < 0) {
       throw new EncryptException(
@@ -139,7 +160,8 @@ public final class PageCryptoContext {
       EncryptParameter parameter,
       int uncompressedSize,
       int compressedPlaintextSize,
-      int pageIndex) {
+      int pageIndex,
+      long chunkOrdinal) {
     byte[][] components =
         new byte[][] {
           bytes(parameter.getProviderId()),
@@ -148,7 +170,7 @@ public final class PageCryptoContext {
           bytes(parameter.getKeyVersion()),
           parameter.getFileCryptoId()
         };
-    int size = Integer.BYTES * (4 + components.length);
+    int size = Integer.BYTES * (4 + components.length) + Long.BYTES;
     for (byte[] component : components) {
       size = Math.addExact(size, component.length);
     }
@@ -159,6 +181,7 @@ public final class PageCryptoContext {
       buffer.putInt(component.length);
       buffer.put(component);
     }
+    buffer.putLong(chunkOrdinal);
     buffer.putInt(pageIndex);
     buffer.putInt(uncompressedSize);
     buffer.putInt(compressedPlaintextSize);
