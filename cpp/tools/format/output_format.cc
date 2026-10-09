@@ -524,9 +524,14 @@ bool RowWriter::write(const std::vector<std::string>& cells,
         }
         const common::TSDataType type =
             i < row_types.size() ? row_types[i] : common::STRING;
-        const std::string cell = format_cell(type, cells[i]);
+        std::string cell = format_cell(type, cells[i]);
         if (fmt_ == OutputFormat::kCsv && cell.empty()) {
             out_ << "\"\"";
+        } else if (fmt_ == OutputFormat::kCsv &&
+                   (type == common::STRING || type == common::TEXT) &&
+                   !cell.empty() && cell[0] == '\\') {
+            cell.insert(0, 1, '\\');
+            out_ << csv_escape(cell);
         } else {
             out_ << (fmt_ == OutputFormat::kCsv ? csv_escape(cell) : cell);
         }

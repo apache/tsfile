@@ -116,9 +116,11 @@ Shared options:
 
 `ndjson` output emits one JSON object per line; numbers/booleans are bare, other values are
 quoted, nulls are `null`, and non-finite floats become `null`. CSV output follows RFC 4180.
-CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Timestamps are raw int64
-values. The `table` format uses a temporary spool to align columns with bounded
-memory; prefer `csv`/`ndjson` when temporary disk use is undesirable. `sketch`
+CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Non-null STRING/TEXT
+values beginning with `\` gain one extra leading `\`, using the same encoding rule
+as CSV input described below. Timestamps are raw int64 values. The `table` format
+uses a temporary spool to align columns with bounded memory; prefer `csv`/`ndjson`
+when temporary disk use is undesirable. `sketch`
 does not accept `--format`.
 
 Text output preserves well-formed UTF-8 and replaces malformed UTF-8 in names
@@ -175,8 +177,30 @@ TAG/FIELD of that type; they do not target individual columns and do not affect 
 | `-v, --verbose` | Print a creation summary to stderr after commit (otherwise silent on success) |
 
 CSV input uses RFC 4180 quoting with comma separators. A null value is unquoted `\N`;
-an empty string is `""`. Header errors, unused or duplicate physical overrides, unknown
-types, and incompatible encodings fail before data rows are read. Target-file problems
+an empty string is `""`.
+
+For non-null STRING/TEXT values beginning with a backslash, prepend **one extra
+leading backslash** when preparing CSV, including inside quoted cells. `write`
+recognizes the unquoted NULL marker first, then removes exactly one leading `\`
+from STRING/TEXT cells beginning with `\\`. The decoded literal `\N` remains text.
+Quoting a cell does not disable this prefix decoding.
+
+| CSV cell | Imported value |
+|---|---|
+| `\N` | NULL |
+| `""` | Empty string |
+| `\\N` | Literal text `\N` |
+| `"\N"` | Literal text `\N` (quoted alternative) |
+| `\\path` | Text `\path` with one leading backslash |
+| `\\\path` | Text `\\path` with two leading backslashes |
+| `"\\a,b"` | Text `\a,b` with one leading backslash and a comma |
+
+Use the same rule for manually authored CSV and output from `cat -f csv` or
+`export --type csv`. Backslashes elsewhere in a value, header names, and non-text
+columns are unaffected.
+
+Header errors, unused or duplicate physical overrides, unknown types, and
+incompatible encodings fail before data rows are read. Target-file problems
 such as an existing output, a missing parent directory, or output equal to input return
 exit code `3`.
 
