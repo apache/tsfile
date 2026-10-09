@@ -363,12 +363,18 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     // that callers could mistake for a complete result.  The final write is
     // still checked separately so stdout errors remain runtime failures.
     std::ostringstream staged;
-    int wret = push_down
-                   ? emit_result_set(rs, fmt, args.no_header, staged, 0, -1,
-                                     emitted_rows, tree_device_prefix)
-                   : emit_result_set(rs, fmt, args.no_header, staged, offset,
-                                     limit, emitted_rows, tree_device_prefix);
+    std::string output_error;
+    int wret =
+        push_down
+            ? emit_result_set(rs, fmt, args.no_header, staged, 0, -1,
+                              emitted_rows, &output_error, tree_device_prefix)
+            : emit_result_set(rs, fmt, args.no_header, staged, offset, limit,
+                              emitted_rows, &output_error, tree_device_prefix);
     reader.destroy_query_data_set(rs);
+    if (!output_error.empty()) {
+        err << "Error: " << output_error << "\n";
+        return kExitRuntime;
+    }
     if (wret == common::E_OK) {
         const std::string bytes = staged.str();
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));

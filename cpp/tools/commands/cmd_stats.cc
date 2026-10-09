@@ -418,7 +418,7 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         schemas.push_back(
             reader.get_table_schema(storage::to_lower(args.table)));
     } else {
-        schemas = reader.get_all_table_schemas();
+        schemas = sorted_table_schemas(reader);
     }
     if (schemas.empty() || !schemas[0]) {
         err << "Error: table '" << args.table << "' does not exist\n";
@@ -500,6 +500,10 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         types.push_back(common::STRING);
     }
     RowWriter w(out, fmt, headers, types, args.no_header);
+    if (!w.error().empty()) {
+        err << "Error: " << w.error() << "\n";
+        return kExitRuntime;
+    }
     for (const TableStatsSummary& summary : summaries) {
         std::map<std::string, size_t> local_tag_positions;
         for (size_t i = 0; i < summary.tag_indexes.size(); ++i) {
