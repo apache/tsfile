@@ -220,6 +220,8 @@ public abstract class TSEncodingBuilder {
   public static class KCluster extends TSEncodingBuilder {
 
     private int k;
+    private int maxIterations = 2;
+    private long seed = 0L;
     private static final int KCLUSTER_DEFAULT_K = 1000;
     private static final String K_KEY = "k";
 
@@ -231,15 +233,15 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
-          return new KClusterEncoder(type, this.k);
+          return new KClusterEncoder(type, this.k, maxIterations, seed);
         case DATE:
         case INT64:
-          return new KClusterEncoder(type, this.k);
+          return new KClusterEncoder(type, this.k, maxIterations, seed);
         case TIMESTAMP:
         case FLOAT:
-          return new KClusterEncoder(type, this.k);
+          return new KClusterEncoder(type, this.k, maxIterations, seed);
         case DOUBLE:
-          return new KClusterEncoder(type, this.k);
+          return new KClusterEncoder(type, this.k, maxIterations, seed);
         default:
           throw new UnSupportedDataTypeException("KCLUSTER doesn't support data type: " + type);
       }
@@ -261,6 +263,15 @@ public abstract class TSEncodingBuilder {
               "KCLUSTER parameter k must be an integer, but was " + kStr);
         }
       }
+      if (props != null && props.containsKey("max_iterations")) {
+        maxIterations = Integer.parseInt(props.get("max_iterations"));
+        if (maxIterations <= 0) {
+          throw new IllegalArgumentException("KCLUSTER max_iterations must be positive");
+        }
+      }
+      if (props != null && props.containsKey("seed")) {
+        seed = Long.parseLong(props.get("seed"));
+      }
     }
   }
 
@@ -274,9 +285,10 @@ public abstract class TSEncodingBuilder {
       switch (type) {
         case INT32:
         case DATE:
+          return new DeltaBinaryEncoder.IntDeltaEncoder();
         case INT64:
         case TIMESTAMP:
-          //          return new DeltaBinaryEncoder.LongDeltaEncoder();
+          return new DeltaBinaryEncoder.LongDeltaEncoder();
         case FLOAT:
         case DOUBLE:
           return new FloatEncoder(TSEncoding.TS_2DIFF, type, maxPointNumber);

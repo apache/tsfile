@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.encoding.decoder;
 
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
+
 import java.nio.ByteBuffer;
 
 public class ClusterReader {
@@ -38,6 +40,10 @@ public class ClusterReader {
           "Cannot read more than 64 bits or non-positive bits at once.");
     }
 
+    if (remainingBits() < numBits) {
+      throw new TsFileDecodingException("Truncated cluster bit stream");
+    }
+
     long result = 0;
     for (int i = 0; i < numBits; i++) {
       if (bitPosition < 0) {
@@ -51,5 +57,9 @@ public class ClusterReader {
       bitPosition--;
     }
     return result;
+  }
+
+  public long remainingBits() {
+    return (long) buffer.remaining() * 8 + bitPosition + 1;
   }
 }

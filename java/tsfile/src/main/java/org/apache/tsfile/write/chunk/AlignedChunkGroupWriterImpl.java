@@ -32,6 +32,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.page.ClusterAlignedPageWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.Tablet.ColumnCategory;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -59,6 +60,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   private final Map<String, ValueChunkWriter> valueChunkWriterMap = new LinkedHashMap<>();
 
   private final TimeChunkWriter timeChunkWriter;
+  private final ClusterAlignedPageWriter clusterPages = new ClusterAlignedPageWriter();
 
   private final EncryptParameter encryprParam;
 
@@ -115,6 +117,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
               measurementSchema.getEncodingType(),
               measurementSchema.getValueEncoder());
       valueChunkWriterMap.put(measurementName, valueChunkWriter);
+      ClusterAlignedPageWriter.attach(
+          timeChunkWriter.getPageWriter(), valueChunkWriterMap.values());
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
     return valueChunkWriter;
@@ -136,6 +140,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 schema.getEncodingType(),
                 schema.getValueEncoder());
         valueChunkWriterMap.put(measurementName, valueChunkWriter);
+        ClusterAlignedPageWriter.attach(
+            timeChunkWriter.getPageWriter(), valueChunkWriterMap.values());
         tryToAddEmptyPageAndData(valueChunkWriter);
       }
     }
@@ -397,6 +403,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   private void writePageToPageBuffer() {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterMap.values());
     timeChunkWriter.writePageToPageBuffer();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterMap.values()) {
       valueChunkWriter.writePageToPageBuffer();
@@ -404,6 +411,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   private void sealAllChunks() {
+    clusterPages.prepare(timeChunkWriter.getPageWriter(), valueChunkWriterMap.values());
     timeChunkWriter.sealCurrentPage();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterMap.values()) {
       valueChunkWriter.sealCurrentPage();

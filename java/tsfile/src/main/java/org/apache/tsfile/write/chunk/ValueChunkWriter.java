@@ -110,6 +110,13 @@ public class ValueChunkWriter {
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
+    if ((encodingType == TSEncoding.ACLUSTER || encodingType == TSEncoding.KCLUSTER)
+        && (dataType == TSDataType.INT32
+            || dataType == TSDataType.INT64
+            || dataType == TSDataType.FLOAT
+            || dataType == TSDataType.DOUBLE)) {
+      pageWriter.enableClusterBuffer();
+    }
   }
 
   public ValueChunkWriter(
@@ -136,6 +143,13 @@ public class ValueChunkWriter {
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
+    if ((encodingType == TSEncoding.ACLUSTER || encodingType == TSEncoding.KCLUSTER)
+        && (dataType == TSDataType.INT32
+            || dataType == TSDataType.INT64
+            || dataType == TSDataType.FLOAT
+            || dataType == TSDataType.DOUBLE)) {
+      pageWriter.enableClusterBuffer();
+    }
   }
 
   public void write(long time, long value, boolean isNull) {
@@ -226,6 +240,7 @@ public class ValueChunkWriter {
       numOfPages++;
       this.statistics.mergeStatistics(pageWriter.getStatistics());
     } catch (IOException e) {
+      if (pageWriter.getClusterBuffer() != null) throw new java.io.UncheckedIOException(e);
       logger.error("meet error in pageWriter.writePageHeaderAndDataIntoBuff,ignore this page:", e);
     } finally {
       // clear start time stamp for next initializing

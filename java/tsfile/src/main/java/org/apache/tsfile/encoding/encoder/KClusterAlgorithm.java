@@ -29,22 +29,22 @@ import java.util.Set;
 
 public class KClusterAlgorithm {
 
-  private static final Random rand = new Random();
-
   /** Private constructor to prevent instantiation. */
   private KClusterAlgorithm() {}
 
-  public static Object[] run(long[] data, int k) {
-    if (data == null || data.length == 0) {
-      return new Object[] {new long[0], new int[0], new long[0]};
-    }
+  public static ClusterResult run(long[] data, int k) {
+    return run(data, k, 2, 0L);
+  }
 
-    long[][] data2D = new long[data.length][1];
-    for (int i = 0; i < data.length; i++) {
-      data2D[i][0] = data[i];
+  public static ClusterResult run(long[] data, int k, int maxIterations, long seed) {
+    ClusterResult.validateInput(data);
+    if (k <= 0 || maxIterations <= 0) {
+      throw new IllegalArgumentException("k and maxIterations must be positive");
     }
-
-    return kMedoidLogCost(data, k, 2, 0.01);
+    if (data.length == 0) {
+      return new ClusterResult(new long[0], new int[0], new long[0]);
+    }
+    return kMedoidLogCost(data, k, maxIterations, 0.01, new Random(seed));
   }
 
   /** Helper class for sorting medoids based on their cluster size (frequency). */
@@ -66,7 +66,8 @@ public class KClusterAlgorithm {
   }
 
   /** The core K-Medoids algorithm, specifically implemented for 1D data. */
-  private static Object[] kMedoidLogCost(long[] data, int k, int maxIter, double tol) {
+  private static ClusterResult kMedoidLogCost(
+      long[] data, int k, int maxIter, double tol, Random random) {
     int n = data.length;
 
     // Use a HashSet for efficient uniqueness checking on primitive longs.
@@ -79,52 +80,27 @@ public class KClusterAlgorithm {
     }
     int distinctCount = uniquePoints.size();
     if (distinctCount < k) {
-      System.err.println(
-          "Warning: Distinct data points ("
-              + distinctCount
-              + ") is less than input k ("
-              + k
-              + "), setting k to "
-              + distinctCount);
       k = distinctCount;
     }
 
-    if (k <= 0) {
-      return new Object[] {new long[0], new int[n], new long[0]};
-    }
-
     // 1. Initialize medoids using a K-Medoids++ style approach.
-    long[] medoids = acceleratedInitialization(data, k);
+    long[] medoids = acceleratedInitialization(data, k, random);
     int[] clusterAssignment = new int[n];
     long previousTotalCost = Long.MAX_VALUE;
 
     // 2. Main iterative loop (Build and Swap phases).
     for (int iteration = 0; iteration < maxIter; iteration++) {
       // --- Assignment Step ---
-      long totalCostThisRound = 0L;
-      for (int i = 0; i < n; i++) {
-        long minCost = Long.MAX_VALUE;
-        int assignedMedoidIndex = -1;
-        for (int m = 0; m < k; m++) {
-          long cost = calculateResidualCost(data[i], medoids[m]);
-          if (cost < minCost) {
-            minCost = cost;
-            assignedMedoidIndex = m;
-            if (minCost == 0) break; // Optimization: A perfect match is unbeatable.
-          }
-        }
-        clusterAssignment[i] = assignedMedoidIndex;
-        totalCostThisRound += minCost;
-      }
+      long totalCostThisRound = assign(data, medoids, clusterAssignment);
 
       // --- Convergence Check (Cost) ---
-      if (iteration > 0 && (previousTotalCost - totalCostThisRound) < tol) {
+      if (iteration > 0 && Math.abs(previousTotalCost - totalCostThisRound) < tol) {
         break;
       }
       previousTotalCost = totalCostThisRound;
 
       // --- Update Step ---
-      long[] newMedoids = updateMedoids(data, clusterAssignment, k);
+      long[] newMedoids = updateMedoids(data, clusterAssignment, medoids);
 
       // --- Convergence Check (Medoids) ---
       if (Arrays.equals(medoids, newMedoids)) {
@@ -134,6 +110,7 @@ public class KClusterAlgorithm {
     }
 
     // 3. Calculate final cluster sizes and sort results.
+    assign(data, medoids, clusterAssignment);
     long[] finalClusterSizes = new long[k];
     for (int assignment : clusterAssignment) {
       if (assignment != -1) finalClusterSizes[assignment]++;
@@ -142,7 +119,7 @@ public class KClusterAlgorithm {
   }
 
   /** K-Medoids++ style initialization for 1D data. */
-  private static long[] acceleratedInitialization(long[] data, int k) {
+  private static long[] acceleratedInitialization(long[] data, int k, Random rand) {
     long[] medoids = new long[k];
     Set<Long> selectedMedoids = new HashSet<>();
 
@@ -195,8 +172,9 @@ public class KClusterAlgorithm {
    * Updates medoids by finding the point within each cluster that minimizes the total intra-cluster
    * cost.
    */
-  private static long[] updateMedoids(long[] data, int[] clusterAssignment, int k) {
-    long[] newMedoids = new long[k];
+  private static long[] updateMedoids(long[] data, int[] clusterAssignment, long[] medoids) {
+    int k = medoids.length;
+    long[] newMedoids = medoids.clone();
     List<Long>[] clusterPoints = new ArrayList[k];
     for (int i = 0; i < k; i++) {
       clusterPoints[i] = new ArrayList<>();
@@ -235,9 +213,10 @@ public class KClusterAlgorithm {
    * @param medoids The discovered medoids.
    * @param clusterAssignment The assignment map for each data point.
    * @param clusterSize The frequency of each cluster.
-   * @return A sorted and correctly mapped Object array.
+   * @return Sorted references with matching assignments and counts.
    */
-  private static Object[] sortResults(long[] medoids, int[] clusterAssignment, long[] clusterSize) {
+  private static ClusterResult sortResults(
+      long[] medoids, int[] clusterAssignment, long[] clusterSize) {
     int k = medoids.length;
     List<KClusterAlgorithm.MedoidSortHelper> sorters = new ArrayList<>();
     for (int i = 0; i < k; i++) {
@@ -262,10 +241,31 @@ public class KClusterAlgorithm {
       sortedClusterAssignment[i] = oldToNewIndexMap[oldIndex];
     }
 
-    return new Object[] {sortedMedoids, sortedClusterAssignment, sortedClusterSize};
+    return new ClusterResult(sortedMedoids, sortedClusterAssignment, sortedClusterSize);
   }
 
   // --- Cost Calculation Functions ---
+
+  private static long assign(long[] data, long[] medoids, int[] assignments) {
+    long total = 0;
+    for (int i = 0; i < data.length; i++) {
+      long bestCost = Long.MAX_VALUE;
+      int best = 0;
+      for (int m = 0; m < medoids.length; m++) {
+        long cost = calculateResidualCost(data[i], medoids[m]);
+        if (cost < bestCost || (cost == bestCost && data[i] == medoids[m])) {
+          bestCost = cost;
+          best = m;
+        }
+        if (data[i] == medoids[m]) {
+          break;
+        }
+      }
+      assignments[i] = best;
+      total += bestCost;
+    }
+    return total;
+  }
 
   private static long bitLengthCost(long value) {
     if (value == 0) return 1;
@@ -282,7 +282,7 @@ public class KClusterAlgorithm {
     int ans = -1;
     while (low <= high) {
       int mid = low + (high - low) / 2;
-      if (prefixSums[mid] >= value) {
+      if (prefixSums[mid] > value) {
         ans = mid;
         high = mid - 1;
       } else {

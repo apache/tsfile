@@ -21,7 +21,10 @@ package org.apache.tsfile.read.reader.page;
 
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.PlainDecoder;
+import org.apache.tsfile.encoding.table.ClusterNativePageCodec;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
@@ -55,10 +58,10 @@ public class PageReader implements IPageReader {
   private final TSDataType dataType;
 
   /** decoder for value column */
-  private final Decoder valueDecoder;
+  private Decoder valueDecoder;
 
   /** decoder for time column */
-  private final Decoder timeDecoder;
+  private Decoder timeDecoder;
 
   /** time column in memory */
   private ByteBuffer timeBuffer;
@@ -128,6 +131,28 @@ public class PageReader implements IPageReader {
    * @param pageData uncompressed bytes size of time column, time column, value column
    */
   private void splitDataToTimeStampAndValue(ByteBuffer pageData) {
+    ByteBuffer nativeData = pageData.duplicate();
+    if (nativeData.hasRemaining()
+        && nativeData.get() == 0
+        && ClusterNativePageCodec.isNativePage(nativeData)) {
+      try {
+        ClusterNativePageCodec.Decoded decoded =
+            ClusterNativePageCodec.decode(nativeData, dataType);
+        timeBuffer = ByteBuffer.allocate(decoded.times.length * Long.BYTES);
+        for (int r = 0; r < decoded.times.length; r++) {
+          if ((decoded.bitmap[r / 8] & (0x80 >>> (r % 8))) == 0)
+            throw new IOException("Null cell in non-aligned page");
+          timeBuffer.putLong(decoded.times[r]);
+        }
+        timeBuffer.flip();
+        valueBuffer = decoded.values;
+        timeDecoder = new PlainDecoder();
+        valueDecoder = new PlainDecoder();
+        return;
+      } catch (IOException invalid) {
+        throw new TsFileDecodingException("Invalid native cluster page: " + invalid.getMessage());
+      }
+    }
     int timeBufferLength = ReadWriteForEncodingUtils.readUnsignedVarInt(pageData);
 
     timeBuffer = pageData.slice();

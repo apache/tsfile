@@ -20,6 +20,7 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encoding.table.ClusterColumnBuffer;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
@@ -61,6 +62,9 @@ public class ValuePageWriter {
    */
   private Statistics<? extends Serializable> statistics;
 
+  private ClusterColumnBuffer clusterBuffer;
+  private byte[] clusterPage;
+
   private byte bitmap;
 
   private int size;
@@ -99,7 +103,7 @@ public class ValuePageWriter {
   public void write(long time, boolean value, boolean isNull) {
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
@@ -108,43 +112,47 @@ public class ValuePageWriter {
   public void write(long time, short value, boolean isNull) {
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
 
   /** write a time value pair into encoder */
   public void write(long time, int value, boolean isNull) {
+    if (clusterBuffer != null) clusterBuffer.append(value, isNull);
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
 
   /** write a time value pair into encoder */
   public void write(long time, long value, boolean isNull) {
+    if (clusterBuffer != null) clusterBuffer.append(value, isNull);
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
 
   /** write a time value pair into encoder */
   public void write(long time, float value, boolean isNull) {
+    if (clusterBuffer != null) clusterBuffer.append(Float.floatToRawIntBits(value), isNull);
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
 
   /** write a time value pair into encoder */
   public void write(long time, double value, boolean isNull) {
+    if (clusterBuffer != null) clusterBuffer.append(Double.doubleToRawLongBits(value), isNull);
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
@@ -153,7 +161,7 @@ public class ValuePageWriter {
   public void write(long time, Binary value, boolean isNull) {
     setBit(isNull);
     if (!isNull) {
-      valueEncoder.encode(value, valueOut);
+      if (clusterBuffer == null) valueEncoder.encode(value, valueOut);
       statistics.update(time, value);
     }
   }
@@ -175,7 +183,7 @@ public class ValuePageWriter {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -185,9 +193,10 @@ public class ValuePageWriter {
   public void write(
       long[] timestamps, int[] values, boolean[] isNull, int batchSize, int arrayOffset) {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      if (clusterBuffer != null) clusterBuffer.append(values[i], isNull[i]);
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -197,9 +206,10 @@ public class ValuePageWriter {
   public void write(
       long[] timestamps, long[] values, boolean[] isNull, int batchSize, int arrayOffset) {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      if (clusterBuffer != null) clusterBuffer.append(values[i], isNull[i]);
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -209,9 +219,11 @@ public class ValuePageWriter {
   public void write(
       long[] timestamps, float[] values, boolean[] isNull, int batchSize, int arrayOffset) {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      if (clusterBuffer != null)
+        clusterBuffer.append(Float.floatToRawIntBits(values[i]), isNull[i]);
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -221,9 +233,11 @@ public class ValuePageWriter {
   public void write(
       long[] timestamps, double[] values, boolean[] isNull, int batchSize, int arrayOffset) {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
+      if (clusterBuffer != null)
+        clusterBuffer.append(Double.doubleToRawLongBits(values[i]), isNull[i]);
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -235,7 +249,7 @@ public class ValuePageWriter {
     for (int i = arrayOffset; i < batchSize + arrayOffset; i++) {
       setBit(isNull[i]);
       if (!isNull[i]) {
-        valueEncoder.encode(values[i], valueOut);
+        if (clusterBuffer == null) valueEncoder.encode(values[i], valueOut);
         statistics.update(timestamps[i], values[i]);
       }
     }
@@ -256,6 +270,11 @@ public class ValuePageWriter {
    * @return a new readable ByteBuffer whose position is 0.
    */
   public ByteBuffer getUncompressedBytes() throws IOException {
+    if (clusterBuffer != null) {
+      if (clusterPage == null)
+        throw new IllegalStateException("Joint cluster page was not prepared");
+      return ByteBuffer.wrap(clusterPage);
+    }
     prepareEndWriteOnePage();
     ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES + bitmapOut.size() + valueOut.size());
     buffer.putInt(size);
@@ -348,16 +367,41 @@ public class ValuePageWriter {
    * @return allocated size in time, value and outputStream
    */
   public long estimateMaxMemSize() {
-    return Integer.BYTES + bitmapOut.size() + 1 + valueOut.size() + valueEncoder.getMaxByteSize();
+    return Integer.BYTES
+        + bitmapOut.size()
+        + 1
+        + valueOut.size()
+        + valueEncoder.getMaxByteSize()
+        + (clusterBuffer == null ? 0 : clusterBuffer.memoryBytes())
+        + (clusterPage == null ? 0 : clusterPage.length);
   }
 
   /** reset this page */
   public void reset(TSDataType dataType) {
+    if (clusterBuffer != null) clusterBuffer.reset();
+    clusterPage = null;
     bitmapOut.reset();
     size = 0;
     bitmap = 0;
     valueOut.reset();
     statistics = Statistics.getStatsByType(dataType);
+  }
+
+  public void enableClusterBuffer() {
+    if (size != 0) throw new IllegalStateException("Cannot change a populated page codec");
+    clusterBuffer = new ClusterColumnBuffer();
+  }
+
+  public ClusterColumnBuffer getClusterBuffer() {
+    return clusterBuffer;
+  }
+
+  public boolean hasClusterPage() {
+    return clusterPage != null;
+  }
+
+  public void setClusterPage(byte[] page) {
+    clusterPage = page;
   }
 
   public void setValueEncoder(Encoder encoder) {

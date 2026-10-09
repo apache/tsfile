@@ -19,13 +19,18 @@
 package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
+import org.apache.tsfile.encoding.encoder.ClusterEncoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encoding.table.ClusterColumnBuffer;
+import org.apache.tsfile.encoding.table.ClusterNativePageCodec;
+import org.apache.tsfile.encoding.table.ClusterTableOptions;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
@@ -59,6 +64,10 @@ public class PageWriter {
   // value
   private Encoder valueEncoder;
   private PublicBAOS valueOut;
+  private ClusterColumnBuffer clusterValues;
+  private ClusterColumnBuffer clusterTimes;
+  private final ClusterNativePageCodec.Selection clusterSelection =
+      new ClusterNativePageCodec.Selection();
 
   /**
    * statistic of current page. It will be reset after calling {@code
@@ -119,29 +128,37 @@ public class PageWriter {
 
   /** write a time value pair into encoder */
   public void write(long time, int value) {
-    timeEncoder.encode(time, timeOut);
-    valueEncoder.encode(value, valueOut);
+    if (!captureClusterValue(time, value)) {
+      timeEncoder.encode(time, timeOut);
+      valueEncoder.encode(value, valueOut);
+    }
     statistics.update(time, value);
   }
 
   /** write a time value pair into encoder */
   public void write(long time, long value) {
-    timeEncoder.encode(time, timeOut);
-    valueEncoder.encode(value, valueOut);
+    if (!captureClusterValue(time, value)) {
+      timeEncoder.encode(time, timeOut);
+      valueEncoder.encode(value, valueOut);
+    }
     statistics.update(time, value);
   }
 
   /** write a time value pair into encoder */
   public void write(long time, float value) {
-    timeEncoder.encode(time, timeOut);
-    valueEncoder.encode(value, valueOut);
+    if (!captureClusterValue(time, Float.floatToRawIntBits(value))) {
+      timeEncoder.encode(time, timeOut);
+      valueEncoder.encode(value, valueOut);
+    }
     statistics.update(time, value);
   }
 
   /** write a time value pair into encoder */
   public void write(long time, double value) {
-    timeEncoder.encode(time, timeOut);
-    valueEncoder.encode(value, valueOut);
+    if (!captureClusterValue(time, Double.doubleToRawLongBits(value))) {
+      timeEncoder.encode(time, timeOut);
+      valueEncoder.encode(value, valueOut);
+    }
     statistics.update(time, value);
   }
 
@@ -164,8 +181,10 @@ public class PageWriter {
   /** write time series into encoder */
   public void write(long[] timestamps, int[] values, int batchSize) {
     for (int i = 0; i < batchSize; i++) {
-      timeEncoder.encode(timestamps[i], timeOut);
-      valueEncoder.encode(values[i], valueOut);
+      if (!captureClusterValue(timestamps[i], values[i])) {
+        timeEncoder.encode(timestamps[i], timeOut);
+        valueEncoder.encode(values[i], valueOut);
+      }
     }
     statistics.update(timestamps, values, batchSize);
   }
@@ -173,8 +192,10 @@ public class PageWriter {
   /** write time series into encoder */
   public void write(long[] timestamps, long[] values, int batchSize) {
     for (int i = 0; i < batchSize; i++) {
-      timeEncoder.encode(timestamps[i], timeOut);
-      valueEncoder.encode(values[i], valueOut);
+      if (!captureClusterValue(timestamps[i], values[i])) {
+        timeEncoder.encode(timestamps[i], timeOut);
+        valueEncoder.encode(values[i], valueOut);
+      }
     }
     statistics.update(timestamps, values, batchSize);
   }
@@ -182,8 +203,10 @@ public class PageWriter {
   /** write time series into encoder */
   public void write(long[] timestamps, float[] values, int batchSize) {
     for (int i = 0; i < batchSize; i++) {
-      timeEncoder.encode(timestamps[i], timeOut);
-      valueEncoder.encode(values[i], valueOut);
+      if (!captureClusterValue(timestamps[i], Float.floatToRawIntBits(values[i]))) {
+        timeEncoder.encode(timestamps[i], timeOut);
+        valueEncoder.encode(values[i], valueOut);
+      }
     }
     statistics.update(timestamps, values, batchSize);
   }
@@ -191,8 +214,10 @@ public class PageWriter {
   /** write time series into encoder */
   public void write(long[] timestamps, double[] values, int batchSize) {
     for (int i = 0; i < batchSize; i++) {
-      timeEncoder.encode(timestamps[i], timeOut);
-      valueEncoder.encode(values[i], valueOut);
+      if (!captureClusterValue(timestamps[i], Double.doubleToRawLongBits(values[i]))) {
+        timeEncoder.encode(timestamps[i], timeOut);
+        valueEncoder.encode(values[i], valueOut);
+      }
     }
     statistics.update(timestamps, values, batchSize);
   }
@@ -204,6 +229,22 @@ public class PageWriter {
       valueEncoder.encode(values[i], valueOut);
     }
     statistics.update(timestamps, values, batchSize);
+  }
+
+  private boolean captureClusterValue(long time, long bits) {
+    TSDataType type = statistics.getType();
+    if (!(valueEncoder instanceof ClusterEncoder)
+        || (type != TSDataType.INT32
+            && type != TSDataType.INT64
+            && type != TSDataType.FLOAT
+            && type != TSDataType.DOUBLE)) return false;
+    if (clusterValues == null) {
+      clusterValues = new ClusterColumnBuffer();
+      clusterTimes = new ClusterColumnBuffer();
+    }
+    clusterValues.append(bits, false);
+    clusterTimes.append(time, false);
+    return true;
   }
 
   /** flush all data remained in encoders. */
@@ -219,6 +260,29 @@ public class PageWriter {
    * @return a new readable ByteBuffer whose position is 0.
    */
   public ByteBuffer getUncompressedBytes() throws IOException {
+    if (clusterValues != null && clusterValues.size() != 0) {
+      long[] times = new long[clusterTimes.size()];
+      for (int r = 0; r < times.length; r++) times[r] = clusterTimes.bits(r);
+      byte[][] pages;
+      try {
+        pages =
+            ClusterNativePageCodec.encode(
+                times,
+                new String[] {"value"},
+                new TSDataType[] {statistics.getType()},
+                new ClusterColumnBuffer[] {clusterValues},
+                valueEncoder.getType() == TSEncoding.ACLUSTER
+                    ? ClusterTableOptions.aCluster()
+                    : ClusterTableOptions.kCluster(),
+                clusterSelection);
+      } catch (IOException failure) {
+        throw new java.io.UncheckedIOException("Cannot encode native scalar cluster page", failure);
+      }
+      // Zero time-stream length cannot occur in a nonempty legacy scalar page.
+      ByteBuffer nativePage = ByteBuffer.allocate(1 + pages[0].length);
+      nativePage.put((byte) 0).put(pages[0]).flip();
+      return nativePage;
+    }
     prepareEndWriteOnePage();
     ByteBuffer buffer = ByteBuffer.allocate(timeOut.size() + valueOut.size() + 4);
     ReadWriteForEncodingUtils.writeUnsignedVarInt(timeOut.size(), buffer);
@@ -309,11 +373,16 @@ public class PageWriter {
     return timeOut.size()
         + valueOut.size()
         + timeEncoder.getMaxByteSize()
-        + valueEncoder.getMaxByteSize();
+        + valueEncoder.getMaxByteSize()
+        + (clusterValues == null ? 0 : clusterValues.memoryBytes() + clusterTimes.memoryBytes());
   }
 
   /** reset this page */
   public void reset(IMeasurementSchema measurementSchema) {
+    if (clusterValues != null) {
+      clusterValues.reset();
+      clusterTimes.reset();
+    }
     timeOut.reset();
     valueOut.reset();
     statistics = Statistics.getStatsByType(measurementSchema.getType());

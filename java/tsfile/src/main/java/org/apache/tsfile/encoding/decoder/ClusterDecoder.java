@@ -20,206 +20,218 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
+/** Decodes cluster-grouped table values; input row order is intentionally not restored. */
 public class ClusterDecoder extends Decoder {
-
   private final TSDataType dataType;
-
-  private long[] longValues;
-  private double[] doubleValues;
-  private int readIndex = 0;
-  private int count = 0;
-  private boolean hasDecoded = false;
+  private long[] values;
+  private int readIndex;
 
   public ClusterDecoder(TSDataType dataType) {
-    super(TSEncoding.ACLUSTER);
-    this.dataType = dataType;
+    this(TSEncoding.ACLUSTER, dataType);
   }
 
-  /** check has next */
-  @Override
-  public boolean hasNext(ByteBuffer buffer) throws IOException {
-    if (!hasDecoded) {
-      decodeInternally(buffer);
+  public ClusterDecoder(TSEncoding encoding, TSDataType dataType) {
+    super(encoding);
+    switch (dataType) {
+      case INT32:
+      case DATE:
+      case INT64:
+      case TIMESTAMP:
+      case FLOAT:
+      case DOUBLE:
+        this.dataType = dataType;
+        break;
+      default:
+        throw new TsFileDecodingException("Unsupported cluster type: " + dataType);
     }
-    return readIndex < count;
   }
 
-  /** reset */
+  @Override
+  public boolean hasNext(ByteBuffer buffer) {
+    return ensureBlock(buffer);
+  }
+
   @Override
   public void reset() {
-    this.hasDecoded = false;
-    this.readIndex = 0;
-    this.count = 0;
-    this.longValues = null;
-    this.doubleValues = null;
+    values = null;
+    readIndex = 0;
   }
 
   @Override
   public int readInt(ByteBuffer buffer) {
-    return (int) longValues[readIndex++];
+    require(dataType == TSDataType.INT32 || dataType == TSDataType.DATE, "Wrong read type");
+    return (int) nextValue(buffer);
   }
 
   @Override
   public long readLong(ByteBuffer buffer) {
-    return longValues[readIndex++];
+    require(dataType == TSDataType.INT64 || dataType == TSDataType.TIMESTAMP, "Wrong read type");
+    return nextValue(buffer);
   }
 
   @Override
   public float readFloat(ByteBuffer buffer) {
-    return (float) doubleValues[readIndex++];
+    require(dataType == TSDataType.FLOAT, "Wrong read type");
+    return Float.intBitsToFloat((int) nextValue(buffer));
   }
 
   @Override
   public double readDouble(ByteBuffer buffer) {
-    return doubleValues[readIndex++];
+    require(dataType == TSDataType.DOUBLE, "Wrong read type");
+    return Double.longBitsToDouble(nextValue(buffer));
   }
 
-  /** Internal decode method Decode ACluster */
-  private void decodeInternally(ByteBuffer buffer) {
-    if (hasDecoded) {
-      return;
+  private long nextValue(ByteBuffer buffer) {
+    require(ensureBlock(buffer), "No more cluster values");
+    return values[readIndex++];
+  }
+
+  private boolean ensureBlock(ByteBuffer buffer) {
+    if (values != null && readIndex < values.length) {
+      return true;
     }
+    if (!buffer.hasRemaining()) {
+      return false;
+    }
+    // Only consume the caller's bytes after a whole block has passed validation.
+    ByteBuffer input = buffer.duplicate();
+    try {
+      long[] decoded = decodeBlock(new ClusterReader(input));
+      buffer.position(input.position());
+      values = decoded;
+      readIndex = 0;
+      return true;
+    } catch (ArithmeticException | IllegalArgumentException e) {
+      throw new TsFileDecodingException("Invalid cluster block: " + e.getMessage());
+    }
+  }
 
-    ClusterReader reader = new ClusterReader(buffer);
-
-    // --- Header ---
-    int scalingExponent = (int) reader.read(8);
+  private long[] decodeBlock(ClusterReader reader) {
+    int scale = (int) reader.read(8);
     int k = (int) reader.read(16);
-    this.count = (int) reader.read(16);
+    int count = (int) reader.read(16);
     int packSize = (int) reader.read(16);
-
-    // --- Global Minimum Value (minVal) ---
-    int minValBit = (int) reader.read(8);
-    long minValSign = reader.read(1);
-    long absMinVal = reader.read(minValBit); // Read the absolute value part
-    long minVal = (minValSign == 1) ? -absMinVal : absMinVal; // Apply the sign
-
-    // Allocate memory based on count and dataType
-    if (this.count > 0) {
-      if (dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE) {
-        this.doubleValues = new double[this.count];
-      } else {
-        this.longValues = new long[this.count];
+    require(count > 0 && k <= count && packSize > 0, "Invalid cluster header");
+    int minBits = (int) reader.read(8);
+    if (minBits == 0) {
+      require(scale == 0 && k == 0, "Invalid RAW block header");
+      require(reader.read(8) == 1, "Unsupported cluster RAW version");
+      require(reader.read(8) == (dataType.serialize() & 0xff), "RAW block type mismatch");
+      int width = is32Bit() ? 32 : 64;
+      require(reader.remainingBits() >= (long) count * width, "Truncated RAW block");
+      long[] raw = new long[count];
+      for (int i = 0; i < count; i++) {
+        long bits = reader.read(width);
+        raw[i] = dataType == TSDataType.INT32 || dataType == TSDataType.DATE ? (int) bits : bits;
       }
+      return raw;
     }
-
-    // Handle case where all values are the same (k=0)
+    require(isFloating() || scale == 0, "Integer cluster block has a decimal scale");
+    long min = readSignedMagnitude(reader, minBits);
+    long[] result = new long[count];
     if (k == 0) {
-      if (this.count > 0) {
-        reconstructFromMinValOnly(minVal, scalingExponent);
-      }
-      this.hasDecoded = true;
-      return;
+      Arrays.fill(result, toValueBits(min, scale));
+      return result;
     }
 
-    // --- Medoids ---
-    long[] medoids = new long[k];
-    int minMedoidBit = (int) reader.read(8);
-    long minMedoidSign = reader.read(1);
-    long absMinMedoid = reader.read(minMedoidBit); // Read the absolute value part
-    long minMedoid = (minMedoidSign == 1) ? -absMinMedoid : absMinMedoid; // Apply the sign
-
-    int maxMedoidOffsetBits = (int) reader.read(8);
+    int referenceMinBits = (int) reader.read(8);
+    long referenceMin = readSignedMagnitude(reader, referenceMinBits);
+    int referenceBits = (int) reader.read(8);
+    require(referenceBits >= 1 && referenceBits <= 63, "Invalid reference width");
+    require(referenceMin >= 0, "Negative normalized reference");
+    long[] references = new long[k];
     for (int i = 0; i < k; i++) {
-      long offset = reader.read(maxMedoidOffsetBits);
-      medoids[i] = minMedoid + offset;
+      references[i] = Math.addExact(referenceMin, reader.read(referenceBits));
     }
-
-    // --- Frequencies (Cluster Sizes) ---
-    // The encoder wrote deltas (cluster sizes), so we read them and rebuild the cumulative array
-    long[] cumulativeFrequencies = new long[k];
-    int numFreqBlocks = (int) reader.read(16);
-
-    // Metadata pass for frequencies
-    int[] freqBlockMaxBits = new int[numFreqBlocks];
-    for (int i = 0; i < numFreqBlocks; i++) {
-      freqBlockMaxBits[i] = (int) reader.read(8);
+    long[] counts = readPacks(reader, k, packSize, 16, false);
+    long previousCount = 0;
+    long total = 0;
+    for (int i = 0; i < k; i++) {
+      // Stored values are differences between sorted cluster sizes, not prefix positions.
+      counts[i] = Math.addExact(previousCount, counts[i]);
+      require(counts[i] >= 0 && counts[i] <= count, "Invalid cluster frequency");
+      previousCount = counts[i];
+      total = Math.addExact(total, counts[i]);
     }
-
-    // Data pass for frequencies - Reconstruct cumulative frequencies
-    long currentCumulativeFreq = 0;
-    int freqIndex = 0;
-    for (int i = 0; i < numFreqBlocks; i++) {
-      int start = i * packSize;
-      int end = Math.min(start + packSize, k);
-      int bitsForBlock = freqBlockMaxBits[i];
-      for (int j = start; j < end; j++) {
-        long delta = reader.read(bitsForBlock); // This delta is the actual cluster size
-        currentCumulativeFreq += delta;
-        cumulativeFrequencies[freqIndex++] = currentCumulativeFreq;
+    require(total == count, "Cluster frequencies do not sum to the value count");
+    long[] residuals = readPacks(reader, count, packSize, 32, true);
+    int position = 0;
+    for (int i = 0; i < k; i++) {
+      for (int j = 0; j < counts[i]; j++) {
+        long zigzag = residuals[position];
+        long residual = (zigzag >>> 1) ^ -(zigzag & 1);
+        long offset = Math.addExact(references[i], residual);
+        require(offset >= 0, "Negative normalized value");
+        result[position++] = toValueBits(Math.addExact(min, offset), scale);
       }
     }
-
-    // --- Residuals ---
-    long[] residuals = new long[this.count];
-    int numPacks = (int) reader.read(32);
-
-    // Metadata pass for residuals
-    int[] resPackMaxBits = new int[numPacks];
-    for (int i = 0; i < numPacks; i++) {
-      resPackMaxBits[i] = (int) reader.read(8);
-    }
-
-    // Data pass for residuals
-    int residualIdx = 0;
-    for (int i = 0; i < numPacks; i++) {
-      int start = i * packSize;
-      int end = Math.min(start + packSize, this.count);
-      int bitsForPack = resPackMaxBits[i];
-      if (bitsForPack > 0) {
-        for (int j = start; j < end; j++) {
-          residuals[residualIdx++] = reader.read(bitsForPack);
-        }
-      } else {
-        // If bitsForPack is 0, all residuals in this pack are 0.
-        // We just need to advance the index, as the array is already initialized to 0.
-        residualIdx += (end - start);
-      }
-    }
-
-    // --- Final Data Reconstruction ---
-    // Use the correctly reconstructed cumulativeFrequencies array
-    reconstructData(medoids, cumulativeFrequencies, residuals, minVal, scalingExponent);
-
-    this.hasDecoded = true;
+    return result;
   }
 
-  private void reconstructData(
-      long[] medoids, long[] frequencies, long[] residuals, long minVal, int scalingExponent) {
-    int residualReadPos = 0;
-    int dataWritePos = 0;
-    double scalingFactor = Math.pow(10, scalingExponent);
-
-    for (int clusterId = 0; clusterId < medoids.length; clusterId++) {
-      long pointsInThisCluster = frequencies[clusterId];
-      long medoid = medoids[clusterId];
-
-      for (int i = 0; i < pointsInThisCluster; i++) {
-        long zigzagResidual = residuals[residualReadPos++];
-        long residual = (zigzagResidual >>> 1) ^ -(zigzagResidual & 1);
-        long scaledDataPoint = medoid + residual + minVal;
-
-        if (dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE) {
-          doubleValues[dataWritePos++] = scaledDataPoint / scalingFactor;
-        } else {
-          longValues[dataWritePos++] = scaledDataPoint;
-        }
-      }
+  private long[] readPacks(
+      ClusterReader reader, int count, int packSize, int packCountBits, boolean allowZeroWidth) {
+    int expected = (count + packSize - 1) / packSize;
+    require(reader.read(packCountBits) == expected, "Invalid pack count");
+    int[] widths = new int[expected];
+    long requiredBits = 0;
+    for (int i = 0; i < expected; i++) {
+      widths[i] = (int) reader.read(8);
+      require(widths[i] >= (allowZeroWidth ? 0 : 1) && widths[i] <= 64, "Invalid pack width");
+      requiredBits += (long) widths[i] * Math.min(packSize, count - i * packSize);
     }
+    require(reader.remainingBits() >= requiredBits, "Truncated cluster payload");
+    long[] data = new long[count];
+    for (int i = 0; i < count; i++) {
+      int width = widths[i / packSize];
+      data[i] = width == 0 ? 0 : reader.read(width);
+    }
+    return data;
   }
 
-  private void reconstructFromMinValOnly(long minVal, int scalingExponent) {
-    if (dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE) {
-      double scalingFactor = Math.pow(10, scalingExponent);
-      double finalValue = minVal / scalingFactor;
-      for (int i = 0; i < this.count; i++) doubleValues[i] = finalValue;
-    } else {
-      for (int i = 0; i < this.count; i++) longValues[i] = minVal;
+  private long readSignedMagnitude(ClusterReader reader, int width) {
+    require(width >= 1 && width <= 64, "Invalid signed value width");
+    boolean negative = reader.read(1) != 0;
+    long magnitude = reader.read(width);
+    require(
+        magnitude >= 0 || (negative && magnitude == Long.MIN_VALUE),
+        "Signed magnitude out of range");
+    return negative ? -magnitude : magnitude;
+  }
+
+  private long toValueBits(long scaled, int scale) {
+    if (isFloating()) {
+      double value = scaled / Math.pow(10, scale);
+      return dataType == TSDataType.FLOAT
+          ? Float.floatToRawIntBits((float) value) & 0xffffffffL
+          : Double.doubleToRawLongBits(value);
+    }
+    if (is32Bit()) {
+      require(
+          scaled >= Integer.MIN_VALUE && scaled <= Integer.MAX_VALUE,
+          "Cluster value exceeds INT32");
+    }
+    return scaled;
+  }
+
+  private boolean isFloating() {
+    return dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE;
+  }
+
+  private boolean is32Bit() {
+    return dataType == TSDataType.INT32
+        || dataType == TSDataType.DATE
+        || dataType == TSDataType.FLOAT;
+  }
+
+  private static void require(boolean condition, String message) {
+    if (!condition) {
+      throw new TsFileDecodingException(message);
     }
   }
 }
