@@ -22,6 +22,7 @@ package org.apache.tsfile.read.query.dataset;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.record.TSRecord;
@@ -184,36 +185,7 @@ public class TableResultSet extends AbstractResultSet {
           cachedRecord.dataPointList.add(null);
           continue;
         }
-        switch (dataType) {
-          case INT32:
-          case DATE:
-            cachedRecord.addPoint(columnName, getInt(columnName));
-            break;
-          case INT64:
-          case TIMESTAMP:
-            cachedRecord.addPoint(columnName, getLong(columnName));
-            break;
-          case FLOAT:
-            cachedRecord.addPoint(columnName, getFloat(columnName));
-            break;
-          case DOUBLE:
-            cachedRecord.addPoint(columnName, getDouble(columnName));
-            break;
-          case STRING:
-          case TEXT:
-            cachedRecord.addPoint(columnName, getString(columnName));
-            break;
-          case BLOB:
-            cachedRecord.addPoint(columnName, getBinary(columnName));
-            break;
-          case BOOLEAN:
-            cachedRecord.addPoint(columnName, getBoolean(columnName));
-            break;
-          case VECTOR:
-          case UNKNOWN:
-          default:
-            break;
-        }
+        Type.fromTsDataType(dataType).addPoint(cachedRecord, columnName, TableResultSet.this);
       }
       return true;
     }

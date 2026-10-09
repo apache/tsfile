@@ -115,8 +115,9 @@ class TsFileWriter {
     int flush();
 
     /*
-     * Flush file index part of the whole file (it may be flushed many times
-     * before close, the index part should cover all data in disk file).
+     * Flushes remaining buffered data, writes the file index and footer, and
+     * closes the file. Any flush failure is returned without finalizing the
+     * file, so the caller can handle the error and retry if possible.
      */
     int close();
 

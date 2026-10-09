@@ -21,16 +21,12 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
-import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.time.LocalDate;
-
-import static org.apache.tsfile.utils.BytesUtils.parseObjectByteArrayToString;
 
 /**
  * Field is component of one {@code RowRecord} which stores a value in specific data type. The value
@@ -53,33 +49,7 @@ public class Field {
   public static Field copy(Field field) {
     Field out = new Field(field.dataType);
     if (out.dataType != null) {
-      switch (out.dataType) {
-        case DOUBLE:
-          out.setDoubleV(field.getDoubleV());
-          break;
-        case FLOAT:
-          out.setFloatV(field.getFloatV());
-          break;
-        case INT64:
-        case TIMESTAMP:
-          out.setLongV(field.getLongV());
-          break;
-        case INT32:
-        case DATE:
-          out.setIntV(field.getIntV());
-          break;
-        case BOOLEAN:
-          out.setBoolV(field.getBoolV());
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          out.setBinaryV(field.getBinaryV());
-          break;
-        default:
-          throw new UnSupportedDataTypeException(out.dataType.toString());
-      }
+      Type.fromTsDataType(out.dataType).setTo(field, out);
     }
 
     return out;
@@ -147,9 +117,6 @@ public class Field {
   public Binary getBinaryV() {
     if (dataType == null) {
       throw new NullFieldException();
-    } else if (dataType == TSDataType.OBJECT) {
-      throw new UnsupportedOperationException(
-          Messages.get("error.read.field_object_type_no_binary"));
     }
     return binaryV;
   }
@@ -174,29 +141,7 @@ public class Field {
     if (dataType == null) {
       return "null";
     }
-    switch (dataType) {
-      case BOOLEAN:
-        return String.valueOf(boolV);
-      case INT32:
-      case DATE:
-        return String.valueOf(intV);
-      case INT64:
-      case TIMESTAMP:
-        return String.valueOf(longV);
-      case FLOAT:
-        return String.valueOf(floatV);
-      case DOUBLE:
-        return String.valueOf(doubleV);
-      case TEXT:
-      case STRING:
-        return binaryV.toString();
-      case OBJECT:
-        return parseObjectByteArrayToString(binaryV.getValues());
-      case BLOB:
-        return BytesUtils.parseBlobByteArrayToString(binaryV.getValues());
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
+    return Type.fromTsDataType(dataType).toString(this);
   }
 
   @Override
@@ -208,94 +153,17 @@ public class Field {
     if (this.dataType == null) {
       return null;
     }
-    switch (dataType) {
-      case DOUBLE:
-        return getDoubleV();
-      case FLOAT:
-        return getFloatV();
-      case INT64:
-      case TIMESTAMP:
-        return getLongV();
-      case INT32:
-        return getIntV();
-      case DATE:
-        return getDateV();
-      case BOOLEAN:
-        return getBoolV();
-      case TEXT:
-      case BLOB:
-      case STRING:
-        return getBinaryV();
-      case OBJECT:
-        return getStringValue();
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
+    return Type.fromTsDataType(dataType).getValue(this);
   }
 
   public static Field getField(Object value, TSDataType dataType) {
     if (value == null) {
       return null;
     }
-    Field field = new Field(dataType);
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        field.setIntV((int) value);
-        break;
-      case INT64:
-      case TIMESTAMP:
-        field.setLongV((long) value);
-        break;
-      case FLOAT:
-        field.setFloatV((float) value);
-        break;
-      case DOUBLE:
-        field.setDoubleV((double) value);
-        break;
-      case BOOLEAN:
-        field.setBoolV((boolean) value);
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        field.setBinaryV((Binary) value);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(dataType.toString());
-    }
-    return field;
+    return Type.fromTsDataType(dataType).getField(value);
   }
 
   public static void setTsPrimitiveValue(TsPrimitiveType value, Field field) {
-    switch (value.getDataType()) {
-      case BOOLEAN:
-        field.setBoolV(value.getBoolean());
-        break;
-      case INT32:
-      case DATE:
-        field.setIntV(value.getInt());
-        break;
-      case INT64:
-      case TIMESTAMP:
-        field.setLongV(value.getLong());
-        break;
-      case FLOAT:
-        field.setFloatV(value.getFloat());
-        break;
-      case DOUBLE:
-        field.setDoubleV(value.getDouble());
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        field.setBinaryV(value.getBinary());
-        break;
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.common.unsupported_data_type", value.getDataType()));
-    }
+    Type.fromTsDataType(value.getDataType()).setTo(value, field);
   }
 }

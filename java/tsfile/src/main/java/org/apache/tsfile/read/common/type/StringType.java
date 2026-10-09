@@ -19,11 +19,34 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.file.metadata.statistics.StringStatistics;
+import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.utils.Binary;
+
 public class StringType extends AbstractVarcharType {
 
   public static final StringType STRING = new StringType();
 
   private StringType() {}
+
+  @Override
+  public Statistics<?> createStatistics() {
+    return new StringStatistics();
+  }
+
+  @Override
+  public long getStatisticsInstanceSize() {
+    return StringStatistics.INSTANCE_SIZE;
+  }
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.STRING);
+    field.setBinaryV((Binary) value);
+    return field;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {

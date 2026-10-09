@@ -27,18 +27,20 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.utils.TypeServices;
+import org.apache.tsfile.utils.TypeServices.PageDataBatchReader;
+import org.apache.tsfile.utils.TypeServices.PageDataTsPrimitiveValueReader;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.LongPredicate;
 
 public class ValuePageReader {
 
@@ -50,6 +52,15 @@ public class ValuePageReader {
 
   /** decoder for value column */
   private final Decoder valueDecoder;
+
+  // Reuse the type-specific reader across per-row nextValue calls.
+  private PageDataTsPrimitiveValueReader valueReader;
+
+  // Reuse readers for batch and column-builder APIs across repeated page reads.
+  private PageDataBatchReader batchReader;
+
+  // Reuse the bound predicate across page reads instead of creating a method reference per call.
+  private final LongPredicate deletePredicate = this::isDeleted;
 
   private byte[] bitmap;
 
@@ -115,120 +126,23 @@ public class ValuePageReader {
       throws IOException {
     uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
-    for (int i = 0; i < timeBatch.length; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        continue;
-      }
-      long timestamp = timeBatch[i];
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyBoolean(timestamp, aBoolean))) {
-            pageData.putBoolean(timestamp, aBoolean);
-          }
-          break;
-        case INT32:
-        case DATE:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyInteger(timestamp, anInt))) {
-            pageData.putInt(timestamp, anInt);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfyLong(timestamp, aLong))) {
-            pageData.putLong(timestamp, aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfyFloat(timestamp, aFloat))) {
-            pageData.putFloat(timestamp, aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyDouble(timestamp, aDouble))) {
-            pageData.putDouble(timestamp, aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timestamp)
-              && (filter == null || filter.satisfyBinary(timestamp, aBinary))) {
-            pageData.putBinary(timestamp, aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
-    }
+    getBatchReader()
+        .readAlignedBatch(
+            timeBatch, bitmap, valueDecoder, valueBuffer, filter, pageData, deletePredicate);
     return pageData.flip();
   }
 
   public TsPrimitiveType nextValue(long timestamp, int timeIndex) throws IOException {
     uncompressDataIfNecessary();
-    TsPrimitiveType resultValue = null;
     if (valueBuffer == null || ((bitmap[timeIndex / 8] & 0xFF) & (MASK >>> (timeIndex % 8))) == 0) {
       return null;
     }
-    switch (dataType) {
-      case BOOLEAN:
-        boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsBoolean(aBoolean);
-        }
-        break;
-      case INT32:
-      case DATE:
-        int anInt = valueDecoder.readInt(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue =
-              dataType.equals(TSDataType.INT32)
-                  ? new TsPrimitiveType.TsInt(anInt)
-                  : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
-        }
-        break;
-      case INT64:
-      case TIMESTAMP:
-        long aLong = valueDecoder.readLong(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsLong(aLong);
-        }
-        break;
-      case FLOAT:
-        float aFloat = valueDecoder.readFloat(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsFloat(aFloat);
-        }
-        break;
-      case DOUBLE:
-        double aDouble = valueDecoder.readDouble(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsDouble(aDouble);
-        }
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        Binary aBinary = valueDecoder.readBinary(valueBuffer);
-        if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsBinary(aBinary);
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
+    if (valueReader == null) {
+      valueReader =
+          TypeServices.READ_PAGE_VALUE_TO_TSPRIMITIVETYPE_SERVICE.call(
+              Type.fromTsDataType(dataType));
     }
-
-    return resultValue;
+    return valueReader.read(valueDecoder, valueBuffer, timestamp, deletePredicate);
   }
 
   /**
@@ -241,59 +155,8 @@ public class ValuePageReader {
     if (valueBuffer == null) {
       return valueBatch;
     }
-    for (int i = 0; i < size; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        continue;
-      }
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsBoolean(aBoolean);
-          }
-          break;
-        case INT32:
-        case DATE:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] =
-                dataType.equals(TSDataType.INT32)
-                    ? new TsPrimitiveType.TsInt(anInt)
-                    : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsLong(aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsFloat(aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsDouble(aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsBinary(aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
-    }
+    getBatchReader()
+        .readValues(timeBatch, bitmap, valueDecoder, valueBuffer, valueBatch, deletePredicate);
     return valueBatch;
   }
 
@@ -309,96 +172,15 @@ public class ValuePageReader {
       }
       return;
     }
-    for (int i = 0; i < readEndIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        if (keepCurrentRow[i]) {
-          columnBuilder.appendNull();
-        }
-        continue;
-      }
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeBoolean(aBoolean);
-            }
-          }
-          break;
-        case INT32:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeInt(anInt);
-            }
-          }
-          break;
-        case DATE:
-          int anDate = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              if (columnBuilder instanceof BinaryColumnBuilder) {
-                ((BinaryColumnBuilder) columnBuilder).writeDate(anDate);
-              } else {
-                columnBuilder.writeInt(anDate);
-              }
-            }
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeLong(aLong);
-            }
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeFloat(aFloat);
-            }
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeDouble(aDouble);
-            }
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (isDeleted[i]) {
-              columnBuilder.appendNull();
-            } else {
-              columnBuilder.writeBinary(aBinary);
-            }
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
-    }
+    getBatchReader()
+        .readColumn(
+            readEndIndex,
+            bitmap,
+            valueDecoder,
+            valueBuffer,
+            columnBuilder,
+            keepCurrentRow,
+            isDeleted);
   }
 
   public void writeColumnBuilderWithNextBatch(
@@ -412,68 +194,9 @@ public class ValuePageReader {
       }
       return;
     }
-    for (int i = 0; i < readEndIndex; i++) {
-      if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-        if (keepCurrentRow[i]) {
-          columnBuilder.appendNull();
-        }
-        continue;
-      }
-      switch (dataType) {
-        case BOOLEAN:
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeBoolean(aBoolean);
-          }
-          break;
-        case INT32:
-          int anInt = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeInt(anInt);
-          }
-          break;
-        case DATE:
-          int anDate = valueDecoder.readInt(valueBuffer);
-          if (keepCurrentRow[i]) {
-            if (columnBuilder instanceof BinaryColumnBuilder) {
-              ((BinaryColumnBuilder) columnBuilder).writeDate(anDate);
-            } else {
-              columnBuilder.writeInt(anDate);
-            }
-          }
-          break;
-        case INT64:
-        case TIMESTAMP:
-          long aLong = valueDecoder.readLong(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeLong(aLong);
-          }
-          break;
-        case FLOAT:
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeFloat(aFloat);
-          }
-          break;
-        case DOUBLE:
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeDouble(aDouble);
-          }
-          break;
-        case TEXT:
-        case BLOB:
-        case STRING:
-        case OBJECT:
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (keepCurrentRow[i]) {
-            columnBuilder.writeBinary(aBinary);
-          }
-          break;
-        default:
-          throw new UnSupportedDataTypeException(String.valueOf(dataType));
-      }
-    }
+    getBatchReader()
+        .readColumn(
+            readEndIndex, bitmap, valueDecoder, valueBuffer, columnBuilder, keepCurrentRow, null);
   }
 
   public void writeColumnBuilderWithNextBatch(
@@ -483,132 +206,15 @@ public class ValuePageReader {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
       return;
     }
+    getBatchReader()
+        .readColumn(readStartIndex, readEndIndex, bitmap, valueDecoder, valueBuffer, columnBuilder);
+  }
 
-    switch (dataType) {
-      case BOOLEAN:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readBoolean(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          columnBuilder.writeBoolean(aBoolean);
-        }
-        break;
-      case INT32:
-      case DATE:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readInt(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          int aInt = valueDecoder.readInt(valueBuffer);
-          if (dataType == TSDataType.INT32) {
-            columnBuilder.writeInt(aInt);
-          } else {
-            if (columnBuilder instanceof BinaryColumnBuilder) {
-              ((BinaryColumnBuilder) columnBuilder).writeDate(aInt);
-            } else {
-              columnBuilder.writeInt(aInt);
-            }
-          }
-        }
-        break;
-      case INT64:
-      case TIMESTAMP:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readLong(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          long aLong = valueDecoder.readLong(valueBuffer);
-          columnBuilder.writeLong(aLong);
-        }
-        break;
-      case FLOAT:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readFloat(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          float aFloat = valueDecoder.readFloat(valueBuffer);
-          columnBuilder.writeFloat(aFloat);
-        }
-        break;
-      case DOUBLE:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readDouble(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          double aDouble = valueDecoder.readDouble(valueBuffer);
-          columnBuilder.writeDouble(aDouble);
-        }
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        // skip useless data
-        for (int i = 0; i < readStartIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            continue;
-          }
-          valueDecoder.readBinary(valueBuffer);
-        }
-
-        for (int i = readStartIndex; i < readEndIndex; i++) {
-          if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
-            columnBuilder.appendNull();
-            continue;
-          }
-          Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          columnBuilder.writeBinary(aBinary);
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.valueOf(dataType));
+  private PageDataBatchReader getBatchReader() {
+    if (batchReader == null) {
+      batchReader = TypeServices.READ_PAGE_BATCH_SERVICE.call(Type.fromTsDataType(dataType));
     }
+    return batchReader;
   }
 
   public Statistics<? extends Serializable> getStatistics() {

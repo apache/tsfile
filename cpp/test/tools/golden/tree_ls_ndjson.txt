@@ -1,0 +1,3 @@
+{"model":"tree","object":"root.t3"}
+{"model":"tree","object":"root.test.d1"}
+{"model":"tree","object":"root.test2.d2.t2"}

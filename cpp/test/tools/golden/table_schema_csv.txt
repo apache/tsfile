@@ -1,0 +1,6 @@
+model,object,column,category,data_type,encoding,compression
+table,table1,value,FIELD,INT64,PLAIN,UNCOMPRESSED
+table,table2,site,TAG,STRING,PLAIN,UNCOMPRESSED
+table,table2,rack,TAG,STRING,PLAIN,UNCOMPRESSED
+table,table2,sensor,TAG,STRING,PLAIN,UNCOMPRESSED
+table,table2,reading,FIELD,DOUBLE,PLAIN,UNCOMPRESSED

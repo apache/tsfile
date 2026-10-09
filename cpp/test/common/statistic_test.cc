@@ -125,6 +125,34 @@ TEST(Int64StatisticTest, BasicFunctionality) {
     EXPECT_EQ(stat_deserialized.last_value_, stat.last_value_);
 }
 
+TEST(Int64StatisticTest, BatchPreservesWideSignedExtremaAcrossLanes) {
+    const int64_t wide = int64_t{1} << 60;
+    const int64_t timestamps[] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    const int64_t values[] = {0,         -wide - 7,  wide + 1,
+                              wide + 9,  -wide - 11, -wide - 17,
+                              wide + 13, 23,         -31};
+    Int64Statistic stat;
+    // Start with an empty statistic; the first value seeds both lanes.
+    stat.update_batch(timestamps, values, 5);
+    EXPECT_EQ(stat.count_, 5);
+    EXPECT_EQ(stat.min_value_, -wide - 11);
+    EXPECT_EQ(stat.max_value_, wide + 9);
+    EXPECT_EQ(stat.first_value_, 0);
+    EXPECT_EQ(stat.last_value_, -wide - 11);
+    EXPECT_EQ(stat.start_time_, 0);
+    EXPECT_EQ(stat.end_time_, 4);
+
+    // The next batch supplies new extrema in opposite SIMD lanes.
+    stat.update_batch(timestamps + 5, values + 5, 4);
+    EXPECT_EQ(stat.count_, 9);
+    EXPECT_EQ(stat.min_value_, -wide - 17);
+    EXPECT_EQ(stat.max_value_, wide + 13);
+    EXPECT_EQ(stat.first_value_, 0);
+    EXPECT_EQ(stat.last_value_, -31);
+    EXPECT_EQ(stat.start_time_, 0);
+    EXPECT_EQ(stat.end_time_, 8);
+}
+
 TEST(FloatStatisticTest, BasicFunctionality) {
     FloatStatistic stat;
 

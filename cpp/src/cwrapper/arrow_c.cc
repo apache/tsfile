@@ -19,6 +19,7 @@
 
 #include <cstring>
 #include <ctime>
+#include <set>
 #include <type_traits>
 #include <vector>
 
@@ -785,15 +786,32 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const ArrowSchema* in_schema,
                         const storage::TableSchema* reg_schema,
                         storage::Tablet** out_tablet, int time_col_index) {
-    if (!in_array || !in_schema || !out_tablet) return common::E_INVALID_ARG;
+    if (!in_array || !in_schema || !out_tablet || !in_schema->format)
+        return common::E_INVALID_ARG;
+    *out_tablet = nullptr;
     if (strcmp(in_schema->format, "+s") != 0) return common::E_INVALID_ARG;
 
     int64_t n_rows = in_array->length;
     int64_t n_cols = in_schema->n_children;
-    if (n_rows <= 0 || n_cols == 0) return common::E_INVALID_ARG;
+    if (n_rows <= 0 || n_cols <= 0 || in_array->n_children != n_cols ||
+        in_array->children == nullptr || in_schema->children == nullptr)
+        return common::E_INVALID_ARG;
+    if (n_rows >= (1LL << 30)) return common::E_OVERFLOW;
 
     if (time_col_index < 0 || time_col_index >= n_cols)
         return common::E_INVALID_ARG;
+
+    const ArrowArray* time_array = in_array->children[time_col_index];
+    const ArrowSchema* time_schema = in_schema->children[time_col_index];
+    if (time_array == nullptr || time_schema == nullptr ||
+        time_schema->format == nullptr ||
+        (strcmp(time_schema->format, "l") != 0 &&
+         strcmp(time_schema->format, "tsn:") != 0) ||
+        time_array->length < n_rows || time_array->null_count != 0 ||
+        time_array->n_buffers < 2 || time_array->buffers == nullptr ||
+        time_array->buffers[1] == nullptr) {
+        return common::E_INVALID_ARG;
+    }
 
     std::vector<std::string> col_names;
     std::vector<common::TSDataType> col_types;
@@ -803,22 +821,53 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     std::vector<common::TSDataType> reg_data_types;
     if (reg_schema) {
         reg_data_types = reg_schema->get_data_types();
+        if (reg_data_types.size() != static_cast<size_t>(n_cols - 1)) {
+            return common::E_INVALID_SCHEMA;
+        }
     }
+
+    std::set<int> matched_schema_columns;
 
     for (int64_t i = 0; i < n_cols; i++) {
         if (static_cast<int>(i) == time_col_index) continue;
         const ArrowSchema* child = in_schema->children[i];
+        const ArrowArray* child_array = in_array->children[i];
+        if (child == nullptr || child_array == nullptr ||
+            child->format == nullptr || child->name == nullptr ||
+            child->name[0] == '\0' || child_array->length < n_rows ||
+            child_array->buffers == nullptr) {
+            return common::E_INVALID_ARG;
+        }
         common::TSDataType read_mode = ArrowFormatToDataType(child->format);
         if (read_mode == common::INVALID_DATATYPE)
             return common::E_TYPE_NOT_SUPPORTED;
-        std::string col_name = child->name ? child->name : "";
+        const bool variable_length = read_mode == common::TEXT ||
+                                     read_mode == common::STRING ||
+                                     read_mode == common::BLOB;
+        const int64_t required_buffers = variable_length ? 3 : 2;
+        if (child_array->n_buffers < required_buffers ||
+            child_array->buffers[1] == nullptr ||
+            (variable_length && child_array->buffers[2] == nullptr &&
+             static_cast<const int32_t*>(
+                 child_array->buffers[1])[child_array->offset + n_rows] != 0)) {
+            return common::E_INVALID_ARG;
+        }
+        std::string col_name = child->name;
         common::TSDataType col_type = read_mode;
         if (reg_schema) {
             int reg_idx = const_cast<storage::TableSchema*>(reg_schema)
                               ->find_column_index(col_name);
-            if (reg_idx >= 0 &&
-                reg_idx < static_cast<int>(reg_data_types.size())) {
-                col_type = reg_data_types[reg_idx];
+            if (reg_idx < 0 ||
+                reg_idx >= static_cast<int>(reg_data_types.size()) ||
+                !matched_schema_columns.insert(reg_idx).second) {
+                return common::E_INVALID_SCHEMA;
+            }
+            col_type = reg_data_types[reg_idx];
+            const bool string_compatible =
+                read_mode == common::TEXT &&
+                (col_type == common::TEXT || col_type == common::STRING);
+            if (!string_compatible && read_mode != col_type) {
+                return common::E_TYPE_NOT_MATCH;
             }
         }
         col_names.emplace_back(std::move(col_name));
@@ -828,6 +877,9 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     }
 
     if (col_names.empty()) return common::E_INVALID_ARG;
+    if (reg_schema && matched_schema_columns.size() != reg_data_types.size()) {
+        return common::E_INVALID_SCHEMA;
+    }
 
     std::string tname = table_name ? table_name : "default_table";
     auto* tablet = new storage::Tablet(tname, &col_names, &col_types,
@@ -840,7 +892,7 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
 
     // Fill timestamps from the time column
     {
-        const ArrowArray* ts_arr = in_array->children[time_col_index];
+        const ArrowArray* ts_arr = time_array;
         const int64_t* ts_buf =
             static_cast<const int64_t*>(ts_arr->buffers[1]) + ts_arr->offset;
         int sret =
@@ -884,10 +936,14 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             }
             case common::INT32:
             case common::INT64:
+            case common::TIMESTAMP:
             case common::FLOAT:
             case common::DOUBLE: {
                 size_t elem_size =
-                    (dtype == common::INT64 || dtype == common::DOUBLE) ? 8 : 4;
+                    (dtype == common::INT64 || dtype == common::TIMESTAMP ||
+                     dtype == common::DOUBLE)
+                        ? 8
+                        : 4;
                 const void* data =
                     static_cast<const char*>(col_arr->buffers[1]) +
                     off * elem_size;

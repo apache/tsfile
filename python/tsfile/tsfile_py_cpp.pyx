@@ -20,6 +20,7 @@ from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
+import os
 import pandas as pd
 import numpy as np
 
@@ -45,6 +46,7 @@ from tsfile.schema import StringTimeseriesStatistic as StringTimeseriesStatistic
 from tsfile.schema import TextTimeseriesStatistic as TextTimeseriesStatisticPy
 from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
 from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
+from tsfile.constants import FileReadBackend as FileReadBackendPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char * context=NULL) except*:
@@ -122,6 +124,10 @@ cdef dict TS_ENCODING_MAP = {
     TSEncodingPy.REGULAR: TSEncoding.TS_ENCODING_REGULAR,
     TSEncodingPy.GORILLA: TSEncoding.TS_ENCODING_GORILLA,
     TSEncodingPy.ZIGZAG: TSEncoding.TS_ENCODING_ZIGZAG,
+    TSEncodingPy.CHIMP: TSEncoding.TS_ENCODING_CHIMP,
+    TSEncodingPy.SPRINTZ: TSEncoding.TS_ENCODING_SPRINTZ,
+    TSEncodingPy.RLBE: TSEncoding.TS_ENCODING_RLBE,
+    TSEncodingPy.CAMEL: TSEncoding.TS_ENCODING_CAMEL,
 }
 
 cdef dict COMPRESSION_TYPE_MAP = {
@@ -133,6 +139,8 @@ cdef dict COMPRESSION_TYPE_MAP = {
     CompressorPy.PAA: CompressionType.TS_COMPRESSION_PAA,
     CompressorPy.PLA: CompressionType.TS_COMPRESSION_PLA,
     CompressorPy.LZ4: CompressionType.TS_COMPRESSION_LZ4,
+    CompressorPy.ZSTD: CompressionType.TS_COMPRESSION_ZSTD,
+    CompressorPy.LZMA2: CompressionType.TS_COMPRESSION_LZMA2,
 }
 
 cdef dict CATEGORY_MAP = {
@@ -777,11 +785,67 @@ cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold
 cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     cdef ErrorCode errno = 0
     cdef TsFileReader reader = NULL
-    cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
+    cdef bytes encoded_path = os.fsencode(pathname)
     cdef const char * c_path = encoded_path
     reader = tsfile_reader_new(c_path, &errno)
     check_error(errno)
     return reader
+
+cdef PreparedSeriesHandle tsfile_reader_prepare_series_c(
+        TsFileReader reader, object locator) except NULL:
+    cdef TsFilePreparedLocator native
+    cdef ErrorCode code = 0
+    native.mapped_index_identity = locator[0]
+    native.file_id = locator[1]
+    native.file_size = locator[2]
+    native.file_fingerprint = locator[3]
+    native.locator_id = locator[4]
+    native.layout = locator[5]
+    native.flags = locator[6]
+    native.value_metadata_offset = locator[7]
+    native.value_metadata_length = locator[8]
+    native.time_metadata_offset = locator[9]
+    native.time_metadata_length = locator[10]
+    cdef PreparedSeriesHandle prepared
+    with nogil:
+        prepared = tsfile_reader_prepare_series(reader, &native, &code)
+    check_error(code, b"Failed to prepare Dataset Index locator")
+    return prepared
+
+cdef PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
+        TsFileReader reader, object locator,
+        PreparedSeriesHandle aligned_time_owner) except NULL:
+    cdef TsFilePreparedLocator native
+    cdef ErrorCode code = 0
+    native.mapped_index_identity = locator[0]
+    native.file_id = locator[1]
+    native.file_size = locator[2]
+    native.file_fingerprint = locator[3]
+    native.locator_id = locator[4]
+    native.layout = locator[5]
+    native.flags = locator[6]
+    native.value_metadata_offset = locator[7]
+    native.value_metadata_length = locator[8]
+    native.time_metadata_offset = locator[9]
+    native.time_metadata_length = locator[10]
+    cdef PreparedSeriesHandle prepared
+    with nogil:
+        prepared = tsfile_reader_prepare_series_with_time_owner(
+            reader, &native, aligned_time_owner, &code
+        )
+    check_error(code, b"Failed to prepare aligned Dataset Index locator")
+    return prepared
+
+cdef ResultSet tsfile_reader_query_prepared_c(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit):
+    cdef ErrorCode code = 0
+    cdef ResultSet result
+    with nogil:
+        result = tsfile_reader_query_prepared(
+            reader, prepared, start_time, end_time, offset, limit, &code)
+    check_error(code, b"Failed to query prepared series")
+    return result
 
 cpdef object get_tsfile_config():
     return {
@@ -804,9 +868,26 @@ cpdef object get_tsfile_config():
         "double_encoding_type_": TSEncodingPy(int(g_config_value_.double_encoding_type_)),
         "string_encoding_type_": TSEncodingPy(int(g_config_value_.string_encoding_type_)),
         "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
+        "file_read_backend_": FileReadBackendPy(int(tsfile_get_file_read_backend())),
     }
 
+cpdef object get_file_read_backend():
+    """Return the backend configured for subsequently opened readers."""
+    return FileReadBackendPy(int(tsfile_get_file_read_backend()))
+
+cpdef void set_file_read_backend(object backend):
+    """Select the backend used by subsequently opened readers."""
+    if not isinstance(backend, FileReadBackendPy):
+        raise TypeError(f"Unsupported FileReadBackend: {backend}")
+    check_error(tsfile_set_file_read_backend(<int32_t> int(backend.value)))
+
 cpdef void set_tsfile_config(dict new_config):
+    if "file_read_backend_" in new_config and not isinstance(
+        new_config["file_read_backend_"], FileReadBackendPy
+    ):
+        raise TypeError(
+            f"Unsupported FileReadBackend: {new_config['file_read_backend_']}"
+        )
     if "tsblock_mem_inc_step_size_" in new_config:
         _check_uint32(new_config["tsblock_mem_inc_step_size_"])
         g_config_value_.tsblock_max_memory_ = new_config["tsblock_mem_inc_step_size_"]
@@ -886,6 +967,8 @@ cpdef void set_tsfile_config(dict new_config):
             raise TypeError(f"Unsupported CompressionType: {new_config['default_compression_type_']}")
         code = set_global_compression(new_config["default_compression_type_"].value)
         check_error(code)
+    if "file_read_backend_" in new_config:
+        set_file_read_backend(new_config["file_read_backend_"])
 
 cdef _check_uint32(value):
     if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
@@ -1158,11 +1241,13 @@ cdef object get_table_schema(TsFileReader reader, object table_name):
 
 cdef object get_all_table_schema(TsFileReader reader):
     cdef uint32_t table_num = 0
+    cdef ErrorCode error_code = 0
     cdef TableSchema * schemas
     cdef int i
 
     table_schemas = {}
-    schemas = tsfile_reader_get_all_table_schemas(reader, &table_num)
+    schemas = tsfile_reader_get_all_table_schemas_with_error(reader, &table_num, &error_code)
+    check_error(error_code)
     for i in range(table_num):
         schema_py = from_c_table_schema(schemas[i])
         table_schemas.update([(schema_py.get_table_name(), schema_py)])
@@ -1257,6 +1342,13 @@ cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
         int(m.chunk_meta_count),
         stat,
         timeline_stat,
+        int(m.value_metadata_offset),
+        int(m.value_metadata_length),
+        int(m.time_metadata_offset),
+        int(m.time_metadata_length),
+        int(m.time_chunk_meta_count),
+        int(m.layout),
+        int(m.locator_flags),
     )
 
 cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):

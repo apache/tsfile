@@ -1,0 +1,12 @@
+model,object,column,category,data_type,encoding,compression
+tree,root.t3,xx,FIELD,BOOLEAN,PLAIN,LZ4
+tree,root.t3,xx_double,FIELD,DOUBLE,GORILLA,LZ4
+tree,root.t3,xx_text,FIELD,TEXT,PLAIN,LZ4
+tree,root.test.d1,m1,FIELD,INT32,TS_2DIFF,LZ4
+tree,root.test.d1,m2,FIELD,DOUBLE,GORILLA,LZ4
+tree,root.test.d1,m3,FIELD,TEXT,PLAIN,LZ4
+tree,root.test.d1,m4,FIELD,INT32,TS_2DIFF,LZ4
+tree,root.test.d1,m5,FIELD,DOUBLE,GORILLA,LZ4
+tree,root.test2.d2.t2,xxx,FIELD,FLOAT,GORILLA,LZ4
+tree,root.test2.d2.t2,xxx_int,FIELD,INT64,TS_2DIFF,LZ4
+tree,root.test2.d2.t2,xxx_text,FIELD,TEXT,PLAIN,LZ4

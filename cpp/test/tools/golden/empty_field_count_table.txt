@@ -1,0 +1,4 @@
+model  object   column  category  row_count  entity_count  non_null_count  null_count  min_time  max_time  time_source
+table  sensors  site    TAG       2          1             2               0           1000      2000      scan
+table  sensors  room    TAG       2          1             2               0           1000      2000      scan
+table  sensors  temp    FIELD     2          1             0               2           1000      2000      scan

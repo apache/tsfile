@@ -20,20 +20,18 @@
 package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.utils.LongHeapPriorityQueue;
+import org.apache.tsfile.utils.LongOpenHashSet;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
-import java.util.Set;
 
 /** multi-way merging data set, no need to use TimeGenerator. */
 public class DataSetWithoutTimeGenerator extends QueryDataSet {
@@ -45,9 +43,9 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
   private List<Boolean> hasDataRemaining;
 
   /** heap only need to store time. */
-  private PriorityQueue<Long> timeHeap;
+  private LongHeapPriorityQueue timeHeap;
 
-  private Set<Long> timeSet;
+  private LongOpenHashSet timeSet;
 
   /**
    * constructor of DataSetWithoutTimeGenerator.
@@ -68,8 +66,9 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
   private void initHeap() throws IOException {
     hasDataRemaining = new ArrayList<>();
     batchDataList = new ArrayList<>();
-    timeHeap = new PriorityQueue<>();
-    timeSet = new HashSet<>();
+    int seriesCount = Math.max(paths.size(), 1);
+    timeHeap = new LongHeapPriorityQueue(seriesCount);
+    timeSet = new LongOpenHashSet(seriesCount);
 
     for (int i = 0; i < paths.size(); i++) {
       AbstractFileSeriesReader reader = readers.get(i);
@@ -139,57 +138,22 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
 
   /** keep heap from storing duplicate time. */
   private void timeHeapPut(long time) {
-    if (!timeSet.contains(time)) {
-      timeSet.add(time);
-      timeHeap.add(time);
+    if (timeSet.add(time)) {
+      timeHeap.enqueue(time);
     }
   }
 
-  private Long timeHeapGet() {
-    Long t = timeHeap.poll();
+  private long timeHeapGet() {
+    long t = timeHeap.dequeueLong();
     timeSet.remove(t);
     return t;
   }
 
   private Field putValueToField(BatchData col) {
-    TSDataType type = col.getDataType();
-    Field field;
-    if (type == TSDataType.VECTOR) {
-      field = new Field((col.getVector())[0].getDataType());
-    } else {
-      field = new Field(col.getDataType());
-    }
-    switch (col.getDataType()) {
-      case BOOLEAN:
-        field.setBoolV(col.getBoolean());
-        break;
-      case INT32:
-      case DATE:
-        field.setIntV(col.getInt());
-        break;
-      case INT64:
-      case TIMESTAMP:
-        field.setLongV(col.getLong());
-        break;
-      case FLOAT:
-        field.setFloatV(col.getFloat());
-        break;
-      case DOUBLE:
-        field.setDoubleV(col.getDouble());
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-      case OBJECT:
-        field.setBinaryV(col.getBinary());
-        break;
-      case VECTOR:
-        Field.setTsPrimitiveValue((col.getVector())[0], field);
-        break;
-      default:
-        throw new UnSupportedDataTypeException(
-            Messages.format("error.read.dataset_unsupported_type", col.getDataType()));
-    }
+    TSDataType dataType = col.getDataType();
+    Field field =
+        new Field(dataType == TSDataType.VECTOR ? col.getVector()[0].getDataType() : dataType);
+    Type.fromTsDataType(dataType).setTo(col, field);
     return field;
   }
 }

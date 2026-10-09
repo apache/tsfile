@@ -20,13 +20,18 @@
 package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -60,7 +65,7 @@ public class BinaryColumn implements Column {
     this(0, positionCount, valueIsNull.orElse(null), values);
   }
 
-  BinaryColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, Binary[] values) {
+  public BinaryColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, Binary[] values) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
@@ -124,6 +129,24 @@ public class BinaryColumn implements Column {
   }
 
   @Override
+  public Column convertTo(TSDataType type) {
+    if (type == TSDataType.TEXT) {
+      return this;
+    }
+    ColumnUtil.checkConversion(TSDataType.TEXT, type);
+
+    ColumnBuilder builder = Type.fromTsDataType(type).createColumnBuilder(positionCount);
+    for (int position = 0; position < positionCount; position++) {
+      if (isNull(position)) {
+        builder.appendNull();
+      } else {
+        builder.writeBinary(getBinary(position));
+      }
+    }
+    return builder.build();
+  }
+
+  @Override
   public Binary getBinary(int position) {
     return values[position + arrayOffset];
   }
@@ -141,6 +164,40 @@ public class BinaryColumn implements Column {
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return new TsPrimitiveType.TsBinary(getBinary(position));
+  }
+
+  @Override
+  public void writeTo(int index, ByteBuffer buffer) {
+    Binary value = values[index + arrayOffset];
+    buffer.putInt(value.getLength());
+    buffer.put(value.getValues());
+  }
+
+  @Override
+  public void writeTo(int index, DataOutputStream stream) throws IOException {
+    Binary value = values[index + arrayOffset];
+    stream.writeInt(value.getLength());
+    stream.write(value.getValues());
+  }
+
+  @Override
+  public void serializeWithoutNulls(DataOutputStream output) throws IOException {
+    for (int i = 0; i < positionCount; i++) {
+      if (!isNull(i)) {
+        Binary value = values[i + arrayOffset];
+        output.writeInt(value.getLength());
+        output.write(value.getValues());
+      }
+    }
+  }
+
+  @Override
+  public boolean arePositionsEqual(int thisPos, Column that, int thatPos) {
+    boolean thisIsNull = isNull(thisPos);
+    if (thisIsNull) {
+      return that.isNull(thatPos);
+    }
+    return !that.isNull(thatPos) && getBinary(thisPos).equals(that.getBinary(thatPos));
   }
 
   @Override

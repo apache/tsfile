@@ -78,6 +78,12 @@ struct PageHeader {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
                 uncompressed_size_, in))) {
+        } else if (uncompressed_size_ == 0) {
+            // Empty page: the Java writer stores only a single zero varint and
+            // writes no compressed size or statistics (see
+            // ValueChunkWriter.writeEmptyPageToPageBuffer). Reading further
+            // would consume the following page's bytes as this page's header.
+            compressed_size_ = 0;
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(
                        compressed_size_, in))) {
         } else if (deserialize_stat) {
@@ -204,10 +210,12 @@ struct ChunkMeta {
 
     ChunkMeta()
         : measurement_name_(),
-          data_type_(),
+          data_type_(common::INVALID_DATATYPE),
           offset_of_chunk_header_(0),
           statistic_(nullptr),
-          mask_(0) {}
+          mask_(0),
+          encoding_(common::INVALID_ENCODING),
+          compression_type_(common::INVALID_COMPRESSION) {}
 
     int init(const common::String& measurement_name,
              common::TSDataType data_type, int64_t offset_of_chunk_header,
@@ -233,6 +241,8 @@ struct ChunkMeta {
         }
         data_type_ = that.data_type_;
         offset_of_chunk_header_ = that.offset_of_chunk_header_;
+        encoding_ = that.encoding_;
+        compression_type_ = that.compression_type_;
         if (that.statistic_ != nullptr) {
             statistic_ =
                 StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
@@ -351,6 +361,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
     TimeseriesIndex()
         : timeseries_meta_type_((char)255),
           chunk_meta_list_data_size_(0),
+          metadata_offset_(-1),
+          metadata_length_(0),
           measurement_name_(),
           data_type_(common::INVALID_DATATYPE),
           statistic_(nullptr),
@@ -369,6 +381,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
     {
         timeseries_meta_type_ = 0;
         chunk_meta_list_data_size_ = 0;
+        metadata_offset_ = -1;
+        metadata_length_ = 0;
         measurement_name_.reset();
         data_type_ = common::VECTOR;
         chunk_meta_list_serialized_buf_.reset();
@@ -400,6 +414,16 @@ class TimeseriesIndex : public ITimeseriesIndex {
     }
     FORCE_INLINE virtual common::TSDataType get_data_type() const {
         return data_type_;
+    }
+    FORCE_INLINE void set_metadata_range(int64_t offset, uint32_t length) {
+        metadata_offset_ = offset;
+        metadata_length_ = length;
+    }
+    FORCE_INLINE int64_t get_metadata_offset() const {
+        return metadata_offset_;
+    }
+    FORCE_INLINE uint32_t get_metadata_length() const {
+        return metadata_length_;
     }
     int init_statistic(common::TSDataType data_type) {
         if (statistic_ != nullptr &&
@@ -488,6 +512,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
         int ret = common::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
+        metadata_offset_ = that.metadata_offset_;
+        metadata_length_ = that.metadata_length_;
         data_type_ = that.data_type_;
 
         statistic_ = StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
@@ -559,6 +585,12 @@ class TimeseriesIndex : public ITimeseriesIndex {
 
     // Sum of chunk meta serialized size in List<ChunkMeta> of this timeseries.
     uint32_t chunk_meta_list_data_size_;
+
+    // Exact byte range of this TimeseriesMetadata in the source TsFile.
+    // It is assigned by TsFileIOReader after deserialization and is not part
+    // of the on-wire TimeseriesMetadata encoding.
+    int64_t metadata_offset_;
+    uint32_t metadata_length_;
 
     // std::string measurement_name_;
     common::String measurement_name_;

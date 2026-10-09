@@ -1,0 +1,190 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package tsfile
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Tablet is a fixed-capacity batch of table rows. A Tablet is not safe for
+// concurrent use; callers must not modify or close it while it is being
+// written by a Writer.
+type Tablet struct {
+	handle  *tabletHandle
+	columns []TabletColumn
+	maxRows int
+}
+
+// NewTablet allocates a tablet with fixed columns and row capacity.
+func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
+	if len(columns) == 0 {
+		return nil, fmt.Errorf("%w: at least one column is required", ErrInvalidArgument)
+	}
+	columns = append([]TabletColumn(nil), columns...)
+	names := make([]string, len(columns))
+	types := make([]DataType, len(columns))
+	seen := make(map[string]struct{}, len(columns))
+	for i, column := range columns {
+		if err := validateCString("new tablet", "column name", column.Name); err != nil {
+			return nil, fmt.Errorf("column %d: %w", i, err)
+		}
+		if !validDataType(column.DataType) {
+			return nil, fmt.Errorf("%w: data type %d for column %q", ErrTypeNotSupported, column.DataType, column.Name)
+		}
+		name := normalizeIdentifier(column.Name)
+		if _, ok := seen[name]; ok {
+			return nil, fmt.Errorf("%w: duplicate column %q", ErrInvalidSchema, column.Name)
+		}
+		seen[name] = struct{}{}
+		names[i], types[i] = name, column.DataType
+		columns[i].Name = name
+	}
+	handle, err := newTabletHandle(names, types, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	return &Tablet{handle: handle, columns: append([]TabletColumn(nil), columns...), maxRows: maxRows}, nil
+}
+
+// SetBytes assigns a BLOB value without interpreting its contents.
+func (t *Tablet) SetBytes(row, column int, value []byte) error {
+	if err := t.validate(row, column, DataTypeBlob); err != nil {
+		return err
+	}
+	if err := t.handle.addBytes(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *Tablet) validate(row, column int, allowed ...DataType) error {
+	if t.handle == nil || t.handle.ptr == nil {
+		return ErrClosed
+	}
+	if row < 0 || row >= t.maxRows || column < 0 || column >= len(t.columns) {
+		return ErrOutOfRange
+	}
+	actual := t.columns[column].DataType
+	for _, expected := range allowed {
+		if actual == expected {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: column %d has data type %d", ErrTypeMismatch, column, actual)
+}
+
+// AddTimestamp assigns the timestamp for a row.
+func (t *Tablet) AddTimestamp(row int, timestamp int64) error {
+	if t.handle == nil || t.handle.ptr == nil {
+		return ErrClosed
+	}
+	if row < 0 || row >= t.maxRows {
+		return ErrOutOfRange
+	}
+	if err := t.handle.addTimestamp(row, timestamp); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetBool assigns a BOOLEAN value by zero-based row and column.
+func (t *Tablet) SetBool(row, column int, value bool) error {
+	if err := t.validate(row, column, DataTypeBoolean); err != nil {
+		return err
+	}
+	if err := t.handle.addBool(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetInt32 assigns an INT32 or DATE value.
+func (t *Tablet) SetInt32(row, column int, value int32) error {
+	if err := t.validate(row, column, DataTypeInt32, DataTypeDate); err != nil {
+		return err
+	}
+	if err := t.handle.addInt32(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetInt64 assigns an INT64 or TIMESTAMP value.
+func (t *Tablet) SetInt64(row, column int, value int64) error {
+	if err := t.validate(row, column, DataTypeInt64, DataTypeTimestamp); err != nil {
+		return err
+	}
+	if err := t.handle.addInt64(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetFloat32 assigns a FLOAT value.
+func (t *Tablet) SetFloat32(row, column int, value float32) error {
+	if err := t.validate(row, column, DataTypeFloat); err != nil {
+		return err
+	}
+	if err := t.handle.addFloat32(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetFloat64 assigns a DOUBLE value.
+func (t *Tablet) SetFloat64(row, column int, value float64) error {
+	if err := t.validate(row, column, DataTypeDouble); err != nil {
+		return err
+	}
+	if err := t.handle.addFloat64(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetString assigns a TEXT or STRING value.
+func (t *Tablet) SetString(row, column int, value string) error {
+	if err := t.validate(row, column, DataTypeText, DataTypeString); err != nil {
+		return err
+	}
+	if strings.IndexByte(value, 0) >= 0 {
+		return fmt.Errorf("%w: strings with embedded NUL are not supported", ErrInvalidArgument)
+	}
+	if err := t.handle.addString(row, column, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Rows returns the number of rows currently present in the tablet. It returns
+// zero after the tablet has been closed.
+func (t *Tablet) Rows() int {
+	if t.handle == nil || t.handle.ptr == nil {
+		return 0
+	}
+	return t.handle.rowCount()
+}
+
+// Close releases the native tablet. It is safe to call more than once.
+func (t *Tablet) Close() error {
+	if t.handle == nil {
+		return nil
+	}
+	return t.handle.close()
+}

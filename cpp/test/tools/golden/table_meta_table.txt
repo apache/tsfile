@@ -1,0 +1,2 @@
+size_bytes  format_version  model
+5364        4               table

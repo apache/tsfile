@@ -1,0 +1,2 @@
+model  object
+table  category_edge

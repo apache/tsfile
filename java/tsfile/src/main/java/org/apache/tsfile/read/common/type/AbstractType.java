@@ -19,7 +19,161 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.DictionaryDecoder;
+import org.apache.tsfile.encoding.decoder.PlainDecoder;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.reflect.Array;
+import java.nio.ByteBuffer;
+import java.util.Objects;
+
 public abstract class AbstractType implements Type {
+
+  private static final String DECODER_NOT_FOUND_ERROR_KEY = "error.encoding.decoder_not_found";
+
+  @Override
+  public Decoder getDecoder(TSEncoding encoding) {
+    return switch (encoding) {
+      case PLAIN -> new PlainDecoder();
+      case DICTIONARY -> new DictionaryDecoder();
+      default -> throw decoderNotFound(encoding);
+    };
+  }
+
+  protected TsFileDecodingException decoderNotFound(TSEncoding encoding) {
+    return new TsFileDecodingException(
+        Messages.format(DECODER_NOT_FOUND_ERROR_KEY, encoding, getTypeEnum()));
+  }
+
+  protected void binaryToBytes(TsPrimitiveType value, byte[] valueBytes, int offset) {
+    Binary binary = value.getBinary();
+    BytesUtils.intToBytes(binary.getLength(), valueBytes, offset);
+    System.arraycopy(binary.getValues(), 0, valueBytes, offset + Integer.BYTES, binary.getLength());
+  }
+
+  protected int binaryTypeSize(TsPrimitiveType value) {
+    return Integer.BYTES + value.getBinary().getLength();
+  }
+
+  protected int binaryTypeSize(Object value) {
+    return Integer.BYTES + ((Binary) value).getLength();
+  }
+
+  protected void checkValueType(Object value, Class<?> expectedClass, String expectedType) {
+    if (value != null && !expectedClass.isInstance(value)) {
+      throw new IllegalArgumentException(
+          Messages.format(
+              "error.write.tablet_expected_type",
+              expectedType,
+              getDisplayName(),
+              value.getClass().getName()));
+    }
+  }
+
+  protected int serializedSizeOfBinaryValues(Object array, int rowSize) {
+    return serializedSizeOfBinaryValues(array, 0, rowSize);
+  }
+
+  protected int serializedSizeOfBinaryValues(Object array, int startRow, int endRow) {
+    Binary[] binaryValues = (Binary[]) array;
+    int size = 0;
+    for (int i = startRow; i < endRow; i++) {
+      size = Math.addExact(size, Byte.BYTES);
+      if (binaryValues[i] != null) {
+        size = Math.addExact(size, ReadWriteIOUtils.sizeToWrite(binaryValues[i]));
+      }
+    }
+    return size;
+  }
+
+  protected void serializeBinaryValues(Object array, int rowSize, DataOutputStream stream)
+      throws IOException {
+    Binary[] binaryValues = (Binary[]) array;
+    for (int i = 0; i < rowSize; i++) {
+      ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[i] != null), stream);
+      if (binaryValues[i] != null) {
+        ReadWriteIOUtils.write(binaryValues[i], stream);
+      }
+    }
+  }
+
+  protected void serializeBinaryValues(Object array, int length, ByteBuffer buffer) {
+    Binary[] binaryValues = (Binary[]) array;
+    for (int i = 0; i < length; i++) {
+      ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[i] != null), buffer);
+      if (binaryValues[i] != null) {
+        ReadWriteIOUtils.write(binaryValues[i], buffer);
+      }
+    }
+  }
+
+  protected Binary[] deserializeBinaryValues(ByteBuffer buffer, int rowSize) {
+    Binary[] values = new Binary[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(buffer));
+      values[i] = isNotNull ? ReadWriteIOUtils.readBinary(buffer) : Binary.EMPTY_VALUE;
+    }
+    return values;
+  }
+
+  protected Binary[] deserializeBinaryValues(DataInputStream stream, int rowSize)
+      throws IOException {
+    Binary[] values = new Binary[rowSize];
+    for (int i = 0; i < rowSize; i++) {
+      values[i] = stream.readBoolean() ? ReadWriteIOUtils.readBinary(stream) : Binary.EMPTY_VALUE;
+    }
+    return values;
+  }
+
+  protected Binary[] deserializeBinaryValues(
+      ByteBuffer buffer, int rowSize, boolean[] nullIndicators) {
+    Binary[] values = new Binary[rowSize];
+    if (nullIndicators == null) {
+      for (int i = 0; i < rowSize; i++) {
+        values[i] = ReadWriteIOUtils.readBinary(buffer);
+      }
+    } else {
+      for (int i = 0; i < rowSize; i++) {
+        if (!nullIndicators[i]) {
+          values[i] = ReadWriteIOUtils.readBinary(buffer);
+        }
+      }
+    }
+    return values;
+  }
+
+  protected boolean hasEnoughLength(Object left, Object right, int rowSize) {
+    return Array.getLength(left) >= rowSize && Array.getLength(right) >= rowSize;
+  }
+
+  protected boolean binaryArrayEquals(Object left, Object right, int rowSize) {
+    if (!hasEnoughLength(left, right, rowSize)) {
+      return false;
+    }
+    Binary[] leftValues = (Binary[]) left;
+    Binary[] rightValues = (Binary[]) right;
+    for (int i = 0; i < rowSize; i++) {
+      if (!Objects.equals(leftValues[i], rightValues[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Override
+  public Object getValue(Object array, int rowIndex) {
+    return Array.get(array, rowIndex);
+  }
 
   @Override
   public String toString() {

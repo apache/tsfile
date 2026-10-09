@@ -110,6 +110,11 @@ class SimpleList {
         return head_->data_;
     }
 
+    FORCE_INLINE T& back() {
+        ASSERT(size_ > 0 && tail_ != nullptr);
+        return tail_->data_;
+    }
+
     int remove(T target) {
         if (head_ == nullptr) {
             return common::E_NOT_EXIST;

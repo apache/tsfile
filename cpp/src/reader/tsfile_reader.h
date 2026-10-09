@@ -20,14 +20,16 @@
 #ifndef READER_TSFILE_READER_H
 #define READER_TSFILE_READER_H
 
+#include <memory>
+
 #include "common/row_record.h"
 #include "common/tsfile_common.h"
 #include "expression.h"
-#include "file/read_file.h"
+#include "file/random_access_read_file.h"
+#include "reader/prepared_series.h"
 #include "reader/table_query_executor.h"
 namespace storage {
 class TsFileExecutor;
-class ReadFile;
 class ResultSet;
 struct MeasurementSchema;
 }  // namespace storage
@@ -48,6 +50,10 @@ class TsFileReader {
    public:
     TsFileReader();
     ~TsFileReader();
+    TsFileReader(const TsFileReader&) = delete;
+    TsFileReader& operator=(const TsFileReader&) = delete;
+    TsFileReader(TsFileReader&& other) = delete;
+    TsFileReader& operator=(TsFileReader&& other) = delete;
     /**
      * @brief open the tsfile
      *
@@ -56,12 +62,19 @@ class TsFileReader {
      */
     int open(const std::string& file_path);
     /**
+     * @brief open an initialized random-access source
+     *
+     * The reader takes ownership of @p read_file.
+     */
+    int open(std::unique_ptr<RandomAccessReadFile> read_file);
+    /**
      * @brief close the tsfile, this method should be called after the
      * query is finished
      *
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
+    unsigned char get_file_version() const;
     /**
      * @brief query the tsfile by the query expression,Users can construct
      * their own query expressions to query tsfile
@@ -116,6 +129,11 @@ class TsFileReader {
               int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
               int batch_size = 0);
 
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, int offset, int limit, ResultSet*& result_set,
+              Filter* tag_filter = nullptr, int batch_size = 0);
+
     /**
      * @brief Query tree-model time series by row with offset and limit.
      *
@@ -127,6 +145,21 @@ class TsFileReader {
      */
     int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
                    ResultSet*& result_set);
+
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+    int prepare_series(
+        const FileGeneration& generation, const PreparedLocator& locator,
+        const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+        std::shared_ptr<PreparedSeries>& prepared);
+    int query_prepared(const std::shared_ptr<PreparedSeries>& prepared,
+                       int64_t start_time, int64_t end_time, int offset,
+                       int limit, ResultSet*& result_set);
+    int query_prepared_multi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        ResultSet*& result_set);
 
     /**
      * @brief Query table-model data by row with offset/limit pushdown.
@@ -186,6 +219,9 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
 
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
     /**
      * @brief get the timeseries schema by the device id and measurement name
      *
@@ -234,7 +270,13 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_all_table_schemas(
+        std::vector<std::shared_ptr<TableSchema>>& table_schemas);
+
    private:
+    int open_source(std::unique_ptr<RandomAccessReadFile> read_file,
+                    unsigned char file_version);
     int ensure_table_query_executor(int batch_size);
     int get_timeseries_metadata_impl(
         std::shared_ptr<IDeviceID> device_id,
@@ -242,10 +284,11 @@ class TsFileReader {
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
                         common::PageArena& pa);
-    storage::ReadFile* read_file_;
+    std::unique_ptr<storage::RandomAccessReadFile> read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
     int table_query_executor_batch_size_ = -1;
+    unsigned char file_version_ = 0;
     common::PageArena tsfile_reader_meta_pa_;
     // Test-only hook for the unbounded-arena-growth regression check.
     friend class TsFileReaderMetaArenaTest;

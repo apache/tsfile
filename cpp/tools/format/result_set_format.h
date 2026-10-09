@@ -34,7 +34,7 @@ std::string cell_to_string(storage::ResultSet* rs, uint32_t col_index,
 
 int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                     std::ostream& out, long long offset = 0,
-                    long long limit = -1);
+                    long long limit = -1, long long* emitted_rows = nullptr);
 
 int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
                             bool no_header, std::ostream& out, long long limit,

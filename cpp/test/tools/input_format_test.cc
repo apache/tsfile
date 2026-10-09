@@ -26,11 +26,12 @@
 #include "common/db_common.h"
 #include "utils/db_utils.h"
 
-TEST(InputFormatTest, ParseColumnsSpecValid) {
+TEST(InputFormatTest, NormalizeWriteColumnsValid) {
+    const std::vector<tsfile_cli::WriteColumnSpec> specs = {
+        {"id1", "STRING", true}, {"s1", "INT64", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_TRUE(tsfile_cli::parse_columns_spec("id1:STRING:tag,s1:INT64:field",
-                                               cols, err));
+    EXPECT_TRUE(tsfile_cli::normalize_write_columns(specs, cols, err));
     ASSERT_EQ(cols.size(), 2u);
     EXPECT_EQ(cols[0].name, "id1");
     EXPECT_EQ(cols[0].type, common::STRING);
@@ -39,51 +40,55 @@ TEST(InputFormatTest, ParseColumnsSpecValid) {
     EXPECT_EQ(cols[1].category, common::ColumnCategory::FIELD);
 }
 
-TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveType) {
+TEST(InputFormatTest, NormalizeWriteColumnsRejectsNonCanonicalType) {
+    const std::vector<tsfile_cli::WriteColumnSpec> specs = {
+        {"s1", "int64", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_TRUE(tsfile_cli::parse_columns_spec("s1:int64:field", cols, err));
-    EXPECT_EQ(cols[0].type, common::INT64);
+    EXPECT_FALSE(tsfile_cli::normalize_write_columns(specs, cols, err));
+    EXPECT_NE(err.find("unknown type"), std::string::npos) << err;
 }
 
-TEST(InputFormatTest, ParseColumnsSpecCaseInsensitiveCategory) {
+TEST(InputFormatTest, NormalizeWriteColumnsPreservesCategories) {
+    const std::vector<tsfile_cli::WriteColumnSpec> specs = {
+        {"id1", "STRING", true}, {"s1", "INT64", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_TRUE(tsfile_cli::parse_columns_spec("id1:STRING:TAG,s1:INT64:Field",
-                                               cols, err))
-        << err;
+    EXPECT_TRUE(tsfile_cli::normalize_write_columns(specs, cols, err)) << err;
     ASSERT_EQ(cols.size(), 2u);
     EXPECT_EQ(cols[0].category, common::ColumnCategory::TAG);
     EXPECT_EQ(cols[1].category, common::ColumnCategory::FIELD);
 }
 
-TEST(InputFormatTest, ParseColumnsSpecExtendedTypes) {
+TEST(InputFormatTest, NormalizeWriteColumnsExtendedTypes) {
+    const std::vector<tsfile_cli::WriteColumnSpec> specs = {
+        {"ts", "TIMESTAMP", false}, {"d", "DATE", false}, {"b", "BLOB", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_TRUE(tsfile_cli::parse_columns_spec(
-        "ts:TIMESTAMP:field,d:DATE:field,b:BLOB:field", cols, err))
-        << err;
+    EXPECT_TRUE(tsfile_cli::normalize_write_columns(specs, cols, err)) << err;
     ASSERT_EQ(cols.size(), 3u);
     EXPECT_EQ(cols[0].type, common::TIMESTAMP);
     EXPECT_EQ(cols[1].type, common::DATE);
     EXPECT_EQ(cols[2].type, common::BLOB);
 }
 
-TEST(InputFormatTest, ParseColumnsSpecErrors) {
+TEST(InputFormatTest, NormalizeWriteColumnsErrors) {
+    const std::vector<tsfile_cli::WriteColumnSpec> bad_type = {
+        {"s1", "NOPE", false}};
+    const std::vector<tsfile_cli::WriteColumnSpec> empty_name = {
+        {"", "INT64", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:NOPE:field", cols, err));
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:bogus", cols, err));
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64", cols, err));
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec("", cols, err));
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec(":INT64:field", cols, err));
+    EXPECT_FALSE(tsfile_cli::normalize_write_columns(bad_type, cols, err));
+    EXPECT_FALSE(tsfile_cli::normalize_write_columns(empty_name, cols, err));
 }
 
-TEST(InputFormatTest, ParseColumnsSpecRejectsDuplicateNames) {
+TEST(InputFormatTest, NormalizeWriteColumnsRejectsDuplicateNames) {
+    const std::vector<tsfile_cli::WriteColumnSpec> specs = {
+        {"s1", "INT64", false}, {"s1", "INT32", false}};
     std::vector<tsfile_cli::ColumnDef> cols;
     std::string err;
-    EXPECT_FALSE(tsfile_cli::parse_columns_spec("s1:INT64:field,s1:INT32:field",
-                                                cols, err));
+    EXPECT_FALSE(tsfile_cli::normalize_write_columns(specs, cols, err));
     EXPECT_NE(err.find("duplicate column"), std::string::npos) << err;
 }
 

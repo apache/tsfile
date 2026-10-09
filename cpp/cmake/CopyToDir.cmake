@@ -23,7 +23,11 @@ under the License.
 function(copy_to_dir)
     set(INCLUDE_EXPORT_DR ${LIBRARY_INCLUDE_DIR} CACHE INTERNAL "Include export directory")
     math(EXPR file_path_length "${ARGC} - 1")
-    list(SUBLIST ARGN 0 ${file_path_length} file_paths)
+    # list(SUBLIST) was added in CMake 3.12. Keep this helper compatible with
+    # TsFile's CMake 3.11 baseline by copying the argument list and removing
+    # its final element, which is the parent target name.
+    set(file_paths ${ARGN})
+    list(REMOVE_AT file_paths ${file_path_length})
     list(GET ARGN ${file_path_length} parent)
 
     add_custom_command(
@@ -47,5 +51,4 @@ function(copy_to_dir)
     )
     add_dependencies(${parent} copy_${parent})
 endfunction()
-
 

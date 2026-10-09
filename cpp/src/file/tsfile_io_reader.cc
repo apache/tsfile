@@ -19,21 +19,26 @@
 
 #include "file/tsfile_io_reader.h"
 
+#include <limits>
+
 #include "common/allocator/alloc_base.h"
+#include "file/local_random_access_read_file.h"
+#include "reader/prepared_series.h"
 
 using namespace common;
 
 namespace storage {
 int TsFileIOReader::init(const std::string& file_path) {
     int ret = E_OK;
-    read_file_ = new ReadFile;
+    LocalRandomAccessReadFile* local_file = new LocalRandomAccessReadFile;
+    read_file_ = local_file;
     read_file_created_ = true;
-    if (RET_FAIL(read_file_->open(file_path))) {
+    if (RET_FAIL(local_file->open(file_path))) {
     }
     return ret;
 }
 
-int TsFileIOReader::init(ReadFile* read_file) {
+int TsFileIOReader::init(RandomAccessReadFile* read_file) {
     if (IS_NULL(read_file)) {
         ASSERT(false);
         return E_INVALID_ARG;
@@ -46,7 +51,7 @@ int TsFileIOReader::init(ReadFile* read_file) {
 void TsFileIOReader::reset() {
     if (read_file_ != nullptr) {
         if (read_file_created_) {
-            read_file_->destroy();
+            read_file_->close();
             delete read_file_;
         }
         read_file_ = nullptr;
@@ -84,6 +89,196 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
             mem_free(ssi);
             ssi = nullptr;
         }
+    }
+    return ret;
+}
+
+namespace {
+int load_exact_timeseries_index(RandomAccessReadFile* read_file,
+                                uint64_t offset, uint32_t length,
+                                PageArena& arena, TimeseriesIndex*& index) {
+    if (read_file == nullptr || length == 0 ||
+        length > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+        offset > static_cast<uint64_t>(read_file->file_size()) ||
+        length > static_cast<uint64_t>(read_file->file_size()) - offset) {
+        return E_TSFILE_CORRUPTED;
+    }
+    char* bytes = static_cast<char*>(arena.alloc(length));
+    void* index_memory = arena.alloc(sizeof(TimeseriesIndex));
+    if (bytes == nullptr || index_memory == nullptr) {
+        return E_OOM;
+    }
+    int32_t read_length = 0;
+    int ret = read_file->read(static_cast<int64_t>(offset), bytes,
+                              static_cast<int32_t>(length), read_length);
+    if (ret != E_OK || read_length != static_cast<int32_t>(length)) {
+        return ret == E_OK ? E_TSFILE_CORRUPTED : ret;
+    }
+    ByteStream stream;
+    stream.wrap_from(bytes, length);
+    index = new (index_memory) TimeseriesIndex;
+    ret = index->deserialize_from(stream, &arena);
+    if (ret != E_OK || stream.read_pos() != length) {
+        index = nullptr;
+        return ret == E_OK ? E_TSFILE_CORRUPTED : ret;
+    }
+    index->set_metadata_range(static_cast<int64_t>(offset), length);
+    return E_OK;
+}
+}  // namespace
+
+int TsFileIOReader::prepare_series(const FileGeneration& generation,
+                                   const PreparedLocator& locator,
+                                   std::shared_ptr<PreparedSeries>& prepared) {
+    return prepare_series(generation, locator, nullptr, prepared);
+}
+
+int TsFileIOReader::prepare_series(
+    const FileGeneration& generation, const PreparedLocator& locator,
+    const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+    std::shared_ptr<PreparedSeries>& prepared) {
+    prepared.reset();
+    uint64_t actual_size = 0;
+    uint64_t actual_fingerprint = 0;
+    if (read_file_ == nullptr || generation.file_size == 0 ||
+        read_file_->generation(actual_size, actual_fingerprint) != E_OK ||
+        actual_size != generation.file_size ||
+        (generation.file_fingerprint != 0 &&
+         actual_fingerprint != generation.file_fingerprint) ||
+        locator.value_metadata_length == 0 || locator.layout > 1) {
+        return E_INVALID_ARG;
+    }
+    std::shared_ptr<PreparedSeries> candidate =
+        std::make_shared<PreparedSeries>(generation, locator);
+    TimeseriesIndex* value_index = nullptr;
+    int ret = load_exact_timeseries_index(
+        read_file_, locator.value_metadata_offset,
+        locator.value_metadata_length, candidate->arena(), value_index);
+    if (ret != E_OK) {
+        return ret;
+    }
+    if (locator.layout == 0) {
+        candidate->set_index(value_index);
+    } else {
+        if (locator.time_metadata_length == 0) {
+            return E_NOT_SUPPORT;
+        }
+        TimeseriesIndex* time_index = nullptr;
+        if (aligned_time_owner != nullptr) {
+            const FileGeneration& owner_generation =
+                aligned_time_owner->generation();
+            const PreparedLocator& owner_locator =
+                aligned_time_owner->locator();
+            auto* owner_index = dynamic_cast<AlignedTimeseriesIndex*>(
+                aligned_time_owner->index());
+            if (owner_generation.mapped_index_identity !=
+                    generation.mapped_index_identity ||
+                owner_generation.file_id != generation.file_id ||
+                owner_generation.file_size != generation.file_size ||
+                owner_generation.file_fingerprint !=
+                    generation.file_fingerprint ||
+                owner_locator.layout != 1 ||
+                owner_locator.time_metadata_offset !=
+                    locator.time_metadata_offset ||
+                owner_locator.time_metadata_length !=
+                    locator.time_metadata_length ||
+                owner_index == nullptr ||
+                owner_index->time_ts_idx_ == nullptr) {
+                return E_INVALID_ARG;
+            }
+            time_index = owner_index->time_ts_idx_;
+            candidate->set_aligned_time_owner(aligned_time_owner);
+        } else {
+            ret = load_exact_timeseries_index(
+                read_file_, locator.time_metadata_offset,
+                locator.time_metadata_length, candidate->arena(), time_index);
+            if (ret != E_OK) {
+                return ret;
+            }
+        }
+        if (time_index->get_chunk_meta_list()->size() !=
+            value_index->get_chunk_meta_list()->size()) {
+            return E_NOT_SUPPORT;
+        }
+        void* aligned_memory =
+            candidate->arena().alloc(sizeof(AlignedTimeseriesIndex));
+        if (aligned_memory == nullptr) {
+            return E_OOM;
+        }
+        AlignedTimeseriesIndex* aligned =
+            new (aligned_memory) AlignedTimeseriesIndex;
+        aligned->time_ts_idx_ = time_index;
+        aligned->value_ts_idx_ = value_index;
+        candidate->set_index(aligned);
+    }
+    prepared = candidate;
+    return E_OK;
+}
+
+int TsFileIOReader::alloc_prepared_ssi(
+    const std::shared_ptr<PreparedSeries>& prepared,
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+    Filter* time_filter) {
+    ssi = nullptr;
+    if (prepared == nullptr || prepared->index() == nullptr) {
+        return E_INVALID_ARG;
+    }
+    if (time_filter != nullptr &&
+        !filter_stasify(prepared->index(), time_filter)) {
+        return E_NO_MORE_DATA;
+    }
+    void* memory =
+        mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
+    if (memory == nullptr) {
+        return E_OOM;
+    }
+    ssi = new (memory) TsFileSeriesScanIterator;
+    int ret = ssi->init_prepared(prepared, read_file_, time_filter, pa);
+    if (ret == E_OK) {
+        ret = ssi->init_chunk_reader();
+    }
+    if (ret != E_OK) {
+        ssi->destroy();
+        mem_free(ssi);
+        ssi = nullptr;
+    }
+    return ret;
+}
+
+int TsFileIOReader::alloc_prepared_multi_ssi(
+    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+    Filter* time_filter) {
+    ssi = nullptr;
+    if (prepared.empty() || prepared.front() == nullptr ||
+        prepared.front()->index() == nullptr) {
+        return E_INVALID_ARG;
+    }
+    auto* first_aligned =
+        dynamic_cast<AlignedTimeseriesIndex*>(prepared.front()->index());
+    if (first_aligned == nullptr || first_aligned->time_ts_idx_ == nullptr) {
+        return E_NOT_SUPPORT;
+    }
+    if (time_filter != nullptr &&
+        !filter_stasify(first_aligned->time_ts_idx_, time_filter)) {
+        return E_NO_MORE_DATA;
+    }
+
+    void* memory =
+        mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
+    if (memory == nullptr) {
+        return E_OOM;
+    }
+    ssi = new (memory) TsFileSeriesScanIterator;
+    int ret = ssi->init_prepared_multi(prepared, read_file_, time_filter, pa);
+    if (ret == E_OK) {
+        ret = ssi->init_chunk_reader();
+    }
+    if (ret != E_OK) {
+        ssi->destroy();
+        mem_free(ssi);
+        ssi = nullptr;
     }
     return ret;
 }
@@ -143,17 +338,18 @@ int TsFileIOReader::alloc_multi_ssi(
 
     // Batch-load all measurement TimeseriesIndex entries in a single pass over
     // the index tree — cheaper than N separate binary searches + file reads.
-    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
-        all_leaves;
-    if (RET_FAIL(get_all_leaf(top_node, all_leaves, ssi_pa))) {
-        ssi->destroy();
-        mem_free(ssi);
-        ssi = nullptr;
-        return ret;
-    }
     std::vector<ITimeseriesIndex*> all_ts_idxs;
-    if (RET_FAIL(
-            do_load_all_timeseries_index(all_leaves, ssi_pa, all_ts_idxs))) {
+    {
+        // Leaf entry deleters access arena-owned nodes. Release the entries
+        // before any error path destroys the iterator and its arena.
+        std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
+            all_leaves;
+        if (RET_FAIL(get_all_leaf(top_node, all_leaves, ssi_pa))) {
+        } else {
+            ret = do_load_all_timeseries_index(all_leaves, ssi_pa, all_ts_idxs);
+        }
+    }
+    if (RET_FAIL(ret)) {
         ssi->destroy();
         mem_free(ssi);
         ssi = nullptr;
@@ -198,7 +394,9 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     std::shared_ptr<IDeviceID> device_id,
     std::vector<ITimeseriesIndex*>& timeseries_indexs, PageArena& pa) {
     int ret = E_OK;
-    load_tsfile_meta_if_necessary();
+    if (RET_FAIL(load_tsfile_meta_if_necessary())) {
+        return ret;
+    }
     std::shared_ptr<IMetaIndexEntry> meta_index_entry;
     int64_t end_offset;
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
@@ -219,7 +417,9 @@ int TsFileIOReader::get_device_timeseries_meta_by_offset(
     int64_t start_offset, int64_t end_offset,
     std::vector<ITimeseriesIndex*>& timeseries_indexs, PageArena& pa) {
     int ret = E_OK;
-    load_tsfile_meta_if_necessary();
+    if (RET_FAIL(load_tsfile_meta_if_necessary())) {
+        return ret;
+    }
 
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
         meta_index_entry_list;
@@ -240,6 +440,8 @@ int TsFileIOReader::get_device_timeseries_meta_by_offset(
     if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                   ret_read_len))) {
         return ret;
+    } else if (ret_read_len != read_size) {
+        return E_FILE_READ_ERR;
     }
     if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
         return ret;
@@ -253,7 +455,9 @@ int TsFileIOReader::get_device_timeseries_meta_by_offset(
         }
     }
 
-    get_all_leaf(top_node, meta_index_entry_list, pa);
+    if (RET_FAIL(get_all_leaf(top_node, meta_index_entry_list, pa))) {
+        return ret;
+    }
 
     if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
                                               timeseries_indexs))) {
@@ -476,6 +680,8 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
     if (RET_FAIL(read_file_->read(start_offset, data_buf.get(), read_size,
                                   ret_read_len))) {
         return ret;
+    } else if (ret_read_len != read_size) {
+        return E_FILE_READ_ERR;
     }
 
     CachedDeviceNode cached;
@@ -648,6 +854,8 @@ int TsFileIOReader::load_all_measurement_index_entry(
                                                    MetaIndexNode::self_deleter);
     if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                   ret_read_len))) {
+    } else if (ret_read_len != read_size) {
+        ret = E_FILE_READ_ERR;
     } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
     }
 #if DEBUG_SE
@@ -658,7 +866,7 @@ int TsFileIOReader::load_all_measurement_index_entry(
 #endif
     // 2. search from top_node in top-down way
     if (IS_SUCC(ret)) {
-        get_all_leaf(top_node, ret_measurement_index_entry, pa);
+        ret = get_all_leaf(top_node, ret_measurement_index_entry, pa);
     }
     if (ret == E_NOT_EXIST) {
         ret = E_MEASUREMENT_NOT_EXIST;
@@ -683,6 +891,9 @@ int TsFileIOReader::read_device_meta_index(int64_t start_offset,
     device_meta_index = new (m_idx_node_buf) MetaIndexNode(&pa);
     if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                   ret_read_len))) {
+        return ret;
+    } else if (ret_read_len != read_size) {
+        return E_FILE_READ_ERR;
     }
     if (!leaf) {
         ret = device_meta_index->device_deserialize_from(data_buf, read_size);
@@ -724,6 +935,8 @@ int TsFileIOReader::get_timeseries_indexes(
     if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
                                   ret_read_len))) {
         return ret;
+    } else if (ret_read_len != read_size) {
+        return E_FILE_READ_ERR;
     } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
         return ret;
     }
@@ -731,7 +944,10 @@ int TsFileIOReader::get_timeseries_indexes(
     bool is_aligned = is_aligned_device(top_node);
     TimeseriesIndex* timeseries_index = nullptr;
     if (is_aligned) {
-        get_time_column_metadata(top_node, timeseries_index, pa);
+        if (RET_FAIL(
+                get_time_column_metadata(top_node, timeseries_index, pa))) {
+            return ret;
+        }
     }
 
     int64_t idx = 0;
@@ -824,8 +1040,9 @@ int TsFileIOReader::search_from_internal_node(
         int32_t ret_read_len = 0;
         if (RET_FAIL(read_file_->read(index_entry->get_offset(), data_buf,
                                       read_size, ret_read_len))) {
+            return ret;
         } else if (read_size != ret_read_len) {
-            return E_TSFILE_CORRUPTED;
+            return E_FILE_READ_ERR;
         }
         if (!is_device) {
             ret = cur_level_index_node->deserialize_from(data_buf, read_size);
@@ -894,13 +1111,23 @@ int TsFileIOReader::get_time_column_metadata(
                 return ret;
             }
         }
+        if (ret_read_len != end_idx - start_idx) {
+            return E_FILE_READ_ERR;
+        }
         buffer.wrap_from(ti_buf, end_idx - start_idx);
         void* buf = pa.alloc(sizeof(TimeseriesIndex));
         if (IS_NULL(buf)) {
             return E_OOM;
         }
         ret_timeseries_index = new (buf) TimeseriesIndex;
-        ret_timeseries_index->deserialize_from(buffer, &pa);
+        if (RET_FAIL(ret_timeseries_index->deserialize_from(buffer, &pa))) {
+            return ret;
+        }
+        if (buffer.read_pos() > UINT32_MAX) {
+            return E_OVERFLOW;
+        }
+        ret_timeseries_index->set_metadata_range(
+            start_idx, static_cast<uint32_t>(buffer.read_pos()));
     } else if (measurement_node->node_type_ == INTERNAL_MEASUREMENT) {
         start_idx = measurement_node->children_[0]->get_offset();
         end_idx = measurement_node->children_[1]->get_offset();
@@ -908,10 +1135,15 @@ int TsFileIOReader::get_time_column_metadata(
         if (RET_FAIL(read_file_->read(start_idx, ti_buf, end_idx - start_idx,
                                       ret_read_len))) {
             return ret;
+        } else if (ret_read_len != end_idx - start_idx) {
+            return E_FILE_READ_ERR;
         }
         std::shared_ptr<MetaIndexNode> meta_index_node =
             std::make_shared<MetaIndexNode>(&pa);
-        meta_index_node->deserialize_from(ti_buf, end_idx - start_idx);
+        if (RET_FAIL(meta_index_node->deserialize_from(ti_buf,
+                                                       end_idx - start_idx))) {
+            return ret;
+        }
         return get_time_column_metadata(meta_index_node, ret_timeseries_index,
                                         pa);
     }
@@ -932,6 +1164,8 @@ int TsFileIOReader::do_load_timeseries_index(
     }
     if (RET_FAIL(
             read_file_->read(start_offset, ti_buf, read_size, ret_read_len))) {
+    } else if (ret_read_len != read_size) {
+        ret = E_FILE_READ_ERR;
     } else {
         ByteStream bs;
         bs.wrap_from(ti_buf, read_size);
@@ -947,8 +1181,18 @@ int TsFileIOReader::do_load_timeseries_index(
             TimeseriesIndex cur_timeseries_index;
             PageArena cur_timeseries_index_pa;
             cur_timeseries_index_pa.init(512, MOD_TSFILE_READER);  // TODO 512
+            const uint64_t relative_start = bs.read_pos();
             if (RET_FAIL(cur_timeseries_index.deserialize_from(
                     bs, &cur_timeseries_index_pa))) {
+            } else if (bs.read_pos() < relative_start ||
+                       bs.read_pos() - relative_start > UINT32_MAX) {
+                ret = E_OVERFLOW;
+            } else {
+                cur_timeseries_index.set_metadata_range(
+                    start_offset + relative_start,
+                    static_cast<uint32_t>(bs.read_pos() - relative_start));
+            }
+            if (RET_FAIL(ret)) {
             } else if (is_aligned &&
                        cur_timeseries_index.get_measurement_name().equal_to(
                            target_measurement_name)) {
@@ -1008,16 +1252,26 @@ int TsFileIOReader::do_load_all_timeseries_index(
         if (RET_FAIL(read_file_->read(start_offset, ti_buf, read_size,
                                       ret_read_len))) {
             return ret;
+        } else if (ret_read_len != read_size) {
+            return E_FILE_READ_ERR;
         }
         ByteStream bs;
         bs.wrap_from(ti_buf, read_size);
         while (bs.has_remaining()) {
+            const uint64_t relative_start = bs.read_pos();
             void* buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
             auto ts_idx = new (buf) TimeseriesIndex;
             if (RET_FAIL(
                     ts_idx->deserialize_from(bs, &in_timeseries_index_pa))) {
                 return ret;
             }
+            if (bs.read_pos() < relative_start ||
+                bs.read_pos() - relative_start > UINT32_MAX) {
+                return E_OVERFLOW;
+            }
+            ts_idx->set_metadata_range(
+                start_offset + relative_start,
+                static_cast<uint32_t>(bs.read_pos() - relative_start));
             if (ts_idx->get_measurement_name().len_ == 0) continue;
             ts_indexs.push_back(ts_idx);
         }
@@ -1078,12 +1332,15 @@ int TsFileIOReader::get_all_leaf(
                     read_file_->read(index_node->children_[i]->get_offset(),
                                      data_buf, read_size, ret_read_len))) {
             } else if (read_size != ret_read_len) {
-                ret = E_TSFILE_CORRUPTED;
+                ret = E_FILE_READ_ERR;
             } else if (RET_FAIL(cur_level_index_node->deserialize_from(
                            data_buf, read_size))) {
             } else {
                 ret = get_all_leaf(cur_level_index_node, index_node_entry_list,
                                    pa);
+            }
+            if (RET_FAIL(ret)) {
+                return ret;
             }
         }
     }
@@ -1126,7 +1383,7 @@ int TsFileIOReader::get_next_page(TsBlock *ret_tsblock)
 }
 
 int TsFileIOReader::init_first_chunk_reader(ChunkMeta *cm,
-                                            ReadFile *read_file,
+                                            RandomAccessReadFile *read_file,
                                             const ColumnDesc &col_desc)
 {
   ASSERT(!chunk_reader_.has_more_data());

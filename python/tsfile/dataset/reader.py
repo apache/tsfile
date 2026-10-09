@@ -24,9 +24,10 @@ from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
 
-from ..constants import ColumnCategory, TSDataType
+from ..constants import ColumnCategory, NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
+from ._arrow import arrow_column_to_float64
 from .metadata import (
     MetadataCatalog,
     MODEL_TABLE,
@@ -36,14 +37,7 @@ from .metadata import (
     resolve_series_path,
 )
 
-_NUMERIC_FIELD_TYPES = {
-    TSDataType.BOOLEAN,
-    TSDataType.INT32,
-    TSDataType.INT64,
-    TSDataType.FLOAT,
-    TSDataType.DOUBLE,
-    TSDataType.TIMESTAMP,
-}
+_NUMERIC_FIELD_TYPES = NUMERIC_DATASET_FIELD_TYPES
 
 
 def _to_python_scalar(value):
@@ -176,27 +170,36 @@ class TsFileSeriesReader:
             tag_columns = []
             tag_types = []
             field_columns = []
+            field_types = []
+            schema_columns = []
             for column_schema in table_schema.get_columns():
                 column_name = column_schema.get_column_name()
                 column_category = column_schema.get_category()
+                column_type = column_schema.get_data_type()
+                schema_columns.append(
+                    (column_name, int(column_type), int(column_category))
+                )
                 if column_category == ColumnCategory.TIME:
                     continue
                 if column_category == ColumnCategory.TAG:
                     tag_columns.append(column_name)
-                    tag_types.append(column_schema.get_data_type())
+                    tag_types.append(column_type)
 
                 # ignore fields which is not numeric, we won't use them currently.
                 elif (
                     column_category == ColumnCategory.FIELD
-                    and column_schema.get_data_type() in _NUMERIC_FIELD_TYPES
+                    and column_type in _NUMERIC_FIELD_TYPES
                 ):
                     field_columns.append(column_name)
-
-            if not field_columns:
-                continue
+                    field_types.append(column_type)
 
             table_id = self._catalog.add_table(
-                table_name, tag_columns, tag_types, field_columns
+                table_name,
+                tag_columns,
+                tag_types,
+                field_columns,
+                field_types,
+                schema_columns,
             )
             table_groups = [
                 group
@@ -419,6 +422,15 @@ class TsFileSeriesReader:
                 timeline_length=int(timeline_statistic.row_count),
                 timeline_min_time=int(timeline_statistic.start_time),
                 timeline_max_time=int(timeline_statistic.end_time),
+                data_type=int(timeseries.data_type),
+                value_metadata_offset=int(timeseries.value_metadata_offset),
+                value_metadata_length=int(timeseries.value_metadata_length),
+                time_metadata_offset=int(timeseries.time_metadata_offset),
+                time_metadata_length=int(timeseries.time_metadata_length),
+                chunk_meta_count=int(timeseries.chunk_meta_count),
+                time_chunk_meta_count=int(timeseries.time_chunk_meta_count),
+                layout=int(timeseries.layout),
+                locator_flags=int(timeseries.locator_flags),
             )
         return stats
 
@@ -539,10 +551,9 @@ class TsFileSeriesReader:
                     if arrow_table.num_rows == 0:
                         continue
                     timestamp_parts.append(arrow_table.column("time").to_numpy())
-                    raw_values = arrow_table.column(field_name).to_numpy(
-                        zero_copy_only=False
+                    value_parts.append(
+                        arrow_column_to_float64(arrow_table.column(field_name))
                     )
-                    value_parts.append(np.asarray(raw_values, dtype=np.float64))
                     produced_this_call += arrow_table.num_rows
 
             if produced_this_call == 0:
@@ -712,10 +723,9 @@ class TsFileSeriesReader:
 
                 timestamp_parts.append(arrow_table.column("time").to_numpy())
                 for field_column in field_columns:
-                    raw_values = arrow_table.column(field_column).to_numpy()
                     try:
                         field_parts[field_column].append(
-                            np.asarray(raw_values, dtype=np.float64)
+                            arrow_column_to_float64(arrow_table.column(field_column))
                         )
                     except (TypeError, ValueError) as e:
                         raise TypeError(

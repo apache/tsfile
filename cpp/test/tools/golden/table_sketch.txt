@@ -1,0 +1,583 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_complex_table_golden.tsfile
+file length: 5364
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of table1, num of Chunks:2
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] table1 size=8
+                  16|	[Chunk] of table1., startTime: 0 endTime: 19 count: 20
+                  16|		[Chunk Header] marker=-123, measurementID=, dataSize=20, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                  22|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:18
+                  24|			[Page Data]  Size:18
+                  42|	[Chunk] of table1.value, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:19,firstValue:0,lastValue:19,sumValue:190.0]
+                  42|		[Chunk Header] marker=69, measurementID=value, dataSize=171, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=12
+                  54|			[Page Header]  HeaderSize:4, UncompressedSize:167, CompressedSize:167
+                  58|			[Page Data]  Size:167
+||||||||||||||||||||| [ChunkGroup] of table1 ends
+||||||||||||||||||||| [ChunkGroup] of table2.null.rack0.sensor0, num of Chunks:2
+                 225|	[ChunkGroup Header]
+                 225|		[marker] 0
+                 226|		[deviceID] table2.null.rack0.sensor0 size=23
+                 249|	[Chunk] of table2.null.rack0.sensor0., startTime: 0 endTime: 0 count: 1
+                 249|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 255|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 257|			[Page Data]  Size:10
+                 267|	[Chunk] of table2.null.rack0.sensor0.reading, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                 267|		[Chunk Header] marker=69, measurementID=reading, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 280|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                 282|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of table2.null.rack0.sensor0 ends
+||||||||||||||||||||| [ChunkGroup] of table2..rack1.sensor1, num of Chunks:2
+                 287|	[ChunkGroup Header]
+                 287|		[marker] 0
+                 288|		[deviceID] table2..rack1.sensor1 size=23
+                 311|	[Chunk] of table2..rack1.sensor1., startTime: 1 endTime: 1 count: 1
+                 311|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 317|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 319|			[Page Data]  Size:10
+                 329|	[Chunk] of table2..rack1.sensor1.reading, startTime: 1 endTime: 1 count: 1 [minValue:1.25,maxValue:1.25,firstValue:1.25,lastValue:1.25,sumValue:1.25]
+                 329|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 342|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 344|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2..rack1.sensor1 ends
+||||||||||||||||||||| [ChunkGroup] of table2.null.rack2.sensor2, num of Chunks:2
+                 357|	[ChunkGroup Header]
+                 357|		[marker] 0
+                 358|		[deviceID] table2.null.rack2.sensor2 size=27
+                 385|	[Chunk] of table2.null.rack2.sensor2., startTime: 2 endTime: 2 count: 1
+                 385|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 391|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 393|			[Page Data]  Size:10
+                 403|	[Chunk] of table2.null.rack2.sensor2.reading, startTime: 2 endTime: 2 count: 1 [minValue:2.5,maxValue:2.5,firstValue:2.5,lastValue:2.5,sumValue:2.5]
+                 403|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 416|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 418|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.null.rack2.sensor2 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site10.rack10.sensor10, num of Chunks:2
+                 431|	[ChunkGroup Header]
+                 431|		[marker] 0
+                 432|		[deviceID] table2.site10.rack10.sensor10 size=31
+                 463|	[Chunk] of table2.site10.rack10.sensor10., startTime: 10 endTime: 10 count: 1
+                 463|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 469|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 471|			[Page Data]  Size:10
+                 481|	[Chunk] of table2.site10.rack10.sensor10.reading, startTime: 10 endTime: 10 count: 1 [minValue:12.5,maxValue:12.5,firstValue:12.5,lastValue:12.5,sumValue:12.5]
+                 481|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 494|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 496|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site10.rack10.sensor10 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site11.rack11.sensor11, num of Chunks:2
+                 509|	[ChunkGroup Header]
+                 509|		[marker] 0
+                 510|		[deviceID] table2.site11.rack11.sensor11 size=31
+                 541|	[Chunk] of table2.site11.rack11.sensor11., startTime: 11 endTime: 11 count: 1
+                 541|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 547|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 549|			[Page Data]  Size:10
+                 559|	[Chunk] of table2.site11.rack11.sensor11.reading, startTime: 11 endTime: 11 count: 1 [minValue:13.75,maxValue:13.75,firstValue:13.75,lastValue:13.75,sumValue:13.75]
+                 559|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 572|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 574|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site11.rack11.sensor11 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site12.rack12.sensor12, num of Chunks:2
+                 587|	[ChunkGroup Header]
+                 587|		[marker] 0
+                 588|		[deviceID] table2.site12.rack12.sensor12 size=31
+                 619|	[Chunk] of table2.site12.rack12.sensor12., startTime: 12 endTime: 12 count: 1
+                 619|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 625|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 627|			[Page Data]  Size:10
+                 637|	[Chunk] of table2.site12.rack12.sensor12.reading, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                 637|		[Chunk Header] marker=69, measurementID=reading, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 650|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                 652|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of table2.site12.rack12.sensor12 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site13.rack13.sensor13, num of Chunks:2
+                 657|	[ChunkGroup Header]
+                 657|		[marker] 0
+                 658|		[deviceID] table2.site13.rack13.sensor13 size=31
+                 689|	[Chunk] of table2.site13.rack13.sensor13., startTime: 13 endTime: 13 count: 1
+                 689|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 695|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 697|			[Page Data]  Size:10
+                 707|	[Chunk] of table2.site13.rack13.sensor13.reading, startTime: 13 endTime: 13 count: 1 [minValue:16.25,maxValue:16.25,firstValue:16.25,lastValue:16.25,sumValue:16.25]
+                 707|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 720|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 722|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site13.rack13.sensor13 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site14.rack14.sensor14, num of Chunks:2
+                 735|	[ChunkGroup Header]
+                 735|		[marker] 0
+                 736|		[deviceID] table2.site14.rack14.sensor14 size=31
+                 767|	[Chunk] of table2.site14.rack14.sensor14., startTime: 14 endTime: 14 count: 1
+                 767|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 773|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 775|			[Page Data]  Size:10
+                 785|	[Chunk] of table2.site14.rack14.sensor14.reading, startTime: 14 endTime: 14 count: 1 [minValue:17.5,maxValue:17.5,firstValue:17.5,lastValue:17.5,sumValue:17.5]
+                 785|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 798|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 800|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site14.rack14.sensor14 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site15.rack15.sensor15, num of Chunks:2
+                 813|	[ChunkGroup Header]
+                 813|		[marker] 0
+                 814|		[deviceID] table2.site15.rack15.sensor15 size=31
+                 845|	[Chunk] of table2.site15.rack15.sensor15., startTime: 15 endTime: 15 count: 1
+                 845|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 851|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 853|			[Page Data]  Size:10
+                 863|	[Chunk] of table2.site15.rack15.sensor15.reading, startTime: 15 endTime: 15 count: 1 [minValue:18.75,maxValue:18.75,firstValue:18.75,lastValue:18.75,sumValue:18.75]
+                 863|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 876|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                 878|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site15.rack15.sensor15 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site16.rack16.sensor16, num of Chunks:2
+                 891|	[ChunkGroup Header]
+                 891|		[marker] 0
+                 892|		[deviceID] table2.site16.rack16.sensor16 size=31
+                 923|	[Chunk] of table2.site16.rack16.sensor16., startTime: 16 endTime: 16 count: 1
+                 923|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 929|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                 931|			[Page Data]  Size:10
+                 941|	[Chunk] of table2.site16.rack16.sensor16.reading, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                 941|		[Chunk Header] marker=69, measurementID=reading, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                 954|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                 956|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of table2.site16.rack16.sensor16 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site17.rack17.sensor17, num of Chunks:2
+                 961|	[ChunkGroup Header]
+                 961|		[marker] 0
+                 962|		[deviceID] table2.site17.rack17.sensor17 size=31
+                 993|	[Chunk] of table2.site17.rack17.sensor17., startTime: 17 endTime: 17 count: 1
+                 993|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                 999|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1001|			[Page Data]  Size:10
+                1011|	[Chunk] of table2.site17.rack17.sensor17.reading, startTime: 17 endTime: 17 count: 1 [minValue:21.25,maxValue:21.25,firstValue:21.25,lastValue:21.25,sumValue:21.25]
+                1011|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1024|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1026|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site17.rack17.sensor17 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site18.rack18.sensor18, num of Chunks:2
+                1039|	[ChunkGroup Header]
+                1039|		[marker] 0
+                1040|		[deviceID] table2.site18.rack18.sensor18 size=31
+                1071|	[Chunk] of table2.site18.rack18.sensor18., startTime: 18 endTime: 18 count: 1
+                1071|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1077|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1079|			[Page Data]  Size:10
+                1089|	[Chunk] of table2.site18.rack18.sensor18.reading, startTime: 18 endTime: 18 count: 1 [minValue:22.5,maxValue:22.5,firstValue:22.5,lastValue:22.5,sumValue:22.5]
+                1089|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1102|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1104|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site18.rack18.sensor18 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site19.rack19.sensor19, num of Chunks:2
+                1117|	[ChunkGroup Header]
+                1117|		[marker] 0
+                1118|		[deviceID] table2.site19.rack19.sensor19 size=31
+                1149|	[Chunk] of table2.site19.rack19.sensor19., startTime: 19 endTime: 19 count: 1
+                1149|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1155|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1157|			[Page Data]  Size:10
+                1167|	[Chunk] of table2.site19.rack19.sensor19.reading, startTime: 19 endTime: 19 count: 1 [minValue:23.75,maxValue:23.75,firstValue:23.75,lastValue:23.75,sumValue:23.75]
+                1167|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1180|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1182|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site19.rack19.sensor19 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site3.rack3.sensor3, num of Chunks:2
+                1195|	[ChunkGroup Header]
+                1195|		[marker] 0
+                1196|		[deviceID] table2.site3.rack3.sensor3 size=28
+                1224|	[Chunk] of table2.site3.rack3.sensor3., startTime: 3 endTime: 3 count: 1
+                1224|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1230|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1232|			[Page Data]  Size:10
+                1242|	[Chunk] of table2.site3.rack3.sensor3.reading, startTime: 3 endTime: 3 count: 1 [minValue:3.75,maxValue:3.75,firstValue:3.75,lastValue:3.75,sumValue:3.75]
+                1242|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1255|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1257|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site3.rack3.sensor3 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site4.rack4.sensor4, num of Chunks:2
+                1270|	[ChunkGroup Header]
+                1270|		[marker] 0
+                1271|		[deviceID] table2.site4.rack4.sensor4 size=28
+                1299|	[Chunk] of table2.site4.rack4.sensor4., startTime: 4 endTime: 4 count: 1
+                1299|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1305|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1307|			[Page Data]  Size:10
+                1317|	[Chunk] of table2.site4.rack4.sensor4.reading, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                1317|		[Chunk Header] marker=69, measurementID=reading, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1330|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                1332|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of table2.site4.rack4.sensor4 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site5.rack5.sensor5, num of Chunks:2
+                1337|	[ChunkGroup Header]
+                1337|		[marker] 0
+                1338|		[deviceID] table2.site5.rack5.sensor5 size=28
+                1366|	[Chunk] of table2.site5.rack5.sensor5., startTime: 5 endTime: 5 count: 1
+                1366|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1372|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1374|			[Page Data]  Size:10
+                1384|	[Chunk] of table2.site5.rack5.sensor5.reading, startTime: 5 endTime: 5 count: 1 [minValue:6.25,maxValue:6.25,firstValue:6.25,lastValue:6.25,sumValue:6.25]
+                1384|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1397|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1399|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site5.rack5.sensor5 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site6.rack6.sensor6, num of Chunks:2
+                1412|	[ChunkGroup Header]
+                1412|		[marker] 0
+                1413|		[deviceID] table2.site6.rack6.sensor6 size=28
+                1441|	[Chunk] of table2.site6.rack6.sensor6., startTime: 6 endTime: 6 count: 1
+                1441|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1447|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1449|			[Page Data]  Size:10
+                1459|	[Chunk] of table2.site6.rack6.sensor6.reading, startTime: 6 endTime: 6 count: 1 [minValue:7.5,maxValue:7.5,firstValue:7.5,lastValue:7.5,sumValue:7.5]
+                1459|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1472|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1474|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site6.rack6.sensor6 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site7.rack7.sensor7, num of Chunks:2
+                1487|	[ChunkGroup Header]
+                1487|		[marker] 0
+                1488|		[deviceID] table2.site7.rack7.sensor7 size=28
+                1516|	[Chunk] of table2.site7.rack7.sensor7., startTime: 7 endTime: 7 count: 1
+                1516|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1522|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1524|			[Page Data]  Size:10
+                1534|	[Chunk] of table2.site7.rack7.sensor7.reading, startTime: 7 endTime: 7 count: 1 [minValue:8.75,maxValue:8.75,firstValue:8.75,lastValue:8.75,sumValue:8.75]
+                1534|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1547|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1549|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site7.rack7.sensor7 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site8.rack8.sensor8, num of Chunks:2
+                1562|	[ChunkGroup Header]
+                1562|		[marker] 0
+                1563|		[deviceID] table2.site8.rack8.sensor8 size=28
+                1591|	[Chunk] of table2.site8.rack8.sensor8., startTime: 8 endTime: 8 count: 1
+                1591|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1597|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1599|			[Page Data]  Size:10
+                1609|	[Chunk] of table2.site8.rack8.sensor8.reading, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                1609|		[Chunk Header] marker=69, measurementID=reading, dataSize=7, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1622|			[Page Header]  HeaderSize:2, UncompressedSize:5, CompressedSize:5
+                1624|			[Page Data]  Size:5
+||||||||||||||||||||| [ChunkGroup] of table2.site8.rack8.sensor8 ends
+||||||||||||||||||||| [ChunkGroup] of table2.site9.rack9.sensor9, num of Chunks:2
+                1629|	[ChunkGroup Header]
+                1629|		[marker] 0
+                1630|		[deviceID] table2.site9.rack9.sensor9 size=28
+                1658|	[Chunk] of table2.site9.rack9.sensor9., startTime: 9 endTime: 9 count: 1
+                1658|		[Chunk Header] marker=-123, measurementID=, dataSize=12, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                1664|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:10
+                1666|			[Page Data]  Size:10
+                1676|	[Chunk] of table2.site9.rack9.sensor9.reading, startTime: 9 endTime: 9 count: 1 [minValue:11.25,maxValue:11.25,firstValue:11.25,lastValue:11.25,sumValue:11.25]
+                1676|		[Chunk Header] marker=69, measurementID=reading, dataSize=15, dataType=DOUBLE, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                1689|			[Page Header]  HeaderSize:2, UncompressedSize:13, CompressedSize:13
+                1691|			[Page Data]  Size:13
+||||||||||||||||||||| [ChunkGroup] of table2.site9.rack9.sensor9 ends
+                1721|	[marker] 2
+                1722|	[TimeseriesMetadata] of table1., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 0 endTime: 19 count: 20
+                1743|		[ChunkMetadata] offset=16, size=8
+                1751|	[TimeseriesMetadata] of table1.value, tsDataType:INT64, sizeWithoutChunkMetadata:66, startTime: 0 endTime: 19 count: 20 [minValue:0,maxValue:19,firstValue:0,lastValue:19,sumValue:190.0]
+                1817|		[ChunkMetadata] offset=42, size=8
+                1825|	[TimeseriesMetadata] of table2.null.rack0.sensor0., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 0 endTime: 0 count: 1
+                1846|		[ChunkMetadata] offset=249, size=8
+                1854|	[TimeseriesMetadata] of table2.null.rack0.sensor0.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                1922|		[ChunkMetadata] offset=267, size=8
+                1930|	[TimeseriesMetadata] of table2..rack1.sensor1., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 1 endTime: 1 count: 1
+                1951|		[ChunkMetadata] offset=311, size=8
+                1959|	[TimeseriesMetadata] of table2..rack1.sensor1.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 1 endTime: 1 count: 1 [minValue:1.25,maxValue:1.25,firstValue:1.25,lastValue:1.25,sumValue:1.25]
+                2027|		[ChunkMetadata] offset=329, size=8
+                2035|	[TimeseriesMetadata] of table2.null.rack2.sensor2., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 2 endTime: 2 count: 1
+                2056|		[ChunkMetadata] offset=385, size=8
+                2064|	[TimeseriesMetadata] of table2.null.rack2.sensor2.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 2 endTime: 2 count: 1 [minValue:2.5,maxValue:2.5,firstValue:2.5,lastValue:2.5,sumValue:2.5]
+                2132|		[ChunkMetadata] offset=403, size=8
+                2140|	[TimeseriesMetadata] of table2.site10.rack10.sensor10., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 10 endTime: 10 count: 1
+                2161|		[ChunkMetadata] offset=463, size=8
+                2169|	[TimeseriesMetadata] of table2.site10.rack10.sensor10.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 10 endTime: 10 count: 1 [minValue:12.5,maxValue:12.5,firstValue:12.5,lastValue:12.5,sumValue:12.5]
+                2237|		[ChunkMetadata] offset=481, size=8
+                2245|	[TimeseriesMetadata] of table2.site11.rack11.sensor11., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 11 endTime: 11 count: 1
+                2266|		[ChunkMetadata] offset=541, size=8
+                2274|	[TimeseriesMetadata] of table2.site11.rack11.sensor11.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 11 endTime: 11 count: 1 [minValue:13.75,maxValue:13.75,firstValue:13.75,lastValue:13.75,sumValue:13.75]
+                2342|		[ChunkMetadata] offset=559, size=8
+                2350|	[TimeseriesMetadata] of table2.site12.rack12.sensor12., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 12 endTime: 12 count: 1
+                2371|		[ChunkMetadata] offset=619, size=8
+                2379|	[TimeseriesMetadata] of table2.site12.rack12.sensor12.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                2447|		[ChunkMetadata] offset=637, size=8
+                2455|	[TimeseriesMetadata] of table2.site13.rack13.sensor13., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 13 endTime: 13 count: 1
+                2476|		[ChunkMetadata] offset=689, size=8
+                2484|	[TimeseriesMetadata] of table2.site13.rack13.sensor13.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 13 endTime: 13 count: 1 [minValue:16.25,maxValue:16.25,firstValue:16.25,lastValue:16.25,sumValue:16.25]
+                2552|		[ChunkMetadata] offset=707, size=8
+                2560|	[TimeseriesMetadata] of table2.site14.rack14.sensor14., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 14 endTime: 14 count: 1
+                2581|		[ChunkMetadata] offset=767, size=8
+                2589|	[TimeseriesMetadata] of table2.site14.rack14.sensor14.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 14 endTime: 14 count: 1 [minValue:17.5,maxValue:17.5,firstValue:17.5,lastValue:17.5,sumValue:17.5]
+                2657|		[ChunkMetadata] offset=785, size=8
+                2665|	[TimeseriesMetadata] of table2.site15.rack15.sensor15., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 15 endTime: 15 count: 1
+                2686|		[ChunkMetadata] offset=845, size=8
+                2694|	[TimeseriesMetadata] of table2.site15.rack15.sensor15.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 15 endTime: 15 count: 1 [minValue:18.75,maxValue:18.75,firstValue:18.75,lastValue:18.75,sumValue:18.75]
+                2762|		[ChunkMetadata] offset=863, size=8
+                2770|	[TimeseriesMetadata] of table2.site16.rack16.sensor16., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 16 endTime: 16 count: 1
+                2791|		[ChunkMetadata] offset=923, size=8
+                2799|	[TimeseriesMetadata] of table2.site16.rack16.sensor16.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                2867|		[ChunkMetadata] offset=941, size=8
+                2875|	[TimeseriesMetadata] of table2.site17.rack17.sensor17., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 17 endTime: 17 count: 1
+                2896|		[ChunkMetadata] offset=993, size=8
+                2904|	[TimeseriesMetadata] of table2.site17.rack17.sensor17.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 17 endTime: 17 count: 1 [minValue:21.25,maxValue:21.25,firstValue:21.25,lastValue:21.25,sumValue:21.25]
+                2972|		[ChunkMetadata] offset=1011, size=8
+                2980|	[TimeseriesMetadata] of table2.site18.rack18.sensor18., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 18 endTime: 18 count: 1
+                3001|		[ChunkMetadata] offset=1071, size=8
+                3009|	[TimeseriesMetadata] of table2.site18.rack18.sensor18.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 18 endTime: 18 count: 1 [minValue:22.5,maxValue:22.5,firstValue:22.5,lastValue:22.5,sumValue:22.5]
+                3077|		[ChunkMetadata] offset=1089, size=8
+                3085|	[TimeseriesMetadata] of table2.site19.rack19.sensor19., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 19 endTime: 19 count: 1
+                3106|		[ChunkMetadata] offset=1149, size=8
+                3114|	[TimeseriesMetadata] of table2.site19.rack19.sensor19.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 19 endTime: 19 count: 1 [minValue:23.75,maxValue:23.75,firstValue:23.75,lastValue:23.75,sumValue:23.75]
+                3182|		[ChunkMetadata] offset=1167, size=8
+                3190|	[TimeseriesMetadata] of table2.site3.rack3.sensor3., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 3 endTime: 3 count: 1
+                3211|		[ChunkMetadata] offset=1224, size=8
+                3219|	[TimeseriesMetadata] of table2.site3.rack3.sensor3.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 3 endTime: 3 count: 1 [minValue:3.75,maxValue:3.75,firstValue:3.75,lastValue:3.75,sumValue:3.75]
+                3287|		[ChunkMetadata] offset=1242, size=8
+                3295|	[TimeseriesMetadata] of table2.site4.rack4.sensor4., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 4 endTime: 4 count: 1
+                3316|		[ChunkMetadata] offset=1299, size=8
+                3324|	[TimeseriesMetadata] of table2.site4.rack4.sensor4.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                3392|		[ChunkMetadata] offset=1317, size=8
+                3400|	[TimeseriesMetadata] of table2.site5.rack5.sensor5., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 5 endTime: 5 count: 1
+                3421|		[ChunkMetadata] offset=1366, size=8
+                3429|	[TimeseriesMetadata] of table2.site5.rack5.sensor5.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 5 endTime: 5 count: 1 [minValue:6.25,maxValue:6.25,firstValue:6.25,lastValue:6.25,sumValue:6.25]
+                3497|		[ChunkMetadata] offset=1384, size=8
+                3505|	[TimeseriesMetadata] of table2.site6.rack6.sensor6., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 6 endTime: 6 count: 1
+                3526|		[ChunkMetadata] offset=1441, size=8
+                3534|	[TimeseriesMetadata] of table2.site6.rack6.sensor6.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 6 endTime: 6 count: 1 [minValue:7.5,maxValue:7.5,firstValue:7.5,lastValue:7.5,sumValue:7.5]
+                3602|		[ChunkMetadata] offset=1459, size=8
+                3610|	[TimeseriesMetadata] of table2.site7.rack7.sensor7., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 7 endTime: 7 count: 1
+                3631|		[ChunkMetadata] offset=1516, size=8
+                3639|	[TimeseriesMetadata] of table2.site7.rack7.sensor7.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 7 endTime: 7 count: 1 [minValue:8.75,maxValue:8.75,firstValue:8.75,lastValue:8.75,sumValue:8.75]
+                3707|		[ChunkMetadata] offset=1534, size=8
+                3715|	[TimeseriesMetadata] of table2.site8.rack8.sensor8., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 8 endTime: 8 count: 1
+                3736|		[ChunkMetadata] offset=1591, size=8
+                3744|	[TimeseriesMetadata] of table2.site8.rack8.sensor8.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 0 [minValue:0.0,maxValue:0.0,firstValue:0.0,lastValue:0.0,sumValue:0.0]
+                3812|		[ChunkMetadata] offset=1609, size=8
+                3820|	[TimeseriesMetadata] of table2.site9.rack9.sensor9., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 9 endTime: 9 count: 1
+                3841|		[ChunkMetadata] offset=1658, size=8
+                3849|	[TimeseriesMetadata] of table2.site9.rack9.sensor9.reading, tsDataType:DOUBLE, sizeWithoutChunkMetadata:68, startTime: 9 endTime: 9 count: 1 [minValue:11.25,maxValue:11.25,firstValue:11.25,lastValue:11.25,sumValue:11.25]
+                3917|		[ChunkMetadata] offset=1676, size=8
+                3925|	[MetadataIndexNode]
+                3925|		 childrenCnt=1
+                3926|		<, 1722>
+                3935|		endOffset=1825
+                3943|		nodeType=LEAF_MEASUREMENT
+                3944|	[MetadataIndexNode]
+                3944|		 childrenCnt=1
+                3945|		<, 1825>
+                3954|		endOffset=1930
+                3962|		nodeType=LEAF_MEASUREMENT
+                3963|	[MetadataIndexNode]
+                3963|		 childrenCnt=1
+                3964|		<, 1930>
+                3973|		endOffset=2035
+                3981|		nodeType=LEAF_MEASUREMENT
+                3982|	[MetadataIndexNode]
+                3982|		 childrenCnt=1
+                3983|		<, 2035>
+                3992|		endOffset=2140
+                4000|		nodeType=LEAF_MEASUREMENT
+                4001|	[MetadataIndexNode]
+                4001|		 childrenCnt=1
+                4002|		<, 2140>
+                4011|		endOffset=2245
+                4019|		nodeType=LEAF_MEASUREMENT
+                4020|	[MetadataIndexNode]
+                4020|		 childrenCnt=1
+                4021|		<, 2245>
+                4030|		endOffset=2350
+                4038|		nodeType=LEAF_MEASUREMENT
+                4039|	[MetadataIndexNode]
+                4039|		 childrenCnt=1
+                4040|		<, 2350>
+                4049|		endOffset=2455
+                4057|		nodeType=LEAF_MEASUREMENT
+                4058|	[MetadataIndexNode]
+                4058|		 childrenCnt=1
+                4059|		<, 2455>
+                4068|		endOffset=2560
+                4076|		nodeType=LEAF_MEASUREMENT
+                4077|	[MetadataIndexNode]
+                4077|		 childrenCnt=1
+                4078|		<, 2560>
+                4087|		endOffset=2665
+                4095|		nodeType=LEAF_MEASUREMENT
+                4096|	[MetadataIndexNode]
+                4096|		 childrenCnt=1
+                4097|		<, 2665>
+                4106|		endOffset=2770
+                4114|		nodeType=LEAF_MEASUREMENT
+                4115|	[MetadataIndexNode]
+                4115|		 childrenCnt=1
+                4116|		<, 2770>
+                4125|		endOffset=2875
+                4133|		nodeType=LEAF_MEASUREMENT
+                4134|	[MetadataIndexNode]
+                4134|		 childrenCnt=1
+                4135|		<, 2875>
+                4144|		endOffset=2980
+                4152|		nodeType=LEAF_MEASUREMENT
+                4153|	[MetadataIndexNode]
+                4153|		 childrenCnt=1
+                4154|		<, 2980>
+                4163|		endOffset=3085
+                4171|		nodeType=LEAF_MEASUREMENT
+                4172|	[MetadataIndexNode]
+                4172|		 childrenCnt=1
+                4173|		<, 3085>
+                4182|		endOffset=3190
+                4190|		nodeType=LEAF_MEASUREMENT
+                4191|	[MetadataIndexNode]
+                4191|		 childrenCnt=1
+                4192|		<, 3190>
+                4201|		endOffset=3295
+                4209|		nodeType=LEAF_MEASUREMENT
+                4210|	[MetadataIndexNode]
+                4210|		 childrenCnt=1
+                4211|		<, 3295>
+                4220|		endOffset=3400
+                4228|		nodeType=LEAF_MEASUREMENT
+                4229|	[MetadataIndexNode]
+                4229|		 childrenCnt=1
+                4230|		<, 3400>
+                4239|		endOffset=3505
+                4247|		nodeType=LEAF_MEASUREMENT
+                4248|	[MetadataIndexNode]
+                4248|		 childrenCnt=1
+                4249|		<, 3505>
+                4258|		endOffset=3610
+                4266|		nodeType=LEAF_MEASUREMENT
+                4267|	[MetadataIndexNode]
+                4267|		 childrenCnt=1
+                4268|		<, 3610>
+                4277|		endOffset=3715
+                4285|		nodeType=LEAF_MEASUREMENT
+                4286|	[MetadataIndexNode]
+                4286|		 childrenCnt=1
+                4287|		<, 3715>
+                4296|		endOffset=3820
+                4304|		nodeType=LEAF_MEASUREMENT
+                4305|	[MetadataIndexNode]
+                4305|		 childrenCnt=1
+                4306|		<, 3820>
+                4315|		endOffset=3925
+                4323|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                4324|	TableIndexRootCnt=2
+                4328|	[Table Name] table1, size=10
+                4338|	[MetadataIndexNode]
+                4338|		 childrenCnt=1
+                4339|		<table1, 3925>
+                4355|		endOffset=3944
+                4363|		nodeType=LEAF_DEVICE
+                4364|	[Table Name] table2, size=10
+                4374|	[MetadataIndexNode]
+                4374|		 childrenCnt=20
+                4375|		<table2.null.rack0.sensor0, 3944>
+                4406|		<table2..rack1.sensor1, 3963>
+                4437|		<table2.null.rack2.sensor2, 3982>
+                4472|		<table2.site10.rack10.sensor10, 4001>
+                4511|		<table2.site11.rack11.sensor11, 4020>
+                4550|		<table2.site12.rack12.sensor12, 4039>
+                4589|		<table2.site13.rack13.sensor13, 4058>
+                4628|		<table2.site14.rack14.sensor14, 4077>
+                4667|		<table2.site15.rack15.sensor15, 4096>
+                4706|		<table2.site16.rack16.sensor16, 4115>
+                4745|		<table2.site17.rack17.sensor17, 4134>
+                4784|		<table2.site18.rack18.sensor18, 4153>
+                4823|		<table2.site19.rack19.sensor19, 4172>
+                4862|		<table2.site3.rack3.sensor3, 4191>
+                4898|		<table2.site4.rack4.sensor4, 4210>
+                4934|		<table2.site5.rack5.sensor5, 4229>
+                4970|		<table2.site6.rack6.sensor6, 4248>
+                5006|		<table2.site7.rack7.sensor7, 4267>
+                5042|		<table2.site8.rack8.sensor8, 4286>
+                5078|		<table2.site9.rack9.sensor9, 4305>
+                5114|		endOffset=4324
+                5122|		nodeType=LEAF_DEVICE
+                5123|	TableSchemaCnt=2
+                5127|	[TableSchema] TableSchema{tableName='table2', columnSchemas=[[site,STRING,PLAIN,,UNCOMPRESSED], [rack,STRING,PLAIN,,UNCOMPRESSED], [sensor,STRING,PLAIN,,UNCOMPRESSED], [reading,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, TAG, FIELD]}, size=82
+                5219|	[TableSchema] TableSchema{tableName='table1', columnSchemas=[[value,INT64,PLAIN,,UNCOMPRESSED]], columnTypes=[FIELD]}, size=21
+                5250|	[Meta Offset] 1721
+                5258|	[Bloom Filter Size] bit vector byte array length=325
+                5262|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                5354|	[TsFileMetadataSize] 1030
+                5358|	[magic tail] TsFile
+                5364|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+table1
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[table1,3925]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,1722]
+table2
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[table2.null.rack0.sensor0,3944]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,1825]
+	└──────[table2..rack1.sensor1,3963]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,1930]
+	└──────[table2.null.rack2.sensor2,3982]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2035]
+	└──────[table2.site10.rack10.sensor10,4001]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2140]
+	└──────[table2.site11.rack11.sensor11,4020]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2245]
+	└──────[table2.site12.rack12.sensor12,4039]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2350]
+	└──────[table2.site13.rack13.sensor13,4058]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2455]
+	└──────[table2.site14.rack14.sensor14,4077]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2560]
+	└──────[table2.site15.rack15.sensor15,4096]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2665]
+	└──────[table2.site16.rack16.sensor16,4115]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2770]
+	└──────[table2.site17.rack17.sensor17,4134]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2875]
+	└──────[table2.site18.rack18.sensor18,4153]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,2980]
+	└──────[table2.site19.rack19.sensor19,4172]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3085]
+	└──────[table2.site3.rack3.sensor3,4191]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3190]
+	└──────[table2.site4.rack4.sensor4,4210]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3295]
+	└──────[table2.site5.rack5.sensor5,4229]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3400]
+	└──────[table2.site6.rack6.sensor6,4248]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3505]
+	└──────[table2.site7.rack7.sensor7,4267]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3610]
+	└──────[table2.site8.rack8.sensor8,4286]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3715]
+	└──────[table2.site9.rack9.sensor9,4305]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,3820]
+---------------------------------- TsFile Sketch End ----------------------------------

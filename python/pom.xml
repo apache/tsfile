@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.4.1-260806-SNAPSHOT</version>
+        <version>2.4.1-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-python</artifactId>
     <packaging>pom</packaging>
@@ -196,6 +196,9 @@
                                 <include>*.h</include>
                                 <include>*.cpp</include>
                             </includes>
+                            <excludes>
+                                <exclude>python_random_access_read_file.h</exclude>
+                            </excludes>
                         </fileset>
                         <fileset>
                             <directory>tsfile.egg-info</directory>

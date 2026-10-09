@@ -1,0 +1,2059 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.tsfile.read.common.type;
+
+import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.encoder.PlainEncoder;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.UnknownColumnTypeException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.common.block.TsBlockBuilder;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.mockito.Mockito;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.reflect.Array;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.Arrays;
+
+public class TypeTest {
+
+  private static final int OFFSET = 2;
+  private static final int VALUE_LENGTH = 10;
+
+  @Test
+  public void testWriteTsPrimitiveTypeToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260721, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(builder, (TsPrimitiveType) testCase[1]);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260721);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.reset(builder);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType binaryValue = new TsPrimitiveType.TsBinary(binary);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(builder, binaryValue);
+      Mockito.verify(builder).writeBinary(binary);
+      Mockito.reset(builder);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, new TsPrimitiveType.TsLong(1L));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteBytesToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260721, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      TsPrimitiveType value = (TsPrimitiveType) testCase[1];
+      byte[] bytes = new byte[OFFSET + type.calcTypeSize(value)];
+      type.toBytes(value, bytes, OFFSET);
+      type.write(builder, bytes, OFFSET);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260721);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.verify(builder, Mockito.times(4)).writeBinary(binary);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, new byte[Long.BYTES], 0);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteColumnValueToColumnBuilder() {
+    ColumnBuilder builder = Mockito.mock(ColumnBuilder.class);
+    Column column = Mockito.mock(Column.class);
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+
+    Mockito.when(column.getBoolean(0)).thenReturn(true);
+    Mockito.when(column.getInt(1)).thenReturn(1);
+    Mockito.when(column.getInt(2)).thenReturn(20260729);
+    Mockito.when(column.getLong(3)).thenReturn(2L);
+    Mockito.when(column.getLong(4)).thenReturn(3L);
+    Mockito.when(column.getFloat(5)).thenReturn(1.25F);
+    Mockito.when(column.getDouble(6)).thenReturn(2.5D);
+    Mockito.when(column.getBinary(7)).thenReturn(binary);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 0},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 2},
+      {TSDataType.INT64, 3},
+      {TSDataType.TIMESTAMP, 4},
+      {TSDataType.FLOAT, 5},
+      {TSDataType.DOUBLE, 6}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(builder, column, (int) testCase[1]);
+    }
+
+    Mockito.verify(builder).writeBoolean(true);
+    Mockito.verify(builder).writeInt(1);
+    Mockito.verify(builder).writeInt(20260729);
+    Mockito.verify(builder).writeLong(2L);
+    Mockito.verify(builder).writeLong(3L);
+    Mockito.verify(builder).writeFloat(1.25F);
+    Mockito.verify(builder).writeDouble(2.5D);
+    Mockito.reset(builder);
+
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(builder, column, 7);
+      Mockito.verify(builder).writeBinary(binary);
+      Mockito.reset(builder);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(builder, column, 0);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteTsPrimitiveTypeToArray() {
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsLong(2L)};
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true), new boolean[2]},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1), new int[2]},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260723, TSDataType.DATE), new int[2]},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260723, TSDataType.DATE), new LocalDate[2]},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L), new long[2]},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L), new long[2]},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F), new float[2]},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D), new double[2]},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary), new Binary[2]},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary), new Binary[2]},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary), new Binary[2]},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary), new Binary[2]},
+      {TSDataType.VECTOR, new TsPrimitiveType.TsVector(vector), new TsPrimitiveType[2][]}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      TsPrimitiveType expected = (TsPrimitiveType) testCase[1];
+      Object array = testCase[2];
+      type.write(expected, array, 1);
+      TsPrimitiveType actual = type.getValueAsTsPrimitiveType(array, 1);
+      Assert.assertEquals(expected, actual);
+      Assert.assertEquals(expected.getDataType(), actual.getDataType());
+    }
+
+    Type rowType = RowType.anonymousRow(IntType.getInstance(), LongType.getInstance());
+    TsPrimitiveType rowValue = new TsPrimitiveType.TsVector(vector);
+    TsPrimitiveType[][] rowArray = new TsPrimitiveType[2][];
+    rowType.write(rowValue, rowArray, 1);
+    Assert.assertEquals(rowValue, rowType.getValueAsTsPrimitiveType(rowArray, 1));
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).write(new TsPrimitiveType.TsInt(1), new int[1], 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteBatchDataToArray() {
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsLong(2L)};
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, new boolean[2]},
+      {TSDataType.INT32, 1, new int[2]},
+      {TSDataType.DATE, 20260723, new int[2]},
+      {TSDataType.DATE, 20260723, new LocalDate[2]},
+      {TSDataType.INT64, 2L, new long[2]},
+      {TSDataType.TIMESTAMP, 3L, new long[2]},
+      {TSDataType.FLOAT, 1.25F, new float[2]},
+      {TSDataType.DOUBLE, 2.5D, new double[2]},
+      {TSDataType.TEXT, binary, new Binary[2]},
+      {TSDataType.STRING, binary, new Binary[2]},
+      {TSDataType.BLOB, binary, new Binary[2]},
+      {TSDataType.OBJECT, binary, new Binary[2]},
+      {TSDataType.VECTOR, vector, new TsPrimitiveType[2][]}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(1L, testCase[1]);
+      Object array = testCase[2];
+      type.write(batchData, array, 1);
+      TsPrimitiveType actual = type.getValueAsTsPrimitiveType(array, 1);
+      Assert.assertEquals(batchData.currentTsPrimitiveType(), actual);
+      Assert.assertEquals(batchData.currentTsPrimitiveType().getDataType(), actual.getDataType());
+    }
+
+    Type rowType = RowType.anonymousRow(IntType.getInstance(), LongType.getInstance());
+    BatchData vectorBatchData = new BatchData(TSDataType.VECTOR);
+    vectorBatchData.putAnObject(1L, vector);
+    TsPrimitiveType[][] rowArray = new TsPrimitiveType[2][];
+    rowType.write(vectorBatchData, rowArray, 1);
+    Assert.assertEquals(
+        vectorBatchData.currentTsPrimitiveType(), rowType.getValueAsTsPrimitiveType(rowArray, 1));
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).write((BatchData) null, new Object[1], 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testGetValueAsTsPrimitiveType() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsInt(1), null};
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {false, true}, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new int[] {0, 1}, new TsPrimitiveType.TsInt(1)},
+      {
+        TSDataType.DATE,
+        new int[] {0, 20260717},
+        new TsPrimitiveType.TsInt(20260717, TSDataType.DATE)
+      },
+      {
+        TSDataType.DATE,
+        new LocalDate[] {null, LocalDate.of(2026, 7, 17)},
+        new TsPrimitiveType.TsInt(20260717, TSDataType.DATE)
+      },
+      {TSDataType.INT64, new long[] {0L, 1L}, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.TIMESTAMP, new long[] {0L, 1L}, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.FLOAT, new float[] {0.0F, 1.25F}, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new double[] {0.0D, 2.5D}, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new Binary[] {null, binary}, new TsPrimitiveType.TsBinary(binary)},
+      {
+        TSDataType.VECTOR,
+        new TsPrimitiveType[][] {null, vector},
+        new TsPrimitiveType.TsVector(vector)
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      TsPrimitiveType expected = (TsPrimitiveType) testCase[2];
+      TsPrimitiveType actual =
+          Type.fromTsDataType((TSDataType) testCase[0]).getValueAsTsPrimitiveType(testCase[1], 1);
+      Assert.assertEquals(expected, actual);
+      Assert.assertEquals(expected.getDataType(), actual.getDataType());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN)
+          .getValueAsTsPrimitiveType(new Object[] {new Object()}, 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testToBytes() {
+    byte[] valueBytes = new byte[16];
+
+    Type.fromTsDataType(TSDataType.BOOLEAN)
+        .toBytes(new TsPrimitiveType.TsBoolean(true), valueBytes, OFFSET);
+    Assert.assertTrue(BytesUtils.bytesToBool(valueBytes, OFFSET));
+
+    Type.fromTsDataType(TSDataType.DATE)
+        .toBytes(new TsPrimitiveType.TsInt(20260713, TSDataType.DATE), valueBytes, OFFSET);
+    Assert.assertEquals(20260713, BytesUtils.bytesToInt(valueBytes, OFFSET));
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP)
+        .toBytes(new TsPrimitiveType.TsLong(123456789L), valueBytes, OFFSET);
+    Assert.assertEquals(
+        123456789L, BytesUtils.bytesToLongFromOffset(valueBytes, Long.BYTES, OFFSET));
+
+    Type.fromTsDataType(TSDataType.FLOAT)
+        .toBytes(new TsPrimitiveType.TsFloat(1.25F), valueBytes, OFFSET);
+    Assert.assertEquals(1.25F, BytesUtils.bytesToFloat(valueBytes, OFFSET), 0);
+
+    Type.fromTsDataType(TSDataType.DOUBLE)
+        .toBytes(new TsPrimitiveType.TsDouble(2.5D), valueBytes, OFFSET);
+    Assert.assertEquals(2.5D, BytesUtils.bytesToDouble(valueBytes, OFFSET), 0);
+
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType)
+          .toBytes(new TsPrimitiveType.TsBinary(binary), valueBytes, OFFSET);
+      Assert.assertEquals(binary.getLength(), BytesUtils.bytesToInt(valueBytes, OFFSET));
+      Assert.assertArrayEquals(
+          binary.getValues(),
+          Arrays.copyOfRange(
+              valueBytes, OFFSET + Integer.BYTES, OFFSET + Integer.BYTES + binary.getLength()));
+    }
+  }
+
+  @Test
+  public void testCalcTypeSize() {
+    Assert.assertEquals(
+        Byte.BYTES,
+        Type.fromTsDataType(TSDataType.BOOLEAN).calcTypeSize(new TsPrimitiveType.TsBoolean(true)));
+    Assert.assertEquals(
+        Integer.BYTES,
+        Type.fromTsDataType(TSDataType.INT32).calcTypeSize(new TsPrimitiveType.TsInt(1)));
+    Assert.assertEquals(
+        Integer.BYTES,
+        Type.fromTsDataType(TSDataType.DATE)
+            .calcTypeSize(new TsPrimitiveType.TsInt(20260713, TSDataType.DATE)));
+    Assert.assertEquals(
+        Long.BYTES,
+        Type.fromTsDataType(TSDataType.INT64).calcTypeSize(new TsPrimitiveType.TsLong(1L)));
+    Assert.assertEquals(
+        Long.BYTES,
+        Type.fromTsDataType(TSDataType.TIMESTAMP).calcTypeSize(new TsPrimitiveType.TsLong(1L)));
+    Assert.assertEquals(
+        Float.BYTES,
+        Type.fromTsDataType(TSDataType.FLOAT).calcTypeSize(new TsPrimitiveType.TsFloat(1.0F)));
+    Assert.assertEquals(
+        Double.BYTES,
+        Type.fromTsDataType(TSDataType.DOUBLE).calcTypeSize(new TsPrimitiveType.TsDouble(1.0D)));
+
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Assert.assertEquals(
+          Integer.BYTES + binary.getLength(),
+          Type.fromTsDataType(dataType).calcTypeSize(new TsPrimitiveType.TsBinary(binary)));
+    }
+  }
+
+  @Test
+  public void testSerializeValue() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260716},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object value = testCase[1];
+      ByteBuffer buffer = ByteBuffer.allocate(64);
+      int bufferSerializedSize = type.serializeValue(value, buffer);
+      Assert.assertEquals(buffer.position(), bufferSerializedSize);
+
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      int serializedSize =
+          type.serialize(type.getTsPrimitiveType(value), new DataOutputStream(output));
+      byte[] expected = output.toByteArray();
+      Assert.assertEquals(expected.length, serializedSize);
+      Assert.assertArrayEquals(expected, Arrays.copyOf(buffer.array(), buffer.position()));
+
+      output.reset();
+      int streamSerializedSize = type.serializeValue(value, new DataOutputStream(output));
+      Assert.assertEquals(output.size(), streamSerializedSize);
+      Assert.assertArrayEquals(expected, output.toByteArray());
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).serializeValue(null, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType)
+            .serializeValue(null, new DataOutputStream(new ByteArrayOutputStream()));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testSerializeTimeValuePair() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260716, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      TimeValuePair timeValuePair = new TimeValuePair(123L, (TsPrimitiveType) testCase[1]);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+      int serializedSize = type.serialize(timeValuePair, new DataOutputStream(output));
+
+      Assert.assertEquals(output.size(), serializedSize);
+      ByteBuffer valueBuffer = ByteBuffer.wrap(output.toByteArray());
+      valueBuffer.getLong();
+      Assert.assertEquals(timeValuePair.getValue(), type.deserialize(valueBuffer));
+      Assert.assertEquals(output.size(), valueBuffer.position());
+
+      ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+      TimeValuePair deserialized = type.deserializeTVPair(buffer);
+      Assert.assertEquals(timeValuePair, deserialized);
+      Assert.assertEquals(output.size(), buffer.position());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR)
+          .serialize(
+              new TimeValuePair(123L, new TsPrimitiveType.TsVector(new TsPrimitiveType[0])),
+              new DataOutputStream(new ByteArrayOutputStream()));
+      Assert.fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testSerializeBatchDataReturnsSerializedSize() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260722},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary},
+      {
+        TSDataType.VECTOR,
+        new TsPrimitiveType[] {
+          null, new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsBinary(binary)
+        }
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      BatchData batchData = new BatchData((TSDataType) testCase[0]);
+      batchData.putAnObject(1L, testCase[1]);
+      batchData.putAnObject(2L, testCase[1]);
+
+      for (boolean isDesc : new boolean[] {false, true}) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        int serializedSize = type.serialize(batchData, new DataOutputStream(output), isDesc);
+        Assert.assertEquals(output.size(), serializedSize);
+      }
+    }
+  }
+
+  @Test
+  public void testDeserializeBatchData() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260722},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      BatchData source = new BatchData(dataType);
+      source.putAnObject(1L, testCase[1]);
+      source.putAnObject(2L, testCase[1]);
+
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serialize(source, new DataOutputStream(output), false);
+      ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+      BatchData actual = new BatchData(dataType);
+      type.deserialize(buffer, actual, source.length());
+
+      Assert.assertEquals(source.length(), actual.length());
+      for (int i = 0; i < source.length(); i++) {
+        Assert.assertEquals(source.getTimeByIndex(i), actual.getTimeByIndex(i));
+        Assert.assertEquals(
+            source.getValueInTimestamp(source.getTimeByIndex(i)),
+            actual.getValueInTimestamp(actual.getTimeByIndex(i)));
+      }
+      Assert.assertEquals(output.size(), buffer.position());
+    }
+
+    Type vectorType = Type.fromTsDataType(TSDataType.VECTOR);
+    TsPrimitiveType[] vector = {
+      null, new TsPrimitiveType.TsInt(1), new TsPrimitiveType.TsBinary(binary)
+    };
+    BatchData vectorSource = new BatchData(TSDataType.VECTOR);
+    vectorSource.putVector(1L, vector);
+    ByteArrayOutputStream vectorOutput = new ByteArrayOutputStream();
+    vectorType.serialize(vectorSource, new DataOutputStream(vectorOutput), false);
+    BatchData vectorActual = new BatchData(TSDataType.VECTOR);
+    ByteBuffer vectorBuffer = ByteBuffer.wrap(vectorOutput.toByteArray());
+    vectorType.deserialize(vectorBuffer, vectorActual, 1);
+    Assert.assertEquals(1, vectorActual.length());
+    Assert.assertEquals(1L, vectorActual.getTimeByIndex(0));
+    Assert.assertArrayEquals(vector, vectorActual.getVectorByIndex(0));
+    Assert.assertEquals(vectorOutput.size(), vectorBuffer.position());
+  }
+
+  @Test
+  public void testDeserializeValue() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 20260716},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 3L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, binary},
+      {TSDataType.STRING, binary},
+      {TSDataType.BLOB, binary},
+      {TSDataType.OBJECT, binary}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serializeValue(testCase[1], new DataOutputStream(output));
+      Object[] values = new Object[2];
+      type.deserialize(values, 1, ByteBuffer.wrap(output.toByteArray()));
+      Assert.assertEquals(testCase[1], values[1]);
+
+      values[1] = null;
+      type.deserialize(values, 1, new ByteArrayInputStream(output.toByteArray()));
+      Assert.assertEquals(testCase[1], values[1]);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).deserialize(new Object[1], 0, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType).deserialize(ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType)
+            .deserialize(new Object[1], 0, new ByteArrayInputStream(new byte[0]));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testSerializeArrayToByteBuffer() throws IOException {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {true, false}},
+      {TSDataType.INT32, new int[] {1, 2}},
+      {TSDataType.DATE, new int[] {20260716, 20260717}},
+      {TSDataType.INT64, new long[] {3L, 4L}},
+      {TSDataType.TIMESTAMP, new long[] {5L, 6L}},
+      {TSDataType.FLOAT, new float[] {1.25F, 2.5F}},
+      {TSDataType.DOUBLE, new double[] {2.5D, 5.0D}},
+      {TSDataType.TEXT, new Binary[] {binary, null}},
+      {TSDataType.STRING, new Binary[] {binary, null}},
+      {TSDataType.BLOB, new Binary[] {binary, null}},
+      {TSDataType.OBJECT, new Binary[] {binary, null}}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object array = testCase[1];
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      type.serializeArray(array, 2, new DataOutputStream(output));
+
+      ByteBuffer buffer = ByteBuffer.allocate(type.serializedSize(array, 2));
+      type.serializeArray(array, 2, buffer);
+      Assert.assertArrayEquals(
+          output.toByteArray(), Arrays.copyOf(buffer.array(), buffer.position()));
+    }
+
+    LocalDate[] dates = {LocalDate.of(2026, 7, 16), null};
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    Type dateType = Type.fromTsDataType(TSDataType.DATE);
+    dateType.serializeArray(dates, dates.length, new DataOutputStream(output));
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES * dates.length);
+    dateType.serializeArray(dates, dates.length, buffer);
+    Assert.assertArrayEquals(output.toByteArray(), buffer.array());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).serializeArray(new Object[0], 0, ByteBuffer.allocate(0));
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testSerializedSizeRange() {
+    Assert.assertEquals(
+        Integer.BYTES * 2,
+        Type.fromTsDataType(TSDataType.INT32).serializedSize(new int[] {1, 2, 3}, 1, 3));
+
+    Binary[] binaries = {
+      new Binary("excluded", StandardCharsets.UTF_8), null, new Binary("x", StandardCharsets.UTF_8)
+    };
+    int expectedSize = Byte.BYTES + Byte.BYTES + Integer.BYTES + 1;
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type type = Type.fromTsDataType(dataType);
+      Assert.assertEquals(expectedSize, type.serializedSize(binaries, 1, 3));
+      Assert.assertEquals(0, type.serializedSize(binaries, 2, 2));
+    }
+  }
+
+  @Test
+  public void testGetDataPoint() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, "true", true},
+      {TSDataType.INT32, "1", 1},
+      {TSDataType.DATE, "2026-07-15", 20260715},
+      {TSDataType.INT64, "2", 2L},
+      {TSDataType.TIMESTAMP, "3", 3L},
+      {TSDataType.FLOAT, "1.25", 1.25F},
+      {TSDataType.DOUBLE, "2.5", 2.5D},
+      {TSDataType.TEXT, "text", new Binary("text", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.STRING, "string", new Binary("string", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.BLOB, "blob", new Binary("blob", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.OBJECT, "object", new Binary("object", TSFileConfig.STRING_CHARSET)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      String value = (String) testCase[1];
+      Object expectedValue = testCase[2];
+
+      DataPoint typeDataPoint = Type.fromTsDataType(dataType).getDataPoint("s", value);
+      Assert.assertEquals("s", typeDataPoint.getMeasurementId());
+      Assert.assertEquals(expectedValue, typeDataPoint.getValue());
+
+      DataPoint factoryDataPoint = DataPoint.getDataPoint(dataType, "s", value);
+      Assert.assertEquals(typeDataPoint.getClass(), factoryDataPoint.getClass());
+      Assert.assertEquals(expectedValue, factoryDataPoint.getValue());
+    }
+
+    try {
+      DataPoint.getDataPoint(TSDataType.INT32, "s", "invalid");
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+
+    try {
+      DataPoint.getDataPoint(TSDataType.VECTOR, "s", "1");
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testGetDataPointFromLong() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 1},
+      {TSDataType.INT64, 1L},
+      {TSDataType.TIMESTAMP, 1L},
+      {TSDataType.FLOAT, 1.0F},
+      {TSDataType.DOUBLE, 1.0D},
+      {TSDataType.TEXT, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.STRING, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.BLOB, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.OBJECT, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.VECTOR, new Binary("1", TSFileConfig.STRING_CHARSET)},
+      {TSDataType.UNKNOWN, new Binary("1", TSFileConfig.STRING_CHARSET)}
+    };
+
+    for (Object[] testCase : testCases) {
+      DataPoint dataPoint = Type.fromTsDataType((TSDataType) testCase[0]).getDataPoint("s", 1L);
+      Assert.assertEquals("s", dataPoint.getMeasurementId());
+      Assert.assertEquals(testCase[1], dataPoint.getValue());
+    }
+  }
+
+  @Test
+  public void testWriteValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, true, false);
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, 1, false);
+    Mockito.verify(writer).write(2L, 1, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DATE).write(writer, 3L, null, true);
+    Mockito.verify(writer).write(3L, 0, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 4L, 2L, false);
+    Mockito.verify(writer).write(4L, 2L, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 5L, 1.25F, false);
+    Mockito.verify(writer).write(5L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 6L, 2.5D, false);
+    Mockito.verify(writer).write(6L, 2.5D, false);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 7L, binary, false);
+      Mockito.verify(writer).write(7L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 8L, null, true);
+    Mockito.verify(writer).write(8L, false, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT64).write(writer, 9L, null, true);
+    Mockito.verify(writer).write(9L, 0L, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 10L, null, true);
+    Mockito.verify(writer).write(10L, 0.0F, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 11L, null, true);
+    Mockito.verify(writer).write(11L, 0.0D, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TEXT).write(writer, 12L, null, true);
+    Mockito.verify(writer).write(12L, Binary.EMPTY_VALUE, true);
+    Mockito.reset(writer);
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 13L, null, true);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteTsPrimitiveValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, new TsPrimitiveType.TsBoolean(true));
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, new TsPrimitiveType.TsInt(1));
+    Mockito.verify(writer).write(2L, 1, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 3L, new TsPrimitiveType.TsLong(2L));
+    Mockito.verify(writer).write(3L, 2L, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 4L, new TsPrimitiveType.TsFloat(1.25F));
+    Mockito.verify(writer).write(4L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 5L, new TsPrimitiveType.TsDouble(2.5D));
+    Mockito.verify(writer).write(5L, 2.5D, false);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 6L, new TsPrimitiveType.TsBinary(binary));
+      Mockito.verify(writer).write(6L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 7L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(7L, Integer.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 8L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(8L, Long.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 9L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(9L, Float.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 10L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(10L, Double.MAX_VALUE, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 11L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(11L, false, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TEXT).write(writer, 12L, (TsPrimitiveType) null);
+    Mockito.verify(writer).write(12L, Binary.EMPTY_VALUE, true);
+    Mockito.reset(writer);
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 13L, (TsPrimitiveType) null);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteTabletValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN)
+        .write(writer, 1L, new boolean[] {false, true}, 1, false);
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, new int[] {0, 1}, 1, false);
+    Mockito.verify(writer).write(2L, 1, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DATE)
+        .write(
+            writer,
+            3L,
+            new LocalDate[] {LocalDate.of(2026, 7, 14), LocalDate.of(2026, 7, 15)},
+            1,
+            false);
+    Mockito.verify(writer).write(3L, 20260715, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 4L, new long[] {0L, 2L}, 1, false);
+    Mockito.verify(writer).write(4L, 2L, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 5L, new float[] {0F, 1.25F}, 1, false);
+    Mockito.verify(writer).write(5L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 6L, new double[] {0D, 2.5D}, 1, false);
+    Mockito.verify(writer).write(6L, 2.5D, false);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Binary[] binaries = {Binary.EMPTY_VALUE, binary};
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 7L, binaries, 1, false);
+      Mockito.verify(writer).write(7L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, new long[] {1L}, 0, false);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteTsBlockValueChunk() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+    Column column = Mockito.mock(Column.class);
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Mockito.when(column.getBoolean(1)).thenReturn(true);
+    Mockito.when(column.getInt(1)).thenReturn(1);
+    Mockito.when(column.getLong(1)).thenReturn(2L);
+    Mockito.when(column.getFloat(1)).thenReturn(1.25F);
+    Mockito.when(column.getDouble(1)).thenReturn(2.5D);
+    Mockito.when(column.getBinary(1)).thenReturn(binary);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, column, 1, false);
+    Mockito.verify(writer).write(1L, true, false);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT32, TSDataType.DATE}) {
+      Type.fromTsDataType(dataType).write(writer, 2L, column, 1, false);
+      Mockito.verify(writer).write(2L, 1, false);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT64, TSDataType.TIMESTAMP}) {
+      Type.fromTsDataType(dataType).write(writer, 3L, column, 1, false);
+      Mockito.verify(writer).write(3L, 2L, false);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 4L, column, 1, false);
+    Mockito.verify(writer).write(4L, 1.25F, false);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 5L, column, 1, false);
+    Mockito.verify(writer).write(5L, 2.5D, false);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB}) {
+      Type.fromTsDataType(dataType).write(writer, 6L, column, 1, false);
+      Mockito.verify(writer).write(6L, binary, false);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 7L, column, 1, true);
+    Mockito.verify(writer).write(7L, 0, true);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.OBJECT, TSDataType.VECTOR}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 8L, column, 1, false);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteTsBlockValueChunkBatch() {
+    ValueChunkWriter writer = Mockito.mock(ValueChunkWriter.class);
+    Column column = Mockito.mock(Column.class);
+    long[] times = {1L, 2L};
+    boolean[] isNull = {false, true};
+    boolean[] booleans = {true, false};
+    int[] ints = {1, 0};
+    long[] longs = {2L, 0L};
+    float[] floats = {1.25F, 0F};
+    double[] doubles = {2.5D, 0D};
+    Binary[] binaries = {new Binary("value", TSFileConfig.STRING_CHARSET), Binary.EMPTY_VALUE};
+    Mockito.when(column.isNull()).thenReturn(isNull);
+    Mockito.when(column.getBooleans()).thenReturn(booleans);
+    Mockito.when(column.getInts()).thenReturn(ints);
+    Mockito.when(column.getLongs()).thenReturn(longs);
+    Mockito.when(column.getFloats()).thenReturn(floats);
+    Mockito.when(column.getDoubles()).thenReturn(doubles);
+    Mockito.when(column.getBinaries()).thenReturn(binaries);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, booleans, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT32, TSDataType.DATE}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, ints, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT64, TSDataType.TIMESTAMP}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, longs, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, floats, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, times, column, 1, 1);
+    Mockito.verify(writer).write(times, doubles, isNull, 1, 1);
+    Mockito.reset(writer);
+
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, times, column, 1, 1);
+      Mockito.verify(writer).write(times, binaries, isNull, 1, 1);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, times, column, 1, 1);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteNonAlignedTabletValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Type.fromTsDataType(TSDataType.BOOLEAN).write(writer, 1L, new boolean[] {false, true}, 1);
+    Mockito.verify(writer).write(1L, true);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.INT32).write(writer, 2L, new int[] {0, 1}, 1);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DATE)
+        .write(
+            writer, 3L, new LocalDate[] {LocalDate.of(2026, 7, 14), LocalDate.of(2026, 7, 15)}, 1);
+    Mockito.verify(writer).write(3L, 20260715);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.TIMESTAMP).write(writer, 4L, new long[] {0L, 2L}, 1);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.FLOAT).write(writer, 5L, new float[] {0F, 1.25F}, 1);
+    Mockito.verify(writer).write(5L, 1.25F);
+    Mockito.reset(writer);
+
+    Type.fromTsDataType(TSDataType.DOUBLE).write(writer, 6L, new double[] {0D, 2.5D}, 1);
+    Mockito.verify(writer).write(6L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Binary[] binaries = {Binary.EMPTY_VALUE, binary};
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 7L, binaries, 1);
+      Mockito.verify(writer).write(7L, binary);
+      Mockito.reset(writer);
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).write(writer, 8L, new long[] {1L}, 0);
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testWriteNonAlignedValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1L, true},
+      {TSDataType.INT32, 2L, 1},
+      {TSDataType.DATE, 3L, 20260717},
+      {TSDataType.INT64, 4L, 2L},
+      {TSDataType.TIMESTAMP, 5L, 3L},
+      {TSDataType.FLOAT, 6L, 1.25F},
+      {TSDataType.DOUBLE, 7L, 2.5D}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0]).write(writer, (long) testCase[1], testCase[2]);
+    }
+
+    Mockito.verify(writer).write(1L, true);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.verify(writer).write(3L, 20260717);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.verify(writer).write(5L, 3L);
+    Mockito.verify(writer).write(6L, 1.25F);
+    Mockito.verify(writer).write(7L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 8L, binary);
+      Mockito.verify(writer).write(8L, binary);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 9L, 1L);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteTsPrimitiveTypeToNonAlignedValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1L, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, 2L, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, 3L, new TsPrimitiveType.TsInt(20260717, TSDataType.DATE)},
+      {TSDataType.INT64, 4L, new TsPrimitiveType.TsLong(2L)},
+      {TSDataType.TIMESTAMP, 5L, new TsPrimitiveType.TsLong(3L)},
+      {TSDataType.FLOAT, 6L, new TsPrimitiveType.TsFloat(1.25F)},
+      {TSDataType.DOUBLE, 7L, new TsPrimitiveType.TsDouble(2.5D)}
+    };
+    for (Object[] testCase : testCases) {
+      Type.fromTsDataType((TSDataType) testCase[0])
+          .write(writer, (long) testCase[1], (TsPrimitiveType) testCase[2]);
+    }
+
+    Mockito.verify(writer).write(1L, true);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.verify(writer).write(3L, 20260717);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.verify(writer).write(5L, 3L);
+    Mockito.verify(writer).write(6L, 1.25F);
+    Mockito.verify(writer).write(7L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    TsPrimitiveType binaryValue = new TsPrimitiveType.TsBinary(binary);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Type.fromTsDataType(dataType).write(writer, 8L, binaryValue);
+      Mockito.verify(writer).write(8L, binary);
+      Mockito.reset(writer);
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 9L, new TsPrimitiveType.TsLong(1L));
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testWriteBatchDataToNonAlignedValueChunk() {
+    ChunkWriterImpl writer = Mockito.mock(ChunkWriterImpl.class);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1L, true},
+      {TSDataType.INT32, 2L, 1},
+      {TSDataType.DATE, 3L, 20260717},
+      {TSDataType.INT64, 4L, 2L},
+      {TSDataType.TIMESTAMP, 5L, 3L},
+      {TSDataType.FLOAT, 6L, 1.25F},
+      {TSDataType.DOUBLE, 7L, 2.5D}
+    };
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      BatchData data = new BatchData(dataType);
+      data.putAnObject(0L, testCase[2]);
+      Type.fromTsDataType(dataType).write(writer, (long) testCase[1], data);
+    }
+
+    Mockito.verify(writer).write(1L, true);
+    Mockito.verify(writer).write(2L, 1);
+    Mockito.verify(writer).write(3L, 20260717);
+    Mockito.verify(writer).write(4L, 2L);
+    Mockito.verify(writer).write(5L, 3L);
+    Mockito.verify(writer).write(6L, 1.25F);
+    Mockito.verify(writer).write(7L, 2.5D);
+    Mockito.reset(writer);
+
+    Binary binary = new Binary("value", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      BatchData data = new BatchData(dataType);
+      data.putAnObject(0L, binary);
+      Type.fromTsDataType(dataType).write(writer, 8L, data);
+      Mockito.verify(writer).write(8L, binary);
+      Mockito.reset(writer);
+    }
+
+    BatchData vectorData = new BatchData(TSDataType.VECTOR);
+    vectorData.putAnObject(0L, new TsPrimitiveType[] {new TsPrimitiveType.TsLong(1L)});
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).write(writer, 9L, vectorData);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testToString() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, "true"},
+      {TSDataType.INT32, 1, "1"},
+      {TSDataType.DATE, 20260714, "20260714"},
+      {TSDataType.INT64, 2L, "2"},
+      {TSDataType.TIMESTAMP, 3L, "3"},
+      {TSDataType.FLOAT, 1.25F, "1.25"},
+      {TSDataType.DOUBLE, 2.5D, "2.5"},
+      {TSDataType.TEXT, new Binary("text", StandardCharsets.UTF_8), "text"},
+      {TSDataType.STRING, new Binary("string", StandardCharsets.UTF_8), "string"},
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23, (byte) 0xFF}), "0x0123ff"},
+      {TSDataType.OBJECT, new Binary(BytesUtils.longToBytes(1L)), "(Object) 1 B"}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Field field = Field.getField(testCase[1], dataType);
+      Assert.assertEquals(testCase[2], Type.fromTsDataType(dataType).toString(field));
+      Assert.assertEquals(testCase[2], field.getStringValue());
+    }
+
+    Assert.assertEquals("null", new Field(null).getStringValue());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new Field(dataType).getStringValue();
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testGetValueFromField() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, true},
+      {TSDataType.INT32, 1, 1},
+      {TSDataType.DATE, 20260714, LocalDate.of(2026, 7, 14)},
+      {TSDataType.INT64, 2L, 2L},
+      {TSDataType.TIMESTAMP, 3L, 3L},
+      {TSDataType.FLOAT, 1.25F, 1.25F},
+      {TSDataType.DOUBLE, 2.5D, 2.5D},
+      {
+        TSDataType.TEXT,
+        new Binary("text", StandardCharsets.UTF_8),
+        new Binary("text", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.STRING,
+        new Binary("string", StandardCharsets.UTF_8),
+        new Binary("string", StandardCharsets.UTF_8)
+      },
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23}), new Binary(new byte[] {0x01, 0x23})},
+      {TSDataType.OBJECT, new Binary(BytesUtils.longToBytes(1L)), "(Object) 1 B"}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Type type = Type.fromTsDataType(dataType);
+      Field typeField = type.getField(testCase[1]);
+      Assert.assertEquals(dataType, typeField.getDataType());
+      Assert.assertEquals(testCase[2], type.getValue(typeField));
+
+      Field field = Field.getField(testCase[1], dataType);
+      Assert.assertEquals(dataType, field.getDataType());
+      Assert.assertEquals(testCase[2], type.getValue(field));
+      Assert.assertEquals(testCase[2], field.getObjectValue(dataType));
+    }
+
+    Assert.assertNull(Field.getField(null, TSDataType.INT32));
+    Assert.assertNull(new Field(null).getObjectValue(TSDataType.INT32));
+    Assert.assertEquals("1", Field.getField(1, TSDataType.INT32).getObjectValue(TSDataType.OBJECT));
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new Field(dataType).getObjectValue(dataType);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType).getField(new Object());
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testSetToField() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true), true},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1), 1},
+      {
+        TSDataType.DATE,
+        new TsPrimitiveType.TsInt(20260714, TSDataType.DATE),
+        LocalDate.of(2026, 7, 14)
+      },
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(2L), 2L},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(3L), 3L},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.25F), 1.25F},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(2.5D), 2.5D},
+      {
+        TSDataType.TEXT,
+        new TsPrimitiveType.TsBinary(new Binary("text", StandardCharsets.UTF_8)),
+        new Binary("text", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.STRING,
+        new TsPrimitiveType.TsBinary(new Binary("string", StandardCharsets.UTF_8)),
+        new Binary("string", StandardCharsets.UTF_8)
+      },
+      {
+        TSDataType.BLOB,
+        new TsPrimitiveType.TsBinary(new Binary(new byte[] {0x01, 0x23})),
+        new Binary(new byte[] {0x01, 0x23})
+      },
+      {
+        TSDataType.OBJECT,
+        new TsPrimitiveType.TsBinary(new Binary(BytesUtils.longToBytes(1L))),
+        "(Object) 1 B"
+      }
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      TsPrimitiveType from = (TsPrimitiveType) testCase[1];
+      Type type = Type.fromTsDataType(dataType);
+
+      Field directTarget = new Field(dataType);
+      type.setTo(from, directTarget);
+      Assert.assertEquals(testCase[2], type.getValue(directTarget));
+
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(1L, from.getValue());
+      Field batchTarget = new Field(dataType);
+      type.setTo(batchData, batchTarget);
+      Assert.assertEquals(testCase[2], type.getValue(batchTarget));
+
+      if (from.getDataType() == dataType) {
+        Field factoryTarget = new Field(dataType);
+        Field.setTsPrimitiveValue(from, factoryTarget);
+        Assert.assertEquals(testCase[2], type.getValue(factoryTarget));
+      }
+    }
+
+    TsPrimitiveType vector = new TsPrimitiveType.TsVector(new TsPrimitiveType[0]);
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).setTo(vector, new Field(dataType));
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+
+    try {
+      Field.setTsPrimitiveValue(vector, new Field(TSDataType.VECTOR));
+      Assert.fail("Expected UnSupportedDataTypeException");
+    } catch (UnSupportedDataTypeException ignored) {
+      // Expected.
+    }
+
+    BatchData vectorBatchData = new BatchData(TSDataType.VECTOR);
+    vectorBatchData.putVector(1L, new TsPrimitiveType[] {new TsPrimitiveType.TsInt(1)});
+    Field vectorTarget = new Field(TSDataType.INT32);
+    Type.fromTsDataType(TSDataType.VECTOR).setTo(vectorBatchData, vectorTarget);
+    Assert.assertEquals(1, vectorTarget.getIntV());
+  }
+
+  @Test
+  public void testSetToArray() {
+    Column column = Mockito.mock(Column.class);
+    Binary binary = new Binary("value", TSFileConfig.STRING_CHARSET);
+    Mockito.when(column.getBoolean(1)).thenReturn(true);
+    Mockito.when(column.getInt(1)).thenReturn(1);
+    Mockito.when(column.getInt(2)).thenReturn(20260715);
+    Mockito.when(column.getLong(1)).thenReturn(2L);
+    Mockito.when(column.getFloat(1)).thenReturn(1.25F);
+    Mockito.when(column.getDouble(1)).thenReturn(2.5D);
+    Mockito.when(column.getBinary(1)).thenReturn(binary);
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, 1, true},
+      {TSDataType.INT32, 1, 1},
+      {TSDataType.DATE, 2, LocalDate.of(2026, 7, 15)},
+      {TSDataType.INT64, 1, 2L},
+      {TSDataType.TIMESTAMP, 1, 2L},
+      {TSDataType.FLOAT, 1, 1.25F},
+      {TSDataType.DOUBLE, 1, 2.5D},
+      {TSDataType.TEXT, 1, binary},
+      {TSDataType.STRING, 1, binary},
+      {TSDataType.BLOB, 1, binary},
+      {TSDataType.OBJECT, 1, binary},
+      {TSDataType.VECTOR, 1, 2L}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object target = type.createArray(1);
+      type.setTo(column, (int) testCase[1], target, 0);
+      Assert.assertEquals(testCase[2], Array.get(target, 0));
+    }
+
+    Object[][] columnTestCases = {
+      {TSDataType.BOOLEAN, 1, true, new boolean[1]},
+      {TSDataType.INT32, 1, 1, new int[1]},
+      {TSDataType.DATE, 2, 20260715, new int[1]},
+      {TSDataType.INT64, 1, 2L, new long[1]},
+      {TSDataType.TIMESTAMP, 1, 2L, new long[1]},
+      {TSDataType.FLOAT, 1, 1.25F, new float[1]},
+      {TSDataType.DOUBLE, 1, 2.5D, new double[1]},
+      {TSDataType.TEXT, 1, binary, new Binary[1]},
+      {TSDataType.STRING, 1, binary, new Binary[1]},
+      {TSDataType.BLOB, 1, binary, new Binary[1]},
+      {TSDataType.OBJECT, 1, binary, new Binary[1]}
+    };
+
+    for (Object[] testCase : columnTestCases) {
+      Column targetColumn = Mockito.mock(Column.class);
+      Object target = testCase[3];
+      if (target instanceof boolean[]) {
+        Mockito.when(targetColumn.getBooleans()).thenReturn((boolean[]) target);
+      } else if (target instanceof int[]) {
+        Mockito.when(targetColumn.getInts()).thenReturn((int[]) target);
+      } else if (target instanceof long[]) {
+        Mockito.when(targetColumn.getLongs()).thenReturn((long[]) target);
+      } else if (target instanceof float[]) {
+        Mockito.when(targetColumn.getFloats()).thenReturn((float[]) target);
+      } else if (target instanceof double[]) {
+        Mockito.when(targetColumn.getDoubles()).thenReturn((double[]) target);
+      } else {
+        Mockito.when(targetColumn.getBinaries()).thenReturn((Binary[]) target);
+      }
+      Type.fromTsDataType((TSDataType) testCase[0])
+          .setTo(column, (int) testCase[1], targetColumn, 0);
+      Assert.assertEquals(testCase[2], Array.get(target, 0));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.VECTOR).setTo(column, 1, column, 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).setTo(column, 1, new Object[1], 0);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testSetNullToBinaryColumnRange() {
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Binary[] values = {Binary.EMPTY_VALUE, Binary.EMPTY_VALUE};
+      Column column = Mockito.mock(Column.class);
+      Mockito.when(column.getBinaries()).thenReturn(values);
+
+      Type.fromTsDataType(dataType).setTo(null, column, 0, values.length);
+
+      Assert.assertArrayEquals(new Binary[] {null, null}, values);
+    }
+  }
+
+  @Test
+  public void testDateAddValueWithIntArray() throws IOException {
+    Type dateType = Type.fromTsDataType(TSDataType.DATE);
+    int[] values = new int[2];
+
+    dateType.addValue(0, LocalDate.of(2026, 7, 14), values);
+    dateType.addValue(1, null, values);
+
+    Assert.assertArrayEquals(new int[] {20260714, DateUtils.EMPTY_DATE_INT}, values);
+
+    dateType.addValue(0, 20260715, values);
+    Assert.assertEquals(20260715, values[0]);
+
+    Column column = Mockito.mock(Column.class);
+    Mockito.when(column.getInt(0)).thenReturn(20260715);
+    dateType.setTo(column, 0, values, 0);
+    Assert.assertEquals(20260715, values[0]);
+
+    LocalDate[] localDates = new LocalDate[2];
+    dateType.copyArrayElement(values, 0, localDates, 0);
+    dateType.copyArrayElement(localDates, 0, values, 0);
+    Assert.assertEquals(LocalDate.of(2026, 7, 15), localDates[0]);
+    Assert.assertEquals(20260715, values[0]);
+    Assert.assertTrue(
+        dateType.arrayEquals(
+            values, new LocalDate[] {LocalDate.of(2026, 7, 15), LocalDate.of(1000, 1, 1)}, 2));
+
+    Object copied = dateType.arrayCopyOf(values, 3);
+    Assert.assertTrue(copied instanceof int[]);
+    Assert.assertArrayEquals(new int[] {20260715, DateUtils.EMPTY_DATE_INT, 0}, (int[]) copied);
+    Assert.assertEquals(RamUsageEstimator.sizeOf(values), dateType.estimateArraySize(values));
+
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    dateType.serializeArray(values, values.length, new DataOutputStream(output));
+    ByteBuffer buffer = ByteBuffer.wrap(output.toByteArray());
+    Assert.assertEquals(20260715, buffer.getInt());
+    Assert.assertEquals(DateUtils.EMPTY_DATE_INT, buffer.getInt());
+  }
+
+  @Test
+  public void testAddPoint() {
+    ResultSet resultSet = Mockito.mock(ResultSet.class);
+    IDeviceID deviceID = Mockito.mock(IDeviceID.class);
+    Mockito.when(resultSet.getBoolean("value")).thenReturn(true);
+    Mockito.when(resultSet.getInt("value")).thenReturn(1);
+    Mockito.when(resultSet.getLong("value")).thenReturn(2L);
+    Mockito.when(resultSet.getFloat("value")).thenReturn(1.25F);
+    Mockito.when(resultSet.getDouble("value")).thenReturn(2.5D);
+    Mockito.when(resultSet.getString("value")).thenReturn("text");
+    Mockito.when(resultSet.getBinary("value")).thenReturn(new byte[] {0x01, 0x23});
+
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true},
+      {TSDataType.INT32, 1},
+      {TSDataType.DATE, 1},
+      {TSDataType.INT64, 2L},
+      {TSDataType.TIMESTAMP, 2L},
+      {TSDataType.FLOAT, 1.25F},
+      {TSDataType.DOUBLE, 2.5D},
+      {TSDataType.TEXT, new Binary("text", StandardCharsets.UTF_8)},
+      {TSDataType.STRING, new Binary("text", StandardCharsets.UTF_8)},
+      {TSDataType.BLOB, new Binary(new byte[] {0x01, 0x23})},
+      {TSDataType.OBJECT, new Binary(new byte[] {0x01, 0x23})}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSRecord record = new TSRecord(deviceID, 1L);
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      type.addPoint(record, "value", resultSet);
+      Assert.assertEquals(1, record.dataPointList.size());
+      Assert.assertEquals(testCase[1], record.dataPointList.get(0).getValue());
+
+      TSRecord fieldRecord = new TSRecord(deviceID, 1L);
+      type.addPoint(fieldRecord, "value", type.getField(testCase[1]));
+      Assert.assertEquals(1, fieldRecord.dataPointList.size());
+      Assert.assertEquals(testCase[1], fieldRecord.dataPointList.get(0).getValue());
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      TSRecord record = new TSRecord(deviceID, 1L);
+      try {
+        Type.fromTsDataType(dataType).addPoint(record, "value", resultSet);
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+
+      try {
+        Type.fromTsDataType(dataType).addPoint(record, "value", new Field(dataType));
+        Assert.fail("Expected UnSupportedDataTypeException");
+      } catch (UnSupportedDataTypeException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testCalcTypeSizeFromObject() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, true, Byte.BYTES},
+      {TSDataType.INT32, 1, Integer.BYTES},
+      {TSDataType.DATE, 20260713, Integer.BYTES},
+      {TSDataType.INT64, 1L, Long.BYTES},
+      {TSDataType.TIMESTAMP, 1L, Long.BYTES},
+      {TSDataType.FLOAT, 1.0F, Float.BYTES},
+      {TSDataType.DOUBLE, 1.0D, Double.BYTES},
+      {TSDataType.TEXT, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.STRING, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.BLOB, binary, Integer.BYTES + binary.getLength()},
+      {TSDataType.OBJECT, binary, Integer.BYTES + binary.getLength()}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      Object value = testCase[1];
+      int expectedSize = (int) testCase[2];
+      Assert.assertEquals(expectedSize, Type.fromTsDataType(dataType).calcTypeSize(value));
+    }
+  }
+
+  @Test
+  public void testDeserializeColumn() {
+    boolean[] nullIndicators = {true, false};
+
+    ByteBuffer booleanBuffer = ByteBuffer.wrap(new byte[] {(byte) 0b1000_0000, 0x01});
+    Column booleanColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.BOOLEAN)
+                .deserializeColumn(booleanBuffer, 2, nullIndicators);
+    Assert.assertTrue(booleanColumn.isNull(0));
+    Assert.assertTrue(booleanColumn.getBoolean(1));
+    Assert.assertEquals(1, booleanBuffer.position());
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT32, TSDataType.DATE}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(intBuffer(20260714), 2, nullIndicators);
+      Assert.assertEquals(dataType, column.getDataType());
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(20260714, column.getInt(1));
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.INT64, TSDataType.TIMESTAMP}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(longBuffer(123456789L), 2, nullIndicators);
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(123456789L, column.getLong(1));
+    }
+
+    Column floatColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.FLOAT)
+                .deserializeColumn(intBuffer(Float.floatToIntBits(1.25F)), 2, nullIndicators);
+    Assert.assertTrue(floatColumn.isNull(0));
+    Assert.assertEquals(1.25F, floatColumn.getFloat(1), 0);
+
+    Column doubleColumn =
+        (Column)
+            Type.fromTsDataType(TSDataType.DOUBLE)
+                .deserializeColumn(longBuffer(Double.doubleToLongBits(2.5D)), 2, nullIndicators);
+    Assert.assertTrue(doubleColumn.isNull(0));
+    Assert.assertEquals(2.5D, doubleColumn.getDouble(1), 0);
+
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    for (TSDataType dataType :
+        new TSDataType[] {TSDataType.TEXT, TSDataType.STRING, TSDataType.BLOB, TSDataType.OBJECT}) {
+      Column column =
+          (Column)
+              Type.fromTsDataType(dataType)
+                  .deserializeColumn(binaryBuffer(binary), 2, nullIndicators);
+      Assert.assertTrue(column.isNull(0));
+      Assert.assertEquals(binary, column.getBinary(1));
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        Type.fromTsDataType(dataType).deserializeColumn(ByteBuffer.allocate(0), 0, null);
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testEstimateArraySize() {
+    int size = 10;
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, RamUsageEstimator.sizeOfBooleanArray(size)},
+      {TSDataType.INT32, RamUsageEstimator.sizeOfIntArray(size)},
+      {TSDataType.DATE, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.INT64, RamUsageEstimator.sizeOfLongArray(size)},
+      {TSDataType.TIMESTAMP, RamUsageEstimator.sizeOfLongArray(size)},
+      {TSDataType.FLOAT, RamUsageEstimator.sizeOfFloatArray(size)},
+      {TSDataType.DOUBLE, RamUsageEstimator.sizeOfDoubleArray(size)},
+      {TSDataType.TEXT, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.STRING, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.BLOB, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.OBJECT, RamUsageEstimator.sizeOfObjectArray(size)},
+      {TSDataType.VECTOR, RamUsageEstimator.sizeOfLongArray(size)}
+    };
+
+    for (Object[] testCase : testCases) {
+      Assert.assertEquals(
+          testCase[1], Type.fromTsDataType((TSDataType) testCase[0]).estimateArraySize(size));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateArraySize(size);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testEstimateArraySizeWithArray() {
+    boolean[] booleans = {false, true};
+    int[] ints = {0, 1};
+    LocalDate[] dates = {null, LocalDate.of(2026, 7, 15)};
+    long[] longs = {0L, 1L};
+    float[] floats = {0.0F, 1.0F};
+    double[] doubles = {0.0D, 1.0D};
+    Binary[] binaries = {null, new Binary("test", StandardCharsets.UTF_8)};
+
+    assertEstimateArraySize(TSDataType.BOOLEAN, booleans, RamUsageEstimator.sizeOf(booleans));
+    assertEstimateArraySize(TSDataType.INT32, ints, RamUsageEstimator.sizeOf(ints));
+    assertEstimateArraySize(TSDataType.DATE, dates, RamUsageEstimator.sizeOf(dates));
+    assertEstimateArraySize(TSDataType.INT64, longs, RamUsageEstimator.sizeOf(longs));
+    assertEstimateArraySize(TSDataType.TIMESTAMP, longs, RamUsageEstimator.sizeOf(longs));
+    assertEstimateArraySize(TSDataType.FLOAT, floats, RamUsageEstimator.sizeOf(floats));
+    assertEstimateArraySize(TSDataType.DOUBLE, doubles, RamUsageEstimator.sizeOf(doubles));
+    assertEstimateArraySize(TSDataType.TEXT, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.STRING, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.BLOB, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.OBJECT, binaries, RamUsageEstimator.sizeOf(binaries));
+    assertEstimateArraySize(TSDataType.VECTOR, longs, RamUsageEstimator.sizeOf(longs));
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateArraySize(new Object[0]);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  private void assertEstimateArraySize(TSDataType dataType, Object array, long expected) {
+    Assert.assertEquals(expected, Type.fromTsDataType(dataType).estimateArraySize(array));
+  }
+
+  @Test
+  public void testCopyArrayElement() {
+    LocalDate date = LocalDate.of(2026, 7, 15);
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new boolean[] {false, true}},
+      {TSDataType.INT32, new int[] {0, 1}},
+      {TSDataType.DATE, new LocalDate[] {null, date}},
+      {TSDataType.INT64, new long[] {0L, 1L}},
+      {TSDataType.TIMESTAMP, new long[] {0L, 1L}},
+      {TSDataType.FLOAT, new float[] {0.0F, 1.0F}},
+      {TSDataType.DOUBLE, new double[] {0.0D, 1.0D}},
+      {TSDataType.TEXT, new Binary[] {null, binary}},
+      {TSDataType.STRING, new Binary[] {null, binary}},
+      {TSDataType.BLOB, new Binary[] {null, binary}},
+      {TSDataType.OBJECT, new Binary[] {null, binary}},
+      {TSDataType.VECTOR, new long[] {0L, 1L}}
+    };
+
+    for (Object[] testCase : testCases) {
+      Type type = Type.fromTsDataType((TSDataType) testCase[0]);
+      Object source = testCase[1];
+      Object target = type.createArray(2);
+
+      type.copyArrayElement(source, 1, target, 0);
+      type.copyArrayElement(source, 0, target, 1);
+
+      Assert.assertEquals(Array.get(source, 1), Array.get(target, 0));
+      Assert.assertEquals(Array.get(source, 0), Array.get(target, 1));
+
+      Object expanded = type.arrayCopyOf(source, 3);
+      Assert.assertEquals(3, Array.getLength(expanded));
+      Assert.assertEquals(Array.get(source, 0), Array.get(expanded, 0));
+      Assert.assertEquals(Array.get(source, 1), Array.get(expanded, 1));
+
+      Object truncated = type.arrayCopyOf(source, 1);
+      Assert.assertEquals(1, Array.getLength(truncated));
+      Assert.assertEquals(Array.get(source, 0), Array.get(truncated, 0));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).arrayCopyOf(new Object[0], 1);
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testEstimateValueSize() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, (long) Byte.BYTES},
+      {TSDataType.INT32, (long) Integer.BYTES},
+      {TSDataType.DATE, (long) Integer.BYTES},
+      {TSDataType.INT64, (long) Long.BYTES},
+      {TSDataType.TIMESTAMP, (long) Long.BYTES},
+      {TSDataType.FLOAT, (long) Float.BYTES},
+      {TSDataType.DOUBLE, (long) Double.BYTES},
+      {TSDataType.TEXT, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.STRING, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.BLOB, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.OBJECT, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF},
+      {TSDataType.VECTOR, (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF}
+    };
+
+    for (Object[] testCase : testCases) {
+      Assert.assertEquals(
+          testCase[1], Type.fromTsDataType((TSDataType) testCase[0]).estimateValueSize());
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).estimateValueSize();
+      Assert.fail("Expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testGetOneItemMaxSize() {
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, Byte.BYTES},
+      {TSDataType.INT32, Integer.BYTES},
+      {TSDataType.DATE, Integer.BYTES},
+      {TSDataType.INT64, Long.BYTES},
+      {TSDataType.TIMESTAMP, Long.BYTES},
+      {TSDataType.FLOAT, Float.BYTES},
+      {TSDataType.DOUBLE, Double.BYTES},
+      {TSDataType.TEXT, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.STRING, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.BLOB, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH},
+      {TSDataType.OBJECT, Integer.BYTES + TSFileConfig.BYTE_SIZE_PER_CHAR * VALUE_LENGTH}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      int expectedSize = (int) testCase[1];
+      Assert.assertEquals(
+          expectedSize, Type.fromTsDataType(dataType).getOneItemMaxSize(VALUE_LENGTH));
+      Assert.assertEquals(
+          expectedSize, new PlainEncoder(dataType, VALUE_LENGTH).getOneItemMaxSize());
+    }
+
+    for (TSDataType dataType : new TSDataType[] {TSDataType.VECTOR, TSDataType.UNKNOWN}) {
+      try {
+        new PlainEncoder(dataType, VALUE_LENGTH).getOneItemMaxSize();
+        Assert.fail("Expected UnsupportedOperationException");
+      } catch (UnsupportedOperationException ignored) {
+        // Expected.
+      }
+    }
+  }
+
+  @Test
+  public void testCreateStatistics() {
+    for (TSDataType dataType :
+        new TSDataType[] {
+          TSDataType.BOOLEAN,
+          TSDataType.INT32,
+          TSDataType.DATE,
+          TSDataType.INT64,
+          TSDataType.TIMESTAMP,
+          TSDataType.FLOAT,
+          TSDataType.DOUBLE,
+          TSDataType.TEXT,
+          TSDataType.STRING,
+          TSDataType.BLOB,
+          TSDataType.OBJECT,
+          TSDataType.VECTOR
+        }) {
+      Type type = Type.fromTsDataType(dataType);
+      Assert.assertEquals(dataType, type.createStatistics().getType());
+      Assert.assertEquals(dataType, Statistics.getStatsByType(dataType).getType());
+      Assert.assertTrue(type.getStatisticsInstanceSize() > 0);
+      Assert.assertEquals(type.getStatisticsInstanceSize(), Statistics.getSizeByType(dataType));
+    }
+
+    try {
+      Type.fromTsDataType(TSDataType.UNKNOWN).createStatistics();
+      Assert.fail("Expected UnknownColumnTypeException");
+    } catch (UnknownColumnTypeException ignored) {
+      // Expected.
+    }
+
+    try {
+      Statistics.getSizeByType(TSDataType.UNKNOWN);
+      Assert.fail("Expected UnknownColumnTypeException");
+    } catch (UnknownColumnTypeException ignored) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testUpdateStatistics() {
+    Binary binary = new Binary("test", StandardCharsets.UTF_8);
+    Object[][] testCases = {
+      {TSDataType.BOOLEAN, new TsPrimitiveType.TsBoolean(true)},
+      {TSDataType.INT32, new TsPrimitiveType.TsInt(1)},
+      {TSDataType.DATE, new TsPrimitiveType.TsInt(20260714, TSDataType.DATE)},
+      {TSDataType.INT64, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.TIMESTAMP, new TsPrimitiveType.TsLong(1L)},
+      {TSDataType.FLOAT, new TsPrimitiveType.TsFloat(1.0F)},
+      {TSDataType.DOUBLE, new TsPrimitiveType.TsDouble(1.0D)},
+      {TSDataType.TEXT, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.STRING, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.BLOB, new TsPrimitiveType.TsBinary(binary)},
+      {TSDataType.OBJECT, new TsPrimitiveType.TsBinary(binary)}
+    };
+
+    for (Object[] testCase : testCases) {
+      TSDataType dataType = (TSDataType) testCase[0];
+      TsPrimitiveType value = (TsPrimitiveType) testCase[1];
+      Type type = Type.fromTsDataType(dataType);
+      Statistics<?> statistics = Statistics.getStatsByType(dataType);
+      type.update(statistics, 100L, value);
+      Assert.assertEquals(1, statistics.getCount());
+      Assert.assertEquals(100L, statistics.getStartTime());
+      Assert.assertEquals(100L, statistics.getEndTime());
+      Assert.assertFalse(statistics.isEmpty());
+
+      BatchData batchData = new BatchData(dataType);
+      batchData.putAnObject(200L, value.getValue());
+      Assert.assertEquals(value.getValue(), type.getCurrentValue(batchData));
+      Assert.assertEquals(value.getValue(), batchData.currentValue());
+      Statistics<?> batchStatistics = Statistics.getStatsByType(dataType);
+      type.update(batchStatistics, batchData);
+      Assert.assertEquals(1, batchStatistics.getCount());
+      Assert.assertEquals(200L, batchStatistics.getStartTime());
+      Assert.assertEquals(200L, batchStatistics.getEndTime());
+      Assert.assertFalse(batchStatistics.isEmpty());
+
+      TsBlockBuilder blockBuilder = new TsBlockBuilder(Arrays.asList(dataType, dataType));
+      blockBuilder.getTimeColumnBuilder().writeLong(250L);
+      blockBuilder.getColumnBuilder(0).writeObject(value.getValue());
+      blockBuilder.getColumnBuilder(1).writeObject(value.getValue());
+      blockBuilder.declarePosition();
+      blockBuilder.getTimeColumnBuilder().writeLong(300L);
+      blockBuilder.getColumnBuilder(0).writeObject(value.getValue());
+      blockBuilder.getColumnBuilder(1).writeObject(value.getValue());
+      blockBuilder.declarePosition();
+      TsBlock block = blockBuilder.build();
+      Statistics<?> blockStatistics = Statistics.getStatsByType(dataType);
+      type.update(blockStatistics, block, 1, 1);
+      Assert.assertEquals(1, blockStatistics.getCount());
+      Assert.assertEquals(300L, blockStatistics.getStartTime());
+      Assert.assertEquals(300L, blockStatistics.getEndTime());
+      Assert.assertFalse(blockStatistics.isEmpty());
+    }
+  }
+
+  @Test
+  public void testGetCurrentValueForVectorAndUnknown() {
+    TsPrimitiveType[] vector = {new TsPrimitiveType.TsLong(1L)};
+    BatchData batchData = new BatchData(TSDataType.VECTOR);
+    batchData.putAnObject(1L, vector);
+    Assert.assertSame(vector, Type.fromTsDataType(TSDataType.VECTOR).getCurrentValue(batchData));
+    Assert.assertSame(vector, batchData.currentValue());
+    Assert.assertNull(Type.fromTsDataType(TSDataType.UNKNOWN).getCurrentValue(null));
+  }
+
+  private static ByteBuffer intBuffer(int value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+    buffer.putInt(value);
+    return buffer.flip();
+  }
+
+  private static ByteBuffer longBuffer(long value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+    buffer.putLong(value);
+    return buffer.flip();
+  }
+
+  private static ByteBuffer binaryBuffer(Binary value) {
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES + value.getLength());
+    buffer.putInt(value.getLength());
+    buffer.put(value.getValues());
+    return buffer.flip();
+  }
+}

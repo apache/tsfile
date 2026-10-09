@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.file.metadata.utils.Utils;
 
@@ -63,6 +64,19 @@ public class TsFileMetadataTest {
     serialized(tsfMetaData);
     TsFileMetadata readMetaData = deSerialized();
     Assert.assertTrue(Utils.isFileMetaDataEqual(tsfMetaData, readMetaData));
+  }
+
+  @Test
+  public void testRejectOversizedEncryptKeyDuringDeserialization() {
+    TsFileMetadata tsfMetaData = TestHelper.createSimpleFileMetaData();
+    tsfMetaData.addProperty("encryptLevel", "1".getBytes(TSFileConfig.STRING_CHARSET));
+    tsfMetaData.addProperty(
+        "encryptType",
+        "org.apache.tsfile.encrypt.UNENCRYPTED".getBytes(TSFileConfig.STRING_CHARSET));
+    tsfMetaData.addProperty("encryptKey", new byte[5121]);
+    serialized(tsfMetaData);
+
+    Assert.assertThrows(EncryptException.class, this::deSerialized);
   }
 
   private TsFileMetadata deSerialized() {

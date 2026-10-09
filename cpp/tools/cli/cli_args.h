@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "cli/write_columns.h"
+
 namespace tsfile_cli {
 
 struct ParsedArgs {
@@ -32,14 +34,22 @@ struct ParsedArgs {
         kNone,
         kEq,
         kNeq,
-        kLt,
-        kLteq,
-        kGt,
-        kGteq,
         kRegexp,
-        kNotRegexp,
-        kBetween,
-        kNotBetween,
+        kIsNull,
+        kNotNull,
+    };
+
+    struct TagFilterSpec {
+        std::string column;
+        TagFilterOp op = TagFilterOp::kNone;
+        std::string value;
+    };
+
+    struct PhysicalOverride {
+        enum class Kind { kEncoding, kCompression };
+        Kind kind;
+        std::string data_type;
+        std::string value;
     };
 
     std::string command;  // subcommand, e.g. "ls"/"write" (args[0])
@@ -47,6 +57,8 @@ struct ParsedArgs {
                           // input ("" or "-" means read stdin)
     std::string device;   // -d/--device filter (tree model)
     std::string table;    // -t/--table filter (table model); write target table
+    std::vector<std::string> devices;  // all -d/--device values, in order
+    std::vector<std::string> tables;   // all -t/--table values, in order
     std::vector<std::string> measurements;  // -m/--measurements projection
     long long limit = -1;          // -n/--limit; -1 means unlimited
     long long offset = 0;          // --offset; rows to skip before emitting
@@ -54,23 +66,28 @@ struct ParsedArgs {
     long long end = LLONG_MAX;     // --end; inclusive upper time bound
     bool has_start = false;        // whether --start was supplied
     bool has_end = false;          // whether --end was supplied
-    long long seed = 0;            // --seed for the reservoir sampler
+    long long seed = 0;            // parsed only to reject obsolete --seed
     bool has_seed = false;         // whether --seed was supplied
-    Format format = Format::kAuto;  // -f/--format; kAuto resolves by TTY
-    bool no_header = false;        // --no-header; suppress header row
-    std::string model;             // --model tree|table override ("" = auto)
+    Format format = Format::kAuto;  // -f/--format; kAuto resolves to table
+    bool format_set = false;        // whether -f/--format was supplied
+    bool no_header = false;        // parsed only to reject obsolete --no-header
+    std::string model;             // reserved; model is always auto-detected
     std::string output;            // -o/--output; write destination .tsfile
-    std::string columns;           // --columns spec for write (name:TYPE:cat,..)
+    std::vector<WriteColumnSpec> columns;  // --tag/--field declarations
     bool verbose = false;          // -v/--verbose; write progress to stderr
     bool header_match = false;     // --header-match; validate write header row
-    bool has_tag_filter = false;   // --tag-filter/--tag-between was supplied
-    TagFilterOp tag_filter_op = TagFilterOp::kNone;
-    std::string tag_filter_column;  // TAG column name for table row queries
-    std::string tag_filter_value;   // comparison value or BETWEEN lower bound
-    std::string tag_filter_value2;  // BETWEEN upper bound
-    bool help = false;             // -h/--help requested
-    bool version = false;          // --version requested
-    std::string error;             // non-empty if parsing failed (the message)
+    bool input_set = false;        // write input was explicitly set
+    bool has_tag_filter = false;   // one or more --tag-filter was supplied
+    std::vector<TagFilterSpec> tag_filters;
+    std::string tag_match;  // empty, all, or any
+    bool help = false;      // -h/--help requested
+    bool version = false;   // --version requested
+    Format export_format = Format::kAuto;  // --type for export
+    bool export_format_set = false;        // whether --type was supplied
+    bool force = false;                    // --force for export/sketch
+    std::string output_dir;  // --output-dir for multi-object export
+    std::vector<PhysicalOverride> physical_overrides;
+    std::string error;  // non-empty if parsing failed (the message)
 };
 
 ParsedArgs parse_args(const std::vector<std::string>& args);

@@ -18,6 +18,7 @@
 
 """Timeseries handles returned by the dataset package."""
 
+import contextlib
 from typing import Callable, List, Optional, Tuple
 
 import numpy as np
@@ -76,9 +77,10 @@ class Timeseries:
         name: str,
         series_refs: list,
         stats: dict,
-        ensure_open: Callable[[], None],
+        ensure_open: Optional[Callable[[], None]],
         load_timestamps: Callable[[], np.ndarray],
         read_by_position: Callable[[int, int], Tuple[np.ndarray, np.ndarray]],
+        runtime_lease=None,
     ):
         self._name = name
         self._series_refs = series_refs
@@ -87,6 +89,23 @@ class Timeseries:
         self._load_timestamps = load_timestamps
         self._read_by_position = read_by_position
         self._timestamps = None
+        self._runtime_lease = runtime_lease
+        self._closed = False
+
+    def _assert_open(self):
+        if self._closed:
+            raise RuntimeError("Current Timeseries is closed.")
+        if self._ensure_open is not None:
+            self._ensure_open()
+
+    @contextlib.contextmanager
+    def _query_guard(self):
+        self._assert_open()
+        if self._runtime_lease is None:
+            yield
+        else:
+            with self._runtime_lease.query_lease():
+                yield
 
     @property
     def name(self) -> str:
@@ -94,10 +113,10 @@ class Timeseries:
 
     @property
     def timestamps(self) -> np.ndarray:
-        self._ensure_open()
-        if self._timestamps is None:
-            self._timestamps = self._load_timestamps()
-        return self._timestamps
+        with self._query_guard():
+            if self._timestamps is None:
+                self._timestamps = self._load_timestamps()
+            return self._timestamps
 
     @property
     def stats(self) -> dict:
@@ -111,7 +130,10 @@ class Timeseries:
         return self._stats["count"]
 
     def __getitem__(self, key):
-        self._ensure_open()
+        with self._query_guard():
+            return self._getitem_open(key)
+
+    def _getitem_open(self, key):
         length = len(self)
 
         if isinstance(key, int):
@@ -148,23 +170,43 @@ class Timeseries:
     def _query_time_range(
         self, start_time: int, end_time: int
     ) -> Tuple[np.ndarray, np.ndarray]:
-        self._ensure_open()
-        time_parts = []
-        value_parts = []
-        for reader, device_id, field_idx in self._series_refs:
-            device_info = reader.get_device_info(device_id)
-            if (
-                device_info["max_time"] < start_time
-                or device_info["min_time"] > end_time
-            ):
-                continue
-            ts_arr, val_arr = reader.read_series_by_ref(
-                device_id, field_idx, start_time, end_time
-            )
-            if len(ts_arr) > 0:
-                time_parts.append(ts_arr)
-                value_parts.append(val_arr)
-        return merge_time_value_parts(time_parts, value_parts)
+        with self._query_guard():
+            time_parts = []
+            value_parts = []
+            for reader, device_id, field_idx in self._series_refs:
+                device_info = reader.get_device_info(device_id)
+                if (
+                    device_info["max_time"] < start_time
+                    or device_info["min_time"] > end_time
+                ):
+                    continue
+                ts_arr, val_arr = reader.read_series_by_ref(
+                    device_id, field_idx, start_time, end_time
+                )
+                if len(ts_arr) > 0:
+                    time_parts.append(ts_arr)
+                    value_parts.append(val_arr)
+            return merge_time_value_parts(time_parts, value_parts)
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self._runtime_lease is not None:
+            self._runtime_lease.close()
+
+    def __enter__(self):
+        self._assert_open()
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __repr__(self):
         stats = self.stats

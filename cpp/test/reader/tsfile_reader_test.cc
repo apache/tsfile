@@ -22,9 +22,13 @@
 #include <sys/stat.h>
 
 #include <cmath>
+#include <cstring>
+#include <fstream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <random>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -32,6 +36,7 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
+#include "file/random_access_read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
@@ -39,10 +44,20 @@
 #include "reader/filter/time_operator.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_series_scan_iterator.h"
+#include "writer/chunk_writer.h"
 #include "writer/tsfile_writer.h"
 
 using namespace storage;
 using namespace common;
+
+static_assert(!std::is_copy_constructible<TsFileReader>::value,
+              "TsFileReader must not be copy constructible");
+static_assert(!std::is_copy_assignable<TsFileReader>::value,
+              "TsFileReader must not be copy assignable");
+static_assert(!std::is_move_constructible<TsFileReader>::value,
+              "TsFileReader must not be move constructible");
+static_assert(!std::is_move_assignable<TsFileReader>::value,
+              "TsFileReader must not be move assignable");
 
 TEST(TsFileSeriesScanIteratorTest, ConsumeRowOffsetSaturates) {
     storage::TsFileSeriesScanIterator ssi;
@@ -138,6 +153,345 @@ class TsFileReaderTest : public ::testing::Test {
         }
     }
 };
+
+namespace {
+
+class InMemoryRandomAccessReadFile : public RandomAccessReadFile {
+   public:
+    explicit InMemoryRandomAccessReadFile(std::vector<char> bytes)
+        : bytes_(std::move(bytes)), opened_(true), name_("memory://test") {}
+
+    bool is_opened() const override { return opened_; }
+
+    int64_t file_size() const override {
+        return static_cast<int64_t>(bytes_.size());
+    }
+
+    const std::string& file_path() const override { return name_; }
+
+    int generation(uint64_t& size, uint64_t& fingerprint) const override {
+        if (!opened_) {
+            return E_FILE_READ_ERR;
+        }
+        size = bytes_.size();
+        fingerprint = 0;
+        return E_OK;
+    }
+
+    int read(int64_t offset, char* buffer, int32_t size,
+             int32_t& read_size) override {
+        read_size = 0;
+        if (!opened_ || offset < 0 || size < 0 ||
+            (buffer == nullptr && size > 0)) {
+            return E_INVALID_ARG;
+        }
+        if (size == 0 || static_cast<size_t>(offset) >= bytes_.size()) {
+            return E_OK;
+        }
+        const size_t available = bytes_.size() - static_cast<size_t>(offset);
+        read_size = static_cast<int32_t>(
+            std::min(available, static_cast<size_t>(size)));
+        std::memcpy(buffer, bytes_.data() + offset,
+                    static_cast<size_t>(read_size));
+        return E_OK;
+    }
+
+    void close() override { opened_ = false; }
+
+   private:
+    std::vector<char> bytes_;
+    bool opened_;
+    std::string name_;
+};
+
+class ShortMetadataReadFile : public InMemoryRandomAccessReadFile {
+   public:
+    explicit ShortMetadataReadFile(const std::vector<char>& bytes)
+        : InMemoryRandomAccessReadFile(bytes) {}
+
+    int read(int64_t offset, char* buffer, int32_t size,
+             int32_t& read_size) override {
+        int ret =
+            InMemoryRandomAccessReadFile::read(offset, buffer, size, read_size);
+        if (ret == E_OK && offset >= metadata_offset &&
+            ++read_count == short_read_at && read_size > 0) {
+            // Keep the entire buffer initialized with valid bytes so a missing
+            // length check fails deterministically instead of crashing in the
+            // parser. Only the reported prefix is valid under the read
+            // contract.
+            read_size = report_zero ? 0 : read_size - 1;
+        }
+        return ret;
+    }
+
+    int read_count = 0;
+    int short_read_at = -1;
+    bool report_zero = false;
+    int64_t metadata_offset = 0;
+};
+
+}  // namespace
+
+class MetadataReadLengthTest : public TsFileReaderTest,
+                               public ::testing::WithParamInterface<int> {
+   protected:
+    void SetUp() override {
+        TsFileReaderTest::SetUp();
+        saved_index_degree_ = g_config_value_.max_degree_of_index_node_;
+        ASSERT_EQ(set_max_degree_of_index_node(2), E_OK);
+    }
+
+    void TearDown() override {
+        set_max_degree_of_index_node(saved_index_degree_);
+        TsFileReaderTest::TearDown();
+    }
+
+    uint32_t saved_index_degree_ = 0;
+};
+
+TEST_P(MetadataReadLengthTest, RejectsIncompleteRangesBeforeParsing) {
+    for (const bool aligned : {false, true}) {
+        const std::string device = aligned ? "root.aligned" : "root.unaligned";
+        TsRecord record(100, device);
+        for (int column = 0; column < GetParam(); ++column) {
+            const std::string name = "value" + std::to_string(column);
+            MeasurementSchema schema(name, INT32, PLAIN, UNCOMPRESSED);
+            ASSERT_EQ(aligned
+                          ? tsfile_writer_->register_aligned_timeseries(device,
+                                                                        schema)
+                          : tsfile_writer_->register_timeseries(device, schema),
+                      E_OK);
+            record.add_point(name, static_cast<int32_t>(42));
+        }
+        ASSERT_EQ(aligned ? tsfile_writer_->write_record_aligned(record)
+                          : tsfile_writer_->write_record(record),
+                  E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    std::ifstream input(file_name_, std::ios::binary);
+    ASSERT_TRUE(input.is_open());
+    const std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
+                                  std::istreambuf_iterator<char>());
+
+    for (const bool aligned : {false, true}) {
+        auto device = std::make_shared<StringArrayDeviceID>(
+            aligned ? "root.aligned" : "root.unaligned");
+        // Exercise the public metadata entry points, including both single
+        // series (cached node) and aligned multi-series allocation.
+        for (const std::string operation :
+             {"device_node", "by_offset", "all_series", "selected_series",
+              "single_scan", "multi_scan"}) {
+            if (!aligned && operation == "multi_scan") continue;
+            int metadata_reads = 0;
+            for (int fail_at = 0; fail_at <= metadata_reads; ++fail_at) {
+                for (const bool report_zero : {false, true}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << "aligned=" << aligned << " operation="
+                                 << operation << " read=" << fail_at
+                                 << " zero=" << report_zero);
+                    ShortMetadataReadFile source(bytes);
+                    TsFileIOReader reader;
+                    ASSERT_EQ(reader.init(&source), E_OK);
+                    TsFileMeta* meta = nullptr;
+                    ASSERT_EQ(reader.get_tsfile_meta(meta), E_OK);
+                    std::shared_ptr<IMetaIndexEntry> entry;
+                    int64_t end_offset = 0;
+                    ASSERT_EQ(reader.load_device_index_entry(
+                                  std::make_shared<DeviceIDComparable>(device),
+                                  entry, end_offset),
+                              E_OK);
+                    source.read_count = 0;
+                    source.metadata_offset = meta->meta_offset_;
+                    source.short_read_at = fail_at;
+                    source.report_zero = report_zero;
+                    PageArena pa;
+                    pa.init(512, MOD_TSFILE_READER);
+                    std::vector<ITimeseriesIndex*> indexes;
+                    int ret = E_OK;
+                    if (operation == "device_node") {
+                        MetaIndexNode* node = nullptr;
+                        ret = reader.read_device_meta_index(
+                            entry->get_offset(), end_offset, pa, node, true);
+                        if (node != nullptr) node->~MetaIndexNode();
+                    } else if (operation == "by_offset") {
+                        ret = reader.get_device_timeseries_meta_by_offset(
+                            entry->get_offset(), end_offset, indexes, pa);
+                    } else if (operation == "all_series") {
+                        ret =
+                            reader
+                                .get_device_timeseries_meta_without_chunk_meta(
+                                    device, indexes, pa);
+                    } else if (operation == "selected_series") {
+                        indexes.resize(1, nullptr);
+                        ret = reader.get_timeseries_indexes(device, {"value0"},
+                                                            indexes, pa);
+                    } else {
+                        TsFileSeriesScanIterator* ssi = nullptr;
+                        ret = operation == "single_scan"
+                                  ? reader.alloc_ssi(device, "value0", ssi, pa)
+                                  : reader.alloc_multi_ssi(device, {"value0"},
+                                                           ssi, pa);
+                        reader.revert_ssi(ssi);
+                    }
+                    if (fail_at == 0) {
+                        ASSERT_EQ(ret, E_OK);
+                        metadata_reads = source.read_count;
+                        ASSERT_GT(metadata_reads, 0);
+                    } else {
+                        EXPECT_EQ(ret, E_FILE_READ_ERR);
+                        EXPECT_EQ(source.read_count, fail_at);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// One column keeps the measurement root a leaf; five columns force internal
+// nodes and exercise recursive traversal and aligned time-index descent.
+INSTANTIATE_TEST_SUITE_P(LeafAndInternalIndexes, MetadataReadLengthTest,
+                         ::testing::Values(1, 5));
+
+class DeviceIndexReadTest : public TsFileReaderTest {
+   protected:
+    void SetUp() override {
+        TsFileReaderTest::SetUp();
+        saved_index_degree_ = g_config_value_.max_degree_of_index_node_;
+        ASSERT_EQ(set_max_degree_of_index_node(2), E_OK);
+        // Five devices force an internal device index, not just measurement
+        // indexes within one device.
+        for (int i = 0; i < 5; ++i) {
+            const std::string device = "root.sg.d" + std::to_string(i);
+            ASSERT_EQ(tsfile_writer_->register_timeseries(
+                          device, MeasurementSchema("value", INT32, PLAIN,
+                                                    UNCOMPRESSED)),
+                      E_OK);
+            TsRecord record(100, device);
+            record.add_point("value", static_cast<int32_t>(42));
+            ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        ASSERT_EQ(tsfile_writer_->close(), E_OK);
+        std::ifstream input(file_name_, std::ios::binary);
+        ASSERT_TRUE(input.is_open());
+        bytes_.assign(std::istreambuf_iterator<char>(input),
+                      std::istreambuf_iterator<char>());
+    }
+
+    void TearDown() override {
+        set_max_degree_of_index_node(saved_index_degree_);
+        TsFileReaderTest::TearDown();
+        std::remove(file_name_.c_str());
+    }
+
+    void open_reader(TsFileReader& reader, ShortMetadataReadFile*& source) {
+        source = new ShortMetadataReadFile(bytes_);
+        ASSERT_EQ(reader.open(std::unique_ptr<RandomAccessReadFile>(source)),
+                  E_OK);
+        // Warm the file footer so subsequent reads start at the device index.
+        std::vector<std::shared_ptr<IDeviceID>> devices;
+        ASSERT_EQ(reader.get_all_devices(devices), E_OK);
+        ASSERT_EQ(devices.size(), 5u);
+        source->read_count = 0;
+    }
+
+    uint32_t saved_index_degree_ = 0;
+    std::vector<char> bytes_;
+};
+
+TEST_F(DeviceIndexReadTest, MetadataEnumerationRejectsShortDeviceIndex) {
+    for (int fail_at : {0, 1, 2}) {
+        for (bool report_zero : {false, true}) {
+            SCOPED_TRACE(::testing::Message() << fail_at << ":" << report_zero);
+            TsFileReader reader;
+            ShortMetadataReadFile* source = nullptr;
+            ASSERT_NO_FATAL_FAILURE(open_reader(reader, source));
+            source->short_read_at = fail_at;
+            source->report_zero = report_zero;
+            auto metadata = reader.get_timeseries_metadata();
+            if (fail_at == 0) {
+                ASSERT_EQ(metadata.size(), 5u);
+            } else {
+                // This legacy map-returning API has no error-code output, but
+                // must stop before parsing a short node or returning metadata.
+                EXPECT_TRUE(metadata.empty());
+                EXPECT_EQ(source->read_count, fail_at);
+            }
+        }
+    }
+}
+
+TEST_F(DeviceIndexReadTest, TreeTableQueryPropagatesDeviceAndSchemaReadErrors) {
+    for (const auto& measurements :
+         {std::vector<std::string>{}, std::vector<std::string>{"value"}}) {
+        for (bool fail_schema : {false, true}) {
+            for (bool report_zero : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << measurements.size() << ":" << fail_schema << ":"
+                             << report_zero);
+                TsFileReader reader;
+                ShortMetadataReadFile* source = nullptr;
+                ASSERT_NO_FATAL_FAILURE(open_reader(reader, source));
+                std::vector<std::shared_ptr<IDeviceID>> devices;
+                ASSERT_EQ(reader.get_all_devices(devices), E_OK);
+                const int device_reads = source->read_count;
+                ASSERT_GT(device_reads, 0);
+                source->read_count = 0;
+                source->short_read_at = fail_schema ? device_reads + 1 : 1;
+                source->report_zero = report_zero;
+                ResultSet* result = nullptr;
+                EXPECT_EQ(
+                    reader.query_table_on_tree(measurements, 0, 200, result),
+                    E_FILE_READ_ERR);
+                EXPECT_EQ(source->read_count, source->short_read_at);
+                if (result != nullptr) reader.destroy_query_data_set(result);
+            }
+        }
+    }
+}
+
+TEST_F(TsFileReaderTest, ReadsThroughRandomAccessReadFile) {
+    const std::string device = "root.sg.device";
+    const std::string measurement = "temperature";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device, MeasurementSchema(measurement, TSDataType::INT32,
+                                            TSEncoding::PLAIN,
+                                            CompressionType::UNCOMPRESSED)),
+              E_OK);
+    TsRecord record(100, device);
+    record.add_point(measurement, static_cast<int32_t>(42));
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::ifstream input(file_name_, std::ios::binary);
+    ASSERT_TRUE(input.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+    ASSERT_FALSE(bytes.empty());
+
+    std::unique_ptr<RandomAccessReadFile> source(
+        new InMemoryRandomAccessReadFile(std::move(bytes)));
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(std::move(source)), E_OK);
+    EXPECT_EQ(reader.get_file_version(),
+              static_cast<unsigned char>(VERSION_NUM_BYTE));
+
+    std::vector<std::string> paths = {device + "." + measurement};
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 0, 200, result), E_OK);
+    ASSERT_NE(result, nullptr);
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(result->get_value<int32_t>(2), 42);
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
     std::string device_path = "device1";
@@ -288,6 +642,93 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
               1622505600000);
     ASSERT_EQ(device_timeseries_1[0]->get_statistic()->count_, 1);
     reader.close();
+}
+
+TEST_F(TsFileReaderTest, GetTimeseriesSchemaUsesLastChunkCodec) {
+    const std::string path = std::string("tsfile_last_chunk_codec_") +
+                             generate_random_string(10) + ".tsfile";
+    remove(path.c_str());
+
+    WriteFile write_file;
+    const int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    ASSERT_EQ(write_file.create(path, flags, 0666), E_OK);
+
+    TsFileIOWriter io_writer;
+    ASSERT_EQ(io_writer.init(&write_file), E_OK);
+    ASSERT_EQ(io_writer.start_file(), E_OK);
+
+    const std::string device_name = "root.codec.last_chunk";
+    const std::string measurement_name = "value";
+    auto device_id = std::make_shared<StringArrayDeviceID>(device_name);
+
+    ASSERT_EQ(io_writer.start_flush_chunk_group(device_id, false), E_OK);
+    ChunkWriter first_chunk;
+    ASSERT_EQ(first_chunk.init(measurement_name, INT32, PLAIN, UNCOMPRESSED),
+              E_OK);
+    ASSERT_EQ(first_chunk.write(1, static_cast<int32_t>(1)), E_OK);
+    ASSERT_EQ(first_chunk.end_encode_chunk(), E_OK);
+    std::string first_name = measurement_name;
+    ASSERT_EQ(io_writer.start_flush_chunk(
+                  first_chunk.get_chunk_data(), first_name, INT32, PLAIN,
+                  UNCOMPRESSED, first_chunk.num_of_pages()),
+              E_OK);
+    ASSERT_EQ(io_writer.flush_chunk(first_chunk.get_chunk_data()), E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk(first_chunk.get_chunk_statistic()),
+              E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk_group(false), E_OK);
+
+    // The second chunk deliberately uses a different encoding. The reader
+    // must report this final chunk's codec, matching Java's implementation.
+    ASSERT_EQ(io_writer.start_flush_chunk_group(device_id, false), E_OK);
+    ChunkWriter last_chunk;
+    ASSERT_EQ(last_chunk.init(measurement_name, INT32, TS_2DIFF, UNCOMPRESSED),
+              E_OK);
+    ASSERT_EQ(last_chunk.write(2, static_cast<int32_t>(2)), E_OK);
+    ASSERT_EQ(last_chunk.end_encode_chunk(), E_OK);
+    std::string last_name = measurement_name;
+    ASSERT_EQ(io_writer.start_flush_chunk(
+                  last_chunk.get_chunk_data(), last_name, INT32, TS_2DIFF,
+                  UNCOMPRESSED, last_chunk.num_of_pages()),
+              E_OK);
+    ASSERT_EQ(io_writer.flush_chunk(last_chunk.get_chunk_data()), E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk(last_chunk.get_chunk_statistic()),
+              E_OK);
+    ASSERT_EQ(io_writer.end_flush_chunk_group(false), E_OK);
+    ASSERT_EQ(io_writer.end_file(), E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(path), E_OK);
+    std::vector<MeasurementSchema> schemas;
+    ASSERT_EQ(reader.get_timeseries_schema(
+                  std::make_shared<StringArrayDeviceID>(device_name), schemas),
+              E_OK);
+    ASSERT_EQ(schemas.size(), 1u);
+    ASSERT_EQ(schemas[0].measurement_name_, measurement_name);
+    EXPECT_EQ(schemas[0].data_type_, INT32);
+    EXPECT_EQ(schemas[0].encoding_, TS_2DIFF);
+    EXPECT_EQ(schemas[0].compression_type_, UNCOMPRESSED);
+    reader.close();
+
+    // The stored codec must also be read through non-local backends.
+    std::ifstream input(path, std::ios::binary);
+    ASSERT_TRUE(input.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+    input.close();
+    std::unique_ptr<RandomAccessReadFile> source(
+        new InMemoryRandomAccessReadFile(std::move(bytes)));
+    ASSERT_EQ(reader.open(std::move(source)), E_OK);
+    schemas.clear();
+    ASSERT_EQ(reader.get_timeseries_schema(
+                  std::make_shared<StringArrayDeviceID>(device_name), schemas),
+              E_OK);
+    ASSERT_EQ(schemas.size(), 1u);
+    EXPECT_EQ(schemas[0].measurement_name_, measurement_name);
+    EXPECT_EQ(schemas[0].data_type_, INT32);
+    EXPECT_EQ(schemas[0].encoding_, TS_2DIFF);
+    EXPECT_EQ(schemas[0].compression_type_, UNCOMPRESSED);
+    reader.close();
+    remove(path.c_str());
 }
 
 TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
@@ -1509,6 +1950,10 @@ TEST_F(TsFileReaderTest, AlignedSchemaReportsValueDataType) {
     }
     EXPECT_EQ(i32_type, INT32);
     EXPECT_EQ(dbl_type, DOUBLE);
+    for (const auto& s : schemas) {
+        EXPECT_EQ(s.encoding_, PLAIN);
+        EXPECT_EQ(s.compression_type_, UNCOMPRESSED);
+    }
     reader.close();
 }
 

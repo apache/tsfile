@@ -19,11 +19,14 @@
 
 package org.apache.tsfile.encoding.decoder;
 
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import java.nio.ByteBuffer;
 
 public class LongRLBEDecoder extends Decoder {
+  private static final int MAX_BLOCK_SIZE = 10000;
+
   /** constructor of LongRLBEDecoder */
   public LongRLBEDecoder() {
     super(TSEncoding.RLBE);
@@ -65,6 +68,9 @@ public class LongRLBEDecoder extends Decoder {
     readindex = -1;
     clearBuffer(buffer);
     readblocksize(buffer);
+    if (blocksize <= 0 || blocksize > MAX_BLOCK_SIZE) {
+      throw new TsFileDecodingException("Invalid RLBE block size: " + blocksize);
+    }
     data = new long[blocksize * 2 + 1];
     fibonacci = new long[blocksize * 2 + 1];
     for (int i = 0; i < blocksize * 2; i++) {
@@ -90,6 +96,9 @@ public class LongRLBEDecoder extends Decoder {
       for (int j = 6; j >= 0; j--) {
         seglength |= (readbit(buffer) << j);
       }
+      if (seglength < 1 || seglength > 64) {
+        throw new TsFileDecodingException("Invalid RLBE segment length: " + seglength);
+      }
 
       // generate repeat time of rle on delta
       int now = readbit(buffer);
@@ -97,8 +106,17 @@ public class LongRLBEDecoder extends Decoder {
 
       int j = 1;
       while (true) {
+        if (j >= fibonacci.length) {
+          throw new TsFileDecodingException("Invalid RLBE Fibonacci run length");
+        }
         if (j > 1) fibonacci[j] = fibonacci[j - 1] + fibonacci[j - 2];
-        if (now == 1) runlength += fibonacci[j];
+        if (now == 1) {
+          long value = fibonacci[j];
+          if (value <= 0 || runlength > blocksize - writeindex - 1 - value) {
+            throw new TsFileDecodingException("Invalid RLBE run length");
+          }
+          runlength += value;
+        }
         // when now and next are both 1, the 1 of next is the symbol of ending of fibonacci code
         if (now == 1 && next == 1) break;
         j++;

@@ -73,7 +73,10 @@ enum TSEncoding : uint8_t {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
+    CHIMP = 11,
     SPRINTZ = 12,
+    RLBE = 13,
+    CAMEL = 14,
     INVALID_ENCODING = 255
 };
 
@@ -92,12 +95,14 @@ enum CompressionType : uint8_t {
     PAA = 5,
     PLA = 6,
     LZ4 = 7,
+    ZSTD = 8,
+    LZMA2 = 9,
     INVALID_COMPRESSION = 255
 };
 
-extern TSFILE_API const char* s_data_type_names[8];
-extern TSFILE_API const char* s_encoding_names[12];
-extern TSFILE_API const char* s_compression_names[8];
+extern TSFILE_API const char* s_data_type_names[12];
+extern TSFILE_API const char* s_encoding_names[15];
+extern TSFILE_API const char* s_compression_names[10];
 }  // namespace common
 
 #if defined(__GLIBCXX__) && (__GNUC__ < 7)
@@ -154,11 +159,12 @@ FORCE_INLINE bool parse_data_type_name(const std::string& s, TSDataType& out) {
 }
 
 FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {
-    ASSERT(encoding >= PLAIN && encoding <= FREQ);
+    ASSERT(encoding >= PLAIN && encoding <= CAMEL);
     return s_encoding_names[encoding];
 }
 
 FORCE_INLINE const char* get_compression_name(CompressionType type) {
+    ASSERT(type >= UNCOMPRESSED && type <= LZMA2);
     return s_compression_names[type];
 }
 

@@ -263,9 +263,28 @@ common = dict(
     runtime_library_dirs=runtime_library_dirs,
 )
 
+merge_common = common.copy()
+merge_common.update(
+    library_dirs=[],
+    libraries=[],
+    extra_link_args=[],
+    runtime_library_dirs=[],
+)
+
 exts = [
+    Extension("tsfile.dataset._merge", ["tsfile/dataset/_merge.pyx"], **merge_common),
+    Extension(
+        "tsfile.dataset._index",
+        ["tsfile/dataset/_index.pyx"],
+        **merge_common,
+    ),
     Extension("tsfile.tsfile_py_cpp", ["tsfile/tsfile_py_cpp.pyx"], **common),
-    Extension("tsfile.tsfile_reader", ["tsfile/tsfile_reader.pyx"], **common),
+    Extension(
+        "tsfile.tsfile_reader",
+        ["tsfile/tsfile_reader.pyx", "tsfile/python_random_access_read_file.cc"],
+        depends=["tsfile/python_random_access_read_file.h"],
+        **common,
+    ),
     Extension("tsfile.tsfile_writer", ["tsfile/tsfile_writer.pyx"], **common),
 ]
 

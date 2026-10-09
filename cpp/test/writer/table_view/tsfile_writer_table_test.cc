@@ -139,8 +139,28 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
     auto tablet = gen_tablet(table_schema, 0, 1);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
-    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+    ResultSet* result_set = nullptr;
+    ASSERT_EQ(reader.query(table_schema->get_table_name(), {"s0"}, 0, INT32_MAX,
+                           result_set),
+              common::E_OK);
+    auto* table_result_set = static_cast<TableResultSet*>(result_set);
+    bool has_next = false;
+    int64_t row_count = 0;
+    while (true) {
+        ASSERT_EQ(table_result_set->next(has_next), common::E_OK);
+        if (!has_next) {
+            break;
+        }
+        ++row_count;
+    }
+    EXPECT_EQ(row_count, 10);
+    table_result_set->close();
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
     delete table_schema;
 }
 
@@ -194,7 +214,7 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     tsfile_table_writer->flush();
     tsfile_table_writer->close();
 
-    TsFileReader reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value = reader.query("test_table", {"value"}, 0, 50, ret);
@@ -358,7 +378,7 @@ TEST_F(TsFileWriterTableTest, EmptyTagWrite) {
     tsfile_table_writer->flush();
     tsfile_table_writer->close();
 
-    TsFileReader reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value =
@@ -462,7 +482,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     tsfile_table_writer->flush();
     tsfile_table_writer->close();
 
-    TsFileReader reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     std::vector<std::string> column_names = {"device", "VALUE"};
@@ -588,7 +608,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
 
     delete table_schema;
 
-    auto reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value =
@@ -762,7 +782,7 @@ TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
 
     delete table_schema;
 
-    auto reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value = reader.query(
@@ -870,7 +890,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
 
     delete table_schema;
 
-    auto reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value = reader.query("testTable", measurement_names, 0, 100, ret);
@@ -971,7 +991,7 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
 
     delete table_schema;
 
-    auto reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value = reader.query("testTable", measurement_names, 0, 100, ret);
@@ -1088,7 +1108,7 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     ASSERT_EQ(tsfile_table_writer->close(), E_OK);
 
     // 5. Verify read data matches what was written
-    auto reader = TsFileReader();
+    TsFileReader reader;
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
     int ret_value =

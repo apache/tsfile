@@ -27,8 +27,8 @@
 using namespace common;
 namespace storage {
 
-int ChunkReader::init(ReadFile* read_file, String m_name, TSDataType data_type,
-                      Filter* time_filter) {
+int ChunkReader::init(RandomAccessReadFile* read_file, String m_name,
+                      TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
     time_decoder_ = DecoderFactory::alloc_time_decoder();
@@ -149,6 +149,13 @@ int ChunkReader::load_by_meta(ChunkMeta* meta) {
 
 int ChunkReader::alloc_compressor_and_value_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
+    // The on-wire enum is a byte, so an arbitrary damaged value can otherwise
+    // fall through DecoderFactory and be reported as an allocation failure.
+    // Distinguish malformed file metadata from a genuine OOM before creating
+    // any decoder object.
+    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+        return E_TSFILE_CORRUPTED;
+    }
     if (value_decoder_ != nullptr) {
         value_decoder_->reset();
     } else {

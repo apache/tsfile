@@ -1,0 +1,2 @@
+model,object,tag.site,tag.room,field,data_type,non_null_count,null_count,min_time,max_time,min,max,first,last,sum,stats_source
+table,sensors,beijing,r1,temp,DOUBLE,0,2,1000,2000,\N,\N,\N,\N,\N,scan

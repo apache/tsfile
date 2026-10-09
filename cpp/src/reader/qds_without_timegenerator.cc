@@ -34,6 +34,55 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader* io_reader,
     return init_internal(io_reader, qe);
 }
 
+int QDSWithoutTimeGenerator::init_prepared(
+    TsFileIOReader* io_reader, const std::shared_ptr<PreparedSeries>& prepared,
+    Filter* owned_time_filter, int offset, int limit,
+    const std::string& column_name) {
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
+    io_reader_ = io_reader;
+    qe_ = nullptr;
+    owned_time_filter_ = owned_time_filter;
+    remaining_offset_ = offset;
+    remaining_limit_ = limit;
+    is_single_path_ = true;
+    index_lookup_.insert({"time", 0});
+
+    TsFileSeriesScanIterator* ssi = nullptr;
+    int ret =
+        io_reader_->alloc_prepared_ssi(prepared, ssi, pa_, owned_time_filter_);
+    if (ret == E_NO_MORE_DATA) {
+        // Preserve the normal empty-result contract even when the global
+        // statistic rejects the range before an SSI is allocated.
+        row_record_ = new RowRecord(1);
+        result_set_metadata_ = std::make_shared<ResultSetMetadata>(
+            std::vector<std::string>(), std::vector<common::TSDataType>());
+        return E_OK;
+    }
+    if (ret != E_OK) {
+        return ret;
+    }
+    const bool table_aligned = ssi->is_multi_value();
+    ssi->set_row_range(offset, table_aligned ? -1 : limit);
+    ssi_vec_.push_back(ssi);
+    tsblocks_.resize(1);
+    time_iters_.resize(1);
+    value_iters_.resize(1);
+    row_record_ = new RowRecord(2);
+    index_lookup_.insert({column_name, 1});
+    if (RET_FAIL(load_next_tsblock(0, true))) {
+        return ret;
+    }
+    remaining_offset_ = ssi->get_row_offset();
+    if (!table_aligned) {
+        remaining_limit_ = ssi->get_row_limit();
+    }
+    result_set_metadata_ = std::make_shared<ResultSetMetadata>(
+        std::vector<std::string>(1, column_name),
+        std::vector<common::TSDataType>(1, ssi->get_data_type()));
+    return E_OK;
+}
+
 int QDSWithoutTimeGenerator::init(TsFileIOReader* io_reader,
                                   QueryExpression* qe, int offset, int limit) {
     remaining_offset_ = offset;
@@ -56,7 +105,7 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     std::vector<std::string> column_names;
     std::vector<common::TSDataType> data_types;
     // Data type per valid path, captured from the timeseries index right after
-    // alloc_ssi — while itimeseries_index_ is still live.  get_next_tsblock()
+    // alloc_ssi — while itimeseries_index_ is still live.  load_next_tsblock()
     // may later destroy() the SSI (e.g. when limit==0 yields no TsBlock), which
     // clears the index, so this must be recorded up front.
     std::vector<common::TSDataType> ssi_data_types;
@@ -114,9 +163,11 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     value_iters_.resize(path_count);
 
     for (size_t i = 0; i < path_count; i++) {
-        get_next_tsblock(i, true);
+        if (RET_FAIL(load_next_tsblock(i, true))) {
+            return ret;
+        }
         // Prefer the type carried by the value iterator, but fall back to the
-        // timeseries-index type captured before get_next_tsblock() when no
+        // timeseries-index type captured before load_next_tsblock() when no
         // TsBlock was produced (e.g. limit==0 skips every row, or the series is
         // empty).  Emitting NULL_TYPE here would surface an invalid datatype
         // (254) to callers that map the metadata onto their own type enums.
@@ -126,7 +177,7 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         data_types.push_back(col_type);
     }
     // Single-path: SSI may have consumed offset/limit by skipping chunks/pages
-    // during first get_next_tsblock(); sync so QDS does not double-apply.
+    // during first load_next_tsblock(); sync so QDS does not double-apply.
     if (is_single_path_) {
         remaining_offset_ = ssi_vec_[0]->get_row_offset();
         remaining_limit_ = ssi_vec_[0]->get_row_limit();
@@ -167,10 +218,18 @@ void QDSWithoutTimeGenerator::close() {
         delete qe_;
         qe_ = nullptr;
     }
+    if (owned_time_filter_ != nullptr) {
+        delete owned_time_filter_;
+        owned_time_filter_ = nullptr;
+    }
     pa_.destroy();
 }
 
 int QDSWithoutTimeGenerator::next(bool& has_next) {
+    has_next = false;
+    if (read_error_ != E_OK) {
+        return read_error_;
+    }
     // For single path, apply offset/limit at row level.
     if (is_single_path_) {
         while (true) {
@@ -213,7 +272,10 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 heap_time_.insert(std::make_pair(timev, idx));
                 time_iters_[idx]->next();
             } else {
-                get_next_tsblock(idx, false);
+                read_error_ = load_next_tsblock(idx, false);
+                if (read_error_ != E_OK) {
+                    return read_error_;
+                }
             }
 
             if (skip_row) {
@@ -268,7 +330,11 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 // Pass merge_cursor (current time) as min_time_hint
                 // to help SSI skip chunks/pages that are entirely before
                 // the current merge position.
-                get_next_tsblock_with_hint(iter->second, false, time);
+                read_error_ =
+                    load_next_tsblock_with_hint(iter->second, false, time);
+                if (read_error_ != E_OK) {
+                    return read_error_;
+                }
             }
             std::multimap<int64_t, uint32_t>::iterator cur = iter;
             iter++;  // cppcheck-suppress postfixOperator
@@ -310,7 +376,7 @@ std::shared_ptr<ResultSetMetadata> QDSWithoutTimeGenerator::get_metadata() {
     return result_set_metadata_;
 }
 
-int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
+int QDSWithoutTimeGenerator::load_next_tsblock(uint32_t index, bool alloc_mem) {
     if (tsblocks_[index] != nullptr) {
         delete time_iters_[index];
         time_iters_[index] = nullptr;
@@ -345,9 +411,8 @@ int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
     return ret;
 }
 
-int QDSWithoutTimeGenerator::get_next_tsblock_with_hint(uint32_t index,
-                                                        bool alloc_mem,
-                                                        int64_t min_time_hint) {
+int QDSWithoutTimeGenerator::load_next_tsblock_with_hint(
+    uint32_t index, bool alloc_mem, int64_t min_time_hint) {
     if (tsblocks_[index] != nullptr) {
         delete time_iters_[index];
         time_iters_[index] = nullptr;

@@ -39,5 +39,6 @@ public enum TypeEnum {
   DATE,
   BLOB,
   STRING,
-  OBJECT
+  OBJECT,
+  VECTOR
 }

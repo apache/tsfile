@@ -20,6 +20,9 @@
 #ifndef ENCODING_DECODER_FACTORY_H
 #define ENCODING_DECODER_FACTORY_H
 
+#include "camel_decoder.h"
+#include "chimp_decoder.h"
+#include "common/global.h"
 #include "decoder.h"
 #include "dictionary_decoder.h"
 #include "double_sprintz_decoder.h"
@@ -30,6 +33,7 @@
 #include "int32_sprintz_decoder.h"
 #include "int64_sprintz_decoder.h"
 #include "plain_decoder.h"
+#include "rlbe_decoder.h"
 #include "ts2diff_decoder.h"
 #include "zigzag_decoder.h"
 
@@ -104,6 +108,22 @@ class DecoderFactory {
                         return nullptr;
                 }
 
+            case CHIMP:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_DECODER(IntChimpDecoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_DECODER(LongChimpDecoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatChimpDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleChimpDecoder);
+                    default:
+                        return nullptr;
+                }
+
             case TS_2DIFF:
                 switch (data_type) {
                     case INT32:
@@ -140,6 +160,30 @@ class DecoderFactory {
                         ALLOC_AND_RETURN_DECODER(FloatSprintzDecoder);
                     case DOUBLE:
                         ALLOC_AND_RETURN_DECODER(DoubleSprintzDecoder);
+                    default:
+                        return nullptr;
+                }
+
+            case RLBE:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_DECODER(IntRLBEDecoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_DECODER(LongRLBEDecoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatRLBEDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleRLBEDecoder);
+                    default:
+                        return nullptr;
+                }
+
+            case CAMEL:
+                switch (data_type) {
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(CamelDecoder);
                     default:
                         return nullptr;
                 }

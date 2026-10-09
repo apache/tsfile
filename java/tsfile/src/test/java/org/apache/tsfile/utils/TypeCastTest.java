@@ -20,6 +20,8 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.read.common.type.service.TypeService;
 
 import org.junit.Test;
 
@@ -28,6 +30,7 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.IntFunction;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -35,6 +38,129 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 public class TypeCastTest {
+
+  private static final TypeService<ArrayCastChecker> CHECK_ARRAY_CAST_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        (int[]) genValueArray(to), (int[]) to.castFromArray(from, array));
+            case INT64, TIMESTAMP ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        (long[]) genValueArray(to), (long[]) to.castFromArray(from, array));
+            case BOOLEAN ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        (boolean[]) genValueArray(to), (boolean[]) to.castFromArray(from, array));
+            case BLOB, STRING, TEXT ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        TypeCastTest.EXPECTED_BINARY_ARRAY_SERVICE
+                            .call(Type.fromTsDataType(from))
+                            .generate(array),
+                        (Binary[]) to.castFromArray(from, array));
+            case FLOAT ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        (float[]) genValueArray(to), (float[]) to.castFromArray(from, array), 0.1f);
+            case DOUBLE ->
+                (from, to, array) ->
+                    assertArrayEquals(
+                        (double[]) genValueArray(to),
+                        (double[]) to.castFromArray(from, array),
+                        0.1);
+            case OBJECT, ROW, UNKNOWN, VECTOR ->
+                (from, to, array) -> fail("Unexpected type: " + to);
+          };
+
+  private static final TypeService<BinaryArrayGenerator> EXPECTED_BINARY_ARRAY_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32 ->
+                array -> {
+                  int[] values = (int[]) array;
+                  return toBinaryArray(values.length, i -> String.valueOf(values[i]));
+                };
+            case DATE ->
+                array -> {
+                  int[] values = (int[]) array;
+                  return toBinaryArray(
+                      values.length, i -> TSDataType.getDateStringValue(values[i]));
+                };
+            case INT64, TIMESTAMP ->
+                array -> {
+                  long[] values = (long[]) array;
+                  return toBinaryArray(values.length, i -> String.valueOf(values[i]));
+                };
+            case FLOAT ->
+                array -> {
+                  float[] values = (float[]) array;
+                  return toBinaryArray(values.length, i -> String.valueOf(values[i]));
+                };
+            case DOUBLE ->
+                array -> {
+                  double[] values = (double[]) array;
+                  return toBinaryArray(values.length, i -> String.valueOf(values[i]));
+                };
+            case BOOLEAN ->
+                array -> {
+                  boolean[] values = (boolean[]) array;
+                  return toBinaryArray(values.length, i -> String.valueOf(values[i]));
+                };
+            case BLOB, STRING, TEXT -> array -> (Binary[]) array;
+            case OBJECT, ROW, UNKNOWN, VECTOR ->
+                array -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported data type: " + type.getTypeEnum());
+                };
+          };
+
+  private static final TypeService<ValueGenerator> GENERATE_VALUE_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE -> () -> 1;
+            case INT64, TIMESTAMP -> () -> 1L;
+            case BOOLEAN -> () -> false;
+            case FLOAT -> () -> 1.0f;
+            case DOUBLE -> () -> 1.0;
+            case BLOB, OBJECT, STRING, TEXT -> () -> new Binary("1", StandardCharsets.UTF_8);
+            case ROW, UNKNOWN, VECTOR ->
+                () -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported data type: " + type.getTypeEnum());
+                };
+          };
+
+  private static final TypeService<ValueGenerator> GENERATE_VALUE_ARRAY_SERVICE =
+      type ->
+          switch (type.getTypeEnum()) {
+            case INT32, DATE -> () -> new int[] {1, 2, 3};
+            case INT64, TIMESTAMP -> () -> new long[] {1, 2, 3};
+            case BOOLEAN -> () -> new boolean[] {true, false};
+            case FLOAT -> () -> new float[] {1.0f, 2.0f, 3.0f};
+            case DOUBLE -> () -> new double[] {1.0, 2.0, 3.0};
+            case BLOB, OBJECT, STRING, TEXT ->
+                () ->
+                    new Binary[] {
+                      new Binary("1", StandardCharsets.UTF_8),
+                      new Binary("2", StandardCharsets.UTF_8),
+                      new Binary("3", StandardCharsets.UTF_8)
+                    };
+            case ROW, UNKNOWN, VECTOR ->
+                () -> {
+                  throw new IllegalArgumentException(
+                      "Unsupported data type: " + type.getTypeEnum());
+                };
+          };
+
+  static {
+    CHECK_ARRAY_CAST_SERVICE.check();
+    EXPECTED_BINARY_ARRAY_SERVICE.check();
+    GENERATE_VALUE_SERVICE.check();
+    GENERATE_VALUE_ARRAY_SERVICE.check();
+  }
 
   @Test
   public void testSingleCast() {
@@ -85,154 +211,42 @@ public class TypeCastTest {
           assertThrows(ClassCastException.class, () -> to.castFromArray(from, array));
           continue;
         }
-        switch (to) {
-          case INT32:
-          case DATE:
-            assertArrayEquals((int[]) genValueArray(to), (int[]) to.castFromArray(from, array));
-            break;
-          case INT64:
-          case TIMESTAMP:
-            assertArrayEquals((long[]) genValueArray(to), (long[]) to.castFromArray(from, array));
-            break;
-          case BOOLEAN:
-            assertArrayEquals(
-                (boolean[]) genValueArray(to), (boolean[]) to.castFromArray(from, array));
-            break;
-          case STRING:
-          case BLOB:
-          case TEXT:
-            switch (from) {
-              case BLOB:
-              case STRING:
-                assertArrayEquals((Binary[]) array, (Binary[]) to.castFromArray(from, array));
-                break;
-              case INT32:
-                int[] tmpInt = (int[]) array;
-                Binary[] intResult = new Binary[tmpInt.length];
-                for (int i = 0; i < tmpInt.length; i++) {
-                  intResult[i] = new Binary(String.valueOf(tmpInt[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(intResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              case DATE:
-                int[] tmpDate = (int[]) array;
-                Binary[] dateResult = new Binary[tmpDate.length];
-                for (int i = 0; i < tmpDate.length; i++) {
-                  dateResult[i] =
-                      new Binary(TSDataType.getDateStringValue(tmpDate[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(dateResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              case INT64:
-              case TIMESTAMP:
-                long[] tmpLong = (long[]) array;
-                Binary[] longResult = new Binary[tmpLong.length];
-                for (int i = 0; i < tmpLong.length; i++) {
-                  longResult[i] = new Binary(String.valueOf(tmpLong[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(longResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              case FLOAT:
-                float[] tmpFloat = (float[]) array;
-                Binary[] floatResult = new Binary[tmpFloat.length];
-                for (int i = 0; i < tmpFloat.length; i++) {
-                  floatResult[i] = new Binary(String.valueOf(tmpFloat[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(floatResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              case DOUBLE:
-                double[] tmpDouble = (double[]) array;
-                Binary[] doubleResult = new Binary[tmpDouble.length];
-                for (int i = 0; i < tmpDouble.length; i++) {
-                  doubleResult[i] =
-                      new Binary(String.valueOf(tmpDouble[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(doubleResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              case BOOLEAN:
-                boolean[] tmpBoolean = (boolean[]) array;
-                Binary[] booleanResult = new Binary[tmpBoolean.length];
-                for (int i = 0; i < tmpBoolean.length; i++) {
-                  booleanResult[i] =
-                      new Binary(String.valueOf(tmpBoolean[i]), StandardCharsets.UTF_8);
-                }
-                assertArrayEquals(booleanResult, (Binary[]) to.castFromArray(from, array));
-                break;
-              default:
-                break;
-            }
-            break;
-          case FLOAT:
-            assertArrayEquals(
-                (float[]) genValueArray(to), (float[]) to.castFromArray(from, array), 0.1f);
-            break;
-          case DOUBLE:
-            assertArrayEquals(
-                (double[]) genValueArray(to), (double[]) to.castFromArray(from, array), 0.1);
-            break;
-          case UNKNOWN:
-          case VECTOR:
-          default:
-            fail("Unexpected type: " + to);
-        }
+        CHECK_ARRAY_CAST_SERVICE.call(Type.fromTsDataType(to)).check(from, to, array);
       }
     }
   }
 
-  private Object genValue(TSDataType dataType) {
-    int i = 1;
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        return i;
-      case TIMESTAMP:
-      case INT64:
-        return (long) i;
-      case BOOLEAN:
-        return false;
-      case FLOAT:
-        return i * 1.0f;
-      case DOUBLE:
-        return i * 1.0;
-      case STRING:
-      case TEXT:
-      case BLOB:
-      case OBJECT:
-        return new Binary(Integer.toString(i), StandardCharsets.UTF_8);
-      case UNKNOWN:
-      case VECTOR:
-      default:
-        throw new IllegalArgumentException("Unsupported data type: " + dataType);
-    }
+  private static Object genValue(TSDataType dataType) {
+    return GENERATE_VALUE_SERVICE.call(Type.fromTsDataType(dataType)).generate();
   }
 
-  private Object genValueArray(TSDataType dataType) {
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        return new int[] {1, 2, 3};
-      case TIMESTAMP:
-      case INT64:
-        return new long[] {1, 2, 3};
-      case BOOLEAN:
-        return new boolean[] {true, false};
-      case FLOAT:
-        return new float[] {1.0f, 2.0f, 3.0f};
-      case DOUBLE:
-        return new double[] {1.0, 2.0, 3.0};
-      case STRING:
-      case TEXT:
-      case BLOB:
-      case OBJECT:
-        return new Binary[] {
-          new Binary(Integer.toString(1), StandardCharsets.UTF_8),
-          new Binary(Integer.toString(2), StandardCharsets.UTF_8),
-          new Binary(Integer.toString(3), StandardCharsets.UTF_8)
-        };
-      case UNKNOWN:
-      case VECTOR:
-      default:
-        throw new IllegalArgumentException("Unsupported data type: " + dataType);
+  private static Object genValueArray(TSDataType dataType) {
+    return GENERATE_VALUE_ARRAY_SERVICE.call(Type.fromTsDataType(dataType)).generate();
+  }
+
+  private static Binary[] toBinaryArray(int length, IntFunction<String> valueProvider) {
+    Binary[] result = new Binary[length];
+    for (int i = 0; i < length; i++) {
+      result[i] = new Binary(valueProvider.apply(i), StandardCharsets.UTF_8);
     }
+    return result;
+  }
+
+  @FunctionalInterface
+  private interface ArrayCastChecker {
+
+    void check(TSDataType from, TSDataType to, Object array);
+  }
+
+  @FunctionalInterface
+  private interface BinaryArrayGenerator {
+
+    Binary[] generate(Object array);
+  }
+
+  @FunctionalInterface
+  private interface ValueGenerator {
+
+    Object generate();
   }
 }

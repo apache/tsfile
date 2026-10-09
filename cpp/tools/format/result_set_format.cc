@@ -73,7 +73,8 @@ std::string cell_to_string(storage::ResultSet* rs, uint32_t i,
 }
 
 int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
-                    std::ostream& out, long long offset, long long limit) {
+                    std::ostream& out, long long offset, long long limit,
+                    long long* emitted_rows) {
     auto meta = rs->get_metadata();
     const uint32_t ncol = meta->get_column_count();
     std::vector<std::string> header;
@@ -107,10 +108,20 @@ int emit_result_set(storage::ResultSet* rs, OutputFormat fmt, bool no_header,
                 cells[i - 1] = cell_to_string(rs, i, types[i - 1]);
             }
         }
-        writer.write(cells, nulls);
+        if (!writer.write(cells, nulls)) {
+            return common::E_FILE_WRITE_ERR;
+        }
         ++emitted;
     }
-    writer.finish();
+    if (code == common::E_OK && skipped < offset) {
+        return common::E_OUT_OF_RANGE;
+    }
+    if (!writer.finish()) {
+        return common::E_FILE_WRITE_ERR;
+    }
+    if (emitted_rows != nullptr) {
+        *emitted_rows = emitted;
+    }
     return code;
 }
 
@@ -178,9 +189,13 @@ int emit_result_set_sampled(storage::ResultSet* rs, OutputFormat fmt,
 
     RowWriter writer(out, fmt, header, types, no_header);
     for (const BufferedRow& row : reservoir) {
-        writer.write(row.cells, row.nulls);
+        if (!writer.write(row.cells, row.nulls)) {
+            return common::E_FILE_WRITE_ERR;
+        }
     }
-    writer.finish();
+    if (!writer.finish()) {
+        return common::E_FILE_WRITE_ERR;
+    }
     return code;
 }
 

@@ -22,6 +22,7 @@ from tsfile import TsFileReader, TsFileWriter
 from tsfile.exceptions import (
     AlreadyExistsError,
     ErrorCode,
+    FileMapError,
     FileOpenError,
     InvalidArgumentError,
     InvalidPathError,
@@ -62,6 +63,10 @@ def test_get_exception_preserves_known_and_unknown_codes():
     invalid_path = get_exception(37)
     assert isinstance(invalid_path, InvalidPathError)
     assert invalid_path.code == ErrorCode.INVALID_PATH
+
+    map_error = get_exception(ErrorCode.FILE_MAP_ERROR)
+    assert isinstance(map_error, FileMapError)
+    assert map_error.code == ErrorCode.FILE_MAP_ERROR
 
 
 def test_invalid_tree_path_propagates_native_error(tmp_path):

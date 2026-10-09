@@ -24,10 +24,15 @@ The dataset package enforces a strict cross-shard merge policy:
 - duplicate timestamps for the same logical series across shards are rejected.
 """
 
-import heapq
 from typing import Dict, List, Tuple
 
 import numpy as np
+
+from ._merge import (
+    merge_time_value_parts_overlap,
+    merge_timestamp_parts_overlap,
+    scatter_timeline_columns,
+)
 
 
 def merge_timestamp_parts(
@@ -49,39 +54,7 @@ def merge_timestamp_parts(
     ):
         return np.concatenate(parts)
 
-    total_length = sum(len(ts_part) for ts_part in parts)
-    merged = np.empty(total_length, dtype=np.int64)
-
-    heap = [(int(ts_part[0]), part_idx, 0) for part_idx, ts_part in enumerate(parts)]
-    heapq.heapify(heap)
-
-    out_idx = 0
-    last_ts = None
-    while heap:
-        ts, part_idx, offset = heapq.heappop(heap)
-
-        if last_ts is not None and ts == last_ts:
-            if validate_unique:
-                raise ValueError(f"Duplicate timestamp {ts} found across shards.")
-            if not deduplicate:
-                merged[out_idx] = ts
-                out_idx += 1
-        else:
-            merged[out_idx] = ts
-            out_idx += 1
-            last_ts = ts
-
-        next_offset = offset + 1
-        if next_offset < len(parts[part_idx]):
-            heapq.heappush(
-                heap, (int(parts[part_idx][next_offset]), part_idx, next_offset)
-            )
-
-    if validate_unique:
-        return merged[:out_idx]
-    if deduplicate:
-        return merged[:out_idx]
-    return merged[:out_idx]
+    return merge_timestamp_parts_overlap(parts, deduplicate, validate_unique)
 
 
 def merge_time_value_parts(
@@ -90,8 +63,8 @@ def merge_time_value_parts(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Merge sorted time/value parts for one logical series.
 
-    Duplicate timestamps are validated during metadata loading, so the query
-    path can assume each part is already sorted and conflict-free.
+    Duplicate timestamps are validated during metadata loading and again by
+    the overlapping query merge as a defense against stale or external indexes.
 
     Fast path: if shard ranges do not overlap in time, concatenate in shard
     order after sorting parts by their first timestamp.
@@ -117,29 +90,7 @@ def merge_time_value_parts(
     ):
         return np.concatenate(time_parts), np.concatenate(value_parts)
 
-    total_length = sum(len(ts_part) for ts_part in time_parts)
-    merged_ts = np.empty(total_length, dtype=np.int64)
-    merged_vals = np.empty(total_length, dtype=np.float64)
-
-    heap = [
-        (int(ts_part[0]), part_idx, 0) for part_idx, ts_part in enumerate(time_parts)
-    ]
-    heapq.heapify(heap)
-
-    out_idx = 0
-    while heap:
-        _, part_idx, offset = heapq.heappop(heap)
-        merged_ts[out_idx] = time_parts[part_idx][offset]
-        merged_vals[out_idx] = value_parts[part_idx][offset]
-        out_idx += 1
-
-        next_offset = offset + 1
-        if next_offset < len(time_parts[part_idx]):
-            heapq.heappush(
-                heap, (int(time_parts[part_idx][next_offset]), part_idx, next_offset)
-            )
-
-    return merged_ts, merged_vals
+    return merge_time_value_parts_overlap(time_parts, value_parts)
 
 
 def build_aligned_matrix(
@@ -150,20 +101,75 @@ def build_aligned_matrix(
     Each input series is assumed to already satisfy the dataset merge policy,
     meaning its timestamp array is unique within that logical series.
     """
-    all_ts_arrays = [ts for ts, _ in series_data.values() if len(ts) > 0]
-    if not all_ts_arrays:
+    # Aligned measurements from one device intentionally share the same
+    # timestamp ndarray.  Collapse those identities first, then also collapse
+    # exact-equal timelines from different devices.  Otherwise the generic
+    # implementation feeds the same 2,880 timestamps into the union once per
+    # selected measurement and repeats np.searchsorted for every column.
+    timeline_groups = []
+    groups_by_identity = {}
+    for col_idx, name in enumerate(series_names):
+        item = series_data.get(name)
+        if item is None or len(item[0]) == 0:
+            continue
+        ts_arr, val_arr = item
+        group = groups_by_identity.get(id(ts_arr))
+        if group is None:
+            group = [ts_arr, []]
+            groups_by_identity[id(ts_arr)] = group
+            timeline_groups.append(group)
+        group[1].append((col_idx, val_arr))
+
+    if not timeline_groups:
         return np.array([], dtype=np.int64), np.empty((0, len(series_names)))
 
-    timestamps = merge_timestamp_parts(all_ts_arrays, deduplicate=True)
+    distinct_timelines = []
+    equivalence_buckets = {}
+    for ts_arr, columns in timeline_groups:
+        last_index = len(ts_arr) - 1
+        sample = tuple(
+            int(ts_arr[last_index * sample_index // 7]) for sample_index in range(1, 7)
+        )
+        equivalence_key = (len(ts_arr), int(ts_arr[0]), int(ts_arr[-1]), sample)
+        equivalent = None
+        bucket = equivalence_buckets.setdefault(equivalence_key, [])
+        for current in bucket:
+            current_ts = current[0]
+            if np.array_equal(current_ts, ts_arr):
+                equivalent = current
+                break
+        if equivalent is None:
+            equivalent = [ts_arr, columns]
+            distinct_timelines.append(equivalent)
+            bucket.append(equivalent)
+        else:
+            equivalent[1].extend(columns)
+
+    if len(distinct_timelines) == 1:
+        timestamps = distinct_timelines[0][0]
+        values = np.full((len(timestamps), len(series_names)), np.nan)
+        columns = distinct_timelines[0][1]
+        scatter_timeline_columns(
+            timestamps,
+            timestamps,
+            [val_arr for _, val_arr in columns],
+            [col_idx for col_idx, _ in columns],
+            values,
+        )
+        return timestamps, values
+
+    timestamps = merge_timestamp_parts(
+        [group[0] for group in distinct_timelines], deduplicate=True
+    )
     values = np.full((len(timestamps), len(series_names)), np.nan)
 
-    for col_idx, name in enumerate(series_names):
-        if name not in series_data:
-            continue
-        ts_arr, val_arr = series_data[name]
-        if len(ts_arr) == 0:
-            continue
-        indices = np.searchsorted(timestamps, ts_arr)
-        values[indices, col_idx] = val_arr
+    for ts_arr, columns in distinct_timelines:
+        scatter_timeline_columns(
+            timestamps,
+            ts_arr,
+            [val_arr for _, val_arr in columns],
+            [col_idx for col_idx, _ in columns],
+            values,
+        )
 
     return timestamps, values

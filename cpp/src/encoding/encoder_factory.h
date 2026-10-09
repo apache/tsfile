@@ -20,6 +20,8 @@
 #ifndef ENCODING_ENCODER_FACTORY_H
 #define ENCODING_ENCODER_FACTORY_H
 
+#include "camel_encoder.h"
+#include "chimp_encoder.h"
 #include "common/global.h"
 #include "dictionary_encoder.h"
 #include "double_sprintz_encoder.h"
@@ -31,6 +33,7 @@
 #include "int32_sprintz_encoder.h"
 #include "int64_sprintz_encoder.h"
 #include "plain_encoder.h"
+#include "rlbe_encoder.h"
 #include "ts2diff_encoder.h"
 #include "zigzag_encoder.h"
 
@@ -134,6 +137,22 @@ class EncoderFactory {
                         return nullptr;
                 }
 
+            case CHIMP:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_ENCODER(IntChimpEncoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_ENCODER(LongChimpEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatChimpEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleChimpEncoder);
+                    default:
+                        return nullptr;
+                }
+
             case ZIGZAG:
                 switch (data_type) {
                     case INT32:
@@ -158,6 +177,30 @@ class EncoderFactory {
                         return nullptr;
                 }
 
+            case RLBE:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_ENCODER(IntRLBEEncoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_ENCODER(LongRLBEEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatRLBEEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleRLBEEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case CAMEL:
+                switch (data_type) {
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(CamelEncoder);
+                    default:
+                        return nullptr;
+                }
+
             case DIFF:
             case BITMAP:
             case GORILLA_V1:
@@ -172,6 +215,10 @@ class EncoderFactory {
     }
 
     static void free(Encoder* encoder) {
+        if (encoder == nullptr) {
+            return;
+        }
+        encoder->destroy();
         encoder->~Encoder();
         common::mem_free(encoder);
     }

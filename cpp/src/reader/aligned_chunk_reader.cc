@@ -33,7 +33,7 @@
 using namespace common;
 namespace storage {
 
-int AlignedChunkReader::init(ReadFile* read_file, String m_name,
+int AlignedChunkReader::init(RandomAccessReadFile* read_file, String m_name,
                              TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
@@ -144,6 +144,10 @@ void AlignedChunkReader::destroy() {
         value_compressor_->after_uncompress(value_uncompressed_buf_);
         value_uncompressed_buf_ = nullptr;
     }
+    // Multi-value readers keep the current page's decompressed buffers in
+    // ValueColumnState. Release them while the column compressors are still
+    // alive; the columns are deleted below and cannot release them afterwards.
+    release_current_page_state();
     value_page_col_notnull_bitmap_.clear();
     value_page_col_notnull_bitmap_.shrink_to_fit();
     if (time_decoder_ != nullptr) {
@@ -213,7 +217,6 @@ void AlignedChunkReader::destroy() {
     // vector to actually release the storage, matching the chunk_pages_ /
     // page_all_times_ handling above.
     std::vector<ValueColumnState*>().swap(value_columns_);
-    release_current_page_state();
     std::vector<std::vector<int64_t>>().swap(per_page_times_);
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned
@@ -322,6 +325,11 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
 int AlignedChunkReader::alloc_compressor_and_decoder(
     storage::Decoder*& decoder, storage::Compressor*& compressor,
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
+    // Invalid enum bytes indicate corrupted chunk metadata, not an allocator
+    // failure.  Reject them before asking the factory for a decoder.
+    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+        return E_TSFILE_CORRUPTED;
+    }
     if (decoder != nullptr) {
         decoder->reset();
     } else {
@@ -1376,7 +1384,8 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
         if (heap) common::mem_free(compressed_buf);
         return ret;
     }
-    // ReadFile::read() returns E_OK + short read_len on EOF; uncompressing
+    // RandomAccessReadFile::read() returns E_OK + short read_len on EOF;
+    // uncompressing
     // page_info.time_compressed_size from a buffer with uninitialised tail
     // bytes would feed garbage to the decompressor.
     if (read_len != static_cast<int32_t>(page_info.time_compressed_size)) {

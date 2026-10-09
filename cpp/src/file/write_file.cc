@@ -34,6 +34,7 @@ int fsync(int);
 
 #include "common/config/config.h"
 #include "common/logger/elog.h"
+#include "file/utf8_file_open.h"
 #include "utils/errno_define.h"
 
 using namespace common;
@@ -59,10 +60,10 @@ int WriteFile::do_create(int flags, mode_t mode) {
     flags |= O_BINARY;
 #endif
     // TODO make sure no same file exists
-    fd_ = ::open(path_.c_str(), flags, mode);
+    fd_ = file_internal::open_utf8(path_, flags, mode);
     if (fd_ < 0) {
         // log_err("open file error, path=%s, errno=%d", path_.c_str(), errno);
-        ret = E_FILE_OPEN_ERR;
+        ret = errno == EEXIST ? E_ALREADY_EXIST : E_FILE_OPEN_ERR;
     } else {
     }
     return ret;

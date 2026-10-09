@@ -37,6 +37,13 @@ import java.util.Optional;
 import java.util.Random;
 
 public class Int32ArrayColumnEncoderTest {
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testInvalidDataType() {
+    ColumnEncoderFactory.get(ColumnEncoding.INT32_ARRAY)
+        .readColumn(ByteBuffer.allocate(0), TSDataType.DOUBLE, 0);
+  }
+
   @Test
   public void testIntColumn() {
     final int positionCount = 10;

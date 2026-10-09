@@ -20,6 +20,7 @@
 #ifndef TSFILE_CLI_OUTPUT_FORMAT_H
 #define TSFILE_CLI_OUTPUT_FORMAT_H
 
+#include <cstdio>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -49,14 +50,20 @@ class RowWriter {
     RowWriter(std::ostream& out, OutputFormat fmt,
               std::vector<std::string> header,
               std::vector<common::TSDataType> types, bool no_header);
+    ~RowWriter();
 
-    void write(const std::vector<std::string>& cells,
+    bool write(const std::vector<std::string>& cells,
                const std::vector<bool>& is_null);
-    void finish();
+    bool write(const std::vector<std::string>& cells,
+               const std::vector<bool>& is_null,
+               const std::vector<common::TSDataType>& row_types);
+    bool finish();
 
    private:
-    void ensure_header();
-    bool emits_json_bare(size_t col) const;
+    bool ensure_header();
+    bool emits_json_bare(common::TSDataType type) const;
+    std::string format_cell(common::TSDataType type,
+                            const std::string& cell) const;
 
     std::ostream& out_;
     OutputFormat fmt_;
@@ -64,8 +71,8 @@ class RowWriter {
     std::vector<common::TSDataType> types_;
     bool no_header_;
     bool header_done_ = false;
-    std::vector<std::vector<std::string>> rows_;
-    std::vector<std::vector<bool>> rows_null_;
+    std::FILE* spool_ = nullptr;
+    std::vector<size_t> table_widths_;
 };
 
 }  // namespace tsfile_cli

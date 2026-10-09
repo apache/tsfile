@@ -27,15 +27,11 @@ import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.fileSystem.fsFactory.FSFactory;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
-import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
-import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
-import org.apache.tsfile.write.record.datapoint.IntDataPoint;
-import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -68,35 +64,9 @@ public class TsFileGeneratorUtils {
       // construct TsRecord
       TSRecord tsRecord = new TSRecord(deviceId, time);
       for (IMeasurementSchema schema : schemas) {
-        DataPoint dPoint;
-        switch (schema.getType()) {
-          case INT64:
-          case TIMESTAMP:
-            dPoint = new LongDataPoint(schema.getMeasurementName(), startValue);
-            break;
-          case INT32:
-          case DATE:
-            dPoint = new IntDataPoint(schema.getMeasurementName(), (int) startValue);
-            break;
-          case DOUBLE:
-            dPoint = new DoubleDataPoint(schema.getMeasurementName(), (double) startValue);
-            break;
-          case FLOAT:
-            dPoint = new FloatDataPoint(schema.getMeasurementName(), (float) startValue);
-            break;
-          case BOOLEAN:
-            dPoint = new BooleanDataPoint(schema.getMeasurementName(), true);
-            break;
-          case TEXT:
-          case BLOB:
-          case STRING:
-          default:
-            dPoint =
-                new StringDataPoint(
-                    schema.getMeasurementName(),
-                    new Binary(String.valueOf(startValue), TSFileConfig.STRING_CHARSET));
-            break;
-        }
+        DataPoint dPoint =
+            Type.fromTsDataType(schema.getType())
+                .getDataPoint(schema.getMeasurementName(), startValue);
         tsRecord.addTuple(dPoint);
       }
       // write

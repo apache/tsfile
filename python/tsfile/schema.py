@@ -100,6 +100,13 @@ class TimeseriesMetadata:
     chunk_meta_count: int
     statistic: TimeseriesStatisticType
     timeline_statistic: TimeseriesStatisticType
+    value_metadata_offset: int = 0
+    value_metadata_length: int = 0
+    time_metadata_offset: int = 0
+    time_metadata_length: int = 0
+    time_chunk_meta_count: int = 0
+    layout: int = 0
+    locator_flags: int = 0
 
 
 @dataclass(frozen=True)

@@ -19,11 +19,21 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.Field;
+
 public class LongType extends AbstractLongType {
 
   public static final LongType INT64 = new LongType();
 
   private LongType() {}
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.INT64);
+    field.setLongV((long) value);
+    return field;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {

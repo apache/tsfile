@@ -299,8 +299,14 @@ def test_dataframe_to_tsfile_all_datatypes():
         assert df_read["bool_col"].equals(df_sorted["bool_col"])
         assert df_read["int32_col"].equals(df_sorted["int32_col"])
         assert df_read["int64_col"].equals(df_sorted["int64_col"])
-        assert np.allclose(df_read["float_col"], df_sorted["float_col"])
-        assert np.allclose(df_read["double_col"], df_sorted["double_col"])
+        assert np.allclose(
+            df_read["float_col"].to_numpy(dtype=np.float32, na_value=np.nan),
+            df_sorted["float_col"].to_numpy(dtype=np.float32, na_value=np.nan),
+        )
+        assert np.allclose(
+            df_read["double_col"].to_numpy(dtype=np.float64, na_value=np.nan),
+            df_sorted["double_col"].to_numpy(dtype=np.float64, na_value=np.nan),
+        )
         assert df_read["string_col"].equals(df_sorted["string_col"])
         assert df_read["text_col"].equals(df_sorted["text_col"])
         assert df_read["date_col"].equals(df_sorted["date_col"])

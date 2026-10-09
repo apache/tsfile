@@ -20,6 +20,7 @@
 #ifndef COMPRESS_COMPRESSOR_FACTORY_H
 #define COMPRESS_COMPRESSOR_FACTORY_H
 
+#include "common/db_common.h"
 #include "uncompressed_compressor.h"
 
 #ifdef ENABLE_SNAPPY
@@ -36,6 +37,14 @@
 
 #ifdef ENABLE_LZ4
 #include "lz4_compressor.h"
+#endif
+
+#ifdef ENABLE_ZSTD
+#include "zstd_compressor.h"
+#endif
+
+#ifdef ENABLE_LZMA2
+#include "lzma2_compressor.h"
 #endif
 
 namespace storage {
@@ -87,6 +96,18 @@ class CompressorFactory {
             return nullptr;
         } else if (type == common::PLA) {
             return nullptr;
+        } else if (type == common::ZSTD) {
+#ifdef ENABLE_ZSTD
+            ALLOC_AND_RETURN_COMPRESSPR(ZstdCompressor);
+#else
+            return nullptr;
+#endif
+        } else if (type == common::LZMA2) {
+#ifdef ENABLE_LZMA2
+            ALLOC_AND_RETURN_COMPRESSPR(LZMA2Compressor);
+#else
+            return nullptr;
+#endif
         } else {
             ASSERT(false);
             return nullptr;

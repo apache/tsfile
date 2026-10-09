@@ -134,7 +134,7 @@ Apache TsFile ships `tsfile-cli`, a single, pipe-friendly command-line tool for 
 **and** importing `.tsfile` files directly from the shell. Read commands (`ls`, `meta`,
 `schema`, `stats`, `count`, `head`, `cat`, `sample`) print to stdout and diagnostics to
 stderr, so they compose with `awk`, `jq`, `sort`, and friends; the `write` command imports
-CSV/TSV into a new `.tsfile`. Output formats: `csv`, `tsv`, `json` (NDJSON), and `table`.
+CSV into a new `.tsfile`. Output formats: `csv`, `tsv`, `json` (NDJSON), and `table`.
 
 ### Commands
 
@@ -148,7 +148,7 @@ CSV/TSV into a new `.tsfile`. Output formats: `csv`, `tsv`, `json` (NDJSON), and
 | `head`   | Print the first N rows (default 10; `-n` to change) |
 | `cat`    | Stream every matching row |
 | `sample` | Take a reproducible reservoir sample of rows (`-n`, `--seed`) |
-| `write`  | Import CSV/TSV into a new table-model `.tsfile` |
+| `write`  | Import CSV into a new table-model `.tsfile` |
 
 The metadata commands (`ls`, `meta`, `schema`, `stats`, `count`) answer most questions
 without decoding data pages, while `head`, `cat`, and `sample` read the actual rows.
@@ -159,11 +159,12 @@ without decoding data pages, while `head`, `cat`, and `sample` read the actual r
 tsfile-cli ls data.tsfile                          # list tables / devices
 tsfile-cli meta data.tsfile                        # file overview (model, counts, time range, size)
 tsfile-cli head -n 20 data.tsfile                  # first 20 rows
-tsfile-cli cat -m temp,humidity -f csv data.tsfile # stream selected columns as CSV
+tsfile-cli cat -m temp -m humidity -f csv data.tsfile # stream selected columns as CSV
 
-# import CSV/TSV into a new table-model .tsfile
+# import CSV into a new table-model .tsfile
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
-  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
+  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 \
+      --stdin -o out.tsfile
 ```
 
 ### Building

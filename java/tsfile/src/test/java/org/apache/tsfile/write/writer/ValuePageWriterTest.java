@@ -37,10 +37,97 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class ValuePageWriterTest {
+
+  @Test
+  public void testWriteNull() throws IOException {
+    ICompressor compressor = ICompressor.getCompressor(CompressionType.UNCOMPRESSED);
+    // Exercise every bitmap offset and null runs spanning multiple bytes.
+    for (int prefixSize = 0; prefixSize <= 8; prefixSize++) {
+      for (int nullCount = 0; nullCount <= 24; nullCount++) {
+        ValuePageWriter pageWriter =
+            new ValuePageWriter(
+                new PlainEncoder(TSDataType.FLOAT, 0), compressor, TSDataType.FLOAT);
+        ValuePageWriter expectedWriter =
+            new ValuePageWriter(
+                new PlainEncoder(TSDataType.FLOAT, 0), compressor, TSDataType.FLOAT);
+        for (int i = 0; i < prefixSize; i++) {
+          pageWriter.write(i, (float) i, false);
+          expectedWriter.write(i, (float) i, false);
+        }
+        pageWriter.writeNull(nullCount);
+        for (int i = 0; i < nullCount; i++) {
+          expectedWriter.write(prefixSize + i, 0.0f, true);
+        }
+        assertEquals(prefixSize + nullCount, pageWriter.getSize());
+        assertEquals(prefixSize, pageWriter.getPointNumber());
+
+        int lastTime = prefixSize + nullCount;
+        pageWriter.write(lastTime, 42.0f, false);
+        expectedWriter.write(lastTime, 42.0f, false);
+        assertEquals(expectedWriter.getUncompressedBytes(), pageWriter.getUncompressedBytes());
+        PublicBAOS expectedStatistics = new PublicBAOS();
+        PublicBAOS actualStatistics = new PublicBAOS();
+        expectedWriter.getStatistics().serialize(expectedStatistics);
+        pageWriter.getStatistics().serialize(actualStatistics);
+        assertArrayEquals(expectedStatistics.toByteArray(), actualStatistics.toByteArray());
+      }
+    }
+  }
+
+  @Test
+  public void testWriteNullOnlyPageAndReset() throws IOException {
+    ValuePageWriter pageWriter =
+        new ValuePageWriter(
+            new PlainEncoder(TSDataType.FLOAT, 0),
+            ICompressor.getCompressor(CompressionType.UNCOMPRESSED),
+            TSDataType.FLOAT);
+    PublicBAOS pageBuffer = new PublicBAOS();
+    pageWriter.writeNull(0);
+    assertEquals(0, pageWriter.getSize());
+    assertEquals(0, pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true));
+    assertEquals(0, pageBuffer.size());
+
+    pageWriter.writeNull(7);
+    pageWriter.writeNull(10);
+    assertEquals(17, pageWriter.getSize());
+    assertEquals(0, pageWriter.getPointNumber());
+    assertEquals(1, pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true));
+    assertEquals(1, pageBuffer.size());
+    assertEquals(0, pageBuffer.getBuf()[0]);
+
+    pageWriter.reset(TSDataType.FLOAT);
+    pageWriter.writeNull(1);
+    pageWriter.write(1L, 1.0f, false);
+    ByteBuffer buffer = pageWriter.getUncompressedBytes();
+    assertEquals(2, buffer.getInt());
+    assertEquals((byte) 0x40, buffer.get());
+    assertEquals(1.0f, buffer.getFloat(), 0.0f);
+    assertEquals(0, buffer.remaining());
+  }
+
+  @Test
+  public void testWriteLargeNullBatch() throws IOException {
+    ValuePageWriter pageWriter =
+        new ValuePageWriter(
+            new PlainEncoder(TSDataType.FLOAT, 0),
+            ICompressor.getCompressor(CompressionType.UNCOMPRESSED),
+            TSDataType.FLOAT);
+    pageWriter.writeNull(16393);
+
+    assertEquals(16393, pageWriter.getSize());
+    assertEquals(0, pageWriter.getPointNumber());
+    ByteBuffer buffer = pageWriter.getUncompressedBytes();
+    assertEquals(16393, buffer.getInt());
+    assertEquals(2050, buffer.remaining());
+    while (buffer.hasRemaining()) {
+      assertEquals(0, buffer.get());
+    }
+  }
 
   @Test
   public void testWrite1() {

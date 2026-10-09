@@ -23,6 +23,8 @@
 #include <map>
 #include <string>
 
+#include "utils/util_define.h"
+
 namespace common {
 
 // define struct
@@ -58,6 +60,11 @@ struct InjectPoint {
 
 // the map save all inject points
 extern std::map<std::string, InjectPoint> g_all_inject_points;
+
+#ifdef ENABLE_TEST
+TSFILE_API void enable_injection(const char* inject_point_name, int count);
+TSFILE_API void disable_injection(const char* inject_point_name);
+#endif
 
 }  // end namespace common
 

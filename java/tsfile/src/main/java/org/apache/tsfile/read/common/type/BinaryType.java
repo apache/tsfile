@@ -19,10 +19,21 @@
 
 package org.apache.tsfile.read.common.type;
 
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.Field;
+import org.apache.tsfile.utils.Binary;
+
 public class BinaryType extends AbstractVarcharType {
   public static final BinaryType TEXT = new BinaryType();
 
   private BinaryType() {}
+
+  @Override
+  public Field getField(Object value) {
+    Field field = new Field(TSDataType.TEXT);
+    field.setBinaryV((Binary) value);
+    return field;
+  }
 
   @Override
   public TypeEnum getTypeEnum() {

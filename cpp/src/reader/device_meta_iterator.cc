@@ -143,7 +143,7 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
 }
 
 void DeviceMetaIterator::try_setup_direct_lookup(MetaIndexNode* root_node) {
-    if (id_filter_ == nullptr) return;
+    if (id_filter_ == nullptr || root_node == nullptr) return;
 
     const auto* eq = dynamic_cast<const TagEq*>(id_filter_);
     if (eq == nullptr) return;

@@ -20,12 +20,13 @@
 #ifndef FILE_TSFILE_IO_REAER_H
 #define FILE_TSFILE_IO_REAER_H
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "common/tsblock/tsblock.h"
-#include "file/read_file.h"
+#include "file/random_access_read_file.h"
 #include "reader/chunk_reader.h"
 #include "reader/filter/filter.h"
 #include "reader/tsfile_series_scan_iterator.h"
@@ -33,6 +34,9 @@
 #include "utils/storage_utils.h"
 namespace storage {
 class TsFileSeriesScanIterator;
+class PreparedSeries;
+struct FileGeneration;
+struct PreparedLocator;
 
 /*
  * TODO:
@@ -51,7 +55,7 @@ class TsFileIOReader {
         device_node_cache_pa_.init(512, common::MOD_TSFILE_READER);
     }
 
-    // Free only the ReadFile we own (created by init(const std::string&)).
+    // Free only the local source we own (created by init(const std::string&)).
     // Without an explicit destructor that raw pointer leaks whenever a
     // TsFileIOReader value goes out of scope without an explicit reset() (e.g.
     // a stack instance in a test).  We deliberately do NOT call reset() here:
@@ -64,7 +68,7 @@ class TsFileIOReader {
     // reset() leaves read_file_ == nullptr, so this never double-frees.
     ~TsFileIOReader() {
         if (read_file_created_ && read_file_ != nullptr) {
-            read_file_->destroy();
+            read_file_->close();
             delete read_file_;
             read_file_ = nullptr;
         }
@@ -72,7 +76,7 @@ class TsFileIOReader {
 
     int init(const std::string& file_path);
 
-    int init(ReadFile* read_file);
+    int init(RandomAccessReadFile* read_file);
 
     void reset();
 
@@ -86,9 +90,37 @@ class TsFileIOReader {
                         TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
                         Filter* time_filter = nullptr);
 
+    int prepare_series(const FileGeneration& generation,
+                       const PreparedLocator& locator,
+                       std::shared_ptr<PreparedSeries>& prepared);
+    int prepare_series(
+        const FileGeneration& generation, const PreparedLocator& locator,
+        const std::shared_ptr<PreparedSeries>& aligned_time_owner,
+        std::shared_ptr<PreparedSeries>& prepared);
+
+    int alloc_prepared_ssi(const std::shared_ptr<PreparedSeries>& prepared,
+                           TsFileSeriesScanIterator*& ssi,
+                           common::PageArena& pa,
+                           Filter* time_filter = nullptr);
+
+    int alloc_prepared_multi_ssi(
+        const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
+        TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+        Filter* time_filter = nullptr);
+
     void revert_ssi(TsFileSeriesScanIterator* ssi);
 
     std::string get_file_path() const { return read_file_->file_path(); }
+
+    int get_tsfile_meta(TsFileMeta*& tsfile_meta) {
+        const int ret = load_tsfile_meta_if_necessary();
+        tsfile_meta = ret == common::E_OK ? &tsfile_meta_ : nullptr;
+        return ret;
+    }
+
+    // Raw read access for callers that need to parse structures the metadata
+    // index does not carry, e.g. the chunk header at a ChunkMeta offset.
+    RandomAccessReadFile* get_read_file() const { return read_file_; }
 
     TsFileMeta* get_tsfile_meta() {
         load_tsfile_meta_if_necessary();
@@ -211,7 +243,7 @@ class TsFileIOReader {
     static std::string device_node_cache_key(
         const std::shared_ptr<IDeviceID>& device_id);
 
-    ReadFile* read_file_;
+    RandomAccessReadFile* read_file_;
     common::PageArena tsfile_meta_page_arena_;
     TsFileMeta tsfile_meta_;
     bool tsfile_meta_ready_;

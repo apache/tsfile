@@ -1,0 +1,5 @@
+{"model":"table","object":"table1","column":"value","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"table2","column":"site","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"table2","column":"rack","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"table2","column":"sensor","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"table2","column":"reading","category":"FIELD","data_type":"DOUBLE","encoding":"PLAIN","compression":"UNCOMPRESSED"}

@@ -28,8 +28,8 @@ import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
+import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Pair;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.TableChunkGroupWriterImpl;
@@ -198,13 +198,16 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
    */
   private class TableTsBlockChunkGroupWriterImpl extends TableChunkGroupWriterImpl {
     private final ValueChunkWriter[] valueChunkWriters;
+    private final Type[] valueTypes;
 
     public TableTsBlockChunkGroupWriterImpl(IDeviceID deviceId) throws IOException {
       super(deviceId);
       // Initialize ValueChunkWriter for each measurement
       this.valueChunkWriters = new ValueChunkWriter[fieldColumnSchemas.length];
+      this.valueTypes = new Type[fieldColumnSchemas.length];
       for (int i = 0; i < fieldColumnSchemas.length; i++) {
         valueChunkWriters[i] = tryToAddSeriesWriterInternal(fieldColumnSchemas[i]);
+        valueTypes[i] = Type.fromTsDataType(valueChunkWriters[i].getDataType());
       }
     }
 
@@ -227,35 +230,7 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
           Column valueColumn = valueColumns[valueColumnIndex];
           ValueChunkWriter valueChunkWriter = valueChunkWriters[valueColumnIndex];
           boolean isNull = valueColumn.isNull(rowIndex);
-          switch (valueChunkWriter.getDataType()) {
-            case BOOLEAN:
-              valueChunkWriter.write(
-                  time, isNull ? false : valueColumn.getBoolean(rowIndex), isNull);
-              break;
-            case INT32:
-            case DATE:
-              valueChunkWriter.write(time, isNull ? 0 : valueColumn.getInt(rowIndex), isNull);
-              break;
-            case INT64:
-            case TIMESTAMP:
-              valueChunkWriter.write(time, isNull ? 0 : valueColumn.getLong(rowIndex), isNull);
-              break;
-            case FLOAT:
-              valueChunkWriter.write(time, isNull ? 0 : valueColumn.getFloat(rowIndex), isNull);
-              break;
-            case DOUBLE:
-              valueChunkWriter.write(time, isNull ? 0 : valueColumn.getDouble(rowIndex), isNull);
-              break;
-            case TEXT:
-            case BLOB:
-            case STRING:
-              valueChunkWriter.write(time, isNull ? null : valueColumn.getBinary(rowIndex), isNull);
-              break;
-            default:
-              throw new UnSupportedDataTypeException(
-                  Messages.format(
-                      "error.write.type_not_supported", valueChunkWriter.getDataType().getType()));
-          }
+          valueTypes[valueColumnIndex].write(valueChunkWriter, time, valueColumn, rowIndex, isNull);
         }
         timeChunkWriter.write(time);
         lastTime = time;

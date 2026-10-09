@@ -1,0 +1,3 @@
+time,site,room,temp
+1000,beijing,r1,\N
+2000,beijing,r1,\N

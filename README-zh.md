@@ -133,7 +133,7 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 Apache TsFile 提供了命令行工具 `tsfile-cli`，这是一个单文件、对管道友好的工具，可直接在
 shell 中查看**并**导入 `.tsfile` 文件。读取类命令
 （`ls`、`meta`、`schema`、`stats`、`count`、`head`、`cat`、`sample`）将数据输出到 stdout、
-诊断信息输出到 stderr，因此可与 `awk`、`jq`、`sort` 等工具组合使用；`write` 命令则将 CSV/TSV
+诊断信息输出到 stderr，因此可与 `awk`、`jq`、`sort` 等工具组合使用；`write` 命令则将 CSV
 导入为新的 `.tsfile`。支持的输出格式：`csv`、`tsv`、`json`（NDJSON）、`table`。
 
 ### 命令
@@ -148,7 +148,7 @@ shell 中查看**并**导入 `.tsfile` 文件。读取类命令
 | `head`   | 输出前 N 行（默认 10，可用 `-n` 调整） |
 | `cat`    | 流式输出所有匹配的行 |
 | `sample` | 对行做可复现的蓄水池采样（`-n`、`--seed`） |
-| `write`  | 将 CSV/TSV 导入为新的表模型 `.tsfile` |
+| `write`  | 将 CSV 导入为新的表模型 `.tsfile` |
 
 其中元数据类命令（`ls`、`meta`、`schema`、`stats`、`count`）无需解码数据页即可回答大部分问题，
 而 `head`、`cat`、`sample` 则会读取真实的行数据。
@@ -159,11 +159,12 @@ shell 中查看**并**导入 `.tsfile` 文件。读取类命令
 tsfile-cli ls data.tsfile                          # 列出表 / 设备
 tsfile-cli meta data.tsfile                        # 文件概览（模型、数量、时间范围、大小）
 tsfile-cli head -n 20 data.tsfile                  # 前 20 行
-tsfile-cli cat -m temp,humidity -f csv data.tsfile # 以 CSV 流式输出指定列
+tsfile-cli cat -m temp -m humidity -f csv data.tsfile # 以 CSV 流式输出指定列
 
-# 将 CSV/TSV 导入为新的表模型 .tsfile
+# 将 CSV 导入为新的表模型 .tsfile
 printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
-  | tsfile-cli write --table t1 --columns "id1:STRING:tag,s1:INT64:field" -o out.tsfile -
+  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 \
+      --stdin -o out.tsfile
 ```
 
 ### 构建

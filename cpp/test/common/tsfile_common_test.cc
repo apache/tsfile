@@ -43,6 +43,47 @@ TEST(PageHeaderTest, Reset) {
     EXPECT_EQ(header.compressed_size_, 0);
 }
 
+TEST(PageHeaderTest, DeserializeEmptyPageConsumesSingleVarint) {
+    // Java writes an empty value page as a single zero varint (see
+    // ValueChunkWriter.writeEmptyPageToPageBuffer): it carries no compressed
+    // size and no statistics. The C++ deserializer must not read past it.
+    common::ByteStream in(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, in));
+    // A following non-empty page header (uncompressed=10, compressed=5).
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(10, in));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(5, in));
+
+    PageHeader header;
+    ASSERT_EQ(common::E_OK,
+              header.deserialize_from(in, false, common::TSDataType::INT32));
+    EXPECT_EQ(header.uncompressed_size_, 0U);
+    EXPECT_EQ(header.compressed_size_, 0U);
+    EXPECT_EQ(header.statistic_, nullptr);
+    // The empty page header consumes exactly one byte (a single varint),
+    // leaving the following page header intact.
+    EXPECT_EQ(1U, in.read_pos());
+
+    PageHeader next;
+    ASSERT_EQ(common::E_OK,
+              next.deserialize_from(in, false, common::TSDataType::INT32));
+    EXPECT_EQ(next.uncompressed_size_, 10U);
+    EXPECT_EQ(next.compressed_size_, 5U);
+    EXPECT_EQ(next.statistic_, nullptr);
+}
+
+TEST(PageHeaderTest, DeserializeEmptyPageWithStatisticConsumesSingleVarint) {
+    common::ByteStream in(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, in));
+
+    PageHeader header;
+    ASSERT_EQ(common::E_OK,
+              header.deserialize_from(in, true, common::TSDataType::INT32));
+    EXPECT_EQ(header.uncompressed_size_, 0U);
+    EXPECT_EQ(header.compressed_size_, 0U);
+    EXPECT_EQ(header.statistic_, nullptr);
+    EXPECT_EQ(1U, in.read_pos());
+}
+
 TEST(ChunkHeaderTest, DefaultConstructor) {
     ChunkHeader header;
     EXPECT_EQ(header.measurement_name_, "");
@@ -564,5 +605,38 @@ TEST(DefaultCompressorTest, DefaultIsAllocatable) {
               common::CompressionType::UNCOMPRESSED);
 #endif
     CompressorFactory::free(c);
+}
+
+TEST(CodecEnumAlignmentTest, JavaCodecIdsMapToNames) {
+    EXPECT_STREQ(common::get_encoding_name(common::CHIMP), "CHIMP");
+    EXPECT_STREQ(common::get_encoding_name(common::SPRINTZ), "SPRINTZ");
+    EXPECT_STREQ(common::get_encoding_name(common::RLBE), "RLBE");
+    EXPECT_STREQ(common::get_encoding_name(common::CAMEL), "CAMEL");
+    EXPECT_STREQ(common::get_compression_name(common::ZSTD), "ZSTD");
+    EXPECT_STREQ(common::get_compression_name(common::LZMA2), "LZMA2");
+}
+
+TEST(CodecEnumAlignmentTest, JavaEncodingsAreConfigurableWhenImplemented) {
+    EXPECT_EQ(common::set_datatype_encoding(common::INT32, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int32_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::INT64, common::RLBE),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.int64_encoding_type_, common::RLBE);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CHIMP),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.float_encoding_type_, common::CHIMP);
+    EXPECT_EQ(common::set_datatype_encoding(common::DOUBLE, common::CAMEL),
+              common::E_OK);
+    EXPECT_EQ(common::g_config_value_.double_encoding_type_, common::CAMEL);
+    EXPECT_EQ(common::set_datatype_encoding(common::FLOAT, common::CAMEL),
+              common::E_NOT_SUPPORT);
+}
+
+TEST(CodecEnumAlignmentTest, JavaCompressionCodecsAreConfigurable) {
+    EXPECT_EQ(common::set_global_compression(common::ZSTD), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::ZSTD);
+    EXPECT_EQ(common::set_global_compression(common::LZMA2), common::E_OK);
+    EXPECT_EQ(common::g_config_value_.default_compression_type_, common::LZMA2);
 }
 }  // namespace storage
