@@ -447,7 +447,7 @@ public class TsFileIOWriter implements AutoCloseable {
     chunkMetadataCount++;
     if (recordTablePointCount
         && currentChunkGroupDeviceId != null
-        && currentChunkGroupDeviceId.isTableModel()
+        && schema.getTableSchemaMap().containsKey(currentChunkGroupDeviceId.getTableName())
         && (currentChunkMetadata.getMask() & TsFileConstant.TIME_COLUMN_MASK) == 0) {
       tablePointCountMap.merge(
           currentChunkGroupDeviceId.getTableName(),
@@ -956,7 +956,7 @@ public class TsFileIOWriter implements AutoCloseable {
     // endFile
     boolean endFile = currentStartChunkGroupDeviceId == null;
     if (endFile
-        || (currentStartChunkGroupDeviceId.isTableModel()
+        || (schema.getTableSchemaMap().containsKey(currentStartChunkGroupDeviceId.getTableName())
             && !currentStartChunkGroupDeviceId.getTableName().equals(currentTable))) {
       if (currentTable != null) {
         long size = currentPosition - currentTableStartOffset;
