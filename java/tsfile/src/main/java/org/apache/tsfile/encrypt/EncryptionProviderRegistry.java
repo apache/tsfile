@@ -48,7 +48,7 @@ public final class EncryptionProviderRegistry {
 
   public static void unregisterProvider(String providerId) {
     if (providerId != null) {
-      PROVIDERS.remove(providerId);
+      PROVIDERS.remove(providerId.trim());
     }
   }
 

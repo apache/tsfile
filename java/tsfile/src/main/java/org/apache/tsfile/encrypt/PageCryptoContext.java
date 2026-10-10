@@ -126,6 +126,7 @@ public final class PageCryptoContext {
     return pageIndex == 0;
   }
 
+  /** Returns a defensive copy so providers cannot mutate the authenticated page identity. */
   public byte[] getAssociatedData() {
     return Arrays.copyOf(associatedData, associatedData.length);
   }

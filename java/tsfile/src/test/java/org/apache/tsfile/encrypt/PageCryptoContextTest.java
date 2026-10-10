@@ -109,4 +109,36 @@ public class PageCryptoContextTest {
       parameter.close();
     }
   }
+
+  @Test
+  public void testAssociatedDataCannotBeModifiedByProvider() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      PageCryptoContext context = PageCryptoContext.forEncryption(parameter, 8, 8, 0, 0);
+      byte[] expected = context.getAssociatedData();
+      byte[] providerCopy = context.getAssociatedData();
+      providerCopy[0] ^= 1;
+      assertArrayEquals(expected, context.getAssociatedData());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testUnregisterProviderTrimsId() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      EncryptionProviderRegistry.create(parameter);
+      EncryptionProviderRegistry.unregisterProvider(
+          " " + TestAeadEncryptionProvider.PROVIDER_ID + " ");
+      assertThrows(EncryptException.class, () -> EncryptionProviderRegistry.create(parameter));
+    } finally {
+      EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+      parameter.close();
+    }
+  }
 }

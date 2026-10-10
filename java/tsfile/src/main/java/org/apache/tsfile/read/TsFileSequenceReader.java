@@ -2307,6 +2307,9 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public ByteBuffer readPage(PageHeader header, CompressionType type, int pageIndex)
       throws IOException {
+    if (fileEncryptionParam != null && fileEncryptionParam.isTdePageAead()) {
+      throw new IOException(Messages.get("error.encrypt.page_read_requires_chunk_ordinal"));
+    }
     return readPage(header, type, pageIndex, -1);
   }
 

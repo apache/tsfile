@@ -167,6 +167,56 @@ public class TDEPageAeadTsFileTest {
   }
 
   @Test
+  public void testLegacyReadPageOverloadsRejectPageAeadBeforeReading() throws Exception {
+    EncryptParameter encryptParameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      try (TsFileWriter writer = new TsFileWriter(file, encryptParameter)) {
+        writer.registerTimeseries(
+            new Path("d1"),
+            new MeasurementSchema(
+                "s1", TSDataType.INT64, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 11L)));
+      }
+
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath())) {
+        ChunkMetadata metadata = reader.getChunkMetadataList(new Path("d1", "s1", true)).get(0);
+        reader.position(metadata.getOffsetOfChunkHeader());
+        ChunkHeader chunkHeader = reader.readChunkHeader(reader.readMarker());
+        PageHeader pageHeader = reader.readPageHeader(chunkHeader.getDataType(), false);
+        long pageBodyOffset = reader.position();
+
+        IOException noPageIndex =
+            assertThrows(
+                IOException.class,
+                () -> reader.readPage(pageHeader, chunkHeader.getCompressionType()));
+        assertTrue(noPageIndex.getMessage().contains("chunkOrdinal"));
+        assertEquals(pageBodyOffset, reader.position());
+
+        IOException noChunkOrdinal =
+            assertThrows(
+                IOException.class,
+                () -> reader.readPage(pageHeader, chunkHeader.getCompressionType(), 0));
+        assertTrue(noChunkOrdinal.getMessage().contains("chunkOrdinal"));
+        assertEquals(pageBodyOffset, reader.position());
+
+        assertTrue(
+            reader
+                    .readPage(
+                        pageHeader,
+                        chunkHeader.getCompressionType(),
+                        0,
+                        chunkHeader.getChunkOrdinal())
+                    .remaining()
+                > 0);
+      }
+    } finally {
+      encryptParameter.close();
+    }
+  }
+
+  @Test
   public void testChunkWriterReuseAllocatesDistinctOrdinals() throws Exception {
     EncryptParameter encryptParameter =
         TestAeadEncryptionProvider.createParameter(
