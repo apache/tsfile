@@ -21,11 +21,13 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "common/path.h"
+#include "encoding/encoder_factory.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
@@ -35,10 +37,63 @@ namespace {
 
 using namespace common;
 
-// All-null value pages still contain codec headers (DICTIONARY) or a
-// terminator (GORILLA). They must not prevent reading subsequent pages.
+// Recreate the older C++ representation so reader compatibility is tested
+// independently of the corrected empty-page writer.
+void use_legacy_null_pages(ValueChunkWriter* writer, TSDataType type,
+                           TSEncoding encoding, uint32_t page_rows) {
+    ByteStream rewritten(1024, MOD_DEFAULT);
+    ByteStream& data = writer->get_chunk_data();
+    std::unique_ptr<Encoder, decltype(&EncoderFactory::free)> encoder(
+        EncoderFactory::alloc_value_encoder(encoding, type),
+        EncoderFactory::free);
+    std::unique_ptr<Statistic, decltype(&StatisticFactory::free)> empty_stat(
+        StatisticFactory::alloc_statistic(type), StatisticFactory::free);
+    ASSERT_NE(encoder, nullptr);
+    ASSERT_NE(empty_stat, nullptr);
+    for (int page = 0; page < writer->num_of_pages(); ++page) {
+        PageHeader header;
+        ASSERT_EQ(header.deserialize_from(data, true, type), E_OK);
+        if (header.uncompressed_size_ == 0) {
+            ByteStream payload(1024, MOD_DEFAULT);
+            encoder->reset();
+            ASSERT_EQ(encoder->flush(payload), E_OK);
+            std::vector<char> bitmap((page_rows + 7) / 8, 0);
+            const uint32_t size =
+                sizeof(uint32_t) + bitmap.size() + payload.total_size();
+            ASSERT_EQ(SerializationUtil::write_var_uint(size, rewritten), E_OK);
+            ASSERT_EQ(SerializationUtil::write_var_uint(size, rewritten), E_OK);
+            ASSERT_EQ(empty_stat->serialize_to(rewritten), E_OK);
+            ASSERT_EQ(SerializationUtil::write_ui32(page_rows, rewritten),
+                      E_OK);
+            ASSERT_EQ(rewritten.write_buf(bitmap.data(), bitmap.size()), E_OK);
+            ASSERT_EQ(merge_byte_stream(rewritten, payload), E_OK);
+        } else {
+            ASSERT_EQ(SerializationUtil::write_var_uint(
+                          header.uncompressed_size_, rewritten),
+                      E_OK);
+            ASSERT_EQ(SerializationUtil::write_var_uint(header.compressed_size_,
+                                                        rewritten),
+                      E_OK);
+            ASSERT_EQ(header.statistic_->serialize_to(rewritten), E_OK);
+            std::vector<char> payload(header.compressed_size_);
+            uint32_t read = 0;
+            ASSERT_EQ(data.read_buf(payload.data(), payload.size(), read),
+                      E_OK);
+            ASSERT_EQ(read, payload.size());
+            ASSERT_EQ(rewritten.write_buf(payload.data(), payload.size()),
+                      E_OK);
+        }
+    }
+    ASSERT_EQ(data.remaining_size(), 0u);
+    data.reset();
+    ASSERT_EQ(merge_byte_stream(data, rewritten), E_OK);
+}
+
+// Leading and intermediate all-null value pages must not prevent reading
+// subsequent pages, regardless of the value codec or write API.
 class AlignedNullPageReadTest
-    : public ::testing::TestWithParam<std::tuple<TSDataType, uint32_t, int>> {
+    : public ::testing::TestWithParam<
+          std::tuple<TSDataType, uint32_t, int, bool>> {
    protected:
     void SetUp() override {
         ASSERT_EQ(libtsfile_init(), E_OK);
@@ -50,7 +105,8 @@ class AlignedNullPageReadTest
         file_ = "aligned_null_page_" +
                 std::to_string(static_cast<int>(std::get<0>(GetParam()))) +
                 "_" + std::to_string(std::get<1>(GetParam())) + "_" +
-                std::to_string(std::get<2>(GetParam())) + ".tsfile";
+                std::to_string(std::get<2>(GetParam())) + "_" +
+                std::to_string(std::get<3>(GetParam())) + ".tsfile";
         std::remove(file_.c_str());
     }
 
@@ -81,8 +137,8 @@ class AlignedNullPageReadTest
                 record.add_point("value", 1000.25 + row);
                 break;
             case STRING:
-                record.add_point("value",
-                                 String("value-" + std::to_string(row)));
+                record_string_ = "value-" + std::to_string(row);
+                record.add_point("value", String(record_string_));
                 break;
             default:
                 FAIL() << "Unexpected type";
@@ -148,6 +204,7 @@ class AlignedNullPageReadTest
     }
 
     std::string file_;
+    std::string record_string_;
     uint32_t saved_page_rows_ = 0;
     uint32_t saved_block_memory_ = 0;
 };
@@ -196,6 +253,11 @@ TEST_P(AlignedNullPageReadTest,
                 row += count;
             }
         }
+        if (std::get<3>(GetParam())) {
+            ASSERT_NO_FATAL_FAILURE(
+                use_legacy_null_pages(schemas[1]->value_chunk_writer_, type,
+                                      encoding, std::get<1>(GetParam())));
+        }
         ASSERT_EQ(writer.flush(), E_OK);
         ASSERT_EQ(writer.close(), E_OK);
     }
@@ -227,7 +289,7 @@ INSTANTIATE_TEST_SUITE_P(
     CodecsAndPageBoundaries, AlignedNullPageReadTest,
     ::testing::Combine(::testing::Values(INT32, INT64, FLOAT, DOUBLE, STRING),
                        ::testing::Values(1u, 7u, 256u),
-                       ::testing::Values(0, 1, 2)));
+                       ::testing::Values(0, 1, 2), ::testing::Bool()));
 
 }  // namespace
 }  // namespace storage

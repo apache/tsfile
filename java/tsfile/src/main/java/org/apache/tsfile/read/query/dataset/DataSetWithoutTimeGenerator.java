@@ -71,25 +71,21 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
     timeSet = new LongOpenHashSet(seriesCount);
 
     for (int i = 0; i < paths.size(); i++) {
-      BatchData data = nextNonEmptyBatch(readers.get(i));
-      batchDataList.add(data == null ? new BatchData() : data);
-      hasDataRemaining.add(data != null);
-      if (data != null) {
+      AbstractFileSeriesReader reader = readers.get(i);
+      if (!reader.hasNextBatch()) {
+        batchDataList.add(new BatchData());
+        hasDataRemaining.add(false);
+      } else {
+        batchDataList.add(reader.nextBatch());
+        hasDataRemaining.add(true);
+      }
+    }
+
+    for (BatchData data : batchDataList) {
+      if (data.hasCurrent()) {
         timeHeapPut(data.currentTime());
       }
     }
-  }
-
-  private static BatchData nextNonEmptyBatch(AbstractFileSeriesReader reader) throws IOException {
-    // An aligned page or a filtered batch can contain no selected rows while
-    // subsequent pages still contain values.
-    while (reader.hasNextBatch()) {
-      BatchData data = reader.nextBatch();
-      if (data.hasCurrent()) {
-        return data;
-      }
-    }
-    return null;
   }
 
   @Override
@@ -117,10 +113,15 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
         data.next();
 
         if (!data.hasCurrent()) {
-          data = nextNonEmptyBatch(readers.get(i));
-          if (data != null) {
-            batchDataList.set(i, data);
-            timeHeapPut(data.currentTime());
+          AbstractFileSeriesReader reader = readers.get(i);
+          if (reader.hasNextBatch()) {
+            data = reader.nextBatch();
+            if (data.hasCurrent()) {
+              batchDataList.set(i, data);
+              timeHeapPut(data.currentTime());
+            } else {
+              hasDataRemaining.set(i, false);
+            }
           } else {
             hasDataRemaining.set(i, false);
           }
