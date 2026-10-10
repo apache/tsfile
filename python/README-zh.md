@@ -68,6 +68,45 @@ mvn -P with-cpp,with-python clean verify
 python setup.py build_ext --inplace
 ```
 
+## Dataset 读取资源上限
+
+`TsFileDataFrame` 在 `use_index=True` 时支持以下仅限关键字的配置参数：
+
+```python
+from tsfile import TsFileDataFrame
+
+with TsFileDataFrame(
+    ["part1.tsfile", "part2.tsfile"],
+    use_index=True,
+    max_prepared_series=32,
+    descriptor_cache_size=32,
+    max_open_files=16,
+    query_workers=4,
+) as frame:
+    values = frame[0][:]
+```
+
+| 参数 | 环境变量 | 默认值 | 有效取值 |
+|------|----------|--------|----------|
+| `max_prepared_series` | `TSFILE_DATAFRAME_MAX_PREPARED_SERIES` | 4096 | 非负整数 |
+| `descriptor_cache_size` | `TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE` | 4096 | 非负整数 |
+| `max_open_files` | `TSFILE_DATAFRAME_MAX_OPEN_FILES` | 16 | 正整数 |
+| `query_workers` | `TSFILE_DATAFRAME_QUERY_WORKERS` | `min(4, os.cpu_count() or 1)` | 正整数 |
+| `query_parallel_min_rows` | `TSFILE_DATAFRAME_QUERY_PARALLEL_MIN_ROWS` | 8192 | 正整数 |
+
+显式参数优先于对应的环境变量。参数为 `None` 时读取环境变量；变量未设置时
+使用内置默认值。配置在构造 frame 时一次性确定，之后修改环境变量不会影响
+已有 frame。子集共享父 frame 的 runtime 和配置。非法值在打开数据文件或索引前
+报错。显式传入这些参数要求 `use_index=True`；默认的无索引模式不读取这些环境变量。
+
+预备序列缓存保留已解析的原生序列元数据，按 LRU 淘汰空闲条目并释放原生句柄。
+查询正在使用的条目，以及其他序列仍依赖的共享时间元数据，会保持有效，因而
+并发查询期间条目数可能暂时超过上限，查询结束后再回收。这是每个 runtime 的
+条目数量上限，不是整个进程的内存上限；设置为 `0` 表示使用结束后不保留缓存。
+`descriptor_cache_size` 分别限制名称描述符缓存和序列路由缓存，`0` 禁用二者。
+`max_open_files` 限制打开的 reader 数量，`query_workers=1` 表示串行执行查询组。
+多个 runtime 或工作进程分别维护各自的上限。
+
 ## 文件级 Properties
 
 `TsFileWriter` 和 `TsFileTableWriter` 可以在打开期间写入二进制 property。

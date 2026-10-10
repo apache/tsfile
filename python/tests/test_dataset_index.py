@@ -25,7 +25,6 @@ import pyarrow as pa
 import pytest
 
 import tsfile.dataset.index as index_module
-import tsfile.dataset.runtime as runtime_module
 from tsfile import (
     ColumnCategory,
     ColumnSchema,
@@ -421,9 +420,9 @@ def test_series_path_from_another_index_falls_back_to_its_name(tmp_path, monkeyp
 def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch):
     source = tmp_path / "devices.tsfile"
     _write_runtime_devices_file(source)
-    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 2)
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, descriptor_cache_size=2
+    ) as dataframe:
         names = [str(name) for name in dataframe.list_timeseries()]
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -538,8 +537,9 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
-        with runtime.readers.acquire(0) as reader:
-            prepared = runtime.prepared.get(0, span[2], reader)
+        with runtime.readers.acquire(0) as reader, runtime.prepared.acquire(
+            0, span[2], reader
+        ) as prepared:
             with reader.query_prepared(prepared, offset=1, limit=7) as result:
                 batches = []
                 while True:

@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from .formatting import format_dataframe_table
+from ._config import resolve_read_options
 from .metadata import (
     MODEL_TABLE,
     MODEL_TREE,
@@ -772,16 +773,38 @@ class _LocIndexer:
 
 
 class TsFileDataFrame:
-    """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
+    """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
+
+    Keyword-only read options apply to ``use_index=True``. Each option uses
+    its explicit value, or the matching ``TSFILE_DATAFRAME_<OPTION>`` environment
+    variable when None, or its built-in default. Values are fixed at creation.
+    Cache sizes accept zero to disable retention; other limits must be positive.
+    """
 
     def __init__(
         self,
         paths: Union[str, List[str]],
         show_progress: bool = True,
         use_index: bool = False,
+        *,
+        max_prepared_series: Optional[int] = None,
+        descriptor_cache_size: Optional[int] = None,
+        max_open_files: Optional[int] = None,
+        query_workers: Optional[int] = None,
+        query_parallel_min_rows: Optional[int] = None,
     ):
         if not isinstance(use_index, bool):
             raise TypeError("use_index must be a bool")
+        options = dict(
+            max_prepared_series=max_prepared_series,
+            descriptor_cache_size=descriptor_cache_size,
+            max_open_files=max_open_files,
+            query_workers=query_workers,
+            query_parallel_min_rows=query_parallel_min_rows,
+        )
+        if not use_index and any(value is not None for value in options.values()):
+            raise ValueError("Dataset read options require use_index=True")
+        self._runtime_options = resolve_read_options(**options) if use_index else {}
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
         self._use_index = use_index
@@ -801,6 +824,7 @@ class TsFileDataFrame:
         """Create a lightweight view that reuses the parent's readers and caches."""
         obj = object.__new__(cls)
         obj._root = parent._root if parent._is_view else parent
+        obj._runtime_options = parent._runtime_options.copy()
         obj._is_view = True
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
@@ -889,7 +913,7 @@ class TsFileDataFrame:
                             reader.close()
                         self._readers.clear()
 
-        self._runtime = DatasetRuntime(index_path)
+        self._runtime = DatasetRuntime(index_path, **self._runtime_options)
         self._runtime_lease = self._runtime.lease()
         self._index = self._runtime.catalog
         if len(self._index.series) == 0:

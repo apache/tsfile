@@ -61,6 +61,50 @@ Build by python command:
 python setup.py build_ext --inplace
 ```
 
+## Dataset read resource limits
+
+`TsFileDataFrame` accepts keyword-only resource options when `use_index=True`:
+
+```python
+from tsfile import TsFileDataFrame
+
+with TsFileDataFrame(
+    ["part1.tsfile", "part2.tsfile"],
+    use_index=True,
+    max_prepared_series=32,
+    descriptor_cache_size=32,
+    max_open_files=16,
+    query_workers=4,
+) as frame:
+    values = frame[0][:]
+```
+
+| Parameter | Environment variable | Default | Allowed values |
+|-----------|----------------------|---------|----------------|
+| `max_prepared_series` | `TSFILE_DATAFRAME_MAX_PREPARED_SERIES` | 4096 | Integer >= 0 |
+| `descriptor_cache_size` | `TSFILE_DATAFRAME_DESCRIPTOR_CACHE_SIZE` | 4096 | Integer >= 0 |
+| `max_open_files` | `TSFILE_DATAFRAME_MAX_OPEN_FILES` | 16 | Integer >= 1 |
+| `query_workers` | `TSFILE_DATAFRAME_QUERY_WORKERS` | `min(4, os.cpu_count() or 1)` | Integer >= 1 |
+| `query_parallel_min_rows` | `TSFILE_DATAFRAME_QUERY_PARALLEL_MIN_ROWS` | 8192 | Integer >= 1 |
+
+An explicit parameter takes precedence over its environment variable. `None`
+uses the environment variable, or the built-in default if it is unset. Options
+are resolved once when constructing the frame; later environment changes do not
+affect it. Subsets share their parent's runtime and limits. Invalid values raise
+an error before dataset files or indexes are opened. Explicit resource options
+require `use_index=True`; the default non-indexed mode ignores these environment
+variables.
+
+The prepared-series cache retains parsed native series metadata. It evicts the
+least recently used idle entries and releases their native handles. Active
+queries and dependent series pin shared time metadata, so the entry count can
+temporarily exceed the limit until those queries finish. This is an entry-count
+limit per runtime, not a process-wide memory limit. A value of `0` disables
+retention after use. `descriptor_cache_size` bounds each of the named-descriptor
+and series-route caches; `0` disables both. `max_open_files` bounds open readers,
+and `query_workers=1` runs query groups serially. Multiple runtimes or worker
+processes have separate limits.
+
 ## File-level properties
 
 `TsFileWriter` and `TsFileTableWriter` accept binary properties while they are

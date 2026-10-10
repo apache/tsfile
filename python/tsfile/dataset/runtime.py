@@ -34,6 +34,7 @@ from ..constants import NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from ._arrow import arrow_column_to_float64
+from ._config import DEFAULT_CACHE_SIZE, resolve_read_options
 from .index import (
     COLUMN_NAME_INDEX,
     COLUMN_SCHEMA,
@@ -55,8 +56,6 @@ from .metadata import (
     split_logical_series_path,
 )
 from .merge import build_aligned_matrix
-
-_SERIES_DESCRIPTOR_CACHE_SIZE = 4096
 
 
 @dataclass(frozen=True)
@@ -249,14 +248,31 @@ class ReaderSessionPool:
             return len(self._sessions)
 
 
-class PreparedSeriesCache:
-    """Runtime-wide single-flight cache of native exact-locator metadata."""
+@dataclass
+class _PreparedSeriesEntry:
+    prepared: object
+    active_uses: int = 0
+    time_owner: Optional["_PreparedSeriesEntry"] = None
+    dependent_uses: int = 0
 
-    def __init__(self, index: MappedDatasetIndex):
+
+class PreparedSeriesCache:
+    """Single-flight LRU; active queries and shared time owners stay pinned."""
+
+    def __init__(
+        self, index: MappedDatasetIndex, max_entries: int = DEFAULT_CACHE_SIZE
+    ):
+        if isinstance(max_entries, bool) or not isinstance(max_entries, int):
+            raise TypeError("max_entries must be an integer")
+        if max_entries < 0:
+            raise ValueError("max_entries must be non-negative")
         self._index = index
+        self.max_entries = max_entries
         self._condition = threading.Condition()
-        self._entries = {}
+        self._entries = OrderedDict()
+        self._entries_by_prepared_id = {}
         self._loading = set()
+        self._pending_closes = 0
         self._closed = False
 
     def _locator_tuple(self, file_id, locator_id):
@@ -279,48 +295,153 @@ class PreparedSeriesCache:
             device_span[3],
         )
 
-    def get(self, file_id, locator_id, reader, time_owner=None):
+    def _pop_entry_locked(self, key):
+        entry = self._entries.pop(key)
+        self._entries_by_prepared_id.pop(id(entry.prepared))
+        if entry.time_owner is not None:
+            entry.time_owner.dependent_uses -= 1
+            entry.time_owner = None
+        return entry.prepared
+
+    def _evict_idle_locked(self):
+        evicted = []
+        while len(self._entries) > self.max_entries:
+            idle_key = next(
+                (
+                    key
+                    for key, entry in self._entries.items()
+                    if entry.active_uses == 0 and entry.dependent_uses == 0
+                ),
+                None,
+            )
+            if idle_key is None:
+                break
+            evicted.append(self._pop_entry_locked(idle_key))
+        self._pending_closes += len(evicted)
+        return evicted
+
+    @staticmethod
+    def _close_entries(entries):
+        first_error = None
+        for prepared in entries:
+            try:
+                prepared.close()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+    def _close_evicted(self, entries):
+        try:
+            self._close_entries(entries)
+        finally:
+            with self._condition:
+                self._pending_closes -= len(entries)
+                self._condition.notify_all()
+
+    def _release(self, entry):
+        with self._condition:
+            entry.active_uses -= 1
+            evicted = self._evict_idle_locked()
+            self._condition.notify_all()
+        self._close_evicted(evicted)
+
+    @contextlib.contextmanager
+    def acquire(self, file_id, locator_id, reader, time_owner=None):
         key = (id(self._index), file_id, locator_id)
+        entry = None
+        owner_entry = None
+        prepared_time_owner = time_owner
         with self._condition:
             while True:
                 if self._closed:
                     raise RuntimeError("PreparedSeriesCache is closed")
-                result = self._entries.get(key)
-                if result is not None:
-                    return result
+                entry = self._entries.get(key)
+                if entry is not None:
+                    self._entries.move_to_end(key)
+                    entry.active_uses += 1
+                    break
                 if key not in self._loading:
+                    if time_owner is not None:
+                        requested_owner = self._entries_by_prepared_id.get(
+                            id(time_owner)
+                        )
+                        if (
+                            requested_owner is None
+                            or requested_owner.prepared is not time_owner
+                            or requested_owner.active_uses == 0
+                        ):
+                            raise RuntimeError(
+                                "PreparedSeries time owner requires an active cache lease"
+                            )
+                        owner_entry = requested_owner.time_owner or requested_owner
+                        prepared_time_owner = owner_entry.prepared
                     self._loading.add(key)
                     break
                 self._condition.wait()
-        try:
-            result = reader.prepare_series(
-                self._locator_tuple(file_id, locator_id), time_owner=time_owner
-            )
-        except Exception:
+        evicted = []
+        if entry is None:
+            try:
+                result = reader.prepare_series(
+                    self._locator_tuple(file_id, locator_id),
+                    time_owner=prepared_time_owner,
+                )
+            except BaseException:
+                with self._condition:
+                    self._loading.remove(key)
+                    self._condition.notify_all()
+                raise
             with self._condition:
-                self._loading.remove(key)
+                rejected = self._closed
+                if not rejected:
+                    entry = _PreparedSeriesEntry(
+                        result, active_uses=1, time_owner=owner_entry
+                    )
+                    if owner_entry is not None:
+                        owner_entry.dependent_uses += 1
+                    self._entries[key] = entry
+                    self._entries_by_prepared_id[id(result)] = entry
+                    self._loading.remove(key)
+                    evicted = self._evict_idle_locked()
                 self._condition.notify_all()
-            raise
-        with self._condition:
-            if self._closed:
-                result.close()
-                self._loading.remove(key)
-                self._condition.notify_all()
+            if rejected:
+                # Keep preparation in flight until its rejected handle is freed,
+                # so close() cannot return while native cleanup is still pending.
+                try:
+                    result.close()
+                finally:
+                    with self._condition:
+                        self._loading.remove(key)
+                        self._condition.notify_all()
                 raise RuntimeError("PreparedSeriesCache is closed")
-            self._entries[key] = result
-            self._loading.remove(key)
-            self._condition.notify_all()
-            return result
+
+        try:
+            self._close_evicted(evicted)
+            yield entry.prepared
+        finally:
+            self._release(entry)
 
     def close(self):
         with self._condition:
             self._closed = True
-            while self._loading:
+            while (
+                self._loading
+                or self._pending_closes
+                or any(entry.active_uses for entry in self._entries.values())
+            ):
                 self._condition.wait()
-            entries = list(self._entries.values())
-            self._entries.clear()
-        for prepared in entries:
-            prepared.close()
+            entries = []
+            while self._entries:
+                # Release values before the shared time metadata they depend on.
+                leaf_key = next(
+                    key
+                    for key, entry in self._entries.items()
+                    if entry.dependent_uses == 0
+                )
+                entries.append(self._pop_entry_locked(leaf_key))
+            self._pending_closes += len(entries)
+        self._close_evicted(entries)
 
     @property
     def size(self):
@@ -335,30 +456,21 @@ class DatasetRuntime:
         max_open_files: Optional[int] = None,
         query_workers: Optional[int] = None,
         query_parallel_min_rows: Optional[int] = None,
+        *,
+        max_prepared_series: Optional[int] = None,
+        descriptor_cache_size: Optional[int] = None,
     ):
+        options = resolve_read_options(
+            max_prepared_series=max_prepared_series,
+            descriptor_cache_size=descriptor_cache_size,
+            max_open_files=max_open_files,
+            query_workers=query_workers,
+            query_parallel_min_rows=query_parallel_min_rows,
+        )
+        self.query_workers = options["query_workers"]
+        self.query_parallel_min_rows = options["query_parallel_min_rows"]
+        self.descriptor_cache_size = options["descriptor_cache_size"]
         self.index = MappedDatasetIndex(path)
-        maximum = (
-            int(os.environ.get("TSFILE_DATAFRAME_MAX_OPEN_FILES", "16"))
-            if max_open_files is None
-            else max_open_files
-        )
-        workers = (
-            int(
-                os.environ.get(
-                    "TSFILE_DATAFRAME_QUERY_WORKERS",
-                    str(min(4, os.cpu_count() or 1)),
-                )
-            )
-            if query_workers is None
-            else query_workers
-        )
-        self.query_workers = max(1, int(workers))
-        minimum_rows = (
-            int(os.environ.get("TSFILE_DATAFRAME_QUERY_PARALLEL_MIN_ROWS", "8192"))
-            if query_parallel_min_rows is None
-            else query_parallel_min_rows
-        )
-        self.query_parallel_min_rows = max(1, int(minimum_rows))
         self._query_executor = (
             ThreadPoolExecutor(
                 max_workers=self.query_workers,
@@ -367,8 +479,8 @@ class DatasetRuntime:
             if self.query_workers > 1
             else None
         )
-        self.readers = ReaderSessionPool(self.index, maximum)
-        self.prepared = PreparedSeriesCache(self.index)
+        self.readers = ReaderSessionPool(self.index, options["max_open_files"])
+        self.prepared = PreparedSeriesCache(self.index, options["max_prepared_series"])
         self._condition = threading.Condition()
         self._object_leases = 0
         self._query_leases = 0
@@ -681,7 +793,7 @@ class MappedDataFrameCatalog:
         self.runtime = runtime
         self.index = runtime.index
         self.index_identity = runtime.index.identity
-        self._descriptor_cache_size = _SERIES_DESCRIPTOR_CACHE_SIZE
+        self._descriptor_cache_size = runtime.descriptor_cache_size
         self._descriptor_cache = OrderedDict()
         self._descriptor_cache_lock = threading.Lock()
         self.table_entries = _TableMapping(self)
@@ -920,14 +1032,16 @@ class RuntimeSeriesReader:
         limit=None,
     ):
         with self.runtime.readers.acquire(self.file_id) as reader:
-            prepared = self.runtime.prepared.get(self.file_id, locator_id, reader)
-            if offset is None:
-                result = reader.query_prepared(
-                    prepared, start_time=start_time, end_time=end_time
-                )
-            else:
-                result = reader.query_prepared(prepared, offset=offset, limit=limit)
-            return self._consume(result)
+            with self.runtime.prepared.acquire(
+                self.file_id, locator_id, reader
+            ) as prepared:
+                if offset is None:
+                    result = reader.query_prepared(
+                        prepared, start_time=start_time, end_time=end_time
+                    )
+                else:
+                    result = reader.query_prepared(prepared, offset=offset, limit=limit)
+                return self._consume(result)
 
     def read_series_by_ref(self, device_id, column_id, start_time, end_time):
         return self._query(device_id, column_id, start_time, end_time)
@@ -969,12 +1083,16 @@ class RuntimeSeriesReader:
             column_names = [
                 self._identity(device_id, column_id)[3] for column_id in column_ids
             ]
-            with self.runtime.readers.acquire(self.file_id) as reader:
+            with self.runtime.readers.acquire(
+                self.file_id
+            ) as reader, contextlib.ExitStack() as stack:
                 prepared = []
                 time_owner = None
                 for span in spans:
-                    current = self.runtime.prepared.get(
-                        self.file_id, span[2], reader, time_owner=time_owner
+                    current = stack.enter_context(
+                        self.runtime.prepared.acquire(
+                            self.file_id, span[2], reader, time_owner=time_owner
+                        )
                     )
                     prepared.append(current)
                     if time_owner is None:
