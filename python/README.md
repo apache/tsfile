@@ -78,6 +78,29 @@ with TsFileReader("example.tsfile") as reader:
 Values do not carry a data type; use an explicit portable encoding when storing
 numbers or structures.
 
+## Dataset indexes
+
+Enable the persistent dataset index with `use_index=True`. The first open
+builds the index; subsequent opens reuse it. By default, `trust_index=True`
+assumes the indexed TsFiles will not change and skips source file size,
+modification time, and generation checks during index loading and queries.
+Index format and locator bounds are always checked.
+
+```python
+from tsfile import TsFileDataFrame
+
+with TsFileDataFrame("dataset/", use_index=True) as dataset:
+    series = dataset[0]
+
+# Check source generations when loading the index and acquiring readers.
+with TsFileDataFrame("dataset/", use_index=True, trust_index=False) as dataset:
+    series = dataset[0]
+```
+
+With `trust_index=False`, a stale index is rebuilt when the dataset opens;
+changes detected while acquiring a query reader raise an error. `trust_index`
+has no effect when `use_index=False`, which remains the default.
+
 ## Local File Read Backend
 
 Python readers inherit the process-wide backend setting when they open a file.

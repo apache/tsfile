@@ -151,12 +151,20 @@ class _QueryLease:
 
 
 class _ReaderSession:
-    def __init__(self, file_id: int, path: str, expected_size: int, fingerprint: int):
+    def __init__(
+        self,
+        file_id: int,
+        path: str,
+        expected_size: int,
+        fingerprint: int,
+        trust_index: bool,
+    ):
         self.file_id = file_id
         self.path = path
         self.expected_size = expected_size
         self.fingerprint = fingerprint
-        self._validate_generation()
+        if not trust_index:
+            self._validate_generation()
         self.reader = TsFileReaderPy(path)
         self.active_uses = 0
 
@@ -178,8 +186,11 @@ class _ReaderSession:
 class ReaderSessionPool:
     """Per-Runtime LRU pool with a hard cap on simultaneously open Readers."""
 
-    def __init__(self, index: MappedDatasetIndex, max_open_files: int):
+    def __init__(
+        self, index: MappedDatasetIndex, max_open_files: int, trust_index: bool = True
+    ):
         self._index = index
+        self._trust_index = trust_index
         self.max_open_files = max(1, int(max_open_files))
         self._sessions: "OrderedDict[int, _ReaderSession]" = OrderedDict()
         self._condition = threading.Condition()
@@ -192,6 +203,7 @@ class ReaderSessionPool:
             self._index.string(record[0]),
             record[2],
             record[3],
+            self._trust_index,
         )
 
     @contextlib.contextmanager
@@ -202,7 +214,8 @@ class ReaderSessionPool:
                     raise RuntimeError("ReaderSessionPool is closed")
                 session = self._sessions.get(file_id)
                 if session is not None:
-                    session._validate_generation()
+                    if not self._trust_index:
+                        session._validate_generation()
                     self._sessions.move_to_end(file_id)
                     session.active_uses += 1
                     break
@@ -254,8 +267,9 @@ class ReaderSessionPool:
 class PreparedSeriesCache:
     """Runtime-wide single-flight cache of native exact-locator metadata."""
 
-    def __init__(self, index: MappedDatasetIndex):
+    def __init__(self, index: MappedDatasetIndex, trust_index: bool = True):
         self._index = index
+        self._trust_index = trust_index
         self._condition = threading.Condition()
         self._entries = {}
         self._loading = set()
@@ -301,7 +315,9 @@ class PreparedSeriesCache:
                 self._condition.wait()
         try:
             result = reader.prepare_series(
-                self._locator_tuple(file_id, locator_id), time_owner=time_owner
+                self._locator_tuple(file_id, locator_id),
+                time_owner=time_owner,
+                trust_index=self._trust_index,
             )
         except Exception:
             with self._condition:
@@ -342,6 +358,7 @@ class DatasetRuntime:
         max_open_files: Optional[int] = None,
         query_workers: Optional[int] = None,
         query_parallel_min_rows: Optional[int] = None,
+        trust_index: bool = True,
     ):
         self.index = MappedDatasetIndex(path)
         maximum = (
@@ -374,8 +391,8 @@ class DatasetRuntime:
             if self.query_workers > 1
             else None
         )
-        self.readers = ReaderSessionPool(self.index, maximum)
-        self.prepared = PreparedSeriesCache(self.index)
+        self.readers = ReaderSessionPool(self.index, maximum, trust_index)
+        self.prepared = PreparedSeriesCache(self.index, trust_index)
         self._condition = threading.Condition()
         self._object_leases = 0
         self._query_leases = 0

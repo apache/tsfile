@@ -568,6 +568,27 @@ ERRNO tsfile_writer_write_arrow(TsFileWriter writer, ArrowArray* array,
 PreparedSeriesHandle tsfile_reader_prepare_series(
     TsFileReader reader, const TsFilePreparedLocator* locator,
     ERRNO* err_code) {
+    return tsfile_reader_prepare_series_with_options(reader, locator, nullptr,
+                                                     false, err_code);
+}
+
+PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code) {
+    if (aligned_time_owner == nullptr) {
+        if (err_code != nullptr) {
+            *err_code = common::E_INVALID_ARG;
+        }
+        return nullptr;
+    }
+    return tsfile_reader_prepare_series_with_options(
+        reader, locator, aligned_time_owner, false, err_code);
+}
+
+PreparedSeriesHandle tsfile_reader_prepare_series_with_options(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    PreparedSeriesHandle aligned_time_owner, bool trust_index,
+    ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
     }
@@ -575,50 +596,13 @@ PreparedSeriesHandle tsfile_reader_prepare_series(
     if (reader == nullptr || locator == nullptr) {
         return nullptr;
     }
-    storage::FileGeneration generation;
-    generation.mapped_index_identity = locator->mapped_index_identity;
-    generation.file_id = locator->file_id;
-    generation.file_size = locator->file_size;
-    generation.file_fingerprint = locator->file_fingerprint;
-    storage::PreparedLocator native_locator;
-    native_locator.locator_id = locator->locator_id;
-    native_locator.layout = locator->layout;
-    native_locator.flags = locator->flags;
-    native_locator.value_metadata_offset = locator->value_metadata_offset;
-    native_locator.value_metadata_length = locator->value_metadata_length;
-    native_locator.time_metadata_offset = locator->time_metadata_offset;
-    native_locator.time_metadata_length = locator->time_metadata_length;
-    std::shared_ptr<storage::PreparedSeries> prepared;
-    *err_code = static_cast<storage::TsFileReader*>(reader)->prepare_series(
-        generation, native_locator, prepared);
-    if (*err_code != common::E_OK) {
-        return nullptr;
-    }
-    auto* handle = new (std::nothrow)
-        std::shared_ptr<storage::PreparedSeries>(std::move(prepared));
-    if (handle == nullptr) {
-        *err_code = common::E_OOM;
-    }
-    return handle;
-}
-
-PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
-    TsFileReader reader, const TsFilePreparedLocator* locator,
-    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code) {
-    if (err_code == nullptr) {
-        return nullptr;
-    }
-    *err_code = common::E_INVALID_ARG;
-    if (reader == nullptr || locator == nullptr ||
-        aligned_time_owner == nullptr) {
-        return nullptr;
-    }
 
     storage::FileGeneration generation;
     generation.mapped_index_identity = locator->mapped_index_identity;
     generation.file_id = locator->file_id;
     generation.file_size = locator->file_size;
     generation.file_fingerprint = locator->file_fingerprint;
+    generation.trust_index = trust_index;
     storage::PreparedLocator native_locator;
     native_locator.locator_id = locator->locator_id;
     native_locator.layout = locator->layout;
@@ -628,11 +612,14 @@ PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     native_locator.time_metadata_offset = locator->time_metadata_offset;
     native_locator.time_metadata_length = locator->time_metadata_length;
 
-    auto* owner = static_cast<std::shared_ptr<storage::PreparedSeries>*>(
-        aligned_time_owner);
     std::shared_ptr<storage::PreparedSeries> prepared;
+    std::shared_ptr<storage::PreparedSeries> owner;
+    if (aligned_time_owner != nullptr) {
+        owner = *static_cast<std::shared_ptr<storage::PreparedSeries>*>(
+            aligned_time_owner);
+    }
     *err_code = static_cast<storage::TsFileReader*>(reader)->prepare_series(
-        generation, native_locator, *owner, prepared);
+        generation, native_locator, owner, prepared);
     if (*err_code != common::E_OK) {
         return nullptr;
     }

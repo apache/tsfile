@@ -772,19 +772,30 @@ class _LocIndexer:
 
 
 class TsFileDataFrame:
-    """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
+    """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
+
+    With ``use_index=True``, ``trust_index=True`` (the default) assumes the
+    indexed TsFiles are immutable and skips source generation checks. Set
+    ``trust_index=False`` to check file sizes and modification times when
+    loading the index and acquiring readers. Index format and locator bounds
+    are always checked. ``trust_index`` has no effect when ``use_index=False``.
+    """
 
     def __init__(
         self,
         paths: Union[str, List[str]],
         show_progress: bool = True,
         use_index: bool = False,
+        trust_index: bool = True,
     ):
         if not isinstance(use_index, bool):
             raise TypeError("use_index must be a bool")
+        if not isinstance(trust_index, bool):
+            raise TypeError("trust_index must be a bool")
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
         self._use_index = use_index
+        self._trust_index = trust_index
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -805,6 +816,7 @@ class TsFileDataFrame:
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._use_index = parent._use_index
+        obj._trust_index = parent._trust_index
         obj._readers = parent._readers
         subset_refs = list(series_refs)
         obj._index = SimpleNamespace(
@@ -870,7 +882,7 @@ class TsFileDataFrame:
         from .runtime import DatasetRuntime
 
         index_path = index_path_for(self._paths)
-        if not index_matches_paths(index_path, self._paths):
+        if not index_matches_paths(index_path, self._paths, self._trust_index):
             lock_path = index_path + ".lock"
             os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
             with open(lock_path, "a+b") as lock_file:
@@ -880,7 +892,7 @@ class TsFileDataFrame:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 except ImportError:
                     pass
-                if not index_matches_paths(index_path, self._paths):
+                if not index_matches_paths(index_path, self._paths, self._trust_index):
                     self._load_metadata_without_index(TsFileSeriesReader)
                     try:
                         build_index_from_dataframe(self, index_path)
@@ -889,7 +901,7 @@ class TsFileDataFrame:
                             reader.close()
                         self._readers.clear()
 
-        self._runtime = DatasetRuntime(index_path)
+        self._runtime = DatasetRuntime(index_path, trust_index=self._trust_index)
         self._runtime_lease = self._runtime.lease()
         self._index = self._runtime.catalog
         if len(self._index.series) == 0:

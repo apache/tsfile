@@ -142,11 +142,14 @@ int TsFileIOReader::prepare_series(
     uint64_t actual_size = 0;
     uint64_t actual_fingerprint = 0;
     if (read_file_ == nullptr || generation.file_size == 0 ||
-        read_file_->generation(actual_size, actual_fingerprint) != E_OK ||
-        actual_size != generation.file_size ||
-        (generation.file_fingerprint != 0 &&
-         actual_fingerprint != generation.file_fingerprint) ||
         locator.value_metadata_length == 0 || locator.layout > 1) {
+        return E_INVALID_ARG;
+    }
+    if (!generation.trust_index &&
+        (read_file_->generation(actual_size, actual_fingerprint) != E_OK ||
+         actual_size != generation.file_size ||
+         (generation.file_fingerprint != 0 &&
+          actual_fingerprint != generation.file_fingerprint))) {
         return E_INVALID_ARG;
     }
     std::shared_ptr<PreparedSeries> candidate =

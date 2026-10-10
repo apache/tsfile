@@ -737,6 +737,14 @@ PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     TsFileReader reader, const TsFilePreparedLocator* locator,
     PreparedSeriesHandle aligned_time_owner, ERRNO* err_code);
 
+/** Prepare a locator, optionally sharing aligned time metadata and trusting
+ * the indexed file generation. A null time owner prepares independent metadata.
+ * Locator bounds are checked even when trust_index is true.
+ */
+PreparedSeriesHandle tsfile_reader_prepare_series_with_options(
+    TsFileReader reader, const TsFilePreparedLocator* locator,
+    PreparedSeriesHandle aligned_time_owner, bool trust_index, ERRNO* err_code);
+
 /** Release a prepared handle. Existing result sets remain independently owned.
  */
 void tsfile_prepared_series_free(PreparedSeriesHandle prepared);

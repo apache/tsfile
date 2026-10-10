@@ -477,8 +477,10 @@ def index_path_for(paths: Sequence[str]) -> str:
     )
 
 
-def index_matches_paths(path: str, paths: Sequence[str]) -> bool:
-    """Return whether an index describes exactly the current sealed files."""
+def index_matches_paths(
+    path: str, paths: Sequence[str], trust_index: bool = True
+) -> bool:
+    """Match the file set, checking source generations only when untrusted."""
     expected = sorted(os.path.abspath(item) for item in paths)
     try:
         with MappedDatasetIndex(path) as index:
@@ -489,12 +491,13 @@ def index_matches_paths(path: str, paths: Sequence[str]) -> bool:
                 record = index.record(TSFILE_RECORD, file_id)
                 file_path = index.string(record[0])
                 actual.append(file_path)
-                st = os.stat(file_path)
-                if (
-                    st.st_size != record[2]
-                    or file_fingerprint(file_path, st) != record[3]
-                ):
-                    return False
+                if not trust_index:
+                    st = os.stat(file_path)
+                    if (
+                        st.st_size != record[2]
+                        or file_fingerprint(file_path, st) != record[3]
+                    ):
+                        return False
             return actual == expected
     except (OSError, ValueError, UnicodeError, IndexError):
         return False

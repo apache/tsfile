@@ -792,7 +792,7 @@ cdef TsFileReader tsfile_reader_new_c(object pathname) except NULL:
     return reader
 
 cdef PreparedSeriesHandle tsfile_reader_prepare_series_c(
-        TsFileReader reader, object locator) except NULL:
+        TsFileReader reader, object locator, bint trust_index) except NULL:
     cdef TsFilePreparedLocator native
     cdef ErrorCode code = 0
     native.mapped_index_identity = locator[0]
@@ -808,13 +808,15 @@ cdef PreparedSeriesHandle tsfile_reader_prepare_series_c(
     native.time_metadata_length = locator[10]
     cdef PreparedSeriesHandle prepared
     with nogil:
-        prepared = tsfile_reader_prepare_series(reader, &native, &code)
+        prepared = tsfile_reader_prepare_series_with_options(
+            reader, &native, NULL, trust_index, &code
+        )
     check_error(code, b"Failed to prepare Dataset Index locator")
     return prepared
 
 cdef PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
         TsFileReader reader, object locator,
-        PreparedSeriesHandle aligned_time_owner) except NULL:
+        PreparedSeriesHandle aligned_time_owner, bint trust_index) except NULL:
     cdef TsFilePreparedLocator native
     cdef ErrorCode code = 0
     native.mapped_index_identity = locator[0]
@@ -830,8 +832,8 @@ cdef PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
     native.time_metadata_length = locator[10]
     cdef PreparedSeriesHandle prepared
     with nogil:
-        prepared = tsfile_reader_prepare_series_with_time_owner(
-            reader, &native, aligned_time_owner, &code
+        prepared = tsfile_reader_prepare_series_with_options(
+            reader, &native, aligned_time_owner, trust_index, &code
         )
     check_error(code, b"Failed to prepare aligned Dataset Index locator")
     return prepared
