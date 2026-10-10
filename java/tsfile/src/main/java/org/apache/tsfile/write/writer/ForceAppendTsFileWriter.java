@@ -71,13 +71,15 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
 
     try (TsFileSequenceReader reader =
         new TsFileSequenceReader(file.getAbsolutePath(), param, true)) {
-
+      if (!reader.hasFileEncryptionHeader() && param != null && param.isTdePageAead()) {
+        throw new IOException(Messages.get("error.write.aead_append_requires_file_header"));
+      }
       EncryptParameter recoveredParameter = reader.getEncryptParam();
       if (recoveredParameter != null && recoveredParameter.isTdePageAead()) {
         ownedEncryptParameter = recoveredParameter.copy();
         setEncryptParam(ownedEncryptParameter);
       }
-      markExistingFileStarted(recoveredParameter != null && recoveredParameter.isTdePageAead());
+      markExistingFileStarted(reader.hasFileEncryptionHeader());
 
       // this tsfile is not complete
       if (!reader.isComplete()) {

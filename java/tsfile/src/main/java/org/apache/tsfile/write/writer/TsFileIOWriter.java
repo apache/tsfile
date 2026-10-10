@@ -841,6 +841,9 @@ public class TsFileIOWriter implements AutoCloseable {
     boolean targetUsesPageAead = encryptParameter != null && encryptParameter.isTdePageAead();
     boolean sourceUsesPageAead = sourceParameter != null && sourceParameter.isTdePageAead();
     if (!targetUsesPageAead && !sourceUsesPageAead) {
+      if (chunk.getHeader().getChunkOrdinal() >= 0) {
+        throw new IOException(Messages.get("error.write.unencrypted_chunk_has_ordinal"));
+      }
       return;
     }
     throw new IOException(Messages.get("error.write.encrypted_chunk_copy_unsupported"));

@@ -49,8 +49,8 @@ import java.util.List;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
 
-/** used in query. */
-public class Chunk {
+/** A materialized chunk. Close it after use to destroy its independent page-AEAD context. */
+public class Chunk implements AutoCloseable {
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(Chunk.class)
@@ -88,7 +88,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.encryptParam = encryptParam;
+    this.encryptParam = copyPageAeadParameter(encryptParam);
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
@@ -100,7 +100,18 @@ public class Chunk {
   public Chunk(ChunkHeader header, ByteBuffer buffer, EncryptParameter encryptParam) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.encryptParam = encryptParam;
+    this.encryptParam = copyPageAeadParameter(encryptParam);
+  }
+
+  private static EncryptParameter copyPageAeadParameter(EncryptParameter parameter) {
+    return parameter != null && parameter.isTdePageAead() ? parameter.copy() : parameter;
+  }
+
+  @Override
+  public void close() {
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.close();
+    }
   }
 
   public EncryptParameter getEncryptParam() {

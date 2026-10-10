@@ -63,6 +63,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 
 @SuppressWarnings("squid:S4042") // Suppress use java.nio.Files#delete warning
 public class RestorableTsFileIOWriterTest {
@@ -118,6 +119,22 @@ public class RestorableTsFileIOWriterTest {
     assertEquals(TsFileCheckStatus.COMPLETE_FILE, rWriter.getTruncatedSize());
     assertFalse(rWriter.canWrite());
     rWriter.close();
+  }
+
+  @Test
+  public void testHeaderlessRecoveryRejectsPageAeadParameter() throws Exception {
+    TsFileWriter writer = new TsFileWriter(file);
+    writer.getIOWriter().close();
+    long originalLength = file.length();
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      assertThrows(IOException.class, () -> new RestorableTsFileIOWriter(file, false, parameter));
+    }
+    assertEquals(originalLength, file.length());
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+      assertFalse(reader.hasFileEncryptionHeader());
+    }
   }
 
   @Test

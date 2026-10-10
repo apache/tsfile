@@ -44,6 +44,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,6 +52,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -137,6 +139,32 @@ public class ForceAppendTsFileWriterTest {
     assertFalse(dataSet.hasNext());
 
     assertTrue(file.delete());
+  }
+
+  @Test
+  public void testHeaderlessForceAppendRejectsPageAeadParameter() throws Exception {
+    File file = fsFactory.getFile(FILE_NAME + ".headerless");
+    if (!file.getParentFile().exists()) {
+      assertTrue(file.getParentFile().mkdirs());
+    }
+    try {
+      try (TsFileWriter writer = new TsFileWriter(file)) {
+        writer.registerTimeseries(
+            new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new FloatDataPoint("s1", 5)));
+      }
+      long originalLength = file.length();
+      try (EncryptParameter parameter =
+          TestAeadEncryptionProvider.createParameter(
+              new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+        assertThrows(IOException.class, () -> new ForceAppendTsFileWriter(file, parameter));
+      }
+      assertEquals(originalLength, file.length());
+    } finally {
+      if (file.exists()) {
+        assertTrue(file.delete());
+      }
+    }
   }
 
   @Test

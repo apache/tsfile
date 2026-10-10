@@ -45,11 +45,15 @@ import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.reader.BufferedTsFileInput;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
+import org.apache.tsfile.read.reader.TsFileLastReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.TimeChunkWriter;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -65,6 +69,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -168,6 +173,104 @@ public class TDEPageAeadTsFileTest {
       }
     } finally {
       encryptParameter.close();
+    }
+  }
+
+  @Test
+  public void testMetadataOffsetConstructorLoadsEncryptionHeader() throws Exception {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      try (TsFileWriter writer = new TsFileWriter(file, parameter)) {
+        writer.registerTimeseries(
+            new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.RLE));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 11L)));
+      }
+      try (TsFileSequenceReader original = new TsFileSequenceReader(file.getPath())) {
+        ChunkMetadata metadata = original.getChunkMetadataList(new Path("d1", "s1", true)).get(0);
+        try (TsFileSequenceReader reader =
+            new TsFileSequenceReader(
+                new BufferedTsFileInput(file.toPath()),
+                original.getFileMetadataPos(),
+                original.getTsFileMetadataSize())) {
+          assertTrue(reader.hasFileEncryptionHeader());
+          original.position(metadata.getOffsetOfChunkHeader());
+          reader.position(metadata.getOffsetOfChunkHeader());
+          assertEquals(
+              original.readChunkHeader(original.readMarker()).getChunkOrdinal(),
+              reader.readChunkHeader(reader.readMarker()).getChunkOrdinal());
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testMaterializedChunkSurvivesReaderClose() throws Exception {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      try (TsFileWriter writer = new TsFileWriter(file, parameter)) {
+        writer.registerTimeseries(
+            new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 11L)));
+      }
+      Chunk chunk;
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath())) {
+        chunk = reader.readMemChunk(reader.getChunkMetadataList(new Path("d1", "s1", true)).get(0));
+      }
+      try (Chunk ownedChunk = chunk) {
+        BatchData data = new ChunkReader(ownedChunk).nextPageData();
+        IPointReader points = data.getBatchDataIterator();
+        assertTrue(points.hasNextTimeValuePair());
+        assertEquals(11L, points.nextTimeValuePair().getValue().getLong());
+      }
+      assertTrue(chunk.getEncryptParam().isDestroyed());
+      chunk.getData().rewind();
+      assertThrows(EncryptException.class, () -> new ChunkReader(chunk).nextPageData());
+    }
+  }
+
+  @Test
+  public void testAlignedBlobLastPointDecryptsPage() throws Exception {
+    TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
+    int previousMaxPointsInPage = config.getMaxNumberOfPointsInPage();
+    config.setMaxNumberOfPointsInPage(1);
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      List<IMeasurementSchema> schemas =
+          Arrays.asList(new MeasurementSchema("s1", TSDataType.BLOB, TSEncoding.PLAIN));
+      try (TsFileWriter writer = new TsFileWriter(file, parameter)) {
+        writer.registerAlignedTimeseries(new Path("d1"), schemas);
+        Tablet tablet = new Tablet("d1", schemas, 2);
+        for (int i = 0; i < 2; i++) {
+          tablet.addTimestamp(i, i + 1);
+          tablet.addValue(i, 0, ("value-" + i).getBytes(StandardCharsets.UTF_8));
+        }
+        writer.writeTree(tablet);
+      }
+      try (TsFileLastReader reader = new TsFileLastReader(file.getPath(), true, false)) {
+        Pair<?, List<Pair<String, TimeValuePair>>> last = reader.next();
+        assertEquals("s1", last.right.get(1).left);
+        assertEquals(2L, last.right.get(1).right.getTimestamp());
+        assertEquals(
+            new Binary("value-1", StandardCharsets.UTF_8),
+            last.right.get(1).right.getValue().getBinary());
+      }
+    } finally {
+      config.setMaxNumberOfPointsInPage(previousMaxPointsInPage);
+    }
+  }
+
+  @Test
+  public void testUnencryptedWriterRejectsChunkWithOrdinal() throws Exception {
+    try (TsFileIOWriter writer = new TsFileIOWriter(file)) {
+      ChunkHeader header =
+          new ChunkHeader(
+              "s1", 0, TSDataType.INT64, CompressionType.UNCOMPRESSED, TSEncoding.PLAIN, 1, 0, 0);
+      Chunk chunk = new Chunk(header, ByteBuffer.allocate(0));
+      assertThrows(IOException.class, () -> writer.writeChunk(chunk));
+      assertThrows(IOException.class, () -> writer.writeChunk(chunk, null));
     }
   }
 

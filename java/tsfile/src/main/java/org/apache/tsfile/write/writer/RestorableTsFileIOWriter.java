@@ -146,6 +146,11 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
       if (file.exists()) {
         try (TsFileSequenceReader reader =
             new TsFileSequenceReader(file.getAbsolutePath(), param, false)) {
+          if (!reader.hasFileEncryptionHeader()
+              && this.param != null
+              && this.param.isTdePageAead()) {
+            throw new IOException(Messages.get("error.write.aead_append_requires_file_header"));
+          }
           EncryptParameter recoveredParameter = reader.getEncryptParam();
           if (recoveredParameter != null && recoveredParameter.isTdePageAead()) {
             if (this.param != null && this.param.isTdePageAead()) {
@@ -154,7 +159,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
             this.param = recoveredParameter.copy();
             setEncryptParam(this.param);
           }
-          markExistingFileStarted(recoveredParameter != null && recoveredParameter.isTdePageAead());
+          markExistingFileStarted(reader.hasFileEncryptionHeader());
           schema.setEnabledUpdateSchema(false);
           truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
           if (this.param != null && this.param.isTdePageAead()) {

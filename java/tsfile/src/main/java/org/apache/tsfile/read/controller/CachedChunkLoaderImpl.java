@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.controller;
 
 import org.apache.tsfile.common.cache.LRUCache;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -61,7 +62,9 @@ public class CachedChunkLoaderImpl implements IChunkLoader {
 
           @Override
           protected Chunk loadObjectByKey(ChunkCacheKey chunkCacheKey) throws IOException {
-            return reader.readMemChunk(chunkCacheKey);
+            try (Chunk chunk = reader.readMemChunk(chunkCacheKey)) {
+              return new Chunk(chunk.getHeader(), chunk.getData(), (EncryptParameter) null);
+            }
           }
         };
   }

@@ -441,17 +441,26 @@ public class TsFileSequenceReader implements AutoCloseable {
    *     of the input to the current position
    * @param fileMetadataSize the byte size of the file metadata in the input
    */
-  public TsFileSequenceReader(TsFileInput input, long fileMetadataPos, int fileMetadataSize) {
+  public TsFileSequenceReader(TsFileInput input, long fileMetadataPos, int fileMetadataSize)
+      throws IOException {
     this.tsFileInput = input;
+    this.file = input.getFilePath();
     this.fileMetadataPos = fileMetadataPos;
     this.fileMetadataSize = fileMetadataSize;
+    try {
+      loadFileEncryptionHeader(null);
+    } catch (IOException | RuntimeException e) {
+      tsFileInput.close();
+      throw e;
+    }
   }
 
   public TsFileSequenceReader(
       TsFileInput input,
       long fileMetadataPos,
       int fileMetadataSize,
-      EncryptParameter firstEncryptParam) {
+      EncryptParameter firstEncryptParam)
+      throws IOException {
     this(input, fileMetadataPos, fileMetadataSize);
     this.firstEncryptParam = firstEncryptParam;
   }
@@ -508,6 +517,10 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public long getDataStartOffset() {
     return dataStartOffset;
+  }
+
+  public boolean hasFileEncryptionHeader() {
+    return fileEncryptionParam != null;
   }
 
   private void configDeserializer() {
@@ -2165,7 +2178,8 @@ public class TsFileSequenceReader implements AutoCloseable {
   /**
    * read memory chunk.
    *
-   * @return -chunk
+   * @return a chunk whose page-AEAD context remains valid after this reader closes; close the chunk
+   *     after use
    */
   public Chunk readMemChunk(long offset) throws IOException {
     return readMemChunk(offset, null);
@@ -2192,7 +2206,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    * read memory chunk.
    *
    * @param metaData -given chunk meta data
-   * @return -chunk
+   * @return a chunk whose page-AEAD context remains valid after this reader closes; close the chunk
+   *     after use
    */
   public Chunk readMemChunk(ChunkMetadata metaData) throws IOException {
     try {
@@ -2218,7 +2233,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    * read memory chunk.
    *
    * @param chunkCacheKey given key of chunk LRUCache
-   * @return chunk
+   * @return a chunk with an independent page-AEAD context; close it after use
    */
   public Chunk readMemChunk(CachedChunkLoaderImpl.ChunkCacheKey chunkCacheKey) throws IOException {
     ChunkHeader header = readChunkHeader(chunkCacheKey.getOffsetOfChunkHeader(), null);
