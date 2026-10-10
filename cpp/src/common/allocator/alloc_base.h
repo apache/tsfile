@@ -67,6 +67,10 @@ void mem_free(void* ptr);
 void* mem_realloc(void* ptr, uint32_t size);
 #ifdef ENABLE_TEST
 TSFILE_API void TEST_fail_next_mem_realloc();
+// Fail one allocation of mid after skipping successful_allocations calls on
+// the current thread. Other allocation modules are unaffected.
+TSFILE_API void TEST_fail_mem_alloc_after(AllocModID mid,
+                                          uint32_t successful_allocations);
 #endif
 
 class ModStat {

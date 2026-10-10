@@ -582,7 +582,8 @@ void tsfile_free_tsfile_properties(TsFileProperty* properties, uint32_t length);
  * @param column_name_list [in] Column names array. Size=column_num.
  * @param data_types [in] Data types array. Size=column_num.
  * @param column_num [in] Number of columns. Must be ≥1.
- * @param max_rows [in] Pre-allocated row capacity. Must be ≥1.
+ * @param max_rows [in] Pre-allocated row capacity. Must satisfy
+ *        1 <= max_rows < 2^29; larger capacities return RET_OVERFLOW.
  * @param err_code [out] Receives RET_OK on success or the failure code. Must
  *        not be NULL.
  * @return Tablet Valid handle, or NULL on failure.
@@ -1291,7 +1292,7 @@ TsFileGenericWriter tsfile_generic_writer_new(const char* pathname,
  *        when column_num > 0
  * @param column_num number of columns; must be >= 0
  * @param max_rows maximum number of rows the tablet can hold; must satisfy
- *        0 < max_rows < 2^30
+ *        0 < max_rows < 2^29
  * @return a caller-owned tablet, or NULL if the arguments are invalid or
  *         memory allocation fails
  */

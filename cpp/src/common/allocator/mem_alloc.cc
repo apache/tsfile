@@ -37,10 +37,18 @@ namespace common {
 #ifdef ENABLE_TEST
 namespace {
 std::atomic<bool> g_fail_next_mem_realloc(false);
-}
+thread_local AllocModID g_fail_mem_alloc_mod = __LAST_MOD_ID;
+thread_local uint32_t g_mem_alloc_calls_to_skip = 0;
+}  // namespace
 
 void TEST_fail_next_mem_realloc() {
     g_fail_next_mem_realloc.store(true, std::memory_order_release);
+}
+
+void TEST_fail_mem_alloc_after(AllocModID mid,
+                               uint32_t successful_allocations) {
+    g_fail_mem_alloc_mod = mid;
+    g_mem_alloc_calls_to_skip = successful_allocations;
 }
 #endif
 
@@ -90,6 +98,15 @@ constexpr size_t HEADER_PTR_SIZE = 8;
 constexpr size_t ALIGNMENT = 8;
 
 void* mem_alloc(uint32_t size, AllocModID mid) {
+#ifdef ENABLE_TEST
+    if (mid == g_fail_mem_alloc_mod) {
+        if (g_mem_alloc_calls_to_skip == 0) {
+            g_fail_mem_alloc_mod = __LAST_MOD_ID;
+            return nullptr;
+        }
+        --g_mem_alloc_calls_to_skip;
+    }
+#endif
     // use 7bit at most
     ASSERT(mid <= 127);
     static_assert(HEADER_PTR_SIZE <= ALIGNMENT,

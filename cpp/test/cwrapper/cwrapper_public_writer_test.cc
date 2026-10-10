@@ -25,6 +25,8 @@
 #include <sstream>
 #include <string>
 
+#include "common/allocator/alloc_base.h"
+
 #ifdef _WIN32
 #include <process.h>
 #else
@@ -165,6 +167,54 @@ TEST_F(CWrapperPublicWriterTest, TableWriterRejectsInvalidSchema) {
     remove(filename.c_str());
 }
 
+TEST_F(CWrapperPublicWriterTest, TabletOversizedCapacityReturnsOverflow) {
+    char name[] = "value";
+    char* names[] = {name};
+    const TSDataType types[] = {TS_DATATYPE_BOOLEAN, TS_DATATYPE_INT32,
+                                TS_DATATYPE_DATE,    TS_DATATYPE_FLOAT,
+                                TS_DATATYPE_INT64,   TS_DATATYPE_TIMESTAMP,
+                                TS_DATATYPE_DOUBLE,  TS_DATATYPE_TEXT,
+                                TS_DATATYPE_BLOB,    TS_DATATYPE_STRING};
+    for (TSDataType type : types) {
+        for (uint32_t rows :
+             {1u << 29, (1u << 30) - 2, (1u << 30) - 1, 1u << 30, UINT32_MAX}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "type=" << type << " rows=" << rows);
+            ERRNO err = RET_OK;
+            Tablet tablet = tablet_new(names, &type, 1, rows, &err);
+            EXPECT_EQ(tablet, nullptr);
+            EXPECT_EQ(err, RET_OVERFLOW);
+            if (tablet) free_tablet(&tablet);
+        }
+        EXPECT_EQ(tablet_new_with_target_name("dev", names, &type, 1, 1 << 29),
+                  nullptr);
+    }
+}
+
+TEST_F(CWrapperPublicWriterTest, TabletAllocationFailureReturnsNull) {
+    char i[] = "i", s[] = "s", d[] = "d", b[] = "b";
+    char* names[] = {i, s, d, b};
+    TSDataType types[] = {TS_DATATYPE_INT32, TS_DATATYPE_STRING,
+                          TS_DATATYPE_DOUBLE, TS_DATATYPE_BLOB};
+    for (uint32_t fail_after = 0; fail_after < 15; ++fail_after) {
+        SCOPED_TRACE(fail_after);
+        const int64_t before =
+            common::ModStat::get_instance().get_stat(common::MOD_TABLET);
+        ERRNO err = RET_OK;
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, fail_after);
+        Tablet tablet = tablet_new(names, types, 4, 8, &err);
+        EXPECT_EQ(tablet, nullptr);
+        EXPECT_EQ(err, RET_OOM);
+        if (tablet) free_tablet(&tablet);
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, fail_after);
+        tablet = tablet_new_with_target_name("dev", names, types, 4, 8);
+        EXPECT_EQ(tablet, nullptr);
+        if (tablet) free_tablet(&tablet);
+        EXPECT_EQ(common::ModStat::get_instance().get_stat(common::MOD_TABLET),
+                  before);
+    }
+}
+
 TEST_F(CWrapperPublicWriterTest, PublicTableAndArrowNullArgs) {
     ERRNO err = RET_OK;
     EXPECT_EQ(tablet_new(nullptr, nullptr, 0, 1, &err), nullptr);
@@ -186,7 +236,7 @@ TEST_F(CWrapperPublicWriterTest, PublicTableAndArrowNullArgs) {
     char* one_name[] = {first};
     TSDataType one_type[] = {TS_DATATYPE_INT64};
     EXPECT_EQ(tablet_new(one_name, one_type, 1, 1u << 30, &err), nullptr);
-    EXPECT_EQ(err, RET_INVALID_ARG);
+    EXPECT_EQ(err, RET_OVERFLOW);
 
     TSDataType unsupported_type[] = {TS_DATATYPE_VECTOR};
     EXPECT_EQ(tablet_new(one_name, unsupported_type, 1, 1, &err), nullptr);

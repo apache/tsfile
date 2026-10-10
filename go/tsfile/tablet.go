@@ -32,6 +32,8 @@ type Tablet struct {
 }
 
 // NewTablet allocates a tablet with fixed columns and row capacity.
+// maxRows must satisfy 1 <= maxRows < 1<<29. Larger capacities return ErrOverflow;
+// capacities within this range may still fail if memory is unavailable.
 func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("%w: at least one column is required", ErrInvalidArgument)

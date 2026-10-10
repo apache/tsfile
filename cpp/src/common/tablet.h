@@ -57,13 +57,22 @@ class Tablet {
         StringColumn()
             : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
 
-        void init(uint32_t max_rows, uint32_t init_buf_capacity) {
+        int init(uint32_t max_rows) {
+            const uint64_t offsets_bytes =
+                sizeof(int32_t) * (static_cast<uint64_t>(max_rows) + 1);
+            if (offsets_bytes > UINT32_MAX) return common::E_OVERFLOW;
             offsets = (int32_t*)common::mem_alloc(
-                sizeof(int32_t) * (max_rows + 1), common::MOD_TABLET);
+                static_cast<uint32_t>(offsets_bytes), common::MOD_TABLET);
+            if (offsets == nullptr) return common::E_OOM;
             offsets[0] = 0;
-            buf_capacity = init_buf_capacity;
+            // Estimate 32 bytes per row, but cap eager allocation at 1 MiB.
+            // Large tablets grow the data buffer as values are appended.
+            buf_capacity = static_cast<uint32_t>(std::min<uint64_t>(
+                static_cast<uint64_t>(max_rows) * 32, 1u << 20));
             buffer = (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
+            if (buffer == nullptr) return common::E_OOM;
             buf_used = 0;
+            return common::E_OK;
         }
 
         void destroy() {
@@ -81,13 +90,15 @@ class Tablet {
         }
 
         int append(uint32_t row, const char* data, uint32_t len) {
+            const uint64_t required = static_cast<uint64_t>(buf_used) + len;
+            // Arrow offsets are signed int32, even though the capacities are
+            // unsigned. Reject before either the addition or offsets wrap.
+            if (required > INT32_MAX) return common::E_OVERFLOW;
             // Grow buffer if needed
-            if (buf_used + len > buf_capacity) {
-                uint64_t new_capacity_64 =
-                    static_cast<uint64_t>(buf_capacity) * 2 + len;
-                if (UNLIKELY(new_capacity_64 > UINT32_MAX)) {
-                    return common::E_OVERFLOW;
-                }
+            if (required > buf_capacity) {
+                uint64_t new_capacity_64 = std::min<uint64_t>(
+                    std::max(required, static_cast<uint64_t>(buf_capacity) * 2),
+                    INT32_MAX);
                 uint32_t new_capacity = static_cast<uint32_t>(new_capacity_64);
                 char* new_buffer =
                     (char*)common::mem_realloc(buffer, new_capacity);
@@ -135,13 +146,16 @@ class Tablet {
 
    public:
     static const uint32_t DEFAULT_MAX_ROWS = 1024;
+    // Every tablet has an int64 timestamp buffer allocated through mem_alloc,
+    // whose byte-size argument is uint32_t.
+    static const uint32_t MAX_ROWS = UINT32_MAX / sizeof(int64_t);
     int err_code_ = common::E_OK;
 
    public:
     Tablet(const std::string& device_id,
            std::shared_ptr<std::vector<MeasurementSchema>> schema_vec,
            int max_rows = DEFAULT_MAX_ROWS)
-        : max_row_num_(max_rows),
+        : max_row_num_(max_rows > 0 ? max_rows : 0),
           insert_target_name_(device_id),
           schema_vec_(schema_vec),
           timestamps_(nullptr),
@@ -149,11 +163,6 @@ class Tablet {
           bitmaps_(nullptr) {
         ASSERT(device_id.size() >= 1);
         ASSERT(schema_vec != NULL);
-        ASSERT(max_rows > 0 && max_rows < (1 << 30));
-        if (max_rows < 0) {
-            ASSERT(false);
-            max_row_num_ = DEFAULT_MAX_ROWS;
-        }
         err_code_ = init();
     }
 
@@ -161,7 +170,7 @@ class Tablet {
            const std::vector<std::string>* measurement_list,
            const std::vector<common::TSDataType>* data_type_list,
            int max_row_num = DEFAULT_MAX_ROWS)
-        : max_row_num_(max_row_num),
+        : max_row_num_(max_row_num > 0 ? max_row_num : 0),
           insert_target_name_(device_id),
           timestamps_(nullptr),
           value_matrix_(nullptr),
@@ -169,11 +178,6 @@ class Tablet {
         ASSERT(!device_id.empty());
         ASSERT(measurement_list != nullptr);
         ASSERT(data_type_list != nullptr);
-        ASSERT(max_row_num > 0 && max_row_num < (1 << 30));
-        if (max_row_num < 0) {
-            ASSERT(false);
-            max_row_num_ = DEFAULT_MAX_ROWS;
-        }
 
         ASSERT(measurement_list->size() == data_type_list->size());
         std::vector<MeasurementSchema> measurement_vec;
@@ -194,7 +198,7 @@ class Tablet {
            const std::vector<common::TSDataType>& data_types,
            const std::vector<common::ColumnCategory>& column_categories,
            int max_rows = DEFAULT_MAX_ROWS)
-        : max_row_num_(max_rows),
+        : max_row_num_(max_rows > 0 ? max_rows : 0),
           cur_row_size_(0),
           insert_target_name_(insert_target_name),
           timestamps_(nullptr),
@@ -407,7 +411,7 @@ class Tablet {
     template <typename T>
     int process_val(uint32_t row_index, uint32_t schema_index, T val);
     uint32_t max_row_num_;
-    uint32_t cur_row_size_;
+    uint32_t cur_row_size_ = 0;
     std::string insert_target_name_;
     std::shared_ptr<std::vector<MeasurementSchema>> schema_vec_;
     std::map<std::string, int> schema_map_;

@@ -22,6 +22,25 @@ import (
 	"testing"
 )
 
+func TestTabletRejectsOversizedCapacityForEveryType(t *testing.T) {
+	for _, dataType := range []DataType{
+		DataTypeBoolean, DataTypeInt32, DataTypeDate, DataTypeFloat,
+		DataTypeInt64, DataTypeTimestamp, DataTypeDouble,
+		DataTypeText, DataTypeBlob, DataTypeString,
+	} {
+		for _, rows := range []int{1 << 29, (1 << 30) - 2, (1 << 30) - 1, 1 << 30} {
+			tablet, err := NewTablet([]TabletColumn{{Name: "value", DataType: dataType}}, rows)
+			if tablet != nil {
+				tablet.Close()
+				t.Fatalf("type %d rows %d: expected nil tablet", dataType, rows)
+			}
+			if !errors.Is(err, ErrOverflow) {
+				t.Fatalf("type %d rows %d: got %v, want ErrOverflow", dataType, rows, err)
+			}
+		}
+	}
+}
+
 func TestTabletValidationAndClose(t *testing.T) {
 	if _, err := NewTablet(nil, 1); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("empty columns: %v", err)
