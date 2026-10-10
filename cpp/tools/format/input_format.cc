@@ -44,23 +44,26 @@ bool read_record(std::istream& in, bool csv_quotes, std::string& record,
     std::string physical;
     bool open_quote = false;
     while (std::getline(in, physical)) {
-        strip_cr(physical);
         ++lines_consumed;
-        if (!record.empty()) {
-            record.push_back('\n');  // restore the newline inside the field
-        }
-        record += physical;
         if (csv_quotes) {
             for (char c : physical) {
                 if (c == '"') {
                     open_quote = !open_quote;
                 }
             }
-            if (open_quote) {
-                continue;  // quote still open: the field spans the next line
-            }
         }
-        return true;
+        if (!open_quote) {
+            // Strip CR from record boundaries, but keep it as field data
+            // when the quoted field continues onto the next physical line.
+            strip_cr(physical);
+        }
+        if (!record.empty()) {
+            record.push_back('\n');  // restore the newline inside the field
+        }
+        record += physical;
+        if (!open_quote) {
+            return true;
+        }
     }
     return lines_consumed > 0;  // trailing record with an unterminated quote
 }
@@ -80,8 +83,7 @@ std::vector<std::string> split_line(const std::string& line, char delim,
 }
 
 bool normalize_write_columns(const std::vector<WriteColumnSpec>& specs,
-                             std::vector<ColumnDef>& out,
-                             std::string& error) {
+                             std::vector<ColumnDef>& out, std::string& error) {
     out.clear();
     if (specs.empty()) {
         error = "empty write column declarations";
