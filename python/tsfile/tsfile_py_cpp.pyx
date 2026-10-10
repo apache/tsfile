@@ -1250,8 +1250,7 @@ cdef object get_all_table_schema(TsFileReader reader):
     cdef int i
 
     table_schemas = {}
-    error_code = tsfile_reader_get_all_table_schemas_checked(
-        reader, &schemas, &table_num)
+    schemas = tsfile_reader_get_all_table_schemas_with_error(reader, &table_num, &error_code)
     check_error(error_code)
     for i in range(table_num):
         schema_py = from_c_table_schema(schemas[i])
@@ -1434,6 +1433,7 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
     cdef uint32_t j
     cdef int err
     cdef bytes bpath
+    cdef const char* raw
     memset(&mmap, 0, sizeof(DeviceTimeseriesMetadataMap))
     if device_ids is None:
         err = tsfile_reader_get_timeseries_metadata_all(reader, &mmap)
@@ -1457,7 +1457,8 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                     path_s = str(dev)
                 if path_s is not None:
                     bpath = path_s.encode('utf-8')
-                    q[i].path = strdup(PyBytes_AsString(bpath))
+                    raw = PyBytes_AsString(bpath)
+                    q[i].path = strdup(raw)
                     if q[i].path == NULL:
                         raise MemoryError()
                 segments = getattr(dev, 'segments', ())

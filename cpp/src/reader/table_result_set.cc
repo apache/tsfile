@@ -39,12 +39,12 @@ void TableResultSet::init() {
 TableResultSet::~TableResultSet() { close(); }
 
 int TableResultSet::next(bool& has_next) {
+    int ret = common::E_OK;
     has_next = false;
     if (read_error_ != common::E_OK) {
         return read_error_;
     }
-    const int ret = next_internal(has_next);
-    if (ret != common::E_OK) {
+    if (RET_FAIL(next_internal(has_next))) {
         read_error_ = ret;
         has_next = false;
         row_ready_ = false;
@@ -202,7 +202,8 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
 
     bool has_next = false;
     if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
-        return read_error_ = ret;
+        read_error_ = ret;
+        return ret;
     }
 
     if (!has_next) {
@@ -210,7 +211,8 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
     }
 
     if (RET_FAIL(tsblock_reader_->next(tsblock_))) {
-        return read_error_ = ret;
+        read_error_ = ret;
+        return ret;
     }
 
     if (tsblock_ == nullptr) {

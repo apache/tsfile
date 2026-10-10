@@ -25,8 +25,6 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
-#include <new>
-#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -60,8 +58,6 @@ class InjectionGuard {
 
 class FailingReadFile : public storage::RandomAccessReadFile {
    public:
-    enum class ReadException { None, BadAlloc, Other };
-
     explicit FailingReadFile(const std::vector<char>& bytes) : bytes_(bytes) {}
     bool is_opened() const override { return opened_; }
     int64_t file_size() const override { return bytes_.size(); }
@@ -77,12 +73,6 @@ class FailingReadFile : public storage::RandomAccessReadFile {
         read_size = 0;
         if (fail_at > 0 && (persistent ? reads >= fail_at : reads == fail_at)) {
             failed = true;
-            if (read_exception == ReadException::BadAlloc) {
-                throw std::bad_alloc();
-            }
-            if (read_exception == ReadException::Other) {
-                throw std::runtime_error("injected read exception");
-            }
             return short_read ? common::E_OK : common::E_FILE_READ_ERR;
         }
         if (offset < 0 || size < 0) return common::E_INVALID_ARG;
@@ -99,7 +89,6 @@ class FailingReadFile : public storage::RandomAccessReadFile {
     bool persistent = false;
     bool short_read = false;
     bool failed = false;
-    ReadException read_exception = ReadException::None;
 
    private:
     const std::vector<char>& bytes_;
@@ -346,9 +335,8 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
     }
 }
 
-TEST_P(TableReadFailureTest, CheckedMetadataApisContainReadExceptions) {
-    using ReadException = FailingReadFile::ReadException;
-    // Enumerating every read also covers exceptions after device-schema
+TEST_P(TableReadFailureTest, CheckedMetadataApisPropagateEveryReadFailure) {
+    // Enumerating every read also covers failures after device-schema
     // entries have been partially initialized.
     for (int operation = 0; operation < 3; ++operation) {
         auto invoke = [operation](storage::TsFileReader& reader,
@@ -404,14 +392,11 @@ TEST_P(TableReadFailureTest, CheckedMetadataApisContainReadExceptions) {
             last_read = source->reads;
             ASSERT_GE(last_read, first_read);
         }
-        for (ReadException exception :
-             {ReadException::BadAlloc, ReadException::Other}) {
-            const int expected = exception == ReadException::BadAlloc
-                                     ? common::E_OOM
-                                     : common::E_FILE_READ_ERR;
+        for (bool short_read : {false, true}) {
             for (int fail_at = first_read; fail_at <= last_read; ++fail_at) {
                 SCOPED_TRACE(::testing::Message()
-                             << operation << ":" << expected << ":" << fail_at);
+                             << operation << ":" << short_read << ":"
+                             << fail_at);
                 const int64_t allocated_before =
                     common::ModStat::get_instance().get_stat(
                         common::MOD_TSFILE_READER);
@@ -424,11 +409,9 @@ TEST_P(TableReadFailureTest, CheckedMetadataApisContainReadExceptions) {
                                 source)),
                         common::E_OK);
                     source->fail_at = fail_at;
-                    source->read_exception = exception;
-                    ERRNO ret = common::E_OK;
-                    EXPECT_NO_THROW(ret = invoke(reader, true));
+                    source->short_read = short_read;
+                    EXPECT_EQ(invoke(reader, true), common::E_FILE_READ_ERR);
                     EXPECT_TRUE(source->failed);
-                    EXPECT_EQ(ret, expected);
                 }
                 EXPECT_EQ(common::ModStat::get_instance().get_stat(
                               common::MOD_TSFILE_READER),
@@ -554,7 +537,7 @@ TEST_P(TableReadFailureTest, TimeseriesMetadataPropagatesEveryReadFailure) {
     }
 }
 
-TEST_P(TableReadFailureTest, CMetadataPropagatesEveryReadFailureAndException) {
+TEST_P(TableReadFailureTest, CMetadataPropagatesEveryReadFailure) {
     std::vector<std::string> names;
     for (int i = 0; i < 5; ++i) names.push_back("d" + std::to_string(i));
     DeviceID devices[5]{};
@@ -600,7 +583,7 @@ TEST_P(TableReadFailureTest, CMetadataPropagatesEveryReadFailureAndException) {
             ASSERT_GE(last_read, first_read);
         }
         for (bool persistent : {false, true}) {
-            for (int mode = 0; mode < 4; ++mode) {
+            for (int mode = 0; mode < 2; ++mode) {
                 for (int fail_at = first_read; fail_at <= last_read;
                      ++fail_at) {
                     SCOPED_TRACE(::testing::Message()
@@ -616,15 +599,7 @@ TEST_P(TableReadFailureTest, CMetadataPropagatesEveryReadFailureAndException) {
                     source->fail_at = fail_at;
                     source->persistent = persistent;
                     source->short_read = mode == 1;
-                    if (mode == 2)
-                        source->read_exception =
-                            FailingReadFile::ReadException::BadAlloc;
-                    if (mode == 3)
-                        source->read_exception =
-                            FailingReadFile::ReadException::Other;
-                    EXPECT_EQ(invoke(reader), mode == 2
-                                                  ? common::E_OOM
-                                                  : common::E_FILE_READ_ERR);
+                    EXPECT_EQ(invoke(reader), common::E_FILE_READ_ERR);
                     EXPECT_TRUE(source->failed);
                     source->fail_at = 0;
                     ASSERT_EQ(invoke(reader), common::E_OK);
@@ -918,32 +893,25 @@ TEST(TableMetadataReadFailureTest, ResizedBufferIsReleasedOnReadFailure) {
         bytes[bytes.size() - 10 + i] =
             static_cast<char>(metadata_size >> (8 * (3 - i)));
     }
-    for (int failure = 0; failure < 4; ++failure) {
+    for (int failure = 0; failure < 3; ++failure) {
         SCOPED_TRACE(failure);
         const int64_t allocated_before =
             common::ModStat::get_instance().get_stat(common::MOD_TSFILE_READER);
         {
             FailingReadFile source(bytes);
             source.fail_at = 2;
+            source.short_read = failure == 1;
             storage::TsFileIOReader reader;
             ASSERT_EQ(reader.init(&source), common::E_OK);
             storage::TsFileMeta* metadata = nullptr;
-            if (failure == 0) {
-                EXPECT_EQ(reader.get_tsfile_meta(metadata),
-                          common::E_FILE_READ_ERR);
-            } else if (failure == 1) {
-                source.read_exception =
-                    FailingReadFile::ReadException::BadAlloc;
-                EXPECT_THROW(reader.get_tsfile_meta(metadata), std::bad_alloc);
-            } else if (failure == 2) {
-                source.read_exception = FailingReadFile::ReadException::Other;
-                EXPECT_THROW(reader.get_tsfile_meta(metadata),
-                             std::runtime_error);
-            } else {
+            if (failure == 2) {
                 common::TEST_fail_next_mem_realloc();
                 EXPECT_EQ(reader.get_tsfile_meta(metadata), common::E_OOM);
+            } else {
+                EXPECT_EQ(reader.get_tsfile_meta(metadata),
+                          common::E_FILE_READ_ERR);
             }
-            EXPECT_EQ(source.reads, failure == 3 ? 1 : 2);
+            EXPECT_EQ(source.reads, failure == 2 ? 1 : 2);
         }
         EXPECT_EQ(
             common::ModStat::get_instance().get_stat(common::MOD_TSFILE_READER),

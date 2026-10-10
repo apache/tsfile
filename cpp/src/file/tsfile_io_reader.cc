@@ -20,7 +20,6 @@
 #include "file/tsfile_io_reader.h"
 
 #include <limits>
-#include <memory>
 
 #include "common/allocator/alloc_base.h"
 #include "file/local_random_access_read_file.h"
@@ -533,15 +532,14 @@ int TsFileIOReader::load_tsfile_meta() {
     const int64_t fsize = file_size();
     const int32_t alloc_size = static_cast<int32_t>(
         UTIL_MIN(static_cast<int64_t>(TSFILE_READ_IO_SIZE), fsize));
-    std::unique_ptr<char, decltype(&mem_free)> read_buf(
-        static_cast<char*>(mem_alloc(alloc_size, MOD_TSFILE_READER)), mem_free);
-    if (!read_buf) {
+    char* read_buf = (char*)mem_alloc(alloc_size, MOD_TSFILE_READER);
+    if (IS_NULL(read_buf)) {
         return E_OOM;
     }
     // 1.2 reader data from file
     read_offset = fsize - alloc_size;
     ret_read_len = 0;
-    if (RET_FAIL(read_file_->read(read_offset, read_buf.get(), alloc_size,
+    if (RET_FAIL(read_file_->read(read_offset, read_buf, alloc_size,
                                   ret_read_len))) {
     } else if (ret_read_len != alloc_size) {
         ret = E_FILE_READ_ERR;
@@ -552,8 +550,7 @@ int TsFileIOReader::load_tsfile_meta() {
     // 1.3 deserialize tsfile_meta_size
     if (IS_SUCC(ret)) {
         // deserialize tsfile_meta_size
-        char* size_buf =
-            read_buf.get() + alloc_size - TAIL_MAGIC_AND_META_SIZE_SIZE;
+        char* size_buf = read_buf + alloc_size - TAIL_MAGIC_AND_META_SIZE_SIZE;
         tsfile_meta_size = SerializationUtil::read_ui32(size_buf);
         ASSERT(tsfile_meta_size > 0 && tsfile_meta_size <= (1ll << 20));
     }
@@ -565,30 +562,26 @@ int TsFileIOReader::load_tsfile_meta() {
         if (tsfile_meta_size + TAIL_MAGIC_AND_META_SIZE_SIZE >
             (uint32_t)alloc_size) {
             // prepare buffer to re-reader from start of tsfile_meta
-            char* resized_read_buf = static_cast<char*>(
-                mem_realloc(read_buf.get(), tsfile_meta_size));
-            if (IS_NULL(resized_read_buf)) {
+            char* old_read_buf = read_buf;
+            read_buf = (char*)mem_realloc(read_buf, tsfile_meta_size);
+            if (IS_NULL(read_buf)) {
+                read_buf = old_read_buf;
                 ret = E_OOM;
+            } else if (RET_FAIL(read_file_->read(
+                           fsize - tsfile_meta_size -
+                               TAIL_MAGIC_AND_META_SIZE_SIZE,
+                           read_buf, tsfile_meta_size, ret_read_len))) {
+            } else if (tsfile_meta_size != (uint32_t)ret_read_len) {
+                ret = E_FILE_READ_ERR;
+                // log_err("do not reader enough data from tsfile, want-size=%d,
+                // reader-size=%d, file=%s", tsfile_meta_size, ret_read_len,
+                // get_file_path().c_str());
             } else {
-                // realloc already released the old allocation on success.
-                read_buf.release();
-                read_buf.reset(resized_read_buf);
-                if (RET_FAIL(read_file_->read(fsize - tsfile_meta_size -
-                                                  TAIL_MAGIC_AND_META_SIZE_SIZE,
-                                              read_buf.get(), tsfile_meta_size,
-                                              ret_read_len))) {
-                } else if (tsfile_meta_size != (uint32_t)ret_read_len) {
-                    ret = E_FILE_READ_ERR;
-                    // log_err("do not reader enough data from tsfile,
-                    // want-size=%d, reader-size=%d, file=%s", tsfile_meta_size,
-                    // ret_read_len, get_file_path().c_str());
-                } else {
-                    tsfile_meta_buf = read_buf.get();
-                }
+                tsfile_meta_buf = read_buf;
             }
         } else {
             // the previous buffer has contained the TsFileMeta data
-            tsfile_meta_buf = read_buf.get() + alloc_size - tsfile_meta_size -
+            tsfile_meta_buf = read_buf + alloc_size - tsfile_meta_size -
                               TAIL_MAGIC_AND_META_SIZE_SIZE;
             // DEBUG_hex_dump_buf("tsfile_meta_buf=", tsfile_meta_buf,
             // tsfile_meta_size);
@@ -604,6 +597,7 @@ int TsFileIOReader::load_tsfile_meta() {
 #endif
         }
     }
+    mem_free(read_buf);
     return ret;
 }
 

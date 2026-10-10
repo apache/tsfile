@@ -239,6 +239,10 @@ class TsFileReader {
      * Only devices that exist in the file are included in the result.
      * If device_ids is empty, returns an empty map.
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty map. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
+     *
      * @param device_ids device list to query
      * @return map: IDeviceID -> list of timeseries metadata (only existing)
      */
@@ -255,6 +259,10 @@ class TsFileReader {
     /**
      * @brief Get timeseries metadata for all devices in the file.
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty map. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
+     *
      * @return map: IDeviceID -> list of timeseries metadata
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata();
@@ -266,9 +274,15 @@ class TsFileReader {
     TsFileProperties get_tsfile_properties();
 
     /**
-     * @brief Legacy lookup returning null on failure.
-     * Use the error-reporting overload to distinguish a missing table from
-     * a metadata read failure.
+     * @brief get the table schema by the table name
+     *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; both a missing table and a read failure return null. Avoid
+     * this overload in new code: use the error-reporting overload and check
+     * its return code.
+     *
+     * @param table_name the table name
+     * @return std::shared_ptr<TableSchema> the table schema
      */
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name);
@@ -285,6 +299,10 @@ class TsFileReader {
                          std::shared_ptr<TableSchema>& table_schema);
     /**
      * @brief get all table schemas in the tsfile
+     *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty list. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
      *
      * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */

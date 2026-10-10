@@ -1059,6 +1059,16 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
     return result_set.column_num;
 }
 
+TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
+                                           const char* table_name) {
+    TableSchema ret_schema{};
+    if (tsfile_reader_get_table_schema_checked(reader, table_name,
+                                               &ret_schema) != common::E_OK) {
+        return TableSchema{};
+    }
+    return ret_schema;
+}
+
 static ColumnSchema* allocate_table_schema_columns(size_t count) {
 #ifdef ENABLE_TEST
     using common::g_all_inject_points;
@@ -1190,67 +1200,11 @@ ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
     }
 }
 
-TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
-                                           const char* table_name) {
-    TableSchema schema{};
-    if (tsfile_reader_get_table_schema_checked(reader, table_name, &schema) !=
-        common::E_OK) {
-        return TableSchema{};
-    }
-    return schema;
-}
-
-ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
-                                                  TableSchema** out_schemas,
-                                                  uint32_t* out_size) {
-    if (out_schemas != nullptr) {
-        *out_schemas = nullptr;
-    }
-    if (out_size != nullptr) {
-        *out_size = 0;
-    }
-    if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
-        return common::E_INVALID_ARG;
-    }
-    TableSchema* result = nullptr;
-    size_t initialized = 0;
-    try {
-        auto* r = static_cast<storage::TsFileReader*>(reader);
-        std::vector<std::shared_ptr<storage::TableSchema>> table_schemas;
-        const ERRNO read_ret = r->get_all_table_schemas(table_schemas);
-        if (read_ret != common::E_OK) {
-            return read_ret;
-        }
-        if (table_schemas.empty()) {
-            return common::E_OK;
-        }
-        const size_t table_num = table_schemas.size();
-        if (table_num > std::numeric_limits<uint32_t>::max()) {
-            return common::E_OVERFLOW;
-        }
-        result = static_cast<TableSchema*>(calloc(table_num, sizeof(*result)));
-        if (result == nullptr) {
-            return common::E_OOM;
-        }
-        for (size_t i = 0; i < table_num; ++i) {
-            initialized = i + 1;
-            const ERRNO copy_ret =
-                copy_table_schema(table_schemas[i], &result[i]);
-            if (copy_ret != common::E_OK) {
-                free_table_schema_array(result, initialized);
-                return copy_ret;
-            }
-        }
-        *out_schemas = result;
-        *out_size = static_cast<uint32_t>(table_num);
-        return common::E_OK;
-    } catch (const std::bad_alloc&) {
-        free_table_schema_array(result, initialized);
-        return common::E_OOM;
-    } catch (...) {
-        free_table_schema_array(result, initialized);
-        return common::E_FILE_READ_ERR;
-    }
+TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
+                                                 uint32_t* size) {
+    ERRNO error_code = common::E_OK;
+    return tsfile_reader_get_all_table_schemas_with_error(reader, size,
+                                                          &error_code);
 }
 
 TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
@@ -1268,12 +1222,57 @@ TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
     return *error_code == common::E_OK ? schemas : nullptr;
 }
 
-TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
-                                                 uint32_t* size) {
-    TableSchema* schemas = nullptr;
-    const ERRNO ret =
-        tsfile_reader_get_all_table_schemas_checked(reader, &schemas, size);
-    return ret == common::E_OK ? schemas : nullptr;
+ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
+                                                  TableSchema** out_schemas,
+                                                  uint32_t* out_size) {
+    if (out_schemas != nullptr) {
+        *out_schemas = nullptr;
+    }
+    if (out_size != nullptr) {
+        *out_size = 0;
+    }
+    if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    TableSchema* copied = nullptr;
+    size_t initialized = 0;
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+        const ERRNO read_ret = r->get_all_table_schemas(schemas);
+        if (read_ret != common::E_OK) {
+            return read_ret;
+        }
+        if (schemas.empty()) {
+            return common::E_OK;
+        }
+        const size_t table_num = schemas.size();
+        if (table_num > std::numeric_limits<uint32_t>::max()) {
+            return common::E_OVERFLOW;
+        }
+        copied = static_cast<TableSchema*>(
+            calloc(schemas.size(), sizeof(TableSchema)));
+        if (copied == nullptr) {
+            return common::E_OOM;
+        }
+        for (size_t i = 0; i < schemas.size(); ++i) {
+            initialized = i + 1;
+            ERRNO ret = copy_table_schema(schemas[i], &copied[i]);
+            if (ret != common::E_OK) {
+                free_table_schema_array(copied, initialized);
+                return ret;
+            }
+        }
+        *out_schemas = copied;
+        *out_size = static_cast<uint32_t>(schemas.size());
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        free_table_schema_array(copied, initialized);
+        return common::E_OOM;
+    } catch (...) {
+        free_table_schema_array(copied, initialized);
+        return common::E_FILE_READ_ERR;
+    }
 }
 
 ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
@@ -1287,7 +1286,7 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
     if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
         return common::E_INVALID_ARG;
     }
-    DeviceSchema* result = nullptr;
+    DeviceSchema* device_schema = nullptr;
     size_t initialized = 0;
     try {
         auto* r = static_cast<storage::TsFileReader*>(reader);
@@ -1303,29 +1302,28 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
         if (device_count > std::numeric_limits<uint32_t>::max()) {
             return common::E_OVERFLOW;
         }
-        result =
-            static_cast<DeviceSchema*>(calloc(device_count, sizeof(*result)));
-        if (result == nullptr) {
+        device_schema = static_cast<DeviceSchema*>(
+            calloc(device_count, sizeof(DeviceSchema)));
+        if (device_schema == nullptr) {
             return common::E_OOM;
         }
 
-        for (size_t device_index = 0; device_index < device_count;
-             ++device_index) {
+        size_t device_index = 0;
+        for (const auto& device_id : device_ids) {
             initialized = device_index + 1;
-            const auto& device_id = device_ids[device_index];
-            DeviceSchema& cur_schema = result[device_index];
+            DeviceSchema& cur_schema = device_schema[device_index++];
             std::string device_name =
                 device_id == nullptr ? "" : device_id->get_device_name();
             cur_schema.device_name = strdup(device_name.c_str());
             if (cur_schema.device_name == nullptr) {
-                free_device_schema_array(result, initialized);
+                free_device_schema_array(device_schema, initialized);
                 return common::E_OOM;
             }
 
             std::vector<storage::MeasurementSchema> schemas;
-            const int ret = r->get_timeseries_schema(device_id, schemas);
+            int ret = r->get_timeseries_schema(device_id, schemas);
             if (ret != common::E_OK) {
-                free_device_schema_array(result, initialized);
+                free_device_schema_array(device_schema, initialized);
                 return ret;
             }
             if (schemas.empty()) {
@@ -1333,14 +1331,14 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
             }
             if (schemas.size() >
                 static_cast<size_t>(std::numeric_limits<int>::max())) {
-                free_device_schema_array(result, initialized);
+                free_device_schema_array(device_schema, initialized);
                 return common::E_OVERFLOW;
             }
 
             cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
                 calloc(schemas.size(), sizeof(TimeseriesSchema)));
             if (cur_schema.timeseries_schema == nullptr) {
-                free_device_schema_array(result, initialized);
+                free_device_schema_array(device_schema, initialized);
                 return common::E_OOM;
             }
             cur_schema.timeseries_num = static_cast<int>(schemas.size());
@@ -1350,7 +1348,7 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
                     strdup(measurement_schema.measurement_name_.c_str());
                 if (cur_schema.timeseries_schema[i].timeseries_name ==
                     nullptr) {
-                    free_device_schema_array(result, initialized);
+                    free_device_schema_array(device_schema, initialized);
                     return common::E_OOM;
                 }
                 cur_schema.timeseries_schema[i].data_type =
@@ -1362,14 +1360,14 @@ ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
                         measurement_schema.compression_type_);
             }
         }
-        *out_schemas = result;
+        *out_schemas = device_schema;
         *out_size = static_cast<uint32_t>(device_count);
         return common::E_OK;
     } catch (const std::bad_alloc&) {
-        free_device_schema_array(result, initialized);
+        free_device_schema_array(device_schema, initialized);
         return common::E_OOM;
     } catch (...) {
-        free_device_schema_array(result, initialized);
+        free_device_schema_array(device_schema, initialized);
         return common::E_FILE_READ_ERR;
     }
 }
@@ -2647,6 +2645,24 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
 
 // ============== Tag Filter API Implementation ==============
 
+#define DEFINE_TAG_FILTER_FACTORY(name, op)                                   \
+    TagFilterHandle tsfile_tag_filter_##name(                                 \
+        TsFileReader reader, const char* table_name, const char* column_name, \
+        const char* value) {                                                  \
+        ERRNO error_code = common::E_OK;                                      \
+        return tsfile_tag_filter_create(reader, table_name, column_name,      \
+                                        value, TAG_FILTER_##op, &error_code); \
+    }
+
+DEFINE_TAG_FILTER_FACTORY(eq, EQ)
+DEFINE_TAG_FILTER_FACTORY(neq, NEQ)
+DEFINE_TAG_FILTER_FACTORY(lt, LT)
+DEFINE_TAG_FILTER_FACTORY(lteq, LTEQ)
+DEFINE_TAG_FILTER_FACTORY(gt, GT)
+DEFINE_TAG_FILTER_FACTORY(gteq, GTEQ)
+
+#undef DEFINE_TAG_FILTER_FACTORY
+
 ERRNO tsfile_tag_filter_create_checked(TsFileReader reader,
                                        const char* table_name,
                                        const char* column_name,
@@ -2785,24 +2801,6 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
     }
     return *err_code == common::E_OK ? filter : nullptr;
 }
-
-#define DEFINE_LEGACY_TAG_FILTER_FACTORY(name, op)                            \
-    TagFilterHandle tsfile_tag_filter_##name(                                 \
-        TsFileReader reader, const char* table_name, const char* column_name, \
-        const char* value) {                                                  \
-        ERRNO error_code = common::E_OK;                                      \
-        return tsfile_tag_filter_create(reader, table_name, column_name,      \
-                                        value, TAG_FILTER_##op, &error_code); \
-    }
-
-DEFINE_LEGACY_TAG_FILTER_FACTORY(eq, EQ)
-DEFINE_LEGACY_TAG_FILTER_FACTORY(neq, NEQ)
-DEFINE_LEGACY_TAG_FILTER_FACTORY(lt, LT)
-DEFINE_LEGACY_TAG_FILTER_FACTORY(lteq, LTEQ)
-DEFINE_LEGACY_TAG_FILTER_FACTORY(gt, GT)
-DEFINE_LEGACY_TAG_FILTER_FACTORY(gteq, GTEQ)
-
-#undef DEFINE_LEGACY_TAG_FILTER_FACTORY
 
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
                                       TagFilterHandle right) {

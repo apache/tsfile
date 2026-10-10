@@ -46,6 +46,7 @@ DeviceMetaIterator::~DeviceMetaIterator() {
 }
 
 int DeviceMetaIterator::has_next(bool& has_next) {
+    int ret = common::E_OK;
     has_next = false;
     if (read_error_ != common::E_OK) {
         return read_error_;
@@ -59,21 +60,27 @@ int DeviceMetaIterator::has_next(bool& has_next) {
         if (direct_lookup_done_) {
             return common::E_OK;
         }
-        read_error_ = load_results_direct();
-    } else {
-        read_error_ = load_results();
-    }
-    if (read_error_ == common::E_OK) {
+        if (RET_FAIL(load_results_direct())) {
+            read_error_ = ret;
+            return ret;
+        }
         has_next = !result_cache_.empty();
+        return ret;
     }
-    return read_error_;
+
+    if (RET_FAIL(load_results())) {
+        read_error_ = ret;
+        return ret;
+    }
+    has_next = !result_cache_.empty();
+    return ret;
 }
 
 int DeviceMetaIterator::next(
     std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>& ret_meta) {
+    int ret = common::E_OK;
     bool available = false;
-    const int ret = has_next(available);
-    if (ret != common::E_OK) {
+    if (RET_FAIL(has_next(available))) {
         return ret;
     }
     if (!available) {
@@ -89,17 +96,18 @@ int DeviceMetaIterator::load_results() {
     while (!meta_index_nodes_.empty()) {
         auto pending = meta_index_nodes_.front();
         meta_index_nodes_.pop();
-        auto* node = pending.first;
+        auto meta_data_index_node = pending.first;
+        const auto& node_type = meta_data_index_node->node_type_;
         int ret = common::E_OK;
-        if (node->node_type_ == MetaIndexNodeType::LEAF_DEVICE) {
-            ret = load_leaf_device(node);
-        } else if (node->node_type_ == MetaIndexNodeType::INTERNAL_DEVICE) {
-            ret = load_internal_node(node);
+        if (node_type == MetaIndexNodeType::LEAF_DEVICE) {
+            ret = load_leaf_device(meta_data_index_node);
+        } else if (node_type == MetaIndexNodeType::INTERNAL_DEVICE) {
+            ret = load_internal_node(meta_data_index_node);
         } else {
             ret = common::E_INVALID_NODE_TYPE;
         }
         if (pending.second) {
-            node->~MetaIndexNode();
+            meta_data_index_node->~MetaIndexNode();
         }
         if (ret != common::E_OK) {
             return ret;

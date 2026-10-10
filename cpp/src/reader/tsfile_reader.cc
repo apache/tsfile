@@ -554,7 +554,7 @@ int read_chunk_header_codec(RandomAccessReadFile* read_file,
         return ret;
     }
     if (read_len < ChunkHeader::MIN_SERIALIZED_SIZE) {
-        return E_TSFILE_CORRUPTED;
+        return E_FILE_READ_ERR;
     }
     common::ByteStream in;
     in.wrap_from(buf.data(), read_len);
@@ -654,6 +654,9 @@ int TsFileReader::get_timeseries_metadata_impl(
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
     const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
     DeviceTimeseriesMetadataMap result;
+    // The error code is ignored to preserve the legacy interface.
+    // New code should use the error-reporting overload and check its return
+    // code.
     get_timeseries_metadata(device_ids, result);
     return result;
 }
@@ -675,19 +678,20 @@ int TsFileReader::get_timeseries_metadata(
     tsfile_reader_meta_pa_.destroy();
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
     DeviceTimeseriesMetadataMap collected;
+    int ret = E_OK;
     for (const auto& device_id : device_ids) {
         if (!device_id) {
             return E_INVALID_ARG;
         }
         std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-        const int ret = get_timeseries_metadata_impl(device_id, list);
-        if (ret == E_DEVICE_NOT_EXIST) {
-            continue;
-        }
-        if (ret != E_OK) {
+        if (RET_FAIL(get_timeseries_metadata_impl(device_id, list))) {
+            if (ret == E_DEVICE_NOT_EXIST) {
+                continue;
+            }
             return ret;
+        } else {
+            collected.insert(std::make_pair(device_id, std::move(list)));
         }
-        collected.emplace(device_id, std::move(list));
     }
     result.swap(collected);
     return E_OK;
@@ -695,6 +699,9 @@ int TsFileReader::get_timeseries_metadata(
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     DeviceTimeseriesMetadataMap result;
+    // The error code is ignored to preserve the legacy interface.
+    // New code should use the error-reporting overload and check its return
+    // code.
     get_timeseries_metadata(result);
     return result;
 }
@@ -705,8 +712,8 @@ int TsFileReader::get_timeseries_metadata(DeviceTimeseriesMetadataMap& result) {
         return E_INVALID_ARG;
     }
     TsFileMeta* tsfile_meta = nullptr;
-    int ret = tsfile_executor_->get_tsfile_meta(tsfile_meta);
-    if (ret != E_OK) {
+    int ret = E_OK;
+    if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
         return ret;
     }
 
@@ -718,9 +725,8 @@ int TsFileReader::get_timeseries_metadata(DeviceTimeseriesMetadataMap& result) {
     pa.init(512, MOD_TSFILE_READER);
     std::vector<DeviceMetaEntry> entries;
     for (auto& table_entry : tsfile_meta->table_metadata_index_node_map_) {
-        ret = get_all_device_entries(entries, table_entry.second,
-                                     read_file_.get(), pa);
-        if (ret != E_OK) {
+        if (RET_FAIL(get_all_device_entries(entries, table_entry.second,
+                                            read_file_.get(), pa))) {
             return ret;
         }
     }
@@ -729,19 +735,20 @@ int TsFileReader::get_timeseries_metadata(DeviceTimeseriesMetadataMap& result) {
     DeviceTimeseriesMetadataMap collected;
     for (auto& device_entry : entries) {
         std::vector<ITimeseriesIndex*> raw_ts_indexes;
-        ret = tsfile_executor_->get_tsfile_io_reader()
-                  ->get_device_timeseries_meta_by_offset(
-                      device_entry.start_offset, device_entry.end_offset,
-                      raw_ts_indexes, tsfile_reader_meta_pa_);
-        if (ret != E_OK) {
+        if (RET_FAIL(tsfile_executor_->get_tsfile_io_reader()
+                         ->get_device_timeseries_meta_by_offset(
+                             device_entry.start_offset, device_entry.end_offset,
+                             raw_ts_indexes, tsfile_reader_meta_pa_))) {
             return ret;
+        } else {
+            std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+            for (auto ts_idx : raw_ts_indexes) {
+                list.emplace_back(
+                    std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
+            }
+            collected.insert(
+                std::make_pair(device_entry.device_id, std::move(list)));
         }
-        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
-        for (auto ts_idx : raw_ts_indexes) {
-            list.emplace_back(
-                std::shared_ptr<ITimeseriesIndex>(ts_idx, noop_deleter));
-        }
-        collected.emplace(device_entry.device_id, std::move(list));
     }
     result.swap(collected);
     return E_OK;
@@ -764,11 +771,14 @@ ResultSet* TsFileReader::read_timeseries(
 
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(
     const std::string& table_name) {
-    std::shared_ptr<TableSchema> schema;
-    if (get_table_schema(table_name, schema) != E_OK) {
+    std::shared_ptr<TableSchema> table_schema;
+    // Errors are reduced to nullptr to preserve the legacy interface.
+    // New code should use the error-reporting overload and check its return
+    // code.
+    if (get_table_schema(table_name, table_schema) != E_OK) {
         return nullptr;
     }
-    return schema;
+    return table_schema;
 }
 
 int TsFileReader::get_table_schema(const std::string& table_name,
@@ -778,17 +788,22 @@ int TsFileReader::get_table_schema(const std::string& table_name,
         return E_INVALID_ARG;
     }
     TsFileMeta* file_metadata = nullptr;
-    const int ret = tsfile_executor_->get_tsfile_meta(file_metadata);
-    if (ret != E_OK) {
+    int ret = E_OK;
+    if (RET_FAIL(tsfile_executor_->get_tsfile_meta(file_metadata))) {
         return ret;
     }
-    // Schema-only tables have no device index, but still have a valid schema.
+    // A schema-only table has no device-level metadata index.  Schema lookup
+    // must therefore be independent of the presence of data pages; callers
+    // can still construct an empty result set from the returned schema.
     return file_metadata->get_table_schema(to_lower(table_name), table_schema);
 }
 
 std::vector<std::shared_ptr<TableSchema>>
 TsFileReader::get_all_table_schemas() {
     std::vector<std::shared_ptr<TableSchema>> table_schemas;
+    // The error code is ignored to preserve the legacy interface.
+    // New code should use the error-reporting overload and check its return
+    // code.
     get_all_table_schemas(table_schemas);
     return table_schemas;
 }

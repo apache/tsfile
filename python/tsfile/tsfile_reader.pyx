@@ -443,14 +443,25 @@ cdef class TsFileReaderPy:
                 <const char*>upper_bytes, tag_filter.is_not, &code)
             check_error(code)
             return handle
-        elif isinstance(tag_filter, (AndTagFilter, OrTagFilter)):
+        elif isinstance(tag_filter, AndTagFilter):
             try:
                 left = self._build_c_tag_filter(table_name, tag_filter.left)
                 right = self._build_c_tag_filter(table_name, tag_filter.right)
-                if isinstance(tag_filter, AndTagFilter):
-                    handle = tsfile_tag_filter_and(left, right)
-                else:
-                    handle = tsfile_tag_filter_or(left, right)
+                handle = tsfile_tag_filter_and(left, right)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                # The compound filter now owns both children.
+                left = NULL
+                right = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(left)
+                tsfile_tag_filter_free(right)
+        elif isinstance(tag_filter, OrTagFilter):
+            try:
+                left = self._build_c_tag_filter(table_name, tag_filter.left)
+                right = self._build_c_tag_filter(table_name, tag_filter.right)
+                handle = tsfile_tag_filter_or(left, right)
                 if handle == NULL:
                     raise MemoryError("Unable to allocate compound tag filter")
                 # The compound filter now owns both children.
