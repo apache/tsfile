@@ -808,8 +808,8 @@ cdef PreparedSeriesHandle tsfile_reader_prepare_series_c(
     native.time_metadata_length = locator[10]
     cdef PreparedSeriesHandle prepared
     with nogil:
-        prepared = tsfile_reader_prepare_series_with_options(
-            reader, &native, NULL, trust_index, &code
+        prepared = tsfile_reader_prepare_series(
+            reader, &native, trust_index, &code
         )
     check_error(code, b"Failed to prepare Dataset Index locator")
     return prepared
@@ -832,7 +832,7 @@ cdef PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
     native.time_metadata_length = locator[10]
     cdef PreparedSeriesHandle prepared
     with nogil:
-        prepared = tsfile_reader_prepare_series_with_options(
+        prepared = tsfile_reader_prepare_series_with_time_owner(
             reader, &native, aligned_time_owner, trust_index, &code
         )
     check_error(code, b"Failed to prepare aligned Dataset Index locator")

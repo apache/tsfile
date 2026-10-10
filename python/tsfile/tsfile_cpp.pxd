@@ -307,11 +307,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     PreparedSeriesHandle tsfile_reader_prepare_series(
         TsFileReader reader, const TsFilePreparedLocator * locator,
-        ErrorCode * err_code) nogil
+        bint trust_index, ErrorCode * err_code) nogil
     PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
-        TsFileReader reader, const TsFilePreparedLocator * locator,
-        PreparedSeriesHandle aligned_time_owner, ErrorCode * err_code) nogil
-    PreparedSeriesHandle tsfile_reader_prepare_series_with_options(
         TsFileReader reader, const TsFilePreparedLocator * locator,
         PreparedSeriesHandle aligned_time_owner, bint trust_index,
         ErrorCode * err_code) nogil
