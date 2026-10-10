@@ -234,8 +234,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     column.setPositionCount(endPos);
   }
 
-  private static void fillSingleMeasurementColumn(Column column, BatchData batchData, int pos) {
-    Type.fromTsDataType(batchData.getDataType()).setTo(batchData, column, pos);
+  private static void fillSingleMeasurementColumn(
+      Column column, BatchData batchData, Type type, int pos) {
+    type.setTo(batchData, column, pos);
     column.setPositionCount(pos + 1);
   }
 
@@ -274,6 +275,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
     private final String columnName;
     private final List<Integer> posInResult;
+    // A measurement context keeps one data type across all batches, so bind its Type once.
+    private final Type type;
 
     public SingleMeasurementColumnContext(
         String columnName,
@@ -283,6 +286,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       super(seriesReader, currentBatch);
       this.columnName = columnName;
       this.posInResult = posInResult;
+      this.type = Type.fromTsDataType(currentBatch.getDataType());
     }
 
     @Override
@@ -294,7 +298,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     void fillInto(TsBlock block, int position) {
       for (Integer pos : posInResult) {
         final Column column = block.getColumn(pos);
-        fillSingleMeasurementColumn(column, currentBatch, position);
+        fillSingleMeasurementColumn(column, currentBatch, type, position);
       }
     }
   }
@@ -322,10 +326,10 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       for (int i = 0; i < vector.length; i++) {
         final TsPrimitiveType value = vector[i];
         final List<Integer> columnPositions = posInResult.get(i);
+        final Type type = value == null ? null : Type.fromTsDataType(value.getDataType());
         for (Integer pos : columnPositions) {
           if (value != null) {
-            Type.fromTsDataType(value.getDataType())
-                .setTo(value, block.getColumn(pos), blockRowNum);
+            type.setTo(value, block.getColumn(pos), blockRowNum);
           } else {
             block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);
           }

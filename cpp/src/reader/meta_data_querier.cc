@@ -24,9 +24,7 @@
 namespace storage {
 
 MetadataQuerier::MetadataQuerier(TsFileIOReader* tsfile_io_reader)
-    : io_reader_(tsfile_io_reader) {
-    file_metadata_ = io_reader_->get_tsfile_meta();
-}
+    : io_reader_(tsfile_io_reader) {}
 
 MetadataQuerier::~MetadataQuerier() {}
 
@@ -55,9 +53,8 @@ MetadataQuerier::get_chunk_metadata_map(const std::vector<Path>& paths) const {
     return {};
 }
 
-int MetadataQuerier::get_whole_file_metadata(TsFileMeta* tsfile_meta) const {
-    tsfile_meta = io_reader_->get_tsfile_meta();
-    return common::E_OK;
+int MetadataQuerier::get_whole_file_metadata(TsFileMeta*& tsfile_meta) const {
+    return io_reader_->get_tsfile_meta(tsfile_meta);
 }
 
 void MetadataQuerier::load_chunk_metadatas(const std::vector<Path>& paths) {

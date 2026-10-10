@@ -21,6 +21,7 @@ package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import org.junit.Test;
 
@@ -34,6 +35,110 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public class TabletBuilderTest {
+
+  @Test
+  public void testColumnInsertionMatchesPublicTabletApi() {
+    TSDataType[] types = {
+      TSDataType.BOOLEAN,
+      TSDataType.INT32,
+      TSDataType.INT64,
+      TSDataType.FLOAT,
+      TSDataType.DOUBLE,
+      TSDataType.DATE,
+      TSDataType.TIMESTAMP,
+      TSDataType.TEXT,
+      TSDataType.STRING,
+      TSDataType.BLOB,
+      TSDataType.OBJECT
+    };
+    List<ImportSchema.SourceColumn> columns = new ArrayList<>();
+    columns.add(new ImportSchema.SourceColumn("time", TSDataType.INT64));
+    String[] names = new String[types.length + 1];
+    names[0] = "time";
+    for (int col = 0; col < types.length; col++) {
+      names[col + 1] = "s" + col;
+      columns.add(new ImportSchema.SourceColumn(names[col + 1], types[col]));
+    }
+    ImportSchema schema =
+        buildSchema(
+            "test",
+            "time",
+            Collections.singletonList(new ImportSchema.TagColumn("tag", "default")),
+            columns.toArray(new ImportSchema.SourceColumn[0]));
+    schema.setNullFormat("NULL");
+    TabletBuilder builder = new TabletBuilder(schema, new TimeConverter("ms"));
+    for (int count : new int[] {0, 1, 35}) {
+      Object[][] values = new Object[names.length][count];
+      for (int row = 0; row < count; row++) {
+        values[0][row] = (long) (count - row);
+        for (int col = 0; col < types.length; col++) {
+          values[col + 1][row] =
+              row % 4 == 0
+                  ? "NULL"
+                  : switch (types[col]) {
+                    case BOOLEAN -> "true";
+                    case DATE -> "2024-02-29";
+                    case INT32, INT64, TIMESTAMP, FLOAT, DOUBLE -> row;
+                    case TEXT, STRING, BLOB, OBJECT -> "v" + row;
+                    case VECTOR, UNKNOWN -> throw new AssertionError();
+                  };
+        }
+      }
+      Tablet actual = builder.build(new SourceBatch(names, values, count));
+      List<IMeasurementSchema> schemas = builder.getTableSchema().getColumnSchemas();
+      Tablet expected =
+          new Tablet(
+              "test",
+              IMeasurementSchema.getMeasurementNameList(schemas),
+              IMeasurementSchema.getDataTypeList(schemas),
+              builder.getTableSchema().getColumnTypes(),
+              count);
+      for (int row = 0; row < count; row++) {
+        expected.addTimestamp(row, row + 1);
+        expected.addValue("tag", row, "default");
+        for (int col = 0; col < types.length; col++) {
+          Object raw = values[col + 1][count - row - 1];
+          if (!"NULL".equals(raw)) {
+            expected.addValue(names[col + 1], row, ValueConverter.convert(raw, types[col], true));
+          }
+        }
+      }
+      expected.setRowSize(count);
+      assertEquals(expected, actual);
+    }
+  }
+
+  @Test
+  public void testColumnConversionKeepsSortedRowsAndNulls() {
+    ImportSchema schema =
+        buildSchema(
+            "test",
+            "time",
+            Collections.singletonList(new ImportSchema.TagColumn("region", "beijing")),
+            new ImportSchema.SourceColumn("time", TSDataType.INT64),
+            new ImportSchema.SourceColumn("number", TSDataType.INT32),
+            new ImportSchema.SourceColumn("flag", TSDataType.BOOLEAN));
+    schema.setNullFormat("NULL");
+    SourceBatch batch =
+        SourceBatch.fromRows(
+            Arrays.asList("time", "number", "flag"),
+            Arrays.asList(
+                new Object[] {30L, "30", "true"},
+                new Object[] {10L, 10, false},
+                new Object[] {20L, "NULL", ""}));
+    Tablet result = new TabletBuilder(schema, new TimeConverter("ms")).build(batch);
+    assertEquals(3, result.getRowSize());
+    assertEquals(10L, result.getTimestamps()[0]);
+    assertEquals(10, result.getValue(0, 1));
+    assertEquals(false, result.getValue(0, 2));
+    assertTrue(result.isNull(1, 1));
+    assertTrue(result.isNull(1, 2));
+    assertEquals(30, result.getValue(2, 1));
+    assertEquals(true, result.getValue(2, 2));
+    for (int i = 0; i < 3; i++) {
+      assertTrue(result.getDeviceID(i).toString().contains("beijing"));
+    }
+  }
 
   private ImportSchema buildSchema(
       String tableName,

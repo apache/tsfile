@@ -37,6 +37,7 @@
 #include "common/device_id.h"
 #include "common/schema.h"
 #include "format/atomic_output.h"
+#include "format/output_format.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
@@ -141,32 +142,6 @@ std::string numbered_file_name(size_t index, ParsedArgs::Format fmt) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%04zu", index + 1);
     return std::string(buf) + extension_for_format(fmt);
-}
-
-std::string json_escape(const std::string& s) {
-    std::ostringstream out;
-    for (char c : s) {
-        switch (c) {
-            case '\\':
-                out << "\\\\";
-                break;
-            case '"':
-                out << "\\\"";
-                break;
-            case '\n':
-                out << "\\n";
-                break;
-            case '\r':
-                out << "\\r";
-                break;
-            case '\t':
-                out << "\\t";
-                break;
-            default:
-                out << c;
-        }
-    }
-    return out.str();
 }
 
 struct ManifestEntry {
@@ -359,25 +334,6 @@ int cmd_export(const ParsedArgs& args, storage::TsFileReader& reader,
     long long rows = 0;
     return stream_query_to_file(query, reader, fmt, args.output, args.force,
                                 rows, err);
-}
-
-int cmd_sketch(const ParsedArgs& args, storage::TsFileReader& reader,
-               std::ostream& out, std::ostream& err) {
-    std::ostringstream content;
-    content << "-------------------------------- TsFile Sketch "
-               "--------------------------------\n"
-            << "file path: " << args.file << "\n"
-            << "model: " << (is_table_model(args, reader) ? "table" : "tree")
-            << "\n"
-            << "---------------------------------- TsFile Sketch End "
-               "----------------------------------\n";
-    if (args.output.empty()) {
-        out << content.str();
-        out.flush();
-        return out.good() ? kExitOk : kExitRuntime;
-    }
-    return write_atomic_text(args.output, content.str(), args.file, args.force,
-                             err);
 }
 
 }  // namespace tsfile_cli

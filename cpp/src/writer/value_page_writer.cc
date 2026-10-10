@@ -151,11 +151,16 @@ int ValuePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
               << pages_data.total_size() << " of chunk_data." << std::endl;
 #endif
     int ret = E_OK;
-    if (RET_FAIL(prepare_end_page())) {
-        return ret;
-    }
-    if (RET_FAIL(cur_page_data_.init(col_notnull_bitmap_out_stream_,
-                                     value_out_stream_, compressor_, size_))) {
+    if (statistic_->count_ == 0) {
+        // Match the aligned empty-page format: a single zero varint, with
+        // no compressed size, statistics, bitmap, or codec payload.
+        cur_page_data_ = ValuePageData();
+    } else {
+        if (RET_FAIL(prepare_end_page())) {
+            return ret;
+        }
+        ret = cur_page_data_.init(col_notnull_bitmap_out_stream_,
+                                  value_out_stream_, compressor_, size_);
     }
     col_notnull_bitmap_.clear();
     size_ = 0;
@@ -164,13 +169,15 @@ int ValuePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
     if (IS_SUCC(ret) && write_header) {
         if (RET_FAIL(SerializationUtil::write_var_uint(
                 cur_page_data_.uncompressed_size_, pages_data))) {
-        } else if (RET_FAIL(SerializationUtil::write_var_uint(
+        } else if (cur_page_data_.uncompressed_size_ != 0 &&
+                   RET_FAIL(SerializationUtil::write_var_uint(
                        cur_page_data_.compressed_size_, pages_data))) {
         }
     }
     // std::cout << "ValuePageWriter::write_to_chunk after write_header. pos="
     // << pages_data.total_size() << std::endl;
-    if (IS_SUCC(ret) && write_statistic) {
+    if (IS_SUCC(ret) && write_statistic &&
+        cur_page_data_.uncompressed_size_ != 0) {
         if (RET_FAIL(statistic_->serialize_to(pages_data))) {
         }
     }
@@ -178,7 +185,8 @@ int ValuePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
     // pages_data.total_size() << std::endl; DEBUG_print_byte_stream("In
     // ValuePageWriter::write_to_chunk, before writer page data: pages_data = ",
     // pages_data);
-    if (IS_SUCC(ret) && write_data_to_chunk_data) {
+    if (IS_SUCC(ret) && write_data_to_chunk_data &&
+        cur_page_data_.compressed_size_ != 0) {
         // DEBUG_hex_dump_buf("cur_page_data_.compressed_buf_ = ",
         // cur_page_data_.compressed_buf_, cur_page_data_.compressed_size_);
         if (RET_FAIL(pages_data.write_buf(cur_page_data_.compressed_buf_,

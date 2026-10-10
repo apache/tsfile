@@ -391,8 +391,10 @@ cdef class TsFileReaderPy:
         """
         cdef ResultSet result
         cdef TagFilterHandle c_tag_filter = NULL
+        pyresult = ResultSetPy(self)
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        pyresult._tag_filter_handle = c_tag_filter
         if batch_size <= 0:
             result = tsfile_reader_query_table_with_tag_filter_c(
                 self.reader, table_name.lower(),
@@ -403,8 +405,6 @@ cdef class TsFileReaderPy:
                 self.reader, table_name.lower(),
                 [column_name.lower() for column_name in column_names],
                 start_time, end_time, c_tag_filter, batch_size)
-        pyresult = ResultSetPy(self)
-        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
@@ -413,6 +413,9 @@ cdef class TsFileReaderPy:
         """Recursively build C TagFilterHandle from Python TagFilter tree."""
         cdef ErrorCode code = 0
         cdef TagFilterHandle handle = NULL
+        cdef TagFilterHandle left = NULL
+        cdef TagFilterHandle right = NULL
+        cdef TagFilterHandle inner = NULL
         cdef bytes table_bytes
         cdef bytes col_bytes
         cdef bytes val_bytes
@@ -441,16 +444,43 @@ cdef class TsFileReaderPy:
             check_error(code)
             return handle
         elif isinstance(tag_filter, AndTagFilter):
-            left = self._build_c_tag_filter(table_name, tag_filter.left)
-            right = self._build_c_tag_filter(table_name, tag_filter.right)
-            return tsfile_tag_filter_and(left, right)
+            try:
+                left = self._build_c_tag_filter(table_name, tag_filter.left)
+                right = self._build_c_tag_filter(table_name, tag_filter.right)
+                handle = tsfile_tag_filter_and(left, right)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                # The compound filter now owns both children.
+                left = NULL
+                right = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(left)
+                tsfile_tag_filter_free(right)
         elif isinstance(tag_filter, OrTagFilter):
-            left = self._build_c_tag_filter(table_name, tag_filter.left)
-            right = self._build_c_tag_filter(table_name, tag_filter.right)
-            return tsfile_tag_filter_or(left, right)
+            try:
+                left = self._build_c_tag_filter(table_name, tag_filter.left)
+                right = self._build_c_tag_filter(table_name, tag_filter.right)
+                handle = tsfile_tag_filter_or(left, right)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                # The compound filter now owns both children.
+                left = NULL
+                right = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(left)
+                tsfile_tag_filter_free(right)
         elif isinstance(tag_filter, NotTagFilter):
-            inner = self._build_c_tag_filter(table_name, tag_filter.filter)
-            return tsfile_tag_filter_not(inner)
+            try:
+                inner = self._build_c_tag_filter(table_name, tag_filter.filter)
+                handle = tsfile_tag_filter_not(inner)
+                if handle == NULL:
+                    raise MemoryError("Unable to allocate compound tag filter")
+                inner = NULL
+                return handle
+            finally:
+                tsfile_tag_filter_free(inner)
         else:
             raise TypeError(f"Unknown tag filter type: {type(tag_filter)}")
     def query_table_on_tree(self, column_names : List[str],
@@ -494,13 +524,13 @@ cdef class TsFileReaderPy:
         """
         cdef ResultSet result
         cdef TagFilterHandle c_tag_filter = NULL
+        pyresult = ResultSetPy(self)
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
+        pyresult._tag_filter_handle = c_tag_filter
         result = tsfile_reader_query_table_by_row_c(self.reader, table_name.lower(),
                                                       [column_name.lower() for column_name in column_names],
                                                       offset, limit, c_tag_filter, batch_size)
-        pyresult = ResultSetPy(self)
-        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult

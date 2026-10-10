@@ -365,6 +365,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                             uint32_t * size);
 
+    ErrorCode tsfile_reader_get_table_schema_checked(
+        TsFileReader reader, const char * table_name, TableSchema * out_schema);
+    ErrorCode tsfile_reader_get_all_timeseries_schemas_checked(
+        TsFileReader reader, DeviceSchema ** out_schemas, uint32_t * out_size);
+
     void tsfile_device_id_free_contents(DeviceID * d)
 
     ErrorCode tsfile_reader_get_all_devices(TsFileReader reader,

@@ -32,8 +32,6 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
-import org.apache.tsfile.utils.TypeServices;
-import org.apache.tsfile.utils.TypeServices.EmptyValueChunkWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -209,6 +207,9 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         emptyValueChunkWriters.add(entry.getValue());
       }
     }
+    // Resolve lazily on the first row to preserve timestamp validation and late-column catch-up.
+    ValueChunkWriter[] writers = new ValueChunkWriter[measurementSchemas.size()];
+    Type[] types = new Type[measurementSchemas.size()];
     // TODO: changing to a column-first style by calculating the remaining page space of each
     // column firsts
     for (int row = startRowIndex; row < endRowIndex; row++) {
@@ -225,10 +226,14 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 && tablet.getBitMaps()[columnIndex] != null
                 && tablet.getBitMaps()[columnIndex].isMarked(row);
         // check isNull by bitMap in tablet
-        ValueChunkWriter valueChunkWriter =
-            tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
-        Type.fromTsDataType(measurementSchemas.get(columnIndex).getType())
-            .write(valueChunkWriter, time, tablet.getValues()[columnIndex], row, isNull);
+        ValueChunkWriter valueChunkWriter = writers[columnIndex];
+        if (valueChunkWriter == null) {
+          valueChunkWriter = tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
+          writers[columnIndex] = valueChunkWriter;
+          types[columnIndex] = Type.fromTsDataType(measurementSchemas.get(columnIndex).getType());
+        }
+        types[columnIndex].write(
+            valueChunkWriter, time, tablet.getValues()[columnIndex], row, isNull);
       }
       // TODO: we can write the null columns after whole insertion, according to the point number
       //  in the time chunk before and after, no need to do it in a row-by-row manner
@@ -285,17 +290,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
 
     // add empty data of currentPage
-    for (long i = 0; i < timeChunkWriter.getPageWriter().getStatistics().getCount(); i++) {
-      valueChunkWriter.write(0, 0, true);
-    }
+    valueChunkWriter.writeNull(timeChunkWriter.getPageWriter().getStatistics().getCount());
   }
 
   private void writeEmptyDataInOneRow(List<ValueChunkWriter> valueChunkWriterList) {
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
-      EmptyValueChunkWriter emptyValueWriter =
-          TypeServices.WRITE_EMPTY_VALUE_TO_CHUNK_SERVICE.call(
-              Type.fromTsDataType(valueChunkWriter.getDataType()));
-      emptyValueWriter.write(valueChunkWriter);
+      // Keep row-wise page-size checks and synchronized page boundaries across all columns.
+      valueChunkWriter.writeNull(1);
     }
   }
 

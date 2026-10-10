@@ -38,8 +38,7 @@ struct ColumnDef {
 
 bool parse_datatype_name(const std::string& s, common::TSDataType& out);
 bool normalize_write_columns(const std::vector<WriteColumnSpec>& specs,
-                             std::vector<ColumnDef>& out,
-                             std::string& error);
+                             std::vector<ColumnDef>& out, std::string& error);
 std::vector<std::string> split_line(const std::string& line, char delim,
                                     bool csv_quotes);
 bool parse_bool_cell(const std::string& s, bool& out);
@@ -49,9 +48,12 @@ bool validate_identifier(const std::string& name, std::string& error);
 
 // Read one logical record from `in`. When `csv_quotes` is true a field may span
 // multiple physical lines if it opens a double-quote that is not yet closed, so
-// continuation lines are appended (newline preserved) until the quote closes.
-// `lines_consumed` returns how many physical lines were read, so callers can
-// keep accurate line numbers. Returns false at end of input with no record.
+// continuation lines are appended (LF or CRLF preserved) until the quote
+// closes. CRLF outside quotes is a record boundary, not field data. File
+// streams should be opened in binary mode to prevent platform newline
+// translation. `lines_consumed` returns how many physical lines were read, so
+// callers can keep accurate line numbers. Returns false at end of input with no
+// record.
 bool read_record(std::istream& in, bool csv_quotes, std::string& record,
                  long long& lines_consumed);
 
