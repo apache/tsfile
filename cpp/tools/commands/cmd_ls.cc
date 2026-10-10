@@ -27,14 +27,25 @@
 
 namespace tsfile_cli {
 
-bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader) {
+int resolve_table_model(const ParsedArgs& args, storage::TsFileReader& reader,
+                        bool& table_model, std::ostream& err) {
+    table_model = false;
     if (args.model == "tree") {
-        return false;
+        return kExitOk;
     }
     if (args.model == "table") {
-        return true;
+        table_model = true;
+        return kExitOk;
     }
-    return !reader.get_all_table_schemas().empty();
+    std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+    const int ret = reader.get_all_table_schemas(schemas);
+    if (ret != common::E_OK) {
+        err << "Error: failed to read table schemas: "
+            << error_code_message(ret) << "\n";
+        return kExitFile;
+    }
+    table_model = !schemas.empty();
+    return kExitOk;
 }
 
 std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
@@ -52,8 +63,13 @@ std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
 
 int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
            OutputFormat fmt, std::ostream& out, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     std::vector<std::string> names;
-    if (is_table_model(args, reader)) {
+    if (table_model) {
         for (auto& ts : sorted_table_schemas(reader)) {
             if (ts) {
                 names.push_back(ts->get_table_name());
@@ -67,7 +83,7 @@ int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
         }
     }
 
-    const std::string model = is_table_model(args, reader) ? "table" : "tree";
+    const std::string model = table_model ? "table" : "tree";
     RowWriter w(out, fmt, {"model", "object"}, {common::STRING, common::STRING},
                 false);
     for (const std::string& n : names) {

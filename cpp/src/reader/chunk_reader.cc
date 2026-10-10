@@ -114,6 +114,12 @@ int ChunkReader::load_by_meta(ChunkMeta* meta) {
     }
     ret = read_file_->read(chunk_meta_->offset_of_chunk_header_, file_data_buf,
                            file_data_buf_size_, ret_read_len);
+    if (IS_SUCC(ret) &&
+        ret_read_len < UTIL_MIN(static_cast<int64_t>(file_data_buf_size_),
+                                read_file_->file_size() -
+                                    chunk_meta_->offset_of_chunk_header_)) {
+        ret = E_FILE_READ_ERR;
+    }
     if (!IS_SUCC(ret)) {
         mem_free(file_data_buf);
         return ret;
@@ -275,6 +281,9 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
     int ret_read_len = 0;
     if (RET_FAIL(
             read_file_->read(offset, file_data_buf, read_size, ret_read_len))) {
+    } else if (ret_read_len < UTIL_MIN(static_cast<int64_t>(read_size),
+                                       read_file_->file_size() - offset)) {
+        ret = E_FILE_READ_ERR;
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
         // DEBUG_hex_dump_buf("wrapped buf = ", file_data_buf, 256);

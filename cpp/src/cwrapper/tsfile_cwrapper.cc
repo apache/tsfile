@@ -46,6 +46,7 @@
 #include "reader/result_set.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
+#include "utils/injection.h"
 #include "writer/tsfile_writer.h"
 
 // Forward declarations for arrow namespace functions (defined in arrow_c.cc)
@@ -1060,81 +1061,141 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
 
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name) {
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto table_shcema = r->get_table_schema(table_name);
-    TableSchema ret_schema;
-    ret_schema.table_name = strdup(table_shcema->get_table_name().c_str());
-    int column_num = table_shcema->get_columns_num();
-    ret_schema.column_num = column_num;
-    ret_schema.column_schemas =
-        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * column_num));
-    for (int i = 0; i < column_num; i++) {
-        auto column_schema = table_shcema->get_measurement_schemas()[i];
-        ret_schema.column_schemas[i].column_name =
-            strdup(column_schema->measurement_name_.c_str());
-        ret_schema.column_schemas[i].data_type =
-            static_cast<TSDataType>(column_schema->data_type_);
-        ret_schema.column_schemas[i].column_category =
-            static_cast<ColumnCategory>(
-                table_shcema->get_column_categories()[i]);
+    TableSchema ret_schema{};
+    if (tsfile_reader_get_table_schema_checked(reader, table_name,
+                                               &ret_schema) != common::E_OK) {
+        return TableSchema{};
     }
     return ret_schema;
 }
 
+static ColumnSchema* allocate_table_schema_columns(size_t count) {
+#ifdef ENABLE_TEST
+    using common::g_all_inject_points;
+    using common::InjectPoint;
+    DBUG_EXECUTE_IF("table_schema_column_alloc_fail", return nullptr;);
+#endif
+    return static_cast<ColumnSchema*>(calloc(count, sizeof(ColumnSchema)));
+}
+
+// MSVC /EHsc assumes C-linkage helpers do not let exceptions escape.
 static ERRNO copy_table_schema(const std::shared_ptr<storage::TableSchema>& src,
                                TableSchema* out_schema) {
-    if (!src || out_schema == nullptr) {
-        return common::E_TABLE_NOT_EXIST;
+    if (out_schema == nullptr) {
+        return common::E_INVALID_ARG;
     }
     *out_schema = TableSchema{};
-    out_schema->table_name = strdup(src->get_table_name().c_str());
-    if (out_schema->table_name == nullptr) {
-        return common::E_OOM;
+    if (!src) {
+        return common::E_TABLE_NOT_EXIST;
     }
-    out_schema->column_num = src->get_columns_num();
-    if (out_schema->column_num == 0) {
-        return common::E_OK;
-    }
-    out_schema->column_schemas = static_cast<ColumnSchema*>(calloc(
-        static_cast<size_t>(out_schema->column_num), sizeof(ColumnSchema)));
-    if (out_schema->column_schemas == nullptr) {
-        free_table_schema(*out_schema);
-        *out_schema = TableSchema{};
-        return common::E_OOM;
-    }
-    const auto& measurements = src->get_measurement_schemas();
-    const auto& categories = src->get_column_categories();
-    for (int i = 0; i < out_schema->column_num; ++i) {
-        out_schema->column_schemas[i].column_name =
-            strdup(measurements[i]->measurement_name_.c_str());
-        if (out_schema->column_schemas[i].column_name == nullptr) {
+    try {
+        out_schema->table_name = strdup(src->get_table_name().c_str());
+        if (out_schema->table_name == nullptr) {
+            return common::E_OOM;
+        }
+        const int column_num = src->get_columns_num();
+        if (column_num == 0) {
+            return common::E_OK;
+        }
+        out_schema->column_schemas =
+            allocate_table_schema_columns(static_cast<size_t>(column_num));
+        if (out_schema->column_schemas == nullptr) {
             free_table_schema(*out_schema);
             *out_schema = TableSchema{};
             return common::E_OOM;
         }
-        out_schema->column_schemas[i].data_type =
-            static_cast<TSDataType>(measurements[i]->data_type_);
-        out_schema->column_schemas[i].column_category =
-            static_cast<ColumnCategory>(categories[i]);
+        out_schema->column_num = column_num;
+#ifdef ENABLE_TEST
+        using common::g_all_inject_points;
+        using common::InjectPoint;
+        DBUG_EXECUTE_IF("table_schema_copy_oom", throw std::bad_alloc(););
+        DBUG_EXECUTE_IF("table_schema_copy_error",
+                        throw common::E_FILE_READ_ERR;);
+#endif
+        const auto& measurements = src->get_measurement_schemas();
+        const auto& categories = src->get_column_categories();
+        if (measurements.size() < static_cast<size_t>(out_schema->column_num) ||
+            categories.size() < static_cast<size_t>(out_schema->column_num)) {
+            free_table_schema(*out_schema);
+            *out_schema = TableSchema{};
+            return common::E_INVALID_SCHEMA;
+        }
+        for (int i = 0; i < out_schema->column_num; ++i) {
+            if (!measurements[i]) {
+                free_table_schema(*out_schema);
+                *out_schema = TableSchema{};
+                return common::E_INVALID_SCHEMA;
+            }
+            out_schema->column_schemas[i].column_name =
+                strdup(measurements[i]->measurement_name_.c_str());
+            if (out_schema->column_schemas[i].column_name == nullptr) {
+                free_table_schema(*out_schema);
+                *out_schema = TableSchema{};
+                return common::E_OOM;
+            }
+            out_schema->column_schemas[i].data_type =
+                static_cast<TSDataType>(measurements[i]->data_type_);
+            out_schema->column_schemas[i].column_category =
+                static_cast<ColumnCategory>(categories[i]);
+        }
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_OOM;
+    } catch (...) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
+        return common::E_FILE_READ_ERR;
     }
-    return common::E_OK;
+}
+
+static void free_table_schema_array(TableSchema* schemas, size_t size) {
+    if (schemas == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        free_table_schema(schemas[i]);
+    }
+    free(schemas);
+}
+
+static void free_device_schema_array(DeviceSchema* schemas, size_t size) {
+    if (schemas == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        free_device_schema(schemas[i]);
+    }
+    free(schemas);
 }
 
 ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
                                              const char* table_name,
                                              TableSchema* out_schema) {
-    if (reader == nullptr || table_name == nullptr || out_schema == nullptr) {
+    if (out_schema == nullptr) {
         return common::E_INVALID_ARG;
     }
     *out_schema = TableSchema{};
+    if (reader == nullptr || table_name == nullptr) {
+        return common::E_INVALID_ARG;
+    }
     try {
-        auto schema =
+        std::shared_ptr<storage::TableSchema> schema;
+        const int ret =
             static_cast<storage::TsFileReader*>(reader)->get_table_schema(
-                table_name);
+                table_name, schema);
+        if (ret != common::E_OK) {
+            return ret;
+        }
         return copy_table_schema(schema, out_schema);
     } catch (const std::bad_alloc&) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
         return common::E_OOM;
     } catch (...) {
+        free_table_schema(*out_schema);
+        *out_schema = TableSchema{};
         return common::E_FILE_READ_ERR;
     }
 }
@@ -1155,66 +1216,50 @@ TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
     if (error_code == nullptr) {
         return nullptr;
     }
-    *error_code = common::E_INVALID_ARG;
-    if (reader == nullptr || size == nullptr) {
-        return nullptr;
-    }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    std::vector<std::shared_ptr<storage::TableSchema>> table_schemas;
-    *error_code = r->get_all_table_schemas(table_schemas);
-    if (*error_code != common::E_OK || table_schemas.empty()) {
-        return nullptr;
-    }
-    size_t table_num = table_schemas.size();
-    TableSchema* ret =
-        static_cast<TableSchema*>(malloc(sizeof(TableSchema) * table_num));
-    for (size_t i = 0; i < table_schemas.size(); i++) {
-        ret[i].table_name = strdup(table_schemas[i]->get_table_name().c_str());
-        int column_num = table_schemas[i]->get_columns_num();
-        ret[i].column_num = column_num;
-        ret[i].column_schemas = static_cast<ColumnSchema*>(
-            malloc(column_num * sizeof(ColumnSchema)));
-        auto column_schemas = table_schemas[i]->get_measurement_schemas();
-        for (int j = 0; j < column_num; j++) {
-            ret[i].column_schemas[j].column_name =
-                strdup(column_schemas[j]->measurement_name_.c_str());
-            ret[i].column_schemas[j].data_type =
-                static_cast<TSDataType>(column_schemas[j]->data_type_);
-            ret[i].column_schemas[j].column_category =
-                static_cast<ColumnCategory>(
-                    table_schemas[i]->get_column_categories()[j]);
-        }
-    }
-    *size = table_num;
-    return ret;
+    TableSchema* schemas = nullptr;
+    *error_code =
+        tsfile_reader_get_all_table_schemas_checked(reader, &schemas, size);
+    return *error_code == common::E_OK ? schemas : nullptr;
 }
 
 ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
                                                   TableSchema** out_schemas,
                                                   uint32_t* out_size) {
+    if (out_schemas != nullptr) {
+        *out_schemas = nullptr;
+    }
+    if (out_size != nullptr) {
+        *out_size = 0;
+    }
     if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
         return common::E_INVALID_ARG;
     }
-    *out_schemas = nullptr;
-    *out_size = 0;
+    TableSchema* copied = nullptr;
+    size_t initialized = 0;
     try {
-        auto schemas = static_cast<storage::TsFileReader*>(reader)
-                           ->get_all_table_schemas();
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+        const ERRNO read_ret = r->get_all_table_schemas(schemas);
+        if (read_ret != common::E_OK) {
+            return read_ret;
+        }
         if (schemas.empty()) {
             return common::E_OK;
         }
-        TableSchema* copied = static_cast<TableSchema*>(
+        const size_t table_num = schemas.size();
+        if (table_num > std::numeric_limits<uint32_t>::max()) {
+            return common::E_OVERFLOW;
+        }
+        copied = static_cast<TableSchema*>(
             calloc(schemas.size(), sizeof(TableSchema)));
         if (copied == nullptr) {
             return common::E_OOM;
         }
         for (size_t i = 0; i < schemas.size(); ++i) {
+            initialized = i + 1;
             ERRNO ret = copy_table_schema(schemas[i], &copied[i]);
             if (ret != common::E_OK) {
-                for (size_t j = 0; j < i; ++j) {
-                    free_table_schema(copied[j]);
-                }
-                free(copied);
+                free_table_schema_array(copied, initialized);
                 return ret;
             }
         }
@@ -1222,63 +1267,117 @@ ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
         *out_size = static_cast<uint32_t>(schemas.size());
         return common::E_OK;
     } catch (const std::bad_alloc&) {
+        free_table_schema_array(copied, initialized);
         return common::E_OOM;
     } catch (...) {
+        free_table_schema_array(copied, initialized);
+        return common::E_FILE_READ_ERR;
+    }
+}
+
+ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
+    TsFileReader reader, DeviceSchema** out_schemas, uint32_t* out_size) {
+    if (out_schemas != nullptr) {
+        *out_schemas = nullptr;
+    }
+    if (out_size != nullptr) {
+        *out_size = 0;
+    }
+    if (reader == nullptr || out_schemas == nullptr || out_size == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    DeviceSchema* device_schema = nullptr;
+    size_t initialized = 0;
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::IDeviceID>> device_ids;
+        const ERRNO read_ret = r->get_all_devices(device_ids);
+        if (read_ret != common::E_OK) {
+            return read_ret;
+        }
+        if (device_ids.empty()) {
+            return common::E_OK;
+        }
+        const size_t device_count = device_ids.size();
+        if (device_count > std::numeric_limits<uint32_t>::max()) {
+            return common::E_OVERFLOW;
+        }
+        device_schema = static_cast<DeviceSchema*>(
+            calloc(device_count, sizeof(DeviceSchema)));
+        if (device_schema == nullptr) {
+            return common::E_OOM;
+        }
+
+        size_t device_index = 0;
+        for (const auto& device_id : device_ids) {
+            initialized = device_index + 1;
+            DeviceSchema& cur_schema = device_schema[device_index++];
+            std::string device_name =
+                device_id == nullptr ? "" : device_id->get_device_name();
+            cur_schema.device_name = strdup(device_name.c_str());
+            if (cur_schema.device_name == nullptr) {
+                free_device_schema_array(device_schema, initialized);
+                return common::E_OOM;
+            }
+
+            std::vector<storage::MeasurementSchema> schemas;
+            int ret = r->get_timeseries_schema(device_id, schemas);
+            if (ret != common::E_OK) {
+                free_device_schema_array(device_schema, initialized);
+                return ret;
+            }
+            if (schemas.empty()) {
+                continue;
+            }
+            if (schemas.size() >
+                static_cast<size_t>(std::numeric_limits<int>::max())) {
+                free_device_schema_array(device_schema, initialized);
+                return common::E_OVERFLOW;
+            }
+
+            cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
+                calloc(schemas.size(), sizeof(TimeseriesSchema)));
+            if (cur_schema.timeseries_schema == nullptr) {
+                free_device_schema_array(device_schema, initialized);
+                return common::E_OOM;
+            }
+            cur_schema.timeseries_num = static_cast<int>(schemas.size());
+            for (size_t i = 0; i < schemas.size(); ++i) {
+                const auto& measurement_schema = schemas[i];
+                cur_schema.timeseries_schema[i].timeseries_name =
+                    strdup(measurement_schema.measurement_name_.c_str());
+                if (cur_schema.timeseries_schema[i].timeseries_name ==
+                    nullptr) {
+                    free_device_schema_array(device_schema, initialized);
+                    return common::E_OOM;
+                }
+                cur_schema.timeseries_schema[i].data_type =
+                    static_cast<TSDataType>(measurement_schema.data_type_);
+                cur_schema.timeseries_schema[i].encoding =
+                    static_cast<TSEncoding>(measurement_schema.encoding_);
+                cur_schema.timeseries_schema[i].compression =
+                    static_cast<CompressionType>(
+                        measurement_schema.compression_type_);
+            }
+        }
+        *out_schemas = device_schema;
+        *out_size = static_cast<uint32_t>(device_count);
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        free_device_schema_array(device_schema, initialized);
+        return common::E_OOM;
+    } catch (...) {
+        free_device_schema_array(device_schema, initialized);
         return common::E_FILE_READ_ERR;
     }
 }
 
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                        uint32_t* size) {
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto device_ids = r->get_all_device_ids();
-    if (size == nullptr) {
-        return nullptr;
-    }
-    *size = static_cast<uint32_t>(device_ids.size());
-    if (device_ids.empty()) {
-        return nullptr;
-    }
-
-    DeviceSchema* device_schema = static_cast<DeviceSchema*>(
-        malloc(sizeof(DeviceSchema) * device_ids.size()));
-    if (device_schema == nullptr) {
-        *size = 0;
-        return nullptr;
-    }
-
-    size_t device_index = 0;
-    for (const auto& device_id : device_ids) {
-        DeviceSchema& cur_schema = device_schema[device_index++];
-        std::string device_name =
-            device_id == nullptr ? "" : device_id->get_device_name();
-        cur_schema.device_name = strdup(device_name.c_str());
-        cur_schema.timeseries_num = 0;
-        cur_schema.timeseries_schema = nullptr;
-
-        std::vector<storage::MeasurementSchema> schemas;
-        int ret = r->get_timeseries_schema(device_id, schemas);
-        if (ret != common::E_OK || schemas.empty()) {
-            continue;
-        }
-
-        cur_schema.timeseries_num = static_cast<int>(schemas.size());
-        cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
-            malloc(sizeof(TimeseriesSchema) * schemas.size()));
-        for (size_t i = 0; i < schemas.size(); ++i) {
-            const auto& measurement_schema = schemas[i];
-            cur_schema.timeseries_schema[i].timeseries_name =
-                strdup(measurement_schema.measurement_name_.c_str());
-            cur_schema.timeseries_schema[i].data_type =
-                static_cast<TSDataType>(measurement_schema.data_type_);
-            cur_schema.timeseries_schema[i].encoding =
-                static_cast<TSEncoding>(measurement_schema.encoding_);
-            cur_schema.timeseries_schema[i].compression =
-                static_cast<CompressionType>(
-                    measurement_schema.compression_type_);
-        }
-    }
-    return device_schema;
+    DeviceSchema* schemas = nullptr;
+    const ERRNO ret = tsfile_reader_get_all_timeseries_schemas_checked(
+        reader, &schemas, size);
+    return ret == common::E_OK ? schemas : nullptr;
 }
 
 void tsfile_device_id_free_contents(DeviceID* d) {
@@ -1648,7 +1747,7 @@ void free_device_timeseries_metadata_entries_partial(
 
 /**
  * Copies path, table name, and segment strings from IDeviceID into heap
- * buffers. On failure, frees any partial allocations and returns E_OOM.
+ * buffers. On failure, frees any partial allocations and returns an error code.
  */
 int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
                                          char** out_path, char** out_table_name,
@@ -1658,70 +1757,90 @@ int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
     *out_table_name = nullptr;
     *out_segment_count = 0;
     *out_segments = nullptr;
-    if (id == nullptr) {
-        *out_path = strdup("");
-        *out_table_name = strdup("");
-        if (*out_path == nullptr || *out_table_name == nullptr) {
-            free(*out_path);
-            free(*out_table_name);
-            *out_path = nullptr;
-            *out_table_name = nullptr;
-            return common::E_OOM;
-        }
-        return common::E_OK;
-    }
-    const std::string dname = id->get_device_name();
-    *out_path = strdup(dname.c_str());
-    if (*out_path == nullptr) {
-        return common::E_OOM;
-    }
-    const std::string tname = id->get_table_name();
-    *out_table_name = strdup(tname.c_str());
-    if (*out_table_name == nullptr) {
+    auto cleanup = [&]() {
         free(*out_path);
-        *out_path = nullptr;
-        return common::E_OOM;
-    }
-    const int n = id->segment_num();
-    if (n <= 0) {
-        return common::E_OK;
-    }
-    auto* seg_arr =
-        static_cast<char**>(malloc(sizeof(char*) * static_cast<size_t>(n)));
-    if (seg_arr == nullptr) {
         free(*out_table_name);
-        *out_table_name = nullptr;
-        free(*out_path);
         *out_path = nullptr;
-        return common::E_OOM;
-    }
-    memset(seg_arr, 0, sizeof(char*) * static_cast<size_t>(n));
-    const auto& segs = id->get_segments();
-    for (int i = 0; i < n; i++) {
-        const std::string* ps =
-            (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
-        // A null tag segment is exposed as a NULL pointer so callers can
-        // distinguish a missing/null tag from the literal string "null".
-        if (ps == nullptr) {
-            seg_arr[i] = nullptr;
-            continue;
-        }
-        seg_arr[i] = strdup(ps->c_str());
-        if (seg_arr[i] == nullptr) {
-            for (int j = 0; j < i; j++) {
-                free(seg_arr[j]);
+        *out_table_name = nullptr;
+    };
+    try {
+        if (id == nullptr) {
+            *out_path = strdup("");
+            *out_table_name = strdup("");
+            if (*out_path == nullptr || *out_table_name == nullptr) {
+                free(*out_path);
+                free(*out_table_name);
+                *out_path = nullptr;
+                *out_table_name = nullptr;
+                return common::E_OOM;
             }
-            free(seg_arr);
+            return common::E_OK;
+        }
+        const std::string dname = id->get_device_name();
+        *out_path = strdup(dname.c_str());
+        if (*out_path == nullptr) {
+            return common::E_OOM;
+        }
+#ifdef ENABLE_TEST
+        using common::g_all_inject_points;
+        using common::InjectPoint;
+        DBUG_EXECUTE_IF("device_id_copy_oom", throw std::bad_alloc(););
+        DBUG_EXECUTE_IF("device_id_copy_error", throw common::E_FILE_READ_ERR;);
+#endif
+        const std::string tname = id->get_table_name();
+        *out_table_name = strdup(tname.c_str());
+        if (*out_table_name == nullptr) {
+            free(*out_path);
+            *out_path = nullptr;
+            return common::E_OOM;
+        }
+        const int n = id->segment_num();
+        if (n <= 0) {
+            return common::E_OK;
+        }
+        const auto& segs = id->get_segments();
+        auto* seg_arr =
+            static_cast<char**>(malloc(sizeof(char*) * static_cast<size_t>(n)));
+        if (seg_arr == nullptr) {
             free(*out_table_name);
             *out_table_name = nullptr;
             free(*out_path);
             *out_path = nullptr;
             return common::E_OOM;
         }
+        memset(seg_arr, 0, sizeof(char*) * static_cast<size_t>(n));
+        for (int i = 0; i < n; i++) {
+            const std::string* ps =
+                (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
+            // A null tag segment is exposed as a NULL pointer so callers can
+            // distinguish a missing/null tag from the literal string "null".
+            if (ps == nullptr) {
+                seg_arr[i] = nullptr;
+                continue;
+            }
+            seg_arr[i] = strdup(ps->c_str());
+            if (seg_arr[i] == nullptr) {
+                for (int j = 0; j < i; j++) {
+                    free(seg_arr[j]);
+                }
+                free(seg_arr);
+                free(*out_table_name);
+                *out_table_name = nullptr;
+                free(*out_path);
+                *out_path = nullptr;
+                return common::E_OOM;
+            }
+        }
+        *out_segment_count = static_cast<uint32_t>(n);
+        *out_segments = seg_arr;
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        cleanup();
+        return common::E_OOM;
+    } catch (...) {
+        cleanup();
+        return common::E_FILE_READ_ERR;
     }
-    *out_segment_count = static_cast<uint32_t>(n);
-    *out_segments = seg_arr;
-    return common::E_OK;
 }
 
 int fill_device_id_from_ideviceid(storage::IDeviceID* id, DeviceID* out) {
@@ -1730,176 +1849,154 @@ int fill_device_id_from_ideviceid(storage::IDeviceID* id, DeviceID* out) {
         id, &out->path, &out->table_name, &out->segment_count, &out->segments);
 }
 
-void clear_metadata_entry_device_only(DeviceTimeseriesMetadataEntry* e) {
-    if (e == nullptr) {
-        return;
-    }
-    tsfile_device_id_free_contents(&e->device);
-}
-
 ERRNO populate_c_metadata_map_from_cpp(
     storage::DeviceTimeseriesMetadataMap& cpp_map,
     DeviceTimeseriesMetadataMap* out_map) {
-    if (cpp_map.empty()) {
-        return common::E_OK;
-    }
-    const uint32_t dev_n = static_cast<uint32_t>(cpp_map.size());
-    auto* entries = static_cast<DeviceTimeseriesMetadataEntry*>(
-        malloc(sizeof(DeviceTimeseriesMetadataEntry) * dev_n));
-    if (entries == nullptr) {
-        return common::E_OOM;
-    }
-    memset(entries, 0, sizeof(DeviceTimeseriesMetadataEntry) * dev_n);
-    size_t di = 0;
-    for (const auto& kv : cpp_map) {
-        DeviceTimeseriesMetadataEntry& e = entries[di];
-        const int dup_rc = fill_device_id_from_ideviceid(
-            kv.first ? kv.first.get() : nullptr, &e.device);
-        if (dup_rc != common::E_OK) {
-            free_device_timeseries_metadata_entries_partial(entries, di);
-            return dup_rc;
+    try {
+        if (cpp_map.empty()) {
+            return common::E_OK;
         }
-        const auto& vec = kv.second;
-        uint32_t n_ts = 0;
-        for (const auto& idx_nz : vec) {
-            if (idx_nz != nullptr) {
-                n_ts++;
-            }
-        }
-        e.timeseries_count = n_ts;
-        if (e.timeseries_count == 0) {
-            e.timeseries = nullptr;
-            di++;
-            continue;
-        }
-        e.timeseries = static_cast<TimeseriesMetadata*>(
-            malloc(sizeof(TimeseriesMetadata) * e.timeseries_count));
-        if (e.timeseries == nullptr) {
-            clear_metadata_entry_device_only(&e);
-            free_device_timeseries_metadata_entries_partial(entries, di);
+        const uint32_t dev_n = static_cast<uint32_t>(cpp_map.size());
+        auto* entries = static_cast<DeviceTimeseriesMetadataEntry*>(
+            malloc(sizeof(DeviceTimeseriesMetadataEntry) * dev_n));
+        if (entries == nullptr) {
             return common::E_OOM;
         }
-        memset(e.timeseries, 0,
-               sizeof(TimeseriesMetadata) * e.timeseries_count);
-        uint32_t slot = 0;
-        for (const auto& idx : vec) {
-            if (idx == nullptr) {
+        memset(entries, 0, sizeof(DeviceTimeseriesMetadataEntry) * dev_n);
+        auto cleanup = [dev_n](DeviceTimeseriesMetadataEntry* data) {
+            free_device_timeseries_metadata_entries_partial(data, dev_n);
+        };
+        std::unique_ptr<DeviceTimeseriesMetadataEntry, decltype(cleanup)> guard(
+            entries, cleanup);
+        size_t di = 0;
+        for (const auto& kv : cpp_map) {
+            DeviceTimeseriesMetadataEntry& e = entries[di];
+            const int dup_rc = fill_device_id_from_ideviceid(
+                kv.first ? kv.first.get() : nullptr, &e.device);
+            if (dup_rc != common::E_OK) {
+                return dup_rc;
+            }
+            const auto& vec = kv.second;
+            uint32_t n_ts = 0;
+            for (const auto& idx_nz : vec) {
+                if (idx_nz != nullptr) {
+                    n_ts++;
+                }
+            }
+            e.timeseries_count = n_ts;
+            if (e.timeseries_count == 0) {
+                e.timeseries = nullptr;
+                di++;
                 continue;
             }
-            TimeseriesMetadata& m = e.timeseries[slot];
-            common::String mn = idx->get_measurement_name();
-            m.measurement_name = strdup(mn.to_std_string().c_str());
-            if (m.measurement_name == nullptr) {
-                for (uint32_t u = 0; u < slot; u++) {
-                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
-                    free_timeseries_statistic_heap(
-                        &e.timeseries[u].timeline_statistic);
-                    free(e.timeseries[u].measurement_name);
-                }
-                free(e.timeseries);
-                e.timeseries = nullptr;
-                clear_metadata_entry_device_only(&e);
-                free_device_timeseries_metadata_entries_partial(entries, di);
+            e.timeseries = static_cast<TimeseriesMetadata*>(
+                malloc(sizeof(TimeseriesMetadata) * e.timeseries_count));
+            if (e.timeseries == nullptr) {
                 return common::E_OOM;
             }
-            auto* aligned_idx =
-                dynamic_cast<storage::AlignedTimeseriesIndex*>(idx.get());
-            if (aligned_idx != nullptr &&
-                aligned_idx->value_ts_idx_ != nullptr) {
-                m.data_type = static_cast<TSDataType>(
-                    aligned_idx->value_ts_idx_->get_data_type());
-                const storage::TimeseriesIndex* value_idx =
-                    aligned_idx->value_ts_idx_;
-                const storage::TimeseriesIndex* time_idx =
-                    aligned_idx->time_ts_idx_;
-                if (value_idx->get_metadata_offset() >= 0) {
-                    m.value_metadata_offset =
-                        static_cast<uint64_t>(value_idx->get_metadata_offset());
-                    m.value_metadata_length = value_idx->get_metadata_length();
+            memset(e.timeseries, 0,
+                   sizeof(TimeseriesMetadata) * e.timeseries_count);
+            uint32_t slot = 0;
+            for (const auto& idx : vec) {
+                if (idx == nullptr) {
+                    continue;
                 }
-                if (time_idx != nullptr &&
-                    time_idx->get_metadata_offset() >= 0) {
-                    m.time_metadata_offset =
-                        static_cast<uint64_t>(time_idx->get_metadata_offset());
-                    m.time_metadata_length = time_idx->get_metadata_length();
+                TimeseriesMetadata& m = e.timeseries[slot];
+                common::String mn = idx->get_measurement_name();
+                m.measurement_name = strdup(mn.to_std_string().c_str());
+                if (m.measurement_name == nullptr) {
+                    return common::E_OOM;
                 }
-                m.layout = 1;
-            } else {
-                m.data_type = static_cast<TSDataType>(idx->get_data_type());
-                const storage::TimeseriesIndex* value_idx =
-                    dynamic_cast<const storage::TimeseriesIndex*>(idx.get());
-                if (value_idx != nullptr &&
-                    value_idx->get_metadata_offset() >= 0) {
-                    m.value_metadata_offset =
-                        static_cast<uint64_t>(value_idx->get_metadata_offset());
-                    m.value_metadata_length = value_idx->get_metadata_length();
+#ifdef ENABLE_TEST
+                using common::g_all_inject_points;
+                using common::InjectPoint;
+                DBUG_EXECUTE_IF("timeseries_metadata_copy_oom",
+                                throw std::bad_alloc(););
+                DBUG_EXECUTE_IF("timeseries_metadata_copy_error",
+                                throw common::E_FILE_READ_ERR;);
+#endif
+                auto* aligned_idx =
+                    dynamic_cast<storage::AlignedTimeseriesIndex*>(idx.get());
+                if (aligned_idx != nullptr &&
+                    aligned_idx->value_ts_idx_ != nullptr) {
+                    m.data_type = static_cast<TSDataType>(
+                        aligned_idx->value_ts_idx_->get_data_type());
+                    const storage::TimeseriesIndex* value_idx =
+                        aligned_idx->value_ts_idx_;
+                    const storage::TimeseriesIndex* time_idx =
+                        aligned_idx->time_ts_idx_;
+                    if (value_idx->get_metadata_offset() >= 0) {
+                        m.value_metadata_offset = static_cast<uint64_t>(
+                            value_idx->get_metadata_offset());
+                        m.value_metadata_length =
+                            value_idx->get_metadata_length();
+                    }
+                    if (time_idx != nullptr &&
+                        time_idx->get_metadata_offset() >= 0) {
+                        m.time_metadata_offset = static_cast<uint64_t>(
+                            time_idx->get_metadata_offset());
+                        m.time_metadata_length =
+                            time_idx->get_metadata_length();
+                    }
+                    m.layout = 1;
+                } else {
+                    m.data_type = static_cast<TSDataType>(idx->get_data_type());
+                    const storage::TimeseriesIndex* value_idx =
+                        dynamic_cast<const storage::TimeseriesIndex*>(
+                            idx.get());
+                    if (value_idx != nullptr &&
+                        value_idx->get_metadata_offset() >= 0) {
+                        m.value_metadata_offset = static_cast<uint64_t>(
+                            value_idx->get_metadata_offset());
+                        m.value_metadata_length =
+                            value_idx->get_metadata_length();
+                    }
                 }
+                storage::Statistic* st = idx->get_statistic();
+                int32_t chunk_cnt = 0;
+                auto* cl = aligned_idx != nullptr
+                               ? idx->get_value_chunk_meta_list()
+                               : idx->get_chunk_meta_list();
+                if (cl != nullptr) {
+                    chunk_cnt = static_cast<int32_t>(cl->size());
+                }
+                m.chunk_meta_count = chunk_cnt;
+                if (chunk_cnt >= 0 && m.value_metadata_length > 0) {
+                    m.locator_flags |= 1;
+                }
+                if (aligned_idx != nullptr) {
+                    auto* time_chunks = idx->get_time_chunk_meta_list();
+                    if (time_chunks != nullptr) {
+                        m.time_chunk_meta_count =
+                            static_cast<uint32_t>(time_chunks->size());
+                    }
+                    if (m.time_metadata_length == 0 ||
+                        m.time_chunk_meta_count !=
+                            static_cast<uint32_t>(chunk_cnt)) {
+                        m.locator_flags &= ~static_cast<uint16_t>(1);
+                    }
+                }
+                const int st_rc = fill_timeseries_statistic(st, &m.statistic);
+                if (st_rc != common::E_OK) {
+                    return st_rc;
+                }
+                const int timeline_st_rc =
+                    fill_timeline_statistic(idx.get(), &m.timeline_statistic);
+                if (timeline_st_rc != common::E_OK) {
+                    return timeline_st_rc;
+                }
+                slot++;
             }
-            storage::Statistic* st = idx->get_statistic();
-            int32_t chunk_cnt = 0;
-            auto* cl = aligned_idx != nullptr ? idx->get_value_chunk_meta_list()
-                                              : idx->get_chunk_meta_list();
-            if (cl != nullptr) {
-                chunk_cnt = static_cast<int32_t>(cl->size());
-            }
-            m.chunk_meta_count = chunk_cnt;
-            if (chunk_cnt >= 0 && m.value_metadata_length > 0) {
-                m.locator_flags |= 1;
-            }
-            if (aligned_idx != nullptr) {
-                auto* time_chunks = idx->get_time_chunk_meta_list();
-                if (time_chunks != nullptr) {
-                    m.time_chunk_meta_count =
-                        static_cast<uint32_t>(time_chunks->size());
-                }
-                if (m.time_metadata_length == 0 ||
-                    m.time_chunk_meta_count !=
-                        static_cast<uint32_t>(chunk_cnt)) {
-                    m.locator_flags &= ~static_cast<uint16_t>(1);
-                }
-            }
-            const int st_rc = fill_timeseries_statistic(st, &m.statistic);
-            if (st_rc != common::E_OK) {
-                for (uint32_t u = 0; u < slot; u++) {
-                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
-                    free_timeseries_statistic_heap(
-                        &e.timeseries[u].timeline_statistic);
-                    free(e.timeseries[u].measurement_name);
-                }
-                free_timeseries_statistic_heap(&m.statistic);
-                free_timeseries_statistic_heap(&m.timeline_statistic);
-                free(m.measurement_name);
-                free(e.timeseries);
-                e.timeseries = nullptr;
-                clear_metadata_entry_device_only(&e);
-                free_device_timeseries_metadata_entries_partial(entries, di);
-                return st_rc;
-            }
-            const int timeline_st_rc =
-                fill_timeline_statistic(idx.get(), &m.timeline_statistic);
-            if (timeline_st_rc != common::E_OK) {
-                for (uint32_t u = 0; u < slot; u++) {
-                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
-                    free_timeseries_statistic_heap(
-                        &e.timeseries[u].timeline_statistic);
-                    free(e.timeseries[u].measurement_name);
-                }
-                free_timeseries_statistic_heap(&m.statistic);
-                free_timeseries_statistic_heap(&m.timeline_statistic);
-                free(m.measurement_name);
-                free(e.timeseries);
-                e.timeseries = nullptr;
-                clear_metadata_entry_device_only(&e);
-                free_device_timeseries_metadata_entries_partial(entries, di);
-                return timeline_st_rc;
-            }
-            slot++;
+            di++;
         }
-        di++;
+        out_map->entries = guard.release();
+        out_map->device_count = dev_n;
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
     }
-    out_map->entries = entries;
-    out_map->device_count = dev_n;
-    return common::E_OK;
 }
 
 }  // namespace
@@ -1949,24 +2046,36 @@ ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
 
 ERRNO tsfile_reader_get_timeseries_metadata_all(
     TsFileReader reader, DeviceTimeseriesMetadataMap* out_map) {
+    if (out_map != nullptr) {
+        out_map->entries = nullptr;
+        out_map->device_count = 0;
+    }
     if (reader == nullptr || out_map == nullptr) {
         return common::E_INVALID_ARG;
     }
-    out_map->entries = nullptr;
-    out_map->device_count = 0;
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    storage::DeviceTimeseriesMetadataMap cpp_map = r->get_timeseries_metadata();
-    return populate_c_metadata_map_from_cpp(cpp_map, out_map);
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        storage::DeviceTimeseriesMetadataMap cpp_map;
+        const int ret = r->get_timeseries_metadata(cpp_map);
+        if (ret != common::E_OK) return ret;
+        return populate_c_metadata_map_from_cpp(cpp_map, out_map);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
+    }
 }
 
 ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
     TsFileReader reader, const DeviceID* devices, uint32_t length,
     DeviceTimeseriesMetadataMap* out_map) {
+    if (out_map != nullptr) {
+        out_map->entries = nullptr;
+        out_map->device_count = 0;
+    }
     if (reader == nullptr || out_map == nullptr) {
         return common::E_INVALID_ARG;
     }
-    out_map->entries = nullptr;
-    out_map->device_count = 0;
     if (length == 0) {
         return common::E_OK;
     }
@@ -1974,20 +2083,48 @@ ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
         return common::E_INVALID_ARG;
     }
     for (uint32_t i = 0; i < length; i++) {
-        if (devices[i].path == nullptr) {
+        if (devices[i].segment_count > 0) {
+            if (devices[i].segments == nullptr ||
+                devices[i].segments[0] == nullptr) {
+                return common::E_INVALID_ARG;
+            }
+        } else if (devices[i].path == nullptr) {
             return common::E_INVALID_ARG;
         }
     }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    std::vector<std::shared_ptr<storage::IDeviceID>> query_ids;
-    query_ids.reserve(length);
-    for (uint32_t i = 0; i < length; i++) {
-        query_ids.push_back(std::make_shared<storage::StringArrayDeviceID>(
-            std::string(devices[i].path)));
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::vector<std::shared_ptr<storage::IDeviceID>> query_ids;
+        query_ids.reserve(length);
+        for (uint32_t i = 0; i < length; i++) {
+            const DeviceID& device = devices[i];
+            if (device.segment_count == 0) {
+                query_ids.push_back(
+                    std::make_shared<storage::StringArrayDeviceID>(
+                        std::string(device.path)));
+                continue;
+            }
+            std::vector<std::string> values;
+            values.reserve(device.segment_count);
+            std::vector<std::string*> segments(device.segment_count, nullptr);
+            for (uint32_t j = 0; j < device.segment_count; ++j) {
+                if (device.segments[j] != nullptr) {
+                    values.emplace_back(device.segments[j]);
+                    segments[j] = &values.back();
+                }
+            }
+            query_ids.push_back(
+                std::make_shared<storage::StringArrayDeviceID>(segments));
+        }
+        storage::DeviceTimeseriesMetadataMap cpp_map;
+        const int ret = r->get_timeseries_metadata(query_ids, cpp_map);
+        if (ret != common::E_OK) return ret;
+        return populate_c_metadata_map_from_cpp(cpp_map, out_map);
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
     }
-    storage::DeviceTimeseriesMetadataMap cpp_map =
-        r->get_timeseries_metadata(query_ids);
-    return populate_c_metadata_map_from_cpp(cpp_map, out_map);
 }
 
 void tsfile_free_device_timeseries_metadata_map(
@@ -2508,36 +2645,92 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
 
 // ============== Tag Filter API Implementation ==============
 
-// Helper macro to avoid repetition in tag filter factory functions.
-// The shared_ptr must stay alive while TagFilterBuilder accesses the schema.
-// Every C-API entry must validate its pointers: a null reader would deref
-// during the static_cast, and null table/column/value would feed std::string
-// a null pointer (UB / crash).
-// The function-name suffix and the TagFilterBuilder method are always the same
-// operator, so the macro takes a single argument used for both.
-#define DEFINE_TAG_FILTER_FACTORY(op)                                         \
-    TagFilterHandle tsfile_tag_filter_##op(                                   \
+#define DEFINE_TAG_FILTER_FACTORY(name, op)                                   \
+    TagFilterHandle tsfile_tag_filter_##name(                                 \
         TsFileReader reader, const char* table_name, const char* column_name, \
         const char* value) {                                                  \
-        if (reader == nullptr || table_name == nullptr ||                     \
-            column_name == nullptr || value == nullptr) {                     \
-            return nullptr;                                                   \
-        }                                                                     \
-        auto* r = static_cast<storage::TsFileReader*>(reader);                \
-        auto schema = r->get_table_schema(table_name);                        \
-        if (!schema) return nullptr;                                          \
-        storage::TagFilterBuilder builder(schema.get());                      \
-        return builder.op(column_name, value);                                \
+        ERRNO error_code = common::E_OK;                                      \
+        return tsfile_tag_filter_create(reader, table_name, column_name,      \
+                                        value, TAG_FILTER_##op, &error_code); \
     }
 
-DEFINE_TAG_FILTER_FACTORY(eq)
-DEFINE_TAG_FILTER_FACTORY(neq)
-DEFINE_TAG_FILTER_FACTORY(lt)
-DEFINE_TAG_FILTER_FACTORY(lteq)
-DEFINE_TAG_FILTER_FACTORY(gt)
-DEFINE_TAG_FILTER_FACTORY(gteq)
+DEFINE_TAG_FILTER_FACTORY(eq, EQ)
+DEFINE_TAG_FILTER_FACTORY(neq, NEQ)
+DEFINE_TAG_FILTER_FACTORY(lt, LT)
+DEFINE_TAG_FILTER_FACTORY(lteq, LTEQ)
+DEFINE_TAG_FILTER_FACTORY(gt, GT)
+DEFINE_TAG_FILTER_FACTORY(gteq, GTEQ)
 
 #undef DEFINE_TAG_FILTER_FACTORY
+
+ERRNO tsfile_tag_filter_create_checked(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value, TagFilterOp op,
+                                       TagFilterHandle* out_filter) {
+    if (out_filter != nullptr) {
+        *out_filter = nullptr;
+    }
+    if (reader == nullptr || table_name == nullptr || column_name == nullptr ||
+        out_filter == nullptr ||
+        (value == nullptr && op != TAG_FILTER_IS_NULL &&
+         op != TAG_FILTER_IS_NOT_NULL)) {
+        return common::E_INVALID_ARG;
+    }
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::shared_ptr<storage::TableSchema> schema;
+        const int ret = r->get_table_schema(table_name, schema);
+        if (ret != common::E_OK) {
+            return ret;
+        }
+        storage::TagFilterBuilder builder(schema.get());
+        storage::Filter* filter = nullptr;
+        switch (op) {
+            case TAG_FILTER_EQ:
+                filter = builder.eq(column_name, value);
+                break;
+            case TAG_FILTER_NEQ:
+                filter = builder.neq(column_name, value);
+                break;
+            case TAG_FILTER_LT:
+                filter = builder.lt(column_name, value);
+                break;
+            case TAG_FILTER_LTEQ:
+                filter = builder.lteq(column_name, value);
+                break;
+            case TAG_FILTER_GT:
+                filter = builder.gt(column_name, value);
+                break;
+            case TAG_FILTER_GTEQ:
+                filter = builder.gteq(column_name, value);
+                break;
+            case TAG_FILTER_REGEXP:
+                filter = builder.reg_exp(column_name, value);
+                break;
+            case TAG_FILTER_NOT_REGEXP:
+                filter = builder.not_reg_exp(column_name, value);
+                break;
+            case TAG_FILTER_IS_NULL:
+                filter = builder.is_null(column_name);
+                break;
+            case TAG_FILTER_IS_NOT_NULL:
+                filter = builder.is_not_null(column_name);
+                break;
+            default:
+                return common::E_INVALID_ARG;
+        }
+        if (filter == nullptr) {
+            return common::E_COLUMN_NOT_EXIST;
+        }
+        *out_filter = static_cast<void*>(filter);
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
+    }
+}
 
 TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
                                          const char* table_name,
@@ -2547,60 +2740,49 @@ TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
     if (err_code == nullptr) {
         return nullptr;
     }
+    TagFilterHandle filter = nullptr;
+    *err_code = tsfile_tag_filter_create_checked(
+        reader, table_name, column_name, value, op, &filter);
+    if (*err_code == common::E_TABLE_NOT_EXIST) {
+        *err_code = common::E_INVALID_ARG;
+    }
+    return *err_code == common::E_OK ? filter : nullptr;
+}
+
+ERRNO tsfile_tag_filter_between_checked(TsFileReader reader,
+                                        const char* table_name,
+                                        const char* column_name,
+                                        const char* lower, const char* upper,
+                                        bool is_not,
+                                        TagFilterHandle* out_filter) {
+    if (out_filter != nullptr) {
+        *out_filter = nullptr;
+    }
     if (reader == nullptr || table_name == nullptr || column_name == nullptr ||
-        value == nullptr) {
-        *err_code = common::E_INVALID_ARG;
-        return nullptr;
+        lower == nullptr || upper == nullptr || out_filter == nullptr) {
+        return common::E_INVALID_ARG;
     }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto schema = r->get_table_schema(table_name);
-    if (!schema) {
-        *err_code = common::E_INVALID_ARG;
-        return nullptr;
+    try {
+        auto* r = static_cast<storage::TsFileReader*>(reader);
+        std::shared_ptr<storage::TableSchema> schema;
+        const int ret = r->get_table_schema(table_name, schema);
+        if (ret != common::E_OK) {
+            return ret;
+        }
+        storage::TagFilterBuilder builder(schema.get());
+        storage::Filter* filter =
+            is_not ? builder.not_between_and(column_name, lower, upper)
+                   : builder.between_and(column_name, lower, upper);
+        if (filter == nullptr) {
+            return common::E_COLUMN_NOT_EXIST;
+        }
+        *out_filter = static_cast<void*>(filter);
+        return common::E_OK;
+    } catch (const std::bad_alloc&) {
+        return common::E_OOM;
+    } catch (...) {
+        return common::E_FILE_READ_ERR;
     }
-    storage::TagFilterBuilder builder(schema.get());
-    storage::Filter* filter = nullptr;
-    switch (op) {
-        case TAG_FILTER_EQ:
-            filter = builder.eq(column_name, value);
-            break;
-        case TAG_FILTER_NEQ:
-            filter = builder.neq(column_name, value);
-            break;
-        case TAG_FILTER_LT:
-            filter = builder.lt(column_name, value);
-            break;
-        case TAG_FILTER_LTEQ:
-            filter = builder.lteq(column_name, value);
-            break;
-        case TAG_FILTER_GT:
-            filter = builder.gt(column_name, value);
-            break;
-        case TAG_FILTER_GTEQ:
-            filter = builder.gteq(column_name, value);
-            break;
-        case TAG_FILTER_REGEXP:
-            filter = builder.reg_exp(column_name, value);
-            break;
-        case TAG_FILTER_NOT_REGEXP:
-            filter = builder.not_reg_exp(column_name, value);
-            break;
-        case TAG_FILTER_IS_NULL:
-            filter = builder.is_null(column_name);
-            break;
-        case TAG_FILTER_IS_NOT_NULL:
-            filter = builder.is_not_null(column_name);
-            break;
-        default:
-            *err_code = common::E_INVALID_ARG;
-            return nullptr;
-    }
-    if (filter == nullptr) {
-        *err_code = common::E_COLUMN_NOT_EXIST;
-        return nullptr;
-    }
-    *err_code = common::E_OK;
-    return static_cast<void*>(filter);
 }
 
 TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
@@ -2611,49 +2793,47 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
     if (err_code == nullptr) {
         return nullptr;
     }
-    if (reader == nullptr || table_name == nullptr || column_name == nullptr ||
-        lower == nullptr || upper == nullptr) {
+    TagFilterHandle filter = nullptr;
+    *err_code = tsfile_tag_filter_between_checked(
+        reader, table_name, column_name, lower, upper, is_not, &filter);
+    if (*err_code == common::E_TABLE_NOT_EXIST) {
         *err_code = common::E_INVALID_ARG;
-        return nullptr;
     }
-    auto* r = static_cast<storage::TsFileReader*>(reader);
-    auto schema = r->get_table_schema(table_name);
-    if (!schema) {
-        *err_code = common::E_INVALID_ARG;
-        return nullptr;
-    }
-    storage::TagFilterBuilder builder(schema.get());
-    storage::Filter* filter =
-        is_not ? builder.not_between_and(column_name, lower, upper)
-               : builder.between_and(column_name, lower, upper);
-    if (filter == nullptr) {
-        *err_code = common::E_COLUMN_NOT_EXIST;
-        return nullptr;
-    }
-    *err_code = common::E_OK;
-    return static_cast<void*>(filter);
+    return *err_code == common::E_OK ? filter : nullptr;
 }
 
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
                                       TagFilterHandle right) {
     if (!left || !right) return nullptr;
-    return storage::TagFilterBuilder::and_filter(
-        static_cast<storage::Filter*>(left),
-        static_cast<storage::Filter*>(right));
+    try {
+        return storage::TagFilterBuilder::and_filter(
+            static_cast<storage::Filter*>(left),
+            static_cast<storage::Filter*>(right));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
                                      TagFilterHandle right) {
     if (!left || !right) return nullptr;
-    return storage::TagFilterBuilder::or_filter(
-        static_cast<storage::Filter*>(left),
-        static_cast<storage::Filter*>(right));
+    try {
+        return storage::TagFilterBuilder::or_filter(
+            static_cast<storage::Filter*>(left),
+            static_cast<storage::Filter*>(right));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter) {
     if (!filter) return nullptr;
-    return storage::TagFilterBuilder::not_filter(
-        static_cast<storage::Filter*>(filter));
+    try {
+        return storage::TagFilterBuilder::not_filter(
+            static_cast<storage::Filter*>(filter));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void tsfile_tag_filter_free(TagFilterHandle filter) {
