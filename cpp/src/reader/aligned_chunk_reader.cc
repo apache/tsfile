@@ -699,11 +699,15 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             value_compressor_->after_uncompress(value_uncompressed_buf_);
             value_uncompressed_buf_ = nullptr;
         }
-        if (!prev_value_page_not_finish()) {
-            value_in_.reset();
-        }
         if (!prev_time_page_not_finish()) {
+            // An aligned value page is complete once all its time rows have
+            // been consumed. All-null pages never decode their value stream,
+            // so a dictionary header or Gorilla terminator can remain unread.
+            value_in_.reset();
+            value_decoder_->reset();
             time_in_.reset();
+        } else if (!prev_value_page_not_finish()) {
+            value_in_.reset();
         }
         value_page_col_notnull_bitmap_.clear();
         value_page_col_notnull_bitmap_.shrink_to_fit();
