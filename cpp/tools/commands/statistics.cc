@@ -26,6 +26,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "cli/exit_codes.h"
 #include "commands/commands.h"
@@ -315,18 +316,41 @@ int collect_series_stats(const ParsedArgs& args, storage::TsFileReader& reader,
     return kExitOk;
 }
 
-FileSummary collect_file_summary(const ParsedArgs& args,
-                                 storage::TsFileReader& reader) {
+int collect_file_summary(const ParsedArgs& args, storage::TsFileReader& reader,
+                         FileSummary& summary, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     FileSummary s;
     s.file = args.file;
-    s.model = is_table_model(args, reader) ? "table" : "tree";
-    s.device_count = static_cast<long long>(reader.get_all_device_ids().size());
-    s.table_count =
-        static_cast<long long>(reader.get_all_table_schemas().size());
+    s.model = table_model ? "table" : "tree";
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+    const int devices_ret = reader.get_all_devices(devices);
+    if (devices_ret != common::E_OK) {
+        err << "Error: failed to read devices: "
+            << error_code_message(devices_ret) << "\n";
+        return kExitFile;
+    }
+    std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+    const int schemas_ret = reader.get_all_table_schemas(schemas);
+    if (schemas_ret != common::E_OK) {
+        err << "Error: failed to read table schemas: "
+            << error_code_message(schemas_ret) << "\n";
+        return kExitFile;
+    }
+    s.device_count = static_cast<long long>(devices.size());
+    s.table_count = static_cast<long long>(schemas.size());
     s.file_size_bytes = file_size(args.file);
 
-    storage::DeviceTimeseriesMetadataMap metadata =
-        reader.get_timeseries_metadata();
+    storage::DeviceTimeseriesMetadataMap metadata;
+    const int metadata_ret = reader.get_timeseries_metadata(metadata);
+    if (metadata_ret != common::E_OK) {
+        err << "Error: failed to read timeseries metadata: "
+            << error_code_message(metadata_ret) << "\n";
+        return kExitFile;
+    }
     int64_t min_start = std::numeric_limits<int64_t>::max();
     int64_t max_end = std::numeric_limits<int64_t>::min();
     for (const auto& device : metadata) {
@@ -348,7 +372,8 @@ FileSummary collect_file_summary(const ParsedArgs& args,
         s.start_time = min_start;
         s.end_time = max_end;
     }
-    return s;
+    summary = std::move(s);
+    return kExitOk;
 }
 
 }  // namespace tsfile_cli

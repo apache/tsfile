@@ -36,7 +36,8 @@ class TsFileReader;
 
 namespace tsfile_cli {
 
-bool is_table_model(const ParsedArgs& args, storage::TsFileReader& reader);
+int resolve_table_model(const ParsedArgs& args, storage::TsFileReader& reader,
+                        bool& table_model, std::ostream& err);
 
 std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
     storage::TsFileReader& reader);
@@ -49,9 +50,10 @@ std::vector<std::shared_ptr<storage::TableSchema>> sorted_table_schemas(
 std::vector<std::string> collect_tree_query_paths(
     const ParsedArgs& args, storage::TsFileReader& reader);
 
-std::unique_ptr<storage::Filter> build_table_tag_filter(
-    const ParsedArgs& args, storage::TsFileReader& reader,
-    const std::string& table_name, std::ostream& err);
+int build_table_tag_filter(const ParsedArgs& args,
+                           storage::TsFileReader& reader,
+                           const std::string& table_name, std::ostream& err,
+                           std::unique_ptr<storage::Filter>& ret_filter);
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,

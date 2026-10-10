@@ -318,10 +318,21 @@ int collect_table_stats(const ParsedArgs& args,
         }
     }
 
-    std::vector<std::shared_ptr<storage::IDeviceID>> devices =
-        reader.get_all_devices(schema->get_table_name());
-    storage::DeviceTimeseriesMetadataMap metadata =
-        reader.get_timeseries_metadata(devices);
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+    const int devices_ret =
+        reader.get_all_devices(schema->get_table_name(), devices);
+    if (devices_ret != common::E_OK) {
+        err << "Error: failed to read devices: "
+            << error_code_message(devices_ret) << "\n";
+        return kExitFile;
+    }
+    storage::DeviceTimeseriesMetadataMap metadata;
+    const int metadata_ret = reader.get_timeseries_metadata(devices, metadata);
+    if (metadata_ret != common::E_OK) {
+        err << "Error: failed to read timeseries metadata: "
+            << error_code_message(metadata_ret) << "\n";
+        return kExitFile;
+    }
     for (const auto& device : devices) {
         if (!device) {
             continue;
@@ -415,14 +426,38 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                     OutputFormat fmt, std::ostream& out, std::ostream& err) {
     std::vector<std::shared_ptr<storage::TableSchema>> schemas;
     if (!args.table.empty()) {
-        schemas.push_back(
-            reader.get_table_schema(storage::to_lower(args.table)));
+        std::shared_ptr<storage::TableSchema> schema;
+        const int schema_ret =
+            reader.get_table_schema(storage::to_lower(args.table), schema);
+        if (schema_ret != common::E_OK) {
+            if (schema_ret == common::E_TABLE_NOT_EXIST) {
+                err << "Error: table '" << args.table << "' does not exist\n";
+                return kExitUsage;
+            }
+            err << "Error: failed to read schema for table '" << args.table
+                << "': " << error_code_message(schema_ret) << "\n";
+            return kExitFile;
+        }
+        schemas.push_back(schema);
     } else {
-        schemas = sorted_table_schemas(reader);
-    }
-    if (schemas.empty() || !schemas[0]) {
-        err << "Error: table '" << args.table << "' does not exist\n";
-        return kExitUsage;
+        const int schemas_ret = reader.get_all_table_schemas(schemas);
+        if (schemas_ret != common::E_OK) {
+            err << "Error: failed to read table schemas: "
+                << error_code_message(schemas_ret) << "\n";
+            return kExitFile;
+        }
+        std::sort(
+            schemas.begin(), schemas.end(),
+            [](const std::shared_ptr<storage::TableSchema>& lhs,
+               const std::shared_ptr<storage::TableSchema>& rhs) {
+                if (!lhs) return false;
+                if (!rhs) return true;
+                return lhs->get_table_name() < rhs->get_table_name();
+            });
+        if (schemas.empty() || !schemas[0]) {
+            err << "Error: table '" << args.table << "' does not exist\n";
+            return kExitUsage;
+        }
     }
 
     if (args.table.empty()) {
@@ -623,7 +658,12 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
 
 int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err) {
-    if (is_table_model(args, reader)) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
+    if (table_model) {
         return cmd_table_stats(args, reader, fmt, out, err);
     }
 

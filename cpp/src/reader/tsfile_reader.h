@@ -199,11 +199,23 @@ class TsFileReader {
     /**
      * @brief get all devices in the tsfile
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty list. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
+     *
      * @param table_name the table name
      * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
         std::string table_name);
+
+    /**
+     * Error-reporting table-scoped overload. The output is empty on failure.
+     * A missing table or a table without devices returns E_OK and an empty
+     * list, matching the legacy overload.
+     */
+    int get_all_devices(std::string table_name,
+                        std::vector<std::shared_ptr<IDeviceID>>& device_ids);
 
     /**
      * @brief get all devices in the tsfile
@@ -239,18 +251,36 @@ class TsFileReader {
      * Only devices that exist in the file are included in the result.
      * If device_ids is empty, returns an empty map.
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty map. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
+     *
      * @param device_ids device list to query
      * @return map: IDeviceID -> list of timeseries metadata (only existing)
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata(
         const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
 
+    /** Error-reporting overload. Missing devices are skipped; the output is
+     * empty on read failure. Metadata remains valid until the next metadata
+     * call or until the reader is closed, as with the legacy overload. */
+    int get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+        DeviceTimeseriesMetadataMap& result);
+
     /**
      * @brief Get timeseries metadata for all devices in the file.
+     *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty map. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
      *
      * @return map: IDeviceID -> list of timeseries metadata
      */
     DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
+    /** Error-reporting overload. The output is empty on failure. */
+    int get_timeseries_metadata(DeviceTimeseriesMetadataMap& result);
 
     /** Return a copy of all file-level properties, preserving null values. */
     TsFileProperties get_tsfile_properties();
@@ -258,13 +288,33 @@ class TsFileReader {
     /**
      * @brief get the table schema by the table name
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; both a missing table and a read failure return null. Avoid
+     * this overload in new code: use the error-reporting overload and check
+     * its return code.
+     *
      * @param table_name the table name
      * @return std::shared_ptr<TableSchema> the table schema
      */
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name);
+
+    /**
+     * @brief Get the table schema by table name.
+     *
+     * @param table_name the table name
+     * @param[out] table_schema the resolved schema, null on failure
+     * @return Returns 0 on success, E_TABLE_NOT_EXIST when the table is
+     *         absent, or a non-zero read error code on metadata failure.
+     */
+    int get_table_schema(const std::string& table_name,
+                         std::shared_ptr<TableSchema>& table_schema);
     /**
      * @brief get all table schemas in the tsfile
+     *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty list. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
      *
      * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */

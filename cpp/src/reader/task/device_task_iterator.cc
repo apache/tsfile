@@ -25,8 +25,8 @@ void DeviceTaskIterator::flush_remaining_device_meta_cache() {
     device_meta_iterator_->destroy_remaining_cached_devices();
 }
 
-bool DeviceTaskIterator::has_next() const {
-    return device_meta_iterator_->has_next();
+int DeviceTaskIterator::has_next(bool& has_next) const {
+    return device_meta_iterator_->has_next(has_next);
 }
 
 int DeviceTaskIterator::next(DeviceQueryTask*& task) {
