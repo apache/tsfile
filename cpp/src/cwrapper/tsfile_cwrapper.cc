@@ -567,7 +567,7 @@ ERRNO tsfile_writer_write_arrow(TsFileWriter writer, ArrowArray* array,
 // Query
 
 PreparedSeriesHandle tsfile_reader_prepare_series(
-    TsFileReader reader, const TsFilePreparedLocator* locator,
+    TsFileReader reader, const TsFilePreparedLocator* locator, bool trust_index,
     ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
@@ -581,6 +581,7 @@ PreparedSeriesHandle tsfile_reader_prepare_series(
     generation.file_id = locator->file_id;
     generation.file_size = locator->file_size;
     generation.file_fingerprint = locator->file_fingerprint;
+    generation.trust_index = trust_index;
     storage::PreparedLocator native_locator;
     native_locator.locator_id = locator->locator_id;
     native_locator.layout = locator->layout;
@@ -605,7 +606,8 @@ PreparedSeriesHandle tsfile_reader_prepare_series(
 
 PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     TsFileReader reader, const TsFilePreparedLocator* locator,
-    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code) {
+    PreparedSeriesHandle aligned_time_owner, bool trust_index,
+    ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
     }
@@ -620,6 +622,7 @@ PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     generation.file_id = locator->file_id;
     generation.file_size = locator->file_size;
     generation.file_fingerprint = locator->file_fingerprint;
+    generation.trust_index = trust_index;
     storage::PreparedLocator native_locator;
     native_locator.locator_id = locator->locator_id;
     native_locator.layout = locator->layout;

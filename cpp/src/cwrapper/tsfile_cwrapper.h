@@ -729,15 +729,19 @@ ERRNO tsfile_writer_write_arrow(TsFileWriter writer, ArrowArray* array,
 
 /*-------------------TsFile reader query data------------------ */
 
-/** Deserialize one exact Dataset Index locator into a reusable series. */
+/** Deserialize one exact Dataset Index locator into a reusable series.
+ * trust_index skips source generation checks; locator bounds remain checked.
+ */
 PreparedSeriesHandle tsfile_reader_prepare_series(
-    TsFileReader reader, const TsFilePreparedLocator* locator, ERRNO* err_code);
+    TsFileReader reader, const TsFilePreparedLocator* locator, bool trust_index,
+    ERRNO* err_code);
 
 /** Prepare an aligned value locator by sharing an existing parsed time index.
+ * trust_index skips source generation checks; locator bounds remain checked.
  */
 PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     TsFileReader reader, const TsFilePreparedLocator* locator,
-    PreparedSeriesHandle aligned_time_owner, ERRNO* err_code);
+    PreparedSeriesHandle aligned_time_owner, bool trust_index, ERRNO* err_code);
 
 /** Release a prepared handle. Existing result sets remain independently owned.
  */

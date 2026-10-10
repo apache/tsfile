@@ -547,18 +547,19 @@ cdef class TsFileReaderPy:
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
-    def prepare_series(self, locator, PreparedSeriesPy time_owner=None) -> PreparedSeriesPy:
-        """Prepare an 11-field native locator tuple for repeated queries."""
+    def prepare_series(self, locator, PreparedSeriesPy time_owner=None,
+                       bint trust_index=False) -> PreparedSeriesPy:
+        """Prepare a locator, optionally skipping source generation checks."""
         if len(locator) != 11:
             raise ValueError("prepared locator must contain exactly 11 fields")
         cdef PreparedSeriesHandle prepared = NULL
         if time_owner is None:
-            prepared = tsfile_reader_prepare_series_c(self.reader, locator)
+            prepared = tsfile_reader_prepare_series_c(self.reader, locator, trust_index)
         else:
             if time_owner.prepared == NULL:
                 raise RuntimeError("PreparedSeries time owner is closed")
             prepared = tsfile_reader_prepare_series_with_time_owner_c(
-                self.reader, locator, time_owner.prepared)
+                self.reader, locator, time_owner.prepared, trust_index)
         py_prepared = PreparedSeriesPy()
         py_prepared.init_c(prepared)
         return py_prepared
