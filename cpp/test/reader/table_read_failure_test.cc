@@ -337,10 +337,20 @@ TEST_P(TableReadFailureTest, MetadataApisPreserveReadErrors) {
 
 TEST_P(TableReadFailureTest, CheckedMetadataApisPropagateEveryReadFailure) {
     // Enumerating every read also covers failures after device-schema
-    // entries have been partially initialized.
-    for (int operation = 0; operation < 3; ++operation) {
+    // entries or device lists have been partially initialized.
+    for (int operation = 0; operation < 4; ++operation) {
         auto invoke = [operation](storage::TsFileReader& reader,
                                   bool expect_failure) {
+            if (operation == 3) {
+                std::vector<std::shared_ptr<storage::IDeviceID>> devices(1);
+                const int ret = reader.get_all_devices("TEST", devices);
+                if (expect_failure) {
+                    EXPECT_TRUE(devices.empty());
+                } else {
+                    EXPECT_FALSE(devices.empty());
+                }
+                return ret;
+            }
             if (operation == 0) {
                 auto* schemas = reinterpret_cast<DeviceSchema*>(&reader);
                 uint32_t count = 7;
@@ -412,6 +422,22 @@ TEST_P(TableReadFailureTest, CheckedMetadataApisPropagateEveryReadFailure) {
                     source->short_read = short_read;
                     EXPECT_EQ(invoke(reader, true), common::E_FILE_READ_ERR);
                     EXPECT_TRUE(source->failed);
+                    if (operation == 3) {
+                        storage::TsFileReader legacy_reader;
+                        auto* legacy_source = new FailingReadFile(bytes_);
+                        ASSERT_EQ(
+                            legacy_reader.open(
+                                std::unique_ptr<storage::RandomAccessReadFile>(
+                                    legacy_source)),
+                            common::E_OK);
+                        legacy_source->fail_at = fail_at;
+                        legacy_source->short_read = short_read;
+                        EXPECT_TRUE(
+                            legacy_reader.get_all_devices("TEST").empty());
+                        EXPECT_TRUE(legacy_source->failed);
+                        source->fail_at = 0;
+                        EXPECT_EQ(invoke(reader, false), common::E_OK);
+                    }
                 }
                 EXPECT_EQ(common::ModStat::get_instance().get_stat(
                               common::MOD_TSFILE_READER),
@@ -419,6 +445,23 @@ TEST_P(TableReadFailureTest, CheckedMetadataApisPropagateEveryReadFailure) {
             }
         }
     }
+}
+
+TEST_P(TableReadFailureTest, TableScopedDeviceEnumerationValidatesInputs) {
+    storage::TsFileReader reader;
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices(1);
+    EXPECT_EQ(reader.get_all_devices("test", devices), common::E_INVALID_ARG);
+    EXPECT_TRUE(devices.empty());
+    EXPECT_TRUE(reader.get_all_devices("test").empty());
+    auto* source = new FailingReadFile(bytes_);
+    ASSERT_EQ(
+        reader.open(std::unique_ptr<storage::RandomAccessReadFile>(source)),
+        common::E_OK);
+    ASSERT_EQ(reader.get_all_devices("TEST", devices), common::E_OK);
+    EXPECT_EQ(devices.size(), static_cast<size_t>(std::get<1>(GetParam())));
+    EXPECT_EQ(reader.get_all_devices("TEST").size(), devices.size());
+    ASSERT_EQ(reader.get_all_devices("missing", devices), common::E_OK);
+    EXPECT_TRUE(devices.empty());
 }
 
 TEST_P(TableReadFailureTest, LegacySchemaApisReturnEmptyOnReadFailure) {

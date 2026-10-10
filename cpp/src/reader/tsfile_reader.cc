@@ -427,19 +427,38 @@ void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
 
 std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
     std::string table_name) {
-    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     std::vector<std::shared_ptr<IDeviceID>> device_ids;
-    if (tsfile_meta != nullptr) {
-        PageArena pa;
-        pa.init(512, MOD_TSFILE_READER);
-        to_lowercase_inplace(table_name);
-        auto it = tsfile_meta->table_metadata_index_node_map_.find(table_name);
-        if (it != tsfile_meta->table_metadata_index_node_map_.end() &&
-            it->second != nullptr) {
-            get_all_devices(device_ids, it->second, pa);
+    // The error code is ignored to preserve the legacy interface.
+    // New code should use the error-reporting overload and check its return
+    // code.
+    get_all_devices(table_name, device_ids);
+    return device_ids;
+}
+
+int TsFileReader::get_all_devices(
+    std::string table_name,
+    std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    device_ids.clear();
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* tsfile_meta = nullptr;
+    int ret = E_OK;
+    if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
+        return ret;
+    }
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+    to_lowercase_inplace(table_name);
+    auto it = tsfile_meta->table_metadata_index_node_map_.find(table_name);
+    if (it != tsfile_meta->table_metadata_index_node_map_.end() &&
+        it->second != nullptr) {
+        if (RET_FAIL(get_all_devices(device_ids, it->second, pa))) {
+            device_ids.clear();
+            return ret;
         }
     }
-    return device_ids;
+    return E_OK;
 }
 
 std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {

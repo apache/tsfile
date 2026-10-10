@@ -318,18 +318,13 @@ int collect_table_stats(const ParsedArgs& args,
         }
     }
 
-    std::vector<std::shared_ptr<storage::IDeviceID>> all_devices;
-    const int devices_ret = reader.get_all_devices(all_devices);
+    std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+    const int devices_ret =
+        reader.get_all_devices(schema->get_table_name(), devices);
     if (devices_ret != common::E_OK) {
         err << "Error: failed to read devices: "
             << error_code_message(devices_ret) << "\n";
         return kExitFile;
-    }
-    std::vector<std::shared_ptr<storage::IDeviceID>> devices;
-    for (const auto& device : all_devices) {
-        if (device && device->get_table_name() == schema->get_table_name()) {
-            devices.push_back(device);
-        }
     }
     storage::DeviceTimeseriesMetadataMap metadata;
     const int metadata_ret = reader.get_timeseries_metadata(devices, metadata);

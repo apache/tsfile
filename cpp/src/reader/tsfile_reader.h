@@ -199,11 +199,23 @@ class TsFileReader {
     /**
      * @brief get all devices in the tsfile
      *
+     * @note Retained for backward compatibility. This signature cannot report
+     * error codes; read failures return an empty list. Avoid this overload in
+     * new code: use the error-reporting overload and check its return code.
+     *
      * @param table_name the table name
      * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
         std::string table_name);
+
+    /**
+     * Error-reporting table-scoped overload. The output is empty on failure.
+     * A missing table or a table without devices returns E_OK and an empty
+     * list, matching the legacy overload.
+     */
+    int get_all_devices(std::string table_name,
+                        std::vector<std::shared_ptr<IDeviceID>>& device_ids);
 
     /**
      * @brief get all devices in the tsfile
