@@ -94,7 +94,7 @@ class TsFileReaderTest : public ::testing::Test {
 
     void TearDown() override {
         delete tsfile_writer_;
-        // remove(file_name_.c_str());
+        remove(file_name_.c_str());
         libtsfile_destroy();
     }
 
@@ -253,16 +253,18 @@ TEST_P(MetadataReadLengthTest, RejectsIncompleteRangesBeforeParsing) {
     for (const bool aligned : {false, true}) {
         const std::string device = aligned ? "root.aligned" : "root.unaligned";
         TsRecord record(100, device);
+        std::vector<MeasurementSchema*> schemas;
         for (int column = 0; column < GetParam(); ++column) {
             const std::string name = "value" + std::to_string(column);
-            MeasurementSchema schema(name, INT32, PLAIN, UNCOMPRESSED);
-            ASSERT_EQ(aligned
-                          ? tsfile_writer_->register_aligned_timeseries(device,
-                                                                        schema)
-                          : tsfile_writer_->register_timeseries(device, schema),
-                      E_OK);
+            schemas.push_back(
+                new MeasurementSchema(name, INT32, PLAIN, UNCOMPRESSED));
             record.add_point(name, static_cast<int32_t>(42));
         }
+        ASSERT_EQ(
+            aligned
+                ? tsfile_writer_->register_aligned_timeseries(device, schemas)
+                : tsfile_writer_->register_timeseries(device, schemas),
+            E_OK);
         ASSERT_EQ(aligned ? tsfile_writer_->write_record_aligned(record)
                           : tsfile_writer_->write_record(record),
                   E_OK);
@@ -826,6 +828,13 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
     auto selected_list = selected_meta.begin()->second;
     std::unordered_map<std::string, TSDataType> type_by_measurement;
     for (const auto& index : selected_list) {
+        auto* aligned =
+            dynamic_cast<storage::AlignedTimeseriesIndex*>(index.get());
+        ASSERT_NE(aligned, nullptr)
+            << "filtered metadata must preserve the shared time index";
+        ASSERT_NE(aligned->time_ts_idx_, nullptr);
+        ASSERT_NE(aligned->time_ts_idx_->get_statistic(), nullptr);
+        EXPECT_EQ(aligned->time_ts_idx_->get_statistic()->get_count(), 5);
         type_by_measurement[index->get_measurement_name().to_std_string()] =
             index->get_data_type();
     }

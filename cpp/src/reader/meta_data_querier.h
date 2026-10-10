@@ -50,7 +50,7 @@ class MetadataQuerier : public IMetadataQuerier {
     std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>>
     get_chunk_metadata_map(const std::vector<Path>& paths) const override;
 
-    int get_whole_file_metadata(TsFileMeta* tsfile_meta) const override;
+    int get_whole_file_metadata(TsFileMeta*& tsfile_meta) const override;
 
     void load_chunk_metadatas(const std::vector<Path>& paths) override;
 
@@ -70,7 +70,6 @@ class MetadataQuerier : public IMetadataQuerier {
 
    private:
     TsFileIOReader* io_reader_;
-    TsFileMeta* file_metadata_;
     std::unique_ptr<
         common::Cache<std::string, /*Todo std::pair<IDeviceID, std::string>*/
                       std::vector<std::shared_ptr<ChunkMeta>>, std::mutex>>

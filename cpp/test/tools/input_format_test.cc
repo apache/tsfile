@@ -158,15 +158,51 @@ TEST(InputFormatTest, ReadRecordStripsCarriageReturn) {
     long long n = 0;
     ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
     EXPECT_EQ(rec, "a,b");
+    EXPECT_EQ(n, 1);
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "c,d");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
+}
+
+TEST(InputFormatTest, ReadRecordPreservesQuotedLineEndings) {
+    std::istringstream in(
+        "1,\"line one\r\n\r\nline \"\"two\"\"\nline three\",x\r\n"
+        "2,plain,y\r\n");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"line one\r\n\r\nline \"\"two\"\"\nline three\",x");
+    EXPECT_EQ(n, 4);
+    const auto fields = tsfile_cli::split_line(rec, ',', true);
+    ASSERT_EQ(fields.size(), 3u);
+    EXPECT_EQ(fields[1], "line one\r\n\r\nline \"two\"\nline three");
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "2,plain,y");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
+}
+
+TEST(InputFormatTest, ReadRecordPreservesQuotedCarriageReturnAtEof) {
+    std::istringstream in("1,\"never closed\r");
+    std::string rec;
+    long long n = 0;
+    ASSERT_TRUE(tsfile_cli::read_record(in, true, rec, n));
+    EXPECT_EQ(rec, "1,\"never closed\r");
+    EXPECT_EQ(n, 1);
+    EXPECT_FALSE(tsfile_cli::read_record(in, true, rec, n));
 }
 
 TEST(InputFormatTest, ReadRecordTsvIgnoresQuotes) {
     // With csv_quotes false a quote is just data; no line joining happens.
-    std::istringstream in("1\t\"open\n2\tclosed\n");
+    std::istringstream in("1\t\"open\r\n2\tclosed\r\n");
     std::string rec;
     long long n = 0;
     ASSERT_TRUE(tsfile_cli::read_record(in, false, rec, n));
     EXPECT_EQ(rec, "1\t\"open");
+    EXPECT_EQ(n, 1);
+    ASSERT_TRUE(tsfile_cli::read_record(in, false, rec, n));
+    EXPECT_EQ(rec, "2\tclosed");
     EXPECT_EQ(n, 1);
 }
 

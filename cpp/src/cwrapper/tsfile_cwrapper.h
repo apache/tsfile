@@ -552,7 +552,9 @@ ERRNO tsfile_reader_get_timeseries_metadata_all(
  *
  * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
  * (E_OK); @p devices is not read.
- * For each entry, @p path must be non-NULL (canonical device path).
+ * Nonempty @p segments are used as the exact device ID, preserving null tags.
+ * The segment array and its first (table name) entry must be non-NULL.
+ * With segment_count==0, @p path must be a non-NULL legacy tree device path.
  */
 ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
     TsFileReader reader, const DeviceID* devices, uint32_t length,
@@ -1021,53 +1023,80 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
 //                                              const char* device_id);
 
 /**
- * @brief Gets specific table's schema in the tsfile.
- *
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema to free the tableschema.
+ * @brief Gets a table schema using the legacy value-returning API.
+ * @return A populated schema, or a zero-initialized schema when the lookup
+ * fails. Use tsfile_reader_get_table_schema_checked() when the error code is
+ * required.
+ * @note Release the returned schema's contents with free_table_schema().
  */
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name);
 
-/** Retrieves one table schema and reports missing tables through ERRNO. */
+/**
+ * @brief Gets one table schema and returns the error code directly.
+ * @param out_schema Required output storage with no owned allocations.
+ * It is zero-initialized on failure; partial results are released internally.
+ * @return RET_OK on success, or the lookup, read, or allocation error.
+ * @note On success, release the contents with free_table_schema(*out_schema).
+ * The caller owns the output storage itself.
+ */
 ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
                                              const char* table_name,
                                              TableSchema* out_schema);
+
 /**
- * @brief Gets all table schema in the tsfile.
- *
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema and free to free the ptr.
- * @note Use tsfile_reader_get_all_table_schemas_with_error to distinguish
- *       metadata read failures from an empty schema list.
+ * @brief Gets all table schemas using the legacy pointer-returning API.
+ * @return Schema array, or NULL when there are no tables or an error occurs.
+ * Use tsfile_reader_get_all_table_schemas_checked() when the error code is
+ * required.
+ * @note size is zero on failure. Release each schema with free_table_schema(),
+ * then release the array with free().
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
-/** Retrieves every table schema into a caller-freed array. */
+/**
+ * @brief Gets all table schemas and returns the error code directly.
+ * Both output parameters are required. Non-null outputs are set to NULL/0
+ * before work begins and remain empty on failure. An empty file result is
+ * successful with RET_OK and NULL/0 outputs.
+ * @note On success, release each schema with free_table_schema(), then free()
+ * the array. Partial results are released internally on failure.
+ */
 ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
                                                   TableSchema** out_schemas,
                                                   uint32_t* out_size);
 
 /**
- * @brief Gets all table schemas and reports metadata read failures.
- * @return Schema array, or NULL when there are no tables or on error. Check
- * error_code to distinguish these cases; size is zero on error.
- * @note Caller must free each schema with free_table_schema, then free the
- * array.
+ * @brief Compatibility API reporting errors through a required error_code.
+ * Returns NULL for an empty result or an error; error_code distinguishes them.
+ * size is zero on failure. Ownership is the same as the checked array API.
  */
 TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
                                                             uint32_t* size,
                                                             ERRNO* error_code);
 
 /**
- * @brief Gets all timeseries schema in the tsfile.
- *
- * @return DeviceSchema list, contains timeseries info.
- * @note Caller should call free_device_schema and free to free the ptr.
+ * @brief Gets all timeseries schemas using the legacy pointer-returning API.
+ * Use tsfile_reader_get_all_timeseries_schemas_checked() when the error code
+ * is required.
+ * @return Array on success, or NULL for an empty result or an error.
+ * @note size is zero on failure. Release each schema with free_device_schema(),
+ * then release the array with free().
  */
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                        uint32_t* size);
+
+/**
+ * @brief Gets all timeseries schemas and returns the error code directly.
+ * Both output parameters are required. Non-null outputs are set to NULL/0
+ * before work begins and remain empty on failure. No devices is a successful
+ * result with RET_OK and NULL/0 outputs.
+ * @note On success, release each schema with free_device_schema(), then free()
+ * the array. Partial results are released internally on failure.
+ */
+ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
+    TsFileReader reader, DeviceSchema** out_schemas, uint32_t* out_size);
 
 // ---------- Tag Filter API ----------
 
@@ -1116,6 +1145,29 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
                                           bool is_not, ERRNO* err_code);
 
 /**
+ * Create a tag filter and return the error code directly. out_filter is
+ * required and is set to NULL on failure. Unlike the legacy create API,
+ * a missing table is reported as RET_TABLE_NOT_EXIST, not RET_INVALID_ARG.
+ * Release a successful result with tsfile_tag_filter_free().
+ */
+ERRNO tsfile_tag_filter_create_checked(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value, TagFilterOp op,
+                                       TagFilterHandle* out_filter);
+
+/**
+ * Create a BETWEEN tag filter and return the error code directly.
+ * Output ownership and missing-table handling match the checked create API.
+ */
+ERRNO tsfile_tag_filter_between_checked(TsFileReader reader,
+                                        const char* table_name,
+                                        const char* column_name,
+                                        const char* lower, const char* upper,
+                                        bool is_not,
+                                        TagFilterHandle* out_filter);
+
+/**
  * @brief Create a tag equality filter: column == value.
  *
  * @param reader [in] Valid TsFileReader handle (used to resolve column index).
@@ -1123,6 +1175,8 @@ TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
  * @param column_name [in] Tag column name.
  * @param value [in] Value to compare against.
  * @return TagFilterHandle on success, NULL on failure.
+ * @note Retained for backward compatibility. New code should use the checked
+ * create API and check its error code. Free with tsfile_tag_filter_free().
  */
 TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
                                      const char* table_name,
@@ -1155,19 +1209,22 @@ TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
                                        const char* value);
 
 /**
- * @brief Logical AND of two tag filters. Takes ownership of left and right.
+ * @brief Logical AND of two tag filters. Takes ownership of left and right
+ * only on success. Returns NULL on failure; the caller still owns the inputs.
  */
 TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
                                       TagFilterHandle right);
 
 /**
- * @brief Logical OR of two tag filters. Takes ownership of left and right.
+ * @brief Logical OR of two tag filters. Takes ownership of left and right
+ * only on success. Returns NULL on failure; the caller still owns the inputs.
  */
 TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
                                      TagFilterHandle right);
 
 /**
- * @brief Logical NOT of a tag filter. Takes ownership of filter.
+ * @brief Logical NOT of a tag filter. Takes ownership of filter only on
+ * success. Returns NULL on failure; the caller still owns the input.
  */
 TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
 

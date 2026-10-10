@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <set>
 #include <utility>
 
 #include "common/csv_utils.h"
@@ -192,14 +193,72 @@ const char* compression_name(common::CompressionType c) {
     }
 }
 
+namespace {
+
+// UTF-8 encoding of the replacement character U+FFFD.
+constexpr unsigned char kUtf8Replacement[] = {0xef, 0xbf, 0xbd};
+
+template <typename Emit>
+void for_each_utf8_byte(const std::string& s, Emit emit) {
+    size_t i = 0;
+    while (i < s.size()) {
+        const unsigned char lead = static_cast<unsigned char>(s[i]);
+        size_t length = 0;
+        if (lead <= 0x7f) {
+            length = 1;
+        } else if (lead >= 0xc2 && lead <= 0xdf) {
+            length = 2;
+        } else if (lead >= 0xe0 && lead <= 0xef) {
+            length = 3;
+        } else if (lead >= 0xf0 && lead <= 0xf4) {
+            length = 4;
+        }
+        size_t consumed = 1;
+        while (consumed < length && consumed < s.size() - i) {
+            const unsigned char next =
+                static_cast<unsigned char>(s[i + consumed]);
+            if (next < 0x80 || next > 0xbf ||
+                (consumed == 1 && ((lead == 0xe0 && next < 0xa0) ||
+                                   (lead == 0xed && next > 0x9f) ||
+                                   (lead == 0xf0 && next < 0x90) ||
+                                   (lead == 0xf4 && next > 0x8f)))) {
+                break;
+            }
+            ++consumed;
+        }
+        if (consumed == length) {
+            for (size_t j = 0; j < consumed; ++j) {
+                emit(static_cast<unsigned char>(s[i + j]));
+            }
+        } else {
+            for (unsigned char c : kUtf8Replacement) {
+                emit(c);
+            }
+        }
+        // Consume only a valid prefix of this character, leaving subsequent
+        // ASCII or valid UTF-8 for the next iteration, even after truncation.
+        i += consumed;
+    }
+}
+
+}  // namespace
+
+std::string replace_invalid_utf8(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for_each_utf8_byte(
+        s, [&out](unsigned char c) { out += static_cast<char>(c); });
+    return out;
+}
+
 std::string csv_escape(const std::string& field) {
-    return common::csv_escape(field, ',');
+    return common::csv_escape(replace_invalid_utf8(field), ',');
 }
 
 std::string json_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 2);
-    for (unsigned char c : s) {
+    for_each_utf8_byte(s, [&out](unsigned char c) {
         switch (c) {
             case '"':
                 out += "\\\"";
@@ -231,7 +290,46 @@ std::string json_escape(const std::string& s) {
                     out += static_cast<char>(c);
                 }
         }
-    }
+    });
+    return out;
+}
+
+// The readable `table` format renders control characters as fixed visible
+// escapes: backslash, newline, carriage return and tab become the two-character
+// literals \\, \n, \r and \t, and every other non-printable control byte
+// (C0 controls plus DEL) becomes \uXXXX. This keeps one logical record on one
+// physical line regardless of embedded control characters.
+std::string table_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for_each_utf8_byte(s, [&out](unsigned char c) {
+        switch (c) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                // C0 controls (0x00-0x1f) plus DEL (0x7f) are the complete
+                // set of non-printable control bytes per C iscntrl(). Bytes
+                // >= 0x80 now belong to well-formed UTF-8 and pass through
+                // untouched so multi-byte sequences survive.
+                if (c < 0x20 || c == 0x7f) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
+    });
     return out;
 }
 
@@ -269,9 +367,23 @@ RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
       types_(std::move(types)),
       no_header_(no_header),
       table_widths_(header_.size(), 0) {
-    if (!no_header_) {
+    if (fmt_ == OutputFormat::kJson) {
+        std::set<std::string> keys;
+        json_keys_.reserve(header_.size());
+        for (const std::string& name : header_) {
+            std::string key = json_escape(name);
+            if (!keys.insert(key).second) {
+                error_ =
+                    "duplicate NDJSON column name after UTF-8 replacement: \"" +
+                    key + "\"";
+                return;
+            }
+            json_keys_.push_back(std::move(key));
+        }
+    }
+    if (fmt_ == OutputFormat::kTable && !no_header_) {
         for (size_t i = 0; i < header_.size(); ++i) {
-            table_widths_[i] = header_[i].size();
+            table_widths_[i] = table_escape(header_[i]).size();
         }
     }
 }
@@ -333,7 +445,7 @@ bool RowWriter::write(const std::vector<std::string>& cells,
 bool RowWriter::write(const std::vector<std::string>& cells,
                       const std::vector<bool>& is_null,
                       const std::vector<common::TSDataType>& row_types) {
-    if (!out_.good()) {
+    if (!error_.empty() || !out_.good()) {
         return false;
     }
     if (fmt_ == OutputFormat::kTable) {
@@ -360,7 +472,8 @@ bool RowWriter::write(const std::vector<std::string>& cells,
                 return false;
             }
             table_widths_[i] =
-                std::max(table_widths_[i], format_cell(type, value).size());
+                std::max(table_widths_[i],
+                         table_escape(format_cell(type, value)).size());
         }
         return true;
     }
@@ -370,7 +483,7 @@ bool RowWriter::write(const std::vector<std::string>& cells,
             if (i) {
                 out_ << ",";
             }
-            out_ << "\"" << json_escape(header_[i]) << "\":";
+            out_ << "\"" << json_keys_[i] << "\":";
             const common::TSDataType type =
                 i < row_types.size() ? row_types[i] : common::STRING;
             if (i < is_null.size() && is_null[i]) {
@@ -411,9 +524,14 @@ bool RowWriter::write(const std::vector<std::string>& cells,
         }
         const common::TSDataType type =
             i < row_types.size() ? row_types[i] : common::STRING;
-        const std::string cell = format_cell(type, cells[i]);
+        std::string cell = format_cell(type, cells[i]);
         if (fmt_ == OutputFormat::kCsv && cell.empty()) {
             out_ << "\"\"";
+        } else if (fmt_ == OutputFormat::kCsv &&
+                   (type == common::STRING || type == common::TEXT) &&
+                   !cell.empty() && cell[0] == '\\') {
+            cell.insert(0, 1, '\\');
+            out_ << csv_escape(cell);
         } else {
             out_ << (fmt_ == OutputFormat::kCsv ? csv_escape(cell) : cell);
         }
@@ -423,7 +541,7 @@ bool RowWriter::write(const std::vector<std::string>& cells,
 }
 
 bool RowWriter::finish() {
-    if (!out_.good()) {
+    if (!error_.empty() || !out_.good()) {
         return false;
     }
     if (fmt_ != OutputFormat::kTable) {
@@ -444,9 +562,9 @@ bool RowWriter::finish() {
         for (size_t i = 0; i < ncols; ++i) {
             std::string cell =
                 (i < cells.size() && !(i < nulls.size() && nulls[i]))
-                    ? format_cell(
+                    ? table_escape(format_cell(
                           i < row_types.size() ? row_types[i] : common::STRING,
-                          cells[i])
+                          cells[i]))
                     : "";
             out_ << cell;
             if (i + 1 < ncols) {

@@ -66,8 +66,8 @@ struct FileSummary {
 StatisticCells statistic_value_cells(storage::Statistic* st);
 int collect_series_stats(const ParsedArgs& args, storage::TsFileReader& reader,
                          std::vector<SeriesStatRow>& rows, std::ostream& err);
-FileSummary collect_file_summary(const ParsedArgs& args,
-                                 storage::TsFileReader& reader);
+int collect_file_summary(const ParsedArgs& args, storage::TsFileReader& reader,
+                         FileSummary& summary, std::ostream& err);
 
 }  // namespace tsfile_cli
 

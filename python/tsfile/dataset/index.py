@@ -351,16 +351,23 @@ class MappedDatasetIndex:
             self._file.close()
             self._file = None
 
+    def _assert_open(self):
+        if self._view is None:
+            raise RuntimeError("Dataset Index is closed")
+
     def __enter__(self):
+        self._assert_open()
         return self
 
     def __exit__(self, *_):
         self.close()
 
     def count(self, section_type: int) -> int:
+        self._assert_open()
         return self._entries[section_type][4]
 
     def record(self, section_type: int, record_id: int) -> tuple:
+        self._assert_open()
         entry = self._entries[section_type]
         if record_id < 0 or record_id >= entry[4]:
             raise IndexError(record_id)
@@ -377,6 +384,7 @@ class MappedDatasetIndex:
             yield self.record(section_type, record_id)
 
     def string_bytes(self, sid: int) -> bytes:
+        self._assert_open()
         offsets = self._entries[STRING_OFFSETS]
         strings = self._entries[STRING_BYTES]
         if sid < 0 or sid + 1 >= offsets[4]:
@@ -388,6 +396,7 @@ class MappedDatasetIndex:
         return bytes(self._view[strings[2] + start : strings[2] + end])
 
     def string(self, sid: int) -> str:
+        self._assert_open()
         return self._lookup.string(sid)
 
     def _equal_hash_range(self, section_type: int, hash_index: int, value_hash: int):
@@ -408,6 +417,7 @@ class MappedDatasetIndex:
         return first, low
 
     def find_table_ids(self, name: str) -> List[int]:
+        self._assert_open()
         encoded = name.encode("utf-8")
         first, end = self._equal_hash_range(TABLE_NAME_INDEX, 0, name_hash(encoded))
         return [
@@ -417,48 +427,60 @@ class MappedDatasetIndex:
         ]
 
     def find_device_id(self, table_id: int, name: str) -> int:
+        self._assert_open()
         return self._lookup.find_device_id(table_id, name)
 
     def find_column_id(self, table_id: int, name: str) -> int:
+        self._assert_open()
         return self._lookup.find_column_id(table_id, name)
 
     def find_series_id(self, device_id: int, column_id: int) -> int:
+        self._assert_open()
         return self._lookup.find_series_id(device_id, column_id)
 
     def describe_series(self, series_id: int):
         """Return scalar route metadata for one logical series."""
+        self._assert_open()
         return self._lookup.describe_series(series_id)
 
     def series_identity(self, series_id: int):
         """Return device and column ids for one logical series."""
+        self._assert_open()
         return self._lookup.series_identity(series_id)
 
     def find_series_span(self, series_id: int, file_id: int):
         """Return one series span without exposing its full record tuple."""
+        self._assert_open()
         return self._lookup.find_series_span(series_id, file_id)
 
     def locator_metadata(self, locator_id: int):
         """Return locator/device-span fields needed by the runtime reader."""
+        self._assert_open()
         return self._lookup.locator_metadata(locator_id)
 
     def prepared_locator_metadata(self, file_id: int, locator_id: int):
         """Return generation and locator fields used by native prepare."""
+        self._assert_open()
         return self._lookup.prepared_locator_metadata(file_id, locator_id)
 
     def device_route(self, device_id: int):
         """Return table id and logical-path string id for one device."""
+        self._assert_open()
         return self._lookup.device_route(device_id)
 
     def table_name_id(self, table_id: int):
         """Return the string-pool id for one table name."""
+        self._assert_open()
         return self._lookup.table_name_id(table_id)
 
     def column_name_id(self, column_id: int):
         """Return the string-pool id for one column name."""
+        self._assert_open()
         return self._lookup.column_name_id(column_id)
 
     def device_time_bounds(self, device_id: int):
         """Return min/max timestamps for one device."""
+        self._assert_open()
         return self._lookup.device_time_bounds(device_id)
 
 

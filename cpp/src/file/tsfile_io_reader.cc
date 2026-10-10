@@ -402,16 +402,14 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     }
     std::shared_ptr<IMetaIndexEntry> meta_index_entry;
     int64_t end_offset;
-    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
-        meta_index_entry_list;
+    // Keep the shared time index in filtered metadata so table statistics
+    // can derive null counts from the footer.
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
             end_offset))) {
-    } else if (RET_FAIL(load_all_measurement_index_entry(
-                   meta_index_entry->get_offset(), end_offset, pa,
-                   meta_index_entry_list))) {
-    } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
-                                                     timeseries_indexs))) {
+    } else if (RET_FAIL(get_device_timeseries_meta_by_offset(
+                   meta_index_entry->get_offset(), end_offset,
+                   timeseries_indexs, pa))) {
     }
     return ret;
 }

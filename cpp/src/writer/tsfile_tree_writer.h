@@ -83,11 +83,15 @@ class TsFileTreeWriter {
 
     /**
      * Registers multiple aligned time series under the same device ID.
+     * The complete measurement list must be registered in one call. A device
+     * that is already registered or recovered cannot be registered again,
+     * including before writing or after flushing.
      *
      * @param device_id The ID or path of the device to which the aligned time
      * series belong.
      * @param schemas A vector of measurement schema pointers representing the
-     * aligned measurements. Must not be empty or contain null pointers.
+     * aligned measurements. Must not be empty or contain null pointers or
+     * duplicate names. Ownership transfers only on successful registration.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int register_timeseries(std::string& device_id,

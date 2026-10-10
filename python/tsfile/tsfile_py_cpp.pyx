@@ -1238,7 +1238,11 @@ cdef ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, 
 cdef object get_table_schema(TsFileReader reader, object table_name):
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
     cdef const char * table_name_c = table_name_bytes
-    cdef TableSchema schema = tsfile_reader_get_table_schema(reader, table_name_c)
+    cdef TableSchema schema
+    cdef ErrorCode code = 0
+    code = tsfile_reader_get_table_schema_checked(
+        reader, table_name_c, &schema)
+    check_error(code)
     return from_c_table_schema(schema)
 
 cdef object get_all_table_schema(TsFileReader reader):
@@ -1259,10 +1263,13 @@ cdef object get_all_table_schema(TsFileReader reader):
 cdef object get_all_timeseries_schema(TsFileReader reader):
     cdef uint32_t device_num = 0
     cdef DeviceSchema * schemas
+    cdef ErrorCode error_code = 0
     cdef int i
 
     device_schemas = {}
-    schemas = tsfile_reader_get_all_timeseries_schemas(reader, &device_num)
+    error_code = tsfile_reader_get_all_timeseries_schemas_checked(
+        reader, &schemas, &device_num)
+    check_error(error_code)
     for i in range(device_num):
         schema_py = from_c_device_schema(schemas[i])
         device_schemas.update([(schema_py.get_device_name(), schema_py)])
@@ -1425,6 +1432,7 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
     cdef DeviceID* q = NULL
     cdef uint32_t qlen = 0
     cdef uint32_t i
+    cdef uint32_t j
     cdef int err
     cdef bytes bpath
     cdef const char* raw
@@ -1449,18 +1457,30 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                     path_s = dev.path
                 except AttributeError:
                     path_s = str(dev)
-                bpath = path_s.encode('utf-8')
-                raw = PyBytes_AsString(bpath)
-                q[i].path = strdup(raw)
-                if q[i].path == NULL:
-                    raise MemoryError()
+                if path_s is not None:
+                    bpath = path_s.encode('utf-8')
+                    raw = PyBytes_AsString(bpath)
+                    q[i].path = strdup(raw)
+                    if q[i].path == NULL:
+                        raise MemoryError()
+                segments = getattr(dev, 'segments', ())
+                if segments:
+                    q[i].segment_count = <uint32_t>len(segments)
+                    q[i].segments = <char**>malloc(sizeof(char*) * len(segments))
+                    if q[i].segments == NULL:
+                        raise MemoryError()
+                    memset(q[i].segments, 0, sizeof(char*) * len(segments))
+                    for j in range(q[i].segment_count):
+                        if segments[j] is not None:
+                            bpath = segments[j].encode('utf-8')
+                            q[i].segments[j] = strdup(PyBytes_AsString(bpath))
+                            if q[i].segments[j] == NULL:
+                                raise MemoryError()
             err = tsfile_reader_get_timeseries_metadata_for_devices(
                 reader, q, qlen, &mmap)
             check_error(err)
         finally:
-            for i in range(qlen):
-                free(q[i].path)
-            free(q)
+            tsfile_free_device_id_array(q, qlen)
     try:
         return device_timeseries_metadata_map_to_py(&mmap)
     finally:
