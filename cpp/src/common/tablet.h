@@ -49,10 +49,10 @@ class Tablet {
     // Arrow-style string column: offsets + contiguous buffer.
     // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
     struct StringColumn {
-        int32_t* offsets;       // length: max_rows + 1 (Arrow-compatible)
-        char* buffer;           // contiguous string data
-        uint32_t buf_capacity;  // allocated buffer size
-        uint32_t buf_used;      // bytes written so far
+        int32_t* offsets;     // length: max_rows + 1 (Arrow-compatible)
+        char* buffer;         // contiguous string data
+        size_t buf_capacity;  // allocated buffer size
+        uint32_t buf_used;    // bytes written so far
 
         StringColumn()
             : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
@@ -60,15 +60,15 @@ class Tablet {
         int init(uint32_t max_rows) {
             const uint64_t offsets_bytes =
                 sizeof(int32_t) * (static_cast<uint64_t>(max_rows) + 1);
-            if (offsets_bytes > UINT32_MAX) return common::E_OVERFLOW;
+            const uint64_t data_bytes = static_cast<uint64_t>(max_rows) * 32;
+            if (offsets_bytes > SIZE_MAX || data_bytes > SIZE_MAX)
+                return common::E_OOM;
             offsets = (int32_t*)common::mem_alloc(
-                static_cast<uint32_t>(offsets_bytes), common::MOD_TABLET);
+                static_cast<size_t>(offsets_bytes), common::MOD_TABLET);
             if (offsets == nullptr) return common::E_OOM;
             offsets[0] = 0;
-            // Estimate 32 bytes per row, but cap eager allocation at 1 MiB.
-            // Large tablets grow the data buffer as values are appended.
-            buf_capacity = static_cast<uint32_t>(std::min<uint64_t>(
-                static_cast<uint64_t>(max_rows) * 32, 1u << 20));
+            // Estimate 32 bytes per row and preserve the full preallocation.
+            buf_capacity = static_cast<size_t>(data_bytes);
             buffer = (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
             if (buffer == nullptr) return common::E_OOM;
             buf_used = 0;
@@ -146,9 +146,6 @@ class Tablet {
 
    public:
     static const uint32_t DEFAULT_MAX_ROWS = 1024;
-    // Every tablet has an int64 timestamp buffer allocated through mem_alloc,
-    // whose byte-size argument is uint32_t.
-    static const uint32_t MAX_ROWS = UINT32_MAX / sizeof(int64_t);
     int err_code_ = common::E_OK;
 
    public:
@@ -337,7 +334,7 @@ class Tablet {
     // its backing buffers. row_count is typically 0 before refilling.
     void reset(uint32_t row_count = 0);
 
-    void* get_value(int row_index, uint32_t schema_index,
+    void* get_value(uint32_t row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
     /**
      * @brief Template function to add a value of type T to the specified row
@@ -356,7 +353,7 @@ class Tablet {
 
     void set_column_categories(
         const std::vector<common::ColumnCategory>& column_categories);
-    std::shared_ptr<IDeviceID> get_device_id(int i) const;
+    std::shared_ptr<IDeviceID> get_device_id(uint32_t i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
 
     // When the caller guarantees that all rows belong to a single device,

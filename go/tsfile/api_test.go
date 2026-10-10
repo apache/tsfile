@@ -28,7 +28,7 @@ func TestTabletRejectsOversizedCapacityForEveryType(t *testing.T) {
 		DataTypeInt64, DataTypeTimestamp, DataTypeDouble,
 		DataTypeText, DataTypeBlob, DataTypeString,
 	} {
-		for _, rows := range []int{1 << 29, (1 << 30) - 2, (1 << 30) - 1, 1 << 30} {
+		for _, rows := range []int{1 << 32, (1 << 32) + 1} {
 			tablet, err := NewTablet([]TabletColumn{{Name: "value", DataType: dataType}}, rows)
 			if tablet != nil {
 				tablet.Close()

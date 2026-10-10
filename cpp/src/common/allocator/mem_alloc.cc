@@ -25,6 +25,7 @@
 #include <atomic>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 #include "alloc_base.h"
 #include "common/logger/elog.h"
@@ -39,9 +40,11 @@ namespace {
 std::atomic<bool> g_fail_next_mem_realloc(false);
 thread_local AllocModID g_fail_mem_alloc_mod = __LAST_MOD_ID;
 thread_local uint32_t g_mem_alloc_calls_to_skip = 0;
+thread_local size_t g_failed_mem_alloc_size = 0;
 }  // namespace
 
 void TEST_fail_next_mem_realloc() {
+    g_failed_mem_alloc_size = 0;
     g_fail_next_mem_realloc.store(true, std::memory_order_release);
 }
 
@@ -49,7 +52,10 @@ void TEST_fail_mem_alloc_after(AllocModID mid,
                                uint32_t successful_allocations) {
     g_fail_mem_alloc_mod = mid;
     g_mem_alloc_calls_to_skip = successful_allocations;
+    g_failed_mem_alloc_size = 0;
 }
+
+size_t TEST_get_failed_mem_alloc_size() { return g_failed_mem_alloc_size; }
 #endif
 
 const char* g_mod_names[__LAST_MOD_ID] = {
@@ -97,11 +103,12 @@ constexpr size_t HEADER_PTR_SIZE = 8;
 // constexpr size_t ALIGNMENT = alignof(std::max_align_t);
 constexpr size_t ALIGNMENT = 8;
 
-void* mem_alloc(uint32_t size, AllocModID mid) {
+void* mem_alloc(size_t size, AllocModID mid) {
 #ifdef ENABLE_TEST
     if (mid == g_fail_mem_alloc_mod) {
         if (g_mem_alloc_calls_to_skip == 0) {
             g_fail_mem_alloc_mod = __LAST_MOD_ID;
+            g_failed_mem_alloc_size = size;
             return nullptr;
         }
         --g_mem_alloc_calls_to_skip;
@@ -112,6 +119,11 @@ void* mem_alloc(uint32_t size, AllocModID mid) {
     static_assert(HEADER_PTR_SIZE <= ALIGNMENT,
                   "Header must fit within alignment");
     constexpr size_t header_size = ALIGNMENT;
+    // The header stores the byte count in its upper 56 bits.
+    if (size > (UINT64_MAX >> 8) ||
+        size > std::numeric_limits<size_t>::max() - header_size) {
+        return nullptr;
+    }
     const size_t total_size = size + header_size;
     auto raw = static_cast<char*>(malloc(total_size));
     if (UNLIKELY(raw == nullptr)) {
@@ -161,24 +173,29 @@ void mem_free(void* ptr) {
         static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr + 4)) |
         (static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr)) << 32);
     auto mid = static_cast<AllocModID>(header & 0x7F);
-    auto size = static_cast<uint32_t>(header >> 8);
+    const uint64_t size = header >> 8;
     ModStat::get_instance().update_free(mid, size);
     ::free(raw_ptr);
 }
 
-void* mem_realloc(void* ptr, uint32_t size) {
+void* mem_realloc(void* ptr, size_t size) {
 #ifdef ENABLE_TEST
     if (g_fail_next_mem_realloc.exchange(false, std::memory_order_acq_rel)) {
+        g_failed_mem_alloc_size = size;
         return nullptr;
     }
 #endif
+    if (size > (UINT64_MAX >> 8) ||
+        size > std::numeric_limits<size_t>::max() - ALIGNMENT) {
+        return nullptr;
+    }
     char* p = static_cast<char*>(ptr);
     char* raw_ptr = p - ALIGNMENT;
     const uint64_t header =
         static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr + 4)) |
         (static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr)) << 32);
     auto mid = static_cast<AllocModID>(header & 0x7F);
-    auto original_size = static_cast<uint32_t>(header >> 8);
+    const uint64_t original_size = header >> 8;
     p = static_cast<char*>(realloc(raw_ptr, size + ALIGNMENT));
     if (UNLIKELY(p == nullptr)) {
         return nullptr;

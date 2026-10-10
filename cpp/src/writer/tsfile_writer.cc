@@ -1325,10 +1325,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
         std::vector<DeviceWriteCtx> device_ctxs;
         std::map<std::shared_ptr<IDeviceID>, size_t, IDeviceIDComparator>
             device_ctx_index;
-        int start_idx = 0;
+        uint32_t start_idx = 0;
         for (auto& pair : device_id_end_index_pairs) {
             auto device_id = pair.first;
-            int end_idx = pair.second;
+            uint32_t end_idx = pair.second;
             if (end_idx == 0) continue;
 
             const uint32_t si = static_cast<uint32_t>(start_idx);
@@ -1558,10 +1558,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
             }
         }
     } else {
-        int start_idx = 0;
+        uint32_t start_idx = 0;
         for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
             auto device_id = device_id_end_index_pair.first;
-            int end_idx = device_id_end_index_pair.second;
+            uint32_t end_idx = device_id_end_index_pair.second;
             if (end_idx == 0) continue;
 
             const uint32_t si = static_cast<uint32_t>(start_idx);
@@ -1636,9 +1636,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
     // per-device last_time_ floor to the highest timestamp this tablet
     // contributed for each device.
     if (enforce_recovered_last_time_order_ && tablet.timestamps_) {
-        int update_start = 0;
+        uint32_t update_start = 0;
         for (auto& pair : device_id_end_index_pairs) {
-            int end_idx = pair.second;
+            uint32_t end_idx = pair.second;
             if (end_idx == 0) continue;
             if (end_idx > update_start) {
                 auto schema_it = schemas_.find(pair.first);
@@ -1660,9 +1660,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
     return ret;
 }
 
-std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
+std::vector<std::pair<std::shared_ptr<IDeviceID>, uint32_t>>
 TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
-    std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
+    std::vector<std::pair<std::shared_ptr<IDeviceID>, uint32_t>> result;
 
     if (tablet.id_column_indexes_.empty() || tablet.single_device_) {
         // No tag columns or caller guarantees single device — skip boundary

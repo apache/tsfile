@@ -371,10 +371,6 @@ Tablet tablet_new(char** column_name_list, TSDataType* data_types,
         data_types == nullptr) {
         return nullptr;
     }
-    if (max_rows > storage::Tablet::MAX_ROWS) {
-        *err_code = common::E_OVERFLOW;
-        return nullptr;
-    }
     try {
         std::vector<std::string> measurement_list;
         std::vector<common::TSDataType> data_type_list;
@@ -2506,11 +2502,9 @@ Tablet tablet_new_with_target_name(const char* target_name,
                                    int max_rows) {
     // Public C entry point: reject arguments that would make the private
     // delegate read out-of-bounds memory (negative column_num, null lists or
-    // null column names) before touching caller buffers. Timestamp allocation
-    // must also fit the native allocator's uint32_t byte-size argument.
-    // Returns NULL on invalid arguments, overflow or allocation failure.
-    if (column_num < 0 || max_rows <= 0 ||
-        static_cast<uint32_t>(max_rows) > storage::Tablet::MAX_ROWS) {
+    // null column names) before touching caller buffers.
+    // Returns NULL on invalid arguments or allocation failure.
+    if (column_num < 0 || max_rows <= 0) {
         return nullptr;
     }
     if (column_num > 0) {

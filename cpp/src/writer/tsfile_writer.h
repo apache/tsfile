@@ -194,7 +194,7 @@ class TsFileWriter {
                           uint32_t end_idx = UINT32_MAX);
     int register_timeseries(const std::string& device_path,
                             MeasurementSchema* measurement_schema);
-    std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
+    std::vector<std::pair<std::shared_ptr<IDeviceID>, uint32_t>>
     split_tablet_by_device(const Tablet& tablet);
 
    private:

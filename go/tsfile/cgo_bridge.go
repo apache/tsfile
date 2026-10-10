@@ -363,10 +363,8 @@ func releaseTablet(ptr unsafe.Pointer) cerrno {
 	return C.RET_OK
 }
 
-// cTabletMaxRowsMax is the exclusive native row-capacity limit. Every Tablet
-// allocates int64 timestamps through a uint32-sized allocator, so capacities
-// at or above 1<<29 would truncate the allocation's byte size.
-const cTabletMaxRowsMax = 1 << 29
+// cTabletMaxRowsMax is the exclusive limit of the C ABI's uint32_t row count.
+const cTabletMaxRowsMax = 1 << 32
 
 // validateTabletMaxRows is a pure integer validator for the tablet row
 // capacity: it reports whether maxRows fits the native domain

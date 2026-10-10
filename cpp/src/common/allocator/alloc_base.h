@@ -62,15 +62,17 @@ enum AllocModID {
 extern TSFILE_API const char* g_mod_names[__LAST_MOD_ID];
 
 /* very basic alloc/free interface in C style */
-void* mem_alloc(uint32_t size, AllocModID mid);
+void* mem_alloc(size_t size, AllocModID mid);
 void mem_free(void* ptr);
-void* mem_realloc(void* ptr, uint32_t size);
+void* mem_realloc(void* ptr, size_t size);
 #ifdef ENABLE_TEST
 TSFILE_API void TEST_fail_next_mem_realloc();
 // Fail one allocation of mid after skipping successful_allocations calls on
 // the current thread. Other allocation modules are unaffected.
 TSFILE_API void TEST_fail_mem_alloc_after(AllocModID mid,
                                           uint32_t successful_allocations);
+// Byte count received by the latest injected alloc/realloc failure.
+TSFILE_API size_t TEST_get_failed_mem_alloc_size();
 #endif
 
 class ModStat {
@@ -131,7 +133,7 @@ class ModStat {
 /* base allocator */
 class BaseAllocator {
    public:
-    void* alloc(uint32_t size, AllocModID mid) { return mem_alloc(size, mid); }
+    void* alloc(size_t size, AllocModID mid) { return mem_alloc(size, mid); }
     void free(void* ptr) { mem_free(ptr); }
 };
 

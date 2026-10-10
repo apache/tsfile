@@ -24,9 +24,10 @@
 
 namespace storage {
 
-// Keep the old implementation safe to test: if it attempts to allocate before
-// rejecting the capacity, fail that allocation instead of reserving GiBs.
-TEST(TabletTest, OversizedCapacityRejectedBeforeAllocation) {
+// Fail the first allocation so large capacities can be checked without
+// reserving GiBs. The allocator must receive the full timestamp byte count.
+TEST(TabletTest, LargeCapacityAttemptsFullAllocationAndReturnsOom) {
+    if (sizeof(size_t) < sizeof(uint64_t)) GTEST_SKIP();
     const std::vector<common::TSDataType> types = {
         common::BOOLEAN, common::INT32,     common::DATE,   common::FLOAT,
         common::INT64,   common::TIMESTAMP, common::DOUBLE, common::TEXT,
@@ -40,12 +41,14 @@ TEST(TabletTest, OversizedCapacityRejectedBeforeAllocation) {
                          << " rows=" << capacity);
             common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
             Tablet tablet({"value"}, {type}, capacity);
-            ASSERT_EQ(tablet.err_code_, common::E_OVERFLOW);
+            ASSERT_EQ(tablet.err_code_, common::E_OOM);
+            EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(),
+                      static_cast<uint64_t>(capacity) * sizeof(int64_t));
             EXPECT_EQ(tablet.get_cur_row_size(), 0u);
-            EXPECT_EQ(tablet.add_timestamp(0, 1), common::E_OVERFLOW);
-            // The overflow check must leave the failure injection unconsumed.
+            EXPECT_EQ(tablet.add_timestamp(0, 1), common::E_OOM);
+            // The allocation failure is one-shot.
             Tablet next({"value"}, {type}, 1u);
-            EXPECT_EQ(next.err_code_, common::E_OOM);
+            EXPECT_EQ(next.err_code_, common::E_OK);
         }
     }
 }
@@ -56,19 +59,44 @@ TEST(TabletTest, CapacityCheckedByEveryConstructor) {
     auto schema = std::make_shared<std::vector<MeasurementSchema>>();
     schema->emplace_back("value", common::DOUBLE, common::PLAIN,
                          common::UNCOMPRESSED);
-    for (int capacity : {0, -1, 1 << 29, (1 << 30) - 1}) {
+    for (int capacity : {0, -1, 1 << 29, (1 << 30) - 1, INT32_MAX}) {
+        if (capacity > 0 && sizeof(size_t) < sizeof(uint64_t)) continue;
         const int expected =
-            capacity <= 0 ? common::E_INVALID_ARG : common::E_OVERFLOW;
+            capacity <= 0 ? common::E_INVALID_ARG : common::E_OOM;
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
         Tablet from_schema("dev", schema, capacity);
         EXPECT_EQ(from_schema.err_code_, expected);
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
         Tablet from_lists("dev", &names, &types, capacity);
         EXPECT_EQ(from_lists.err_code_, expected);
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
         Tablet with_categories("table", names, types,
                                {common::ColumnCategory::FIELD}, capacity);
         EXPECT_EQ(with_categories.err_code_, expected);
     }
     Tablet zero(names, types, 0u);
     EXPECT_EQ(zero.err_code_, common::E_INVALID_ARG);
+}
+
+TEST(TabletTest, StringColumnsPreallocate32BytesPerRow) {
+    const uint32_t rows = 1u << 16;
+    for (auto type : {common::TEXT, common::BLOB, common::STRING}) {
+        const int64_t before =
+            common::ModStat::get_instance().get_stat(common::MOD_TABLET);
+        // timestamps, matrix, StringColumn, offsets, then the data buffer.
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 4);
+        {
+            Tablet tablet({"value"}, {type}, rows);
+            EXPECT_EQ(tablet.err_code_, common::E_OOM);
+            EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(),
+                      static_cast<size_t>(rows) * 32);
+        }
+        EXPECT_EQ(common::ModStat::get_instance().get_stat(common::MOD_TABLET),
+                  before);
+    }
 }
 
 TEST(TabletTest, AllocationFailuresReturnOomAndReleasePartialBuffers) {

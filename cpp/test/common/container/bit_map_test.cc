@@ -33,6 +33,14 @@ TEST_F(BitMapTest, Initialization) {
     EXPECT_TRUE(bitmap.get_bitmap() != nullptr);
 }
 
+TEST_F(BitMapTest, Uint32MaxCapacityDoesNotWrapByteCount) {
+    common::TEST_fail_mem_alloc_after(common::MOD_TSBLOCK, 0);
+    common::BitMap bitmap;
+    EXPECT_EQ(bitmap.init(UINT32_MAX), common::E_OOM);
+    EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(), size_t(1) << 29);
+    EXPECT_EQ(bitmap.get_size(), 0u);
+}
+
 TEST_F(BitMapTest, Reset) {
     common::BitMap bitmap;
     bitmap.init(100);

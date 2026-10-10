@@ -167,7 +167,8 @@ TEST_F(CWrapperPublicWriterTest, TableWriterRejectsInvalidSchema) {
     remove(filename.c_str());
 }
 
-TEST_F(CWrapperPublicWriterTest, TabletOversizedCapacityReturnsOverflow) {
+TEST_F(CWrapperPublicWriterTest, TabletLargeCapacityAttemptsAllocation) {
+    if (sizeof(size_t) < sizeof(uint64_t)) GTEST_SKIP();
     char name[] = "value";
     char* names[] = {name};
     const TSDataType types[] = {TS_DATATYPE_BOOLEAN, TS_DATATYPE_INT32,
@@ -181,11 +182,17 @@ TEST_F(CWrapperPublicWriterTest, TabletOversizedCapacityReturnsOverflow) {
             SCOPED_TRACE(::testing::Message()
                          << "type=" << type << " rows=" << rows);
             ERRNO err = RET_OK;
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
             Tablet tablet = tablet_new(names, &type, 1, rows, &err);
             EXPECT_EQ(tablet, nullptr);
-            EXPECT_EQ(err, RET_OVERFLOW);
+            EXPECT_EQ(err, RET_OOM);
+            if (sizeof(size_t) >= sizeof(uint64_t)) {
+                EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(),
+                          static_cast<uint64_t>(rows) * sizeof(int64_t));
+            }
             if (tablet) free_tablet(&tablet);
         }
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
         EXPECT_EQ(tablet_new_with_target_name("dev", names, &type, 1, 1 << 29),
                   nullptr);
     }
@@ -235,9 +242,6 @@ TEST_F(CWrapperPublicWriterTest, PublicTableAndArrowNullArgs) {
 
     char* one_name[] = {first};
     TSDataType one_type[] = {TS_DATATYPE_INT64};
-    EXPECT_EQ(tablet_new(one_name, one_type, 1, 1u << 30, &err), nullptr);
-    EXPECT_EQ(err, RET_OVERFLOW);
-
     TSDataType unsupported_type[] = {TS_DATATYPE_VECTOR};
     EXPECT_EQ(tablet_new(one_name, unsupported_type, 1, 1, &err), nullptr);
     EXPECT_EQ(err, RET_TYPE_NOT_SUPPORTED);

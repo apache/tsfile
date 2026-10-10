@@ -380,11 +380,11 @@ func TestBridgeValidateCBytesLen(t *testing.T) {
 }
 
 // TestBridgeValidateTabletMaxRows pins the pure tablet row-capacity
-// validator against the native domain [1, 1<<29). Every case is a bare
+// validator against the native domain [1, 1<<32). Every case is a bare
 // integer: no tablet and no C allocation is involved, so the boundary at
-// 1<<29 is tested without reserving row buffers.
+// 1<<32 is tested without reserving row buffers.
 func TestBridgeValidateTabletMaxRows(t *testing.T) {
-	for _, n := range []int{1, 8, 1024, cTabletMaxRowsMax - 1} {
+	for _, n := range []int{1, 8, 1024, 1 << 29, (1 << 30) - 1, math.MaxInt32, cTabletMaxRowsMax - 1} {
 		if err := validateTabletMaxRows("op", n); err != nil {
 			t.Fatalf("validateTabletMaxRows(%d) = %v, want nil", n, err)
 		}
@@ -394,7 +394,7 @@ func TestBridgeValidateTabletMaxRows(t *testing.T) {
 			t.Fatalf("validateTabletMaxRows(%d) = %v, want ErrInvalidArgument", n, err)
 		}
 	}
-	for _, n := range []int{cTabletMaxRowsMax, cTabletMaxRowsMax + 1, math.MaxInt32, math.MaxInt64} {
+	for _, n := range []int{cTabletMaxRowsMax, cTabletMaxRowsMax + 1, math.MaxInt64} {
 		if err := validateTabletMaxRows("op", n); !errors.Is(err, ErrOverflow) {
 			t.Fatalf("validateTabletMaxRows(%d) = %v, want ErrOverflow", n, err)
 		}
@@ -419,11 +419,11 @@ func TestBridgeValidateCInt32(t *testing.T) {
 
 // TestBridgeTabletRejectsOversizedMaxRows proves newTabletHandle rejects
 // row capacities outside the native domain before any C call: the truncated
-// C.int path (values >= 1<<32 wrap to small or negative ints on a 64-bit
+// C.uint32_t path (values >= 1<<32 wrap to small integers on a 64-bit
 // host) must be unreachable. No handle is returned and no native tablet is
 // created, so no row buffers are allocated.
 func TestBridgeTabletRejectsOversizedMaxRows(t *testing.T) {
-	for _, maxRows := range []int{1 << 29, (1 << 30) - 2, (1 << 30) - 1, 1 << 30, 1 << 31, 1 << 32, math.MaxInt32, math.MaxInt64} {
+	for _, maxRows := range []int{1 << 32, (1 << 32) + 1, math.MaxInt64} {
 		h, err := newTabletHandle([]string{"s1"}, []DataType{DataTypeInt64}, maxRows)
 		if h != nil {
 			t.Fatalf("maxRows %d: expected no handle", maxRows)
