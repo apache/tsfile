@@ -21,6 +21,7 @@
 #define TSFILE_CLI_OUTPUT_FORMAT_H
 
 #include <cstdio>
+#include <map>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -47,6 +48,26 @@ std::string replace_invalid_utf8(const std::string& s);
 std::string csv_escape(const std::string& field);
 std::string json_escape(const std::string& s);
 std::string table_escape(const std::string& s);
+
+// Headers must remain unique even when the result has no rows.
+std::string validate_column_names(const std::vector<std::string>& names);
+
+// Metadata repeats object/column names across rows. Only distinct raw names
+// that render identically conflict; columns belong to their original object.
+class OutputNameValidator {
+   public:
+    bool add_object(const std::string& name);
+    bool add_column(const std::string& object, const std::string& name);
+    const std::string& error() const { return error_; }
+
+   private:
+    bool add_name(std::map<std::string, std::string>& names,
+                  const std::string& name, const char* kind);
+
+    std::map<std::string, std::string> objects_;
+    std::map<std::string, std::map<std::string, std::string>> columns_;
+    std::string error_;
+};
 
 class RowWriter {
    public:

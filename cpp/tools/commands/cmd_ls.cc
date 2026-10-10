@@ -83,6 +83,13 @@ int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
         }
     }
 
+    OutputNameValidator validator;
+    for (const std::string& name : names) {
+        if (!validator.add_object(name)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
+    }
     const std::string model = table_model ? "table" : "tree";
     RowWriter w(out, fmt, {"model", "object"}, {common::STRING, common::STRING},
                 false);
