@@ -19,6 +19,7 @@
 package org.apache.tsfile.encrypt;
 
 import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -29,7 +30,9 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class PageCryptoContextTest {
 
@@ -111,6 +114,22 @@ public class PageCryptoContextTest {
   }
 
   @Test
+  public void testPageAeadFileContextRequiresSharedAllocatorAndKey() {
+    byte[] fileId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    EncryptParameter parameter = TestAeadEncryptionProvider.createParameter(new byte[16], fileId);
+    EncryptParameter independent = TestAeadEncryptionProvider.createParameter(new byte[16], fileId);
+    try (EncryptParameter copy = parameter.copy()) {
+      assertTrue(parameter.sharesPageAeadFileContext(copy));
+      assertFalse(parameter.sharesPageAeadFileContext(independent));
+      copy.getKey()[0] ^= 1;
+      assertFalse(parameter.sharesPageAeadFileContext(copy));
+    } finally {
+      parameter.close();
+      independent.close();
+    }
+  }
+
+  @Test
   public void testAssociatedDataCannotBeModifiedByProvider() {
     EncryptParameter parameter =
         TestAeadEncryptionProvider.createParameter(
@@ -121,6 +140,55 @@ public class PageCryptoContextTest {
       byte[] providerCopy = context.getAssociatedData();
       providerCopy[0] ^= 1;
       assertArrayEquals(expected, context.getAssociatedData());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testLegacyCipherCannotSilentlyHandleAuthenticatedPages() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      PageCryptoContext context = PageCryptoContext.forEncryption(parameter, 1, 1, 0, 0);
+      IEncryptor legacyEncryptor =
+          new IEncryptor() {
+            @Override
+            public byte[] encrypt(byte[] data) {
+              return data;
+            }
+
+            @Override
+            public byte[] encrypt(byte[] data, int offset, int size) {
+              throw new AssertionError("Legacy encryption must not be called for AEAD pages");
+            }
+
+            @Override
+            public EncryptionType getEncryptionType() {
+              return EncryptionType.NewWay;
+            }
+          };
+      IDecryptor legacyDecryptor =
+          new IDecryptor() {
+            @Override
+            public byte[] decrypt(byte[] data) {
+              return data;
+            }
+
+            @Override
+            public byte[] decrypt(byte[] data, int offset, int size) {
+              throw new AssertionError("Legacy decryption must not be called for AEAD pages");
+            }
+
+            @Override
+            public EncryptionType getEncryptionType() {
+              return EncryptionType.NewWay;
+            }
+          };
+      byte[] page = {1};
+      assertThrows(EncryptException.class, () -> legacyEncryptor.encryptPage(page, 0, 1, context));
+      assertThrows(EncryptException.class, () -> legacyDecryptor.decryptPage(page, 0, 1, context));
     } finally {
       parameter.close();
     }

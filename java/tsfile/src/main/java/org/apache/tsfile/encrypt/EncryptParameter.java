@@ -24,6 +24,7 @@ import org.apache.tsfile.i18n.Messages;
 import javax.security.auth.Destroyable;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -172,6 +173,23 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
 
   public boolean isTdePageAead() {
     return pageAead;
+  }
+
+  /** Copies of one file share the ordinal allocator; independently created files never do. */
+  public boolean sharesPageAeadFileContext(EncryptParameter other) {
+    return other != null
+        && pageAead
+        && other.pageAead
+        && !destroyed
+        && !other.destroyed
+        && nextChunkOrdinal == other.nextChunkOrdinal
+        && Objects.equals(providerId, other.providerId)
+        && Objects.equals(profileId, other.profileId)
+        && Objects.equals(keyId, other.keyId)
+        && Objects.equals(keyVersion, other.keyVersion)
+        && Arrays.equals(fileCryptoId, other.fileCryptoId)
+        && Arrays.equals(wrappedDataKey, other.wrappedDataKey)
+        && Arrays.equals(key, other.key);
   }
 
   IEncrypt getOrCreateFileEncrypt() {

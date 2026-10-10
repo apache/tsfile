@@ -74,7 +74,7 @@ public interface IEncryptor {
 
   default byte[] encryptPage(
       byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
-    return encrypt(data, offset, size);
+    throw new EncryptException(Messages.get("error.encrypt.page_aead_encrypt_unsupported"));
   }
 
   EncryptionType getEncryptionType();

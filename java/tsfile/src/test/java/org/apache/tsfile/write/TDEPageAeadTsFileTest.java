@@ -21,10 +21,12 @@ package org.apache.tsfile.write;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
 import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
@@ -44,6 +46,9 @@ import org.apache.tsfile.read.reader.BufferedTsFileInput;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.TimeChunkWriter;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -373,6 +378,92 @@ public class TDEPageAeadTsFileTest {
       if (targetFile.exists()) {
         assertTrue(targetFile.delete());
       }
+    }
+  }
+
+  @Test
+  public void testFileEncryptionContextCannotChangeAfterHeader() throws Exception {
+    EncryptParameter first =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    byte[] secondFileId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    secondFileId[0] = 1;
+    EncryptParameter second =
+        TestAeadEncryptionProvider.createParameter(new byte[16], secondFileId);
+    try (TsFileIOWriter writer = new TsFileIOWriter(file, first);
+        EncryptParameter firstCopy = first.copy()) {
+      writer.setEncryptParam(first);
+      assertThrows(EncryptException.class, () -> writer.setEncryptParam(second));
+      assertThrows(EncryptException.class, () -> writer.setEncryptParam(firstCopy));
+      assertThrows(
+          EncryptException.class,
+          () -> writer.setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null));
+      assertTrue(writer.getEncryptParameter() == first);
+    } finally {
+      first.close();
+      second.close();
+    }
+  }
+
+  @Test
+  public void testChunkFromDifferentFileContextIsRejectedBeforeWriting() throws Exception {
+    EncryptParameter target =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    byte[] sourceFileId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    sourceFileId[0] = 1;
+    EncryptParameter source =
+        TestAeadEncryptionProvider.createParameter(new byte[16], sourceFileId);
+    try (TsFileIOWriter writer = new TsFileIOWriter(file, target)) {
+      ChunkWriterImpl chunk =
+          new ChunkWriterImpl(new MeasurementSchema("s1", TSDataType.INT64), source);
+      chunk.write(1, 11L);
+      long position = writer.getPos();
+      assertThrows(IOException.class, () -> chunk.writeToFileWriter(writer));
+      assertEquals(position, writer.getPos());
+
+      TimeChunkWriter timeChunk =
+          new TimeChunkWriter(
+              "",
+              CompressionType.UNCOMPRESSED,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              source);
+      timeChunk.write(1);
+      timeChunk.sealCurrentPage();
+      assertThrows(IOException.class, () -> timeChunk.writeAllPagesOfChunkToTsFile(writer));
+      assertEquals(position, writer.getPos());
+
+      ValueChunkWriter valueChunk =
+          new ValueChunkWriter(
+              "s1",
+              CompressionType.UNCOMPRESSED,
+              TSDataType.INT64,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              source);
+      valueChunk.write(1, 11L, false);
+      valueChunk.sealCurrentPage();
+      assertThrows(IOException.class, () -> valueChunk.writeAllPagesOfChunkToTsFile(writer, null));
+      assertEquals(position, writer.getPos());
+
+      assertThrows(
+          IOException.class,
+          () ->
+              writer.startFlushChunk(
+                  "s1",
+                  CompressionType.UNCOMPRESSED,
+                  TSDataType.INT64,
+                  TSEncoding.PLAIN,
+                  null,
+                  0,
+                  0,
+                  0,
+                  0));
+      assertEquals(position, writer.getPos());
+    } finally {
+      source.close();
+      target.close();
     }
   }
 }

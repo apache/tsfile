@@ -337,7 +337,8 @@ public class TimeChunkWriter {
         pageBuffer.size(),
         numOfPages,
         TsFileConstant.TIME_COLUMN_MASK,
-        chunkOrdinal);
+        chunkOrdinal,
+        encryptParam);
 
     long dataOffset = writer.getPos();
 

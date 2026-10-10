@@ -440,7 +440,8 @@ public class ValueChunkWriter {
           0,
           0,
           TsFileConstant.VALUE_COLUMN_MASK,
-          chunkOrdinal);
+          chunkOrdinal,
+          encryptParam);
       writer.endCurrentChunk();
       return;
     }
@@ -455,7 +456,8 @@ public class ValueChunkWriter {
         pageBuffer.size(),
         numOfPages,
         TsFileConstant.VALUE_COLUMN_MASK,
-        chunkOrdinal);
+        chunkOrdinal,
+        encryptParam);
 
     long dataOffset = writer.getPos();
 

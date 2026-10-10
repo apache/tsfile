@@ -74,7 +74,7 @@ public interface IDecryptor {
 
   default byte[] decryptPage(
       byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
-    return decrypt(data, offset, size);
+    throw new EncryptException(Messages.get("error.encrypt.page_aead_decrypt_unsupported"));
   }
 
   EncryptionType getEncryptionType();

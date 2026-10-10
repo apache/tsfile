@@ -25,6 +25,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
@@ -243,6 +244,9 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
+    if (encryptionHeaderWritten) {
+      throw new EncryptException(Messages.get("error.write.encryption_context_immutable"));
+    }
     this.encryptLevel = encryptLevel;
     this.encryptType = encryptType;
     this.encryptKey = encryptKey;
@@ -250,6 +254,9 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public void setEncryptParam(EncryptParameter param) {
+    if (encryptionHeaderWritten && encryptParameter != param) {
+      throw new EncryptException(Messages.get("error.write.encryption_context_immutable"));
+    }
     this.encryptParameter = param;
     if (param == null) {
       setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
@@ -411,10 +418,38 @@ public class TsFileIOWriter implements AutoCloseable {
       int mask,
       long chunkOrdinal)
       throws IOException {
+    startFlushChunk(
+        measurementId,
+        compressionCodecName,
+        tsDataType,
+        encodingType,
+        statistics,
+        dataSize,
+        numOfPages,
+        mask,
+        chunkOrdinal,
+        null);
+  }
+
+  public void startFlushChunk(
+      String measurementId,
+      CompressionType compressionCodecName,
+      TSDataType tsDataType,
+      TSEncoding encodingType,
+      Statistics<? extends Serializable> statistics,
+      int dataSize,
+      int numOfPages,
+      int mask,
+      long chunkOrdinal,
+      EncryptParameter chunkEncryptParameter)
+      throws IOException {
 
     boolean pageAead = encryptParameter != null && encryptParameter.isTdePageAead();
     if (pageAead != (chunkOrdinal >= 0)) {
       throw new IOException(Messages.get("error.write.invalid_chunk_ordinal"));
+    }
+    if (pageAead && !encryptParameter.sharesPageAeadFileContext(chunkEncryptParameter)) {
+      throw new IOException(Messages.get("error.write.encrypted_chunk_context_mismatch"));
     }
 
     writeEncryptionHeaderIfNecessary();

@@ -521,7 +521,8 @@ public class ChunkWriterImpl implements IChunkWriter {
         pageBuffer.size(),
         numOfPages,
         0,
-        chunkOrdinal);
+        chunkOrdinal,
+        encryptParam);
 
     long dataOffset = writer.getPos();
 
