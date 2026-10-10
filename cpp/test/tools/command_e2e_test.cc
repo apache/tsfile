@@ -1815,9 +1815,9 @@ TEST(CliE2E, Utf8JsonKeyCollisionsFailWithoutPublishingOutput) {
                     args.insert(args.end() - 1, {"--start", "0", "-n", "0"});
                 }
                 std::ostringstream out, err;
-                EXPECT_EQ(tsfile_cli::run_cli(args, out, err), 3) << err.str();
+                EXPECT_EQ(tsfile_cli::run_cli(args, out, err), 2) << err.str();
                 EXPECT_TRUE(out.str().empty());
-                EXPECT_NE(err.str().find("duplicate NDJSON column name"),
+                EXPECT_NE(err.str().find("duplicate column name"),
                           std::string::npos);
                 EXPECT_TRUE(tsfile_cli::is_valid_utf8(err.str()));
             }
@@ -1837,10 +1837,9 @@ TEST(CliE2E, Utf8JsonKeyCollisionsFailWithoutPublishingOutput) {
             args.insert(args.end() - 1, "--force");
         }
         std::ostringstream out, err;
-        EXPECT_EQ(tsfile_cli::run_cli(args, out, err), 3) << err.str();
+        EXPECT_EQ(tsfile_cli::run_cli(args, out, err), 2) << err.str();
         EXPECT_TRUE(out.str().empty());
-        EXPECT_NE(err.str().find("duplicate NDJSON column name"),
-                  std::string::npos);
+        EXPECT_NE(err.str().find("duplicate column name"), std::string::npos);
         std::ifstream target(output.c_str(), std::ios::binary);
         if (existing) {
             ASSERT_TRUE(target.is_open());
@@ -1897,10 +1896,9 @@ TEST(CliE2E, TableUtf8JsonKeyCollisionsFailInRowsAndStats) {
         std::ostringstream out, err;
         EXPECT_EQ(tsfile_cli::run_cli(
                       {command, "-t", table, "-f", "ndjson", path}, out, err),
-                  3);
+                  2);
         EXPECT_TRUE(out.str().empty());
-        EXPECT_NE(err.str().find("duplicate NDJSON column name"),
-                  std::string::npos);
+        EXPECT_NE(err.str().find("duplicate column name"), std::string::npos);
         EXPECT_TRUE(tsfile_cli::is_valid_utf8(err.str()));
     }
     std::remove(path.c_str());

@@ -150,6 +150,96 @@ int resolve_tree_paths(const ParsedArgs& args, storage::TsFileReader& reader,
     return kExitOk;
 }
 
+struct RowQuerySelection {
+    bool table_model = false;
+    std::string object;
+    // Table column names or fully qualified tree paths, as required by query.
+    std::vector<std::string> columns;
+};
+
+int resolve_row_query_selection(const ParsedArgs& args,
+                                storage::TsFileReader& reader,
+                                RowQuerySelection& selection,
+                                std::ostream& err) {
+    int ret = resolve_table_model(args, reader, selection.table_model, err);
+    if (ret != kExitOk) return ret;
+    if (selection.table_model) {
+        selection.object = args.table;
+        if (selection.object.empty()) {
+            std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+            const int schemas_ret = reader.get_all_table_schemas(schemas);
+            if (schemas_ret != common::E_OK) {
+                err << "Error: failed to read table schemas: "
+                    << error_code_message(schemas_ret) << "\n";
+                return kExitFile;
+            }
+            if (schemas.empty() || !schemas[0]) {
+                err << "Error: no table found in file\n";
+                return kExitRuntime;
+            }
+            if (schemas.size() != 1) {
+                err << "Error: head/cat requires -t/--table when the file "
+                       "contains multiple tables\n";
+                return kExitUsage;
+            }
+            selection.object = schemas[0]->get_table_name();
+        }
+        std::shared_ptr<storage::TableSchema> schema;
+        const int schema_ret =
+            reader.get_table_schema(selection.object, schema);
+        if (schema_ret != common::E_OK) {
+            if (schema_ret == common::E_TABLE_NOT_EXIST) {
+                err << "Error: table '" << selection.object
+                    << "' does not exist\n";
+                return kExitUsage;
+            }
+            err << "Error: failed to read schema for table '"
+                << selection.object << "': " << error_code_message(schema_ret)
+                << "\n";
+            return kExitFile;
+        }
+        ret = resolve_table_fields(args, schema, selection.columns, err);
+    } else {
+        if (args.has_tag_filter) {
+            err << "Error: tag filter flags are only valid for table model\n";
+            return kExitUsage;
+        }
+        ParsedArgs effective_args = args;
+        if (effective_args.device.empty()) {
+            auto devices = reader.get_all_device_ids();
+            if (devices.empty() || !devices[0]) {
+                err << "Error: no device found in file\n";
+                return kExitRuntime;
+            }
+            if (devices.size() != 1) {
+                err << "Error: head/cat requires -d/--device when the file "
+                       "contains multiple devices\n";
+                return kExitUsage;
+            }
+            effective_args.device = devices[0]->get_device_name();
+        }
+        selection.object = effective_args.device;
+        ret =
+            resolve_tree_paths(effective_args, reader, selection.columns, err);
+    }
+    if (ret != kExitOk) return ret;
+
+    // Validate the selected schema before time/row filters can remove columns
+    // from the reader's result metadata, including entirely empty results.
+    std::vector<std::string> header = {"time"};
+    for (const std::string& column : selection.columns) {
+        header.push_back(selection.table_model
+                             ? column
+                             : column.substr(selection.object.size() + 1));
+    }
+    const std::string error = validate_column_names(header);
+    if (!error.empty()) {
+        err << "Error: " << error << "\n";
+        return kExitFile;
+    }
+    return kExitOk;
+}
+
 }  // namespace
 
 int build_table_tag_filter(const ParsedArgs& args,
@@ -276,6 +366,12 @@ std::vector<std::string> collect_tree_query_paths(
     return paths;
 }
 
+int validate_row_query_names(const ParsedArgs& args,
+                             storage::TsFileReader& reader, std::ostream& err) {
+    RowQuerySelection selection;
+    return resolve_row_query_selection(args, reader, selection, err);
+}
+
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
                   long long offset, long long limit, long long* emitted_rows) {
@@ -284,100 +380,35 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     const int64_t end = args.has_end ? static_cast<int64_t>(args.end)
                                      : std::numeric_limits<int64_t>::max();
 
+    RowQuerySelection selection;
+    const int selection_ret =
+        resolve_row_query_selection(args, reader, selection, err);
+    if (selection_ret != kExitOk) return selection_ret;
+
     storage::ResultSet* rs = nullptr;
     int qret = 0;
     const bool push_down = can_push_down_row_window(args, offset, limit);
+    const std::string tree_device_prefix =
+        selection.table_model ? "" : selection.object;
     std::unique_ptr<storage::Filter> tag_filter;
-    std::string tree_device_prefix;
-
-    bool table_model = false;
-    const int model_ret = resolve_table_model(args, reader, table_model, err);
-    if (model_ret != kExitOk) {
-        return model_ret;
-    }
-    if (table_model) {
-        std::string table_name = args.table;
-        if (table_name.empty()) {
-            std::vector<std::shared_ptr<storage::TableSchema>> schemas;
-            const int schemas_ret = reader.get_all_table_schemas(schemas);
-            if (schemas_ret != common::E_OK) {
-                err << "Error: failed to read table schemas: "
-                    << error_code_message(schemas_ret) << "\n";
-                return kExitFile;
-            }
-            if (schemas.empty() || !schemas[0]) {
-                err << "Error: no table found in file\n";
-                return kExitRuntime;
-            }
-            if (schemas.size() != 1) {
-                err << "Error: head/cat requires -t/--table when the file "
-                       "contains multiple tables\n";
-                return kExitUsage;
-            }
-            table_name = schemas[0]->get_table_name();
-        }
-        std::shared_ptr<storage::TableSchema> table_schema;
-        const int schema_ret =
-            reader.get_table_schema(table_name, table_schema);
-        if (schema_ret != common::E_OK) {
-            if (schema_ret == common::E_TABLE_NOT_EXIST) {
-                err << "Error: table '" << table_name << "' does not exist\n";
-                return kExitUsage;
-            }
-            err << "Error: failed to read schema for table '" << table_name
-                << "': " << error_code_message(schema_ret) << "\n";
-            return kExitFile;
-        }
-        std::vector<std::string> cols;
-        int selection_ret = resolve_table_fields(args, table_schema, cols, err);
-        if (selection_ret != kExitOk) {
-            return selection_ret;
-        }
-        int filter_ret =
-            build_table_tag_filter(args, reader, table_name, err, tag_filter);
-        if (filter_ret != kExitOk) {
-            return filter_ret;
-        }
+    if (selection.table_model) {
+        const int filter_ret = build_table_tag_filter(
+            args, reader, selection.object, err, tag_filter);
+        if (filter_ret != kExitOk) return filter_ret;
         if (push_down) {
-            qret = reader.queryByRow(
-                table_name, cols, to_reader_row_bound(offset),
-                to_reader_row_bound(limit), rs, tag_filter.get());
+            qret = reader.queryByRow(selection.object, selection.columns,
+                                     to_reader_row_bound(offset),
+                                     to_reader_row_bound(limit), rs,
+                                     tag_filter.get());
         } else {
-            qret = reader.query(table_name, cols, start, end, rs,
-                                tag_filter.get());
+            qret = reader.query(selection.object, selection.columns, start, end,
+                                rs, tag_filter.get());
         }
+    } else if (push_down) {
+        qret = reader.queryByRow(selection.columns, to_reader_row_bound(offset),
+                                 to_reader_row_bound(limit), rs);
     } else {
-        if (args.has_tag_filter) {
-            err << "Error: tag filter flags are only valid for table model\n";
-            return kExitUsage;
-        }
-        ParsedArgs effective_args = args;
-        if (effective_args.device.empty()) {
-            auto devices = reader.get_all_device_ids();
-            if (devices.empty() || !devices[0]) {
-                err << "Error: no device found in file\n";
-                return kExitRuntime;
-            }
-            if (devices.size() != 1) {
-                err << "Error: head/cat requires -d/--device when the file "
-                       "contains multiple devices\n";
-                return kExitUsage;
-            }
-            effective_args.device = devices[0]->get_device_name();
-        }
-        tree_device_prefix = effective_args.device;
-        std::vector<std::string> paths;
-        int selection_ret =
-            resolve_tree_paths(effective_args, reader, paths, err);
-        if (selection_ret != kExitOk) {
-            return selection_ret;
-        }
-        if (push_down) {
-            qret = reader.queryByRow(paths, to_reader_row_bound(offset),
-                                     to_reader_row_bound(limit), rs);
-        } else {
-            qret = reader.query(paths, start, end, rs);
-        }
+        qret = reader.query(selection.columns, start, end, rs);
     }
 
     if (qret != 0 || rs == nullptr) {
@@ -404,7 +435,7 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
     reader.destroy_query_data_set(rs);
     if (!output_error.empty()) {
         err << "Error: " << output_error << "\n";
-        return kExitRuntime;
+        return kExitFile;
     }
     if (wret == common::E_OK) {
         const std::string bytes = staged.str();

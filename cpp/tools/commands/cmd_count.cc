@@ -308,6 +308,15 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
                 return ret;
             }
         }
+        OutputNameValidator validator;
+        for (const TableCountSummary& summary : summaries) {
+            for (const CountColumn& column : summary.columns) {
+                if (!validator.add_column(summary.table_name, column.name)) {
+                    err << "Error: " << validator.error() << "\n";
+                    return kExitFile;
+                }
+            }
+        }
         for (const TableCountSummary& summary : summaries) {
             for (const CountColumn& c : summary.columns) {
                 long long null_count = summary.row_count - c.non_null_count;
@@ -343,6 +352,13 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
     int collect_ret = collect_series_stats(args, reader, rows, err);
     if (collect_ret != kExitOk) {
         return collect_ret;
+    }
+    OutputNameValidator validator;
+    for (const SeriesStatRow& row : rows) {
+        if (!validator.add_column(row.target, row.measurement)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
     }
     for (const SeriesStatRow& row : rows) {
         const long long null_count = row.row_count - row.count;

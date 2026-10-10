@@ -261,6 +261,23 @@ int validate_multi_export_objects(const ParsedArgs& args,
             }
         }
     }
+    OutputNameValidator validator;
+    const bool table_mode = !args.tables.empty();
+    const std::vector<std::string>& objects =
+        table_mode ? args.tables : args.devices;
+    for (const std::string& object : objects) {
+        const std::string name =
+            table_mode ? storage::to_lower(object) : object;
+        if (!validator.add_object(name)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
+        ParsedArgs scope = args;
+        scope.table = table_mode ? name : "";
+        scope.device = table_mode ? "" : name;
+        const int code = validate_row_query_names(scope, reader, err);
+        if (code != kExitOk) return code;
+    }
     return kExitOk;
 }
 
@@ -331,6 +348,8 @@ int cmd_export(const ParsedArgs& args, storage::TsFileReader& reader,
 
     ParsedArgs query = args;
     query.command = "cat";
+    const int code = validate_row_query_names(query, reader, err);
+    if (code != kExitOk) return code;
     long long rows = 0;
     return stream_query_to_file(query, reader, fmt, args.output, args.force,
                                 rows, err);

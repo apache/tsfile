@@ -358,6 +358,41 @@ std::string blob_hex(const std::string& cell) {
 
 }  // namespace
 
+std::string validate_column_names(const std::vector<std::string>& names) {
+    std::set<std::string> seen;
+    for (const std::string& name : names) {
+        const std::string display = replace_invalid_utf8(name);
+        if (!seen.insert(display).second) {
+            return "duplicate column name after UTF-8 replacement: \"" +
+                   json_escape(display) + "\"";
+        }
+    }
+    return "";
+}
+
+bool OutputNameValidator::add_name(std::map<std::string, std::string>& names,
+                                   const std::string& name, const char* kind) {
+    if (!error_.empty()) return false;
+    const std::string display = replace_invalid_utf8(name);
+    const auto entry = names.emplace(display, name);
+    if (!entry.second && entry.first->second != name) {
+        error_ = std::string("duplicate ") + kind +
+                 " name after UTF-8 replacement: \"" + json_escape(display) +
+                 "\"";
+        return false;
+    }
+    return true;
+}
+
+bool OutputNameValidator::add_object(const std::string& name) {
+    return add_name(objects_, name, "object");
+}
+
+bool OutputNameValidator::add_column(const std::string& object,
+                                     const std::string& name) {
+    return add_object(object) && add_name(columns_[object], name, "column");
+}
+
 RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
                      std::vector<std::string> header,
                      std::vector<common::TSDataType> types, bool no_header)
@@ -367,18 +402,12 @@ RowWriter::RowWriter(std::ostream& out, OutputFormat fmt,
       types_(std::move(types)),
       no_header_(no_header),
       table_widths_(header_.size(), 0) {
+    error_ = validate_column_names(header_);
+    if (!error_.empty()) return;
     if (fmt_ == OutputFormat::kJson) {
-        std::set<std::string> keys;
         json_keys_.reserve(header_.size());
         for (const std::string& name : header_) {
-            std::string key = json_escape(name);
-            if (!keys.insert(key).second) {
-                error_ =
-                    "duplicate NDJSON column name after UTF-8 replacement: \"" +
-                    key + "\"";
-                return;
-            }
-            json_keys_.push_back(std::move(key));
+            json_keys_.push_back(json_escape(name));
         }
     }
     if (fmt_ == OutputFormat::kTable && !no_header_) {

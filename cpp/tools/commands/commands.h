@@ -55,6 +55,11 @@ int build_table_tag_filter(const ParsedArgs& args,
                            const std::string& table_name, std::ostream& err,
                            std::unique_ptr<storage::Filter>& ret_filter);
 
+// Resolve the projected schema and reject name collisions without scanning
+// rows or preparing output files. Export calls this for every object first.
+int validate_row_query_names(const ParsedArgs& args,
+                             storage::TsFileReader& reader, std::ostream& err);
+
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
                   long long offset, long long limit,

@@ -520,6 +520,20 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
         }
     }
 
+    OutputNameValidator validator;
+    for (const TableStatsSummary& summary : summaries) {
+        if (summary.field_indexes.empty()) continue;
+        const std::string& object = summary.schema->get_table_name();
+        std::vector<size_t> indexes = summary.tag_indexes;
+        indexes.insert(indexes.end(), summary.field_indexes.begin(),
+                       summary.field_indexes.end());
+        for (size_t index : indexes) {
+            if (!validator.add_column(object, summary.columns[index].name)) {
+                err << "Error: " << validator.error() << "\n";
+                return kExitFile;
+            }
+        }
+    }
     std::vector<std::string> headers = {"model", "object"};
     std::vector<common::TSDataType> types = {common::STRING, common::STRING};
     for (const std::string& tag : union_tags) {
@@ -537,7 +551,7 @@ int cmd_table_stats(const ParsedArgs& args, storage::TsFileReader& reader,
     RowWriter w(out, fmt, headers, types, args.no_header);
     if (!w.error().empty()) {
         err << "Error: " << w.error() << "\n";
-        return kExitRuntime;
+        return kExitFile;
     }
     for (const TableStatsSummary& summary : summaries) {
         std::map<std::string, size_t> local_tag_positions;
@@ -681,6 +695,13 @@ int cmd_stats(const ParsedArgs& args, storage::TsFileReader& reader,
     int collect_ret = collect_series_stats(args, reader, rows, err);
     if (collect_ret != kExitOk) {
         return collect_ret;
+    }
+    OutputNameValidator validator;
+    for (const SeriesStatRow& row : rows) {
+        if (!validator.add_column(row.target, row.measurement)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
     }
     for (const SeriesStatRow& row : rows) {
         const long long null_count = row.row_count - row.count;
