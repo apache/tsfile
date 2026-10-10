@@ -46,6 +46,11 @@ struct ChunkPageInfo {
     int64_t time_file_offset = 0;
     uint32_t time_compressed_size = 0;
     uint32_t time_uncompressed_size = 0;
+    // Point count of the time page from its header statistic (-1 when the
+    // page carries no statistic).  Bounds the time decoder's block
+    // headers; unlike row_begin/row_end this is the full page count, not
+    // the filtered sub-span.
+    int32_t time_page_value_count = -1;
     int32_t row_begin = 0;  // inclusive
     int32_t row_end = 0;    // exclusive
     std::vector<int64_t> value_file_offsets;
