@@ -640,7 +640,10 @@ def test_hot_construction_maps_index_without_opening_readers(tmp_path, monkeypat
         series.close()
 
 
-def test_trust_index_defaults_to_skipping_generation_checks(tmp_path, monkeypatch):
+@pytest.mark.parametrize("capacity", [0, 1, 2])
+def test_trust_index_defaults_to_skipping_generation_checks(
+    tmp_path, monkeypatch, capacity
+):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
     with TsFileDataFrame(str(source), show_progress=False, use_index=True):
@@ -658,11 +661,18 @@ def test_trust_index_defaults_to_skipping_generation_checks(tmp_path, monkeypatc
         runtime_module._ReaderSession, "_validate_generation", fail_check
     )
     monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", fail_check)
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source),
+        show_progress=False,
+        use_index=True,
+        max_prepared_series=capacity,
+        descriptor_cache_size=capacity,
+    ) as dataframe:
         with dataframe[:1] as subset:
             assert subset._trust_index is True
             np.testing.assert_array_equal(subset[0][:], np.array([0.0, 1.0]))
         np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        assert dataframe._runtime.prepared.size <= capacity
 
 
 def test_trust_index_false_rebuilds_a_stale_index(tmp_path):
@@ -848,9 +858,9 @@ def test_series_path_from_another_index_falls_back_to_its_name(tmp_path, monkeyp
 def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch):
     source = tmp_path / "devices.tsfile"
     _write_runtime_devices_file(source)
-    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 2)
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, descriptor_cache_size=2
+    ) as dataframe:
         names = [str(name) for name in dataframe.list_timeseries()]
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -976,8 +986,9 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
-        with runtime.readers.acquire(0) as reader:
-            prepared = runtime.prepared.get(0, span[2], reader)
+        with runtime.readers.acquire(0) as reader, runtime.prepared.acquire(
+            0, span[2], reader
+        ) as prepared:
             with reader.query_prepared(prepared, offset=1, limit=7) as result:
                 batches = []
                 while True:
