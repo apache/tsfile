@@ -191,6 +191,71 @@ TEST(CliRequirements, FileSummaryPropagatesEveryMetadataReadFailure) {
     }
 }
 
+TEST(CliRequirements, TableStatsPropagateEveryMetadataReadFailure) {
+    TableFixture fixture;
+    const uint32_t saved = common::g_config_value_.max_degree_of_index_node_;
+    ASSERT_EQ(storage::set_max_degree_of_index_node(2), common::E_OK);
+    std::remove(fixture.path.c_str());
+    fixture.path = tsfile_cli_test::write_tag_filter_fixture();
+    ASSERT_EQ(storage::set_max_degree_of_index_node(saved), common::E_OK);
+    tsfile_cli::ParsedArgs args;
+    args.file = fixture.path;
+    args.table = "t1";
+    int first_read = 0;
+    int last_read = 0;
+    for (int fail_at = 0; fail_at <= last_read; ++fail_at) {
+        if (fail_at > 0 && fail_at < first_read) {
+            continue;
+        }
+        for (bool persistent : {false, true}) {
+            for (bool short_read : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << persistent << ":" << short_read << ":"
+                             << fail_at);
+                auto* source = new FailingMetadataReadFile;
+                ASSERT_EQ(source->open(fixture.path), common::E_OK);
+                storage::TsFileReader reader;
+                ASSERT_EQ(
+                    reader.open(
+                        std::unique_ptr<storage::RandomAccessReadFile>(source)),
+                    common::E_OK);
+                // Match run_cli's model validation before command dispatch.
+                std::vector<std::shared_ptr<storage::TableSchema>> schemas;
+                std::vector<std::shared_ptr<storage::IDeviceID>> devices;
+                ASSERT_EQ(reader.get_all_table_schemas(schemas), common::E_OK);
+                ASSERT_EQ(reader.get_all_devices(devices), common::E_OK);
+                first_read = source->reads + 1;
+                source->fail_at = fail_at;
+                source->persistent = persistent;
+                source->short_read = short_read;
+                std::ostringstream out;
+                std::ostringstream err;
+                const int ret = tsfile_cli::cmd_stats(
+                    args, reader, tsfile_cli::OutputFormat::kCsv, out, err);
+                if (fail_at == 0) {
+                    ASSERT_EQ(ret, 0) << err.str();
+                    EXPECT_TRUE(err.str().empty()) << err.str();
+                    EXPECT_NE(out.str().find("table,t1,dev_a,s1,INT64,1,"),
+                              std::string::npos);
+                    EXPECT_NE(out.str().find("table,t1,dev_b,s1,INT64,2,"),
+                              std::string::npos);
+                    EXPECT_NE(out.str().find("table,t1,dev_c,s1,INT64,1,"),
+                              std::string::npos);
+                    last_read = source->reads;
+                    ASSERT_GE(last_read, first_read);
+                } else {
+                    EXPECT_EQ(ret, 2);
+                    EXPECT_TRUE(source->failed);
+                    EXPECT_TRUE(out.str().empty()) << out.str();
+                    EXPECT_NE(err.str().find("failed to read"),
+                              std::string::npos)
+                        << err.str();
+                }
+            }
+        }
+    }
+}
+
 TEST(CliRequirements, ModelDetectionPropagatesMetadataReadErrors) {
     TableFixture fixture;
     using Command =
