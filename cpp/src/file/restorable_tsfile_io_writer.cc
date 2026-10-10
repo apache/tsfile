@@ -54,6 +54,7 @@ namespace {
 const int HEADER_LEN = MAGIC_STRING_TSFILE_LEN + 1;  // magic + version
 const int BUF_SIZE = 4096;
 const unsigned char kTimeChunkTypeMask = 0x80;
+const unsigned char kValueChunkTypeMask = 0x40;
 
 // -----------------------------------------------------------------------------
 // Self-check helpers: read file, parse chunk header, recover chunk statistics
@@ -263,6 +264,13 @@ static int recover_chunk_statistic(
                                  kTimeChunkTypeMask) != 0;
     PageHeader ph;
     int ret = ph.deserialize_from(bs, false, chdr.data_type_);
+    if (ret == common::E_OK && ph.uncompressed_size_ == 0 &&
+        (static_cast<unsigned char>(chdr.chunk_type_) & kValueChunkTypeMask) !=
+            0) {
+        // A single all-null aligned value page has no payload or statistics.
+        return bs.remaining_size() == 0 ? common::E_OK
+                                        : common::E_TSFILE_CORRUPTED;
+    }
     if (ret != common::E_OK || ph.compressed_size_ == 0 ||
         bs.remaining_size() < ph.compressed_size_) {
         // Align with Java selfCheck behavior: malformed/incomplete page in this
