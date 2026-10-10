@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from .formatting import format_dataframe_table
+from ._config import resolve_read_options
 from .metadata import (
     MODEL_TABLE,
     MODEL_TREE,
@@ -772,19 +773,51 @@ class _LocIndexer:
 
 
 class TsFileDataFrame:
-    """Lazy-loaded unified numeric dataset view over multiple TsFile shards."""
+    """Lazy-loaded unified numeric dataset view over multiple TsFile shards.
+
+    With ``use_index=True``, ``trust_index=True`` (the default) assumes the
+    indexed TsFiles are immutable and skips source generation checks. Set
+    ``trust_index=False`` to check file sizes and modification times when
+    loading the index and acquiring readers. Index format and locator bounds
+    are always checked. ``trust_index`` has no effect when ``use_index=False``.
+
+    Keyword-only resource limits apply to ``use_index=True``. Each limit uses
+    its explicit value, or the matching ``TSFILE_DATAFRAME_<OPTION>`` environment
+    variable when None, or its built-in default. Values are fixed at creation.
+    Cache sizes accept zero to disable retention; other limits must be positive.
+    """
 
     def __init__(
         self,
         paths: Union[str, List[str]],
         show_progress: bool = True,
         use_index: bool = False,
+        *,
+        trust_index: bool = True,
+        max_prepared_series: Optional[int] = None,
+        descriptor_cache_size: Optional[int] = None,
+        max_open_files: Optional[int] = None,
+        query_workers: Optional[int] = None,
+        query_parallel_min_rows: Optional[int] = None,
     ):
         if not isinstance(use_index, bool):
             raise TypeError("use_index must be a bool")
+        if not isinstance(trust_index, bool):
+            raise TypeError("trust_index must be a bool")
+        options = dict(
+            max_prepared_series=max_prepared_series,
+            descriptor_cache_size=descriptor_cache_size,
+            max_open_files=max_open_files,
+            query_workers=query_workers,
+            query_parallel_min_rows=query_parallel_min_rows,
+        )
+        if not use_index and any(value is not None for value in options.values()):
+            raise ValueError("Dataset read options require use_index=True")
+        self._runtime_options = resolve_read_options(**options) if use_index else {}
         self._paths = _expand_paths(paths)
         self._show_progress = show_progress
         self._use_index = use_index
+        self._trust_index = trust_index
         self._readers: Dict[str, object] = {}
         self._index = _DataFrameCatalog()
         self._is_view = False
@@ -801,10 +834,12 @@ class TsFileDataFrame:
         """Create a lightweight view that reuses the parent's readers and caches."""
         obj = object.__new__(cls)
         obj._root = parent._root if parent._is_view else parent
+        obj._runtime_options = parent._runtime_options.copy()
         obj._is_view = True
         obj._paths = parent._paths
         obj._show_progress = parent._show_progress
         obj._use_index = parent._use_index
+        obj._trust_index = parent._trust_index
         obj._readers = parent._readers
         subset_refs = list(series_refs)
         obj._index = SimpleNamespace(
@@ -870,7 +905,7 @@ class TsFileDataFrame:
         from .runtime import DatasetRuntime
 
         index_path = index_path_for(self._paths)
-        if not index_matches_paths(index_path, self._paths):
+        if not index_matches_paths(index_path, self._paths, self._trust_index):
             lock_path = index_path + ".lock"
             os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
             with open(lock_path, "a+b") as lock_file:
@@ -880,7 +915,7 @@ class TsFileDataFrame:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 except ImportError:
                     pass
-                if not index_matches_paths(index_path, self._paths):
+                if not index_matches_paths(index_path, self._paths, self._trust_index):
                     self._load_metadata_without_index(TsFileSeriesReader)
                     try:
                         build_index_from_dataframe(self, index_path)
@@ -889,7 +924,9 @@ class TsFileDataFrame:
                             reader.close()
                         self._readers.clear()
 
-        self._runtime = DatasetRuntime(index_path)
+        self._runtime = DatasetRuntime(
+            index_path, trust_index=self._trust_index, **self._runtime_options
+        )
         self._runtime_lease = self._runtime.lease()
         self._index = self._runtime.catalog
         if len(self._index.series) == 0:

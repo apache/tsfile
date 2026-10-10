@@ -640,6 +640,67 @@ def test_hot_construction_maps_index_without_opening_readers(tmp_path, monkeypat
         series.close()
 
 
+@pytest.mark.parametrize("capacity", [0, 1, 2])
+def test_trust_index_defaults_to_skipping_generation_checks(
+    tmp_path, monkeypatch, capacity
+):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True):
+        pass
+
+    stat = os.stat(source)
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    def fail_check(*_args, **_kwargs):
+        raise AssertionError("trusted indexes must not check source generations")
+
+    monkeypatch.setattr(index_module, "file_fingerprint", fail_check)
+    monkeypatch.setattr(runtime_module, "file_fingerprint", fail_check)
+    monkeypatch.setattr(
+        runtime_module._ReaderSession, "_validate_generation", fail_check
+    )
+    monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", fail_check)
+    with TsFileDataFrame(
+        str(source),
+        show_progress=False,
+        use_index=True,
+        max_prepared_series=capacity,
+        descriptor_cache_size=capacity,
+    ) as dataframe:
+        with dataframe[:1] as subset:
+            assert subset._trust_index is True
+            np.testing.assert_array_equal(subset[0][:], np.array([0.0, 1.0]))
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        assert dataframe._runtime.prepared.size <= capacity
+
+
+def test_trust_index_false_rebuilds_a_stale_index(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        index_path = dataframe._runtime.index.path
+        fingerprint = dataframe._runtime.index.record(TSFILE_RECORD, 0)[3]
+
+    stat = os.stat(source)
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    assert index_module.index_matches_paths(index_path, [str(source)])
+    assert not index_module.index_matches_paths(
+        index_path, [str(source)], trust_index=False
+    )
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, trust_index=False
+    ) as dataframe:
+        assert dataframe._runtime.index.record(TSFILE_RECORD, 0)[3] != fingerprint
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+
+
+@pytest.mark.parametrize("trust_index", [None, 1, "true"])
+def test_trust_index_requires_a_bool(tmp_path, trust_index):
+    with pytest.raises(TypeError, match="trust_index must be a bool"):
+        TsFileDataFrame(str(tmp_path / "missing.tsfile"), trust_index=trust_index)
+
+
 def test_dataframe_does_not_use_or_create_index_by_default(tmp_path):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
@@ -797,9 +858,9 @@ def test_series_path_from_another_index_falls_back_to_its_name(tmp_path, monkeyp
 def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch):
     source = tmp_path / "devices.tsfile"
     _write_runtime_devices_file(source)
-    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 2)
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, descriptor_cache_size=2
+    ) as dataframe:
         names = [str(name) for name in dataframe.list_timeseries()]
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -925,8 +986,9 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
-        with runtime.readers.acquire(0) as reader:
-            prepared = runtime.prepared.get(0, span[2], reader)
+        with runtime.readers.acquire(0) as reader, runtime.prepared.acquire(
+            0, span[2], reader
+        ) as prepared:
             with reader.query_prepared(prepared, offset=1, limit=7) as result:
                 batches = []
                 while True:
@@ -951,7 +1013,8 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
     )
 
 
-def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
+@pytest.mark.parametrize("trust_index", [True, False])
+def test_prepared_locator_generation_checks_and_bounds(tmp_path, trust_index):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
     with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
@@ -962,27 +1025,38 @@ def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
         with runtime.readers.acquire(0) as reader:
             stale = list(locator)
             stale[3] ^= 1
-            with pytest.raises(Exception, match="prepare Dataset Index locator"):
-                reader.prepare_series(stale)
+            if trust_index:
+                reader.prepare_series(stale, trust_index=True).close()
+            else:
+                with pytest.raises(Exception, match="prepare Dataset Index locator"):
+                    reader.prepare_series(stale)
 
             out_of_range = list(locator)
             out_of_range[7] = os.path.getsize(source) + 1
             with pytest.raises(Exception, match="prepare Dataset Index locator"):
-                reader.prepare_series(out_of_range)
+                reader.prepare_series(out_of_range, trust_index=trust_index)
 
 
-def test_reader_session_revalidates_generation_when_reused(tmp_path):
+@pytest.mark.parametrize("trust_index", [True, False])
+def test_reader_session_generation_checks_follow_trust_index(tmp_path, trust_index):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, trust_index=trust_index
+    ) as dataframe:
         pool = dataframe._runtime.readers
         with pool.acquire(0):
             pass
         stat = os.stat(source)
         os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
-        with pytest.raises(RuntimeError, match="generation changed"):
+        if trust_index:
             with pool.acquire(0):
                 pass
+            np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        else:
+            with pytest.raises(RuntimeError, match="generation changed"):
+                with pool.acquire(0):
+                    pass
 
 
 def test_runtime_lease_close_waits_for_query_lease(tmp_path):
