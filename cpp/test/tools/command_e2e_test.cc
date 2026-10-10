@@ -817,7 +817,8 @@ TEST(CliE2E, WriteImportsQuotedFieldWithEmbeddedNewline) {
     std::string csv_path =
         tsfile_cli_test::unique_temp_path("tsfile_cli_nl_in", ".csv");
     {
-        std::ofstream o(csv_path.c_str());
+        // Keep the fixture's LF bytes unchanged on Windows as well.
+        std::ofstream o(csv_path.c_str(), std::ios::binary);
         // The note field on the first row spans two physical lines inside
         // quotes; it must import as a single row, not be split into two.
         o << "time,id1,note\n0,dev,\"line one\nline two\"\n1,dev,plain\n";
