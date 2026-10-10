@@ -57,6 +57,7 @@ public class TimeChunkWriter {
   private CompressionType compressionType;
 
   private EncryptParameter encryptParam;
+  private long chunkOrdinal = -1;
 
   /** all pages of this chunk. */
   private PublicBAOS pageBuffer;
@@ -96,6 +97,7 @@ public class TimeChunkWriter {
     this.encodingType = encodingType;
     this.compressionType = compressionType;
     this.encryptParam = EncryptUtils.getEncryptParameter();
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -110,6 +112,7 @@ public class TimeChunkWriter {
     this.pageWriter =
         new TimePageWriter(
             timeEncoder, ICompressor.getCompressor(compressionType), this.encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
   }
 
   public TimeChunkWriter(
@@ -122,6 +125,7 @@ public class TimeChunkWriter {
     this.encodingType = encodingType;
     this.compressionType = compressionType;
     this.encryptParam = encryptParam;
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -135,10 +139,17 @@ public class TimeChunkWriter {
 
     this.pageWriter =
         new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
   }
 
   public void write(long time) {
     pageWriter.write(time);
+  }
+
+  private long nextChunkOrdinal() {
+    return encryptParam != null && encryptParam.isTdePageAead()
+        ? encryptParam.nextChunkOrdinal()
+        : -1;
   }
 
   public void write(long[] timestamps, int batchSize, int arrayOffset) {
@@ -184,17 +195,18 @@ public class TimeChunkWriter {
     try {
       if (numOfPages == 0) { // record the firstPageStatistics
         this.firstPageStatistics = pageWriter.getStatistics();
-        this.sizeWithoutStatistic = pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true);
+        this.sizeWithoutStatistic =
+            pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true, numOfPages);
       } else if (numOfPages == 1) { // put the firstPageStatistics into pageBuffer
         byte[] b = pageBuffer.toByteArray();
         pageBuffer.reset();
         pageBuffer.write(b, 0, this.sizeWithoutStatistic);
         firstPageStatistics.serialize(pageBuffer);
         pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
         firstPageStatistics = null;
       } else {
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
       }
 
       // update statistics of this chunk
@@ -262,6 +274,8 @@ public class TimeChunkWriter {
     sizeWithoutStatistic = 0;
     firstPageStatistics = null;
     this.statistics = new TimeStatistics();
+    this.chunkOrdinal = nextChunkOrdinal();
+    pageWriter.setChunkOrdinal(chunkOrdinal);
   }
 
   public long estimateMaxSeriesMemSize() {
@@ -276,7 +290,7 @@ public class TimeChunkWriter {
       return 0;
     }
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementId, pageBuffer.size())
+    return ChunkHeader.getSerializedSize(measurementId, pageBuffer.size(), chunkOrdinal >= 0)
         + (long) pageBuffer.size();
   }
 
@@ -322,7 +336,9 @@ public class TimeChunkWriter {
         statistics,
         pageBuffer.size(),
         numOfPages,
-        TsFileConstant.TIME_COLUMN_MASK);
+        TsFileConstant.TIME_COLUMN_MASK,
+        chunkOrdinal,
+        encryptParam);
 
     long dataOffset = writer.getPos();
 

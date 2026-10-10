@@ -20,6 +20,9 @@
 package org.apache.tsfile.write.writer;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptionProviderRegistry;
+import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.MetaMarker;
@@ -44,8 +47,10 @@ import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
@@ -58,6 +63,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 
 @SuppressWarnings("squid:S4042") // Suppress use java.nio.Files#delete warning
 public class RestorableTsFileIOWriterTest {
@@ -66,6 +72,16 @@ public class RestorableTsFileIOWriterTest {
       TsFileGeneratorForTest.getTestTsFilePath("root.sg1", 0, 0, 1);
   private static final FSFactory fsFactory = FSFactoryProducer.getFSFactory();
   File file = fsFactory.getFile(FILE_NAME);
+
+  @BeforeClass
+  public static void setUpEncryptionProvider() {
+    EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+  }
+
+  @AfterClass
+  public static void tearDownEncryptionProvider() {
+    EncryptionProviderRegistry.unregisterProvider(TestAeadEncryptionProvider.PROVIDER_ID);
+  }
 
   @Before
   public void setUp() throws IOException {
@@ -103,6 +119,116 @@ public class RestorableTsFileIOWriterTest {
     assertEquals(TsFileCheckStatus.COMPLETE_FILE, rWriter.getTruncatedSize());
     assertFalse(rWriter.canWrite());
     rWriter.close();
+  }
+
+  @Test
+  public void testHeaderlessRecoveryRejectsPageAeadParameter() throws Exception {
+    TsFileWriter writer = new TsFileWriter(file);
+    writer.getIOWriter().close();
+    long originalLength = file.length();
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      assertThrows(IOException.class, () -> new RestorableTsFileIOWriter(file, false, parameter));
+    }
+    assertEquals(originalLength, file.length());
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+      assertFalse(reader.hasFileEncryptionHeader());
+    }
+  }
+
+  @Test
+  public void testEncryptedHeaderSurvivesUnclosedFile() throws Exception {
+    byte[] fileCryptoId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    for (int i = 0; i < fileCryptoId.length; i++) {
+      fileCryptoId[i] = (byte) (i + 1);
+    }
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], fileCryptoId);
+    TsFileWriter writer = new TsFileWriter(file, parameter);
+    long expectedDataStartOffset;
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+      expectedDataStartOffset = reader.getDataStartOffset();
+      assertNotEquals(
+          TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES, expectedDataStartOffset);
+      assertEquals("test-key", reader.getEncryptParam().getKeyId());
+      Assert.assertArrayEquals(fileCryptoId, reader.getEncryptParam().getFileCryptoId());
+    }
+    writer.getIOWriter().close();
+    writer.getIOWriter().getEncryptParameter().close();
+
+    RestorableTsFileIOWriter restorableWriter = new RestorableTsFileIOWriter(file, parameter);
+    assertEquals(expectedDataStartOffset, restorableWriter.getTruncatedSize());
+    assertEquals("test-key", restorableWriter.getEncryptParameter().getKeyId());
+    EncryptParameter ownedParameter = restorableWriter.getEncryptParameter();
+    Assert.assertNotSame(parameter, ownedParameter);
+    try (TsFileWriter recoveredWriter = new TsFileWriter(restorableWriter, parameter)) {
+      // Closing writes a valid footer without replacing the file encryption header.
+    }
+    Assert.assertTrue(ownedParameter.isDestroyed());
+    Assert.assertFalse(parameter.isDestroyed());
+    parameter.close();
+  }
+
+  @Test
+  public void testEncryptedChunkOrdinalContinuesAfterRecovery() throws Exception {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      TsFileWriter writer = new TsFileWriter(file, parameter);
+      writer.registerTimeseries(
+          new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
+      writer.writeRecord(new TSRecord("d1", 1).addTuple(new FloatDataPoint("s1", 1.0f)));
+      writer.flush();
+      writer.getIOWriter().writePlanIndices();
+      ChunkMetadata firstMetadata =
+          writer.getIOWriter().getChunkGroupMetadataList().get(0).getChunkMetadataList().get(0);
+      long firstOrdinal;
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
+        firstOrdinal = reader.readMemChunk(firstMetadata).getHeader().getChunkOrdinal();
+      }
+      writer.getIOWriter().close();
+      writer.getIOWriter().getEncryptParameter().close();
+
+      try (EncryptParameter recoveryParameter =
+          TestAeadEncryptionProvider.createParameter(
+              new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+        RestorableTsFileIOWriter restorableWriter =
+            new RestorableTsFileIOWriter(file, recoveryParameter);
+        try (TsFileWriter recoveredWriter = new TsFileWriter(restorableWriter, recoveryParameter)) {
+          recoveredWriter.writeRecord(
+              new TSRecord("d1", 2).addTuple(new FloatDataPoint("s1", 2.0f)));
+        }
+      }
+
+      try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath())) {
+        List<ChunkMetadata> chunks = reader.getChunkMetadataList(new Path("d1", "s1", true));
+        assertEquals(2, chunks.size());
+        assertEquals(
+            firstOrdinal, reader.readMemChunk(chunks.get(0)).getHeader().getChunkOrdinal());
+        Assert.assertTrue(
+            reader.readMemChunk(chunks.get(1)).getHeader().getChunkOrdinal() > firstOrdinal);
+      }
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testCloseDestroysOwnedTdeParameter() throws Exception {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    RestorableTsFileIOWriter writer = new RestorableTsFileIOWriter(file, parameter);
+    EncryptParameter ownedParameter = writer.getEncryptParameter();
+
+    writer.close();
+
+    Assert.assertNotSame(parameter, ownedParameter);
+    Assert.assertTrue(ownedParameter.isDestroyed());
+    Assert.assertFalse(parameter.isDestroyed());
+    parameter.close();
   }
 
   @Test

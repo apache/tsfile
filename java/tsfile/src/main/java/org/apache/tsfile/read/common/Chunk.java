@@ -49,8 +49,8 @@ import java.util.List;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
 
-/** used in query. */
-public class Chunk {
+/** A materialized chunk. Close it after use to destroy its independent page-AEAD context. */
+public class Chunk implements AutoCloseable {
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(Chunk.class)
@@ -88,7 +88,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.encryptParam = encryptParam;
+    this.encryptParam = copyPageAeadParameter(encryptParam);
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
@@ -100,7 +100,18 @@ public class Chunk {
   public Chunk(ChunkHeader header, ByteBuffer buffer, EncryptParameter encryptParam) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.encryptParam = encryptParam;
+    this.encryptParam = copyPageAeadParameter(encryptParam);
+  }
+
+  private static EncryptParameter copyPageAeadParameter(EncryptParameter parameter) {
+    return parameter != null && parameter.isTdePageAead() ? parameter.copy() : parameter;
+  }
+
+  @Override
+  public void close() {
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.close();
+    }
   }
 
   public EncryptParameter getEncryptParam() {
@@ -124,6 +135,10 @@ public class Chunk {
   }
 
   public void mergeChunkByAppendPage(Chunk chunk) throws IOException {
+    if ((encryptParam != null && encryptParam.isTdePageAead())
+        || (chunk.encryptParam != null && chunk.encryptParam.isTdePageAead())) {
+      throw new IOException(Messages.get("error.chunk.merge_page_aead_unsupported"));
+    }
     int dataSize = 0;
     // from where the page data of the merged chunk starts, if -1, it means the merged chunk has
     // more than one page
@@ -220,6 +235,10 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.resumeAfterChunkOrdinal(chunkHeader.getChunkOrdinal());
+      encryptParam.resumeAfterChunkOrdinal(timeChunk.getHeader().getChunkOrdinal());
+    }
     TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
@@ -270,7 +289,8 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            encoding);
+            encoding,
+            chunkWriter.getChunkOrdinal());
     chunkData.flip();
     timeChunk.chunkData.flip();
     return new Chunk(
@@ -284,6 +304,9 @@ public class Chunk {
   public Chunk rewrite(TSDataType newType) throws IOException {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
+    }
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      encryptParam.resumeAfterChunkOrdinal(chunkHeader.getChunkOrdinal());
     }
     TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
@@ -317,7 +340,8 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            encoding);
+            encoding,
+            chunkWriter.getChunkOrdinal());
     chunkData.flip();
     return new Chunk(
         newChunkHeader,

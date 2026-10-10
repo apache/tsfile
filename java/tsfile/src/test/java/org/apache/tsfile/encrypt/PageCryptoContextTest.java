@@ -1,0 +1,212 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.tsfile.encrypt;
+
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
+
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.util.Arrays;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+public class PageCryptoContextTest {
+
+  @BeforeClass
+  public static void setUpProvider() {
+    EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+  }
+
+  @AfterClass
+  public static void tearDownProvider() {
+    EncryptionProviderRegistry.unregisterProvider(TestAeadEncryptionProvider.PROVIDER_ID);
+  }
+
+  @Before
+  public void resetProviderCount() {
+    TestAeadEncryptionProvider.resetCreateCount();
+  }
+
+  @Test
+  public void testAeadRejectsTamperingAndPageSwap() {
+    byte[] dataKey = new byte[16];
+    Arrays.fill(dataKey, (byte) 0x5A);
+    byte[] fileCryptoId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    Arrays.fill(fileCryptoId, (byte) 0x2C);
+    EncryptParameter parameter = TestAeadEncryptionProvider.createParameter(dataKey, fileCryptoId);
+    byte[] plaintext = new byte[] {1, 3, 5, 7, 9, 11, 13, 15};
+
+    try {
+      IEncryptor encryptor = IEncryptor.getEncryptor(parameter);
+      IDecryptor decryptor = IDecryptor.getDecryptor(parameter);
+      PageCryptoContext page0 =
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 0, 0);
+      PageCryptoContext page1 =
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 1, 0);
+      PageCryptoContext anotherChunkPage0 =
+          PageCryptoContext.forEncryption(parameter, plaintext.length, plaintext.length, 0, 1);
+
+      byte[] encryptedPage0 = encryptor.encryptPage(plaintext, 0, plaintext.length, page0);
+      byte[] encryptedPage1 = encryptor.encryptPage(plaintext, 0, plaintext.length, page1);
+      assertArrayEquals(
+          plaintext, decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, page0));
+      assertArrayEquals(
+          plaintext, decryptor.decryptPage(encryptedPage1, 0, encryptedPage1.length, page1));
+
+      assertThrows(
+          EncryptException.class,
+          () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, page1));
+      assertThrows(
+          EncryptException.class,
+          () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, anotherChunkPage0));
+
+      encryptedPage0[encryptedPage0.length - 1] ^= 1;
+      assertThrows(
+          EncryptException.class,
+          () -> decryptor.decryptPage(encryptedPage0, 0, encryptedPage0.length, page0));
+
+      assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testChunkOrdinalAllocationSurvivesCopyAndRecovery() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      assertEquals(0, parameter.nextChunkOrdinal());
+      try (EncryptParameter copy = parameter.copy()) {
+        assertEquals(1, copy.nextChunkOrdinal());
+        parameter.resumeAfterChunkOrdinal(10);
+        assertEquals(11, copy.nextChunkOrdinal());
+      }
+      assertEquals(12, parameter.nextChunkOrdinal());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testPageAeadFileContextRequiresSharedAllocatorAndKey() {
+    byte[] fileId = new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH];
+    EncryptParameter parameter = TestAeadEncryptionProvider.createParameter(new byte[16], fileId);
+    EncryptParameter independent = TestAeadEncryptionProvider.createParameter(new byte[16], fileId);
+    try (EncryptParameter copy = parameter.copy()) {
+      assertTrue(parameter.sharesPageAeadFileContext(copy));
+      assertFalse(parameter.sharesPageAeadFileContext(independent));
+      copy.getKey()[0] ^= 1;
+      assertFalse(parameter.sharesPageAeadFileContext(copy));
+    } finally {
+      parameter.close();
+      independent.close();
+    }
+  }
+
+  @Test
+  public void testAssociatedDataCannotBeModifiedByProvider() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      PageCryptoContext context = PageCryptoContext.forEncryption(parameter, 8, 8, 0, 0);
+      byte[] expected = context.getAssociatedData();
+      byte[] providerCopy = context.getAssociatedData();
+      providerCopy[0] ^= 1;
+      assertArrayEquals(expected, context.getAssociatedData());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testLegacyCipherCannotSilentlyHandleAuthenticatedPages() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      PageCryptoContext context = PageCryptoContext.forEncryption(parameter, 1, 1, 0, 0);
+      IEncryptor legacyEncryptor =
+          new IEncryptor() {
+            @Override
+            public byte[] encrypt(byte[] data) {
+              return data;
+            }
+
+            @Override
+            public byte[] encrypt(byte[] data, int offset, int size) {
+              throw new AssertionError("Legacy encryption must not be called for AEAD pages");
+            }
+
+            @Override
+            public EncryptionType getEncryptionType() {
+              return EncryptionType.NewWay;
+            }
+          };
+      IDecryptor legacyDecryptor =
+          new IDecryptor() {
+            @Override
+            public byte[] decrypt(byte[] data) {
+              return data;
+            }
+
+            @Override
+            public byte[] decrypt(byte[] data, int offset, int size) {
+              throw new AssertionError("Legacy decryption must not be called for AEAD pages");
+            }
+
+            @Override
+            public EncryptionType getEncryptionType() {
+              return EncryptionType.NewWay;
+            }
+          };
+      byte[] page = {1};
+      assertThrows(EncryptException.class, () -> legacyEncryptor.encryptPage(page, 0, 1, context));
+      assertThrows(EncryptException.class, () -> legacyDecryptor.decryptPage(page, 0, 1, context));
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testUnregisterProviderTrimsId() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try {
+      EncryptionProviderRegistry.create(parameter);
+      EncryptionProviderRegistry.unregisterProvider(
+          " " + TestAeadEncryptionProvider.PROVIDER_ID + " ");
+      assertThrows(EncryptException.class, () -> EncryptionProviderRegistry.create(parameter));
+    } finally {
+      EncryptionProviderRegistry.registerProvider(TestAeadEncryptionProvider.INSTANCE);
+      parameter.close();
+    }
+  }
+}

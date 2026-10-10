@@ -23,7 +23,9 @@ import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
+import org.apache.tsfile.encrypt.PageCryptoContext;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
@@ -39,11 +41,16 @@ public class LazyLoadPageData {
 
   private final EncryptParameter encryptParam;
 
+  private final int pageIndex;
+  private final long chunkOrdinal;
+
   public LazyLoadPageData(byte[] data, int offset, IUnCompressor unCompressor) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
     this.encryptParam = EncryptUtils.getEncryptParameter();
+    this.pageIndex = -1;
+    this.chunkOrdinal = -1;
   }
 
   public LazyLoadPageData(
@@ -52,17 +59,67 @@ public class LazyLoadPageData {
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
     this.encryptParam = encryptParam;
+    this.pageIndex = -1;
+    this.chunkOrdinal = -1;
+  }
+
+  public LazyLoadPageData(
+      byte[] data,
+      int offset,
+      IUnCompressor unCompressor,
+      EncryptParameter encryptParam,
+      int pageIndex) {
+    this(data, offset, unCompressor, encryptParam, pageIndex, -1);
+  }
+
+  public LazyLoadPageData(
+      byte[] data,
+      int offset,
+      IUnCompressor unCompressor,
+      EncryptParameter encryptParam,
+      int pageIndex,
+      long chunkOrdinal) {
+    this.chunkData = data;
+    this.pageDataOffset = offset;
+    this.unCompressor = unCompressor;
+    this.encryptParam = encryptParam;
+    this.pageIndex = pageIndex;
+    this.chunkOrdinal = chunkOrdinal;
   }
 
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     IDecryptor decryptor = IDecryptor.getDecryptor(encryptParam);
-    byte[] decryptedPageData =
-        decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
+    byte[] decryptedPageData;
+    if (encryptParam != null && encryptParam.isTdePageAead()) {
+      PageCryptoContext pageCryptoContext =
+          PageCryptoContext.forDecryption(
+              encryptParam,
+              pageHeader.getUncompressedSize(),
+              compressedPageBodyLength,
+              pageIndex,
+              chunkOrdinal);
+      decryptedPageData =
+          decryptor.decryptPage(
+              chunkData, pageDataOffset, compressedPageBodyLength, pageCryptoContext);
+      if (decryptedPageData.length != pageCryptoContext.getCompressedPlaintextSize()) {
+        throw new IOException(
+            Messages.format(
+                "error.encrypt.page_plaintext_size_mismatch",
+                pageCryptoContext.getCompressedPlaintextSize(),
+                decryptedPageData.length));
+      }
+    } else if (decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      decryptedPageData =
+          java.util.Arrays.copyOfRange(
+              chunkData, pageDataOffset, pageDataOffset + compressedPageBodyLength);
+    } else {
+      decryptedPageData = decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
+    }
     try {
       unCompressor.uncompress(
-          decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
+          decryptedPageData, 0, decryptedPageData.length, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
           Messages.format(
