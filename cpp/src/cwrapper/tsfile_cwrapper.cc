@@ -368,7 +368,7 @@ Tablet tablet_new(char** column_name_list, TSDataType* data_types,
     }
     *err_code = common::E_INVALID_ARG;
     if (column_num == 0 || max_rows == 0 || column_name_list == nullptr ||
-        data_types == nullptr || max_rows >= (1u << 30)) {
+        data_types == nullptr) {
         return nullptr;
     }
     try {
@@ -2329,12 +2329,19 @@ Tablet _tablet_new_with_target_name(const char* device_id,
         data_type_list.push_back(
             static_cast<common::TSDataType>(*(data_types + i)));
     }
+    storage::Tablet* tablet;
     if (device_id != nullptr) {
-        return new storage::Tablet(device_id, &measurement_list,
-                                   &data_type_list, max_rows);
+        tablet = new storage::Tablet(device_id, &measurement_list,
+                                     &data_type_list, max_rows);
     } else {
-        return new storage::Tablet(measurement_list, data_type_list, max_rows);
+        tablet =
+            new storage::Tablet(measurement_list, data_type_list, max_rows);
     }
+    if (tablet->err_code_ != common::E_OK) {
+        delete tablet;
+        return nullptr;
+    }
+    return tablet;
 }
 
 ERRNO _tsfile_writer_register_table(TsFileWriter writer, TableSchema* schema) {
@@ -2495,11 +2502,9 @@ Tablet tablet_new_with_target_name(const char* target_name,
                                    int max_rows) {
     // Public C entry point: reject arguments that would make the private
     // delegate read out-of-bounds memory (negative column_num, null lists or
-    // null column names) before touching caller buffers. The native Tablet
-    // constructor asserts 0 < max_rows < (1 << 30); reject values outside
-    // that domain here instead of letting an assertion abort the host
-    // process. Returns NULL on invalid arguments or allocation failure.
-    if (column_num < 0 || max_rows <= 0 || max_rows >= (1 << 30)) {
+    // null column names) before touching caller buffers.
+    // Returns NULL on invalid arguments or allocation failure.
+    if (column_num < 0 || max_rows <= 0) {
         return nullptr;
     }
     if (column_num > 0) {

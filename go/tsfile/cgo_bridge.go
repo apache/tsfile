@@ -363,12 +363,8 @@ func releaseTablet(ptr unsafe.Pointer) cerrno {
 	return C.RET_OK
 }
 
-// cTabletMaxRowsMax is the native row-capacity limit: storage::Tablet
-// asserts max_rows > 0 && max_rows < (1 << 30), so the bridge only admits
-// 1 <= maxRows < cTabletMaxRowsMax. Beyond the native assertion, larger
-// capacities would make the native row-buffer index math (int32 offsets of
-// length max_rows + 1) unsafe.
-const cTabletMaxRowsMax = 1 << 30
+// cTabletMaxRowsMax is the exclusive limit of the C ABI's uint32_t row count.
+const cTabletMaxRowsMax = 1 << 32
 
 // validateTabletMaxRows is a pure integer validator for the tablet row
 // capacity: it reports whether maxRows fits the native domain
