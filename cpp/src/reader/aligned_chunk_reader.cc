@@ -699,11 +699,15 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             value_compressor_->after_uncompress(value_uncompressed_buf_);
             value_uncompressed_buf_ = nullptr;
         }
-        if (!prev_value_page_not_finish()) {
-            value_in_.reset();
-        }
         if (!prev_time_page_not_finish()) {
+            // The time page determines the aligned value page's end. Even
+            // after decoding every value, Gorilla can leave a padding byte
+            // unread, which must not prevent advancing to the next page.
+            value_in_.reset();
+            value_decoder_->reset();
             time_in_.reset();
+        } else if (!prev_value_page_not_finish()) {
+            value_in_.reset();
         }
         value_page_col_notnull_bitmap_.clear();
         value_page_col_notnull_bitmap_.shrink_to_fit();
