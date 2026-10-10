@@ -700,9 +700,9 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             value_uncompressed_buf_ = nullptr;
         }
         if (!prev_time_page_not_finish()) {
-            // An aligned value page is complete once all its time rows have
-            // been consumed. All-null pages never decode their value stream,
-            // so a dictionary header or Gorilla terminator can remain unread.
+            // The time page determines the aligned value page's end. Even
+            // after decoding every value, Gorilla can leave a padding byte
+            // unread, which must not prevent advancing to the next page.
             value_in_.reset();
             value_decoder_->reset();
             time_in_.reset();
