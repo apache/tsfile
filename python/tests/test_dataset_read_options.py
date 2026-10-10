@@ -15,7 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 import threading
 from types import SimpleNamespace
 
@@ -218,6 +220,89 @@ def test_prepared_cache_evicts_lru_and_reprepares(monkeypatch):
         assert not rebuilt.closed
     cache.close()
     assert all(item.closed for item in reader.prepared)
+
+
+def test_prepared_cache_preserves_access_order_when_leases_finish_out_of_order(
+    monkeypatch,
+):
+    cache = _cache(monkeypatch, 2)
+    reader = _Reader()
+    with cache.acquire(0, 0, reader) as oldest:
+        with cache.acquire(0, 1, reader) as newer:
+            pass
+    with cache.acquire(0, 2, reader):
+        assert oldest.closed
+        assert not newer.closed
+    cache.close()
+
+
+def test_prepared_cache_restores_unpinned_owner_in_access_order(monkeypatch):
+    cache = _cache(monkeypatch, 3)
+    reader = _Reader()
+    with cache.acquire(0, 0, reader) as owner:
+        with cache.acquire(0, 1, reader, time_owner=owner) as dependent:
+            pass
+    with cache.acquire(0, 2, reader) as newer:
+        pass
+    with cache.acquire(0, 3, reader):
+        assert dependent.closed
+        assert not owner.closed
+    with cache.acquire(0, 4, reader):
+        assert owner.closed
+        assert not newer.closed
+    cache.close()
+
+
+def test_prepared_cache_bounds_idle_queue_during_repeated_cache_hits(monkeypatch):
+    cache = _cache(monkeypatch, 2)
+    reader = _Reader()
+    for _ in range(256):
+        with cache.acquire(0, 0, reader) as prepared:
+            assert not prepared.closed
+        # Lazy invalidation must not retain one heap record per cache hit.
+        assert len(cache._idle_heap) <= 128
+    assert len(reader.prepared) == 1
+    cache.close()
+    assert prepared.closed
+
+
+@pytest.mark.parametrize("capacity", [0, 1, 32])
+@pytest.mark.parametrize("aligned", [False, True])
+def test_wide_prepared_query_does_not_repeatedly_scan_pinned_entries(
+    monkeypatch, capacity, aligned
+):
+    class CountedEntries(OrderedDict):
+        visited = 0
+
+        def items(self):
+            for item in super().items():
+                self.visited += 1
+                yield item
+
+        def values(self):
+            for entry in super().values():
+                self.visited += 1
+                yield entry
+
+    cache = _cache(monkeypatch, capacity)
+    entries = CountedEntries()
+    monkeypatch.setattr(cache, "_entries", entries)
+    reader = _Reader()
+    width = 128
+    with ExitStack() as stack:
+        owner = None
+        for locator in range(width):
+            prepared = stack.enter_context(
+                cache.acquire(0, locator, reader, time_owner=owner)
+            )
+            if aligned and owner is None:
+                owner = prepared
+        assert cache.size == width
+        assert all(not prepared.closed for prepared in reader.prepared)
+    assert cache.size <= capacity
+    cache.close()
+    assert all(prepared.closed for prepared in reader.prepared)
+    assert entries.visited <= 8 * width
 
 
 def test_prepared_cache_zero_keeps_active_entries_and_shared_owner(monkeypatch):

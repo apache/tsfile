@@ -24,6 +24,7 @@ from collections.abc import Mapping, Sequence
 import contextlib
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
+import heapq
 import os
 import sys
 import threading
@@ -267,6 +268,8 @@ class ReaderSessionPool:
 @dataclass
 class _PreparedSeriesEntry:
     prepared: object
+    key: Tuple[int, int, int]
+    last_used: int
     active_uses: int = 0
     time_owner: Optional["_PreparedSeriesEntry"] = None
     dependent_uses: int = 0
@@ -290,8 +293,14 @@ class PreparedSeriesCache:
         self._trust_index = trust_index
         self.max_entries = max_entries
         self._condition = threading.Condition()
-        self._entries = OrderedDict()
+        self._entries = {}
         self._entries_by_prepared_id = {}
+        self._idle_entries = {}
+        # Release/unpin order may differ from access order, so use a heap to
+        # restore an idle entry at its original LRU position.
+        self._idle_heap = []
+        self._access_order = 0
+        self._active_leases = 0
         self._loading = set()
         self._pending_closes = 0
         self._closed = False
@@ -321,25 +330,44 @@ class PreparedSeriesCache:
             device_span_length,
         )
 
+    def _compact_idle_heap_locked(self):
+        # Cache hits invalidate old heap records. Bound those records even when
+        # a hot working set never exceeds the retention limit. Only idle entries
+        # are traversed; wide queries can pin arbitrarily many active entries.
+        if len(self._idle_heap) > 2 * len(self._idle_entries) + 64:
+            self._idle_heap = [
+                (last_used, key) for key, last_used in self._idle_entries.items()
+            ]
+            heapq.heapify(self._idle_heap)
+
+    def _mark_idle_locked(self, entry):
+        if entry.active_uses == 0 and entry.dependent_uses == 0:
+            self._idle_entries[entry.key] = entry.last_used
+            heapq.heappush(self._idle_heap, (entry.last_used, entry.key))
+        self._compact_idle_heap_locked()
+
+    def _oldest_idle_key_locked(self):
+        while self._idle_heap:
+            last_used, key = heapq.heappop(self._idle_heap)
+            if self._idle_entries.get(key) == last_used:
+                return key
+        return None
+
     def _pop_entry_locked(self, key):
         entry = self._entries.pop(key)
         self._entries_by_prepared_id.pop(id(entry.prepared))
+        self._idle_entries.pop(key, None)
         if entry.time_owner is not None:
             entry.time_owner.dependent_uses -= 1
+            self._mark_idle_locked(entry.time_owner)
             entry.time_owner = None
+        self._compact_idle_heap_locked()
         return entry.prepared
 
     def _evict_idle_locked(self):
         evicted = []
         while len(self._entries) > self.max_entries:
-            idle_key = next(
-                (
-                    key
-                    for key, entry in self._entries.items()
-                    if entry.active_uses == 0 and entry.dependent_uses == 0
-                ),
-                None,
-            )
+            idle_key = self._oldest_idle_key_locked()
             if idle_key is None:
                 break
             evicted.append(self._pop_entry_locked(idle_key))
@@ -369,6 +397,8 @@ class PreparedSeriesCache:
     def _release(self, entry):
         with self._condition:
             entry.active_uses -= 1
+            self._active_leases -= 1
+            self._mark_idle_locked(entry)
             evicted = self._evict_idle_locked()
             self._condition.notify_all()
         self._close_evicted(evicted)
@@ -385,8 +415,12 @@ class PreparedSeriesCache:
                     raise RuntimeError("PreparedSeriesCache is closed")
                 entry = self._entries.get(key)
                 if entry is not None:
-                    self._entries.move_to_end(key)
+                    self._idle_entries.pop(key, None)
+                    self._access_order += 1
+                    entry.last_used = self._access_order
                     entry.active_uses += 1
+                    self._active_leases += 1
+                    self._compact_idle_heap_locked()
                     break
                 if key not in self._loading:
                     if time_owner is not None:
@@ -422,9 +456,15 @@ class PreparedSeriesCache:
             with self._condition:
                 rejected = self._closed
                 if not rejected:
+                    self._access_order += 1
                     entry = _PreparedSeriesEntry(
-                        result, active_uses=1, time_owner=owner_entry
+                        result,
+                        key=key,
+                        last_used=self._access_order,
+                        active_uses=1,
+                        time_owner=owner_entry,
                     )
+                    self._active_leases += 1
                     if owner_entry is not None:
                         owner_entry.dependent_uses += 1
                     self._entries[key] = entry
@@ -452,20 +492,13 @@ class PreparedSeriesCache:
     def close(self):
         with self._condition:
             self._closed = True
-            while (
-                self._loading
-                or self._pending_closes
-                or any(entry.active_uses for entry in self._entries.values())
-            ):
+            while self._loading or self._pending_closes or self._active_leases:
                 self._condition.wait()
             entries = []
             while self._entries:
                 # Release values before the shared time metadata they depend on.
-                leaf_key = next(
-                    key
-                    for key, entry in self._entries.items()
-                    if entry.dependent_uses == 0
-                )
+                leaf_key = self._oldest_idle_key_locked()
+                assert leaf_key is not None
                 entries.append(self._pop_entry_locked(leaf_key))
             self._pending_closes += len(entries)
         self._close_evicted(entries)
