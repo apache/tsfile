@@ -24,6 +24,7 @@
 #include <cstring>
 #include <fstream>
 #include <random>
+#include <tuple>
 
 #ifdef _WIN32
 #include <process.h>
@@ -1987,9 +1988,125 @@ TEST_F(TsFileWriterTest, AlignedRegisterAfterWriteIsRejected) {
               E_ALREADY_EXIST);
     delete dup_schema;
 
+    // The schema-reference overloads own their internal copies even when the
+    // registration is rejected. Exercise both wrappers under leak checking.
+    MeasurementSchema extra_value("s2", INT64, PLAIN, UNCOMPRESSED);
+    EXPECT_EQ(
+        tsfile_writer_->register_aligned_timeseries(device_name, extra_value),
+        E_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device_name, extra_value),
+              E_INVALID_ARG);
+    MeasurementSchema duplicate_value("s0", INT64, PLAIN, UNCOMPRESSED);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name,
+                                                          duplicate_value),
+              E_ALREADY_EXIST);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device_name, duplicate_value),
+              E_ALREADY_EXIST);
+
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
+
+class AlignedTabletRecordBoundaryTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<std::tuple<uint32_t, bool, int>> {};
+
+TEST_P(AlignedTabletRecordBoundaryTest, MissingMeasurementsStayAligned) {
+    const uint32_t tablet_rows = std::get<0>(GetParam());
+    const bool missing_tablet_column = std::get<1>(GetParam());
+    const int flush_mode = std::get<2>(GetParam());
+    struct ConfigGuard {
+        uint32_t points, memory;
+        ~ConfigGuard() {
+            g_config_value_.page_writer_max_point_num_ = points;
+            g_config_value_.page_writer_max_memory_bytes_ = memory;
+        }
+    } guard{g_config_value_.page_writer_max_point_num_,
+            g_config_value_.page_writer_max_memory_bytes_};
+    const uint32_t page_capacity = 7;
+    g_config_value_.page_writer_max_point_num_ = page_capacity;
+    g_config_value_.page_writer_max_memory_bytes_ = 1024 * 1024;
+
+    std::string device_name = "device_tablet_record_boundary";
+    std::vector<MeasurementSchema*> schemas{
+        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+              E_OK);
+    auto tablet_schema = std::make_shared<std::vector<MeasurementSchema>>();
+    tablet_schema->emplace_back("s0", INT64, PLAIN, UNCOMPRESSED);
+    if (!missing_tablet_column) {
+        tablet_schema->emplace_back("s1", INT64, PLAIN, UNCOMPRESSED);
+    }
+    Tablet tablet(device_name, tablet_schema, tablet_rows);
+    for (uint32_t row = 0; row < tablet_rows; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), E_OK);
+        ASSERT_EQ(tablet.add_value(row, 0u, int64_t(100 + row)), E_OK);
+        if (!missing_tablet_column) {
+            ASSERT_EQ(tablet.add_value(row, 1u, int64_t(200 + row)), E_OK);
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    if (tablet_rows % page_capacity == 0) {
+        // A full last page must be sealed on every column before switching
+        // from batch writes to record writes, including all-NULL columns.
+        for (MeasurementSchema* schema : schemas) {
+            EXPECT_EQ(schema->value_chunk_writer_->get_point_numer(), 0u);
+        }
+    }
+    if (flush_mode == 1) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    TsRecord sparse(tablet_rows, device_name);
+    sparse.add_point("s0", int64_t(100 + tablet_rows));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(sparse), E_OK);
+    EXPECT_EQ(schemas[0]->value_chunk_writer_->num_of_pages(),
+              schemas[1]->value_chunk_writer_->num_of_pages());
+    EXPECT_EQ(schemas[0]->value_chunk_writer_->get_point_numer(),
+              schemas[1]->value_chunk_writer_->get_point_numer());
+    if (flush_mode == 2) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    TsRecord full(tablet_rows + 1, device_name);
+    full.add_point("s0", int64_t(101 + tablet_rows));
+    full.add_point("s1", int64_t(201 + tablet_rows));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(full), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::string s0("s0"), s1("s1");
+    std::vector<Path> paths{Path(device_name, s0), Path(device_name, s1)};
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(QueryExpression::create(paths, nullptr), result),
+              E_OK);
+    bool has_next = false;
+    uint32_t rows = 0;
+    int ret = E_OK;
+    while ((ret = result->next(has_next)) == E_OK && has_next) {
+        RowRecord* row = result->get_row_record();
+        EXPECT_EQ(row->get_timestamp(), rows);
+        EXPECT_EQ(field_to_string(row->get_field(1)),
+                  std::to_string(100 + rows));
+        const bool is_null = rows == tablet_rows ||
+                             (missing_tablet_column && rows < tablet_rows);
+        EXPECT_EQ(field_to_string(row->get_field(2)),
+                  is_null ? "NULL" : std::to_string(200 + rows));
+        rows++;
+    }
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(rows, tablet_rows + 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(PageBoundaries, AlignedTabletRecordBoundaryTest,
+                         ::testing::Combine(::testing::Values(6u, 7u, 8u, 14u),
+                                            ::testing::Bool(),
+                                            ::testing::Values(0, 1, 2)));
 
 // Same as above, but with rows spread over several pages: the NULL padding of
 // a missing measurement has to keep the page lists of every value column in

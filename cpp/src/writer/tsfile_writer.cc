@@ -305,7 +305,11 @@ int TsFileWriter::register_aligned_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
-    return register_timeseries(device_id, ms, true);
+    int ret = register_timeseries(device_id, ms, true);
+    if (ret != E_OK) {
+        delete ms;
+    }
+    return ret;
 }
 
 int TsFileWriter::register_aligned_timeseries(
@@ -326,7 +330,11 @@ int TsFileWriter::register_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
-    return register_timeseries(device_id, ms, false);
+    int ret = register_timeseries(device_id, ms, false);
+    if (ret != E_OK) {
+        delete ms;
+    }
+    return ret;
 }
 
 int TsFileWriter::register_timeseries(const std::string& device_path,
@@ -963,15 +971,20 @@ int TsFileWriter::write_point(ChunkWriter* chunk_writer, int64_t timestamp,
 }
 
 // After writing one record / batch to the time chunk and every value chunk,
-// keep their page boundaries aligned: if any of them autosealed a page on
-// memory pressure, seal the rest of the open pages too so an aligned reader
-// can still pair position N across time + every value column.
+// keep their page boundaries aligned: if any of them autosealed a page, or
+// the batch left a full current page, seal the rest of the open pages too so
+// an aligned reader can still pair position N across time + every value column.
 int TsFileWriter::maybe_seal_aligned_pages_together(
     TimeChunkWriter* time_chunk_writer,
     common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
     int32_t time_pages_before, const std::vector<int32_t>& value_pages_before) {
+    // Batch writes can leave the last page full without advancing the page
+    // count. Seal it before a later sparse record can split time and NULL
+    // values across different pages.
     bool should_seal_all =
-        time_chunk_writer->num_of_pages() > time_pages_before;
+        time_chunk_writer->num_of_pages() > time_pages_before ||
+        time_chunk_writer->get_point_numer() >=
+            g_config_value_.page_writer_max_point_num_;
     for (uint32_t c = 0; c < value_chunk_writers.size() && !should_seal_all;
          c++) {
         ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
