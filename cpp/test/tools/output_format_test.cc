@@ -346,29 +346,36 @@ TEST(RowWriterTest, PreservesNonUtf8BlobBytesAsHex) {
     }
 }
 
-TEST(RowWriterTest, RejectsJsonKeyCollisionsAfterUtf8Replacement) {
+TEST(RowWriterTest, RejectsColumnCollisionsAfterUtf8Replacement) {
     const std::vector<std::vector<std::string>> headers = {
         {"bad\xff", "bad\xfe"},
         {"bad\xff", "bad\xef\xbf\xbd"},
+        {"same", "same"},
     };
     for (const auto& header : headers) {
-        for (bool no_header : {false, true}) {
-            std::ostringstream out;
-            RowWriter writer(out, OutputFormat::kJson, header,
-                             {common::INT64, common::INT64}, no_header);
-            EXPECT_FALSE(writer.write({"42", "7"}, {false, false}));
-            EXPECT_FALSE(writer.finish());
-            EXPECT_TRUE(out.str().empty());
+        for (OutputFormat format : {OutputFormat::kJson, OutputFormat::kCsv,
+                                    OutputFormat::kTable, OutputFormat::kTsv}) {
+            for (bool no_header : {false, true}) {
+                std::ostringstream out;
+                RowWriter writer(out, format, header,
+                                 {common::INT64, common::INT64}, no_header);
+                EXPECT_FALSE(writer.write({"42", "7"}, {false, false}));
+                EXPECT_FALSE(writer.finish());
+                EXPECT_TRUE(out.str().empty());
+            }
         }
     }
 }
 
-TEST(RowWriterTest, RejectsJsonKeyCollisionsWithoutRows) {
-    std::ostringstream out;
-    RowWriter writer(out, OutputFormat::kJson, {"bad\xff", "bad\xfe"},
-                     {common::STRING, common::STRING}, false);
-    EXPECT_FALSE(writer.finish());
-    EXPECT_TRUE(out.str().empty());
+TEST(RowWriterTest, RejectsColumnCollisionsWithoutRows) {
+    for (OutputFormat format : {OutputFormat::kJson, OutputFormat::kCsv,
+                                OutputFormat::kTable, OutputFormat::kTsv}) {
+        std::ostringstream out;
+        RowWriter writer(out, format, {"bad\xff", "bad\xfe"},
+                         {common::STRING, common::STRING}, false);
+        EXPECT_FALSE(writer.finish());
+        EXPECT_TRUE(out.str().empty());
+    }
 }
 
 TEST(RowWriterTest, CsvEscapesLeadingBackslashesOnlyInTextValues) {
