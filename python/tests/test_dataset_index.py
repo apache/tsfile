@@ -145,6 +145,100 @@ def test_build_publish_map_and_lookup(tmp_path):
         assert index.string(file_record[0]) == str(source)
 
 
+@pytest.mark.parametrize("close_mode", ["explicit", "context", "runtime"])
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("__enter__", ()),
+        ("count", (LOGICAL_SERIES,)),
+        ("record", (LOGICAL_SERIES, 0)),
+        ("records", (LOGICAL_SERIES,)),
+        ("records", (LOGICAL_SERIES, 0, 0)),
+        ("string_bytes", (0,)),
+        ("string", (0,)),
+        ("find_table_ids", ("root",)),
+        ("find_table_ids", ("missing",)),
+        ("find_device_id", (0, "root.")),
+        ("find_column_id", (0, "s1")),
+        ("find_series_id", (0, 0)),
+        ("describe_series", (0,)),
+        ("series_identity", (0,)),
+        ("find_series_span", (0, 0)),
+        ("locator_metadata", (0,)),
+        ("prepared_locator_metadata", (0, 0)),
+        ("device_route", (0,)),
+        ("table_name_id", (0,)),
+        ("column_name_id", (0,)),
+        ("device_time_bounds", (0,)),
+    ],
+)
+def test_index_reads_after_close_raise_runtime_error(
+    tmp_path, close_mode, method, args
+):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    write_index_atomic(
+        str(output), build_sections_from_dataframe(_synthetic_dataframe(str(source)))
+    )
+
+    if close_mode == "runtime":
+        runtime = DatasetRuntime(str(output))
+        lease = runtime.lease()
+        index = runtime.index
+        lease.close()
+        assert runtime._torn_down
+    elif close_mode == "context":
+        with MappedDatasetIndex(str(output)) as index:
+            pass
+    else:
+        index = MappedDatasetIndex(str(output))
+        index.close()
+
+    index.close()
+    assert index._view is None
+    assert index._mmap is None
+    assert index._file is None
+    assert index._lookup is None
+    with pytest.raises(RuntimeError, match="Dataset Index is closed"):
+        result = getattr(index, method)(*args)
+        if method == "records":
+            list(result)
+
+
+@pytest.mark.parametrize("started", [False, True])
+def test_records_iterator_rejects_reads_after_close(tmp_path, started):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    write_index_atomic(
+        str(output), build_sections_from_dataframe(_synthetic_dataframe(str(source)))
+    )
+
+    with MappedDatasetIndex(str(output)) as index:
+        records = index.records(index_module.STRING_OFFSETS)
+        if started:
+            next(records)
+
+    with pytest.raises(RuntimeError, match="Dataset Index is closed"):
+        next(records)
+
+
+def test_closed_subset_rejects_named_read_after_runtime_teardown(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(tmp_path), show_progress=False, use_index=True) as first:
+        with first[:1] as subset:
+            name = str(subset.list_timeseries()[0])
+            runtime = first._runtime
+            first.close()
+        assert runtime._torn_down
+        assert runtime.index._view is None
+        with pytest.raises(RuntimeError, match="closed"):
+            subset[name][:]
+
+
 def test_index_lookup_is_required_and_does_not_unpack_python_record_tuples(
     tmp_path, monkeypatch
 ):

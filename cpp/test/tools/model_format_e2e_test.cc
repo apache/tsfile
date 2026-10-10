@@ -294,8 +294,7 @@ TEST(ComplexTreeFixture, CsvAnswersMatchByteForByte) {
     const std::string path = tsfile_cli_test::write_complex_tree_fixture();
     expect_cli_exact(
         {"head", "-d", "root.test.d1", "-n", "2", "-f", "csv", path}, 0,
-        "time,root.test.d1.m1,root.test.d1.m2,root.test.d1.m3,"
-        "root.test.d1.m4,root.test.d1.m5\n"
+        "time,m1,m2,m3,m4,m5\n"
         "0,0,0.5,value_0,0,100.5\n"
         "1,1,1.5,value_1,2,101.5\n",
         "");
