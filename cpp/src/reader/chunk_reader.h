@@ -91,7 +91,7 @@ class ChunkReader : public IChunkReader {
     bool cur_page_fully_satisfies_filter(Filter* filter);
     int skip_cur_page();
     int decode_cur_page_data(common::TsBlock*& ret_tsblock, Filter* filter,
-                             common::PageArena& pa);
+                             common::PageArena& pa, int* row_offset = nullptr);
     bool prev_page_not_finish() const {
         return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
@@ -101,30 +101,33 @@ class ChunkReader : public IChunkReader {
                                                common::ByteStream& value_in,
                                                common::TsBlock* ret_tsblock,
                                                Filter* filter,
-                                               common::PageArena* pa = nullptr);
+                                               common::PageArena* pa = nullptr,
+                                               int* remaining_offset = nullptr);
     int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
                                          common::ByteStream& value_in,
                                          common::RowAppender& row_appender,
                                          Filter* filter);
     int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender, Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter,
+                            int& row_offset);
     int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender, Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter,
+                            int& row_offset);
     int float_DECODE_TV_BATCH(common::ByteStream& time_in,
                               common::ByteStream& value_in,
-                              common::RowAppender& row_appender,
-                              Filter* filter);
+                              common::RowAppender& row_appender, Filter* filter,
+                              int& row_offset);
     int double_DECODE_TV_BATCH(common::ByteStream& time_in,
                                common::ByteStream& value_in,
                                common::RowAppender& row_appender,
-                               Filter* filter);
+                               Filter* filter, int& row_offset);
     int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
                                             common::ByteStream& value_in,
                                             common::RowAppender& row_appender,
                                             common::PageArena& pa,
-                                            Filter* filter);
+                                            Filter* filter, int& row_offset);
 
    private:
     RandomAccessReadFile* read_file_;

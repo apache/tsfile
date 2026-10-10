@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <vector>
 
@@ -32,22 +33,29 @@
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_table_writer.h"
+#include "writer/tsfile_writer.h"
 
 namespace storage {
 namespace {
 
 class PagePointGuard {
    public:
-    explicit PagePointGuard(uint32_t page_points)
-        : saved_(common::g_config_value_.page_writer_max_point_num_) {
+    explicit PagePointGuard(uint32_t page_points, uint32_t page_bytes = 0)
+        : saved_(common::g_config_value_.page_writer_max_point_num_),
+          saved_bytes_(common::g_config_value_.page_writer_max_memory_bytes_) {
         common::g_config_value_.page_writer_max_point_num_ = page_points;
+        if (page_bytes != 0) {
+            common::g_config_value_.page_writer_max_memory_bytes_ = page_bytes;
+        }
     }
     ~PagePointGuard() {
         common::g_config_value_.page_writer_max_point_num_ = saved_;
+        common::g_config_value_.page_writer_max_memory_bytes_ = saved_bytes_;
     }
 
    private:
     uint32_t saved_;
+    uint32_t saved_bytes_;
 };
 
 class PreparedSeriesBatchTest : public ::testing::Test {
@@ -59,6 +67,7 @@ class PreparedSeriesBatchTest : public ::testing::Test {
         file_name_ = std::string("prepared_series_batch_test_") +
                      (test_info == nullptr ? "unknown" : test_info->name()) +
                      ".tsfile";
+        std::replace(file_name_.begin(), file_name_.end(), '/', '_');
         std::remove(file_name_.c_str());
     }
 
@@ -110,6 +119,173 @@ class PreparedSeriesBatchTest : public ::testing::Test {
 
     std::string file_name_ = "prepared_series_batch_test.tsfile";
 };
+
+class NonAlignedPreparedSeriesOffsetTest
+    : public PreparedSeriesBatchTest,
+      public ::testing::WithParamInterface<uint32_t> {};
+
+TEST_P(NonAlignedPreparedSeriesOffsetTest, AppliesRowOffset) {
+    // Include pages larger than the 65536-row output block so the decoder
+    // resumes an unfinished page on the next read.
+    PagePointGuard guard(GetParam(), 16 * 1024 * 1024);
+    const std::string device = "root.offset";
+    const std::vector<std::string> names = {"boolean", "int32",  "int64",
+                                            "float",   "double", "string"};
+    const std::vector<common::TSDataType> types = {
+        common::BOOLEAN, common::INT32,  common::INT64,
+        common::FLOAT,   common::DOUBLE, common::STRING};
+    auto schemas = std::make_shared<std::vector<MeasurementSchema>>();
+    TsFileWriter writer;
+    ASSERT_EQ(common::E_OK, writer.open(file_name_));
+    for (size_t i = 0; i < names.size(); ++i) {
+        schemas->emplace_back(names[i], types[i], common::PLAIN,
+                              common::UNCOMPRESSED);
+        ASSERT_EQ(common::E_OK,
+                  writer.register_timeseries(device, schemas->back()));
+    }
+    // Flush halfway through to exercise both page and chunk skipping.
+    for (int start : {0, 70000}) {
+        Tablet tablet(device, schemas, 70000);
+        for (int row = 0; row < 70000; ++row) {
+            const int value = start + row;
+            ASSERT_EQ(common::E_OK, tablet.add_timestamp(row, value));
+            ASSERT_EQ(common::E_OK, tablet.add_value(row, 0u, value % 2 == 0));
+            ASSERT_EQ(common::E_OK, tablet.add_value(row, 1u, int32_t(value)));
+            ASSERT_EQ(common::E_OK, tablet.add_value(row, 2u, int64_t(value)));
+            ASSERT_EQ(common::E_OK,
+                      tablet.add_value(row, 3u, float(value) + 0.5f));
+            ASSERT_EQ(common::E_OK,
+                      tablet.add_value(row, 4u, double(value) + 0.5));
+            const std::string text = std::to_string(value);
+            ASSERT_EQ(common::E_OK, tablet.add_value(row, 5u, text.c_str()));
+        }
+        ASSERT_EQ(common::E_OK, writer.write_tablet(tablet));
+        ASSERT_EQ(common::E_OK, writer.flush());
+    }
+    ASSERT_EQ(common::E_OK, writer.close());
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    FileGeneration generation;
+    generation.mapped_index_identity = 1;
+    generation.file_id = 0;
+    struct stat file_stat {};
+    ASSERT_EQ(0, stat(file_name_.c_str(), &file_stat));
+    generation.file_size = static_cast<uint64_t>(file_stat.st_size);
+    generation.file_fingerprint = 0;
+
+    struct Window {
+        int64_t start;
+        int64_t end;
+        int offset;
+        int limit;
+    };
+    const std::vector<Window> windows = {
+        {0, 139999, 30, 10},     // Offset inside the first page.
+        {0, 139999, 10003, 1},   // Output capacity below the decode batch size.
+        {0, 139999, 70003, 7},   // Whole chunk plus a residual.
+        {0, 139999, 13, 65537},  // Resumes decoding a large page.
+        {0, 139999, 69995, 10},  // Window crossing a chunk boundary.
+        {0, 139999, 139990, -1},  // Unlimited tail.
+        {0, 139999, 140001, 5},   // Offset beyond the data.
+        {99, 150, 5, 7},          // Count only rows passing the time filter.
+        {99, 150, 60, 7},         // Offset beyond the filtered rows.
+        {9998, 10005, 3, 4},      // Filter and offset crossing a page boundary.
+        {0, 139999, 30, 0},
+    };
+    auto metadata = reader.get_timeseries_metadata();
+    ASSERT_EQ(1U, metadata.size());
+    ASSERT_EQ(names.size(), metadata.begin()->second.size());
+    for (const auto& device_entry : metadata) {
+        for (const auto& index : device_entry.second) {
+            auto* series_index = dynamic_cast<TimeseriesIndex*>(index.get());
+            ASSERT_NE(nullptr, series_index);
+            PreparedLocator locator;
+            locator.layout = 0;
+            locator.value_metadata_offset = series_index->get_metadata_offset();
+            locator.value_metadata_length = series_index->get_metadata_length();
+            std::shared_ptr<PreparedSeries> prepared;
+            ASSERT_EQ(common::E_OK,
+                      reader.prepare_series(generation, locator, prepared));
+            for (const auto& window : windows) {
+                SCOPED_TRACE(index->get_measurement_name().to_std_string());
+                SCOPED_TRACE(window.offset);
+                ResultSet* result = nullptr;
+                ASSERT_EQ(
+                    common::E_OK,
+                    reader.query_prepared(prepared, window.start, window.end,
+                                          window.offset, window.limit, result));
+                auto* table = dynamic_cast<TableResultSet*>(result);
+                ASSERT_NE(nullptr, table);
+                const int available = std::max(
+                    0, int(window.end - window.start + 1) - window.offset);
+                const int expected_count =
+                    window.limit < 0 ? available
+                                     : std::min(available, window.limit);
+                int count = 0;
+                common::TsBlock* block = nullptr;
+                int ret = common::E_OK;
+                while ((ret = table->get_next_tsblock(block)) == common::E_OK) {
+                    common::RowIterator rows(block);
+                    while (rows.has_next()) {
+                        const int64_t expected =
+                            window.start + window.offset + count;
+                        uint32_t len = 0;
+                        bool is_null = false;
+                        const char* time = rows.read(0, &len, &is_null);
+                        ASSERT_FALSE(is_null);
+                        ASSERT_EQ(expected,
+                                  *reinterpret_cast<const int64_t*>(time));
+                        const char* value = rows.read(1, &len, &is_null);
+                        ASSERT_FALSE(is_null);
+                        switch (index->get_data_type()) {
+                            case common::BOOLEAN:
+                                EXPECT_EQ(
+                                    expected % 2 == 0,
+                                    *reinterpret_cast<const bool*>(value));
+                                break;
+                            case common::INT32:
+                                EXPECT_EQ(
+                                    expected,
+                                    *reinterpret_cast<const int32_t*>(value));
+                                break;
+                            case common::INT64:
+                                EXPECT_EQ(
+                                    expected,
+                                    *reinterpret_cast<const int64_t*>(value));
+                                break;
+                            case common::FLOAT:
+                                EXPECT_FLOAT_EQ(
+                                    expected + 0.5f,
+                                    *reinterpret_cast<const float*>(value));
+                                break;
+                            case common::DOUBLE:
+                                EXPECT_DOUBLE_EQ(
+                                    expected + 0.5,
+                                    *reinterpret_cast<const double*>(value));
+                                break;
+                            case common::STRING:
+                                EXPECT_EQ(std::to_string(expected),
+                                          std::string(value, len));
+                                break;
+                            default:
+                                FAIL() << "Unexpected type";
+                        }
+                        ++count;
+                        rows.next();
+                    }
+                }
+                EXPECT_EQ(common::E_NO_MORE_DATA, ret);
+                EXPECT_EQ(expected_count, count);
+                reader.destroy_query_data_set(result);
+            }
+        }
+    }
+    EXPECT_EQ(common::E_OK, reader.close());
+}
+
+INSTANTIATE_TEST_SUITE_P(PageSizes, NonAlignedPreparedSeriesOffsetTest,
+                         ::testing::Values(10000U, 100000U));
 
 TEST_F(PreparedSeriesBatchTest,
        PreparedQueryReturnsDirectTableResultSetBatches) {
