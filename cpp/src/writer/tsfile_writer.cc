@@ -305,7 +305,8 @@ int TsFileWriter::register_aligned_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
-    int ret = register_timeseries(device_id, ms, true);
+    int ret = register_aligned_timeseries(device_id,
+                                          std::vector<MeasurementSchema*>{ms});
     if (ret != E_OK) {
         delete ms;
     }
@@ -315,14 +316,37 @@ int TsFileWriter::register_aligned_timeseries(
 int TsFileWriter::register_aligned_timeseries(
     const std::string& device_id,
     const std::vector<MeasurementSchema*>& measurement_schemas) {
-    int ret = E_OK;
-    for (auto it : measurement_schemas) {
-        ret = register_timeseries(device_id, it, true);
-        if (ret != E_OK) {
+    std::shared_ptr<IDeviceID> id =
+        std::make_shared<StringArrayDeviceID>(device_id);
+    // Fix the complete aligned schema at the first registration, like Java.
+    // schemas_ survives flush and is rebuilt from metadata during recovery.
+    if (schemas_.find(id) != schemas_.end() || measurement_schemas.empty()) {
+        return E_INVALID_ARG;
+    }
+
+    std::unique_ptr<MeasurementSchemaGroup> group(new MeasurementSchemaGroup);
+    group->is_aligned_ = true;
+    for (auto* schema : measurement_schemas) {
+        if (schema == nullptr) {
+            return E_INVALID_ARG;
+        }
+        if (!group->measurement_schema_map_
+                 .insert(std::make_pair(schema->measurement_name_, schema))
+                 .second) {
+            return E_ALREADY_EXIST;
+        }
+    }
+    // Every registered column must participate from row 0. Publish the group
+    // and take ownership of its schemas only after the entire batch succeeds.
+    for (auto* schema : measurement_schemas) {
+        int ret = ensure_aligned_value_chunk_writer(schema);
+        if (RET_FAIL(ret)) {
             return ret;
         }
     }
-    return ret;
+    schemas_.insert(std::make_pair(id, group.get()));
+    group.release();
+    return E_OK;
 }
 
 int TsFileWriter::register_timeseries(
@@ -330,7 +354,7 @@ int TsFileWriter::register_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
-    int ret = register_timeseries(device_id, ms, false);
+    int ret = register_timeseries(device_id, ms);
     if (ret != E_OK) {
         delete ms;
     }
@@ -338,35 +362,22 @@ int TsFileWriter::register_timeseries(
 }
 
 int TsFileWriter::register_timeseries(const std::string& device_path,
-                                      MeasurementSchema* measurement_schema,
-                                      bool is_aligned) {
+                                      MeasurementSchema* measurement_schema) {
+    if (measurement_schema == nullptr) {
+        return E_INVALID_ARG;
+    }
     std::shared_ptr<IDeviceID> device_id =
         std::make_shared<StringArrayDeviceID>(device_path);
     DeviceSchemasMapIter device_iter = schemas_.find(device_id);
     if (device_iter != schemas_.end()) {
         MeasurementSchemaGroup* device_schema = device_iter->second;
+        // Non-aligned registration must not bypass the fixed aligned schema.
+        if (device_schema->is_aligned_) {
+            return E_INVALID_ARG;
+        }
         MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;
         if (msm.find(measurement_schema->measurement_name_) != msm.end()) {
             return E_ALREADY_EXIST;
-        }
-        if (device_schema->is_aligned_ &&
-            device_schema->time_chunk_writer_ != nullptr &&
-            device_schema->time_chunk_writer_->hasData()) {
-            // A column added now would have to be padded with the rows (and
-            // pages) that were already written, which the current page writer
-            // cannot express.  Java does not allow an aligned device to be
-            // expanded at all; refuse loudly instead of silently writing a
-            // chunk group whose value column row counts diverge from the time
-            // column.
-            return E_INVALID_ARG;
-        }
-        // Aligned devices advance every registered measurement on every row,
-        // so the value chunk writer has to exist before the first row.
-        if (device_schema->is_aligned_) {
-            int ret = ensure_aligned_value_chunk_writer(measurement_schema);
-            if (RET_FAIL(ret)) {
-                return ret;
-            }
         }
         MeasurementSchemaMapInsertResult ins_res = msm.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
@@ -375,14 +386,6 @@ int TsFileWriter::register_timeseries(const std::string& device_path,
         }
     } else {
         MeasurementSchemaGroup* ms_group = new MeasurementSchemaGroup;
-        ms_group->is_aligned_ = is_aligned;
-        if (is_aligned) {
-            int ret = ensure_aligned_value_chunk_writer(measurement_schema);
-            if (RET_FAIL(ret)) {
-                delete ms_group;
-                return ret;
-            }
-        }
         ms_group->measurement_schema_map_.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
         schemas_.insert(std::make_pair(device_id, ms_group));

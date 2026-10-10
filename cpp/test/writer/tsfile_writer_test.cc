@@ -480,18 +480,21 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
         device_num, std::vector<MeasurementSchema>(measurement_num));
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        std::vector<MeasurementSchema*> schemas;
         for (int j = 0; j < measurement_num; j++) {
             std::string measure_name = "measurement" + std::to_string(j);
             schema_vecs[i][j] =
                 MeasurementSchema(measure_name, common::TSDataType::INT32,
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED);
-            tsfile_writer_->register_aligned_timeseries(
-                device_name, storage::MeasurementSchema(
-                                 measure_name, common::TSDataType::INT32,
-                                 common::TSEncoding::PLAIN,
-                                 common::CompressionType::UNCOMPRESSED));
+            schemas.push_back(
+                new MeasurementSchema(measure_name, common::TSDataType::INT32,
+                                      common::TSEncoding::PLAIN,
+                                      common::CompressionType::UNCOMPRESSED));
         }
+        ASSERT_EQ(
+            tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+            E_OK);
     }
 
     for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
@@ -1957,40 +1960,62 @@ TEST_F(TsFileWriterTest, AlignedRecordDuplicateMeasurementWritesOneRow) {
     ASSERT_EQ(reader.close(), E_OK);
 }
 
-// New columns have to be padded with the rows (and pages) that were already
-// written, which the aligned writer cannot express: reject the registration
-// instead of writing a chunk group whose value column is shifted.
-TEST_F(TsFileWriterTest, AlignedRegisterAfterWriteIsRejected) {
-    std::string device_name = "device_late_m";
-    std::vector<MeasurementSchema*> schemas;
-    schemas.push_back(new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
-    tsfile_writer_->register_aligned_timeseries(device_name, schemas);
+// Like Java, fix the complete aligned measurement list at registration, even
+// before the first write. Flushing must not make the device extensible again.
+class AlignedRegistrationTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<std::tuple<bool, int>> {};
 
-    TsRecord record(1, device_name);
-    record.add_point("s0", static_cast<int64_t>(1));
-    ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+TEST_P(AlignedRegistrationTest, MeasurementsAreFixedAtRegistration) {
+    const bool single_measurement = std::get<0>(GetParam());
+    const int stage = std::get<1>(GetParam());
+    std::string device_name = "device_late_m";
+    if (single_measurement) {
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(
+                      device_name,
+                      MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED)),
+                  E_OK);
+    } else {
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+            new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(
+            tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+            E_OK);
+    }
+    if (stage == 1) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    TsRecord first(0, device_name);
+    first.add_point("s0", int64_t(100));
+    if (stage >= 2) {
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(first), E_OK);
+    }
+    if (stage == 3) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
 
     // The writer only takes ownership of a schema when the registration
     // succeeds, so a rejected one has to be released by the caller.
-    MeasurementSchema* extra_schema =
-        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED);
-    std::vector<MeasurementSchema*> extra{extra_schema};
-    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, extra),
-              E_INVALID_ARG);
-    delete extra_schema;
-
-    // A second registration of the same measurement is still reported as a
-    // duplicate, not as a late registration.
-    MeasurementSchema* dup_schema =
-        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED);
-    std::vector<MeasurementSchema*> dup{dup_schema};
-    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, dup),
-              E_ALREADY_EXIST);
-    delete dup_schema;
+    for (bool aligned : {true, false}) {
+        for (const std::string& name : {"extra", "s0"}) {
+            auto* schema =
+                new MeasurementSchema(name, INT64, PLAIN, UNCOMPRESSED);
+            std::vector<MeasurementSchema*> extra{schema};
+            int ret = aligned ? tsfile_writer_->register_aligned_timeseries(
+                                    device_name, extra)
+                              : tsfile_writer_->register_timeseries(device_name,
+                                                                    extra);
+            EXPECT_EQ(ret, E_INVALID_ARG);
+            if (ret != E_OK) {
+                delete schema;
+            }
+        }
+    }
 
     // The schema-reference overloads own their internal copies even when the
     // registration is rejected. Exercise both wrappers under leak checking.
-    MeasurementSchema extra_value("s2", INT64, PLAIN, UNCOMPRESSED);
+    MeasurementSchema extra_value("extra_value", INT64, PLAIN, UNCOMPRESSED);
     EXPECT_EQ(
         tsfile_writer_->register_aligned_timeseries(device_name, extra_value),
         E_INVALID_ARG);
@@ -1999,10 +2024,115 @@ TEST_F(TsFileWriterTest, AlignedRegisterAfterWriteIsRejected) {
     MeasurementSchema duplicate_value("s0", INT64, PLAIN, UNCOMPRESSED);
     EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name,
                                                           duplicate_value),
-              E_ALREADY_EXIST);
+              E_INVALID_ARG);
     EXPECT_EQ(tsfile_writer_->register_timeseries(device_name, duplicate_value),
-              E_ALREADY_EXIST);
+              E_INVALID_ARG);
 
+    auto* groups = tsfile_writer_->get_schema_group_map();
+    ASSERT_EQ(groups->size(), 1u);
+    ASSERT_EQ(groups->begin()->second->measurement_schema_map_.size(),
+              single_measurement ? 1u : 2u);
+    if (stage < 2) {
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(first), E_OK);
+    }
+    TsRecord second(1, device_name);
+    second.add_point("s0", int64_t(101));
+    if (!single_measurement) {
+        second.add_point("s1", int64_t(201));
+    }
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(second), E_OK);
+
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<Path> paths;
+    std::string s0("s0"), s1("s1");
+    paths.emplace_back(device_name, s0);
+    if (!single_measurement) {
+        paths.emplace_back(device_name, s1);
+    }
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(QueryExpression::create(paths, nullptr), result),
+              E_OK);
+    bool has_next = false;
+    int row = 0;
+    while (IS_SUCC(result->next(has_next)) && has_next) {
+        RowRecord* record = result->get_row_record();
+        EXPECT_EQ(record->get_timestamp(), row);
+        EXPECT_EQ(field_to_string(record->get_field(1)),
+                  std::to_string(100 + row));
+        if (!single_measurement) {
+            EXPECT_EQ(field_to_string(record->get_field(2)),
+                      row == 0 ? "NULL" : "201");
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(RegistrationStages, AlignedRegistrationTest,
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Values(0, 1, 2, 3)));
+
+class AlignedRegistrationFailureTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<int> {};
+
+TEST_P(AlignedRegistrationFailureTest, FailedBatchCanBeRetried) {
+    std::string device = "device_failed_registration";
+    std::unique_ptr<MeasurementSchema> first(
+        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
+    std::unique_ptr<MeasurementSchema> second(
+        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED));
+    std::unique_ptr<MeasurementSchema> invalid(new MeasurementSchema(
+        GetParam() == 2 ? "s0" : "bad", INT64, DICTIONARY, UNCOMPRESSED));
+    std::vector<MeasurementSchema*> batch;
+    if (GetParam() == 1) {
+        batch = {first.get(), nullptr};
+    } else if (GetParam() >= 2) {
+        batch = {first.get(), invalid.get()};
+    }
+    // Empty list, null pointer, duplicate name, or unsupported encoding.
+    EXPECT_NE(tsfile_writer_->register_aligned_timeseries(device, batch), E_OK);
+    ASSERT_TRUE(tsfile_writer_->get_schema_group_map()->empty());
+
+    batch = {first.get(), second.get()};
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, batch), E_OK);
+    first.release();
+    second.release();
+    TsRecord record(0, device);
+    record.add_point("s0", int64_t(100));
+    record.add_point("s1", int64_t(200));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(InvalidBatches, AlignedRegistrationFailureTest,
+                         ::testing::Values(0, 1, 2, 3));
+
+TEST_F(TsFileWriterTest, NonAlignedRegistrationRemainsIncremental) {
+    std::string device = "nonaligned_device";
+    MeasurementSchema s0("s0", INT64, PLAIN, UNCOMPRESSED);
+    MeasurementSchema s1("s1", INT64, PLAIN, UNCOMPRESSED);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, s0), E_OK);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, s1), E_OK);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device, s0), E_ALREADY_EXIST);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device, s0),
+              E_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device, s1),
+              E_INVALID_ARG);
+    auto* group = tsfile_writer_->get_schema_group_map()->begin()->second;
+    EXPECT_FALSE(group->is_aligned_);
+    EXPECT_EQ(group->measurement_schema_map_.size(), 2u);
+    TsRecord record(0, device);
+    record.add_point("s0", int64_t(100));
+    record.add_point("s1", int64_t(200));
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }

@@ -253,16 +253,18 @@ TEST_P(MetadataReadLengthTest, RejectsIncompleteRangesBeforeParsing) {
     for (const bool aligned : {false, true}) {
         const std::string device = aligned ? "root.aligned" : "root.unaligned";
         TsRecord record(100, device);
+        std::vector<MeasurementSchema*> schemas;
         for (int column = 0; column < GetParam(); ++column) {
             const std::string name = "value" + std::to_string(column);
-            MeasurementSchema schema(name, INT32, PLAIN, UNCOMPRESSED);
-            ASSERT_EQ(aligned
-                          ? tsfile_writer_->register_aligned_timeseries(device,
-                                                                        schema)
-                          : tsfile_writer_->register_timeseries(device, schema),
-                      E_OK);
+            schemas.push_back(
+                new MeasurementSchema(name, INT32, PLAIN, UNCOMPRESSED));
             record.add_point(name, static_cast<int32_t>(42));
         }
+        ASSERT_EQ(
+            aligned
+                ? tsfile_writer_->register_aligned_timeseries(device, schemas)
+                : tsfile_writer_->register_timeseries(device, schemas),
+            E_OK);
         ASSERT_EQ(aligned ? tsfile_writer_->write_record_aligned(record)
                           : tsfile_writer_->write_record(record),
                   E_OK);

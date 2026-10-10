@@ -485,6 +485,84 @@ TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
     reader.close();
 }
 
+TEST_F(RestorableTsFileIOWriterTest,
+       RecoveredAlignedDeviceRejectsMeasurementRegistration) {
+    std::string device = "d1";
+    {
+        TsFileWriter writer;
+        ASSERT_EQ(writer.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+            new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(writer.register_aligned_timeseries(device, schemas), E_OK);
+        TsRecord record(0, device);
+        record.add_point("s0", int64_t(100));
+        // s1 is registered but entirely NULL before recovery.
+        ASSERT_EQ(writer.write_record_aligned(record), E_OK);
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter recovery;
+    ASSERT_EQ(recovery.open(file_name_, true), E_OK);
+    ASSERT_TRUE(recovery.can_write());
+    {
+        TsFileTreeWriter writer(&recovery);
+        for (const std::string& name : {"extra", "s0"}) {
+            auto* schema =
+                new MeasurementSchema(name, INT64, PLAIN, UNCOMPRESSED);
+            int ret = writer.register_timeseries(
+                device, std::vector<MeasurementSchema*>{schema});
+            EXPECT_EQ(ret, E_INVALID_ARG);
+            if (ret != E_OK) {
+                delete schema;
+            }
+        }
+        MeasurementSchema schema("nonaligned_extra", INT64, PLAIN,
+                                 UNCOMPRESSED);
+        EXPECT_EQ(writer.register_timeseries(device, &schema), E_INVALID_ARG);
+        TsRecord record(1, device);
+        record.add_point("s0", int64_t(101));
+        record.add_point("s1", int64_t(201));
+        ASSERT_EQ(writer.write(record), E_OK);
+
+        // The restriction belongs to the recovered device, not the whole file.
+        std::string other_device = "d2";
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(writer.register_timeseries(other_device, schemas), E_OK);
+        TsRecord other(2, other_device);
+        other.add_point("s0", int64_t(302));
+        ASSERT_EQ(writer.write(other), E_OK);
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query({device}, {"s0", "s1"}, 0, 10, result), E_OK);
+    auto it = result->iterator();
+    int row = 0;
+    while (it.hasNext()) {
+        RowRecord* record = it.next();
+        EXPECT_EQ(record->get_timestamp(), row);
+        EXPECT_EQ(record->get_field(1)->type_, INT64);
+        EXPECT_EQ(record->get_field(1)->value_.lval_, 100 + row);
+        if (row == 0) {
+            EXPECT_EQ(record->get_field(2)->type_, NULL_TYPE);
+        } else {
+            EXPECT_EQ(record->get_field(2)->type_, INT64);
+            EXPECT_EQ(record->get_field(2)->value_.lval_, 201);
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
 // -----------------------------------------------------------------------------
 // Recovery + continued write with TsFileTableWriter (table model), then
 // read-back
