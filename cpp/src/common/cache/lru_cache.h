@@ -88,9 +88,6 @@ class Cache {
         prune();
     }
 
-    /** Backward-compatible copying lookup. */
-    bool tryGet(const Key& k, Value& vOut) { return tryGetCopy(k, vOut); }
-
     bool tryGetCopy(const Key& k, Value& vOut) {
         const Value* value = getPtr(k);
         if (value == nullptr) {
@@ -109,12 +106,6 @@ class Cache {
         return vOut != nullptr;
     }
 
-    /**
-     * Legacy overload retained for source compatibility. Despite its historic
-     * name it copies; new code should use the pointer overload or getPtr().
-     */
-    bool tryGetRef(const Key& k, Value& vOut) { return tryGetCopy(k, vOut); }
-
     /** Returns nullptr on miss and promotes a hit without copying the value. */
     const Value* getPtr(const Key& k) {
         const auto iter = cache_.find(k);
@@ -132,9 +123,6 @@ class Cache {
         }
         return *value;
     }
-
-    /** Backward-compatible copying lookup. */
-    Value get(const Key& k) { return getCopy(k); }
 
     Value getCopy(const Key& k) { return getRef(k); }
 

@@ -533,8 +533,10 @@ TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
         load_device(i);
     }
     ASSERT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
     const int64_t memory_at_capacity = io_reader.TEST_reader_memory_bytes();
     ASSERT_GT(memory_at_capacity, 0);
+#endif
 
     // Filling beyond capacity must evict old nodes and reclaim their per-entry
     // arenas rather than retaining more reader metadata memory.
@@ -542,13 +544,17 @@ TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
         load_device(i);
     }
     EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
     EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
+#endif
 
     // d0 was the least-recently-used entry and has been evicted. Loading it
     // again must still work, evict another entry, and keep memory flat.
     load_device(0);
     EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
     EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
+#endif
 }
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
