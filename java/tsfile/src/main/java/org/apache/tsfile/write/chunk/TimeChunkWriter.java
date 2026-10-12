@@ -275,7 +275,9 @@ public class TimeChunkWriter {
     firstPageStatistics = null;
     this.statistics = new TimeStatistics();
     this.chunkOrdinal = nextChunkOrdinal();
-    pageWriter.setChunkOrdinal(chunkOrdinal);
+    if (pageWriter != null) {
+      pageWriter.setChunkOrdinal(chunkOrdinal);
+    }
   }
 
   public long estimateMaxSeriesMemSize() {

@@ -327,7 +327,9 @@ public class ValueChunkWriter {
     firstPageStatistics = null;
     this.statistics = Statistics.getStatsByType(dataType);
     this.chunkOrdinal = nextChunkOrdinal();
-    pageWriter.setChunkOrdinal(chunkOrdinal);
+    if (pageWriter != null) {
+      pageWriter.setChunkOrdinal(chunkOrdinal);
+    }
   }
 
   public long estimateMaxSeriesMemSize() {

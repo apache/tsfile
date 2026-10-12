@@ -377,7 +377,9 @@ public class ChunkWriterImpl implements IChunkWriter {
     firstPageStatistics = null;
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.chunkOrdinal = nextChunkOrdinal();
-    pageWriter.setChunkOrdinal(chunkOrdinal);
+    if (pageWriter != null) {
+      pageWriter.setChunkOrdinal(chunkOrdinal);
+    }
   }
 
   @Override

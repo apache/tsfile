@@ -362,6 +362,74 @@ public class TDEPageAeadTsFileTest {
   }
 
   @Test
+  public void testFlushAfterClearingPageWriter() throws Exception {
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        TsFileIOWriter writer = new TsFileIOWriter(file, parameter)) {
+      writer.startChunkGroup(
+          org.apache.tsfile.file.metadata.IDeviceID.Factory.DEFAULT_FACTORY.create("d1"));
+      ChunkWriterImpl chunkWriter =
+          new ChunkWriterImpl(
+              new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.RLE), parameter);
+      chunkWriter.write(1L, 42L);
+      chunkWriter.sealCurrentPage();
+      chunkWriter.clearPageWriter();
+      chunkWriter.writeToFileWriter(writer);
+      writer.endChunkGroup();
+      writer.endFile();
+    }
+    try (TsFileReader reader = new TsFileReader(new TsFileSequenceReader(file.getPath()))) {
+      QueryDataSet data =
+          reader.query(QueryExpression.create(Arrays.asList(new Path("d1", "s1", true)), null));
+      assertEquals(42L, data.next().getFields().get(0).getLongV());
+      assertFalse(data.hasNext());
+    }
+  }
+
+  @Test
+  public void testAlignedFlushAfterClearingPageWriters() throws Exception {
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        TsFileIOWriter writer = new TsFileIOWriter(file, parameter)) {
+      writer.startChunkGroup(
+          org.apache.tsfile.file.metadata.IDeviceID.Factory.DEFAULT_FACTORY.create("d1"));
+      TimeChunkWriter time =
+          new TimeChunkWriter(
+              "",
+              CompressionType.UNCOMPRESSED,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              parameter);
+      ValueChunkWriter value =
+          new ValueChunkWriter(
+              "s1",
+              CompressionType.UNCOMPRESSED,
+              TSDataType.INT64,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              parameter);
+      time.write(1L);
+      value.write(1L, 42L, false);
+      time.sealCurrentPage();
+      value.sealCurrentPage();
+      time.clearPageWriter();
+      value.clearPageWriter();
+      time.writeToFileWriter(writer);
+      value.writeToFileWriter(writer);
+      writer.endChunkGroup();
+      writer.endFile();
+    }
+    try (TsFileReader reader = new TsFileReader(new TsFileSequenceReader(file.getPath()))) {
+      QueryDataSet data =
+          reader.query(QueryExpression.create(Arrays.asList(new Path("d1", "s1", true)), null));
+      assertEquals(42L, data.next().getFields().get(0).getLongV());
+      assertFalse(data.hasNext());
+    }
+  }
+
+  @Test
   public void testEncryptedChunkRewriteUsesNewOrdinal() throws Exception {
     EncryptParameter encryptParameter =
         TestAeadEncryptionProvider.createParameter(
