@@ -41,7 +41,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.LongConsumer;
 
+/** Owns the supplied time and value chunks' encryption references until {@link #close()}. */
 public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
+  private final Chunk timeChunk;
+  private final List<Chunk> valueChunks;
   // chunk header of the time column
   private final ChunkHeader timeChunkHeader;
   // chunk data of the time column
@@ -67,6 +70,8 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
       LongConsumer filterRowsRecorder)
       throws IOException {
     super(readStopTime, queryFilter, filterRowsRecorder);
+    this.timeChunk = timeChunk;
+    this.valueChunks = new ArrayList<>(valueChunkList);
     this.timeChunkHeader = timeChunk.getHeader();
     this.timeChunkDataBuffer = timeChunk.getData();
     this.timeDeleteIntervalList = timeChunk.getDeleteIntervalList();
@@ -81,7 +86,22 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
           valueChunkStatisticsList.add(chunk == null ? null : chunk.getChunkStatistic());
         });
     this.encryptParam = timeChunk.getEncryptParam();
-    initAllPageReaders(timeChunk.getChunkStatistic(), valueChunkStatisticsList);
+    try {
+      initAllPageReaders(timeChunk.getChunkStatistic(), valueChunkStatisticsList);
+    } catch (IOException | RuntimeException | Error e) {
+      close();
+      throw e;
+    }
+  }
+
+  @Override
+  public void close() {
+    timeChunk.close();
+    for (Chunk valueChunk : valueChunks) {
+      if (valueChunk != null) {
+        valueChunk.close();
+      }
+    }
   }
 
   /** construct all the page readers in this chunk */

@@ -41,8 +41,10 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.function.LongConsumer;
 
+/** Owns the supplied chunk's encryption reference until {@link #close()}. */
 public class ChunkReader extends AbstractChunkReader {
 
+  private final Chunk chunk;
   private final ChunkHeader chunkHeader;
   private final ByteBuffer chunkDataBuffer;
   private final List<TimeRange> deleteIntervalList;
@@ -53,11 +55,22 @@ public class ChunkReader extends AbstractChunkReader {
   public ChunkReader(
       Chunk chunk, long readStopTime, Filter queryFilter, LongConsumer filterRowsRecorder) {
     super(readStopTime, queryFilter, filterRowsRecorder);
+    this.chunk = chunk;
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
     this.deleteIntervalList = chunk.getDeleteIntervalList();
     this.encryptParam = chunk.getEncryptParam();
-    initAllPageReaders(chunk.getChunkStatistic());
+    try {
+      initAllPageReaders(chunk.getChunkStatistic());
+    } catch (RuntimeException | Error e) {
+      chunk.close();
+      throw e;
+    }
+  }
+
+  @Override
+  public void close() {
+    chunk.close();
   }
 
   public ChunkReader(Chunk chunk) throws IOException {

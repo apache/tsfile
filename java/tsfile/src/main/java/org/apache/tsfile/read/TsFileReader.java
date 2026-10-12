@@ -34,8 +34,10 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TsFileReader implements AutoCloseable {
@@ -44,6 +46,7 @@ public class TsFileReader implements AutoCloseable {
   private IMetadataQuerier metadataQuerier;
   private IChunkLoader chunkLoader;
   private TsFileExecutor tsfileExecutor;
+  private final Set<QueryDataSet> queryDataSets = new HashSet<>();
 
   @TsFileApi
   public TsFileReader(File file) throws IOException {
@@ -59,13 +62,20 @@ public class TsFileReader implements AutoCloseable {
   }
 
   public QueryDataSet query(QueryExpression queryExpression) throws IOException {
-    return tsfileExecutor.execute(queryExpression);
+    return retainQuery(tsfileExecutor.execute(queryExpression));
   }
 
   public QueryDataSet query(
       QueryExpression queryExpression, long partitionStartOffset, long partitionEndOffset)
       throws IOException {
-    return tsfileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset);
+    return retainQuery(
+        tsfileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset));
+  }
+
+  private QueryDataSet retainQuery(QueryDataSet dataSet) {
+    queryDataSets.removeIf(QueryDataSet::isClosed);
+    queryDataSets.add(dataSet);
+    return dataSet;
   }
 
   public List<String> getAllDeviceIds() throws IOException {
@@ -87,6 +97,33 @@ public class TsFileReader implements AutoCloseable {
   @Override
   @TsFileApi
   public void close() throws IOException {
-    fileReader.close();
+    IOException failure = null;
+    try {
+      for (QueryDataSet dataSet : queryDataSets) {
+        try {
+          dataSet.close();
+        } catch (IOException e) {
+          if (failure == null) {
+            failure = e;
+          } else {
+            failure.addSuppressed(e);
+          }
+        }
+      }
+    } finally {
+      queryDataSets.clear();
+      try {
+        fileReader.close();
+      } catch (IOException e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
   }
 }

@@ -65,19 +65,29 @@ public class FileSeriesReader extends AbstractFileSeriesReader {
       Chunk timeChunk =
           chunkLoader.loadChunk((ChunkMetadata) (alignedChunkMetadata.getTimeChunkMetadata()));
       List<Chunk> valueChunkList = new ArrayList<>();
-      for (IChunkMetadata metadata : alignedChunkMetadata.getValueChunkMetadataList()) {
-        if (metadata != null) {
-          valueChunkList.add(chunkLoader.loadChunk((ChunkMetadata) metadata));
-          currentChunkMeasurementNames.add(metadata.getMeasurementUid());
-          continue;
+      try {
+        for (IChunkMetadata metadata : alignedChunkMetadata.getValueChunkMetadataList()) {
+          if (metadata != null) {
+            valueChunkList.add(chunkLoader.loadChunk((ChunkMetadata) metadata));
+            currentChunkMeasurementNames.add(metadata.getMeasurementUid());
+            continue;
+          }
+          valueChunkList.add(null);
+          currentChunkMeasurementNames.add(null);
         }
-        valueChunkList.add(null);
-        currentChunkMeasurementNames.add(null);
-      }
-      if (ignoreAllNullRows) {
-        this.chunkReader = new AlignedChunkReader(timeChunk, valueChunkList, filter);
-      } else {
-        this.chunkReader = new TableChunkReader(timeChunk, valueChunkList, filter);
+        if (ignoreAllNullRows) {
+          this.chunkReader = new AlignedChunkReader(timeChunk, valueChunkList, filter);
+        } else {
+          this.chunkReader = new TableChunkReader(timeChunk, valueChunkList, filter);
+        }
+      } catch (IOException | RuntimeException | Error e) {
+        timeChunk.close();
+        for (Chunk valueChunk : valueChunkList) {
+          if (valueChunk != null) {
+            valueChunk.close();
+          }
+        }
+        throw e;
       }
     }
   }

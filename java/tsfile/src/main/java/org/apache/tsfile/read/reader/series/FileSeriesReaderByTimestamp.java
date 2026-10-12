@@ -38,7 +38,7 @@ import java.util.List;
  * Series reader is used to query one series of one tsfile, using this reader to query the value of
  * a series with given timestamps.
  */
-public class FileSeriesReaderByTimestamp {
+public class FileSeriesReaderByTimestamp implements AutoCloseable {
 
   protected IChunkLoader chunkLoader;
   protected List<IChunkMetadata> chunkMetadataList;
@@ -99,6 +99,8 @@ public class FileSeriesReaderByTimestamp {
           data = chunkReader.nextPageData();
         } else if (!constructNextSatisfiedChunkReader()) {
           return null;
+        } else {
+          data = chunkReader.nextPageData();
         }
       }
     }
@@ -137,11 +139,15 @@ public class FileSeriesReaderByTimestamp {
   }
 
   private boolean constructNextSatisfiedChunkReader() throws IOException {
+    closeChunkReader();
     while (currentChunkIndex < chunkMetadataList.size()) {
       IChunkMetadata chunkMetaData = chunkMetadataList.get(currentChunkIndex++);
       if (chunkSatisfied(chunkMetaData)) {
         initChunkReader(chunkMetaData);
-        return true;
+        if (chunkReader.hasNextSatisfiedPage()) {
+          return true;
+        }
+        closeChunkReader();
       }
     }
     return false;
@@ -156,14 +162,38 @@ public class FileSeriesReaderByTimestamp {
       Chunk timeChunk =
           chunkLoader.loadChunk((ChunkMetadata) (alignedChunkMetadata.getTimeChunkMetadata()));
       List<Chunk> valueChunkList = new ArrayList<>();
-      for (IChunkMetadata metadata : alignedChunkMetadata.getValueChunkMetadataList()) {
-        valueChunkList.add(chunkLoader.loadChunk((ChunkMetadata) metadata));
+      try {
+        for (IChunkMetadata metadata : alignedChunkMetadata.getValueChunkMetadataList()) {
+          valueChunkList.add(chunkLoader.loadChunk((ChunkMetadata) metadata));
+        }
+        this.chunkReader = new AlignedChunkReader(timeChunk, valueChunkList, currentTimestamp);
+      } catch (IOException | RuntimeException | Error e) {
+        timeChunk.close();
+        for (Chunk valueChunk : valueChunkList) {
+          valueChunk.close();
+        }
+        throw e;
       }
-      this.chunkReader = new AlignedChunkReader(timeChunk, valueChunkList, currentTimestamp);
     }
   }
 
   private boolean chunkSatisfied(IChunkMetadata chunkMetaData) {
     return chunkMetaData.getEndTime() >= currentTimestamp;
+  }
+
+  private void closeChunkReader() throws IOException {
+    if (chunkReader != null) {
+      try {
+        chunkReader.close();
+      } finally {
+        chunkReader = null;
+        data = null;
+      }
+    }
+  }
+
+  @Override
+  public void close() throws IOException {
+    closeChunkReader();
   }
 }

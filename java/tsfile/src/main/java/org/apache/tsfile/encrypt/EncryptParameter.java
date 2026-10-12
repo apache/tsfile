@@ -50,7 +50,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
   private final byte[] fileCryptoId;
   private final AtomicLong nextChunkOrdinal;
 
-  private transient volatile IEncrypt fileEncrypt;
+  private final FileEncryptContext fileEncryptContext;
   private transient volatile boolean destroyed;
 
   public EncryptParameter(String type, byte[] key) {
@@ -64,6 +64,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.wrappedDataKey = null;
     this.fileCryptoId = null;
     this.nextChunkOrdinal = new AtomicLong();
+    this.fileEncryptContext = null;
   }
 
   private EncryptParameter(Builder builder) {
@@ -78,6 +79,22 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.fileCryptoId = copy(builder.fileCryptoId);
     this.nextChunkOrdinal =
         builder.nextChunkOrdinal == null ? new AtomicLong() : builder.nextChunkOrdinal;
+    this.fileEncryptContext = new FileEncryptContext();
+  }
+
+  private EncryptParameter(EncryptParameter source) {
+    this.type = source.type;
+    this.key = copy(source.key);
+    this.pageAead = source.pageAead;
+    this.providerId = source.providerId;
+    this.profileId = source.profileId;
+    this.keyId = source.keyId;
+    this.keyVersion = source.keyVersion;
+    this.wrappedDataKey = copy(source.wrappedDataKey);
+    this.fileCryptoId = copy(source.fileCryptoId);
+    this.nextChunkOrdinal = source.nextChunkOrdinal;
+    this.fileEncryptContext = source.fileEncryptContext;
+    this.fileEncryptContext.retain();
   }
 
   public static Builder pageAeadBuilder() {
@@ -85,7 +102,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
   }
 
   /** Returns an independent parameter object with no initialized runtime provider state. */
-  public EncryptParameter copy() {
+  public synchronized EncryptParameter copy() {
     if (destroyed) {
       throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
     }
@@ -102,6 +119,17 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
         .fileCryptoId(fileCryptoId)
         .nextChunkOrdinal(nextChunkOrdinal)
         .build();
+  }
+
+  /**
+   * Returns an owned reference sharing this file's runtime provider. Each reference must be closed;
+   * the provider is destroyed only after the last reference closes. Legacy parameters are copied.
+   */
+  public synchronized EncryptParameter retain() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    return pageAead ? new EncryptParameter(this) : copy();
   }
 
   /** Allocates a file-unique identity before the first page of a chunk is encrypted. */
@@ -192,24 +220,11 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
         && Arrays.equals(key, other.key);
   }
 
-  IEncrypt getOrCreateFileEncrypt() {
+  synchronized IEncrypt getOrCreateFileEncrypt() {
     if (destroyed) {
       throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
     }
-    IEncrypt current = fileEncrypt;
-    if (current == null) {
-      synchronized (this) {
-        if (destroyed) {
-          throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
-        }
-        current = fileEncrypt;
-        if (current == null) {
-          current = EncryptionProviderRegistry.create(this);
-          fileEncrypt = current;
-        }
-      }
-    }
-    return current;
+    return fileEncryptContext.getOrCreate(this);
   }
 
   @Override
@@ -219,20 +234,17 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
 
   @Override
   public void destroy() {
-    IEncrypt current;
     synchronized (this) {
       if (destroyed) {
         return;
       }
       destroyed = true;
-      current = fileEncrypt;
-      fileEncrypt = null;
       if (key != null && isTdePageAead()) {
         Arrays.fill(key, (byte) 0);
       }
     }
-    if (current != null) {
-      current.close();
+    if (fileEncryptContext != null) {
+      fileEncryptContext.release();
     }
   }
 
@@ -243,6 +255,35 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
 
   private static byte[] copy(byte[] value) {
     return value == null ? null : Arrays.copyOf(value, value.length);
+  }
+
+  private static final class FileEncryptContext {
+    private int references = 1;
+    private IEncrypt fileEncrypt;
+
+    private synchronized void retain() {
+      references++;
+    }
+
+    private synchronized IEncrypt getOrCreate(EncryptParameter parameter) {
+      if (fileEncrypt == null) {
+        fileEncrypt = EncryptionProviderRegistry.create(parameter);
+      }
+      return fileEncrypt;
+    }
+
+    private void release() {
+      IEncrypt toClose = null;
+      synchronized (this) {
+        if (--references == 0) {
+          toClose = fileEncrypt;
+          fileEncrypt = null;
+        }
+      }
+      if (toClose != null) {
+        toClose.close();
+      }
+    }
   }
 
   public static final class Builder {

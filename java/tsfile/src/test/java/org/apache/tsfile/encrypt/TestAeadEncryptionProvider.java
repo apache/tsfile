@@ -48,6 +48,7 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
       };
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
   private static final AtomicInteger CREATE_COUNT = new AtomicInteger();
+  private static final AtomicInteger CLOSE_COUNT = new AtomicInteger();
 
   private TestAeadEncryptionProvider() {}
 
@@ -79,6 +80,10 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
 
   public static int getCreateCount() {
     return CREATE_COUNT.get();
+  }
+
+  public static int getCloseCount() {
+    return CLOSE_COUNT.get();
   }
 
   public static void resetCreateCount() {
@@ -137,6 +142,7 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     @Override
     public void close() {
       Arrays.fill(dataKey, (byte) 0);
+      CLOSE_COUNT.incrementAndGet();
     }
   }
 

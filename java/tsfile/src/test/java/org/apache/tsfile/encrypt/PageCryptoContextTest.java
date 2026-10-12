@@ -26,11 +26,19 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -110,6 +118,122 @@ public class PageCryptoContextTest {
       assertEquals(12, parameter.nextChunkOrdinal());
     } finally {
       parameter.close();
+    }
+  }
+
+  @Test
+  public void testRetainedReferencesShareProviderUntilLastClose() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    int previousCloseCount = TestAeadEncryptionProvider.getCloseCount();
+    try (EncryptParameter first = parameter.retain();
+        EncryptParameter second = parameter.retain()) {
+      assertSame(first.getOrCreateFileEncrypt(), second.getOrCreateFileEncrypt());
+      assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
+      parameter.close();
+      first.close();
+      assertEquals(previousCloseCount, TestAeadEncryptionProvider.getCloseCount());
+      assertEquals(28, second.getPageBodyOverhead());
+      assertThrows(EncryptException.class, parameter::retain);
+      assertThrows(EncryptException.class, first::getOrCreateFileEncrypt);
+    } finally {
+      parameter.close();
+    }
+    assertEquals(previousCloseCount + 1, TestAeadEncryptionProvider.getCloseCount());
+  }
+
+  @Test
+  public void testRetainedReferenceCanInitializeAfterOriginalCloses() {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    try (EncryptParameter retained = parameter.retain()) {
+      parameter.close();
+      byte[] plaintext = {1, 2, 3};
+      PageCryptoContext context = PageCryptoContext.forEncryption(retained, 3, 3, 0, 0);
+      byte[] encrypted = IEncryptor.getEncryptor(retained).encryptPage(plaintext, 0, 3, context);
+      assertArrayEquals(
+          plaintext,
+          IDecryptor.getDecryptor(retained).decryptPage(encrypted, 0, encrypted.length, context));
+      assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
+    } finally {
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testConcurrentRetainedOwnersCreateAndCloseProviderOnce() throws Exception {
+    EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+    List<EncryptParameter> owners = new ArrayList<>();
+    ExecutorService executor = Executors.newFixedThreadPool(4);
+    CountDownLatch start = new CountDownLatch(1);
+    int previousCloseCount = TestAeadEncryptionProvider.getCloseCount();
+    try {
+      for (int i = 0; i < 4; i++) {
+        owners.add(parameter.retain());
+      }
+      parameter.close();
+      List<Future<IEncrypt>> results = new ArrayList<>();
+      for (EncryptParameter owner : owners) {
+        results.add(
+            executor.submit(
+                () -> {
+                  try (EncryptParameter reference = owner) {
+                    start.await();
+                    return reference.getOrCreateFileEncrypt();
+                  }
+                }));
+      }
+      start.countDown();
+      IEncrypt provider = results.get(0).get(10, TimeUnit.SECONDS);
+      for (Future<IEncrypt> result : results) {
+        assertSame(provider, result.get(10, TimeUnit.SECONDS));
+      }
+      assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
+      assertEquals(previousCloseCount + 1, TestAeadEncryptionProvider.getCloseCount());
+    } finally {
+      start.countDown();
+      executor.shutdownNow();
+      for (EncryptParameter owner : owners) {
+        owner.close();
+      }
+      parameter.close();
+    }
+  }
+
+  @Test
+  public void testCopyStillOwnsAnIndependentProvider() {
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        EncryptParameter copy = parameter.copy()) {
+      parameter.getPageBodyOverhead();
+      copy.getPageBodyOverhead();
+      assertEquals(2, TestAeadEncryptionProvider.getCreateCount());
+      parameter.close();
+      assertEquals(28, copy.getPageBodyOverhead());
+    }
+  }
+
+  @Test
+  public void testProviderLookupNormalizesIdLikeRegistration() {
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        EncryptParameter nonCanonical =
+            EncryptParameter.pageAeadBuilder()
+                .key(parameter.getKey())
+                .providerId(" " + TestAeadEncryptionProvider.PROVIDER_ID + " ")
+                .profileId(parameter.getProfileId())
+                .keyId(parameter.getKeyId())
+                .keyVersion(parameter.getKeyVersion())
+                .wrappedDataKey(parameter.getWrappedDataKey())
+                .fileCryptoId(parameter.getFileCryptoId())
+                .build()) {
+      assertEquals(28, nonCanonical.getPageBodyOverhead());
     }
   }
 

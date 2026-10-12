@@ -55,7 +55,7 @@ public final class EncryptionProviderRegistry {
   static IEncrypt create(EncryptParameter encryptParameter) {
     loadServices();
     String providerId = encryptParameter.getProviderId();
-    IEncryptProvider provider = providerId == null ? null : PROVIDERS.get(providerId);
+    IEncryptProvider provider = providerId == null ? null : PROVIDERS.get(providerId.trim());
     if (provider == null) {
       throw new EncryptException(Messages.format("error.encrypt.provider_not_found", providerId));
     }

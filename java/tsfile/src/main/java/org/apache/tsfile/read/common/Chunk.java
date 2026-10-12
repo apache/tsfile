@@ -49,7 +49,10 @@ import java.util.List;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
 
-/** A materialized chunk. Close it after use to destroy its independent page-AEAD context. */
+/**
+ * A materialized chunk owning a page-AEAD reference that survives file reader closure. Close it
+ * after use, or transfer it to a chunk reader that releases the reference when closed.
+ */
 public class Chunk implements AutoCloseable {
 
   private static final long INSTANCE_SIZE =
@@ -88,7 +91,7 @@ public class Chunk implements AutoCloseable {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.encryptParam = copyPageAeadParameter(encryptParam);
+    this.encryptParam = retainPageAeadParameter(encryptParam);
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
@@ -100,11 +103,11 @@ public class Chunk implements AutoCloseable {
   public Chunk(ChunkHeader header, ByteBuffer buffer, EncryptParameter encryptParam) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.encryptParam = copyPageAeadParameter(encryptParam);
+    this.encryptParam = retainPageAeadParameter(encryptParam);
   }
 
-  private static EncryptParameter copyPageAeadParameter(EncryptParameter parameter) {
-    return parameter != null && parameter.isTdePageAead() ? parameter.copy() : parameter;
+  private static EncryptParameter retainPageAeadParameter(EncryptParameter parameter) {
+    return parameter != null && parameter.isTdePageAead() ? parameter.retain() : parameter;
   }
 
   @Override
@@ -252,34 +255,35 @@ public class Chunk implements AutoCloseable {
             encoding,
             schema.getValueEncoder(),
             encryptParam);
-    List<Chunk> valueChunks = new ArrayList<>();
-    valueChunks.add(this);
-    TableChunkReader chunkReader =
-        new TableChunkReader(
+    try (Chunk readTimeChunk =
             new Chunk(
                 timeChunk.getHeader(),
                 timeChunk.getData(),
                 null,
                 timeChunk.getChunkStatistic(),
-                timeChunk.getEncryptParam()),
-            valueChunks,
-            null);
-    List<IPageReader> pages = chunkReader.loadPageReaderList();
-    for (IPageReader page : pages) {
-      IPointReader pointReader = page.getAllSatisfiedPageData().getBatchDataIterator();
-      while (pointReader.hasNextTimeValuePair()) {
-        TimeValuePair point = pointReader.nextTimeValuePair();
-        Object convertedValue = null;
-        if (point.getValue().getVector()[0] != null) {
-          convertedValue =
-              newType.castFromSingleValue(
-                  chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
+                timeChunk.getEncryptParam());
+        Chunk readValueChunk =
+            new Chunk(chunkHeader, chunkData, deleteIntervalList, chunkStatistic, encryptParam)) {
+      List<Chunk> valueChunks = new ArrayList<>();
+      valueChunks.add(readValueChunk);
+      TableChunkReader chunkReader = new TableChunkReader(readTimeChunk, valueChunks, null);
+      List<IPageReader> pages = chunkReader.loadPageReaderList();
+      for (IPageReader page : pages) {
+        IPointReader pointReader = page.getAllSatisfiedPageData().getBatchDataIterator();
+        while (pointReader.hasNextTimeValuePair()) {
+          TimeValuePair point = pointReader.nextTimeValuePair();
+          Object convertedValue = null;
+          if (point.getValue().getVector()[0] != null) {
+            convertedValue =
+                newType.castFromSingleValue(
+                    chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
+          }
+          long timestamp = point.getTimestamp();
+          Type.fromTsDataType(newType)
+              .write(chunkWriter, timestamp, convertedValue, convertedValue == null);
         }
-        long timestamp = point.getTimestamp();
-        Type.fromTsDataType(newType)
-            .write(chunkWriter, timestamp, convertedValue, convertedValue == null);
+        chunkWriter.sealCurrentPage();
       }
-      chunkWriter.sealCurrentPage();
     }
     ByteBuffer newChunkData = chunkWriter.getByteBuffer();
     ChunkHeader newChunkHeader =
@@ -313,22 +317,25 @@ public class Chunk implements AutoCloseable {
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
     ChunkWriterImpl chunkWriter = new ChunkWriterImpl(schema, encryptParam);
-    ChunkReader chunkReader = new ChunkReader(this);
-    List<IPageReader> pages = chunkReader.loadPageReaderList();
-    for (IPageReader page : pages) {
-      BatchData batchData = page.getAllSatisfiedPageData();
-      IPointReader pointReader = batchData.getBatchDataIterator();
-      while (pointReader.hasNextTimeValuePair()) {
-        TimeValuePair point = pointReader.nextTimeValuePair();
-        Object convertedValue =
-            newType.castFromSingleValue(chunkHeader.getDataType(), point.getValue().getValue());
-        long timestamp = point.getTimestamp();
-        if (convertedValue == null) {
-          throw new IOException(Messages.format("error.read.chunk_non_aligned_null", timestamp));
+    try (Chunk readChunk =
+        new Chunk(chunkHeader, chunkData, deleteIntervalList, chunkStatistic, encryptParam)) {
+      ChunkReader chunkReader = new ChunkReader(readChunk);
+      List<IPageReader> pages = chunkReader.loadPageReaderList();
+      for (IPageReader page : pages) {
+        BatchData batchData = page.getAllSatisfiedPageData();
+        IPointReader pointReader = batchData.getBatchDataIterator();
+        while (pointReader.hasNextTimeValuePair()) {
+          TimeValuePair point = pointReader.nextTimeValuePair();
+          Object convertedValue =
+              newType.castFromSingleValue(chunkHeader.getDataType(), point.getValue().getValue());
+          long timestamp = point.getTimestamp();
+          if (convertedValue == null) {
+            throw new IOException(Messages.format("error.read.chunk_non_aligned_null", timestamp));
+          }
+          Type.fromTsDataType(newType).write(chunkWriter, timestamp, convertedValue);
         }
-        Type.fromTsDataType(newType).write(chunkWriter, timestamp, convertedValue);
+        chunkWriter.sealCurrentPage();
       }
-      chunkWriter.sealCurrentPage();
     }
     ByteBuffer newChunkData = chunkWriter.getByteBuffer();
     ChunkHeader newChunkHeader =

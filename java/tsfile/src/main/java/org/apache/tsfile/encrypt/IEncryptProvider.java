@@ -31,5 +31,10 @@ public interface IEncryptProvider {
 
   String getProviderId();
 
+  /**
+   * Creates a file context that may be shared by concurrent chunk readers. Implementations must own
+   * their runtime key resources independently of the supplied parameter's lifetime. TsFile closes
+   * the context after its last retained reference is released.
+   */
   IEncrypt create(EncryptParameter encryptParameter);
 }
