@@ -59,6 +59,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   private final Map<String, IdColumnContext> idColumnContextMap;
 
   private Long nextTime;
+  private boolean closed;
 
   public SingleDeviceTsBlockReader(
       DeviceQueryTask task,
@@ -77,22 +78,27 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     this.measureColumnContextMap = new HashMap<>();
     this.idColumnContextMap = new HashMap<>();
 
-    final List<List<IChunkMetadata>> chunkMetadataLists =
-        metadataQuerier.getChunkMetadataLists(
-            task.getDeviceID(),
-            task.getColumnMapping().getMeasurementColumns(),
-            task.getIndexRoot());
+    try {
+      final List<List<IChunkMetadata>> chunkMetadataLists =
+          metadataQuerier.getChunkMetadataLists(
+              task.getDeviceID(),
+              task.getColumnMapping().getMeasurementColumns(),
+              task.getIndexRoot());
 
-    Filter timeFilter = timeExpression == null ? null : timeExpression.toFilter();
-    for (List<IChunkMetadata> chunkMetadataList : chunkMetadataLists) {
-      constructColumnContext(chunkMetadataList, chunkLoader, timeFilter);
-    }
+      Filter timeFilter = timeExpression == null ? null : timeExpression.toFilter();
+      for (List<IChunkMetadata> chunkMetadataList : chunkMetadataLists) {
+        constructColumnContext(chunkMetadataList, chunkLoader, timeFilter);
+      }
 
-    for (String idColumn : task.getColumnMapping().getIdColumns()) {
-      final List<Integer> columnPosInResult = task.getColumnMapping().getColumnPos(idColumn);
-      // the first segment in DeviceId is the table name
-      final int columnPosInId = task.getTableSchema().findIdColumnOrder(idColumn) + 1;
-      idColumnContextMap.put(idColumn, new IdColumnContext(columnPosInResult, columnPosInId));
+      for (String idColumn : task.getColumnMapping().getIdColumns()) {
+        final List<Integer> columnPosInResult = task.getColumnMapping().getColumnPos(idColumn);
+        // the first segment in DeviceId is the table name
+        final int columnPosInId = task.getTableSchema().findIdColumnOrder(idColumn) + 1;
+        idColumnContextMap.put(idColumn, new IdColumnContext(columnPosInResult, columnPosInId));
+      }
+    } catch (IOException | RuntimeException | Error e) {
+      closeAfterFailure(e);
+      throw e;
     }
   }
 
@@ -105,33 +111,60 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     final IChunkMetadata chunkMetadata = chunkMetadataList.get(0);
     AbstractFileSeriesReader seriesReader =
         new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter, false);
-    if (seriesReader.hasNextBatch()) {
-      if (chunkMetadata instanceof AbstractAlignedChunkMetadata) {
-        final List<String> currentChunkMeasurementNames =
-            seriesReader.getCurrentChunkMeasurementNames();
-        List<List<Integer>> posInResult = new ArrayList<>();
-        for (String currentChunkMeasurementName : currentChunkMeasurementNames) {
-          posInResult.add(task.getColumnMapping().getColumnPos(currentChunkMeasurementName));
+    try {
+      if (seriesReader.hasNextBatch()) {
+        if (chunkMetadata instanceof AbstractAlignedChunkMetadata) {
+          final List<String> currentChunkMeasurementNames =
+              seriesReader.getCurrentChunkMeasurementNames();
+          List<List<Integer>> posInResult = new ArrayList<>();
+          for (String currentChunkMeasurementName : currentChunkMeasurementNames) {
+            posInResult.add(task.getColumnMapping().getColumnPos(currentChunkMeasurementName));
+          }
+          measureColumnContextMap.put(
+              "",
+              new VectorMeasurementColumnContext(
+                  posInResult, seriesReader.nextBatch(), seriesReader));
+        } else {
+          final String measurementUid = chunkMetadata.getMeasurementUid();
+          measureColumnContextMap.put(
+              measurementUid,
+              new SingleMeasurementColumnContext(
+                  measurementUid,
+                  task.getColumnMapping().getColumnPos(measurementUid),
+                  seriesReader.nextBatch(),
+                  seriesReader));
         }
-        measureColumnContextMap.put(
-            "",
-            new VectorMeasurementColumnContext(
-                posInResult, seriesReader.nextBatch(), seriesReader));
       } else {
-        final String measurementUid = chunkMetadata.getMeasurementUid();
-        measureColumnContextMap.put(
-            measurementUid,
-            new SingleMeasurementColumnContext(
-                measurementUid,
-                task.getColumnMapping().getColumnPos(measurementUid),
-                seriesReader.nextBatch(),
-                seriesReader));
+        seriesReader.closeChunkReader();
       }
+    } catch (IOException | RuntimeException | Error e) {
+      try {
+        seriesReader.closeChunkReader();
+      } catch (IOException | RuntimeException | Error closeError) {
+        e.addSuppressed(closeError);
+      }
+      throw e;
     }
   }
 
   @Override
   public boolean hasNext() {
+    if (closed) {
+      return false;
+    }
+    try {
+      return prepareNextBlock();
+    } catch (IOException e) {
+      closeAfterFailure(e);
+      LOGGER.error(Messages.get("log.read.block_reader_fill_measurements_error"), e);
+      return false;
+    } catch (RuntimeException | Error e) {
+      closeAfterFailure(e);
+      throw e;
+    }
+  }
+
+  private boolean prepareNextBlock() throws IOException {
     if (!lastBlockReturned) {
       return true;
     }
@@ -158,13 +191,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         }
       }
 
-      try {
-        fillMeasurements(minTimeColumns);
-        nextTime = null;
-      } catch (IOException e) {
-        LOGGER.error(Messages.get("log.read.block_reader_fill_measurements_error"), e);
-        return false;
-      }
+      fillMeasurements(minTimeColumns);
+      nextTime = null;
 
       // all columns have exhausted
       if (measureColumnContextMap.isEmpty()) {
@@ -251,7 +279,46 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
   @Override
   public void close() throws Exception {
-    // nothing to be done
+    closeColumnReaders();
+  }
+
+  private void closeAfterFailure(Throwable failure) {
+    try {
+      closeColumnReaders();
+    } catch (IOException | RuntimeException | Error closeError) {
+      failure.addSuppressed(closeError);
+    }
+  }
+
+  private void closeColumnReaders() throws IOException {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    Throwable failure = null;
+    for (MeasurementColumnContext context : measureColumnContextMap.values()) {
+      try {
+        context.seriesReader.closeChunkReader();
+      } catch (IOException | RuntimeException | Error e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    measureColumnContextMap.clear();
+    idColumnContextMap.clear();
+    nextTime = null;
+    if (failure instanceof IOException) {
+      throw (IOException) failure;
+    }
+    if (failure instanceof RuntimeException) {
+      throw (RuntimeException) failure;
+    }
+    if (failure instanceof Error) {
+      throw (Error) failure;
+    }
   }
 
   public abstract static class MeasurementColumnContext {

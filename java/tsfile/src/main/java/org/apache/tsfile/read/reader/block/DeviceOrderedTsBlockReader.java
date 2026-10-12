@@ -43,6 +43,7 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
   private SingleDeviceTsBlockReader currentReader;
   private ExpressionTree timeFilter;
   private ExpressionTree measurementFilter;
+  private boolean closed;
 
   public DeviceOrderedTsBlockReader(
       DeviceTaskIterator taskIterator,
@@ -61,9 +62,13 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
 
   @Override
   public boolean hasNext() {
+    if (closed) {
+      return false;
+    }
     if (currentReader != null && currentReader.hasNext()) {
       return true;
     }
+    closeCurrentReaderForIteration();
     while (taskIterator.hasNext()) {
       final DeviceQueryTask nextTask = taskIterator.next();
       try {
@@ -76,6 +81,7 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
       if (currentReader != null && currentReader.hasNext()) {
         return true;
       }
+      closeCurrentReaderForIteration();
     }
     return false;
   }
@@ -90,8 +96,25 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
 
   @Override
   public void close() throws Exception {
+    closed = true;
+    closeCurrentReader();
+  }
+
+  private void closeCurrentReaderForIteration() {
+    try {
+      closeCurrentReader();
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private void closeCurrentReader() throws Exception {
     if (currentReader != null) {
-      currentReader.close();
+      try {
+        currentReader.close();
+      } finally {
+        currentReader = null;
+      }
     }
   }
 }
