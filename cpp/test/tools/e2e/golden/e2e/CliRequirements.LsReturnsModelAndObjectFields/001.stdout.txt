@@ -1,0 +1,2 @@
+model,object
+table,table1

@@ -1,0 +1,1 @@
+Error: cannot open tsfile_cli_damaged_input.tsfile: file is corrupted (code 35)

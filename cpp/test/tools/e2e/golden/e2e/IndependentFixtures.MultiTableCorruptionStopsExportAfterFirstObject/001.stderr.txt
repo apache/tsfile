@@ -1,0 +1,1 @@
+Error: failed to read rows: file is corrupted

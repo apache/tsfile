@@ -1,0 +1,6 @@
+{
+  "complete": false,
+  "files": [
+    {"file":"0001.csv","model":"table","object":"sensors_a","type":"csv","rows":"1"}
+  ]
+}

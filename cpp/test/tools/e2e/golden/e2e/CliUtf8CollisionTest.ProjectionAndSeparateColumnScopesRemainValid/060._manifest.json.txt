@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "files": [
+    {"file":"0001.ndjson","model":"table","object":"a","type":"ndjson","rows":"2"},
+    {"file":"0002.ndjson","model":"table","object":"b","type":"ndjson","rows":"2"}
+  ]
+}

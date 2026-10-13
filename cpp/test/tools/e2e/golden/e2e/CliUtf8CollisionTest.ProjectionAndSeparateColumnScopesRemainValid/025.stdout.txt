@@ -1,0 +1,1 @@
+{"model":"tree","object":"a","field":"bad�","data_type":"INT64","non_null_count":"1","null_count":"0","min_time":"1000","max_time":"1000","min":"42","max":"42","first":"42","last":"42","sum":null,"stats_source":"statistics"}

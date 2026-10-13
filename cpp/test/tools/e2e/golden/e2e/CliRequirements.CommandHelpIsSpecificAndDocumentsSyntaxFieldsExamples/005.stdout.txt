@@ -1,0 +1,6 @@
+Usage: tsfile-cli count [-d|--device <device> | -t|--table <table>] [-m|--measurements <column>]... [-f|--format table|ndjson|csv] <file.tsfile>
+Shows logical row, entity, and column counts.
+Result fields: model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+Default: --format table; omitted scope visits every object in file order.
+Examples:
+  tsfile-cli count -t sensors -m site -f csv data.tsfile

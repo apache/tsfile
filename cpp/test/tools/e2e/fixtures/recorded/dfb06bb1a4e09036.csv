@@ -1,0 +1,5 @@
+time,site,temp,note
+1000,beijing,20,n0
+2000,shanghai,21,n1
+3000,beijing,22,\N
+4000,shanghai,23,n3

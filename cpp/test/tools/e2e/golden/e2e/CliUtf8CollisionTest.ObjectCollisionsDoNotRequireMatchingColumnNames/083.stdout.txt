@@ -1,0 +1,2 @@
+{"model":"table","object":"bad�","column":"id","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"bad�","column":"left","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}

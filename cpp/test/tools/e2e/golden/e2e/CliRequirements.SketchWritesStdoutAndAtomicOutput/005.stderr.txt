@@ -1,0 +1,1 @@
+Error: output target 'tsfile_cli_fixture_214.tsfile' is the same as the input file 'tsfile_cli_fixture_214.tsfile'

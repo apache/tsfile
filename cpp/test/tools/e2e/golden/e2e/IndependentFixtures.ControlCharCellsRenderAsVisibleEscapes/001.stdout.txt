@@ -1,0 +1,4 @@
+time  site  note
+1000  s1    line1\nline2
+2000  s2    tab\there
+3000  s3    back\\slash

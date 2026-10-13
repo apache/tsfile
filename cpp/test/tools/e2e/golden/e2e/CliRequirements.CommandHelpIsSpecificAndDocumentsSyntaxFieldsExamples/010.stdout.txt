@@ -1,0 +1,10 @@
+Usage: tsfile-cli write --table <name> (--tag <name> STRING)* (--field <name> <type>)+ [--encoding <type> <encoding>] [--compression <type> <compression>] (-i|--input <input.csv> | --stdin) -o|--output <out.tsfile> [-v|--verbose]
+Creates a new single-table, table-model TsFile from strict CSV.
+Result fields: none on stdout; -v writes a post-commit summary and resolved column physical settings to stderr.
+Default: success is silent; target must not exist; CSV header must contain time and declared TAG/FIELD names.
+CSV values: unquoted \N is NULL; "" is an empty string.
+STRING/TEXT: prepend one extra \ to values starting with \, including inside quoted cells.
+write removes exactly one leading \ from STRING/TEXT cells starting with \\; backslashes elsewhere are unchanged.
+CSV examples: \\N -> literal \N; \\path -> \path; \\\path -> \\path.
+Examples:
+  tsfile-cli write --table sensors --tag site STRING --field temperature DOUBLE -i input.csv -o out.tsfile

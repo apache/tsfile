@@ -1,0 +1,2 @@
+time,a_bool,b_int,c_long,d_float,e_double,f_str,g_ts,h_date
+10,true,42,9000000000,1.5,3.25,hello,1700000000000,2024-06-15

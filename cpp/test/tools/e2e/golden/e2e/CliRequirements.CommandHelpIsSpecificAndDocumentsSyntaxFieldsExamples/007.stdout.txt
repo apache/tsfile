@@ -1,0 +1,6 @@
+Usage: tsfile-cli head [-d|--device <device> | -t|--table <table>] [-m|--measurements <field>]... [--start <int64>] [--end <int64>] [--offset N] [-n|--limit N] [--tag-filter <tag> <op> [value]] [--tag-match all|any] [-f|--format table|ndjson|csv] <file.tsfile>
+Reads the first matching rows from one object.
+Result fields: time, all table TAG columns, selected FIELD columns.
+Default: --limit 10, --offset 0, --format table.
+Examples:
+  tsfile-cli head -t sensors -m temperature -n 5 data.tsfile

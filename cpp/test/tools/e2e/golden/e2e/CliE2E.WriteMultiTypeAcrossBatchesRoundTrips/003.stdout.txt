@@ -1,0 +1,4 @@
+model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+table,t,id,TAG,2500,1,2500,0,0,2499,scan
+table,t,n,FIELD,2500,1,2500,0,0,2499,scan
+table,t,note,FIELD,2500,1,2500,0,0,2499,scan

@@ -1,0 +1,2 @@
+{"time":"0","id":"dev","value":"10"}
+{"time":"1","id":"dev","value":"20"}

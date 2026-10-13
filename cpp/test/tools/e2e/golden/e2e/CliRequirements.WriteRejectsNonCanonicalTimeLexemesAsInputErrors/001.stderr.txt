@@ -1,0 +1,1 @@
+Error: bad timestamp '+1' (line 2)

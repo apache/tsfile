@@ -1,0 +1,2 @@
+{"model":"tree","object":"root.device�","column":"value�","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"tree","object":"root.中文","column":"温度","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}

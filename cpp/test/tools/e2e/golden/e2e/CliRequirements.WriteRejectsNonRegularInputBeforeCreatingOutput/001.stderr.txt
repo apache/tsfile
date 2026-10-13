@@ -1,0 +1,1 @@
+Error: input must be a regular CSV file: tsfile_cli_input_dir_190

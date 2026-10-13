@@ -1,0 +1,7 @@
+Usage: tsfile-cli export (-d|--device <device> | -t|--table <table>) -o|--output <file> --type table|ndjson|csv [query options] [--force] <file.tsfile>
+       tsfile-cli export (-d <device>... | -t <table>...) --output-dir <dir> --type table|ndjson|csv [query options] <file.tsfile>
+Writes one object atomically, or a numbered multi-object directory with _manifest.json.
+Result fields: same bytes as cat for the same scope and type; multi-object manifest records file,model,object,type,rows.
+Default: no row limit, --offset 0; --type is required.
+Examples:
+  tsfile-cli export -t sensors --type csv -o sensors.csv data.tsfile

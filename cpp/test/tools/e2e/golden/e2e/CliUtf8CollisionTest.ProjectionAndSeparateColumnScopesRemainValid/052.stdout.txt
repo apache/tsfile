@@ -1,0 +1,6 @@
+{"model":"table","object":"a","column":"id","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"a","column":"bad�","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"a","column":"value","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"b","column":"id","category":"TAG","data_type":"STRING","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"b","column":"bad�","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"table","object":"b","column":"value","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}

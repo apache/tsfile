@@ -1,0 +1,1 @@
+Error: head/cat requires -t/--table when the file contains multiple tables

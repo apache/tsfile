@@ -1,0 +1,1 @@
+Error: TAG column 'id' must use STRING

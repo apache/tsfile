@@ -1,0 +1,2 @@
+created model=table object=vt rows=1 output=tsfile_cli_vb_out_309.tsfile
+column=s1 category=FIELD data_type=INT64 encoding=TS_2DIFF source=default compression=LZ4 source=default

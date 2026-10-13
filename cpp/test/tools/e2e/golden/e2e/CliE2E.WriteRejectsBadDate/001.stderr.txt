@@ -1,0 +1,1 @@
+Error: bad DATE 'not-a-date' (want YYYY-MM-DD) (line 2)

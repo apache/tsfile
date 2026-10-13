@@ -1,0 +1,1 @@
+Error: invalid UTF-8 or misplaced BOM (line 2)

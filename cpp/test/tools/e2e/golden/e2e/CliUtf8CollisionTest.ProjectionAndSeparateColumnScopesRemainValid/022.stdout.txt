@@ -1,0 +1,4 @@
+{"model":"tree","object":"a","column":"bad�","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"tree","object":"a","column":"value","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"tree","object":"b","column":"bad�","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}
+{"model":"tree","object":"b","column":"value","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}

@@ -1,0 +1,2 @@
+{"time":"1000","id":"first","bad�":"42"}
+{"time":"1001","id":"second","bad�":"42"}

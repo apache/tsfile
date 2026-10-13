@@ -1,0 +1,2 @@
+model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+table,big,s1,FIELD,3000,1,3000,0,1,3000,scan

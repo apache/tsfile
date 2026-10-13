@@ -1,0 +1,1 @@
+Error: CSV contains undeclared column 'status'

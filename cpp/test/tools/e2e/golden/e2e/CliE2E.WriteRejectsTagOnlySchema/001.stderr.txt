@@ -1,0 +1,1 @@
+Error: write requires at least one --field column

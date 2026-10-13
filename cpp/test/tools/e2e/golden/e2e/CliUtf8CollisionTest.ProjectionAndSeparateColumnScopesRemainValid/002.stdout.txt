@@ -1,0 +1,5 @@
+model,object,column,category,data_type,encoding,compression
+tree,a,bad�,FIELD,INT64,PLAIN,UNCOMPRESSED
+tree,a,value,FIELD,INT64,PLAIN,UNCOMPRESSED
+tree,b,bad�,FIELD,INT64,PLAIN,UNCOMPRESSED
+tree,b,value,FIELD,INT64,PLAIN,UNCOMPRESSED

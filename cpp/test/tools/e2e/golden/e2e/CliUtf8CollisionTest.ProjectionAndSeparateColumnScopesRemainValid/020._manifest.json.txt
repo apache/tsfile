@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "files": [
+    {"file":"0001.txt","model":"tree","object":"a","type":"table","rows":"1"},
+    {"file":"0002.txt","model":"tree","object":"b","type":"table","rows":"1"}
+  ]
+}

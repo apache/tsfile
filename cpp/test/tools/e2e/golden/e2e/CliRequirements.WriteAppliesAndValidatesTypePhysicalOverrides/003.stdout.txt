@@ -1,0 +1,4 @@
+model,object,column,category,data_type,encoding,compression
+table,sensors,site,TAG,STRING,PLAIN,LZ4
+table,sensors,temp,FIELD,FLOAT,GORILLA,UNCOMPRESSED
+table,sensors,humidity,FIELD,FLOAT,GORILLA,UNCOMPRESSED

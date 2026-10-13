@@ -1,0 +1,7 @@
+Usage: tsfile-cli schema [-d|--device <device> | -t|--table <table>] [-m|--measurements <column>]... [-f|--format table|ndjson|csv] <file.tsfile>
+Shows TIME/TAG/ATTRIBUTE/FIELD structure and physical settings.
+Result fields: model,object,column,category,data_type,encoding,compression
+Default: --format table; omitted scope visits every object in file order.
+Examples:
+  tsfile-cli schema -t sensors -f csv data.tsfile
+  tsfile-cli schema -d root.sg.d1 -m temperature data.tsfile

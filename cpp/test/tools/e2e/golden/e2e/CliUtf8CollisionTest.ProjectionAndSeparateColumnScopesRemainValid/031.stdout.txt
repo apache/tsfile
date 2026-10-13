@@ -1,0 +1,2 @@
+model,object,column,category,data_type,encoding,compression
+table,a,bad�,FIELD,INT64,PLAIN,UNCOMPRESSED

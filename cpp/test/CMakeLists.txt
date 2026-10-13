@@ -355,3 +355,34 @@ if(WIN32)
 else()
   gtest_discover_tests(TsFile_Test)
 endif()
+
+# The same file-driven CLI suite also runs against an installed executable.
+# Keep test-data preparation and golden comparisons independent of libtsfile.
+if (BUILD_TOOLS)
+    if (CMAKE_VERSION VERSION_LESS "3.12")
+        find_package(PythonInterp 3.9 REQUIRED)
+        set(TSFILE_E2E_PYTHON "${PYTHON_EXECUTABLE}")
+    else ()
+        find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+        set(TSFILE_E2E_PYTHON "${Python3_EXECUTABLE}")
+    endif ()
+    add_dependencies(TsFile_Test tsfile_cli)
+    add_test(NAME CliE2E
+            COMMAND "${TSFILE_E2E_PYTHON}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/e2e/run_cli_e2e.py"
+                    --cli $<TARGET_FILE:tsfile_cli>
+                    --expected-version "${TsFile_CPP_VERSION}"
+                    --output-dir "${CMAKE_CURRENT_BINARY_DIR}/cli-e2e-results")
+    set_tests_properties(CliE2E PROPERTIES TIMEOUT 1800)
+    if (WIN32 AND TSFILE_BUILD_SHARED)
+        # The build-tree DLL lives in lib/<config>, separate from the CLI.
+        # Installed-package verification uses its own normal runtime setup.
+        string(REPLACE ";" "\\;" _TSFILE_E2E_SYSTEM_PATH "$ENV{PATH}")
+        set_tests_properties(CliE2E PROPERTIES ENVIRONMENT
+                "PATH=$<TARGET_FILE_DIR:tsfile>\\;${_TSFILE_E2E_SYSTEM_PATH}")
+    endif ()
+    add_test(NAME CliE2ERunnerTest
+            COMMAND "${TSFILE_E2E_PYTHON}" -m unittest discover
+                    -s "${CMAKE_CURRENT_SOURCE_DIR}/tools/e2e"
+                    -p test_runner.py)
+endif ()

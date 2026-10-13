@@ -1,0 +1,1 @@
+{"time":"10","a_bool":true,"b_int":42,"c_long":"9000000000","d_float":1.5,"e_double":3.25,"f_str":"hello","g_ts":"1700000000000","h_date":"2024-06-15"}

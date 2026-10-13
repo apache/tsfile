@@ -1,0 +1,6 @@
+Usage: tsfile-cli stats [-d|--device <device> | -t|--table <table>] [-m|--measurements <field>]... [-f|--format table|ndjson|csv] <file.tsfile>
+Shows FIELD value statistics and null counts.
+Result fields: tree uses model,object,field,data_type,non_null_count,null_count,min_time,max_time,min,max,first,last,sum,stats_source; table inserts tag.<name> fields after object.
+Default: --format table; omitted scope visits every object in file order.
+Examples:
+  tsfile-cli stats -t sensors -m temperature -f csv data.tsfile

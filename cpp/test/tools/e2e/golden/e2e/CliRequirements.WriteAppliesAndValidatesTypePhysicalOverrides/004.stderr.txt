@@ -1,0 +1,1 @@
+Error: encoding for data type FLOAT specified more than once

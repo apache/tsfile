@@ -1,0 +1,7 @@
+Usage: tsfile-cli meta [-f|--format table|ndjson|csv] <file.tsfile>
+Shows file-level metadata and the selected data model.
+Result fields: size_bytes,format_version,model
+Default: --format table
+Examples:
+  tsfile-cli meta data.tsfile
+  tsfile-cli meta -f ndjson data.tsfile

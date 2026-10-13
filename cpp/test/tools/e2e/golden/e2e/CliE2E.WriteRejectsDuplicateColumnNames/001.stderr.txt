@@ -1,0 +1,1 @@
+Error: duplicate column name 's1'

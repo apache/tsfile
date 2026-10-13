@@ -1,0 +1,4 @@
+{"time":"1000","site":"beijing","temp":20,"note":"n0"}
+{"time":"3000","site":"beijing","temp":22,"note":null}
+{"time":"2000","site":"shanghai","temp":21,"note":"n1"}
+{"time":"4000","site":"shanghai","temp":23,"note":"n3"}

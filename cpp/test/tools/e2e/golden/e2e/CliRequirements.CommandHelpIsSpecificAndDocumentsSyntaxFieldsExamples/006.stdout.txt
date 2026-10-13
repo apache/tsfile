@@ -1,0 +1,7 @@
+Usage: tsfile-cli sketch [-o|--output <file>] [--force] <file.tsfile>
+Writes the physical layout text from the bound printSketch behavior.
+Result fields: printSketch text; --format is not supported.
+Default: stdout; --force requires --output and replaces only a regular file.
+Examples:
+  tsfile-cli sketch data.tsfile
+  tsfile-cli sketch -o layout.txt data.tsfile

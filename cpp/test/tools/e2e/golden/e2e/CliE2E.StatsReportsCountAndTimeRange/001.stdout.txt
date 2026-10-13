@@ -1,0 +1,2 @@
+model,object,tag.id1,tag.id2,field,data_type,non_null_count,null_count,min_time,max_time,min,max,first,last,sum,stats_source
+table,table1,id1_field_1,id2_field_2,s1,INT64,5,0,0,4,0,40,0,40,\N,statistics

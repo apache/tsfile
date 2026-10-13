@@ -152,3 +152,12 @@ jobs:
            -Denable.lzma2=ON \
            -Dtsfile.dependency.source=BUNDLED \
            clean verify
+
+      - name: Upload CLI E2E failure results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-e2e-${{ matrix.os }}-${{ strategy.job-index }}
+          path: cpp/target/build/test/cli-e2e-results/
+          if-no-files-found: ignore
+          retention-days: 14

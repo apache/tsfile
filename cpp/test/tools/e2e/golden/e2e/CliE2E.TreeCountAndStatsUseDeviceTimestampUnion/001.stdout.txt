@@ -1,0 +1,3 @@
+model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+tree,root.test.d1,left,FIELD,3,\N,2,1,0,2,statistics
+tree,root.test.d1,right,FIELD,3,\N,2,1,1,2,statistics

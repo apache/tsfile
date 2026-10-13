@@ -1,0 +1,2 @@
+{"model":"tree","object":"root.device�","field":"value�","data_type":"INT64","non_null_count":"1","null_count":"0","min_time":"0","max_time":"0","min":"42","max":"42","first":"42","last":"42","sum":null,"stats_source":"statistics"}
+{"model":"tree","object":"root.中文","field":"温度","data_type":"INT64","non_null_count":"1","null_count":"0","min_time":"0","max_time":"0","min":"7","max":"7","first":"7","last":"7","sum":null,"stats_source":"statistics"}

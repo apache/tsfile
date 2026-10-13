@@ -1,0 +1,1 @@
+{"model":"tree","object":"bad�","column":"left","category":"FIELD","data_type":"INT64","encoding":"PLAIN","compression":"UNCOMPRESSED"}

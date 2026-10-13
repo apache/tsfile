@@ -1,0 +1,2 @@
+{"model":"tree","object":"root.device�","column":"value�","category":"FIELD","row_count":"1","entity_count":null,"non_null_count":"1","null_count":"0","min_time":"0","max_time":"0","time_source":"statistics"}
+{"model":"tree","object":"root.中文","column":"温度","category":"FIELD","row_count":"1","entity_count":null,"non_null_count":"1","null_count":"0","min_time":"0","max_time":"0","time_source":"statistics"}

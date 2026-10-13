@@ -1,0 +1,6 @@
+Usage: tsfile-cli cat [-d|--device <device> | -t|--table <table>] [-m|--measurements <field>]... [--start <int64>] [--end <int64>] [--offset N] [-n|--limit N] [--tag-filter <tag> <op> [value]] [--tag-match all|any] [-f|--format table|ndjson|csv] <file.tsfile>
+Reads all matching rows from one object unless --limit is set.
+Result fields: time, all table TAG columns, selected FIELD columns.
+Default: no row limit, --offset 0, --format table.
+Examples:
+  tsfile-cli cat -t sensors --tag-filter site eq a -f ndjson data.tsfile

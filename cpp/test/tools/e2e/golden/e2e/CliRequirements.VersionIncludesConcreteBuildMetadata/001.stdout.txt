@@ -1,0 +1,1 @@
+tsfile-cli <VERSION> tsfile=<VERSION> commit=<COMMIT> built=<BUILT>

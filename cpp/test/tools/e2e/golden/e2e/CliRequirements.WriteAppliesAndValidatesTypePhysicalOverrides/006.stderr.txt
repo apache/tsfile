@@ -1,0 +1,1 @@
+Error: encoding GORILLA is not supported for data type BLOB

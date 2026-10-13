@@ -1,0 +1,60 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: utf8_collision_0.tsfile
+file length: 579
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of root.d, num of Chunks:3
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] root.d size=8
+                  16|	[Chunk] of root.d.bad�, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                  16|		[Chunk Header] marker=5, measurementID=bad�, dataSize=35, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=12
+                  28|			[Page Header]  HeaderSize:2, UncompressedSize:33, CompressedSize:33
+                  30|			[Page Data]  Size:33
+                  63|	[Chunk] of root.d.bad�, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                  63|		[Chunk Header] marker=5, measurementID=bad�, dataSize=35, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=10
+                  73|			[Page Header]  HeaderSize:2, UncompressedSize:33, CompressedSize:33
+                  75|			[Page Data]  Size:33
+                 108|	[Chunk] of root.d.bad�, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                 108|		[Chunk Header] marker=5, measurementID=bad�, dataSize=35, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=10
+                 118|			[Page Header]  HeaderSize:2, UncompressedSize:33, CompressedSize:33
+                 120|			[Page Data]  Size:33
+||||||||||||||||||||| [ChunkGroup] of root.d ends
+                 170|	[marker] 2
+                 171|	[TimeseriesMetadata] of root.d.bad�, tsDataType:INT64, sizeWithoutChunkMetadata:67, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                 238|		[ChunkMetadata] offset=16, size=8
+                 246|	[TimeseriesMetadata] of root.d.bad�, tsDataType:INT64, sizeWithoutChunkMetadata:65, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                 311|		[ChunkMetadata] offset=63, size=8
+                 319|	[TimeseriesMetadata] of root.d.bad�, tsDataType:INT64, sizeWithoutChunkMetadata:65, startTime: 1000 endTime: 1000 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                 384|		[ChunkMetadata] offset=108, size=8
+                 392|	[MetadataIndexNode]
+                 392|		 childrenCnt=1
+                 393|		<bad�, 171>
+                 408|		endOffset=392
+                 416|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                 417|	TableIndexRootCnt=1
+                 421|	[Table Name] root, size=8
+                 429|	[MetadataIndexNode]
+                 429|		 childrenCnt=1
+                 430|		<root.d, 392>
+                 446|		endOffset=417
+                 454|		nodeType=LEAF_DEVICE
+                 455|	TableSchemaCnt=0
+                 459|	[Meta Offset] 170
+                 467|	[Bloom Filter Size] bit vector byte array length=295
+                 471|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                 569|	[TsFileMetadataSize] 152
+                 573|	[magic tail] TsFile
+                 579|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+root
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[root.d,392]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[bad�,171]
+---------------------------------- TsFile Sketch End ----------------------------------

@@ -1,0 +1,7 @@
+model  object  column  category  data_type  encoding  compression
+table  a       id      TAG       STRING     PLAIN     UNCOMPRESSED
+table  a       bad�  FIELD     INT64      PLAIN     UNCOMPRESSED
+table  a       value   FIELD     INT64      PLAIN     UNCOMPRESSED
+table  b       id      TAG       STRING     PLAIN     UNCOMPRESSED
+table  b       bad�  FIELD     INT64      PLAIN     UNCOMPRESSED
+table  b       value   FIELD     INT64      PLAIN     UNCOMPRESSED

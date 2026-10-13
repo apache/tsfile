@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "files": [
+    {"file":"0001.ndjson","model":"tree","object":"root.device�","type":"ndjson","rows":"1"},
+    {"file":"0002.ndjson","model":"tree","object":"root.中文","type":"ndjson","rows":"1"}
+  ]
+}

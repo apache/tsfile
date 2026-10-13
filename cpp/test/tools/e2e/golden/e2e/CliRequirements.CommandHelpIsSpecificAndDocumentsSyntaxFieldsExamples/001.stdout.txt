@@ -1,0 +1,7 @@
+Usage: tsfile-cli ls [-f|--format table|ndjson|csv] <file.tsfile>
+Lists every object in the selected tree or table model.
+Result fields: model,object
+Default: --format table
+Examples:
+  tsfile-cli ls data.tsfile
+  tsfile-cli ls -f ndjson data.tsfile

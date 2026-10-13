@@ -1,0 +1,4 @@
+{"model":"table","object":"a","column":"bad�","category":"TAG","row_count":"2","entity_count":"2","non_null_count":"2","null_count":"0","min_time":"1000","max_time":"1001","time_source":"scan"}
+{"model":"table","object":"a","column":"value","category":"FIELD","row_count":"2","entity_count":"2","non_null_count":"2","null_count":"0","min_time":"1000","max_time":"1001","time_source":"scan"}
+{"model":"table","object":"b","column":"bad�","category":"TAG","row_count":"2","entity_count":"2","non_null_count":"2","null_count":"0","min_time":"1000","max_time":"1001","time_source":"scan"}
+{"model":"table","object":"b","column":"value","category":"FIELD","row_count":"2","entity_count":"2","non_null_count":"2","null_count":"0","min_time":"1000","max_time":"1001","time_source":"scan"}

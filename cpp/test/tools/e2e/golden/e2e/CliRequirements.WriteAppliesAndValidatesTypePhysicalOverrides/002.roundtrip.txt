@@ -1,0 +1,2 @@
+{"time":"1000","site":"beijing","temp":21,"humidity":40.5}
+{"time":"2000","site":"beijing","temp":21.5,"humidity":41}

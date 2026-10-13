@@ -1,0 +1,4 @@
+{"time":"0","site":"s\r\n1","message":"first\r\nsecond","note":"\"quoted\"\r\n\r\nlast"}
+{"time":"1","site":"s\r\n1","message":"lf\nonly","note":"mixed\r\nand\nmore"}
+{"time":"2","site":"s\r\n1","message":"carriage\rreturn","note":"\r\n"}
+{"time":"3","site":"s\r\n1","message":"ends\r","note":"line\r\nend"}

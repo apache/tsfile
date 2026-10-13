@@ -1,0 +1,3 @@
+time  id      bad�
+1000  first   42
+1001  second  42

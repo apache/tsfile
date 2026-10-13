@@ -1,0 +1,3 @@
+{"time":"1000","site":"s1","note":"line1\nline2"}
+{"time":"2000","site":"s2","note":"tab\there"}
+{"time":"3000","site":"s3","note":"back\\slash"}

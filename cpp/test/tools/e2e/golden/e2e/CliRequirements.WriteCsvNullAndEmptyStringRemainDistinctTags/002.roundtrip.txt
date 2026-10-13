@@ -1,0 +1,2 @@
+{"time":"1000","site":null,"temp":21}
+{"time":"1000","site":"","temp":22}

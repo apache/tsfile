@@ -1,0 +1,1 @@
+Error: input TsFile must be a pure tree-model or pure table-model file

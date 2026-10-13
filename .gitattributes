@@ -16,3 +16,7 @@
 # under the License.
 
 * text=auto eol=lf
+
+# CLI fixtures include significant CRLF bytes inside quoted CSV fields.
+cpp/test/tools/e2e/fixtures/** -text
+cpp/test/tools/e2e/golden/** -text

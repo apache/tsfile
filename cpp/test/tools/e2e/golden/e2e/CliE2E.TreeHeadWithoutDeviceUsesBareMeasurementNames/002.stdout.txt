@@ -1,0 +1,4 @@
+time,left,right
+0,10,\N
+1,\N,true
+2,20,false

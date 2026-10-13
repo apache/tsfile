@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "files": [
+    {"file":"0001.csv","model":"table","object":"a","type":"csv","rows":"2"},
+    {"file":"0002.csv","model":"table","object":"b","type":"csv","rows":"2"}
+  ]
+}

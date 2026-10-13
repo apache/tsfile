@@ -23,72 +23,6 @@
 
 #include <sstream>
 
-#include "cli/run_cli.h"
-
-TEST(RunCliTest, VersionFlagPrintsVersionAndReturnsOk) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({"--version"}, out, err);
-    EXPECT_EQ(code, 0);
-    EXPECT_NE(out.str().find("tsfile"), std::string::npos);
-    EXPECT_TRUE(err.str().empty());
-}
-
-TEST(RunCliTest, VersionMustAppearByItself) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"cat", "--version", "data.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_TRUE(out.str().empty());
-    EXPECT_NE(err.str().find("--version"), std::string::npos) << err.str();
-}
-
-TEST(RunCliTest, TopLevelHelpMustAppearByItself) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({"--help", "cat"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_TRUE(out.str().empty());
-    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
-}
-
-TEST(RunCliTest, CommandHelpMustAppearByItself) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({"cat", "--help", "data.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_TRUE(out.str().empty());
-    EXPECT_NE(err.str().find("--help"), std::string::npos) << err.str();
-}
-
-TEST(RunCliTest, NoArgsPrintsUsageToErrAndReturnsUsageError) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("Usage"), std::string::npos);
-}
-
-TEST(RunCliTest, UnknownCommandIsUsageError) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({"frobnicate", "x.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("Unknown command"), std::string::npos);
-}
-
-TEST(RunCliTest, LeadingOptionBeforeCommandIsClearError) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"-f", "ndjson", "meta", "data.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("command must come before options"),
-              std::string::npos)
-        << err.str();
-}
-
 TEST(ParseArgsTest, CommandAndFilePositional) {
     auto p = tsfile_cli::parse_args({"ls", "data.tsfile"});
     EXPECT_TRUE(p.error.empty());
@@ -178,30 +112,4 @@ TEST(ParseArgsTest, StdinFlagParsed) {
     EXPECT_TRUE(p.error.empty());
     EXPECT_EQ(p.file, "-");
     EXPECT_TRUE(p.input_set);
-}
-
-TEST(RunCliTest, SelectIsNoLongerKnownCommand) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code = tsfile_cli::run_cli({"select", "x.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("Unknown command"), std::string::npos);
-}
-
-TEST(RunCliTest, SeedOnCatIsUsageError) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"cat", "--seed", "7", "x.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("--seed is not supported"), std::string::npos);
-}
-
-TEST(RunCliTest, SampleIsUnknownCommand) {
-    std::ostringstream out;
-    std::ostringstream err;
-    int code =
-        tsfile_cli::run_cli({"sample", "--offset", "2", "x.tsfile"}, out, err);
-    EXPECT_EQ(code, 1);
-    EXPECT_NE(err.str().find("Unknown command"), std::string::npos);
 }

@@ -1,0 +1,5 @@
+model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source
+table,sensors_a,id1,TAG,1,1,1,0,0,0,scan
+table,sensors_a,s1,FIELD,1,1,1,0,0,0,scan
+table,sensors_b,id1,TAG,1,1,1,0,0,0,scan
+table,sensors_b,s1,FIELD,1,1,1,0,0,0,scan

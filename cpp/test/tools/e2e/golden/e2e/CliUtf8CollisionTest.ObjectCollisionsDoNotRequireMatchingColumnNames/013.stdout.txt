@@ -1,0 +1,2 @@
+model  object  column  category  data_type  encoding  compression
+tree   bad�  left    FIELD     INT64      PLAIN     UNCOMPRESSED

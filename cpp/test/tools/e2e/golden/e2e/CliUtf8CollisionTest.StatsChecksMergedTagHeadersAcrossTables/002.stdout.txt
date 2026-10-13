@@ -1,0 +1,5 @@
+model,object,column,category,data_type,encoding,compression
+table,a,bad�,TAG,STRING,PLAIN,UNCOMPRESSED
+table,a,value,FIELD,INT64,PLAIN,UNCOMPRESSED
+table,b,bad�,TAG,STRING,PLAIN,UNCOMPRESSED
+table,b,value,FIELD,INT64,PLAIN,UNCOMPRESSED

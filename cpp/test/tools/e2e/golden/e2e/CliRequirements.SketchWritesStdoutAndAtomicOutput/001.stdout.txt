@@ -1,0 +1,55 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_fixture_214.tsfile
+file length: 508
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of table1.id1_field_1.id2_field_2, num of Chunks:2
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] table1.id1_field_1.id2_field_2 size=32
+                  40|	[Chunk] of table1.id1_field_1.id2_field_2., startTime: 0 endTime: 4 count: 5
+                  40|		[Chunk Header] marker=-123, measurementID=, dataSize=20, dataType=VECTOR, compressionType=LZ4, encodingType=TS_2DIFF, size=6
+                  46|			[Page Header]  HeaderSize:2, UncompressedSize:24, CompressedSize:18
+                  48|			[Page Data]  Size:18
+                  66|	[Chunk] of table1.id1_field_1.id2_field_2.s1, startTime: 0 endTime: 4 count: 5 [minValue:0,maxValue:40,firstValue:0,lastValue:40,sumValue:100.0]
+                  66|		[Chunk Header] marker=69, measurementID=s1, dataSize=47, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=8
+                  74|			[Page Header]  HeaderSize:2, UncompressedSize:45, CompressedSize:45
+                  76|			[Page Data]  Size:45
+||||||||||||||||||||| [ChunkGroup] of table1.id1_field_1.id2_field_2 ends
+                 138|	[marker] 2
+                 139|	[TimeseriesMetadata] of table1.id1_field_1.id2_field_2., tsDataType:VECTOR, sizeWithoutChunkMetadata:21, startTime: 0 endTime: 4 count: 5
+                 160|		[ChunkMetadata] offset=40, size=8
+                 168|	[TimeseriesMetadata] of table1.id1_field_1.id2_field_2.s1, tsDataType:INT64, sizeWithoutChunkMetadata:63, startTime: 0 endTime: 4 count: 5 [minValue:0,maxValue:40,firstValue:0,lastValue:40,sumValue:100.0]
+                 231|		[ChunkMetadata] offset=66, size=8
+                 239|	[MetadataIndexNode]
+                 239|		 childrenCnt=1
+                 240|		<, 139>
+                 249|		endOffset=239
+                 257|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                 258|	TableIndexRootCnt=1
+                 262|	[Table Name] table1, size=10
+                 272|	[MetadataIndexNode]
+                 272|		 childrenCnt=1
+                 273|		<table1.id1_field_1.id2_field_2, 239>
+                 313|		endOffset=258
+                 321|		nodeType=LEAF_DEVICE
+                 322|	TableSchemaCnt=1
+                 326|	[TableSchema] TableSchema{tableName='table1', columnSchemas=[[id1,STRING,PLAIN,,UNCOMPRESSED], [id2,STRING,PLAIN,,UNCOMPRESSED], [s1,INT64,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, FIELD]}, size=54
+                 390|	[Meta Offset] 138
+                 398|	[Bloom Filter Size] bit vector byte array length=305
+                 402|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                 498|	[TsFileMetadataSize] 240
+                 502|	[magic tail] TsFile
+                 508|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+table1
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[table1.id1_field_1.id2_field_2,239]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[,139]
+---------------------------------- TsFile Sketch End ----------------------------------

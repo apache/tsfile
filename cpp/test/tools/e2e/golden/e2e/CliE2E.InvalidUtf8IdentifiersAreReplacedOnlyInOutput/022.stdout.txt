@@ -1,0 +1,68 @@
+-------------------------------- TsFile Sketch --------------------------------
+file path: tsfile_cli_utf8_names_328.tsfile
+file length: 538
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+||||||||||||||||||||| [ChunkGroup] of root.device�, num of Chunks:1
+                   7|	[ChunkGroup Header]
+                   7|		[marker] 0
+                   8|		[deviceID] root.device� size=14
+                  22|	[Chunk] of root.device�.value�, startTime: 0 endTime: 0 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                  22|		[Chunk Header] marker=5, measurementID=value�, dataSize=35, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=13
+                  35|			[Page Header]  HeaderSize:2, UncompressedSize:33, CompressedSize:33
+                  37|			[Page Data]  Size:33
+||||||||||||||||||||| [ChunkGroup] of root.device� ends
+||||||||||||||||||||| [ChunkGroup] of root.中文, num of Chunks:1
+                  70|	[ChunkGroup Header]
+                  70|		[marker] 0
+                  71|		[deviceID] root.中文 size=13
+                  84|	[Chunk] of root.中文.温度, startTime: 0 endTime: 0 count: 1 [minValue:7,maxValue:7,firstValue:7,lastValue:7,sumValue:7.0]
+                  84|		[Chunk Header] marker=5, measurementID=温度, dataSize=35, dataType=INT64, compressionType=UNCOMPRESSED, encodingType=PLAIN, size=12
+                  96|			[Page Header]  HeaderSize:2, UncompressedSize:33, CompressedSize:33
+                  98|			[Page Data]  Size:33
+||||||||||||||||||||| [ChunkGroup] of root.中文 ends
+                 148|	[marker] 2
+                 149|	[TimeseriesMetadata] of root.device�.value�, tsDataType:INT64, sizeWithoutChunkMetadata:68, startTime: 0 endTime: 0 count: 1 [minValue:42,maxValue:42,firstValue:42,lastValue:42,sumValue:42.0]
+                 217|		[ChunkMetadata] offset=22, size=8
+                 225|	[TimeseriesMetadata] of root.中文.温度, tsDataType:INT64, sizeWithoutChunkMetadata:67, startTime: 0 endTime: 0 count: 1 [minValue:7,maxValue:7,firstValue:7,lastValue:7,sumValue:7.0]
+                 292|		[ChunkMetadata] offset=84, size=8
+                 300|	[MetadataIndexNode]
+                 300|		 childrenCnt=1
+                 301|		<value�, 149>
+                 317|		endOffset=225
+                 325|		nodeType=LEAF_MEASUREMENT
+                 326|	[MetadataIndexNode]
+                 326|		 childrenCnt=1
+                 327|		<温度, 225>
+                 342|		endOffset=300
+                 350|		nodeType=LEAF_MEASUREMENT
+||||||||||||||||||||| [TsFileMetadata] begins
+                 351|	TableIndexRootCnt=1
+                 355|	[Table Name] root, size=8
+                 363|	[MetadataIndexNode]
+                 363|		 childrenCnt=2
+                 364|		<root.device�, 300>
+                 386|		<root.中文, 326>
+                 407|		endOffset=351
+                 415|		nodeType=LEAF_DEVICE
+                 416|	TableSchemaCnt=0
+                 420|	[Meta Offset] 148
+                 428|	[Bloom Filter Size] bit vector byte array length=275
+                 432|	[Bloom Filter] , filterCapacity=256, hashFunctionSize=5
+||||||||||||||||||||| [TsFileMetadata] ends
+                 528|	[TsFileMetadataSize] 177
+                 532|	[magic tail] TsFile
+                 538|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
+root
+	[MetadataIndex:LEAF_DEVICE]
+	└──────[root.device�,300]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[value�,149]
+	└──────[root.中文,326]
+			[MetadataIndex:LEAF_MEASUREMENT]
+			└──────[温度,225]
+---------------------------------- TsFile Sketch End ----------------------------------

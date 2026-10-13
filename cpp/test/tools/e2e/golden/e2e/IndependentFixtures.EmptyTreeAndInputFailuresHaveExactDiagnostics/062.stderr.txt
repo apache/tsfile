@@ -1,0 +1,1 @@
+Error: cannot open tsfile_cli_fifo_input_354.tsfile: invalid path (code 37)
