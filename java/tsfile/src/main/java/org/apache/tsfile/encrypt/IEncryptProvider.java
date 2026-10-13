@@ -32,7 +32,9 @@ package org.apache.tsfile.encrypt;
  * Providers must ensure that nonces are not reused under the same DEK, including after append,
  * recovery, or recreation of a runtime context. PageCryptoContext is authenticated context, not a
  * guaranteed-unique nonce source. Random-nonce profiles must define per-key usage limits and reject
- * use beyond those limits.
+ * use beyond those limits, counting both page encryption and chunk position authentication.
+ * Version-1 encrypted chunk headers also require the fixed-size opaque position proof defined by
+ * {@link ChunkCryptoContext}; unsupported providers must reject these operations.
  */
 public interface IEncryptProvider {
 

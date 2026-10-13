@@ -502,7 +502,7 @@ public class TsFileIOWriter implements AutoCloseable {
             numOfPages,
             mask,
             chunkOrdinal);
-    header.serializeTo(out.wrapAsStream());
+    writeChunkHeader(header);
   }
 
   /** Write a whole chunk in another file into this file. Providing fast merge for IoTDB. */
@@ -519,7 +519,7 @@ public class TsFileIOWriter implements AutoCloseable {
             out.getPosition(),
             chunkMetadata.getStatistics());
     currentChunkMetadata.setMask(chunkMetadata.getMask());
-    chunkHeader.serializeTo(out.wrapAsStream());
+    writeChunkHeader(chunkHeader);
     out.write(chunk.getData());
     endCurrentChunk();
     if (logger.isDebugEnabled()) {
@@ -560,7 +560,7 @@ public class TsFileIOWriter implements AutoCloseable {
             encryptParameter != null && encryptParameter.isTdePageAead()
                 ? encryptParameter.nextChunkOrdinal()
                 : -1);
-    emptyChunkHeader.serializeTo(out.wrapAsStream());
+    writeChunkHeader(emptyChunkHeader);
     endCurrentChunk();
   }
 
@@ -580,9 +580,17 @@ public class TsFileIOWriter implements AutoCloseable {
         (byte)
             (chunkHeader.getChunkType()
                 & (TsFileConstant.TIME_COLUMN_MASK | TsFileConstant.VALUE_COLUMN_MASK)));
-    chunkHeader.serializeTo(out.wrapAsStream());
+    writeChunkHeader(chunkHeader);
     out.write(chunk.getData());
     endCurrentChunk();
+  }
+
+  private void writeChunkHeader(ChunkHeader header) throws IOException {
+    byte[] authentication =
+        encryptParameter != null && encryptParameter.isTdePageAead()
+            ? encryptParameter.authenticateChunk(out.getPosition(), header.getChunkOrdinal())
+            : null;
+    header.serializeTo(out.wrapAsStream(), authentication);
   }
 
   /** end chunk and write some log. */

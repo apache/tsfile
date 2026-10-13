@@ -2106,10 +2106,11 @@ public class TsFileSequenceReader implements AutoCloseable {
   public ChunkHeader readChunkHeader(byte chunkType) throws IOException {
     try {
       ensureFileEncryptionHeaderLoaded(null);
+      long chunkOffset = tsFileInput.position() - Byte.BYTES;
       ChunkHeader header =
           ChunkHeader.deserializeFrom(
               tsFileInput.wrapAsInputStream(), chunkType, fileEncryptionParam != null);
-      recordChunkOrdinal(header);
+      authenticateChunkHeader(header, chunkOffset);
       return header;
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
@@ -2133,7 +2134,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       ChunkHeader header =
           ChunkHeader.deserializeFrom(
               tsFileInput, position, ioSizeRecorder, fileEncryptionParam != null);
-      recordChunkOrdinal(header);
+      authenticateChunkHeader(header, position);
       return header;
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
@@ -2144,9 +2145,19 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
   }
 
-  private void recordChunkOrdinal(ChunkHeader header) throws IOException {
+  /** Reads and authenticates a chunk header at its absolute marker offset. */
+  public ChunkHeader readChunkHeader(long position) throws IOException {
+    return readChunkHeader(position, null);
+  }
+
+  private void authenticateChunkHeader(ChunkHeader header, long chunkOffset) throws IOException {
     if (fileEncryptionParam != null && header.getChunkOrdinal() < 0) {
-      throw new IOException(Messages.get("error.write.invalid_chunk_ordinal"));
+      throw new org.apache.tsfile.exception.encrypt.EncryptException(
+          Messages.get("error.write.invalid_chunk_ordinal"));
+    }
+    if (fileEncryptionParam != null) {
+      fileEncryptionParam.verifyChunkAuthentication(
+          header.getChunkAuthentication(), chunkOffset, header.getChunkOrdinal());
     }
     maxChunkOrdinal = Math.max(maxChunkOrdinal, header.getChunkOrdinal());
   }
@@ -2814,6 +2825,9 @@ public class TsFileSequenceReader implements AutoCloseable {
         truncatedSize = this.position() - 1;
       }
     } catch (Exception e) {
+      if (org.apache.tsfile.exception.encrypt.EncryptException.isEncryptionFailure(e)) {
+        throw new IOException(e.getMessage(), e);
+      }
       logger.warn(
           Messages.get("log.read.sequence_reader_self_check_warn"),
           file,

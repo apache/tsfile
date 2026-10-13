@@ -223,6 +223,18 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     return pageAead;
   }
 
+  public byte[] authenticateChunk(long chunkOffset, long chunkOrdinal) {
+    return getOrCreateFileEncrypt()
+        .authenticateChunk(ChunkCryptoContext.forChunk(this, chunkOffset, chunkOrdinal));
+  }
+
+  public void verifyChunkAuthentication(
+      byte[] authentication, long chunkOffset, long chunkOrdinal) {
+    getOrCreateFileEncrypt()
+        .verifyChunkAuthentication(
+            authentication, ChunkCryptoContext.forChunk(this, chunkOffset, chunkOrdinal));
+  }
+
   /** Copies of one file share the ordinal allocator; independently created files never do. */
   public boolean sharesPageAeadFileContext(EncryptParameter other) {
     return other != null

@@ -18,6 +18,9 @@
  */
 package org.apache.tsfile.encrypt;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.concurrent.ConcurrentHashMap;
 
 public interface IEncrypt extends AutoCloseable {
@@ -39,6 +42,20 @@ public interface IEncrypt extends AutoCloseable {
    */
   default int getPageBodyOverhead() {
     return -1;
+  }
+
+  /**
+   * Returns a fixed-size opaque proof authenticating a chunk's physical position. The proof is
+   * exactly {@link ChunkCryptoContext#AUTHENTICATION_SIZE} bytes. Providers using AEAD must use a
+   * fresh nonce under the file DEK, independently of page encryption calls.
+   */
+  default byte[] authenticateChunk(ChunkCryptoContext context) {
+    throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_unsupported"));
+  }
+
+  /** Verifies the proof before a chunk identity is used; unsupported providers fail closed. */
+  default void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+    throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_unsupported"));
   }
 
   @Override

@@ -140,6 +140,23 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     }
 
     @Override
+    public byte[] authenticateChunk(ChunkCryptoContext context) {
+      return new AeadEncryptor(dataKey)
+          .encryptWithAad(new byte[0], 0, 0, context.getAssociatedData());
+    }
+
+    @Override
+    public void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+      byte[] plaintext =
+          new AeadDecryptor(dataKey)
+              .decryptWithAad(
+                  authentication, 0, authentication.length, context.getAssociatedData());
+      if (plaintext.length != 0) {
+        throw new EncryptException("Unexpected chunk authentication plaintext");
+      }
+    }
+
+    @Override
     public void close() {
       Arrays.fill(dataKey, (byte) 0);
       CLOSE_COUNT.incrementAndGet();
@@ -167,6 +184,10 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     @Override
     public byte[] encryptPage(
         byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
+      return encryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+    }
+
+    private byte[] encryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {
       byte[] iv = new byte[IV_LENGTH];
       SECURE_RANDOM.nextBytes(iv);
       try {
@@ -175,7 +196,7 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
             Cipher.ENCRYPT_MODE,
             new SecretKeySpec(dataKey, "AES"),
             new GCMParameterSpec(TAG_LENGTH * Byte.SIZE, iv));
-        cipher.updateAAD(pageCryptoContext.getAssociatedData());
+        cipher.updateAAD(associatedData);
         byte[] ciphertext = cipher.doFinal(data, offset, size);
         byte[] pageBody = new byte[iv.length + ciphertext.length];
         System.arraycopy(iv, 0, pageBody, 0, iv.length);
@@ -213,12 +234,16 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     @Override
     public byte[] decryptPage(
         byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
+      return decryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+    }
+
+    private byte[] decryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {
       try {
         GCMParameterSpec spec =
             new GCMParameterSpec(TAG_LENGTH * Byte.SIZE, data, offset, IV_LENGTH);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(dataKey, "AES"), spec);
-        cipher.updateAAD(pageCryptoContext.getAssociatedData());
+        cipher.updateAAD(associatedData);
         return cipher.doFinal(data, offset + IV_LENGTH, size - IV_LENGTH);
       } catch (GeneralSecurityException e) {
         throw new EncryptException("test page decryption failed", e);

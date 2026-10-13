@@ -231,7 +231,10 @@ public class Chunk implements AutoCloseable {
    * and deleteIntervalList are all null in cache
    */
   public long getRetainedSizeInBytes() {
-    return INSTANCE_SIZE + sizeOfByteArray(chunkData.capacity());
+    int authenticationSize = chunkHeader.getChunkAuthenticationSize();
+    return INSTANCE_SIZE
+        + sizeOfByteArray(chunkData.capacity())
+        + (authenticationSize == 0 ? 0 : sizeOfByteArray(authenticationSize));
   }
 
   public Chunk rewrite(TSDataType newType, Chunk timeChunk) throws IOException {

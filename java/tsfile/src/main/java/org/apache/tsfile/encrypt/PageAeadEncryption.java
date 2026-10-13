@@ -122,6 +122,33 @@ final class PageAeadEncryption implements IEncrypt {
   }
 
   @Override
+  public byte[] authenticateChunk(ChunkCryptoContext context) {
+    ensureOpen();
+    byte[] authentication = delegate.authenticateChunk(context);
+    validateChunkAuthentication(authentication);
+    return authentication;
+  }
+
+  @Override
+  public void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+    ensureOpen();
+    validateChunkAuthentication(authentication);
+    try {
+      delegate.verifyChunkAuthentication(authentication, context);
+    } catch (EncryptException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_failed"), e);
+    }
+  }
+
+  private static void validateChunkAuthentication(byte[] authentication) {
+    if (authentication == null || authentication.length != ChunkCryptoContext.AUTHENTICATION_SIZE) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_chunk_authentication"));
+    }
+  }
+
+  @Override
   public void close() {
     if (closed.compareAndSet(false, true)) {
       delegate.close();
