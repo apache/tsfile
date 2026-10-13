@@ -449,6 +449,10 @@ public class ChunkWriterImpl implements IChunkWriter {
    */
   public void writePageHeaderAndDataIntoBuff(ByteBuffer data, PageHeader header)
       throws PageException {
+    if (chunkOrdinal >= 0) {
+      throw new org.apache.tsfile.exception.encrypt.EncryptException(
+          Messages.get("error.write.aead_raw_page_copy_unsupported"));
+    }
     // write the page header to pageBuffer
     try {
       logger.debug(Messages.get("log.write.page_header_flush_start"), pageBuffer.size());

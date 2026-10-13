@@ -49,6 +49,7 @@ import org.apache.tsfile.read.reader.TsFileLastReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
+import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.TimeChunkWriter;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
@@ -57,6 +58,7 @@ import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.writer.LocalTsFileOutput;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.junit.After;
@@ -66,6 +68,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -78,6 +81,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class TDEPageAeadTsFileTest {
 
@@ -105,6 +111,119 @@ public class TDEPageAeadTsFileTest {
   public void tearDown() {
     if (file.exists()) {
       assertTrue(file.delete());
+    }
+  }
+
+  @Test
+  public void testRawPageCopyIsRejectedBeforeChangingBuffers() throws Exception {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      MeasurementSchema schema = new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN);
+      ChunkWriterImpl scalar = new ChunkWriterImpl(schema, parameter);
+      TimeChunkWriter time =
+          new TimeChunkWriter(
+              "",
+              CompressionType.UNCOMPRESSED,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              parameter);
+      ValueChunkWriter value =
+          new ValueChunkWriter(
+              "s1",
+              CompressionType.UNCOMPRESSED,
+              TSDataType.INT64,
+              TSEncoding.PLAIN,
+              new PlainEncoder(TSDataType.INT64, 0),
+              parameter);
+      AlignedChunkWriterImpl aligned = new AlignedChunkWriterImpl(Arrays.asList(schema), parameter);
+      ByteBuffer data = ByteBuffer.wrap(new byte[] {1, 2, 3});
+      PageHeader header = new PageHeader(3, 3, null);
+      assertThrows(
+          EncryptException.class, () -> scalar.writePageHeaderAndDataIntoBuff(data, header));
+      assertThrows(EncryptException.class, () -> time.writePageHeaderAndDataIntoBuff(data, header));
+      assertThrows(
+          EncryptException.class, () -> value.writePageHeaderAndDataIntoBuff(data, header));
+      assertThrows(
+          EncryptException.class, () -> aligned.writePageHeaderAndDataIntoTimeBuff(data, header));
+      assertThrows(
+          EncryptException.class,
+          () -> aligned.writePageHeaderAndDataIntoValueBuff(data, header, 0));
+      assertEquals(0, data.position());
+    }
+  }
+
+  @Test
+  public void testIoWriterConstructorDoesNotDestroyCallerParameter() throws Exception {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      try (TsFileWriter writer = new TsFileWriter(new TsFileIOWriter(file), parameter)) {
+        writer.registerTimeseries(new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 11)));
+      }
+      assertFalse(parameter.isDestroyed());
+    }
+  }
+
+  @Test
+  public void testNewFileCannotReuseAeadParameterOrItsCopy() throws Exception {
+    File second = new File(file.getParentFile(), "tde-reused-context.tsfile");
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      try (TsFileWriter writer = new TsFileWriter(file, parameter)) {
+        writer.registerTimeseries(new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64));
+        writer.writeRecord(new TSRecord("d1", 1).addTuple(new LongDataPoint("s1", 11)));
+      }
+      long originalSize = file.length();
+      assertThrows(EncryptException.class, () -> new TsFileWriter(file, parameter));
+      assertEquals(originalSize, file.length());
+      try (EncryptParameter copy = parameter.copy()) {
+        assertThrows(EncryptException.class, () -> new TsFileWriter(second, copy));
+      }
+      assertFalse(second.exists());
+      assertFalse(parameter.isDestroyed());
+    }
+  }
+
+  @Test
+  public void testTruncatedEncryptionHeaderReportsIOExceptionWithoutModifyingFile()
+      throws Exception {
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        TsFileIOWriter writer = new TsFileIOWriter(file, parameter)) {
+      writer.getIOWriterOut().flush();
+    }
+    try (RandomAccessFile output = new RandomAccessFile(file, "rw")) {
+      output.setLength(output.length() - 5);
+    }
+    long truncatedSize = file.length();
+    IOException failure =
+        assertThrows(IOException.class, () -> new TsFileSequenceReader(file.getPath(), false));
+    assertTrue(EncryptException.isEncryptionFailure(failure));
+    assertThrows(
+        IOException.class, () -> new org.apache.tsfile.write.writer.RestorableTsFileIOWriter(file));
+    assertEquals(truncatedSize, file.length());
+  }
+
+  @Test
+  public void testEncryptionHeaderDoesNotForceOutput() throws Exception {
+    LocalTsFileOutput output = spy(new LocalTsFileOutput(new FileOutputStream(file)));
+    try (EncryptParameter parameter =
+            TestAeadEncryptionProvider.createParameter(
+                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+        TsFileIOWriter writer = new TsFileIOWriter(output, parameter)) {
+      long dataStartOffset = output.getPosition();
+      assertTrue(dataStartOffset > TSFileConfig.MAGIC_STRING.length() + Byte.BYTES);
+      writer.writeEncryptionHeaderIfNecessary();
+      assertEquals(dataStartOffset, output.getPosition());
+      verify(output, never()).force();
+      verify(output).flush();
+
+      writer.getIOWriterOut().force();
+      verify(output).force();
     }
   }
 
@@ -563,13 +682,15 @@ public class TDEPageAeadTsFileTest {
         TestAeadEncryptionProvider.createParameter(new byte[16], secondFileId);
     try (TsFileIOWriter writer = new TsFileIOWriter(file, first);
         EncryptParameter firstCopy = first.copy()) {
-      writer.setEncryptParam(first);
+      EncryptParameter owned = writer.getEncryptParameter();
+      writer.setEncryptParam(owned);
       assertThrows(EncryptException.class, () -> writer.setEncryptParam(second));
       assertThrows(EncryptException.class, () -> writer.setEncryptParam(firstCopy));
       assertThrows(
           EncryptException.class,
           () -> writer.setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null));
-      assertTrue(writer.getEncryptParameter() == first);
+      assertTrue(writer.getEncryptParameter() == owned);
+      assertFalse(first.isDestroyed());
     } finally {
       first.close();
       second.close();
@@ -630,7 +751,8 @@ public class TDEPageAeadTsFileTest {
                   0,
                   0,
                   0,
-                  0));
+                  0,
+                  null));
       assertEquals(position, writer.getPos());
     } finally {
       source.close();

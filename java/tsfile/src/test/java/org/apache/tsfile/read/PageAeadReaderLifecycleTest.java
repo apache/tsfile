@@ -77,6 +77,27 @@ public class PageAeadReaderLifecycleTest {
   }
 
   @Test
+  public void testPlaintextQueriesAreNotStronglyRetained() throws Exception {
+    File file = new File(temporaryFolder.getRoot(), "plain.tsfile");
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      writer.registerTimeseries(new Path("d1"), new MeasurementSchema("s1", TSDataType.INT64));
+      for (int i = 1; i <= 3; i++) {
+        writer.writeRecord(new TSRecord("d1", i).addTuple(new LongDataPoint("s1", i)));
+      }
+    }
+    try (TsFileReader reader = new TsFileReader(file)) {
+      for (int i = 0; i < 100; i++) {
+        QueryDataSet query = reader.query(queryExpression());
+        assertTrue(query.hasNext());
+        query.next();
+      }
+      java.lang.reflect.Field field = TsFileReader.class.getDeclaredField("queryDataSets");
+      field.setAccessible(true);
+      assertTrue(((java.util.Set<?>) field.get(reader)).isEmpty());
+    }
+  }
+
+  @Test
   public void testSeriesScanReleasesEachChunkAndCreatesOneProvider() throws Exception {
     File file = writeFile(false);
     int createCount = TestAeadEncryptionProvider.getCreateCount();

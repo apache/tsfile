@@ -146,17 +146,13 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
       if (file.exists()) {
         try (TsFileSequenceReader reader =
             new TsFileSequenceReader(file.getAbsolutePath(), param, false)) {
-          if (!reader.hasFileEncryptionHeader()
-              && this.param != null
-              && this.param.isTdePageAead()) {
-            throw new IOException(Messages.get("error.write.aead_append_requires_file_header"));
-          }
           EncryptParameter recoveredParameter = reader.getEncryptParam();
-          if (recoveredParameter != null && recoveredParameter.isTdePageAead()) {
+          if ((recoveredParameter != null && recoveredParameter.isTdePageAead())
+              || (this.param != null && this.param.isTdePageAead())) {
             if (this.param != null && this.param.isTdePageAead()) {
               this.param.close();
             }
-            this.param = recoveredParameter.copy();
+            this.param = recoveredParameter == null ? null : recoveredParameter.copy();
             setEncryptParam(this.param);
           }
           markExistingFileStarted(reader.hasFileEncryptionHeader());

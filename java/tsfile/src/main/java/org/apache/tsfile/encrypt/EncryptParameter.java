@@ -25,6 +25,7 @@ import javax.security.auth.Destroyable;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -49,6 +50,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
   private final byte[] wrappedDataKey;
   private final byte[] fileCryptoId;
   private final AtomicLong nextChunkOrdinal;
+  private final AtomicBoolean newFileClaimed;
 
   private final FileEncryptContext fileEncryptContext;
   private transient volatile boolean destroyed;
@@ -64,6 +66,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.wrappedDataKey = null;
     this.fileCryptoId = null;
     this.nextChunkOrdinal = new AtomicLong();
+    this.newFileClaimed = new AtomicBoolean();
     this.fileEncryptContext = null;
   }
 
@@ -79,6 +82,8 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.fileCryptoId = copy(builder.fileCryptoId);
     this.nextChunkOrdinal =
         builder.nextChunkOrdinal == null ? new AtomicLong() : builder.nextChunkOrdinal;
+    this.newFileClaimed =
+        builder.newFileClaimed == null ? new AtomicBoolean() : builder.newFileClaimed;
     this.fileEncryptContext = new FileEncryptContext();
   }
 
@@ -93,6 +98,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     this.wrappedDataKey = copy(source.wrappedDataKey);
     this.fileCryptoId = copy(source.fileCryptoId);
     this.nextChunkOrdinal = source.nextChunkOrdinal;
+    this.newFileClaimed = source.newFileClaimed;
     this.fileEncryptContext = source.fileEncryptContext;
     this.fileEncryptContext.retain();
   }
@@ -101,7 +107,10 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     return new Builder();
   }
 
-  /** Returns an independent parameter object with no initialized runtime provider state. */
+  /**
+   * Copies this file's descriptor without initialized provider state. This does not generate a new
+   * data key or file identity and must not be used to create another new file.
+   */
   public synchronized EncryptParameter copy() {
     if (destroyed) {
       throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
@@ -118,7 +127,18 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
         .wrappedDataKey(wrappedDataKey)
         .fileCryptoId(fileCryptoId)
         .nextChunkOrdinal(nextChunkOrdinal)
+        .newFileClaimed(newFileClaimed)
         .build();
+  }
+
+  /** Reserves this context for one new file. Append/recovery use the existing on-disk header. */
+  public synchronized void claimForNewFile() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    if (!pageAead || !newFileClaimed.compareAndSet(false, true)) {
+      throw new EncryptException(Messages.get("error.encrypt.file_context_already_used"));
+    }
   }
 
   /**
@@ -296,6 +316,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     private byte[] wrappedDataKey;
     private byte[] fileCryptoId;
     private AtomicLong nextChunkOrdinal;
+    private AtomicBoolean newFileClaimed;
 
     private Builder() {}
 
@@ -336,6 +357,11 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
 
     private Builder nextChunkOrdinal(AtomicLong nextChunkOrdinal) {
       this.nextChunkOrdinal = nextChunkOrdinal;
+      return this;
+    }
+
+    private Builder newFileClaimed(AtomicBoolean newFileClaimed) {
+      this.newFileClaimed = newFileClaimed;
       return this;
     }
 

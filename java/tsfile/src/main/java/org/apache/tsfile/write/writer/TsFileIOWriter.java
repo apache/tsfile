@@ -139,6 +139,8 @@ public class TsFileIOWriter implements AutoCloseable {
   protected String encryptKey;
 
   protected EncryptParameter encryptParameter;
+  private EncryptParameter ownedEncryptParameter;
+  private boolean newFileContextClaimed;
 
   private boolean fileStarted;
 
@@ -195,13 +197,18 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public TsFileIOWriter(File file, TSFileConfig conf, EncryptParameter param) throws IOException {
-    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
+    prepareNewFileEncryption(param);
     this.file = file;
-    if (resourceLogger.isDebugEnabled()) {
-      resourceLogger.debug("{} writer is opened.", file.getName());
+    try {
+      this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
+      if (resourceLogger.isDebugEnabled()) {
+        resourceLogger.debug("{} writer is opened.", file.getName());
+      }
+      startFile();
+    } catch (IOException | RuntimeException | Error e) {
+      closeAfterNewFileFailure(e);
+      throw e;
     }
-    setEncryptParam(param);
-    startFile();
   }
 
   /**
@@ -218,8 +225,47 @@ public class TsFileIOWriter implements AutoCloseable {
 
   public TsFileIOWriter(TsFileOutput output, EncryptParameter param) throws IOException {
     this.out = output;
-    setEncryptParam(param);
-    startFile();
+    try {
+      prepareNewFileEncryption(param);
+      startFile();
+    } catch (IOException | RuntimeException | Error e) {
+      closeAfterNewFileFailure(e);
+      throw e;
+    }
+  }
+
+  private void prepareNewFileEncryption(EncryptParameter parameter) {
+    if (parameter != null && parameter.isTdePageAead()) {
+      ownedEncryptParameter = parameter.copy();
+      try {
+        ownedEncryptParameter.claimForNewFile();
+      } catch (RuntimeException | Error e) {
+        ownedEncryptParameter.close();
+        throw e;
+      }
+      newFileContextClaimed = true;
+      setEncryptParam(ownedEncryptParameter);
+    } else {
+      setEncryptParam(parameter);
+    }
+  }
+
+  private void closeAfterNewFileFailure(Throwable failure) {
+    try {
+      if (out != null) {
+        out.close();
+      }
+    } catch (IOException | RuntimeException e) {
+      failure.addSuppressed(e);
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  private void closeOwnedEncryptParameter() {
+    if (ownedEncryptParameter != null) {
+      ownedEncryptParameter.close();
+    }
   }
 
   /** for test only */
@@ -280,6 +326,7 @@ public class TsFileIOWriter implements AutoCloseable {
         setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
       }
     }
+    this.encryptParameter = param;
   }
 
   public EncryptParameter getEncryptParameter() {
@@ -299,9 +346,13 @@ public class TsFileIOWriter implements AutoCloseable {
     if (!fileStarted || out.getPosition() != baseHeaderSize) {
       throw new IOException(Messages.get("error.write.encryption_header_must_precede_data"));
     }
+    if (!newFileContextClaimed) {
+      encryptParameter.claimForNewFile();
+      newFileContextClaimed = true;
+    }
     FileEncryptionHeader.serialize(encryptParameter, out.wrapAsStream());
-    // A recoverable encrypted file must persist its wrapped data key before any encrypted page.
-    out.force();
+    // Make the header visible to readers without a separate durability synchronization.
+    out.flush();
     encryptionHeaderWritten = true;
   }
 
@@ -404,30 +455,7 @@ public class TsFileIOWriter implements AutoCloseable {
         dataSize,
         numOfPages,
         mask,
-        -1);
-  }
-
-  public void startFlushChunk(
-      String measurementId,
-      CompressionType compressionCodecName,
-      TSDataType tsDataType,
-      TSEncoding encodingType,
-      Statistics<? extends Serializable> statistics,
-      int dataSize,
-      int numOfPages,
-      int mask,
-      long chunkOrdinal)
-      throws IOException {
-    startFlushChunk(
-        measurementId,
-        compressionCodecName,
-        tsDataType,
-        encodingType,
-        statistics,
-        dataSize,
-        numOfPages,
-        mask,
-        chunkOrdinal,
+        -1,
         null);
   }
 
@@ -601,7 +629,11 @@ public class TsFileIOWriter implements AutoCloseable {
     // flush page cache data to disk
     out.force();
     // close file
-    out.close();
+    try {
+      out.close();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
 
     if (resourceLogger.isDebugEnabled() && file != null) {
       resourceLogger.debug("{} writer is closed.", file.getName());
@@ -806,9 +838,13 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public void close() throws IOException {
     canWrite = false;
-    out.close();
-    if (tempOutput != null) {
-      this.tempOutput.close();
+    try {
+      out.close();
+      if (tempOutput != null) {
+        this.tempOutput.close();
+      }
+    } finally {
+      closeOwnedEncryptParameter();
     }
   }
 

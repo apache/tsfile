@@ -68,15 +68,6 @@ public class LazyLoadPageData {
       int offset,
       IUnCompressor unCompressor,
       EncryptParameter encryptParam,
-      int pageIndex) {
-    this(data, offset, unCompressor, encryptParam, pageIndex, -1);
-  }
-
-  public LazyLoadPageData(
-      byte[] data,
-      int offset,
-      IUnCompressor unCompressor,
-      EncryptParameter encryptParam,
       int pageIndex,
       long chunkOrdinal) {
     this.chunkData = data;

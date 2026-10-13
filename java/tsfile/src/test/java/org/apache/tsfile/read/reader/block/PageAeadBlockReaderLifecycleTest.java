@@ -92,6 +92,47 @@ public class PageAeadBlockReaderLifecycleTest {
   }
 
   @Test
+  public void testPublicTableQueryPropagatesAuthenticationFailure() throws Exception {
+    File file = writeTableFile(1);
+    try (TsFileSequenceReader sequence = new TsFileSequenceReader(file.getPath())) {
+      TrackingChunkLoader loader = new TrackingChunkLoader(sequence);
+      loader.tamperTimeColumn = true;
+      TableQueryExecutor executor =
+          new TableQueryExecutor(
+              new MetadataQuerierByFileImpl(sequence), loader, TableQueryOrdering.DEVICE);
+      try (TableResultSet result = tableResult(executor)) {
+        Exception failure = assertThrows(Exception.class, result::next);
+        assertTrue(EncryptException.isEncryptionFailure(failure));
+      }
+      assertAllDestroyed(loader.loaded);
+    }
+  }
+
+  @Test
+  public void testPublicTableQueryPropagatesLaterValuePageFailure() throws Exception {
+    File file = writeTableFile(1);
+    try (TsFileSequenceReader sequence = new TsFileSequenceReader(file.getPath())) {
+      TrackingChunkLoader loader = new TrackingChunkLoader(sequence);
+      loader.tamperSecondColumn = true;
+      TableQueryExecutor executor =
+          new TableQueryExecutor(
+              new MetadataQuerierByFileImpl(sequence), loader, TableQueryOrdering.DEVICE);
+      try (TableResultSet result = tableResult(executor)) {
+        Exception failure =
+            assertThrows(
+                Exception.class,
+                () -> {
+                  while (result.next()) {
+                    result.getLong("s2");
+                  }
+                });
+        assertTrue(EncryptException.isEncryptionFailure(failure));
+      }
+      assertAllDestroyed(loader.loaded);
+    }
+  }
+
+  @Test
   public void testTableResultEarlyCloseReleasesContextsAndKeepsSharedLoaderOpen() throws Exception {
     File file = writeTableFile(1);
     int closeCount = TestAeadEncryptionProvider.getCloseCount();
@@ -322,6 +363,7 @@ public class PageAeadBlockReaderLifecycleTest {
     private final List<Chunk> loaded = new ArrayList<>();
     private IOException loadFailure;
     private boolean tamperSecondColumn;
+    private boolean tamperTimeColumn;
 
     private TrackingChunkLoader(TsFileSequenceReader sequence) {
       super(sequence);
@@ -333,7 +375,8 @@ public class PageAeadBlockReaderLifecycleTest {
         throw loadFailure;
       }
       Chunk chunk = super.loadChunk(metadata);
-      if (tamperSecondColumn && "s2".equals(metadata.getMeasurementUid())) {
+      if ((tamperSecondColumn && "s2".equals(metadata.getMeasurementUid()))
+          || (tamperTimeColumn && "".equals(metadata.getMeasurementUid()))) {
         byte[] data = chunk.getData().array();
         data[data.length - 1] ^= 1;
       }

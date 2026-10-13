@@ -63,7 +63,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("squid:S4042") // Suppress use java.nio.Files#delete warning
 public class RestorableTsFileIOWriterTest {
@@ -122,18 +122,57 @@ public class RestorableTsFileIOWriterTest {
   }
 
   @Test
-  public void testHeaderlessRecoveryRejectsPageAeadParameter() throws Exception {
+  public void testHeaderlessRecoveryKeepsOnDiskFormatWithPageAeadParameter() throws Exception {
     TsFileWriter writer = new TsFileWriter(file);
     writer.getIOWriter().close();
     long originalLength = file.length();
     try (EncryptParameter parameter =
         TestAeadEncryptionProvider.createParameter(
             new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
-      assertThrows(IOException.class, () -> new RestorableTsFileIOWriter(file, false, parameter));
+      try (RestorableTsFileIOWriter recovered =
+          new RestorableTsFileIOWriter(file, false, parameter)) {
+        assertFalse(recovered.getEncryptParameter().isTdePageAead());
+        assertTrue(recovered.canWrite());
+      }
+      assertFalse(parameter.isDestroyed());
     }
     assertEquals(originalLength, file.length());
     try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath(), false)) {
       assertFalse(reader.hasFileEncryptionHeader());
+    }
+  }
+
+  @Test
+  public void testPlaintextRecoveryAndAppendDoNotAdoptCallerAeadContext() throws Exception {
+    TsFileWriter original = new TsFileWriter(file);
+    original.registerTimeseries(new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT));
+    original.writeRecord(new TSRecord("d1", 1).addTuple(new FloatDataPoint("s1", 11)));
+    original.flush();
+    original.getIOWriter().writePlanIndices();
+    original.getIOWriter().close();
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(
+            new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH])) {
+      try (org.apache.tsfile.read.UnClosedTsFileReader reader =
+          new org.apache.tsfile.read.UnClosedTsFileReader(file.getPath(), parameter, null)) {
+        assertFalse(reader.getEncryptParam().isTdePageAead());
+      }
+      RestorableTsFileIOWriter recovered = new RestorableTsFileIOWriter(file, parameter);
+      try (TsFileWriter writer = new TsFileWriter(recovered, parameter)) {
+        writer.writeRecord(new TSRecord("d1", 2).addTuple(new FloatDataPoint("s1", 22)));
+      }
+      assertFalse(parameter.isDestroyed());
+    }
+    try (TsFileSequenceReader sequence = new TsFileSequenceReader(file.getPath());
+        TsFileReader reader = new TsFileReader(sequence)) {
+      assertFalse(sequence.hasFileEncryptionHeader());
+      QueryDataSet query =
+          reader.query(
+              QueryExpression.create(
+                  java.util.Collections.singletonList(new Path("d1", "s1", true)), null));
+      assertEquals(11.0f, query.next().getFields().get(0).getFloatV(), 0.0f);
+      assertEquals(22.0f, query.next().getFields().get(0).getFloatV(), 0.0f);
+      assertFalse(query.hasNext());
     }
   }
 

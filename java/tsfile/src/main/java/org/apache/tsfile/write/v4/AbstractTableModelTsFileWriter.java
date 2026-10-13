@@ -94,10 +94,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   protected AbstractTableModelTsFileWriter(
       File file, long chunkGroupSizeThreshold, EncryptParameter firstEncryptParam)
       throws IOException {
-    this(
-        new TsFileIOWriter(file, copyEncryptParameter(firstEncryptParam)),
-        chunkGroupSizeThreshold,
-        firstEncryptParam);
+    this(new TsFileIOWriter(file, firstEncryptParam), chunkGroupSizeThreshold, firstEncryptParam);
   }
 
   @TsFileApi
@@ -132,8 +129,11 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
             ? fileEncryptParameter
             : firstEncryptParam;
     if (effectiveEncryptParameter != null && effectiveEncryptParameter.isTdePageAead()) {
-      this.secondEncryptParam = effectiveEncryptParameter;
-      fileWriter.setEncryptParam(effectiveEncryptParameter);
+      this.secondEncryptParam =
+          effectiveEncryptParameter == fileEncryptParameter
+              ? effectiveEncryptParameter
+              : effectiveEncryptParameter.copy();
+      fileWriter.setEncryptParam(this.secondEncryptParam);
       fileWriter.writeEncryptionHeaderIfNecessary();
     } else {
       this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
@@ -153,10 +153,6 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
         fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
       }
     }
-  }
-
-  private static EncryptParameter copyEncryptParameter(EncryptParameter parameter) {
-    return parameter == null ? null : parameter.copy();
   }
 
   protected IChunkGroupWriter tryToInitialGroupWriter(

@@ -26,6 +26,13 @@ package org.apache.tsfile.encrypt;
  * or discovered through {@link java.util.ServiceLoader}. Providers own the encryption profiles
  * referenced by {@link EncryptParameter#getProfileId()}; a profile's algorithms, page layout, key
  * envelope format, and page body overhead must remain immutable while files using it exist.
+ *
+ * <p>The caller must generate an independent DEK and fileCryptoId for every new file. An
+ * EncryptParameter, including its copies, describes one file, not a reusable encryption template.
+ * Providers must ensure that nonces are not reused under the same DEK, including after append,
+ * recovery, or recreation of a runtime context. PageCryptoContext is authenticated context, not a
+ * guaranteed-unique nonce source. Random-nonce profiles must define per-key usage limits and reject
+ * use beyond those limits.
  */
 public interface IEncryptProvider {
 

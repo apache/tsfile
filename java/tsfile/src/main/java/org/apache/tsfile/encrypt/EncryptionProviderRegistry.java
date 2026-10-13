@@ -21,16 +21,17 @@ package org.apache.tsfile.encrypt;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.i18n.Messages;
 
+import java.util.Iterator;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Registry for file-level encryption providers identified by stable provider ids. */
 public final class EncryptionProviderRegistry {
 
   private static final ConcurrentHashMap<String, IEncryptProvider> PROVIDERS =
       new ConcurrentHashMap<>();
-  private static final AtomicBoolean SERVICES_LOADED = new AtomicBoolean();
+  private static volatile boolean servicesLoaded;
 
   private EncryptionProviderRegistry() {}
 
@@ -64,14 +65,52 @@ public final class EncryptionProviderRegistry {
       throw new EncryptException(
           Messages.format("error.encrypt.provider_returned_null", providerId));
     }
-    return encrypt;
+    try {
+      return new PageAeadEncryption(encrypt);
+    } catch (RuntimeException | Error e) {
+      try {
+        encrypt.close();
+      } catch (RuntimeException | Error closeFailure) {
+        e.addSuppressed(closeFailure);
+      }
+      throw e;
+    }
   }
 
-  private static void loadServices() {
-    if (SERVICES_LOADED.compareAndSet(false, true)) {
-      for (IEncryptProvider provider : ServiceLoader.load(IEncryptProvider.class)) {
-        registerProvider(provider);
+  private static synchronized void loadServices() {
+    if (servicesLoaded) {
+      return;
+    }
+    Iterator<IEncryptProvider> providers = ServiceLoader.load(IEncryptProvider.class).iterator();
+    EncryptException failure = null;
+    while (true) {
+      try {
+        if (!providers.hasNext()) {
+          break;
+        }
+      } catch (ServiceConfigurationError e) {
+        if (failure == null) {
+          failure =
+              new EncryptException(Messages.get("error.encrypt.provider_discovery_failed"), e);
+        } else {
+          failure.addSuppressed(e);
+        }
+        break;
+      }
+      try {
+        registerProvider(providers.next());
+      } catch (ServiceConfigurationError | RuntimeException e) {
+        if (failure == null) {
+          failure =
+              new EncryptException(Messages.get("error.encrypt.provider_discovery_failed"), e);
+        } else {
+          failure.addSuppressed(e);
+        }
       }
     }
+    if (failure != null) {
+      throw failure;
+    }
+    servicesLoaded = true;
   }
 }

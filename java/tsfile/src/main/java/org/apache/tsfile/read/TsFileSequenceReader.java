@@ -503,6 +503,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ioSizeRecorder != null) {
         ioSizeRecorder.accept(dataStartOffset - BASE_FILE_HEADER_SIZE);
       }
+    } catch (org.apache.tsfile.exception.encrypt.EncryptException e) {
+      throw new IOException(e.getMessage(), e);
     } finally {
       tsFileInput.position(savedPosition);
     }
@@ -757,7 +759,10 @@ public class TsFileSequenceReader implements AutoCloseable {
           return dataEncryptParam;
         }
       }
-      return EncryptUtils.getEncryptParameter(firstEncryptParam);
+      return EncryptUtils.getEncryptParameter(
+          firstEncryptParam != null && firstEncryptParam.isTdePageAead()
+              ? new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null)
+              : firstEncryptParam);
     }
   }
 

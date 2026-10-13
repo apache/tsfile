@@ -34,6 +34,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +47,7 @@ public class TsFileReader implements AutoCloseable {
   private IMetadataQuerier metadataQuerier;
   private IChunkLoader chunkLoader;
   private TsFileExecutor tsfileExecutor;
-  private final Set<QueryDataSet> queryDataSets = new HashSet<>();
+  private final Set<QueryDataSet> queryDataSets = Collections.synchronizedSet(new HashSet<>());
 
   @TsFileApi
   public TsFileReader(File file) throws IOException {
@@ -72,9 +73,13 @@ public class TsFileReader implements AutoCloseable {
         tsfileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset));
   }
 
-  private QueryDataSet retainQuery(QueryDataSet dataSet) {
-    queryDataSets.removeIf(QueryDataSet::isClosed);
-    queryDataSets.add(dataSet);
+  private QueryDataSet retainQuery(QueryDataSet dataSet) throws IOException {
+    if (fileReader.hasFileEncryptionHeader()) {
+      synchronized (queryDataSets) {
+        queryDataSets.removeIf(QueryDataSet::isClosed);
+        queryDataSets.add(dataSet);
+      }
+    }
     return dataSet;
   }
 
@@ -99,14 +104,16 @@ public class TsFileReader implements AutoCloseable {
   public void close() throws IOException {
     IOException failure = null;
     try {
-      for (QueryDataSet dataSet : queryDataSets) {
-        try {
-          dataSet.close();
-        } catch (IOException e) {
-          if (failure == null) {
-            failure = e;
-          } else {
-            failure.addSuppressed(e);
+      synchronized (queryDataSets) {
+        for (QueryDataSet dataSet : queryDataSets) {
+          try {
+            dataSet.close();
+          } catch (IOException e) {
+            if (failure == null) {
+              failure = e;
+            } else {
+              failure.addSuppressed(e);
+            }
           }
         }
       }

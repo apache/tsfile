@@ -118,7 +118,7 @@ public class TsFileWriter implements AutoCloseable {
 
   public TsFileWriter(File file, EncryptParameter firstEncryptParam) throws IOException {
     this(
-        new TsFileIOWriter(file, copyEncryptParameter(firstEncryptParam)),
+        new TsFileIOWriter(file, firstEncryptParam),
         new Schema(),
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -151,7 +151,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(File file, Schema schema, EncryptParameter firstEncryptParam)
       throws IOException {
     this(
-        new TsFileIOWriter(file, copyEncryptParameter(firstEncryptParam)),
+        new TsFileIOWriter(file, firstEncryptParam),
         schema,
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -170,7 +170,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(TsFileOutput output, Schema schema, EncryptParameter firstEncryptParam)
       throws IOException {
     this(
-        new TsFileIOWriter(output, copyEncryptParameter(firstEncryptParam)),
+        new TsFileIOWriter(output, firstEncryptParam),
         schema,
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -190,11 +190,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(
       File file, Schema schema, TSFileConfig conf, EncryptParameter firstEncryptParam)
       throws IOException {
-    this(
-        new TsFileIOWriter(file, conf, copyEncryptParameter(firstEncryptParam)),
-        schema,
-        conf,
-        firstEncryptParam);
+    this(new TsFileIOWriter(file, conf, firstEncryptParam), schema, conf, firstEncryptParam);
   }
 
   /**
@@ -236,13 +232,22 @@ public class TsFileWriter implements AutoCloseable {
       LOG.warn(Messages.get("log.write.page_size_warn"), pageSize, chunkGroupSizeThreshold);
     }
     EncryptParameter fileEncryptParameter = fileWriter.getEncryptParameter();
+    if (fileWriter instanceof RestorableTsFileIOWriter
+        && firstEncryptParam != null
+        && firstEncryptParam.isTdePageAead()
+        && (fileEncryptParameter == null || !fileEncryptParameter.isTdePageAead())) {
+      firstEncryptParam = fileEncryptParameter;
+    }
     EncryptParameter effectiveEncryptParameter =
         fileEncryptParameter != null && fileEncryptParameter.isTdePageAead()
             ? fileEncryptParameter
             : firstEncryptParam;
     if (effectiveEncryptParameter != null && effectiveEncryptParameter.isTdePageAead()) {
-      this.secondEncryptParam = effectiveEncryptParameter;
-      fileWriter.setEncryptParam(effectiveEncryptParameter);
+      this.secondEncryptParam =
+          effectiveEncryptParameter == fileEncryptParameter
+              ? effectiveEncryptParameter
+              : effectiveEncryptParameter.copy();
+      fileWriter.setEncryptParam(this.secondEncryptParam);
       fileWriter.writeEncryptionHeaderIfNecessary();
     } else {
       this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
@@ -262,10 +267,6 @@ public class TsFileWriter implements AutoCloseable {
         fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
       }
     }
-  }
-
-  private static EncryptParameter copyEncryptParameter(EncryptParameter parameter) {
-    return parameter == null ? null : parameter.copy();
   }
 
   public void setChunkGroupSizeThreshold(long chunkGroupSizeThreshold) {

@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -156,6 +157,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       return prepareNextBlock();
     } catch (IOException e) {
       closeAfterFailure(e);
+      if (org.apache.tsfile.exception.encrypt.EncryptException.isEncryptionFailure(e)) {
+        throw new UncheckedIOException(e);
+      }
       LOGGER.error(Messages.get("log.read.block_reader_fill_measurements_error"), e);
       return false;
     } catch (RuntimeException | Error e) {

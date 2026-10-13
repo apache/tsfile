@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.reader.block;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -31,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.NoSuchElementException;
 
 public class DeviceOrderedTsBlockReader implements TsBlockReader {
@@ -76,6 +78,10 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
             new SingleDeviceTsBlockReader(
                 nextTask, metadataQuerier, chunkLoader, blockSize, timeFilter, measurementFilter);
       } catch (IOException e) {
+        if (EncryptException.isEncryptionFailure(e)) {
+          closed = true;
+          throw new UncheckedIOException(e);
+        }
         LOGGER.error(Messages.get("log.read.block_reader_construct_error"), nextTask, e);
       }
       if (currentReader != null && currentReader.hasNext()) {
