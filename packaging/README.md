@@ -69,7 +69,7 @@ Build a relocatable SDK and portable archive through the Maven entry point:
 ```bash
 ./mvnw -Pwith-cpp package \
   -Dbuild.test=OFF \
-  -Dtsfile.dependency.source=AUTO \
+  -Dtsfile.dependency.source=BUNDLED \
   -Denable.cpack=ON
 cmake --install cpp/target/build --prefix cpp/build/sdk-root
 cpack --config cpp/target/build/CPackConfig.cmake -G TGZ -B cpp/build/packages
@@ -88,16 +88,17 @@ generator in the same job:
 ```bash
 ./mvnw -Pwith-cpp package \
   -Dbuild.test=OFF \
-  -Dtsfile.dependency.source=AUTO \
+  -Dtsfile.dependency.source=BUNDLED \
   -Denable.cpack=ON
 cpack -G DEB --config cpp/target/build/CPackConfig.cmake -B cpp/build/packages
 # or: cpack -G RPM --config cpp/target/build/CPackConfig.cmake -B cpp/build/packages
 ```
 
-`SYSTEM` can be used instead of `AUTO` when the build image provides every
-compatible dependency, including ANTLR4 >=4.9.3 and <4.13.0. `AUTO` is the
-reproducible release default and uses the verified source fallback for
-unavailable or incompatible distro versions.
+All release packages use `BUNDLED`, including DEB, RPM and Homebrew builds.
+Pinned, SHA-256-verified third-party sources are compiled into the native library,
+so installing TsFile does not require separate Snappy, LZ4 or other codec libraries.
+Operating-system runtimes remain dynamic dependencies. `AUTO` and `SYSTEM` are
+optional custom source-build policies, not release packaging policies.
 
 The manual `Build native package artifacts` workflow is the authoritative
 native package build. Its Linux jobs create `tsfile`, `tsfile-dev`, and
@@ -184,7 +185,8 @@ compile TsFile or the CLI. Final assembly waits for all installation checks.
 
 ## macOS
 
-Homebrew is the native macOS distribution path. The formula is
+Homebrew is the native macOS distribution path. Its bundled build has no
+third-party runtime Formula dependencies. The formula is
 `packaging/homebrew/tsfile.rb`; it builds the same CMake install layout and
 tests both a C++ consumer and `tsfile-cli --version` after installation.
 
@@ -213,7 +215,12 @@ intermediate artifacts remain separate until merge. Each job also archives its
 installed Formula prefix as a standalone SDK artifact,
 `native-sdk-macos-arm64` or `native-sdk-macos-x86_64`, so macOS C++ consumers
 do not have to depend on Homebrew. The SDK archive is checked with the CLI,
-pkg-config, and an installed CMake consumer before upload. The merge job checks that
+pkg-config, and an installed CMake consumer before upload.
+`verify_macos_runtime.py` inspects Mach-O load commands in the installed bottle
+and staged SDK, allowing only macOS system libraries and the packaged TsFile
+library. Downloaded SDK tests repeat this check before executing any binaries,
+so preinstalled Homebrew dependencies cannot conceal an external reference.
+The merge job checks that
 both source Formula files match, merges both platform JSON files with Homebrew,
 and checks both generated tags and checksums in the resulting Formula.
 
@@ -347,7 +354,8 @@ the wheel compatibility SDKs.
 
 The wheel SDKs remain distinct from the Ubuntu/AlmaLinux SDKs and Homebrew
 SDKs: an Ubuntu SDK does not by itself establish manylinux_2_28 compatibility,
-and a Homebrew SDK may require newer macOS or Homebrew libraries. The four
+and a Homebrew SDK may require newer macOS. All of these SDKs bundle their
+third-party dependencies. The four
 Unix wheel SDKs use bundled dependencies and are included in the final bundle
 as `native-sdk-manylinux_2_28-{x86_64,aarch64}` and
 `native-sdk-macos12-{x86_64,arm64}`. This also makes them available for direct

@@ -114,7 +114,7 @@ jobs:
             -Dbuild.test=OFF \
             -DskipTests \
             -Dspotless.skip=true \
-            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.dependency.source=BUNDLED \
             -Dtsfile.version.sync.skip=true \
             -Denable.cpack=ON \
             -Dtsfile.archive.version="$ARCHIVE_VERSION" \
@@ -350,7 +350,7 @@ jobs:
             -Dbuild.test=OFF \
             -DskipTests \
             -Dspotless.skip=true \
-            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.dependency.source=BUNDLED \
             -Dtsfile.version.sync.skip=true \
             -Denable.cpack=ON \
             -Dtsfile.archive.version="$ARCHIVE_VERSION" \
@@ -563,7 +563,7 @@ jobs:
             -Dbuild.test=OFF \
             -DskipTests \
             -Dspotless.skip=true \
-            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.dependency.source=BUNDLED \
             -Dtsfile.version.sync.skip=true \
             -Denable.cpack=ON \
             -Dtsfile.archive.version="$ARCHIVE_VERSION" \
@@ -794,7 +794,7 @@ jobs:
             -Dbuild.test=OFF \
             -DskipTests \
             -Dspotless.skip=true \
-            -Dtsfile.dependency.source=AUTO \
+            -Dtsfile.dependency.source=BUNDLED \
             -Dtsfile.version.sync.skip=true \
             -Denable.cpack=ON \
             -Dtsfile.archive.version="$ARCHIVE_VERSION" \
@@ -1485,6 +1485,7 @@ jobs:
         shell: bash
         run: |
           brew install --build-bottle apache/tsfile-dev/tsfile-dev
+          python3 packaging/scripts/verify_macos_runtime.py "$(brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1)"
           brew test apache/tsfile-dev/tsfile-dev
           cd homebrew/bottles
           brew bottle --json --root-url "$BOTTLE_ROOT_URL" apache/tsfile-dev/tsfile-dev
@@ -1543,6 +1544,7 @@ jobs:
           [ "$(otool -D "$real_dylib" | sed -n '2p')" = "@rpath/$dylib_id" ] ||
             fail "dylib identity was not normalized to @rpath"
 
+          python3 packaging/scripts/verify_macos_runtime.py "$sdk_root"
           "$sdk_root/bin/tsfile-cli" --version
           PKG_CONFIG_PATH="$sdk_root/lib/pkgconfig" pkg-config --cflags --libs libtsfile
           cmake -S cpp/cmake/tests/projects/InstalledConsumer -B consumer/macos \
@@ -1847,6 +1849,7 @@ jobs:
           sparse-checkout: |
             packaging/tests
             packaging/cmake/InstalledGTest
+            packaging/scripts/verify_macos_runtime.py
             cpp/test
             cpp/cmake/tests/projects/InstalledConsumer
             go
@@ -1905,6 +1908,7 @@ jobs:
           if receipt.get("poured_from_bottle") is not True:
               raise SystemExit("CLI acceptance must install the built bottle")
           PY
+          python3 packaging/scripts/verify_macos_runtime.py "$formula_prefix"
           python3 packaging/tests/cli_package_smoke.py \
             --cli "$formula_prefix/bin/tsfile-cli" --resources cli-test-data
 
@@ -1975,6 +1979,7 @@ jobs:
           sparse-checkout: |
             packaging/tests
             packaging/cmake/InstalledGTest
+            packaging/scripts/verify_macos_runtime.py
             cpp/test
             go
           sparse-checkout-cone-mode: false

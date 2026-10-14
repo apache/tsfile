@@ -31,20 +31,13 @@ class Tsfile < Formula
   head "https://github.com/apache/tsfile.git", branch: "develop"
 
   depends_on "cmake" => :build
-  depends_on "lz4"
-  depends_on "simde"
-  depends_on "snappy"
-  depends_on "utf8cpp"
-  depends_on "zstd"
-
-  uses_from_macos "zlib"
 
   def install
     args = %W[
       -DBUILD_TEST=OFF
       -DBUILD_TOOLS=ON
       -DENABLE_LZMA2=OFF
-      -DTSFILE_DEPENDENCY_SOURCE=AUTO
+      -DTSFILE_DEPENDENCY_SOURCE=BUNDLED
       -DTSFILE_ENABLE_NATIVE_ARCH=OFF
       -DCMAKE_INSTALL_RPATH=#{rpath}
     ]

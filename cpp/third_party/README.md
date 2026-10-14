@@ -31,7 +31,9 @@ must be updated together.
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
 modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma have
 migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
-cache rather than kept in this repository.
+cache rather than kept in this repository. `BUNDLED` is the default for both
+CMake and Maven and is used by every native release package, including Homebrew.
+`AUTO` and `SYSTEM` remain explicit options for custom source builds.
 
 LZMA2 support is disabled by default so this optional codec does not raise the
 CMake 3.11 baseline for long-lived industrial and legacy toolchains. Set
