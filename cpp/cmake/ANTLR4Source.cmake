@@ -17,6 +17,8 @@ specific language governing permissions and limitations
 under the License.
 ]]
 
+include("${CMAKE_CURRENT_LIST_DIR}/DownloadWithRetry.cmake")
+
 set(_TSFILE_ANTLR4_ARCHIVE_NAME
         "antlr4-${TSFILE_ANTLR4_BUNDLED_VERSION}.tar.gz")
 set(_TSFILE_ANTLR4_URL
@@ -89,13 +91,8 @@ function(_tsfile_prepare_antlr4_archive
         set(_TSFILE_PARTIAL_ARCHIVE "${_TSFILE_ARCHIVE}.part")
         file(REMOVE "${_TSFILE_PARTIAL_ARCHIVE}")
         message(STATUS "Downloading ${DEPENDENCY}")
-        file(DOWNLOAD
-                "${URL}"
-                "${_TSFILE_PARTIAL_ARCHIVE}"
-                STATUS _TSFILE_DOWNLOAD_STATUS
-                TLS_VERIFY ON
-                TIMEOUT 120
-                INACTIVITY_TIMEOUT 30)
+        tsfile_download_with_retry(
+                "${URL}" "${_TSFILE_PARTIAL_ARCHIVE}" _TSFILE_DOWNLOAD_STATUS)
         list(GET _TSFILE_DOWNLOAD_STATUS 0 _TSFILE_DOWNLOAD_RESULT)
         list(GET _TSFILE_DOWNLOAD_STATUS 1 _TSFILE_DOWNLOAD_MESSAGE)
         if (NOT _TSFILE_DOWNLOAD_RESULT EQUAL 0)
