@@ -19,6 +19,13 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP_TEST)
 
+# Configuring cpp/test directly validates an already installed SDK. The normal
+# add_subdirectory(test) path continues to test the source-built library.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/InstalledSDKTests.cmake")
+    return()
+endif ()
+
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(GTEST_URL_LIST
@@ -215,6 +222,7 @@ add_test(
         NAME ANTLR4DependencyCMakeTest
         COMMAND ${CMAKE_COMMAND}
                 ${_TSFILE_DEPENDENCY_TEST_CMAKE_ARGUMENTS}
+                "-DTEST_CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 -DTEST_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cmake-tests
                 -DTEST_ANTLR4_ARCHIVE=${TSFILE_ANTLR4_ARCHIVE_RESOLVED}
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ANTLR4DependencyTest.cmake)
