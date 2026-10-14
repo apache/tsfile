@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: Build native package artifacts
+name: Build native release artifacts
 
 on:
   workflow_dispatch:
@@ -61,10 +61,6 @@ jobs:
         run: |
           python3 packaging/scripts/native_package_versions.py \
             --cmake-file cpp/CMakeLists.txt \
-            --build-date "$(date -u +%Y%m%d)" \
-            --run-number "${{ github.run_number }}" \
-            --run-attempt "${{ github.run_attempt }}" \
-            --git-sha "${{ github.sha }}" \
             --json-out versions.json \
             --github-output "$GITHUB_OUTPUT"
 
@@ -1456,7 +1452,7 @@ jobs:
       TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_GIT_SHA: ${{ github.sha }}
-      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
+      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -1470,25 +1466,25 @@ jobs:
             --output "$RUNNER_TEMP/tsfile-source.tar.gz"
           source_sha256="$(shasum -a 256 "$RUNNER_TEMP/tsfile-source.tar.gz" | awk '{print $1}')"
           python3 packaging/scripts/render_homebrew_formula.py \
-            --template packaging/homebrew/tsfile-dev.rb.in \
+            --template packaging/homebrew/tsfile.rb.in \
             --repository "$SOURCE_REPOSITORY" \
             --git-sha "$SOURCE_GIT_SHA" \
             --version "$TSFILE_HOMEBREW_VERSION" \
             --source-sha256 "$source_sha256" \
-            --output homebrew/Formula/tsfile-dev.rb
-          ruby -c homebrew/Formula/tsfile-dev.rb
-          brew tap-new apache/tsfile-dev
-          tap_path="$(brew --repository apache/tsfile-dev)"
-          cp homebrew/Formula/tsfile-dev.rb "$tap_path/Formula/tsfile-dev.rb"
+            --output homebrew/Formula/tsfile.rb
+          ruby -c homebrew/Formula/tsfile.rb
+          brew tap-new apache/tsfile
+          tap_path="$(brew --repository apache/tsfile)"
+          cp homebrew/Formula/tsfile.rb "$tap_path/Formula/tsfile.rb"
 
-      - name: Build, test, and bottle the development Formula
+      - name: Build, test, and bottle the release Formula
         shell: bash
         run: |
-          brew install --build-bottle apache/tsfile-dev/tsfile-dev
-          python3 packaging/scripts/verify_macos_runtime.py "$(brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1)"
-          brew test apache/tsfile-dev/tsfile-dev
+          brew install --build-bottle apache/tsfile/tsfile
+          python3 packaging/scripts/verify_macos_runtime.py "$(brew --prefix apache/tsfile/tsfile | tail -n 1)"
+          brew test apache/tsfile/tsfile
           cd homebrew/bottles
-          brew bottle --json --root-url "$BOTTLE_ROOT_URL" apache/tsfile-dev/tsfile-dev
+          brew bottle --json --root-url "$BOTTLE_ROOT_URL" apache/tsfile/tsfile
           shopt -s nullglob
           bottles=(*.bottle*.tar.gz)
           metadata=(*.bottle.json)
@@ -1502,7 +1498,7 @@ jobs:
           fail() { printf '::error::%s\n' "$1"; exit 1; }
           sdk_name="tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION"
           # Homebrew may print advisory lines before the path, so keep the last line.
-          formula_prefix="$(brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1)"
+          formula_prefix="$(brew --prefix apache/tsfile/tsfile | tail -n 1)"
           [ -n "$formula_prefix" ] || fail "brew --prefix returned no formula path"
           printf 'formula prefix: <%s>\n' "$formula_prefix"
           keg_root="$(cd "$formula_prefix" && pwd -P)"
@@ -1571,14 +1567,14 @@ jobs:
           retention-days: 14
 
   merge-homebrew:
-    name: Merge Homebrew development bottles
+    name: Merge Homebrew release bottles
     needs: [prepare, build-homebrew]
     runs-on: macos-latest
     timeout-minutes: 15
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       TSFILE_HOMEBREW_VERSION: ${{ needs.prepare.outputs.homebrew_version }}
-      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
+      BOTTLE_ROOT_URL: https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles
     steps:
       - name: Download both platform Homebrew artifacts separately
         uses: actions/download-artifact@v8
@@ -1592,10 +1588,10 @@ jobs:
         run: |
           arm=homebrew-intermediate/native-homebrew-macos-arm64
           intel=homebrew-intermediate/native-homebrew-macos-x86_64
-          cmp "$arm/Formula/tsfile-dev.rb" "$intel/Formula/tsfile-dev.rb"
-          brew tap-new apache/tsfile-dev
-          tap_path="$(brew --repository apache/tsfile-dev)"
-          cp "$arm/Formula/tsfile-dev.rb" "$tap_path/Formula/tsfile-dev.rb"
+          cmp "$arm/Formula/tsfile.rb" "$intel/Formula/tsfile.rb"
+          brew tap-new apache/tsfile
+          tap_path="$(brew --repository apache/tsfile)"
+          cp "$arm/Formula/tsfile.rb" "$tap_path/Formula/tsfile.rb"
           mkdir -p homebrew/Formula homebrew/bottles
           python3 - <<'PY'
           import hashlib
@@ -1611,10 +1607,10 @@ jobs:
               metadata = list(directory.glob("*.bottle.json"))
               assert len(metadata) == 1, f"Expected one JSON for {platform}"
               data = json.loads(metadata[0].read_text())
-              assert list(data) == ["apache/tsfile-dev/tsfile-dev"]
-              entry = data["apache/tsfile-dev/tsfile-dev"]
+              assert list(data) == ["apache/tsfile/tsfile"]
+              entry = data["apache/tsfile/tsfile"]
               assert entry["formula"]["pkg_version"] == os.environ["TSFILE_HOMEBREW_VERSION"]
-              assert entry["formula"]["path"] == "Library/Taps/apache/homebrew-tsfile-dev/Formula/tsfile-dev.rb"
+              assert entry["formula"]["path"] == "Library/Taps/apache/homebrew-tsfile/Formula/tsfile.rb"
               assert entry["bottle"]["root_url"] == os.environ["BOTTLE_ROOT_URL"]
               assert len(entry["bottle"]["tags"]) == 1
               tag, bottle = next(iter(entry["bottle"]["tags"].items()))
@@ -1635,11 +1631,11 @@ jobs:
       - name: Merge both bottle tags into the Formula
         shell: bash
         run: |
-          brew trust apache/tsfile-dev
+          brew trust apache/tsfile
           brew bottle --merge --write --no-commit homebrew/bottles/*.json
-          tap_path="$(brew --repository apache/tsfile-dev)"
-          cp "$tap_path/Formula/tsfile-dev.rb" homebrew/Formula/tsfile-dev.rb
-          ruby -c homebrew/Formula/tsfile-dev.rb
+          tap_path="$(brew --repository apache/tsfile)"
+          cp "$tap_path/Formula/tsfile.rb" homebrew/Formula/tsfile.rb
+          ruby -c homebrew/Formula/tsfile.rb
 
       - name: Verify merged Formula and normalize HTTP bottle filenames
         shell: bash
@@ -1652,7 +1648,7 @@ jobs:
           from pathlib import Path
           from urllib.parse import unquote
 
-          formula = Path("homebrew/Formula/tsfile-dev.rb").read_text()
+          formula = Path("homebrew/Formula/tsfile.rb").read_text()
           assert not re.search(r"@[A-Z0-9_]+@", formula), "Unresolved Formula token"
           assert len(re.findall(r"^\s*bottle\s+do\b", formula, re.M)) == 1
           assert f'root_url "{os.environ["BOTTLE_ROOT_URL"]}"' in formula
@@ -1662,7 +1658,7 @@ jobs:
           tags = set()
           for path in metadata:
               data = json.loads(path.read_text())
-              entry = data["apache/tsfile-dev/tsfile-dev"]
+              entry = data["apache/tsfile/tsfile"]
               for tag, bottle in entry["bottle"]["tags"].items():
                   assert tag not in tags, f"Duplicate bottle tag: {tag}"
                   tags.add(tag)
@@ -1881,10 +1877,10 @@ jobs:
       - name: Install the local bottle and test the CLI with Python test data
         shell: bash
         run: |
-          brew tap-new apache/tsfile-dev
-          tap_dir="$(brew --repository apache/tsfile-dev)"
-          cp homebrew/Formula/tsfile-dev.rb "$tap_dir/Formula/tsfile-dev.rb"
-          brew trust apache/tsfile-dev
+          brew tap-new apache/tsfile
+          tap_dir="$(brew --repository apache/tsfile)"
+          cp homebrew/Formula/tsfile.rb "$tap_dir/Formula/tsfile.rb"
+          brew trust apache/tsfile
           shopt -s nullglob
           bottles=("$PWD"/homebrew/bottles/*.bottle*.tar.gz)
           [[ ${#bottles[@]} -eq 1 ]]
@@ -1892,12 +1888,12 @@ jobs:
           # download cache path. Install by formula name: current Homebrew
           # rejects direct package paths outside developer mode.
           brew bottle --merge --write --no-commit homebrew/bottles/*.json
-          cached_bottle="$(brew --cache --force-bottle apache/tsfile-dev/tsfile-dev | tail -n 1)"
+          cached_bottle="$(brew --cache --force-bottle apache/tsfile/tsfile | tail -n 1)"
           [[ "$cached_bottle" == *.bottle*.tar.gz ]]
           mkdir -p "$(dirname "$cached_bottle")"
           cp "${bottles[0]}" "$cached_bottle"
-          brew install --force-bottle apache/tsfile-dev/tsfile-dev
-          formula_prefix="$(brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1)"
+          brew install --force-bottle apache/tsfile/tsfile
+          formula_prefix="$(brew --prefix apache/tsfile/tsfile | tail -n 1)"
           echo "TSFILE_INSTALLED_PREFIX=$formula_prefix" >> "$GITHUB_ENV"
           python3 - "$formula_prefix" <<'PY'
           import json

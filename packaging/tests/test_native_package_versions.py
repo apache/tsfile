@@ -31,184 +31,120 @@ CPP_VERSION_PATTERN = re.compile(r"^set\(TsFile_CPP_VERSION\s+(\S+)\)", re.MULTI
 
 
 def repository_cpp_version():
-    """Return the C++ version declared by the checkout under test."""
-
     match = CPP_VERSION_PATTERN.search(CPP_CMAKE_FILE.read_text(encoding="utf-8"))
     if match is None:
         raise AssertionError(f"cannot find TsFile_CPP_VERSION in {CPP_CMAKE_FILE}")
     return match.group(1)
 
 
-def load_version_module():
-    if not MODULE_PATH.is_file():
-        return None
-    spec = importlib.util.spec_from_file_location(
-        "native_package_versions", MODULE_PATH
-    )
-    if spec is None or spec.loader is None:
-        raise ImportError(
-            f"cannot load native package version helper from {MODULE_PATH}"
-        )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 class NativePackageVersionsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.module = load_version_module()
-
-    def require_module(self):
-        self.assertIsNotNone(
-            self.module,
-            "native_package_versions helper must exist for native package builds",
+        spec = importlib.util.spec_from_file_location(
+            "native_package_versions", MODULE_PATH
         )
-        return self.module
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
 
-    def test_reads_repository_version_from_cpp_cmake(self):
-        module = self.require_module()
-
+    def test_reads_repository_release_version(self):
         self.assertEqual(
-            module.read_cpp_version(CPP_CMAKE_FILE), repository_cpp_version()
+            self.module.read_cpp_version(CPP_CMAKE_FILE), repository_cpp_version()
         )
-
-    def test_builds_exact_development_package_versions(self):
-        module = self.require_module()
-
-        self.assertEqual(
-            module.build_versions("2.5.0.dev", "20260910", 123, 1, "abcdef123456"),
-            {
-                "base_version": "2.5.0",
-                "python_version": "2.5.0.dev0",
-                "logical_version": "2.5.0.dev0+20260910.123.1.gabcdef1",
-                "deb_version": "2.5.0~dev0+20260910.123.1.gabcdef1-1",
-                "rpm_version": "2.5.0",
-                "rpm_release": "0.dev0.20260910.123.1.gabcdef1.el9",
-                "archive_version": "2.5.0-dev0.20260910.123.1.gabcdef1",
-                "homebrew_version": "2.5.0.dev0.20260910.123.1.gabcdef1",
-            },
-        )
-
-    def test_reads_release_and_development_versions(self):
-        module = self.require_module()
-        with tempfile.TemporaryDirectory() as directory:
-            cmake_file = Path(directory) / "CMakeLists.txt"
-            for version in ("2.5.0", "2.5.0.dev"):
-                with self.subTest(version=version):
-                    cmake_file.write_text(
-                        f"set(TsFile_CPP_VERSION {version})\n", encoding="utf-8"
-                    )
-                    self.assertEqual(module.read_cpp_version(cmake_file), version)
 
     def test_builds_exact_release_package_versions(self):
-        module = self.require_module()
-        expected = {
-            "base_version": "2.5.0",
-            "python_version": "2.5.0",
-            "logical_version": "2.5.0",
-            "deb_version": "2.5.0-1",
-            "rpm_version": "2.5.0",
-            "rpm_release": "1.el9",
-            "archive_version": "2.5.0",
-            "homebrew_version": "2.5.0",
-        }
-        for build_date, run_number, run_attempt, git_sha in (
-            ("20260910", 123, 1, "abcdef123456"),
-            ("20261014", 124, 2, "123456abcdef"),
-        ):
-            with self.subTest(run_number=run_number, run_attempt=run_attempt):
-                self.assertEqual(
-                    module.build_versions(
-                        "2.5.0", build_date, run_number, run_attempt, git_sha
-                    ),
-                    expected,
-                )
-
-    def test_rejects_invalid_source_versions(self):
-        module = self.require_module()
-
-        for source_version in ("2.5.dev", "2.5", "02.5.0", "2.5.0rc1", "2.5.0.dev0"):
-            with self.subTest(source_version=source_version):
-                with self.assertRaises(ValueError):
-                    module.build_versions(
-                        source_version, "20260910", 123, 1, "abcdef123456"
-                    )
-
-    def test_rejects_invalid_build_identity_fields(self):
-        module = self.require_module()
-
-        invalid_cases = (
-            ("2026-09-10", 123, 1, "abcdef123456"),
-            ("2026091", 123, 1, "abcdef123456"),
-            ("20261340", 123, 1, "abcdef123456"),
-            ("20260910", "run", 1, "abcdef123456"),
-            ("20260910", 123, "attempt", "abcdef123456"),
-            ("20260910", 123, 1, "abcdef"),
-            ("20260910", 123, 1, "abcdefg123456"),
+        self.assertEqual(
+            self.module.build_versions("2.5.0"),
+            {
+                "base_version": "2.5.0",
+                "python_version": "2.5.0",
+                "logical_version": "2.5.0",
+                "deb_version": "2.5.0-1",
+                "rpm_version": "2.5.0",
+                "rpm_release": "1.el9",
+                "archive_version": "2.5.0",
+                "homebrew_version": "2.5.0",
+            },
         )
-        for build_date, run_number, run_attempt, git_sha in invalid_cases:
-            with self.subTest(
-                build_date=build_date,
-                run_number=run_number,
-                run_attempt=run_attempt,
-                git_sha=git_sha,
+        self.assertEqual(self.module.build_versions("3.0.0")["deb_version"], "3.0.0-1")
+
+    def test_rejects_development_prerelease_and_invalid_versions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cmake_file = Path(directory) / "CMakeLists.txt"
+            for version in (
+                "2.5.0.dev",
+                "2.5.0.dev0",
+                "2.5.0rc1",
+                "2.5.dev",
+                "2.5",
+                "02.5.0",
+                "2.5.0+build",
+                "2.5.0-release",
+                "",
             ):
-                with self.assertRaises(ValueError):
-                    module.build_versions(
-                        "2.5.0.dev", build_date, run_number, run_attempt, git_sha
-                    )
+                with self.subTest(version=version):
+                    with self.assertRaisesRegex(ValueError, "release"):
+                        self.module.build_versions(version)
+                    cmake_file.write_text(f"set(TsFile_CPP_VERSION {version})\n")
+                    with self.assertRaisesRegex(ValueError, "release"):
+                        self.module.read_cpp_version(cmake_file)
+
+    def test_cli_rejects_development_checkout_before_writing_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cmake_file = root / "CMakeLists.txt"
+            cmake_file.write_text("set(TsFile_CPP_VERSION 2.5.0.dev)\n")
+            json_out = root / "versions.json"
+            github_out = root / "github-output.txt"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--cmake-file",
+                    str(cmake_file),
+                    "--json-out",
+                    str(json_out),
+                    "--github-output",
+                    str(github_out),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("release TsFile_CPP_VERSION", result.stderr)
+            self.assertFalse(json_out.exists())
+            self.assertFalse(github_out.exists())
 
     def test_cli_writes_json_and_github_outputs(self):
-        module = self.require_module()
-        expected = module.build_versions(
-            repository_cpp_version(), "20260910", 123, 1, "abcdef123456"
-        )
-
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            temporary_path = Path(temporary_directory)
-            json_output = temporary_path / "versions.json"
-            github_output = temporary_path / "github-output.txt"
-            github_output.write_text("existing=value\n", encoding="utf-8")
+        expected = self.module.build_versions(repository_cpp_version())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            json_out = root / "versions.json"
+            github_out = root / "github-output.txt"
+            github_out.write_text("existing=value\n")
             subprocess.run(
                 [
                     sys.executable,
                     str(MODULE_PATH),
                     "--cmake-file",
                     str(CPP_CMAKE_FILE),
-                    "--build-date",
-                    "20260910",
-                    "--run-number",
-                    "123",
-                    "--run-attempt",
-                    "1",
-                    "--git-sha",
-                    "abcdef123456",
                     "--json-out",
-                    str(json_output),
+                    str(json_out),
                     "--github-output",
-                    str(github_output),
+                    str(github_out),
                 ],
                 check=True,
             )
-
+            self.assertEqual(json.loads(json_out.read_text()), expected)
             self.assertEqual(
-                json.loads(json_output.read_text(encoding="utf-8")), expected
-            )
-            self.assertEqual(
-                github_output.read_text(encoding="utf-8").splitlines(),
+                github_out.read_text().splitlines(),
                 [
                     "existing=value",
                     *[f"{key}={value}" for key, value in expected.items()],
                 ],
             )
 
-    def test_cli_separates_unterminated_github_output_without_changing_bytes(self):
-        module = self.require_module()
-        base_version = module.build_versions(
-            repository_cpp_version(), "20260910", 123, 1, "abcdef123456"
-        )["base_version"]
-
+    def test_cli_preserves_existing_github_output_bytes(self):
+        version = repository_cpp_version()
         for existing in (
             b"",
             b"existing=value",
@@ -218,37 +154,27 @@ class NativePackageVersionsTest(unittest.TestCase):
             with self.subTest(
                 existing=existing
             ), tempfile.TemporaryDirectory() as directory:
-                output = Path(directory) / "github-output.txt"
-                output.write_bytes(existing)
+                root = Path(directory)
+                github_out = root / "github-output.txt"
+                github_out.write_bytes(existing)
                 subprocess.run(
                     [
                         sys.executable,
                         str(MODULE_PATH),
                         "--cmake-file",
                         str(CPP_CMAKE_FILE),
-                        "--build-date",
-                        "20260910",
-                        "--run-number",
-                        "123",
-                        "--run-attempt",
-                        "1",
-                        "--git-sha",
-                        "abcdef123456",
                         "--json-out",
-                        str(Path(directory) / "versions.json"),
+                        str(root / "versions.json"),
                         "--github-output",
-                        str(output),
+                        str(github_out),
                     ],
                     check=True,
                 )
                 separator = b"\n" if existing and not existing.endswith(b"\n") else b""
                 self.assertTrue(
-                    output.read_bytes().startswith(
-                        existing
-                        + separator
-                        + f"base_version={base_version}\n".encode("utf-8")
-                    ),
-                    output.read_bytes(),
+                    github_out.read_bytes().startswith(
+                        existing + separator + f"base_version={version}\n".encode()
+                    )
                 )
 
 

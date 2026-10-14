@@ -31,7 +31,7 @@ API; a separate API cleanup will narrow it in a future version.
 
 ## Manual artifact workflow
 
-`Build native package artifacts` (`.github/workflows/native-packages.yml`) is
+`Build native release artifacts` (`.github/workflows/native-packages.yml`) is
 the authoritative native packaging workflow. In the Apache TsFile repository's GitHub Actions tab,
 select this workflow, choose **Run workflow**, select the branch containing the
 commit to build, and dispatch it manually. It runs only on `workflow_dispatch`,
@@ -40,7 +40,7 @@ native packaging.
 
 A successful run builds the C++ core through Maven, stages one SDK per
 platform and compatibility baseline, and then produces Ubuntu amd64 and arm64 DEBs, AlmaLinux
-x86_64 and aarch64 RPMs, ARM64 and Intel Homebrew development bottles with a
+x86_64 and aarch64 RPMs, ARM64 and Intel Homebrew release bottles with a
 merged Formula, Windows x86_64 and ARM64 SDK/CLI ZIPs, and Python wheels for Linux and macOS
 on both architectures plus Windows x86_64. Every wheel platform covers CPython
 3.9 through 3.14. The Go consumer and Python extensions reuse staged SDKs; C++
@@ -56,11 +56,13 @@ promote a build to an official release.
 
 For a source version of `2.5.0`, the workflow generates release-format
 metadata: SDK archives and Python wheels use `2.5.0`, DEBs use `2.5.0-1`,
-and RPMs use `2.5.0-1.el9`. The bundle records the exact source repository
-and commit in `manifest.json`. A source version ending in `.dev` retains
-the date, workflow run, attempt, and commit suffixes for development builds.
+and RPMs use `2.5.0-1.el9`. This workflow accepts only `MAJOR.MINOR.PATCH`
+source versions; development and prerelease versions fail during preparation.
+The bundle records the exact source repository and commit in `manifest.json`.
 Final bundle assembly rejects wheels whose version differs from the release
-version.
+version. C++ publication targets always use the `release` directory or Debian
+component. The DEB package name `tsfile-dev` denotes SDK headers and is retained
+for release packages.
 
 ## Portable archive
 
@@ -100,7 +102,7 @@ so installing TsFile does not require separate Snappy, LZ4 or other codec librar
 Operating-system runtimes remain dynamic dependencies. `AUTO` and `SYSTEM` are
 optional custom source-build policies, not release packaging policies.
 
-The manual `Build native package artifacts` workflow is the authoritative
+The manual `Build native release artifacts` workflow is the authoritative
 native package build. Its Linux jobs create `tsfile`, `tsfile-dev`, and
 `tsfile-tools` DEBs on native Ubuntu 22.04 amd64 and arm64 runners, and
 `tsfile`, `tsfile-devel`, and `tsfile-tools` RPMs on native AlmaLinux 9
@@ -185,29 +187,20 @@ compile TsFile or the CLI. Final assembly waits for all installation checks.
 
 ## macOS
 
-Homebrew is the native macOS distribution path. Its bundled build has no
-third-party runtime Formula dependencies. The formula is
-`packaging/homebrew/tsfile.rb`; it builds the same CMake install layout and
-tests both a C++ consumer and `tsfile-cli --version` after installation.
+Homebrew is the native macOS distribution path. The workflow renders the
+release Formula `tsfile` from `packaging/homebrew/tsfile.rb.in`, using the exact
+source repository and full workflow commit. It hashes that source archive,
+uses the C++ release version, and builds and tests the installed C++ consumer
+and CLI before bottling. Its bundled build has no third-party runtime Formula
+dependencies. The generated Formula is shipped as `homebrew/Formula/tsfile.rb`
+in the final artifact; no source URL or checksum needs to be edited after download.
 
-```bash
-brew install ./packaging/homebrew/tsfile.rb
-```
-
-The stable formula URL and checksum must be updated to the ASF source archive
-when the first release containing this packaging work is published.
-
-The manual native-package workflow also builds the self-hosted development
-Formula `tsfile-dev`, using `packaging/homebrew/tsfile-dev.rb.in`. This is not a
-Homebrew/core submission. Each build pins the full workflow commit from
-the Apache TsFile source repository, hashes that source archive, and uses the generated immutable
-Homebrew development version. The Formula retains the CMake install behavior
-and tests the installed C++ consumer and CLI before bottling. `tsfile-dev` is
-keg-only because the current SDK intentionally ships its dependency header
-closure; linking that closure into Homebrew's shared prefix would collide with
-headers owned by dependencies such as `simde`. After installation, invoke the
-CLI as `$(brew --prefix tsfile-dev)/bin/tsfile-cli`, or add that Formula's
-`bin` directory to `PATH`.
+The Formula is keg-only because the SDK ships its dependency header closure;
+linking that closure into Homebrew's shared prefix would collide with headers
+owned by dependencies such as `simde`. Invoke the CLI as
+`$(brew --prefix tsfile)/bin/tsfile-cli`, or add the Formula's `bin` directory
+to `PATH`. The temporary `apache/tsfile` tap used by CI is local to each job;
+a public Git tap is a separate distribution step.
 
 The ARM64 job runs on `macos-latest` and the Intel job on `macos-15-intel`.
 Their `native-homebrew-macos-arm64` and `native-homebrew-macos-x86_64`
@@ -224,11 +217,11 @@ The merge job checks that
 both source Formula files match, merges both platform JSON files with Homebrew,
 and checks both generated tags and checksums in the resulting Formula.
 
-The `native-homebrew` artifact contains `Formula/tsfile-dev.rb` and `bottles/`
+The `native-homebrew` artifact contains `Formula/tsfile.rb` and `bottles/`
 with both bottle tarballs and both JSON metadata files. When downloaded into
 `homebrew/`, this gives the final `homebrew/Formula/` and `homebrew/bottles/`
 layout. The configured future bottle root is
-`https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/<homebrew-version>/bottles`.
+`https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/<homebrew-version>/bottles`.
 Homebrew generates local tarballs with a double dash before the version but
 requests a single dash in HTTP URLs. After merge, the workflow renames each
 tarball to the JSON `filename` (URL-decoded) and updates its `local_filename`
@@ -426,8 +419,10 @@ path, and properties required for later manual publication.
 
 The final job has no publishing credentials and does not upload to JFrog. A
 maintainer can later use the manifest to upload DEBs to `tsfile-debian` with the
-recorded Debian coordinates, RPMs to `tsfile-rpm/dev/el9/<architecture>`,
-Homebrew formula/bottles to `tsfile/homebrew/dev/versions/<version>`, SDKs to
-`tsfile/sdk/dev/versions/<version>`, Windows ZIPs to
-`tsfile/windows/dev/versions/<version>`, and Python wheels to the
-`tsfile-python` repository recorded in the manifest.
+recorded Debian coordinates, RPMs to `tsfile-rpm/release/el9/<architecture>`,
+Homebrew formula/bottles to `tsfile/homebrew/release/versions/<version>`, SDKs to
+`tsfile/sdk/release/versions/<version>`, Windows ZIPs to
+`tsfile/windows/release/versions/<version>`. DEBs use the `release` component
+and `pool/release/<platform>` paths. Python wheels retain their platform,
+version, size and checksum metadata, but have no Apache repository or target
+path: they are published separately through the project's PyPI process.

@@ -22,17 +22,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = ROOT / "packaging/scripts/render_homebrew_formula.py"
-TEMPLATE_PATH = ROOT / "packaging/homebrew/tsfile-dev.rb.in"
+TEMPLATE_PATH = ROOT / "packaging/homebrew/tsfile.rb.in"
 VALUES = {
     "SOURCE_REPOSITORY": "apache/tsfile",
     "GIT_SHA": "abcdef1234567890abcdef1234567890abcdef12",
-    "HOMEBREW_VERSION": "2.5.0.dev0.20260910.123.1.gabcdef1",
+    "HOMEBREW_VERSION": "2.5.0",
     "SOURCE_SHA256": "0123456789abcdef" * 4,
 }
-TEMPLATE = """class TsfileDev < Formula
+TEMPLATE = """class Tsfile < Formula
   url "https://github.com/@SOURCE_REPOSITORY@/archive/@GIT_SHA@.tar.gz"
   version "@HOMEBREW_VERSION@"
   sha256 "@SOURCE_SHA256@"
@@ -40,7 +39,7 @@ TEMPLATE = """class TsfileDev < Formula
 end
 """
 BOTTLE_BLOCK = """  bottle do
-    root_url "https://packages.apache.org/artifactory/tsfile/homebrew/dev/versions/2.5.0.dev0.20260910.123.1.gabcdef1/bottles"
+    root_url "https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/2.5.0/bottles"
     sha256 cellar: :any, arm64_sequoia: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     sha256 cellar: :any, sequoia: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   end"""
@@ -65,13 +64,11 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
         rendered = self.renderer()(TEMPLATE, VALUES, BOTTLE_BLOCK)
         self.assertEqual(
             rendered,
-            """class TsfileDev < Formula
+            """class Tsfile < Formula
   url "https://github.com/apache/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"
-  version "2.5.0.dev0.20260910.123.1.gabcdef1"
+  version "2.5.0"
   sha256 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-"""
-            + BOTTLE_BLOCK
-            + "\nend\n",
+""" + BOTTLE_BLOCK + "\nend\n",
         )
 
     def test_pre_bottle_formula_has_no_bottle_block(self):
@@ -117,6 +114,8 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
             ("GIT_SHA", "develop"),
             ("SOURCE_REPOSITORY", 'apache/tsfile"'),
             ("HOMEBREW_VERSION", 'bad"\nversion "injected'),
+            ("HOMEBREW_VERSION", "2.5.0.dev"),
+            ("HOMEBREW_VERSION", "2.5.0rc1"),
         ):
             with self.subTest(key=key, value=value):
                 with self.assertRaises(ValueError):
@@ -130,12 +129,12 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
         self.renderer()
         template = TEMPLATE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            'keg_only "development snapshots install their dependency header closure"',
+            'keg_only "the SDK installs its dependency header closure"',
             template,
         )
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
-            output = directory / "tsfile-dev.rb"
+            output = directory / "tsfile.rb"
             block = directory / "bottle.rb"
             block.write_text(BOTTLE_BLOCK, encoding="utf-8")
             command = [
@@ -160,12 +159,12 @@ class RenderHomebrewFormulaTest(unittest.TestCase):
             ):
                 subprocess.run(command + bottle_args, check=True)
                 rendered = output.read_text(encoding="utf-8")
-                self.assertIn("class TsfileDev < Formula", rendered)
+                self.assertIn("class Tsfile < Formula", rendered)
                 self.assertIn(
                     'url "https://github.com/apache/tsfile/archive/abcdef1234567890abcdef1234567890abcdef12.tar.gz"',
                     rendered,
                 )
-                self.assertIn('version "2.5.0.dev0.20260910.123.1.gabcdef1"', rendered)
+                self.assertIn('version "2.5.0"', rendered)
                 self.assertIn(
                     'sha256 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"',
                     rendered,
