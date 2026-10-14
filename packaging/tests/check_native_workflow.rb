@@ -34,6 +34,7 @@ end
 %w[build-deb build-deb-arm64 build-rpm build-rpm-aarch64 build-windows build-windows-arm64].each do |name|
   text = run_text(jobs.fetch(name))
   raise "#{name} must build C++ through Maven" unless text.include?("-Pwith-cpp package")
+  raise "#{name} must bundle third-party dependencies" unless text.include?("-Dtsfile.dependency.source=BUNDLED")
   raise "#{name} must enable CPack through Maven" unless text.include?("-Denable.cpack=ON")
   raise "#{name} must use the generated CPack config" unless text.include?("cpp/target/build/CPackConfig.cmake")
   raise "#{name} must stage an SDK" unless text.include?("cmake --install cpp/target/build")
@@ -130,6 +131,14 @@ raise "The old wheel workflow must be retired" if File.exist?(File.expand_path("
 homebrew = jobs.fetch("build-homebrew")
 raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"
 homebrew_text = run_text(homebrew)
+raise "Homebrew bottles and SDKs must validate dylib dependencies" unless homebrew_text.scan("python3 packaging/scripts/verify_macos_runtime.py").size == 2
+%w[tsfile.rb tsfile-dev.rb.in].each do |name|
+  formula = File.read(File.expand_path("../homebrew/#{name}", __dir__))
+  raise "#{name} must use bundled dependencies" unless formula.include?("-DTSFILE_DEPENDENCY_SOURCE=BUNDLED")
+  dependencies = formula.lines.grep(/^\s*depends_on/)
+  raise "#{name} must not install third-party runtime Formulae" unless dependencies.all? { |line| line.include?("=> :build") }
+  raise "#{name} must bundle zlib" if formula.include?("uses_from_macos")
+end
 raise "Homebrew job must stage a macOS SDK from the installed formula" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev")
 raise "Homebrew job must archive the staged macOS SDK" unless homebrew_text.include?("tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION")
 raise "Homebrew SDK must be verified from its own staged tree" unless homebrew_text.include?('sdk_root="$PWD/sdk/$sdk_name"')
@@ -168,6 +177,12 @@ raise "prepare must use one source checkout for code and CLI data" unless prepar
   raise "#{name} must check out only its acceptance fixtures" if checkout.fetch("sparse-checkout").include?("cpp/src") || checkout.fetch("sparse-checkout").include?("cpp/tools")
   raise "#{name} must not rebuild TsFile" if run_text(job).include?("-Pwith-cpp")
 end
+
+%w[test-homebrew test-compatibility-sdk].each do |name|
+  checkout = jobs.fetch(name).fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
+  raise "#{name} must provide the macOS runtime checker for downloaded SDKs" unless checkout.fetch("with").fetch("sparse-checkout").include?("packaging/scripts/verify_macos_runtime.py")
+end
+raise "Installed Homebrew bottle must validate dylib dependencies" unless run_text(jobs.fetch("test-homebrew")).include?("python3 packaging/scripts/verify_macos_runtime.py")
 windows_cli = jobs.fetch("test-windows")
 raise "Windows CLI acceptance must wait for both ZIP architectures" unless windows_cli.fetch("needs").sort == %w[build-windows build-windows-arm64].sort
 windows_cli_matrix = windows_cli.fetch("strategy").fetch("matrix").fetch("include")

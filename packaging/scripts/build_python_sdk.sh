@@ -63,6 +63,9 @@ test ! -e "$sdk_root"
 cmake --install cpp/target/build --prefix "$sdk_root"
 test -f "$sdk_root/include/tsfile/cwrapper/tsfile_cwrapper.h"
 test -d "$sdk_root/lib"
+if [[ "$(uname -s)" == Darwin ]]; then
+  python3 packaging/scripts/verify_macos_runtime.py "$sdk_root"
+fi
 "$sdk_root/bin/tsfile-cli" --version
 sdk_output="${TSFILE_PYTHON_SDK_EXPORT:-$repository_root/python-sdk-output}"
 mkdir -p "$sdk_output"

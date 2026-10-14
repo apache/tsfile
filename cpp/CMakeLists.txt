@@ -573,9 +573,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"
 unset(_TSFILE_PUBLIC_FEATURE)
 
 # CPack is an opt-in local/package-builder integration. Native release jobs
-# can configure the project with TSFILE_DEPENDENCY_SOURCE=SYSTEM when the
-# target image provides every compatible dependency; AUTO remains the
-# reproducible fallback for distribution images with older packages.
+# use BUNDLED dependencies so packages do not depend on third-party shared
+# libraries installed on the build host.
 option(TSFILE_ENABLE_CPACK
         "Enable CPack native package metadata generation" OFF)
 if (TSFILE_ENABLE_CPACK)

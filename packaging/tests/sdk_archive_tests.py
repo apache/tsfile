@@ -72,7 +72,10 @@ def extract_sdk(archive_path, destination):
 
 
 def run(command):
-    print("+ " + subprocess.list2cmdline([str(item) for item in command]), flush=True)
+    print(
+        "+ " + subprocess.list2cmdline([str(item) for item in command]),
+        flush=True,
+    )
     subprocess.run(command, check=True, timeout=1800)
 
 
@@ -102,7 +105,18 @@ def main():
         raise ValueError("Missing shared-library build configuration in SDK")
     if sys.platform == "win32" and metadata.get("msvc_runtime") != "MultiThreaded":
         raise ValueError("Portable Windows SDK must record its static Release CRT")
-    print(f"Testing downloaded SDK {archives[0]} relocated to {prefix}", flush=True)
+    print(
+        f"Testing downloaded SDK {archives[0]} relocated to {prefix}",
+        flush=True,
+    )
+    if sys.platform == "darwin":
+        run(
+            [
+                sys.executable,
+                ROOT / "packaging/scripts/verify_macos_runtime.py",
+                prefix,
+            ]
+        )
     run(
         [
             sys.executable,
