@@ -26,6 +26,7 @@ raise "Workflow must remain manual-only" unless triggers.keys == ["workflow_disp
 raise "Workflow permissions must remain read-only" unless workflow["permissions"] == { "contents" => "read" }
 
 jobs = workflow.fetch("jobs")
+raise "Workflow must be dedicated to release artifacts" unless workflow.fetch("name") == "Build native release artifacts"
 
 def run_text(job)
   job.fetch("steps").filter_map { |step| step["run"] }.join("\n")
@@ -131,19 +132,24 @@ raise "The old wheel workflow must be retired" if File.exist?(File.expand_path("
 homebrew = jobs.fetch("build-homebrew")
 raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"
 homebrew_text = run_text(homebrew)
+raise "Homebrew must build the release Formula" unless homebrew_text.include?("packaging/homebrew/tsfile.rb.in") && !homebrew_text.include?("tsfile-dev")
+expected_bottle_root = "https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/${{ needs.prepare.outputs.homebrew_version }}/bottles"
+%w[build-homebrew merge-homebrew].each do |name|
+  raise "#{name} must use the release bottle root" unless jobs.fetch(name).fetch("env").fetch("BOTTLE_ROOT_URL") == expected_bottle_root
+end
 raise "Homebrew bottles and SDKs must validate dylib dependencies" unless homebrew_text.scan("python3 packaging/scripts/verify_macos_runtime.py").size == 2
-%w[tsfile.rb tsfile-dev.rb.in].each do |name|
+%w[tsfile.rb.in].each do |name|
   formula = File.read(File.expand_path("../homebrew/#{name}", __dir__))
   raise "#{name} must use bundled dependencies" unless formula.include?("-DTSFILE_DEPENDENCY_SOURCE=BUNDLED")
   dependencies = formula.lines.grep(/^\s*depends_on/)
   raise "#{name} must not install third-party runtime Formulae" unless dependencies.all? { |line| line.include?("=> :build") }
   raise "#{name} must bundle zlib" if formula.include?("uses_from_macos")
 end
-raise "Homebrew job must stage a macOS SDK from the installed formula" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev")
+raise "Homebrew job must stage a macOS SDK from the installed formula" unless homebrew_text.include?("brew --prefix apache/tsfile/tsfile")
 raise "Homebrew job must archive the staged macOS SDK" unless homebrew_text.include?("tsfile-sdk-${{ matrix.name }}-$ARCHIVE_VERSION")
 raise "Homebrew SDK must be verified from its own staged tree" unless homebrew_text.include?('sdk_root="$PWD/sdk/$sdk_name"')
 raise "Homebrew SDK must be archived from the staging root" unless homebrew_text.include?('tar -C sdk -czf "sdk/$sdk_name.tar.gz" "$sdk_name"')
-raise "Homebrew prefix capture must tolerate extra stdout lines" unless homebrew_text.include?("brew --prefix apache/tsfile-dev/tsfile-dev | tail -n 1")
+raise "Homebrew prefix capture must tolerate extra stdout lines" unless homebrew_text.include?("brew --prefix apache/tsfile/tsfile | tail -n 1")
 raise "Homebrew SDK verification must provide pkg-config" unless homebrew_text.include?("brew install pkgconf")
 raise "Homebrew SDK step must keep bash 3.2 compatibility" if homebrew_text.include?("set -euo pipefail")
 raise "Homebrew job must upload a macOS SDK artifact" unless homebrew.fetch("steps").any? { |step| step["with"].to_h["name"] == "native-sdk-${{ matrix.name }}" }
@@ -152,7 +158,7 @@ raise "Homebrew SDK must normalize the dylib identity" unless homebrew_text.incl
 raise "Homebrew SDK must re-sign the normalized dylib" unless homebrew_text.include?("codesign --force --sign -")
 
 homebrew_merge = run_text(jobs.fetch("merge-homebrew"))
-trust = homebrew_merge.index("brew trust apache/tsfile-dev")
+trust = homebrew_merge.index("brew trust apache/tsfile")
 merge = homebrew_merge.index("brew bottle --merge")
 raise "Homebrew merge must trust its temporary tap before loading the Formula" unless trust && merge && trust < merge
 
@@ -164,6 +170,10 @@ raise "Homebrew merge must trust its temporary tap before loading the Formula" u
 end
 
 prepare_steps = jobs.fetch("prepare").fetch("steps")
+prepare_text = run_text(jobs.fetch("prepare"))
+%w[--build-date --run-number --run-attempt].each do |option|
+  raise "Release versions must not depend on a development build identity" if prepare_text.include?(option)
+end
 cli_data_upload = prepare_steps.find { |step| step["with"].to_h["name"] == "native-cli-test-data" }.fetch("with")
 raise "CLI data must come from the current source checkout" unless cli_data_upload.fetch("path") == "python/tests/resources/*.tsfile"
 raise "prepare must use one source checkout for code and CLI data" unless prepare_steps.count { |step| step["uses"].to_s.start_with?("actions/checkout@") } == 1
@@ -193,7 +203,7 @@ raise "Homebrew CLI acceptance must wait for the bottles" unless homebrew_cli.fe
 raise "Homebrew CLI acceptance must cover both architectures" unless homebrew_cli.fetch("strategy").fetch("matrix").fetch("include").map { |row| row.fetch("name") }.sort == %w[macos-arm64 macos-x86_64].sort
 raise "Homebrew CLI acceptance must install a bottle" unless run_text(homebrew_cli).include?("brew install --force-bottle") && run_text(homebrew_cli).include?("poured_from_bottle")
 homebrew_install = run_text(homebrew_cli)
-raise "Homebrew acceptance must install from its trusted tap" unless homebrew_install.include?("brew install --force-bottle apache/tsfile-dev/tsfile-dev")
+raise "Homebrew acceptance must install from its trusted tap" unless homebrew_install.include?("brew install --force-bottle apache/tsfile/tsfile")
 raise "Homebrew acceptance must merge bottle checksums" unless homebrew_install.include?("brew bottle --merge --write --no-commit")
 raise "Homebrew acceptance must seed the bottle download cache" unless homebrew_install.include?("brew --cache --force-bottle") && homebrew_install.include?('cp "${bottles[0]}" "$cached_bottle"')
 raise "Homebrew acceptance must not bypass package path restrictions" if homebrew_install.include?("HOMEBREW_INTERNAL_ALLOW_PACKAGES_FROM_PATHS")

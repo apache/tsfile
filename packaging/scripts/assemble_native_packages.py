@@ -31,7 +31,7 @@ from typing import Sequence
 
 DEB_PROPERTIES = {
     "deb.distribution": ["jammy", "noble"],
-    "deb.component": ["dev"],
+    "deb.component": ["release"],
 }
 DEB_PLATFORMS = {"ubuntu22.04-amd64", "ubuntu22.04-arm64"}
 RPM_PLATFORMS = {"almalinux9-x86_64", "almalinux9-aarch64"}
@@ -119,6 +119,23 @@ def _validate_versions(versions: dict[str, str]) -> None:
             or "\x00" in value
         ):
             raise ValueError(f"version {name} must be a safe path component")
+        if not re.fullmatch(
+            r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", value
+        ):
+            raise ValueError(
+                f"version {name} must be a release version MAJOR.MINOR.PATCH"
+            )
+    release_version = versions["archive_version"]
+    for name in (
+        "homebrew_version",
+        "base_version",
+        "logical_version",
+        "python_version",
+    ):
+        if name in versions and versions[name] != release_version:
+            raise ValueError(
+                f"version {name} must match release version {release_version}"
+            )
 
 
 def _validate_source(source: dict[str, str]) -> None:
@@ -167,7 +184,7 @@ def _artifact_description(
             "family": "deb",
             "platform": platform,
             "targetRepository": "tsfile-debian",
-            "targetPath": f"pool/dev/{platform}/{filename}",
+            "targetPath": f"pool/release/{platform}/{filename}",
             "properties": {
                 **DEB_PROPERTIES,
                 "deb.architecture": [architecture],
@@ -184,20 +201,20 @@ def _artifact_description(
             "family": "rpm",
             "platform": platform,
             "targetRepository": "tsfile-rpm",
-            "targetPath": f"dev/el9/{architecture}/{filename}",
+            "targetPath": f"release/el9/{architecture}/{filename}",
             "properties": {},
         }
     if (
         len(parts) == 3
         and parts[:2] == ("homebrew", "Formula")
-        and filename == "tsfile-dev.rb"
+        and filename == "tsfile.rb"
     ):
         target = Path(*parts)
         return target, {
             "family": "homebrew",
             "platform": "homebrew",
             "targetRepository": "tsfile",
-            "targetPath": f"homebrew/dev/versions/{versions['homebrew_version']}/{target.as_posix()[len('homebrew/'):]}",
+            "targetPath": f"homebrew/release/versions/{versions['homebrew_version']}/{target.as_posix()[len('homebrew/'):]}",
             "properties": {},
         }
     if (
@@ -210,7 +227,7 @@ def _artifact_description(
             "family": "homebrew",
             "platform": "homebrew",
             "targetRepository": "tsfile",
-            "targetPath": f"homebrew/dev/versions/{versions['homebrew_version']}/{target.as_posix()[len('homebrew/'):]}",
+            "targetPath": f"homebrew/release/versions/{versions['homebrew_version']}/{target.as_posix()[len('homebrew/'):]}",
             "properties": {},
         }
     if len(parts) == 3 and parts[0] == "sdk" and filename.endswith(".tar.gz"):
@@ -223,7 +240,7 @@ def _artifact_description(
             "platform": platform,
             "targetRepository": "tsfile",
             "targetPath": (
-                f"sdk/dev/versions/{versions['archive_version']}/{platform}/{filename}"
+                f"sdk/release/versions/{versions['archive_version']}/{platform}/{filename}"
             ),
             "properties": {},
         }
@@ -236,11 +253,6 @@ def _artifact_description(
             "family": "python",
             "platform": platform,
             **_wheel_metadata(filename, platform),
-            "targetRepository": "tsfile-python",
-            "targetPath": (
-                f"python/dev/versions/{versions['archive_version']}/{platform}/{filename}"
-            ),
-            "properties": {},
         }
     if len(parts) >= 2 and parts[0] == "windows" and filename.endswith(".zip"):
         match = re.search(r"-windows-(x86_64|arm64)\.zip$", filename)
@@ -252,7 +264,7 @@ def _artifact_description(
             "family": "windows",
             "platform": platform,
             "targetRepository": "tsfile",
-            "targetPath": f"windows/dev/versions/{versions['archive_version']}/{filename}",
+            "targetPath": f"windows/release/versions/{versions['archive_version']}/{filename}",
             "properties": {},
         }
     raise ValueError(f"undeclared file type: {relative_path.as_posix()}")
@@ -325,7 +337,7 @@ def _require_complete_families(
         for _, target, metadata in planned
         if metadata["family"] == "homebrew"
     }
-    if "homebrew/Formula/tsfile-dev.rb" not in homebrew_paths:
+    if "homebrew/Formula/tsfile.rb" not in homebrew_paths:
         raise ValueError("missing Homebrew Formula input")
     if not any(path.endswith(".tar.gz") for path in homebrew_paths):
         raise ValueError("missing Homebrew Bottle input")
@@ -427,16 +439,15 @@ def assemble(
         target_paths.add(target)
         planned.append((source_path, target, metadata))
     _require_complete_families(planned)
-    release_version = versions.get("base_version")
-    if release_version and versions.get("logical_version") == release_version:
-        for _, _, metadata in planned:
-            if (
-                metadata["family"] == "python"
-                and metadata["wheelVersion"] != release_version
-            ):
-                raise ValueError(
-                    f"Python wheel version must match release version {release_version}"
-                )
+    release_version = versions["archive_version"]
+    for _, _, metadata in planned:
+        if (
+            metadata["family"] == "python"
+            and metadata["wheelVersion"] != release_version
+        ):
+            raise ValueError(
+                f"Python wheel version must match release version {release_version}"
+            )
     if output_dir.is_symlink():
         raise ValueError(f"output directory must not be a symbolic link: {output_dir}")
     if output_dir.exists() and any(output_dir.iterdir()):

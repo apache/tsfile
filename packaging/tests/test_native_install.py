@@ -91,7 +91,9 @@ class PublicHeaderCompatibilityTest(unittest.TestCase):
             stderr=subprocess.STDOUT,
         )
         self.assertEqual(result.returncode, 0, result.stdout[-4000:])
-        self.assertRegex(result.stdout, r"class Probe \{\s*(?:static_assert|_Static_assert)")
+        self.assertRegex(
+            result.stdout, r"class Probe \{\s*(?:static_assert|_Static_assert)"
+        )
         self.assertNotIn("static_assertion_MSVC_old_cplusplus", result.stdout)
         self.assertIn("void reset() override", result.stdout)
 
@@ -429,7 +431,7 @@ class NativeInstallTest(unittest.TestCase):
         )
         self.assertIn("get_global_time_encoding", result.stdout)
         self.consumer("InstalledConsumer", "tsfile_installed_consumer")
-        for formula in ("tsfile.rb", "tsfile-dev.rb.in"):
+        for formula in ("tsfile.rb.in",):
             source = re.search(
                 r"write <<~CPP\n(.*?)\n\s+CPP",
                 (ROOT / "packaging/homebrew" / formula).read_text(),

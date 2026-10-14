@@ -15,17 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Render the development Formula using an immutable source identity."""
+"""Render the release Formula using an immutable source identity."""
 
 import argparse
 import re
 from pathlib import Path
 
-
 VALUE_PATTERNS = {
     "SOURCE_REPOSITORY": r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
     "GIT_SHA": r"[0-9a-f]{40}",
-    "HOMEBREW_VERSION": r"[0-9][A-Za-z0-9.]*",
+    "HOMEBREW_VERSION": r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)",
     "SOURCE_SHA256": r"[0-9a-f]{64}",
 }
 TOKEN = re.compile(r"@([A-Z0-9_]+)@")
