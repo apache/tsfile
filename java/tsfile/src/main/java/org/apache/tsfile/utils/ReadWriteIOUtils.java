@@ -27,6 +27,7 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.reader.TsFileInput;
 
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -596,9 +597,21 @@ public class ReadWriteIOUtils {
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[LONG_LEN];
-    int readLen = inputStream.read(bytes);
-    if (readLen != LONG_LEN) {
-      throw new IOException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+    int readLen = 0;
+    while (readLen < LONG_LEN) {
+      int count = inputStream.read(bytes, readLen, LONG_LEN - readLen);
+      if (count < 0) {
+        throw new EOFException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+      }
+      if (count == 0) {
+        int value = inputStream.read();
+        if (value < 0) {
+          throw new EOFException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+        }
+        bytes[readLen++] = (byte) value;
+      } else {
+        readLen += count;
+      }
     }
     return BytesUtils.bytesToLong(bytes);
   }

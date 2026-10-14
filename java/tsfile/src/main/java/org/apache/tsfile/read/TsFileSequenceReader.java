@@ -87,8 +87,10 @@ import org.apache.tsfile.write.schema.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
@@ -488,17 +490,35 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (tsFileInput.size() <= BASE_FILE_HEADER_SIZE) {
         return;
       }
-      ByteBuffer marker = ByteBuffer.allocate(Byte.BYTES);
-      if (tsFileInput.read(marker, BASE_FILE_HEADER_SIZE) != Byte.BYTES) {
-        return;
+      tsFileInput.position(BASE_FILE_HEADER_SIZE);
+      InputStream inputStream = tsFileInput.wrapAsInputStream();
+      int marker = inputStream.read();
+      if (marker < 0) {
+        throw new EOFException();
       }
-      marker.flip();
-      if (marker.get() != MetaMarker.ENCRYPTION_HEADER) {
+      if (marker != MetaMarker.ENCRYPTION_HEADER) {
+        switch ((byte) marker) {
+          case MetaMarker.CHUNK_GROUP_HEADER:
+          case MetaMarker.CHUNK_HEADER:
+          case MetaMarker.SEPARATOR:
+          case MetaMarker.VERSION:
+          case MetaMarker.OPERATION_INDEX_RANGE:
+          case MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER:
+          case MetaMarker.TIME_CHUNK_HEADER:
+          case MetaMarker.VALUE_CHUNK_HEADER:
+          case MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER:
+          case MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER:
+            break;
+          default:
+            MetaMarker.handleUnexpectedMarker((byte) marker);
+        }
+        if (ioSizeRecorder != null) {
+          ioSizeRecorder.accept(Byte.BYTES);
+        }
         return;
       }
 
-      tsFileInput.position(BASE_FILE_HEADER_SIZE + Byte.BYTES);
-      fileEncryptionParam = FileEncryptionHeader.deserialize(tsFileInput.wrapAsInputStream());
+      fileEncryptionParam = FileEncryptionHeader.deserialize(inputStream);
       dataStartOffset = tsFileInput.position();
       if (ioSizeRecorder != null) {
         ioSizeRecorder.accept(dataStartOffset - BASE_FILE_HEADER_SIZE);

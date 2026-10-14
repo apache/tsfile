@@ -23,6 +23,7 @@ import org.apache.tsfile.i18n.Messages;
 
 import javax.security.auth.Destroyable;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -210,6 +211,17 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     return copy(fileCryptoId);
   }
 
+  boolean hasValidFileCryptoId() {
+    return fileCryptoId != null && fileCryptoId.length == FILE_CRYPTO_ID_LENGTH;
+  }
+
+  synchronized ByteBuffer newPageAssociatedDataBuffer(int pageFieldsSize) {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    return fileEncryptContext.newPageAssociatedDataBuffer(this, pageFieldsSize);
+  }
+
   public int getPageBodyOverhead() {
     int overhead = getOrCreateFileEncrypt().getPageBodyOverhead();
     if (overhead <= 0) {
@@ -292,6 +304,17 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
   private static final class FileEncryptContext {
     private int references = 1;
     private IEncrypt fileEncrypt;
+    private byte[] pageAssociatedDataPrefix;
+
+    private synchronized ByteBuffer newPageAssociatedDataBuffer(
+        EncryptParameter parameter, int pageFieldsSize) {
+      if (pageAssociatedDataPrefix == null) {
+        pageAssociatedDataPrefix = PageCryptoContext.buildFileAssociatedDataPrefix(parameter);
+      }
+      // Never expose the shared prefix to providers or individual page contexts.
+      return ByteBuffer.allocate(Math.addExact(pageAssociatedDataPrefix.length, pageFieldsSize))
+          .put(pageAssociatedDataPrefix);
+    }
 
     private synchronized void retain() {
       references++;
@@ -310,6 +333,7 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
         if (--references == 0) {
           toClose = fileEncrypt;
           fileEncrypt = null;
+          pageAssociatedDataPrefix = null;
         }
       }
       if (toClose != null) {

@@ -30,6 +30,7 @@ import org.apache.tsfile.i18n.Messages;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class LazyLoadPageData {
   /** Reference to the data of original chunkDataBuffer. * */
@@ -103,8 +104,7 @@ public class LazyLoadPageData {
       }
     } else if (decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
       decryptedPageData =
-          java.util.Arrays.copyOfRange(
-              chunkData, pageDataOffset, pageDataOffset + compressedPageBodyLength);
+          Arrays.copyOfRange(chunkData, pageDataOffset, pageDataOffset + compressedPageBodyLength);
     } else {
       decryptedPageData = decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
     }

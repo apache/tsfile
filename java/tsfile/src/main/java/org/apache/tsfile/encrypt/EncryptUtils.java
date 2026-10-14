@@ -258,7 +258,10 @@ public class EncryptUtils {
     return encryptParam;
   }
 
-  /** Get the second EncryptParameter object according to the given type and first key. */
+  /**
+   * Returns a page-AEAD file descriptor unchanged, or derives the legacy second key from the given
+   * type and first key. A null parameter selects unencrypted operation.
+   */
   public static EncryptParameter getEncryptParameter(EncryptParameter param) {
     if (param == null) {
       return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);

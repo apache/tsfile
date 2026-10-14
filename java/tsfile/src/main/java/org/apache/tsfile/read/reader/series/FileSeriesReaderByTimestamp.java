@@ -168,9 +168,9 @@ public class FileSeriesReaderByTimestamp implements AutoCloseable {
         }
         this.chunkReader = new AlignedChunkReader(timeChunk, valueChunkList, currentTimestamp);
       } catch (IOException | RuntimeException | Error e) {
-        timeChunk.close();
+        closeChunkOnFailure(timeChunk, e);
         for (Chunk valueChunk : valueChunkList) {
-          valueChunk.close();
+          closeChunkOnFailure(valueChunk, e);
         }
         throw e;
       }
@@ -179,6 +179,19 @@ public class FileSeriesReaderByTimestamp implements AutoCloseable {
 
   private boolean chunkSatisfied(IChunkMetadata chunkMetaData) {
     return chunkMetaData.getEndTime() >= currentTimestamp;
+  }
+
+  private static void closeChunkOnFailure(Chunk chunk, Throwable failure) {
+    if (chunk == null) {
+      return;
+    }
+    try {
+      chunk.close();
+    } catch (RuntimeException | Error closeFailure) {
+      if (closeFailure != failure) {
+        failure.addSuppressed(closeFailure);
+      }
+    }
   }
 
   private void closeChunkReader() throws IOException {

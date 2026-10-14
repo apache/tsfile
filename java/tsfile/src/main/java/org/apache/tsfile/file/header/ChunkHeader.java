@@ -247,11 +247,7 @@ public class ChunkHeader {
     long chunkOrdinal = -1;
     byte[] authentication = null;
     if (pageAead) {
-      byte[] ordinalBytes = inputStream.readNBytes(Long.BYTES);
-      if (ordinalBytes.length != Long.BYTES) {
-        throw new EOFException();
-      }
-      chunkOrdinal = ByteBuffer.wrap(ordinalBytes).getLong();
+      chunkOrdinal = ReadWriteIOUtils.readLong(inputStream);
       authentication = inputStream.readNBytes(ChunkCryptoContext.AUTHENTICATION_SIZE);
       if (authentication.length != ChunkCryptoContext.AUTHENTICATION_SIZE) {
         throw new EOFException();

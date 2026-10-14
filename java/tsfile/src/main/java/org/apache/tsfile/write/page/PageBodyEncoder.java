@@ -34,7 +34,8 @@ class PageBodyEncoder {
 
   private PageBodyEncoder() {}
 
-  static EncodedPageBody encode(
+  /** Returns an array-backed buffer whose remaining bytes are the encoded page body. */
+  static ByteBuffer encode(
       ByteBuffer pageData,
       int uncompressedSize,
       ICompressor compressor,
@@ -45,18 +46,19 @@ class PageBodyEncoder {
     byte[] plaintext;
     int plaintextOffset = 0;
     int compressedSize;
+    int inputOffset = pageData.arrayOffset() + pageData.position();
 
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {
       plaintext = pageData.array();
-      plaintextOffset = pageData.position();
+      plaintextOffset = inputOffset;
       compressedSize = uncompressedSize;
     } else if (compressor.getType().equals(CompressionType.GZIP)) {
-      plaintext = compressor.compress(pageData.array(), pageData.position(), uncompressedSize);
+      plaintext = compressor.compress(pageData.array(), inputOffset, uncompressedSize);
       compressedSize = plaintext.length;
     } else {
       plaintext = new byte[compressor.getMaxBytesForCompression(uncompressedSize)];
       compressedSize =
-          compressor.compress(pageData.array(), pageData.position(), uncompressedSize, plaintext);
+          compressor.compress(pageData.array(), inputOffset, uncompressedSize, plaintext);
     }
 
     IEncryptor encryptor = IEncryptor.getEncryptor(encryptParameter);
@@ -75,10 +77,10 @@ class PageBodyEncoder {
                 encryptedPageBody.length));
       }
     } else if (encryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
-      return new EncodedPageBody(plaintext, plaintextOffset, compressedSize);
+      return ByteBuffer.wrap(plaintext, plaintextOffset, compressedSize);
     } else {
       encryptedPageBody = encryptor.encrypt(plaintext, plaintextOffset, compressedSize);
     }
-    return new EncodedPageBody(encryptedPageBody);
+    return ByteBuffer.wrap(encryptedPageBody);
   }
 }

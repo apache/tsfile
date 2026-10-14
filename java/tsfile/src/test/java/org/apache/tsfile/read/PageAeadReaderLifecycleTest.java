@@ -30,6 +30,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
+import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.query.dataset.TreeResultSet;
@@ -60,8 +61,13 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class PageAeadReaderLifecycleTest {
   @Rule public final TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -139,6 +145,36 @@ public class PageAeadReaderLifecycleTest {
         assertTrue(loader.loaded.get(0).getEncryptParam().isDestroyed());
       }
       assertAllDestroyed(loader.loaded);
+    }
+  }
+
+  @Test
+  public void testTimestampReaderPreservesLoadFailureAndClosesRemainingChunks() throws Exception {
+    IChunkLoader loader = mock(IChunkLoader.class);
+    AlignedChunkMetadata aligned = mock(AlignedChunkMetadata.class);
+    ChunkMetadata timeMetadata = mock(ChunkMetadata.class);
+    ChunkMetadata firstMetadata = mock(ChunkMetadata.class);
+    ChunkMetadata secondMetadata = mock(ChunkMetadata.class);
+    Chunk timeChunk = mock(Chunk.class);
+    Chunk firstChunk = mock(Chunk.class);
+    IOException loadFailure = new IOException("load failed");
+    IllegalStateException closeFailure = new IllegalStateException("close failed");
+    when(aligned.getEndTime()).thenReturn(Long.MAX_VALUE);
+    when(aligned.getTimeChunkMetadata()).thenReturn(timeMetadata);
+    when(aligned.getValueChunkMetadataList())
+        .thenReturn(Arrays.asList(firstMetadata, secondMetadata));
+    when(loader.loadChunk(timeMetadata)).thenReturn(timeChunk);
+    when(loader.loadChunk(firstMetadata)).thenReturn(firstChunk);
+    when(loader.loadChunk(secondMetadata)).thenThrow(loadFailure);
+    doThrow(closeFailure).when(timeChunk).close();
+    try (FileSeriesReaderByTimestamp reader =
+        new FileSeriesReaderByTimestamp(loader, Arrays.asList(aligned))) {
+      IOException actual = assertThrows(IOException.class, () -> reader.getValueInTimestamp(1));
+      assertSame(loadFailure, actual);
+      assertEquals(1, actual.getSuppressed().length);
+      assertSame(closeFailure, actual.getSuppressed()[0]);
+      verify(timeChunk).close();
+      verify(firstChunk).close();
     }
   }
 

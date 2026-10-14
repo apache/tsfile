@@ -34,7 +34,8 @@ import java.util.Arrays;
  */
 public final class PageCryptoContext {
 
-  private static final int ASSOCIATED_DATA_VERSION = 2;
+  private static final int ASSOCIATED_DATA_VERSION = 1;
+  private static final byte[] EMPTY_BYTES = new byte[0];
 
   private final int uncompressedSize;
   private final int compressedPlaintextSize;
@@ -84,13 +85,11 @@ public final class PageCryptoContext {
       int pageIndex,
       long chunkOrdinal) {
     validate(parameter, uncompressedSize, 0, pageIndex, chunkOrdinal);
-    int compressedPlaintextSize = encryptedPageBodySize - parameter.getPageBodyOverhead();
+    int overhead = parameter.getPageBodyOverhead();
+    int compressedPlaintextSize = encryptedPageBodySize - overhead;
     if (compressedPlaintextSize < 0) {
       throw new EncryptException(
-          Messages.format(
-              "error.encrypt.page_body_too_short",
-              encryptedPageBodySize,
-              parameter.getPageBodyOverhead()));
+          Messages.format("error.encrypt.page_body_too_short", encryptedPageBodySize, overhead));
     }
     return new PageCryptoContext(
         parameter,
@@ -140,8 +139,7 @@ public final class PageCryptoContext {
     if (parameter == null || !parameter.isTdePageAead()) {
       throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
     }
-    if (parameter.getFileCryptoId() == null
-        || parameter.getFileCryptoId().length != EncryptParameter.FILE_CRYPTO_ID_LENGTH) {
+    if (!parameter.hasValidFileCryptoId()) {
       throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_file_id"));
     }
     if (chunkOrdinal < 0) {
@@ -163,6 +161,15 @@ public final class PageCryptoContext {
       int compressedPlaintextSize,
       int pageIndex,
       long chunkOrdinal) {
+    ByteBuffer buffer = parameter.newPageAssociatedDataBuffer(Long.BYTES + Integer.BYTES * 3);
+    buffer.putLong(chunkOrdinal);
+    buffer.putInt(pageIndex);
+    buffer.putInt(uncompressedSize);
+    buffer.putInt(compressedPlaintextSize);
+    return buffer.array();
+  }
+
+  static byte[] buildFileAssociatedDataPrefix(EncryptParameter parameter) {
     byte[][] components =
         new byte[][] {
           bytes(parameter.getProviderId()),
@@ -171,7 +178,7 @@ public final class PageCryptoContext {
           bytes(parameter.getKeyVersion()),
           parameter.getFileCryptoId()
         };
-    int size = Integer.BYTES * (4 + components.length) + Long.BYTES;
+    int size = Integer.BYTES * (1 + components.length);
     for (byte[] component : components) {
       size = Math.addExact(size, component.length);
     }
@@ -182,14 +189,10 @@ public final class PageCryptoContext {
       buffer.putInt(component.length);
       buffer.put(component);
     }
-    buffer.putLong(chunkOrdinal);
-    buffer.putInt(pageIndex);
-    buffer.putInt(uncompressedSize);
-    buffer.putInt(compressedPlaintextSize);
     return buffer.array();
   }
 
   private static byte[] bytes(String value) {
-    return value == null ? new byte[0] : value.getBytes(TSFileConfig.STRING_CHARSET);
+    return value == null ? EMPTY_BYTES : value.getBytes(TSFileConfig.STRING_CHARSET);
   }
 }

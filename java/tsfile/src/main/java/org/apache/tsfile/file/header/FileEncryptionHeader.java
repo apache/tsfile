@@ -48,15 +48,31 @@ public final class FileEncryptionHeader {
       throws IOException {
     validate(parameter);
 
-    PublicBAOS payload = new PublicBAOS();
+    byte[] fileCryptoId = parameter.getFileCryptoId();
+    byte[] wrappedDataKey = parameter.getWrappedDataKey();
+    long expectedSize =
+        (long) Byte.BYTES
+            + ReadWriteForEncodingUtils.varIntStringSize(parameter.getProviderId())
+            + ReadWriteForEncodingUtils.varIntStringSize(parameter.getProfileId())
+            + ReadWriteForEncodingUtils.varIntStringSize(parameter.getKeyId())
+            + ReadWriteForEncodingUtils.varIntStringSize(parameter.getKeyVersion())
+            + ReadWriteForEncodingUtils.uVarIntSize(fileCryptoId.length)
+            + fileCryptoId.length
+            + ReadWriteForEncodingUtils.uVarIntSize(wrappedDataKey.length)
+            + wrappedDataKey.length;
+    if (expectedSize > MAX_HEADER_SIZE) {
+      throw new EncryptException(
+          Messages.format("error.file.encryption_header_invalid_size", expectedSize));
+    }
+    PublicBAOS payload = new PublicBAOS((int) expectedSize);
     int payloadSize = 0;
     payloadSize += ReadWriteIOUtils.write(VERSION, payload);
     payloadSize += ReadWriteIOUtils.writeVar(parameter.getProviderId(), payload);
     payloadSize += ReadWriteIOUtils.writeVar(parameter.getProfileId(), payload);
     payloadSize += ReadWriteIOUtils.writeVar(parameter.getKeyId(), payload);
     payloadSize += ReadWriteIOUtils.writeVar(parameter.getKeyVersion(), payload);
-    payloadSize += writeBytes(parameter.getFileCryptoId(), payload);
-    payloadSize += writeBytes(parameter.getWrappedDataKey(), payload);
+    payloadSize += writeBytes(fileCryptoId, payload);
+    payloadSize += writeBytes(wrappedDataKey, payload);
 
     if (payloadSize != payload.size() || payloadSize > MAX_HEADER_SIZE) {
       throw new EncryptException(

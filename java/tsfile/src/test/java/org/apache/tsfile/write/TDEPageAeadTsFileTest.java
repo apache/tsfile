@@ -209,6 +209,24 @@ public class TDEPageAeadTsFileTest {
   }
 
   @Test
+  public void testUnknownFirstMarkerIsRejectedWithoutMovingLazyReader() throws Exception {
+    try (TsFileIOWriter writer = new TsFileIOWriter(file)) {
+      writer.endFile();
+    }
+    try (RandomAccessFile output = new RandomAccessFile(file, "rw")) {
+      output.seek(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length + 1);
+      output.writeByte(0x7F);
+    }
+    assertThrows(IOException.class, () -> new TsFileSequenceReader(file.getPath(), false));
+    BufferedTsFileInput input = new BufferedTsFileInput(file.toPath());
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(input, 0, 0)) {
+      input.position(3);
+      assertThrows(IOException.class, reader::hasFileEncryptionHeader);
+      assertEquals(3, input.position());
+    }
+  }
+
+  @Test
   public void testEncryptionHeaderDoesNotForceOutput() throws Exception {
     LocalTsFileOutput output = spy(new LocalTsFileOutput(new FileOutputStream(file)));
     try (EncryptParameter parameter =

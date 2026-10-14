@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.encrypt;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
@@ -26,6 +27,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -270,6 +273,46 @@ public class PageCryptoContextTest {
   }
 
   @Test
+  public void testCachedAssociatedDataPreservesEncodingAndReferenceLifetime() throws Exception {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16])) {
+      PageCryptoContext.forEncryption(parameter, 100, 80, 0, 0);
+      try (EncryptParameter retained = parameter.retain()) {
+        parameter.close();
+        for (int page = 0; page < 100; page++) {
+          ByteArrayOutputStream expected = new ByteArrayOutputStream();
+          DataOutputStream output = new DataOutputStream(expected);
+          output.writeInt(1);
+          for (String field :
+              new String[] {
+                retained.getProviderId(), retained.getProfileId(),
+                retained.getKeyId(), retained.getKeyVersion()
+              }) {
+            byte[] bytes = field.getBytes(TSFileConfig.STRING_CHARSET);
+            output.writeInt(bytes.length);
+            output.write(bytes);
+          }
+          output.writeInt(EncryptParameter.FILE_CRYPTO_ID_LENGTH);
+          output.write(retained.getFileCryptoId());
+          output.writeLong(7);
+          output.writeInt(page);
+          output.writeInt(100);
+          output.writeInt(80);
+          PageCryptoContext context = PageCryptoContext.forEncryption(retained, 100, 80, page, 7);
+          assertArrayEquals(expected.toByteArray(), context.getAssociatedData());
+          context.getAssociatedData()[0] ^= 1;
+          assertArrayEquals(expected.toByteArray(), context.getAssociatedData());
+          assertArrayEquals(
+              expected.toByteArray(),
+              PageCryptoContext.forDecryption(
+                      retained, 100, context.getEncryptedPageBodySize(), page, 7)
+                  .getAssociatedData());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testLegacyCipherCannotSilentlyHandleAuthenticatedPages() {
     EncryptParameter parameter =
         TestAeadEncryptionProvider.createParameter(
@@ -311,8 +354,16 @@ public class PageCryptoContextTest {
             }
           };
       byte[] page = {1};
-      assertThrows(EncryptException.class, () -> legacyEncryptor.encryptPage(page, 0, 1, context));
-      assertThrows(EncryptException.class, () -> legacyDecryptor.decryptPage(page, 0, 1, context));
+      assertTrue(
+          assertThrows(
+                  EncryptException.class, () -> legacyEncryptor.encryptPage(page, 0, 1, context))
+              .getMessage()
+              .contains(legacyEncryptor.getClass().getName()));
+      assertTrue(
+          assertThrows(
+                  EncryptException.class, () -> legacyDecryptor.decryptPage(page, 0, 1, context))
+              .getMessage()
+              .contains(legacyDecryptor.getClass().getName()));
     } finally {
       parameter.close();
     }

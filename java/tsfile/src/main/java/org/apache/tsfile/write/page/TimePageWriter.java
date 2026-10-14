@@ -122,10 +122,10 @@ public class TimePageWriter {
 
     ByteBuffer pageData = getUncompressedBytes();
     int uncompressedSize = pageData.remaining();
-    EncodedPageBody pageBody =
+    ByteBuffer pageBody =
         PageBodyEncoder.encode(
             pageData, uncompressedSize, compressor, encryptParam, pageIndex, chunkOrdinal);
-    int pageBodySize = pageBody.size();
+    int pageBodySize = pageBody.remaining();
 
     // write the page header to IOWriter
     int sizeWithoutStatistic = 0;
@@ -143,7 +143,7 @@ public class TimePageWriter {
     // write page content to temp PBAOS
     logger.trace(
         "start to flush a time page data into buffer, buffer position {} ", pageBuffer.size());
-    pageBuffer.write(pageBody.getData(), pageBody.getOffset(), pageBodySize);
+    pageBuffer.write(pageBody.array(), pageBody.arrayOffset() + pageBody.position(), pageBodySize);
     logger.trace(
         "finish flushing a time page data into buffer, buffer position {} ", pageBuffer.size());
     return sizeWithoutStatistic;

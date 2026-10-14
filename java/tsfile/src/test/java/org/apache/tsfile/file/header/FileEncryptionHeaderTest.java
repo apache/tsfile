@@ -22,6 +22,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.TestAeadEncryptionProvider;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.MetaMarker;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.junit.Test;
 
@@ -65,6 +66,51 @@ public class FileEncryptionHeaderTest {
     assertEquals(parameter.getKeyVersion(), restored.getKeyVersion());
     assertArrayEquals(parameter.getFileCryptoId(), restored.getFileCryptoId());
     assertArrayEquals(parameter.getWrappedDataKey(), restored.getWrappedDataKey());
+  }
+
+  @Test
+  public void testLargeHeaderUsesExactSerializedSize() throws IOException {
+    try (EncryptParameter parameter =
+        EncryptParameter.pageAeadBuilder()
+            .providerId("provider")
+            .profileId("profile")
+            .keyId("k".repeat(300))
+            .keyVersion("1")
+            .fileCryptoId(new byte[16])
+            .wrappedDataKey(new byte[20000])
+            .build()) {
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      int serializedSize = FileEncryptionHeader.serialize(parameter, output);
+      assertEquals(serializedSize, output.size());
+      ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
+      assertEquals(MetaMarker.ENCRYPTION_HEADER, input.read());
+      int payloadSize = ReadWriteForEncodingUtils.readUnsignedVarInt(input);
+      assertEquals(payloadSize, input.available());
+      input = new ByteArrayInputStream(output.toByteArray());
+      input.read();
+      try (EncryptParameter restored = FileEncryptionHeader.deserialize(input)) {
+        assertEquals(parameter.getKeyId(), restored.getKeyId());
+        assertArrayEquals(parameter.getWrappedDataKey(), restored.getWrappedDataKey());
+        assertEquals(0, input.available());
+      }
+    }
+  }
+
+  @Test
+  public void testOversizedHeaderDoesNotWriteOutput() {
+    try (EncryptParameter parameter =
+        EncryptParameter.pageAeadBuilder()
+            .providerId("provider")
+            .profileId("profile")
+            .keyId("key")
+            .keyVersion("1")
+            .fileCryptoId(new byte[16])
+            .wrappedDataKey(new byte[FileEncryptionHeader.MAX_HEADER_SIZE])
+            .build()) {
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      assertThrows(EncryptException.class, () -> FileEncryptionHeader.serialize(parameter, output));
+      assertEquals(0, output.size());
+    }
   }
 
   @Test
