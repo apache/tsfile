@@ -2129,7 +2129,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       long chunkOffset = tsFileInput.position() - Byte.BYTES;
       ChunkHeader header =
           ChunkHeader.deserializeFrom(
-              tsFileInput.wrapAsInputStream(), chunkType, fileEncryptionParam != null);
+              tsFileInput.wrapAsInputStream(),
+              chunkType,
+              fileEncryptionParam == null ? 0 : fileEncryptionParam.getChunkAuthenticationSize());
       authenticateChunkHeader(header, chunkOffset);
       return header;
     } catch (StopReadTsFileByInterruptException e) {
@@ -2153,7 +2155,10 @@ public class TsFileSequenceReader implements AutoCloseable {
       ensureFileEncryptionHeaderLoaded(ioSizeRecorder);
       ChunkHeader header =
           ChunkHeader.deserializeFrom(
-              tsFileInput, position, ioSizeRecorder, fileEncryptionParam != null);
+              tsFileInput,
+              position,
+              ioSizeRecorder,
+              fileEncryptionParam == null ? 0 : fileEncryptionParam.getChunkAuthenticationSize());
       authenticateChunkHeader(header, position);
       return header;
     } catch (StopReadTsFileByInterruptException e) {

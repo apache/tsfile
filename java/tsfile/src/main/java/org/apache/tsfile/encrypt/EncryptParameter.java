@@ -235,6 +235,10 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     return pageAead;
   }
 
+  public int getChunkAuthenticationSize() {
+    return getOrCreateFileEncrypt().getChunkAuthenticationSize();
+  }
+
   public byte[] authenticateChunk(long chunkOffset, long chunkOrdinal) {
     return getOrCreateFileEncrypt()
         .authenticateChunk(ChunkCryptoContext.forChunk(this, chunkOffset, chunkOrdinal));

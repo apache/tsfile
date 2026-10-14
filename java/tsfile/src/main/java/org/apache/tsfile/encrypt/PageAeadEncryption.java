@@ -122,17 +122,29 @@ final class PageAeadEncryption implements IEncrypt {
   }
 
   @Override
+  public int getChunkAuthenticationSize() {
+    ensureOpen();
+    int size = delegate.getChunkAuthenticationSize();
+    if (size <= 0 || size > ChunkCryptoContext.MAX_AUTHENTICATION_SIZE) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.invalid_chunk_authentication_size", size));
+    }
+    return size;
+  }
+
+  @Override
   public byte[] authenticateChunk(ChunkCryptoContext context) {
     ensureOpen();
+    int expectedSize = getChunkAuthenticationSize();
     byte[] authentication = delegate.authenticateChunk(context);
-    validateChunkAuthentication(authentication);
+    validateChunkAuthentication(authentication, expectedSize);
     return authentication;
   }
 
   @Override
   public void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
     ensureOpen();
-    validateChunkAuthentication(authentication);
+    validateChunkAuthentication(authentication, getChunkAuthenticationSize());
     try {
       delegate.verifyChunkAuthentication(authentication, context);
     } catch (EncryptException e) {
@@ -142,8 +154,8 @@ final class PageAeadEncryption implements IEncrypt {
     }
   }
 
-  private static void validateChunkAuthentication(byte[] authentication) {
-    if (authentication == null || authentication.length != ChunkCryptoContext.AUTHENTICATION_SIZE) {
+  private static void validateChunkAuthentication(byte[] authentication, int expectedSize) {
+    if (authentication == null || authentication.length != expectedSize) {
       throw new EncryptException(Messages.get("error.encrypt.invalid_chunk_authentication"));
     }
   }

@@ -22,6 +22,7 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -37,6 +38,7 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   public static final TestAeadEncryptionProvider INSTANCE = new TestAeadEncryptionProvider();
   public static final String PROVIDER_ID = "test-aead-provider";
   public static final String PROFILE_ID = "AES_GCM_128_AES_WRAP_128_V1";
+  public static final String MAC_PROFILE_ID = "TEST_AES_GCM_HMAC_SHA256_V1";
 
   private static final int IV_LENGTH = 12;
   private static final int TAG_LENGTH = 16;
@@ -59,18 +61,30 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
 
   @Override
   public IEncrypt create(EncryptParameter encryptParameter) {
-    if (!PROFILE_ID.equals(encryptParameter.getProfileId())) {
+    if (!PROFILE_ID.equals(encryptParameter.getProfileId())
+        && !MAC_PROFILE_ID.equals(encryptParameter.getProfileId())) {
       throw new EncryptException("unsupported test encryption profile");
     }
     CREATE_COUNT.incrementAndGet();
-    return new TestAeadEncrypt(resolveDataKey(encryptParameter));
+    return new TestAeadEncrypt(
+        resolveDataKey(encryptParameter), MAC_PROFILE_ID.equals(encryptParameter.getProfileId()));
   }
 
   public static EncryptParameter createParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, PROFILE_ID);
+  }
+
+  /** Test-only 32-byte proof profile; page bodies still use the existing AES-GCM test cipher. */
+  public static EncryptParameter createMacParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, MAC_PROFILE_ID);
+  }
+
+  private static EncryptParameter createParameter(
+      byte[] dataKey, byte[] fileCryptoId, String profile) {
     return EncryptParameter.pageAeadBuilder()
         .key(dataKey)
         .providerId(PROVIDER_ID)
-        .profileId(PROFILE_ID)
+        .profileId(profile)
         .keyId("test-key")
         .keyVersion("1")
         .wrappedDataKey(wrapDataKey(dataKey))
@@ -119,9 +133,11 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   private static final class TestAeadEncrypt implements IEncrypt {
 
     private final byte[] dataKey;
+    private final boolean macProof;
 
-    private TestAeadEncrypt(byte[] dataKey) {
+    private TestAeadEncrypt(byte[] dataKey, boolean macProof) {
       this.dataKey = dataKey;
+      this.macProof = macProof;
     }
 
     @Override
@@ -140,19 +156,43 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     }
 
     @Override
+    public int getChunkAuthenticationSize() {
+      return macProof ? 32 : IV_LENGTH + TAG_LENGTH;
+    }
+
+    @Override
     public byte[] authenticateChunk(ChunkCryptoContext context) {
+      if (macProof) {
+        return chunkMac(context);
+      }
       return new AeadEncryptor(dataKey)
           .encryptWithAad(new byte[0], 0, 0, context.getAssociatedData());
     }
 
     @Override
     public void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+      if (macProof) {
+        if (!java.security.MessageDigest.isEqual(authentication, chunkMac(context))) {
+          throw new EncryptException("Test chunk MAC mismatch");
+        }
+        return;
+      }
       byte[] plaintext =
           new AeadDecryptor(dataKey)
               .decryptWithAad(
                   authentication, 0, authentication.length, context.getAssociatedData());
       if (plaintext.length != 0) {
         throw new EncryptException("Unexpected chunk authentication plaintext");
+      }
+    }
+
+    private byte[] chunkMac(ChunkCryptoContext context) {
+      try {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(dataKey, "HmacSHA256"));
+        return mac.doFinal(context.getAssociatedData());
+      } catch (GeneralSecurityException e) {
+        throw new EncryptException("Test chunk MAC failed", e);
       }
     }
 

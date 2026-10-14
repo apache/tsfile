@@ -45,9 +45,18 @@ public interface IEncrypt extends AutoCloseable {
   }
 
   /**
+   * Returns this immutable profile's chunk-position proof size. Page-AEAD providers must override
+   * this method; unsupported providers fail closed. The size must be positive and no larger than
+   * {@link ChunkCryptoContext#MAX_AUTHENTICATION_SIZE}.
+   */
+  default int getChunkAuthenticationSize() {
+    return -1;
+  }
+
+  /**
    * Returns a fixed-size opaque proof authenticating a chunk's physical position. The proof is
-   * exactly {@link ChunkCryptoContext#AUTHENTICATION_SIZE} bytes. Providers using AEAD must use a
-   * fresh nonce under the file DEK, independently of page encryption calls.
+   * exactly {@link #getChunkAuthenticationSize()} bytes. Providers using AEAD must use a fresh
+   * nonce under the file DEK, independently of page encryption calls.
    */
   default byte[] authenticateChunk(ChunkCryptoContext context) {
     throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_unsupported"));

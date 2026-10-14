@@ -28,8 +28,8 @@ import java.util.Arrays;
 
 /** Binds a chunk's page identity to the absolute position of its on-disk marker. */
 public final class ChunkCryptoContext {
-  /** Version-1 chunk headers carry a fixed-size opaque proof supplied by the provider. */
-  public static final int AUTHENTICATION_SIZE = 28;
+  /** Format bound for opaque proofs; the immutable provider profile defines their exact size. */
+  public static final int MAX_AUTHENTICATION_SIZE = 1024;
 
   private static final int ASSOCIATED_DATA_VERSION = 1;
   private static final byte[] DOMAIN = "TsFile/ChunkPosition".getBytes(TSFileConfig.STRING_CHARSET);

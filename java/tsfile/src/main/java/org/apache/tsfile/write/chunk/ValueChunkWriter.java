@@ -355,11 +355,15 @@ public class ValueChunkWriter {
     // Empty chunk, it may happen if pageBuffer stores empty bits and only chunk header will be
     // flushed.
     if (statistics.getCount() == 0) {
-      return ChunkHeader.getSerializedSize(measurementId, 0, chunkOrdinal >= 0);
+      return ChunkHeader.getSerializedSize(
+          measurementId, 0, chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0);
     }
 
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementId, pageBuffer.size(), chunkOrdinal >= 0)
+    return ChunkHeader.getSerializedSize(
+            measurementId,
+            pageBuffer.size(),
+            chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0)
         + (long) pageBuffer.size();
   }
 

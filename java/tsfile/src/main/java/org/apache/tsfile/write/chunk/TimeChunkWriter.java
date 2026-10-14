@@ -296,7 +296,10 @@ public class TimeChunkWriter {
       return 0;
     }
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementId, pageBuffer.size(), chunkOrdinal >= 0)
+    return ChunkHeader.getSerializedSize(
+            measurementId,
+            pageBuffer.size(),
+            chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0)
         + (long) pageBuffer.size();
   }
 

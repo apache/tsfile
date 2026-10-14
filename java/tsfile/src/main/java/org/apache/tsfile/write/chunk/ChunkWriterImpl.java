@@ -397,7 +397,9 @@ public class ChunkWriterImpl implements IChunkWriter {
     }
     // return the serialized size of the chunk header + all pages
     return ChunkHeader.getSerializedSize(
-            measurementSchema.getMeasurementName(), pageBuffer.size(), chunkOrdinal >= 0)
+            measurementSchema.getMeasurementName(),
+            pageBuffer.size(),
+            chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0)
         + (long) pageBuffer.size();
   }
 

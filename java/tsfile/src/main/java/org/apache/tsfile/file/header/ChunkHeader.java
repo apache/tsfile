@@ -41,6 +41,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.function.Function;
@@ -112,7 +113,7 @@ public class ChunkHeader {
                 | (byte) mask),
         measurementID,
         dataSize,
-        getSerializedSize(measurementID, dataSize, chunkOrdinal >= 0),
+        getSerializedPrefixSize(measurementID, dataSize, chunkOrdinal >= 0),
         dataType,
         compressionType,
         encoding,
@@ -149,7 +150,7 @@ public class ChunkHeader {
         chunkType,
         measurementID,
         dataSize,
-        getSerializedSize(measurementID, dataSize, chunkOrdinal >= 0),
+        getSerializedPrefixSize(measurementID, dataSize, chunkOrdinal >= 0),
         dataType,
         compressionType,
         encoding,
@@ -199,9 +200,17 @@ public class ChunkHeader {
         + TSEncoding.getSerializedSize(); // encodingType
   }
 
-  public static int getSerializedSize(String measurementID, int dataSize, boolean pageAead) {
-    return getSerializedSize(measurementID, dataSize)
-        + (pageAead ? Long.BYTES + ChunkCryptoContext.AUTHENTICATION_SIZE : 0);
+  /** Exact size with a profile-defined proof; zero selects the plaintext header format. */
+  public static int getSerializedSize(String measurementID, int dataSize, int authenticationSize) {
+    if (authenticationSize != 0) {
+      validateAuthenticationSize(authenticationSize, 0);
+    }
+    return getSerializedPrefixSize(measurementID, dataSize, authenticationSize != 0)
+        + authenticationSize;
+  }
+
+  private static int getSerializedPrefixSize(String measurementID, int dataSize, boolean pageAead) {
+    return getSerializedSize(measurementID, dataSize) + (pageAead ? Long.BYTES + Integer.BYTES : 0);
   }
 
   /**
@@ -222,7 +231,10 @@ public class ChunkHeader {
   }
 
   public int getSerializedSize() {
-    return serializedSize;
+    if (chunkOrdinal >= 0 && chunkAuthentication == null) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_chunk_authentication"));
+    }
+    return serializedSize + getChunkAuthenticationSize();
   }
 
   /**
@@ -238,6 +250,21 @@ public class ChunkHeader {
 
   public static ChunkHeader deserializeFrom(
       InputStream inputStream, byte chunkType, boolean pageAead) throws IOException {
+    return deserializeFrom(inputStream, chunkType, pageAead, 0);
+  }
+
+  /** Reads and bounds-checks the proof length against the file's provider profile. */
+  public static ChunkHeader deserializeFrom(
+      InputStream inputStream, byte chunkType, int authenticationSize) throws IOException {
+    if (authenticationSize != 0) {
+      validateAuthenticationSize(authenticationSize, 0);
+    }
+    return deserializeFrom(inputStream, chunkType, authenticationSize != 0, authenticationSize);
+  }
+
+  private static ChunkHeader deserializeFrom(
+      InputStream inputStream, byte chunkType, boolean pageAead, int expectedAuthenticationSize)
+      throws IOException {
     // read measurementID
     String measurementID = ReadWriteIOUtils.readVarIntString(inputStream);
     int dataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
@@ -248,8 +275,14 @@ public class ChunkHeader {
     byte[] authentication = null;
     if (pageAead) {
       chunkOrdinal = ReadWriteIOUtils.readLong(inputStream);
-      authentication = inputStream.readNBytes(ChunkCryptoContext.AUTHENTICATION_SIZE);
-      if (authentication.length != ChunkCryptoContext.AUTHENTICATION_SIZE) {
+      byte[] sizeBytes = inputStream.readNBytes(Integer.BYTES);
+      if (sizeBytes.length != Integer.BYTES) {
+        throw new EOFException();
+      }
+      int size = ByteBuffer.wrap(sizeBytes).getInt();
+      validateAuthenticationSize(size, expectedAuthenticationSize);
+      authentication = inputStream.readNBytes(size);
+      if (authentication.length != size) {
         throw new EOFException();
       }
     }
@@ -258,7 +291,7 @@ public class ChunkHeader {
             chunkType,
             measurementID,
             dataSize,
-            getSerializedSize(measurementID, dataSize, pageAead),
+            getSerializedPrefixSize(measurementID, dataSize, pageAead),
             dataType,
             type,
             encoding,
@@ -296,64 +329,122 @@ public class ChunkHeader {
   public static ChunkHeader deserializeFrom(
       TsFileInput input, long offset, LongConsumer ioSizeRecorder, boolean pageAead)
       throws IOException {
+    return deserializeFrom(input, offset, ioSizeRecorder, pageAead, 0);
+  }
 
-    // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining read
-    // operation
-    ByteBuffer buffer = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + 1);
-    input.read(buffer, offset);
-    buffer.flip();
-
-    // read chunk header from input to buffer
-    byte chunkType = buffer.get();
-    int strLength = ReadWriteForEncodingUtils.readVarInt(buffer);
-    int alreadyReadLength = buffer.position();
-
-    int remainingBytes =
-        strLength
-            + Integer.BYTES
-            + 1 // uVarInt dataSize
-            + TSDataType.getSerializedSize() // dataType
-            + CompressionType.getSerializedSize() // compressionType
-            + TSEncoding.getSerializedSize()
-            + (pageAead ? Long.BYTES + ChunkCryptoContext.AUTHENTICATION_SIZE : 0);
-    buffer = ByteBuffer.allocate(remainingBytes);
-
-    if (ioSizeRecorder != null) {
-      ioSizeRecorder.accept((long) alreadyReadLength + remainingBytes);
+  /** Positional counterpart with profile validation before reading the proof payload. */
+  public static ChunkHeader deserializeFrom(
+      TsFileInput input, long offset, LongConsumer ioSizeRecorder, int authenticationSize)
+      throws IOException {
+    if (authenticationSize != 0) {
+      validateAuthenticationSize(authenticationSize, 0);
     }
+    return deserializeFrom(
+        input, offset, ioSizeRecorder, authenticationSize != 0, authenticationSize);
+  }
 
-    input.read(buffer, offset + alreadyReadLength);
-    buffer.flip();
+  private static ChunkHeader deserializeFrom(
+      TsFileInput input,
+      long offset,
+      LongConsumer ioSizeRecorder,
+      boolean pageAead,
+      int expectedAuthenticationSize)
+      throws IOException {
+    try {
 
-    // read measurementID
-    String measurementID = ReadWriteIOUtils.readStringWithLength(buffer, strLength);
-    int dataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-    TSDataType dataType = ReadWriteIOUtils.readDataType(buffer);
-    CompressionType type = ReadWriteIOUtils.readCompressionType(buffer);
-    TSEncoding encoding = ReadWriteIOUtils.readEncoding(buffer);
-    long chunkOrdinal = -1;
-    byte[] authentication = null;
-    if (pageAead) {
-      if (buffer.remaining() < Long.BYTES + ChunkCryptoContext.AUTHENTICATION_SIZE) {
-        throw new EOFException();
+      // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining read
+      // operation
+      ByteBuffer buffer = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + 1);
+      readAtMost(input, offset, buffer);
+      buffer.flip();
+
+      // read chunk header from input to buffer
+      byte chunkType = buffer.get();
+      int strLength = ReadWriteForEncodingUtils.readVarInt(buffer);
+      int alreadyReadLength = buffer.position();
+
+      int remainingBytes =
+          strLength
+              + Integer.BYTES
+              + 1 // uVarInt dataSize
+              + TSDataType.getSerializedSize() // dataType
+              + CompressionType.getSerializedSize() // compressionType
+              + TSEncoding.getSerializedSize()
+              + (pageAead ? Long.BYTES + Integer.BYTES : 0);
+      buffer = ByteBuffer.allocate(remainingBytes);
+
+      if (ioSizeRecorder != null) {
+        ioSizeRecorder.accept((long) alreadyReadLength + remainingBytes);
       }
-      chunkOrdinal = buffer.getLong();
-      authentication = new byte[ChunkCryptoContext.AUTHENTICATION_SIZE];
-      buffer.get(authentication);
+
+      readAtMost(input, offset + alreadyReadLength, buffer);
+      buffer.flip();
+
+      // read measurementID
+      String measurementID = ReadWriteIOUtils.readStringWithLength(buffer, strLength);
+      int dataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      TSDataType dataType = ReadWriteIOUtils.readDataType(buffer);
+      CompressionType type = ReadWriteIOUtils.readCompressionType(buffer);
+      TSEncoding encoding = ReadWriteIOUtils.readEncoding(buffer);
+      long chunkOrdinal = -1;
+      byte[] authentication = null;
+      if (pageAead) {
+        if (buffer.remaining() < Long.BYTES + Integer.BYTES) {
+          throw new EOFException();
+        }
+        chunkOrdinal = buffer.getLong();
+        int size = buffer.getInt();
+        validateAuthenticationSize(size, expectedAuthenticationSize);
+        authentication = new byte[size];
+      }
+      int chunkHeaderSize = alreadyReadLength + buffer.position();
+      if (authentication != null) {
+        ByteBuffer proof = ByteBuffer.wrap(authentication);
+        int bufferedBytes = Math.min(buffer.remaining(), proof.remaining());
+        proof.put(buffer.array(), buffer.position(), bufferedBytes);
+        if (ioSizeRecorder != null) {
+          ioSizeRecorder.accept(proof.remaining());
+        }
+        readAtMost(input, offset + chunkHeaderSize + bufferedBytes, proof);
+        if (proof.hasRemaining()) {
+          throw new EOFException();
+        }
+      }
+      ChunkHeader header =
+          new ChunkHeader(
+              chunkType,
+              measurementID,
+              dataSize,
+              chunkHeaderSize,
+              dataType,
+              type,
+              encoding,
+              chunkOrdinal);
+      header.chunkAuthentication = authentication;
+      return header;
+    } catch (BufferUnderflowException e) {
+      throw new EOFException();
     }
-    int chunkHeaderSize = alreadyReadLength + buffer.position();
-    ChunkHeader header =
-        new ChunkHeader(
-            chunkType,
-            measurementID,
-            dataSize,
-            chunkHeaderSize,
-            dataType,
-            type,
-            encoding,
-            chunkOrdinal);
-    header.chunkAuthentication = authentication;
-    return header;
+  }
+
+  private static void readAtMost(TsFileInput input, long offset, ByteBuffer target)
+      throws IOException {
+    int initialPosition = target.position();
+    while (target.hasRemaining()) {
+      int count = input.read(target, offset + target.position() - initialPosition);
+      if (count <= 0) {
+        break;
+      }
+    }
+  }
+
+  private static void validateAuthenticationSize(int size, int expectedSize) {
+    if (size <= 0
+        || size > ChunkCryptoContext.MAX_AUTHENTICATION_SIZE
+        || (expectedSize > 0 && size != expectedSize)) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.invalid_chunk_authentication_size", size));
+    }
   }
 
   /**
@@ -443,6 +534,7 @@ public class ChunkHeader {
     length += ReadWriteIOUtils.write(encodingType, outputStream);
     if (chunkOrdinal >= 0) {
       length += ReadWriteIOUtils.write(chunkOrdinal, outputStream);
+      length += ReadWriteIOUtils.write(authentication.length, outputStream);
       outputStream.write(authentication);
       length += authentication.length;
     }
@@ -466,6 +558,7 @@ public class ChunkHeader {
     length += ReadWriteIOUtils.write(encodingType, buffer);
     if (chunkOrdinal >= 0) {
       length += ReadWriteIOUtils.write(chunkOrdinal, buffer);
+      length += ReadWriteIOUtils.write(chunkAuthentication.length, buffer);
       buffer.put(chunkAuthentication);
       length += chunkAuthentication.length;
     }
@@ -475,7 +568,8 @@ public class ChunkHeader {
   private void validateChunkAuthentication(byte[] authentication) {
     if ((chunkOrdinal >= 0
             && (authentication == null
-                || authentication.length != ChunkCryptoContext.AUTHENTICATION_SIZE))
+                || authentication.length <= 0
+                || authentication.length > ChunkCryptoContext.MAX_AUTHENTICATION_SIZE))
         || (chunkOrdinal < 0 && authentication != null)) {
       throw new EncryptException(Messages.get("error.encrypt.invalid_chunk_authentication"));
     }
