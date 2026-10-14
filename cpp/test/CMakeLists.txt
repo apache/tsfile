@@ -19,6 +19,13 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP_TEST)
 
+# Configuring cpp/test directly validates an already installed SDK. The normal
+# add_subdirectory(test) path continues to test the source-built library.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/InstalledSDKTests.cmake")
+    return()
+endif ()
+
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(GTEST_URL_LIST
