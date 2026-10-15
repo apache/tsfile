@@ -36,6 +36,7 @@ import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.exception.TsFileStatisticsMistakesException;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.read.FileVersionTooOldException;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.MetaMarker;
@@ -498,19 +499,17 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
       if (marker != MetaMarker.ENCRYPTION_HEADER) {
         switch ((byte) marker) {
-          case MetaMarker.CHUNK_GROUP_HEADER:
-          case MetaMarker.CHUNK_HEADER:
-          case MetaMarker.SEPARATOR:
-          case MetaMarker.VERSION:
-          case MetaMarker.OPERATION_INDEX_RANGE:
-          case MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER:
-          case MetaMarker.TIME_CHUNK_HEADER:
-          case MetaMarker.VALUE_CHUNK_HEADER:
-          case MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER:
-          case MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER:
-            break;
-          default:
-            MetaMarker.handleUnexpectedMarker((byte) marker);
+          case MetaMarker.CHUNK_GROUP_HEADER,
+              MetaMarker.CHUNK_HEADER,
+              MetaMarker.SEPARATOR,
+              MetaMarker.VERSION,
+              MetaMarker.OPERATION_INDEX_RANGE,
+              MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER,
+              MetaMarker.TIME_CHUNK_HEADER,
+              MetaMarker.VALUE_CHUNK_HEADER,
+              MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER,
+              MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER -> {}
+          default -> MetaMarker.handleUnexpectedMarker((byte) marker);
         }
         if (ioSizeRecorder != null) {
           ioSizeRecorder.accept(Byte.BYTES);
@@ -523,7 +522,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ioSizeRecorder != null) {
         ioSizeRecorder.accept(dataStartOffset - BASE_FILE_HEADER_SIZE);
       }
-    } catch (org.apache.tsfile.exception.encrypt.EncryptException e) {
+    } catch (EncryptException e) {
       throw new IOException(e.getMessage(), e);
     } finally {
       tsFileInput.position(savedPosition);

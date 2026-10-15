@@ -118,6 +118,22 @@ public class EncryptionProviderRegistryTest {
   }
 
   @Test
+  public void testUnsupportedChunkAuthenticationNamesImplementation() {
+    IEncrypt legacy = new UNENCRYPTED(null);
+    try (legacy) {
+      assertTrue(
+          assertThrows(EncryptException.class, () -> legacy.authenticateChunk(null))
+              .getMessage()
+              .contains(legacy.getClass().getName()));
+      assertTrue(
+          assertThrows(
+                  EncryptException.class, () -> legacy.verifyChunkAuthentication(new byte[0], null))
+              .getMessage()
+              .contains(legacy.getClass().getName()));
+    }
+  }
+
+  @Test
   public void testLegacyOperationsAreRejectedEvenForPermissiveProvider() {
     IEncrypt permissive = new UNENCRYPTED(null);
     try (IEncrypt guarded = new PageAeadEncryption(permissive)) {

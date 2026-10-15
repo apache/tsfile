@@ -59,12 +59,14 @@ public interface IEncrypt extends AutoCloseable {
    * nonce under the file DEK, independently of page encryption calls.
    */
   default byte[] authenticateChunk(ChunkCryptoContext context) {
-    throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_unsupported"));
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
   }
 
   /** Verifies the proof before a chunk identity is used; unsupported providers fail closed. */
   default void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
-    throw new EncryptException(Messages.get("error.encrypt.chunk_authentication_unsupported"));
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
   }
 
   @Override
