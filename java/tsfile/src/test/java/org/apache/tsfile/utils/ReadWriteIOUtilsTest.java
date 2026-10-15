@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -28,9 +30,13 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.Assert.fail;
@@ -65,6 +71,237 @@ public class ReadWriteIOUtilsTest {
     for (int length = 0; length < Long.BYTES; length++) {
       InputStream input = new ByteArrayInputStream(new byte[length]);
       Assert.assertThrows(EOFException.class, () -> ReadWriteIOUtils.readLong(input));
+    }
+  }
+
+  @Test
+  public void testReadStringRejectsOversizedLength() {
+    for (int length : new int[] {2, Integer.MAX_VALUE}) {
+      ByteBuffer buffer = ByteBuffer.allocate(5).putInt(length).put((byte) 'a');
+      buffer.flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readString(buffer));
+    }
+  }
+
+  @Test
+  public void testReadBinaryRejectsOversizedLength() {
+    for (int length : new int[] {2, Integer.MAX_VALUE}) {
+      ByteBuffer buffer = ByteBuffer.allocate(5).putInt(length).put((byte) 1);
+      buffer.flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readBinary(buffer));
+    }
+  }
+
+  @Test
+  public void testLengthPrefixedValuesRejectTruncatedLength() {
+    for (int size = 0; size < Integer.BYTES; size++) {
+      ByteBuffer buffer = ByteBuffer.allocate(size);
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readString(buffer.duplicate()));
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readBinary(buffer.duplicate()));
+    }
+  }
+
+  @Test
+  public void testLengthPrefixedValuesRespectBufferLimit() {
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer buffer = direct ? ByteBuffer.allocateDirect(32) : ByteBuffer.allocate(32);
+      buffer.putInt(7).putInt(5).put((byte) 'a').flip();
+      buffer.position(Integer.BYTES);
+      for (ByteBuffer view : new ByteBuffer[] {buffer, buffer.asReadOnlyBuffer()}) {
+        Assert.assertThrows(
+            BufferUnderflowException.class, () -> ReadWriteIOUtils.readString(view.duplicate()));
+        Assert.assertThrows(
+            BufferUnderflowException.class, () -> ReadWriteIOUtils.readBinary(view.duplicate()));
+        Assert.assertEquals(Integer.BYTES, view.position());
+        Assert.assertEquals(9, view.limit());
+      }
+    }
+  }
+
+  @Test
+  public void testExplicitLengthsRespectRemainingBytes() {
+    ByteBuffer buffer = ByteBuffer.allocate(32);
+    buffer.putInt(7).put((byte) 'a').flip();
+    buffer.position(Integer.BYTES);
+    for (int length : new int[] {2, Integer.MAX_VALUE}) {
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readBytes(buffer, length));
+      Assert.assertThrows(
+          BufferUnderflowException.class,
+          () -> ReadWriteIOUtils.readStringWithLength(buffer, length));
+      Assert.assertEquals(Integer.BYTES, buffer.position());
+    }
+  }
+
+  @Test
+  public void testReadVarIntStringRejectsOversizedLength() {
+    for (int length : new int[] {2, Integer.MAX_VALUE}) {
+      ByteBuffer buffer = ByteBuffer.allocate(32);
+      ReadWriteForEncodingUtils.writeVarInt(length, buffer);
+      buffer.put((byte) 'a').flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readVarIntString(buffer));
+    }
+  }
+
+  @Test
+  public void testReadSelfDescribedBytesRejectsOversizedLength() {
+    for (int length : new int[] {2, Integer.MAX_VALUE}) {
+      ByteBuffer buffer = ByteBuffer.allocate(32);
+      ReadWriteForEncodingUtils.writeUnsignedVarInt(length, buffer);
+      buffer.put((byte) 1).flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class,
+          () -> ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer));
+    }
+  }
+
+  @Test
+  public void testMapReadersRejectInvalidEntryCount() {
+    for (int count : new int[] {-2, 2, Integer.MAX_VALUE}) {
+      ByteBuffer buffer = ByteBuffer.allocate(12).putInt(count).putInt(-1).putInt(-1);
+      buffer.flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readMap(buffer.duplicate()));
+      Assert.assertThrows(
+          BufferUnderflowException.class,
+          () -> ReadWriteIOUtils.readLinkedHashMap(buffer.duplicate()));
+    }
+  }
+
+  @Test
+  public void testMapReadersRejectOversizedStrings() {
+    for (ByteBuffer buffer :
+        new ByteBuffer[] {
+          ByteBuffer.allocate(12).putInt(1).putInt(Integer.MAX_VALUE).putInt(0),
+          ByteBuffer.allocate(12).putInt(1).putInt(0).putInt(Integer.MAX_VALUE)
+        }) {
+      buffer.flip();
+      Assert.assertThrows(
+          BufferUnderflowException.class, () -> ReadWriteIOUtils.readMap(buffer.duplicate()));
+      Assert.assertThrows(
+          BufferUnderflowException.class,
+          () -> ReadWriteIOUtils.readLinkedHashMap(buffer.duplicate()));
+    }
+  }
+
+  @Test
+  public void testStringBufferReadersPreserveValuesAndPositions() {
+    for (boolean varInt : new boolean[] {false, true}) {
+      for (boolean direct : new boolean[] {false, true}) {
+        ByteBuffer buffer = direct ? ByteBuffer.allocateDirect(64) : ByteBuffer.allocate(64);
+        buffer.putInt(7);
+        for (String value : new String[] {null, "", "中文"}) {
+          if (varInt) {
+            ReadWriteIOUtils.writeVar(value, buffer);
+          } else {
+            ReadWriteIOUtils.write(value, buffer);
+          }
+        }
+        int end = buffer.position();
+        buffer.putInt(77).flip();
+        buffer.position(Integer.BYTES);
+        for (ByteBuffer view : new ByteBuffer[] {buffer.duplicate(), buffer.asReadOnlyBuffer()}) {
+          for (String value : new String[] {null, "", "中文"}) {
+            Assert.assertEquals(
+                value,
+                varInt
+                    ? ReadWriteIOUtils.readVarIntString(view)
+                    : ReadWriteIOUtils.readString(view));
+          }
+          Assert.assertEquals(end, view.position());
+          Assert.assertEquals(77, view.getInt());
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testReadStringWithLengthPreservesNullEmptyAndUnicode() {
+    byte[] bytes = "中文".getBytes(TSFileConfig.STRING_CHARSET);
+    ByteBuffer buffer = ByteBuffer.wrap(bytes).asReadOnlyBuffer();
+    Assert.assertNull(ReadWriteIOUtils.readStringWithLength(buffer, -1));
+    Assert.assertNull(ReadWriteIOUtils.readStringWithLength(buffer, -2));
+    Assert.assertEquals("", ReadWriteIOUtils.readStringWithLength(buffer, 0));
+    Assert.assertEquals(0, buffer.position());
+    Assert.assertEquals("中文", ReadWriteIOUtils.readStringWithLength(buffer, bytes.length));
+    Assert.assertFalse(buffer.hasRemaining());
+  }
+
+  @Test
+  public void testBinaryBufferReaderPreservesValuesAndPositions() {
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer buffer = direct ? ByteBuffer.allocateDirect(32) : ByteBuffer.allocate(32);
+      buffer.putInt(7);
+      ReadWriteIOUtils.write(new Binary(new byte[0]), buffer);
+      ReadWriteIOUtils.write(new Binary(new byte[] {1, 2, 3}), buffer);
+      int end = buffer.position();
+      buffer.putInt(77).flip();
+      buffer.position(Integer.BYTES);
+      for (ByteBuffer view : new ByteBuffer[] {buffer.duplicate(), buffer.asReadOnlyBuffer()}) {
+        Assert.assertArrayEquals(new byte[0], ReadWriteIOUtils.readBinary(view).getValues());
+        Assert.assertArrayEquals(
+            new byte[] {1, 2, 3}, ReadWriteIOUtils.readBinary(view).getValues());
+        Assert.assertEquals(end, view.position());
+        Assert.assertEquals(77, view.getInt());
+      }
+    }
+  }
+
+  @Test
+  public void testReadSelfDescribedBytesPreservesValuesAndPositions() {
+    ByteBuffer buffer = ByteBuffer.allocate(16);
+    ReadWriteForEncodingUtils.writeUnsignedVarInt(0, buffer);
+    ReadWriteForEncodingUtils.writeUnsignedVarInt(3, buffer);
+    buffer.put(new byte[] {1, 2, 3});
+    int end = buffer.position();
+    buffer.putInt(77).flip();
+    Assert.assertArrayEquals(
+        new byte[0], ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer));
+    Assert.assertArrayEquals(
+        new byte[] {1, 2, 3}, ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer));
+    Assert.assertEquals(end, buffer.position());
+    Assert.assertEquals(77, buffer.getInt());
+  }
+
+  @Test
+  public void testNegativeBinaryLengthsRemainRejected() {
+    Assert.assertThrows(
+        NegativeArraySizeException.class,
+        () -> ReadWriteIOUtils.readBinary(ByteBuffer.allocate(4).putInt(0, -1)));
+    Assert.assertThrows(
+        NegativeArraySizeException.class,
+        () -> ReadWriteIOUtils.readBytes(ByteBuffer.allocate(0), -1));
+  }
+
+  @Test
+  public void testMapReadersPreserveNullEmptyAndOrder() throws IOException {
+    Map<String, String> map = new LinkedHashMap<>();
+    map.put(null, null);
+    map.put("", "");
+    map.put("key", "中文");
+    for (Map<String, String> value :
+        Arrays.asList(null, Collections.<String, String>emptyMap(), map)) {
+      ByteArrayOutputStream stream = new ByteArrayOutputStream();
+      ReadWriteIOUtils.write(value, stream);
+      byte[] bytes = stream.toByteArray();
+      ByteBuffer buffer = ByteBuffer.allocateDirect(bytes.length + 8);
+      buffer.putInt(7).put(bytes).putInt(77).flip();
+      buffer.position(Integer.BYTES);
+      for (ByteBuffer view : new ByteBuffer[] {buffer.duplicate(), buffer.asReadOnlyBuffer()}) {
+        Assert.assertEquals(value, ReadWriteIOUtils.readMap(view.duplicate()));
+        Map<String, String> linked = ReadWriteIOUtils.readLinkedHashMap(view);
+        Assert.assertEquals(value, linked);
+        if (value != null) {
+          Assert.assertEquals(new ArrayList<>(value.keySet()), new ArrayList<>(linked.keySet()));
+        }
+        Assert.assertEquals(Integer.BYTES + bytes.length, view.position());
+        Assert.assertEquals(77, view.getInt());
+      }
     }
   }
 

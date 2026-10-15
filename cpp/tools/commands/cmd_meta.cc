@@ -28,7 +28,11 @@ namespace tsfile_cli {
 
 int cmd_meta(const ParsedArgs& args, storage::TsFileReader& reader,
              OutputFormat fmt, std::ostream& out, std::ostream& err) {
-    FileSummary s = collect_file_summary(args, reader);
+    FileSummary s;
+    const int summary_ret = collect_file_summary(args, reader, s, err);
+    if (summary_ret != kExitOk) {
+        return summary_ret;
+    }
     RowWriter w(out, fmt, {"size_bytes", "format_version", "model"},
                 {common::INT64, common::INT64, common::STRING}, false);
     if (!w.write({std::to_string(s.file_size_bytes),

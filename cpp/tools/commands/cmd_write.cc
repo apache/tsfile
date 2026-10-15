@@ -562,7 +562,7 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
             return kExitFile;
         }
         has_input_stat = true;
-        fin.open(args.file.c_str());
+        fin.open(args.file.c_str(), std::ios::binary);
         if (!fin.is_open()) {
             err << "Error: cannot open input: " << args.file << "\n";
             return kExitFile;

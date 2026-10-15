@@ -69,9 +69,15 @@ class TsFileWriter {
     int register_timeseries(
         const std::string& device_path,
         const std::vector<MeasurementSchema*>& measurement_schema_vec);
+    // Register the complete measurement list for an aligned device once.
+    // This overload fixes the device to a single measurement. Later aligned
+    // or non-aligned registration for that device returns E_INVALID_ARG,
+    // including before writing, after flush, and after recovery.
     int register_aligned_timeseries(
         const std::string& device_id,
         const MeasurementSchema& measurement_schema);
+    // The list must be nonempty with distinct, non-null schemas. Ownership
+    // transfers to the writer only when the entire registration succeeds.
     int register_aligned_timeseries(
         const std::string& device_id,
         const std::vector<MeasurementSchema*>& measurement_schemas);
@@ -129,6 +135,14 @@ class TsFileWriter {
     int write_point_aligned(ValueChunkWriter* value_chunk_writer,
                             int64_t timestamp, common::TSDataType data_type,
                             const DataPoint& point);
+    /*
+     * Create (once) the value chunk writer that carries one measurement of an
+     * aligned device.  Aligned devices keep every registered measurement in
+     * lock-step with the time column, so the writer has to exist before the
+     * first row of that device is written.
+     */
+    int ensure_aligned_value_chunk_writer(
+        storage::MeasurementSchema* measurement_schema);
     int maybe_seal_aligned_pages_together(
         TimeChunkWriter* time_chunk_writer,
         common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
@@ -179,8 +193,7 @@ class TsFileWriter {
                           const Tablet& tablet, uint32_t start_idx = 0,
                           uint32_t end_idx = UINT32_MAX);
     int register_timeseries(const std::string& device_path,
-                            MeasurementSchema* measurement_schema,
-                            bool is_aligned = false);
+                            MeasurementSchema* measurement_schema);
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
     split_tablet_by_device(const Tablet& tablet);
 

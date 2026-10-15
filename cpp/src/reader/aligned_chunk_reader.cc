@@ -259,6 +259,13 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
+    if (IS_SUCC(ret) &&
+        ret_read_len <
+            UTIL_MIN(static_cast<int64_t>(file_data_time_buf_size_),
+                     read_file_->file_size() -
+                         time_chunk_meta_->offset_of_chunk_header_)) {
+        ret = E_FILE_READ_ERR;
+    }
     if (!IS_SUCC(ret)) {
         mem_free(time_file_data_buf);
         return ret;
@@ -286,6 +293,13 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     ret = read_file_->read(value_chunk_meta_->offset_of_chunk_header_,
                            value_file_data_buf, file_data_value_buf_size_,
                            ret_read_len);
+    if (IS_SUCC(ret) &&
+        ret_read_len <
+            UTIL_MIN(static_cast<int64_t>(file_data_value_buf_size_),
+                     read_file_->file_size() -
+                         value_chunk_meta_->offset_of_chunk_header_)) {
+        ret = E_FILE_READ_ERR;
+    }
     if (!IS_SUCC(ret)) {
         mem_free(value_file_data_buf);
         return ret;
@@ -478,6 +492,9 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int ret_read_len = 0;
     if (RET_FAIL(
             read_file_->read(offset, file_data_buf, read_size, ret_read_len))) {
+    } else if (ret_read_len < UTIL_MIN(static_cast<int64_t>(read_size),
+                                       read_file_->file_size() - offset)) {
+        ret = E_FILE_READ_ERR;
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
 #ifdef DEBUG_SE
@@ -682,11 +699,15 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             value_compressor_->after_uncompress(value_uncompressed_buf_);
             value_uncompressed_buf_ = nullptr;
         }
-        if (!prev_value_page_not_finish()) {
-            value_in_.reset();
-        }
         if (!prev_time_page_not_finish()) {
+            // The time page determines the aligned value page's end. Even
+            // after decoding every value, Gorilla can leave a padding byte
+            // unread, which must not prevent advancing to the next page.
+            value_in_.reset();
+            value_decoder_->reset();
             time_in_.reset();
+        } else if (!prev_value_page_not_finish()) {
+            value_in_.reset();
         }
         value_page_col_notnull_bitmap_.clear();
         value_page_col_notnull_bitmap_.shrink_to_fit();
@@ -1216,6 +1237,13 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     ret = read_file_->read(time_chunk_meta_->offset_of_chunk_header_,
                            time_file_data_buf, file_data_time_buf_size_,
                            ret_read_len);
+    if (IS_SUCC(ret) &&
+        ret_read_len <
+            UTIL_MIN(static_cast<int64_t>(file_data_time_buf_size_),
+                     read_file_->file_size() -
+                         time_chunk_meta_->offset_of_chunk_header_)) {
+        ret = E_FILE_READ_ERR;
+    }
     if (!IS_SUCC(ret)) {
         mem_free(time_file_data_buf);
         return ret;
@@ -1264,6 +1292,13 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
 
         ret = read_file_->read(col->chunk_meta->offset_of_chunk_header_, vbuf,
                                col->file_data_buf_size, ret_read_len);
+        if (IS_SUCC(ret) &&
+            ret_read_len <
+                UTIL_MIN(static_cast<int64_t>(col->file_data_buf_size),
+                         read_file_->file_size() -
+                             col->chunk_meta->offset_of_chunk_header_)) {
+            ret = E_FILE_READ_ERR;
+        }
         if (!IS_SUCC(ret)) {
             mem_free(vbuf);
             return ret;
@@ -1390,7 +1425,7 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     // bytes would feed garbage to the decompressor.
     if (read_len != static_cast<int32_t>(page_info.time_compressed_size)) {
         if (heap) common::mem_free(compressed_buf);
-        return E_TSFILE_CORRUPTED;
+        return E_FILE_READ_ERR;
     }
 
     char* uncompressed_buf = nullptr;
@@ -1637,7 +1672,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     if (read_len !=
         static_cast<int32_t>(page_info.value_compressed_sizes[col_idx])) {
         if (heap) common::mem_free(compressed_buf);
-        return E_TSFILE_CORRUPTED;
+        return E_FILE_READ_ERR;
     }
 
     char* uncompressed_buf = nullptr;

@@ -139,3 +139,36 @@ TEST_F(ValuePageWriterTest, WriteBatchCommitsStateAfterEncode) {
     ASSERT_NE(stat, nullptr);
     EXPECT_EQ(stat->count_, 3u);
 }
+
+TEST_F(ValuePageWriterTest, AllNullPagesUseEmptyPageMarker) {
+    for (auto type : {TSDataType::INT64, TSDataType::FLOAT, TSDataType::DOUBLE,
+                      TSDataType::STRING}) {
+        for (auto encoding : {TSEncoding::PLAIN, type == TSDataType::STRING
+                                                     ? TSEncoding::DICTIONARY
+                                                     : TSEncoding::GORILLA}) {
+            for (bool write_statistic : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << "type=" << static_cast<int>(type)
+                             << " encoding=" << static_cast<int>(encoding)
+                             << " statistics=" << write_statistic);
+                ValuePageWriter writer;
+                ASSERT_EQ(writer.init(type, encoding, UNCOMPRESSED), E_OK);
+                ASSERT_EQ(writer.write_null_rows(9), E_OK);
+                ByteStream data(1024, MOD_DEFAULT);
+                ASSERT_EQ(
+                    writer.write_to_chunk(data, true, write_statistic, true),
+                    E_OK);
+                // The complete page is one zero varint, without compressed
+                // size, statistics, bitmap, or codec payload.
+                EXPECT_EQ(data.total_size(), 1u);
+                uint32_t uncompressed_size = 1;
+                ASSERT_EQ(
+                    SerializationUtil::read_var_uint(uncompressed_size, data),
+                    E_OK);
+                EXPECT_EQ(uncompressed_size, 0u);
+                EXPECT_EQ(data.remaining_size(), 0u);
+                writer.destroy_page_data();
+            }
+        }
+    }
+}

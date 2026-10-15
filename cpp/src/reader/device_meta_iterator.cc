@@ -35,33 +35,55 @@ void DeviceMetaIterator::destroy_remaining_cached_devices() {
 
 DeviceMetaIterator::~DeviceMetaIterator() {
     destroy_remaining_cached_devices();
+    while (!meta_index_nodes_.empty()) {
+        auto pending = meta_index_nodes_.front();
+        meta_index_nodes_.pop();
+        if (pending.second) {
+            pending.first->~MetaIndexNode();
+        }
+    }
     pa_.destroy();
 }
 
-bool DeviceMetaIterator::has_next() {
+int DeviceMetaIterator::has_next(bool& has_next) {
+    int ret = common::E_OK;
+    has_next = false;
+    if (read_error_ != common::E_OK) {
+        return read_error_;
+    }
     if (!result_cache_.empty()) {
-        return true;
+        has_next = true;
+        return common::E_OK;
     }
 
     if (direct_device_id_ != nullptr) {
         if (direct_lookup_done_) {
-            return false;
+            return common::E_OK;
         }
-        if (load_results_direct() != common::E_OK) {
-            return false;
+        if (RET_FAIL(load_results_direct())) {
+            read_error_ = ret;
+            return ret;
         }
-        return !result_cache_.empty();
+        has_next = !result_cache_.empty();
+        return ret;
     }
 
-    if (load_results() != common::E_OK) {
-        return false;
+    if (RET_FAIL(load_results())) {
+        read_error_ = ret;
+        return ret;
     }
-    return !result_cache_.empty();
+    has_next = !result_cache_.empty();
+    return ret;
 }
 
 int DeviceMetaIterator::next(
     std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>& ret_meta) {
-    if (!has_next()) {
+    int ret = common::E_OK;
+    bool available = false;
+    if (RET_FAIL(has_next(available))) {
+        return ret;
+    }
+    if (!available) {
         return common::E_NO_MORE_DATA;
     }
 
@@ -71,20 +93,24 @@ int DeviceMetaIterator::next(
 }
 
 int DeviceMetaIterator::load_results() {
-    int root_num = meta_index_nodes_.size();
     while (!meta_index_nodes_.empty()) {
-        auto meta_data_index_node = meta_index_nodes_.front();
+        auto pending = meta_index_nodes_.front();
         meta_index_nodes_.pop();
+        auto meta_data_index_node = pending.first;
         const auto& node_type = meta_data_index_node->node_type_;
+        int ret = common::E_OK;
         if (node_type == MetaIndexNodeType::LEAF_DEVICE) {
-            load_leaf_device(meta_data_index_node);
+            ret = load_leaf_device(meta_data_index_node);
         } else if (node_type == MetaIndexNodeType::INTERNAL_DEVICE) {
-            load_internal_node(meta_data_index_node);
+            ret = load_internal_node(meta_data_index_node);
         } else {
-            return common::E_INVALID_NODE_TYPE;
+            ret = common::E_INVALID_NODE_TYPE;
         }
-        if (root_num-- <= 0) {
+        if (pending.second) {
             meta_data_index_node->~MetaIndexNode();
+        }
+        if (ret != common::E_OK) {
+            return ret;
         }
     }
     return common::E_OK;
@@ -136,7 +162,7 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
                 start_offset, end_offset, pa_, child_node, false))) {
             return ret;
         } else {
-            meta_index_nodes_.push(child_node);
+            meta_index_nodes_.push({child_node, true});
         }
     }
     return ret;

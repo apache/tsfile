@@ -132,8 +132,13 @@ int collect_table_schema_rows(const ParsedArgs& args,
 
 int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
                OutputFormat fmt, std::ostream& out, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     std::vector<SchemaRow> rows;
-    if (is_table_model(args, reader)) {
+    if (table_model) {
         int ret = collect_table_schema_rows(args, reader, rows, err);
         if (ret != kExitOk) {
             return ret;
@@ -206,6 +211,13 @@ int cmd_schema(const ParsedArgs& args, storage::TsFileReader& reader,
         }
     }
 
+    OutputNameValidator validator;
+    for (const SchemaRow& row : rows) {
+        if (!validator.add_column(row.cells[1], row.cells[2])) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
+    }
     RowWriter w(out, fmt,
                 {"model", "object", "column", "category", "data_type",
                  "encoding", "compression"},

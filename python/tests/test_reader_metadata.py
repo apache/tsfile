@@ -269,3 +269,47 @@ def test_get_timeseries_metadata_table_timeline_statistic_keeps_null_rows():
             os.unlink(path)
         except OSError:
             pass
+
+
+def test_selected_metadata_preserves_table_device_segments(tmp_path):
+    path = tmp_path / "structured_device_metadata.tsfile"
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
+        ],
+    )
+    frame = pd.DataFrame(
+        {
+            "time": [0, 1, 2, 3],
+            "region": ["north.east", "north.east", "north.east", ""],
+            "device": [None, "null", "a.b", "d"],
+            "value": [10, 11, 12, 13],
+        }
+    )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(frame)
+
+    with TsFileReader(str(path)) as reader:
+        devices = reader.get_all_devices()
+        expected = reader.get_timeseries_metadata()
+        assert set(expected) == {
+            ("weather", "north.east", None),
+            ("weather", "north.east", "null"),
+            ("weather", "north.east", "a.b"),
+            ("weather", "", "d"),
+        }
+        selected = reader.get_timeseries_metadata(devices)
+        assert set(selected) == set(expected)
+        for device in devices:
+            # Structured segments must win even if the display path is absent
+            # or ambiguous because a tag contains a dot.
+            for display_path in (None, "unrelated.path"):
+                query = DeviceID(display_path, None, device.segments)
+                group = reader.get_timeseries_metadata([query])[device.segments]
+                assert group.segments == expected[device.segments].segments
+                assert group.timeseries[0].statistic.sum == pytest.approx(
+                    expected[device.segments].timeseries[0].statistic.sum
+                )

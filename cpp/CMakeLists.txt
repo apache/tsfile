@@ -32,7 +32,7 @@ endif ()
 if (POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
 endif ()
-set(TsFile_CPP_VERSION 2.3.2.dev)
+set(TsFile_CPP_VERSION 2.5.1.dev)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DependencySource.cmake)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

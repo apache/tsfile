@@ -18,6 +18,7 @@
  */
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -40,7 +41,8 @@ int demo_read() {
     columns.emplace_back("id2");
     columns.emplace_back("s1");
 
-    auto table_schema = reader.get_table_schema(table_name);
+    std::shared_ptr<storage::TableSchema> table_schema;
+    HANDLE_ERROR(reader.get_table_schema(table_name, table_schema));
     storage::Filter* tag_filter1 =
         storage::TagFilterBuilder(table_schema.get()).eq("id1", "id1_filed_1");
     storage::Filter* tag_filter2 =

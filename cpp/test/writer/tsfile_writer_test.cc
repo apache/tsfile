@@ -24,6 +24,7 @@
 #include <cstring>
 #include <fstream>
 #include <random>
+#include <tuple>
 
 #ifdef _WIN32
 #include <process.h>
@@ -479,18 +480,21 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
         device_num, std::vector<MeasurementSchema>(measurement_num));
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        std::vector<MeasurementSchema*> schemas;
         for (int j = 0; j < measurement_num; j++) {
             std::string measure_name = "measurement" + std::to_string(j);
             schema_vecs[i][j] =
                 MeasurementSchema(measure_name, common::TSDataType::INT32,
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED);
-            tsfile_writer_->register_aligned_timeseries(
-                device_name, storage::MeasurementSchema(
-                                 measure_name, common::TSDataType::INT32,
-                                 common::TSEncoding::PLAIN,
-                                 common::CompressionType::UNCOMPRESSED));
+            schemas.push_back(
+                new MeasurementSchema(measure_name, common::TSDataType::INT32,
+                                      common::TSEncoding::PLAIN,
+                                      common::CompressionType::UNCOMPRESSED));
         }
+        ASSERT_EQ(
+            tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+            E_OK);
     }
 
     for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
@@ -1779,4 +1783,638 @@ TEST_F(TsFileWriterTest, WriterReuseAfterDestroyProducesValidSecondFile) {
     // wf was passed to init() but init() did not take ownership.
     delete wf;
     remove(second_path.c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Aligned writes: a row that does not carry every measurement of the device
+// must not shift the value columns.
+//
+// Records and tablets may legitimately carry only a subset of an aligned
+// device's measurements.  A measurement missing from the row still has to
+// consume one row (as NULL) so that every value column's not-null bitmap stays
+// aligned with the time column; otherwise the values of that column get paired
+// with the earliest timestamps of the page on read (Java behaves the same way:
+// AlignedChunkGroupWriterImpl#write -> writeEmptyDataInOneRow).
+// ---------------------------------------------------------------------------
+
+TEST_F(TsFileWriterTest, AlignedRecordMissingMeasurementsStayRowAligned) {
+    std::string device_name = "device_missing_m";
+    std::vector<std::string> mnames = {"s0", "s1", "s2"};
+    std::vector<MeasurementSchema*> schemas;
+    for (auto& n : mnames) {
+        schemas.push_back(new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
+    }
+    tsfile_writer_->register_aligned_timeseries(device_name, schemas);
+
+    const int row_num = 10;
+    for (int i = 0; i < row_num; i++) {
+        TsRecord record(1622505600000 + i, device_name);
+        if (i % 2 == 0) {
+            // Only s0 is carried by even rows, only s1 by odd rows; s2 is
+            // never written at all.
+            record.add_point(mnames[0], static_cast<int64_t>(100 + i));
+        } else {
+            record.add_point(mnames[1], static_cast<int64_t>(200 + i));
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    // Statistics must describe the rows that really carry a value.
+    std::vector<std::shared_ptr<IDeviceID>> devices = {
+        std::make_shared<StringArrayDeviceID>(device_name)};
+    TsFileReader meta_reader;
+    ASSERT_EQ(meta_reader.open(file_name_), E_OK);
+    auto meta_map = meta_reader.get_timeseries_metadata(devices);
+    std::map<std::string, storage::ITimeseriesIndex*> meta_by_name;
+    for (auto& ts_idx : meta_map.at(devices[0])) {
+        meta_by_name[ts_idx->get_measurement_name().to_std_string()] =
+            ts_idx.get();
+    }
+    // s2 is registered but never carries a value: it advances with NULL rows
+    // (like an all-null column of an aligned tablet), so it is present with
+    // count 0.
+    ASSERT_EQ(meta_by_name.size(), 3u);
+    EXPECT_EQ(meta_by_name[mnames[0]]->get_statistic()->count_, 5);
+    EXPECT_EQ(meta_by_name[mnames[0]]->get_statistic()->start_time_,
+              1622505600000);
+    EXPECT_EQ(meta_by_name[mnames[0]]->get_statistic()->end_time_,
+              1622505600008);
+    EXPECT_EQ(meta_by_name[mnames[1]]->get_statistic()->count_, 5);
+    EXPECT_EQ(meta_by_name[mnames[1]]->get_statistic()->start_time_,
+              1622505600001);
+    EXPECT_EQ(meta_by_name[mnames[1]]->get_statistic()->end_time_,
+              1622505600009);
+    EXPECT_EQ(meta_by_name[mnames[2]]->get_statistic()->count_, 0);
+    ASSERT_EQ(meta_reader.close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    for (auto& n : mnames) {
+        select_list.emplace_back(device_name, n);
+    }
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 1622505600000 + cur_row);
+        const std::string s0 = field_to_string(rec->get_field(1));
+        const std::string s1 = field_to_string(rec->get_field(2));
+        const std::string s2 = field_to_string(rec->get_field(3));
+        if (cur_row % 2 == 0) {
+            EXPECT_EQ(s0, std::to_string(100 + cur_row));
+            EXPECT_EQ(s1, "NULL");
+        } else {
+            EXPECT_EQ(s0, "NULL");
+            EXPECT_EQ(s1, std::to_string(200 + cur_row));
+        }
+        EXPECT_EQ(s2, "NULL");
+        cur_row++;
+    }
+    EXPECT_EQ(cur_row, row_num);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+TEST_F(TsFileWriterTest, AlignedTabletMissingColumnStaysRowAligned) {
+    std::string device_name = "device_tablet_missing";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("s0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("s1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) {
+            reg.push_back(new MeasurementSchema(s));
+        }
+        tsfile_writer_->register_aligned_timeseries(device_name, reg);
+    }
+    {
+        // First tablet only carries s0: s1 must still advance with NULLs.
+        std::vector<MeasurementSchema> cols;
+        cols.push_back(schema_vec[0]);
+        Tablet tablet(device_name,
+                      std::make_shared<std::vector<MeasurementSchema>>(cols),
+                      5);
+        for (int i = 0; i < 5; i++) {
+            tablet.add_timestamp(i, 1000 + i);
+            tablet.add_value(i, 0u, static_cast<int64_t>(100 + i));
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    }
+    {
+        Tablet tablet(
+            device_name,
+            std::make_shared<std::vector<MeasurementSchema>>(schema_vec), 5);
+        for (int i = 0; i < 5; i++) {
+            tablet.add_timestamp(i, 1005 + i);
+            tablet.add_value(i, 0u, static_cast<int64_t>(105 + i));
+            tablet.add_value(i, 1u, static_cast<int64_t>(200 + i));
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::string s0_name("s0"), s1_name("s1");
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name, s0_name);
+    select_list.emplace_back(device_name, s1_name);
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 1000 + cur_row);
+        EXPECT_EQ(field_to_string(rec->get_field(1)),
+                  std::to_string(100 + cur_row));
+        if (cur_row < 5) {
+            // The rows written before s1 showed up are NULL for s1.
+            EXPECT_EQ(field_to_string(rec->get_field(2)), "NULL");
+        } else {
+            EXPECT_EQ(field_to_string(rec->get_field(2)),
+                      std::to_string(200 + cur_row - 5));
+        }
+        cur_row++;
+    }
+    EXPECT_EQ(cur_row, 10);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// A record that repeats the same measurement must still advance that column a
+// single time, otherwise the column would run ahead of the time column.
+TEST_F(TsFileWriterTest, AlignedRecordDuplicateMeasurementWritesOneRow) {
+    std::string device_name = "device_dup_m";
+    std::vector<MeasurementSchema*> schemas;
+    schemas.push_back(new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
+    schemas.push_back(new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED));
+    tsfile_writer_->register_aligned_timeseries(device_name, schemas);
+
+    TsRecord record(7, device_name);
+    record.add_point("s0", static_cast<int64_t>(1));
+    record.add_point("s0", static_cast<int64_t>(2));
+    record.add_point("s1", static_cast<int64_t>(3));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::string s0_name("s0"), s1_name("s1");
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name, s0_name);
+    select_list.emplace_back(device_name, s1_name);
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int rows = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 7);
+        // The last point of the duplicated measurement wins.
+        EXPECT_EQ(field_to_string(rec->get_field(1)), "2");
+        EXPECT_EQ(field_to_string(rec->get_field(2)), "3");
+        rows++;
+    }
+    EXPECT_EQ(rows, 1);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// Like Java, fix the complete aligned measurement list at registration, even
+// before the first write. Flushing must not make the device extensible again.
+class AlignedRegistrationTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<std::tuple<bool, int>> {};
+
+TEST_P(AlignedRegistrationTest, MeasurementsAreFixedAtRegistration) {
+    const bool single_measurement = std::get<0>(GetParam());
+    const int stage = std::get<1>(GetParam());
+    std::string device_name = "device_late_m";
+    if (single_measurement) {
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(
+                      device_name,
+                      MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED)),
+                  E_OK);
+    } else {
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+            new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(
+            tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+            E_OK);
+    }
+    if (stage == 1) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    TsRecord first(0, device_name);
+    first.add_point("s0", int64_t(100));
+    if (stage >= 2) {
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(first), E_OK);
+    }
+    if (stage == 3) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    // The writer only takes ownership of a schema when the registration
+    // succeeds, so a rejected one has to be released by the caller.
+    for (bool aligned : {true, false}) {
+        for (const std::string& name : {"extra", "s0"}) {
+            auto* schema =
+                new MeasurementSchema(name, INT64, PLAIN, UNCOMPRESSED);
+            std::vector<MeasurementSchema*> extra{schema};
+            int ret = aligned ? tsfile_writer_->register_aligned_timeseries(
+                                    device_name, extra)
+                              : tsfile_writer_->register_timeseries(device_name,
+                                                                    extra);
+            EXPECT_EQ(ret, E_INVALID_ARG);
+            if (ret != E_OK) {
+                delete schema;
+            }
+        }
+    }
+
+    // The schema-reference overloads own their internal copies even when the
+    // registration is rejected. Exercise both wrappers under leak checking.
+    MeasurementSchema extra_value("extra_value", INT64, PLAIN, UNCOMPRESSED);
+    EXPECT_EQ(
+        tsfile_writer_->register_aligned_timeseries(device_name, extra_value),
+        E_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device_name, extra_value),
+              E_INVALID_ARG);
+    MeasurementSchema duplicate_value("s0", INT64, PLAIN, UNCOMPRESSED);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device_name,
+                                                          duplicate_value),
+              E_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device_name, duplicate_value),
+              E_INVALID_ARG);
+
+    auto* groups = tsfile_writer_->get_schema_group_map();
+    ASSERT_EQ(groups->size(), 1u);
+    ASSERT_EQ(groups->begin()->second->measurement_schema_map_.size(),
+              single_measurement ? 1u : 2u);
+    if (stage < 2) {
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(first), E_OK);
+    }
+    TsRecord second(1, device_name);
+    second.add_point("s0", int64_t(101));
+    if (!single_measurement) {
+        second.add_point("s1", int64_t(201));
+    }
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(second), E_OK);
+
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<Path> paths;
+    std::string s0("s0"), s1("s1");
+    paths.emplace_back(device_name, s0);
+    if (!single_measurement) {
+        paths.emplace_back(device_name, s1);
+    }
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(QueryExpression::create(paths, nullptr), result),
+              E_OK);
+    bool has_next = false;
+    int row = 0;
+    while (IS_SUCC(result->next(has_next)) && has_next) {
+        RowRecord* record = result->get_row_record();
+        EXPECT_EQ(record->get_timestamp(), row);
+        EXPECT_EQ(field_to_string(record->get_field(1)),
+                  std::to_string(100 + row));
+        if (!single_measurement) {
+            EXPECT_EQ(field_to_string(record->get_field(2)),
+                      row == 0 ? "NULL" : "201");
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(RegistrationStages, AlignedRegistrationTest,
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Values(0, 1, 2, 3)));
+
+class AlignedRegistrationFailureTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<int> {};
+
+TEST_P(AlignedRegistrationFailureTest, FailedBatchCanBeRetried) {
+    std::string device = "device_failed_registration";
+    std::unique_ptr<MeasurementSchema> first(
+        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
+    std::unique_ptr<MeasurementSchema> second(
+        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED));
+    std::unique_ptr<MeasurementSchema> invalid(new MeasurementSchema(
+        GetParam() == 2 ? "s0" : "bad", INT64, DICTIONARY, UNCOMPRESSED));
+    std::vector<MeasurementSchema*> batch;
+    if (GetParam() == 1) {
+        batch = {first.get(), nullptr};
+    } else if (GetParam() >= 2) {
+        batch = {first.get(), invalid.get()};
+    }
+    // Empty list, null pointer, duplicate name, or unsupported encoding.
+    EXPECT_NE(tsfile_writer_->register_aligned_timeseries(device, batch), E_OK);
+    ASSERT_TRUE(tsfile_writer_->get_schema_group_map()->empty());
+
+    batch = {first.get(), second.get()};
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device, batch), E_OK);
+    first.release();
+    second.release();
+    TsRecord record(0, device);
+    record.add_point("s0", int64_t(100));
+    record.add_point("s1", int64_t(200));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(InvalidBatches, AlignedRegistrationFailureTest,
+                         ::testing::Values(0, 1, 2, 3));
+
+TEST_F(TsFileWriterTest, NonAlignedRegistrationRemainsIncremental) {
+    std::string device = "nonaligned_device";
+    MeasurementSchema s0("s0", INT64, PLAIN, UNCOMPRESSED);
+    MeasurementSchema s1("s1", INT64, PLAIN, UNCOMPRESSED);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, s0), E_OK);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, s1), E_OK);
+    EXPECT_EQ(tsfile_writer_->register_timeseries(device, s0), E_ALREADY_EXIST);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device, s0),
+              E_INVALID_ARG);
+    EXPECT_EQ(tsfile_writer_->register_aligned_timeseries(device, s1),
+              E_INVALID_ARG);
+    auto* group = tsfile_writer_->get_schema_group_map()->begin()->second;
+    EXPECT_FALSE(group->is_aligned_);
+    EXPECT_EQ(group->measurement_schema_map_.size(), 2u);
+    TsRecord record(0, device);
+    record.add_point("s0", int64_t(100));
+    record.add_point("s1", int64_t(200));
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+class AlignedTabletRecordBoundaryTest
+    : public TsFileWriterTest,
+      public ::testing::WithParamInterface<std::tuple<uint32_t, bool, int>> {};
+
+TEST_P(AlignedTabletRecordBoundaryTest, MissingMeasurementsStayAligned) {
+    const uint32_t tablet_rows = std::get<0>(GetParam());
+    const bool missing_tablet_column = std::get<1>(GetParam());
+    const int flush_mode = std::get<2>(GetParam());
+    struct ConfigGuard {
+        uint32_t points, memory;
+        ~ConfigGuard() {
+            g_config_value_.page_writer_max_point_num_ = points;
+            g_config_value_.page_writer_max_memory_bytes_ = memory;
+        }
+    } guard{g_config_value_.page_writer_max_point_num_,
+            g_config_value_.page_writer_max_memory_bytes_};
+    const uint32_t page_capacity = 7;
+    g_config_value_.page_writer_max_point_num_ = page_capacity;
+    g_config_value_.page_writer_max_memory_bytes_ = 1024 * 1024;
+
+    std::string device_name = "device_tablet_record_boundary";
+    std::vector<MeasurementSchema*> schemas{
+        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+        new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+    ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, schemas),
+              E_OK);
+    auto tablet_schema = std::make_shared<std::vector<MeasurementSchema>>();
+    tablet_schema->emplace_back("s0", INT64, PLAIN, UNCOMPRESSED);
+    if (!missing_tablet_column) {
+        tablet_schema->emplace_back("s1", INT64, PLAIN, UNCOMPRESSED);
+    }
+    Tablet tablet(device_name, tablet_schema, tablet_rows);
+    for (uint32_t row = 0; row < tablet_rows; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), E_OK);
+        ASSERT_EQ(tablet.add_value(row, 0u, int64_t(100 + row)), E_OK);
+        if (!missing_tablet_column) {
+            ASSERT_EQ(tablet.add_value(row, 1u, int64_t(200 + row)), E_OK);
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    if (tablet_rows % page_capacity == 0) {
+        // A full last page must be sealed on every column before switching
+        // from batch writes to record writes, including all-NULL columns.
+        for (MeasurementSchema* schema : schemas) {
+            EXPECT_EQ(schema->value_chunk_writer_->get_point_numer(), 0u);
+        }
+    }
+    if (flush_mode == 1) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    TsRecord sparse(tablet_rows, device_name);
+    sparse.add_point("s0", int64_t(100 + tablet_rows));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(sparse), E_OK);
+    EXPECT_EQ(schemas[0]->value_chunk_writer_->num_of_pages(),
+              schemas[1]->value_chunk_writer_->num_of_pages());
+    EXPECT_EQ(schemas[0]->value_chunk_writer_->get_point_numer(),
+              schemas[1]->value_chunk_writer_->get_point_numer());
+    if (flush_mode == 2) {
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    TsRecord full(tablet_rows + 1, device_name);
+    full.add_point("s0", int64_t(101 + tablet_rows));
+    full.add_point("s1", int64_t(201 + tablet_rows));
+    ASSERT_EQ(tsfile_writer_->write_record_aligned(full), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::string s0("s0"), s1("s1");
+    std::vector<Path> paths{Path(device_name, s0), Path(device_name, s1)};
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(QueryExpression::create(paths, nullptr), result),
+              E_OK);
+    bool has_next = false;
+    uint32_t rows = 0;
+    int ret = E_OK;
+    while ((ret = result->next(has_next)) == E_OK && has_next) {
+        RowRecord* row = result->get_row_record();
+        EXPECT_EQ(row->get_timestamp(), rows);
+        EXPECT_EQ(field_to_string(row->get_field(1)),
+                  std::to_string(100 + rows));
+        const bool is_null = rows == tablet_rows ||
+                             (missing_tablet_column && rows < tablet_rows);
+        EXPECT_EQ(field_to_string(row->get_field(2)),
+                  is_null ? "NULL" : std::to_string(200 + rows));
+        rows++;
+    }
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(rows, tablet_rows + 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(PageBoundaries, AlignedTabletRecordBoundaryTest,
+                         ::testing::Combine(::testing::Values(6u, 7u, 8u, 14u),
+                                            ::testing::Bool(),
+                                            ::testing::Values(0, 1, 2)));
+
+// Same as above, but with rows spread over several pages: the NULL padding of
+// a missing measurement has to keep the page lists of every value column in
+// step with the time column.
+TEST_F(TsFileWriterTest, AlignedRecordMissingMeasurementsAcrossPages) {
+    uint32_t prev_pt = g_config_value_.page_writer_max_point_num_;
+    uint32_t prev_mem = g_config_value_.page_writer_max_memory_bytes_;
+    struct Guard {
+        uint32_t pt, mem;
+        ~Guard() {
+            g_config_value_.page_writer_max_point_num_ = pt;
+            g_config_value_.page_writer_max_memory_bytes_ = mem;
+        }
+    } guard{prev_pt, prev_mem};
+    g_config_value_.page_writer_max_point_num_ = 7;
+    g_config_value_.page_writer_max_memory_bytes_ = 1024 * 1024;
+
+    std::string device_name = "device_missing_pages";
+    std::vector<std::string> mnames = {"s0", "s1", "s2"};
+    std::vector<MeasurementSchema*> schemas;
+    for (auto& n : mnames) {
+        schemas.push_back(new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
+    }
+    tsfile_writer_->register_aligned_timeseries(device_name, schemas);
+
+    const int row_num = 20;
+    for (int i = 0; i < row_num; i++) {
+        TsRecord record(1000 + i, device_name);
+        // s0: every row, s1: every third row, s2: only the last row.
+        record.add_point(mnames[0], static_cast<int64_t>(i));
+        if (i % 3 == 0) {
+            record.add_point(mnames[1], static_cast<int64_t>(100 + i));
+        }
+        if (i == row_num - 1) {
+            record.add_point(mnames[2], static_cast<int64_t>(999));
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    for (auto& n : mnames) {
+        select_list.emplace_back(device_name, n);
+    }
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 1000 + cur_row);
+        EXPECT_EQ(field_to_string(rec->get_field(1)), std::to_string(cur_row));
+        if (cur_row % 3 == 0) {
+            EXPECT_EQ(field_to_string(rec->get_field(2)),
+                      std::to_string(100 + cur_row));
+        } else {
+            EXPECT_EQ(field_to_string(rec->get_field(2)), "NULL");
+        }
+        if (cur_row == row_num - 1) {
+            EXPECT_EQ(field_to_string(rec->get_field(3)), "999");
+        } else {
+            EXPECT_EQ(field_to_string(rec->get_field(3)), "NULL");
+        }
+        cur_row++;
+    }
+    EXPECT_EQ(cur_row, row_num);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// A value column is identified by measurement name, not by the position of the
+// point inside the record: records may add their points in any order (and in a
+// different order from row to row) without disturbing the row alignment.
+TEST_F(TsFileWriterTest, AlignedRecordPointOrderDoesNotMatter) {
+    std::string device_name = "device_point_order";
+    std::vector<std::string> mnames = {"s0", "s1", "s2"};
+    std::vector<MeasurementSchema*> schemas;
+    for (auto& n : mnames) {
+        schemas.push_back(new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
+    }
+    tsfile_writer_->register_aligned_timeseries(device_name, schemas);
+
+    const int row_num = 6;
+    for (int i = 0; i < row_num; i++) {
+        TsRecord record(2000 + i, device_name);
+        // Reverse order of the previous row, and drop s1 on odd rows.
+        for (int k = 2; k >= 0; k--) {
+            int idx = (i + k) % 3;
+            if (idx == 1 && i % 2 == 1) {
+                continue;
+            }
+            record.add_point(mnames[idx], static_cast<int64_t>(idx * 100 + i));
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    for (auto& n : mnames) {
+        select_list.emplace_back(device_name, n);
+    }
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(qds->next(has_next)) && has_next) {
+        auto* rec = qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), 2000 + cur_row);
+        for (int c = 0; c < 3; c++) {
+            if (c == 1 && cur_row % 2 == 1) {
+                EXPECT_EQ(field_to_string(rec->get_field(c + 1)), "NULL");
+            } else {
+                EXPECT_EQ(field_to_string(rec->get_field(c + 1)),
+                          std::to_string(c * 100 + cur_row));
+            }
+        }
+        cur_row++;
+    }
+    EXPECT_EQ(cur_row, row_num);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
 }

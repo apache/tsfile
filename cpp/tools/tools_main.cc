@@ -19,7 +19,12 @@
 
 #include <exception>
 #include <iostream>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+
+#include <cstdio>
+#else
 #include <csignal>
 #endif
 #include <string>
@@ -29,7 +34,19 @@
 #include "cli/run_cli.h"
 
 int main(int argc, char** argv) {
-#ifndef _WIN32
+#ifdef _WIN32
+    // Preserve CSV field bytes in pipes and redirected files. CRT text mode
+    // otherwise converts CRLF on input and LF on output, including inside
+    // quotes.
+    const auto binary_if_redirected = [](FILE* stream) {
+        const int fd = _fileno(stream);
+        if (fd >= 0 && _isatty(fd) == 0) {
+            _setmode(fd, _O_BINARY);
+        }
+    };
+    binary_if_redirected(stdin);
+    binary_if_redirected(stdout);
+#else
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     std::vector<std::string> args(argv + 1, argv + argc);

@@ -20,6 +20,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "common/allocator/byte_stream.h"
 #include "common/config/config.h"
 #include "common/statistic.h"
@@ -94,4 +96,63 @@ TEST_F(ValueChunkWriterTest, DestroyChunkWriter) {
     value_chunk_writer.destroy();
     EXPECT_EQ(value_chunk_writer.get_chunk_statistic(), nullptr);
     EXPECT_EQ(value_chunk_writer.get_chunk_data().total_size(), 0);
+}
+
+TEST_F(ValueChunkWriterTest, EmptyPagesDoNotHaveStatisticsOrData) {
+    const std::vector<std::vector<bool>> patterns{
+        {true},
+        {true, true},
+        {true, false},
+        {false, true},
+        {true, true, false, true, false, true}};
+    for (const auto& pattern : patterns) {
+        for (bool seal_last_page : {false, true}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "pages=" << pattern.size()
+                         << " seal_last_page=" << seal_last_page);
+            ValueChunkWriter writer;
+            ASSERT_EQ(writer.init("value", DOUBLE, GORILLA, UNCOMPRESSED),
+                      E_OK);
+            writer.set_enable_page_seal_if_full(false);
+            int64_t timestamp = 0;
+            for (size_t page = 0; page < pattern.size(); ++page) {
+                for (int row = 0; row < 9; ++row) {
+                    ASSERT_EQ(writer.write(timestamp++, 42.0, pattern[page]),
+                              E_OK);
+                }
+                if (page + 1 < pattern.size() || seal_last_page) {
+                    ASSERT_EQ(writer.seal_current_page(), E_OK);
+                }
+            }
+            ASSERT_EQ(writer.end_encode_chunk(), E_OK);
+            ASSERT_EQ(writer.num_of_pages(), pattern.size());
+            ByteStream& data = writer.get_chunk_data();
+            for (bool all_null : pattern) {
+                const auto start = data.read_pos();
+                PageHeader header;
+                ASSERT_EQ(
+                    header.deserialize_from(data, pattern.size() > 1, DOUBLE),
+                    E_OK);
+                if (all_null) {
+                    EXPECT_EQ(data.read_pos() - start, 1u);
+                    EXPECT_EQ(header.uncompressed_size_, 0u);
+                    EXPECT_EQ(header.compressed_size_, 0u);
+                    EXPECT_EQ(header.statistic_, nullptr);
+                } else {
+                    ASSERT_GT(header.compressed_size_, 0u);
+                    if (pattern.size() > 1) {
+                        ASSERT_NE(header.statistic_, nullptr);
+                        EXPECT_EQ(header.statistic_->count_, 9u);
+                    }
+                    std::vector<char> payload(header.compressed_size_);
+                    uint32_t read = 0;
+                    ASSERT_EQ(
+                        data.read_buf(payload.data(), payload.size(), read),
+                        E_OK);
+                    ASSERT_EQ(read, payload.size());
+                }
+            }
+            EXPECT_EQ(data.remaining_size(), 0u);
+        }
+    }
 }

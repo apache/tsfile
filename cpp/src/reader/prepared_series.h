@@ -34,12 +34,15 @@ struct FileGeneration {
     uint32_t file_id;
     uint64_t file_size;
     uint64_t file_fingerprint;
+    // A sealed Dataset may skip checking the source file generation.
+    bool trust_index;
 
     FileGeneration()
         : mapped_index_identity(0),
           file_id(0),
           file_size(0),
-          file_fingerprint(0) {}
+          file_fingerprint(0),
+          trust_index(false) {}
 };
 
 struct PreparedLocator {

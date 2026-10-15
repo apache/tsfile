@@ -43,7 +43,7 @@ class IMetadataQuerier {
     virtual std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>>
     get_chunk_metadata_map(const std::vector<Path>& paths) const = 0;
 
-    virtual int get_whole_file_metadata(TsFileMeta* tsfile_meta) const = 0;
+    virtual int get_whole_file_metadata(TsFileMeta*& tsfile_meta) const = 0;
 
     virtual void load_chunk_metadatas(const std::vector<Path>& paths) = 0;
 
