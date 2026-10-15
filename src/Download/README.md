@@ -23,14 +23,14 @@
 
 | Version | Dependency                                                                  | Sources                                                                                              | SHA512                                                                                                     | ASC                                                                                                  | Release Nodes                                                      | IoTDB adaptation version                                                         |
 |---------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------| ---------------------------------------------------------------- |
-| 2.4.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.4.0) | [Source](https://www.apache.org/dyn/closer.cgi/tsfile/2.4.0/apache-tsfile-2.4.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.4.0/apache-tsfile-2.4.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.4.0/apache-tsfile-2.4.0-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.4.0/RELEASE_NOTES.md) | IoTDB V2.x |
+| 2.5.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.5.0) | [Source](https://www.apache.org/dyn/closer.cgi/tsfile/2.5.0/apache-tsfile-2.5.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.5.0/apache-tsfile-2.5.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.5.0/apache-tsfile-2.5.0-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.5.0/RELEASE_NOTES.md) | IoTDB V2.x |
 | 1.1.4 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.4) | [Source](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.4/apache-tsfile-1.1.4-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.4/apache-tsfile-1.1.4-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.4/apache-tsfile-1.1.4-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.4)   | IoTDB V1.x |
 
 Legacy version are available here: https://archive.apache.org/dist/tsfile/
 # Download
 Our GitHub page: https://github.com/apache/tsfile
 
-The latest version of TsFile is 2.4.0.
+The latest version of TsFile is 2.5.0.
 
 Downloading it from the [Maven central repository](https://search.maven.org/search?q=g:org.apache.tsfile)
 
@@ -40,8 +40,8 @@ Add the following dependency section to your pom.xml:
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.4.0</version>
+   <version>2.5.0</version>
  </dependency>
 ```
 
-The release note of 2.4.0 can be found in the Archives of the Apache Software Foundation: https://dlcdn.apache.org/tsfile/2.4.0/RELEASE_NOTES.md
+The release note of 2.5.0 can be found in the Archives of the Apache Software Foundation: https://dlcdn.apache.org/tsfile/2.5.0/RELEASE_NOTES.md
