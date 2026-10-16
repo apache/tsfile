@@ -52,6 +52,7 @@
         <enable.lzma2>OFF</enable.lzma2>
         <enable.antlr4>ON</enable.antlr4>
         <enable.simd>ON</enable.simd>
+        <clang.format.executable>clang-format</clang.format.executable>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -361,11 +362,9 @@
                                     <include>test/**/*.cc</include>
                                 </includes>
                                 <clangFormat>
-                                    <!--pathToExe>/path/to/buf</pathToExe-->
-                                    <!-- optional: if clang-format isn't in your path -->
+                                    <pathToExe>${clang.format.executable}</pathToExe>
                                     <version>${clang.format.version}</version>
                                     <style>file</style>
-                                    <!-- optional: can be LLVM, Google, Chromium, Mozilla, WebKit -->
                                 </clangFormat>
                             </cpp>
                             <lineEndings>UNIX</lineEndings>
@@ -383,6 +382,29 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>.clang-format-linux</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                </os>
+            </activation>
+            <properties>
+                <clang.format.executable>${project.basedir}/tools/clang-format</clang.format.executable>
+            </properties>
+        </profile>
+        <profile>
+            <id>.clang-format-mac</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <clang.format.executable>${project.basedir}/tools/clang-format</clang.format.executable>
+            </properties>
         </profile>
     </profiles>
 </project>

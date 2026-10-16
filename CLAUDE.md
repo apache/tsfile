@@ -54,9 +54,17 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 ## Code Formatting
 
 ```bash
-./mvnw spotless:apply    # Format all languages (Java: Google Java Format, C++: clang-format, Python: Black)
-./mvnw spotless:check    # Check formatting without modifying
+./mvnw spotless:apply -P with-java,with-cpp    # Format Java and C++
+./mvnw spotless:check -P with-java,with-cpp    # Check Java and C++ formatting
+./mvnw initialize spotless:apply -P with-java,with-python    # Format Java, C++, and Python
+./mvnw process-sources -P with-java,with-python              # Check Java, C++, and Python formatting
 ```
+
+Java uses Google Java Format. C++ uses clang-format 17.0.6 via Spotless; on
+supported Linux and Apple Silicon macOS hosts, Maven downloads the LLVM release
+archive into `cpp/target/clang-format` before running Spotless.
+Python uses Black 26.3.1 from the virtual environment created by the
+`with-python` profile; that profile also includes the C++ module.
 
 ## Internationalization
 
