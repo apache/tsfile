@@ -17,7 +17,6 @@
 
 import importlib.util
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -26,15 +25,14 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPOSITORY_ROOT / "packaging/scripts/native_package_versions.py"
-CPP_CMAKE_FILE = REPOSITORY_ROOT / "cpp/CMakeLists.txt"
-CPP_VERSION_PATTERN = re.compile(r"^set\(TsFile_CPP_VERSION\s+(\S+)\)", re.MULTILINE)
+RELEASE_VERSION = "2.5.0"
 
 
-def repository_cpp_version():
-    match = CPP_VERSION_PATTERN.search(CPP_CMAKE_FILE.read_text(encoding="utf-8"))
-    if match is None:
-        raise AssertionError(f"cannot find TsFile_CPP_VERSION in {CPP_CMAKE_FILE}")
-    return match.group(1)
+def write_release_cmake(root):
+    # Successful CLI cases must also run in a development-version checkout.
+    path = root / "CMakeLists.txt"
+    path.write_text(f"set(TsFile_CPP_VERSION {RELEASE_VERSION})\n", encoding="utf-8")
+    return path
 
 
 class NativePackageVersionsTest(unittest.TestCase):
@@ -46,10 +44,10 @@ class NativePackageVersionsTest(unittest.TestCase):
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
 
-    def test_reads_repository_release_version(self):
-        self.assertEqual(
-            self.module.read_cpp_version(CPP_CMAKE_FILE), repository_cpp_version()
-        )
+    def test_reads_release_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cmake_file = write_release_cmake(Path(directory))
+            self.assertEqual(self.module.read_cpp_version(cmake_file), RELEASE_VERSION)
 
     def test_builds_exact_release_package_versions(self):
         self.assertEqual(
@@ -115,9 +113,10 @@ class NativePackageVersionsTest(unittest.TestCase):
             self.assertFalse(github_out.exists())
 
     def test_cli_writes_json_and_github_outputs(self):
-        expected = self.module.build_versions(repository_cpp_version())
+        expected = self.module.build_versions(RELEASE_VERSION)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            cmake_file = write_release_cmake(root)
             json_out = root / "versions.json"
             github_out = root / "github-output.txt"
             github_out.write_text("existing=value\n")
@@ -126,7 +125,7 @@ class NativePackageVersionsTest(unittest.TestCase):
                     sys.executable,
                     str(MODULE_PATH),
                     "--cmake-file",
-                    str(CPP_CMAKE_FILE),
+                    str(cmake_file),
                     "--json-out",
                     str(json_out),
                     "--github-output",
@@ -144,7 +143,7 @@ class NativePackageVersionsTest(unittest.TestCase):
             )
 
     def test_cli_preserves_existing_github_output_bytes(self):
-        version = repository_cpp_version()
+        version = RELEASE_VERSION
         for existing in (
             b"",
             b"existing=value",
@@ -155,6 +154,7 @@ class NativePackageVersionsTest(unittest.TestCase):
                 existing=existing
             ), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
+                cmake_file = write_release_cmake(root)
                 github_out = root / "github-output.txt"
                 github_out.write_bytes(existing)
                 subprocess.run(
@@ -162,7 +162,7 @@ class NativePackageVersionsTest(unittest.TestCase):
                         sys.executable,
                         str(MODULE_PATH),
                         "--cmake-file",
-                        str(CPP_CMAKE_FILE),
+                        str(cmake_file),
                         "--json-out",
                         str(root / "versions.json"),
                         "--github-output",
