@@ -60,7 +60,16 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
       throws IOException {
     super(paths, dataTypes);
     this.readers = readers;
-    initHeap();
+    try {
+      initHeap();
+    } catch (IOException | RuntimeException | Error e) {
+      try {
+        close();
+      } catch (IOException closeError) {
+        e.addSuppressed(closeError);
+      }
+      throw e;
+    }
   }
 
   private void initHeap() throws IOException {
@@ -91,6 +100,29 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
   @Override
   public boolean hasNextWithoutConstraint() {
     return !timeHeap.isEmpty();
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (isClosed()) {
+      return;
+    }
+    super.close();
+    IOException failure = null;
+    for (AbstractFileSeriesReader reader : readers) {
+      try {
+        reader.closeChunkReader();
+      } catch (IOException e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
   }
 
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning

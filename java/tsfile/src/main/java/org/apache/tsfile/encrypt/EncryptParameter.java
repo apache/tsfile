@@ -18,14 +18,165 @@
  */
 package org.apache.tsfile.encrypt;
 
-public class EncryptParameter {
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
+
+import javax.security.auth.Destroyable;
+
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Parameters required to encrypt or decrypt one TsFile.
+ *
+ * <p>The two-argument constructor preserves the legacy encryption API. New file-level encryption
+ * schemes should use {@link #pageAeadBuilder()} and identify an {@link IEncryptProvider} and one of
+ * its immutable encryption profiles by stable ids. Runtime implementation class names and algorithm
+ * implementation details are deliberately not part of the persisted parameters.
+ */
+public class EncryptParameter implements AutoCloseable, Destroyable {
+
+  public static final int FILE_CRYPTO_ID_LENGTH = 16;
 
   private final String type;
   private final byte[] key;
+  private final boolean pageAead;
+  private final String providerId;
+  private final String profileId;
+  private final String keyId;
+  private final String keyVersion;
+  private final byte[] wrappedDataKey;
+  private final byte[] fileCryptoId;
+  private final AtomicLong nextChunkOrdinal;
+  private final AtomicBoolean newFileClaimed;
+
+  private final FileEncryptContext fileEncryptContext;
+  private transient volatile boolean destroyed;
 
   public EncryptParameter(String type, byte[] key) {
     this.type = type;
     this.key = key;
+    this.pageAead = false;
+    this.providerId = null;
+    this.profileId = null;
+    this.keyId = null;
+    this.keyVersion = null;
+    this.wrappedDataKey = null;
+    this.fileCryptoId = null;
+    this.nextChunkOrdinal = new AtomicLong();
+    this.newFileClaimed = new AtomicBoolean();
+    this.fileEncryptContext = null;
+  }
+
+  private EncryptParameter(Builder builder) {
+    this.type = null;
+    this.key = copy(builder.key);
+    this.pageAead = true;
+    this.providerId = builder.providerId;
+    this.profileId = builder.profileId;
+    this.keyId = builder.keyId;
+    this.keyVersion = builder.keyVersion;
+    this.wrappedDataKey = copy(builder.wrappedDataKey);
+    this.fileCryptoId = copy(builder.fileCryptoId);
+    this.nextChunkOrdinal =
+        builder.nextChunkOrdinal == null ? new AtomicLong() : builder.nextChunkOrdinal;
+    this.newFileClaimed =
+        builder.newFileClaimed == null ? new AtomicBoolean() : builder.newFileClaimed;
+    this.fileEncryptContext = new FileEncryptContext();
+  }
+
+  private EncryptParameter(EncryptParameter source) {
+    this.type = source.type;
+    this.key = copy(source.key);
+    this.pageAead = source.pageAead;
+    this.providerId = source.providerId;
+    this.profileId = source.profileId;
+    this.keyId = source.keyId;
+    this.keyVersion = source.keyVersion;
+    this.wrappedDataKey = copy(source.wrappedDataKey);
+    this.fileCryptoId = copy(source.fileCryptoId);
+    this.nextChunkOrdinal = source.nextChunkOrdinal;
+    this.newFileClaimed = source.newFileClaimed;
+    this.fileEncryptContext = source.fileEncryptContext;
+    this.fileEncryptContext.retain();
+  }
+
+  public static Builder pageAeadBuilder() {
+    return new Builder();
+  }
+
+  /**
+   * Copies this file's descriptor without initialized provider state. This does not generate a new
+   * data key or file identity and must not be used to create another new file.
+   */
+  public synchronized EncryptParameter copy() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    if (!isTdePageAead()) {
+      return new EncryptParameter(type, key);
+    }
+    return pageAeadBuilder()
+        .key(key)
+        .providerId(providerId)
+        .profileId(profileId)
+        .keyId(keyId)
+        .keyVersion(keyVersion)
+        .wrappedDataKey(wrappedDataKey)
+        .fileCryptoId(fileCryptoId)
+        .nextChunkOrdinal(nextChunkOrdinal)
+        .newFileClaimed(newFileClaimed)
+        .build();
+  }
+
+  /** Reserves this context for one new file. Append/recovery use the existing on-disk header. */
+  public synchronized void claimForNewFile() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    if (!pageAead || !newFileClaimed.compareAndSet(false, true)) {
+      throw new EncryptException(Messages.get("error.encrypt.file_context_already_used"));
+    }
+  }
+
+  /**
+   * Returns an owned reference sharing this file's runtime provider. Each reference must be closed;
+   * the provider is destroyed only after the last reference closes. Legacy parameters are copied.
+   */
+  public synchronized EncryptParameter retain() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    return pageAead ? new EncryptParameter(this) : copy();
+  }
+
+  /** Allocates a file-unique identity before the first page of a chunk is encrypted. */
+  public long nextChunkOrdinal() {
+    if (!pageAead || destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
+    }
+    long ordinal =
+        nextChunkOrdinal.getAndUpdate(value -> value == Long.MAX_VALUE ? value : value + 1);
+    if (ordinal == Long.MAX_VALUE) {
+      throw new EncryptException(Messages.get("error.encrypt.chunk_ordinal_exhausted"));
+    }
+    return ordinal;
+  }
+
+  /** Continues allocation after the highest retained chunk during append or crash recovery. */
+  public void resumeAfterChunkOrdinal(long ordinal) {
+    if (!pageAead || destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.page_context_invalid_parameter"));
+    }
+    if (ordinal == Long.MAX_VALUE) {
+      throw new EncryptException(Messages.get("error.encrypt.chunk_ordinal_exhausted"));
+    }
+    if (ordinal >= 0) {
+      nextChunkOrdinal.accumulateAndGet(ordinal + 1, Math::max);
+    }
   }
 
   public byte[] getKey() {
@@ -34,5 +185,228 @@ public class EncryptParameter {
 
   public String getType() {
     return type;
+  }
+
+  public String getProviderId() {
+    return providerId;
+  }
+
+  public String getProfileId() {
+    return profileId;
+  }
+
+  public String getKeyId() {
+    return keyId;
+  }
+
+  public String getKeyVersion() {
+    return keyVersion;
+  }
+
+  public byte[] getWrappedDataKey() {
+    return copy(wrappedDataKey);
+  }
+
+  public byte[] getFileCryptoId() {
+    return copy(fileCryptoId);
+  }
+
+  boolean hasValidFileCryptoId() {
+    return fileCryptoId != null && fileCryptoId.length == FILE_CRYPTO_ID_LENGTH;
+  }
+
+  synchronized ByteBuffer newPageAssociatedDataBuffer(int pageFieldsSize) {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    return fileEncryptContext.newPageAssociatedDataBuffer(this, pageFieldsSize);
+  }
+
+  public int getPageBodyOverhead() {
+    int overhead = getOrCreateFileEncrypt().getPageBodyOverhead();
+    if (overhead <= 0) {
+      throw new EncryptException(
+          Messages.format("error.encrypt.invalid_page_body_overhead", overhead, profileId));
+    }
+    return overhead;
+  }
+
+  public boolean isTdePageAead() {
+    return pageAead;
+  }
+
+  public int getChunkAuthenticationSize() {
+    return getOrCreateFileEncrypt().getChunkAuthenticationSize();
+  }
+
+  public byte[] authenticateChunk(long chunkOffset, long chunkOrdinal) {
+    return getOrCreateFileEncrypt()
+        .authenticateChunk(ChunkCryptoContext.forChunk(this, chunkOffset, chunkOrdinal));
+  }
+
+  public void verifyChunkAuthentication(
+      byte[] authentication, long chunkOffset, long chunkOrdinal) {
+    getOrCreateFileEncrypt()
+        .verifyChunkAuthentication(
+            authentication, ChunkCryptoContext.forChunk(this, chunkOffset, chunkOrdinal));
+  }
+
+  /** Copies of one file share the ordinal allocator; independently created files never do. */
+  public boolean sharesPageAeadFileContext(EncryptParameter other) {
+    return other != null
+        && pageAead
+        && other.pageAead
+        && !destroyed
+        && !other.destroyed
+        && nextChunkOrdinal == other.nextChunkOrdinal
+        && Objects.equals(providerId, other.providerId)
+        && Objects.equals(profileId, other.profileId)
+        && Objects.equals(keyId, other.keyId)
+        && Objects.equals(keyVersion, other.keyVersion)
+        && Arrays.equals(fileCryptoId, other.fileCryptoId)
+        && Arrays.equals(wrappedDataKey, other.wrappedDataKey)
+        && Arrays.equals(key, other.key);
+  }
+
+  synchronized IEncrypt getOrCreateFileEncrypt() {
+    if (destroyed) {
+      throw new EncryptException(Messages.get("error.encrypt.parameter_destroyed"));
+    }
+    return fileEncryptContext.getOrCreate(this);
+  }
+
+  @Override
+  public boolean isDestroyed() {
+    return destroyed;
+  }
+
+  @Override
+  public void destroy() {
+    synchronized (this) {
+      if (destroyed) {
+        return;
+      }
+      destroyed = true;
+      if (key != null && isTdePageAead()) {
+        Arrays.fill(key, (byte) 0);
+      }
+    }
+    if (fileEncryptContext != null) {
+      fileEncryptContext.release();
+    }
+  }
+
+  @Override
+  public void close() {
+    destroy();
+  }
+
+  private static byte[] copy(byte[] value) {
+    return value == null ? null : Arrays.copyOf(value, value.length);
+  }
+
+  private static final class FileEncryptContext {
+    private int references = 1;
+    private IEncrypt fileEncrypt;
+    private byte[] pageAssociatedDataPrefix;
+
+    private synchronized ByteBuffer newPageAssociatedDataBuffer(
+        EncryptParameter parameter, int pageFieldsSize) {
+      if (pageAssociatedDataPrefix == null) {
+        pageAssociatedDataPrefix = PageCryptoContext.buildFileAssociatedDataPrefix(parameter);
+      }
+      // Never expose the shared prefix to providers or individual page contexts.
+      return ByteBuffer.allocate(Math.addExact(pageAssociatedDataPrefix.length, pageFieldsSize))
+          .put(pageAssociatedDataPrefix);
+    }
+
+    private synchronized void retain() {
+      references++;
+    }
+
+    private synchronized IEncrypt getOrCreate(EncryptParameter parameter) {
+      if (fileEncrypt == null) {
+        fileEncrypt = EncryptionProviderRegistry.create(parameter);
+      }
+      return fileEncrypt;
+    }
+
+    private void release() {
+      IEncrypt toClose = null;
+      synchronized (this) {
+        if (--references == 0) {
+          toClose = fileEncrypt;
+          fileEncrypt = null;
+          pageAssociatedDataPrefix = null;
+        }
+      }
+      if (toClose != null) {
+        toClose.close();
+      }
+    }
+  }
+
+  public static final class Builder {
+
+    private byte[] key;
+    private String providerId;
+    private String profileId;
+    private String keyId;
+    private String keyVersion;
+    private byte[] wrappedDataKey;
+    private byte[] fileCryptoId;
+    private AtomicLong nextChunkOrdinal;
+    private AtomicBoolean newFileClaimed;
+
+    private Builder() {}
+
+    public Builder key(byte[] key) {
+      this.key = copy(key);
+      return this;
+    }
+
+    public Builder providerId(String providerId) {
+      this.providerId = providerId;
+      return this;
+    }
+
+    public Builder profileId(String profileId) {
+      this.profileId = profileId;
+      return this;
+    }
+
+    public Builder keyId(String keyId) {
+      this.keyId = keyId;
+      return this;
+    }
+
+    public Builder keyVersion(String keyVersion) {
+      this.keyVersion = keyVersion;
+      return this;
+    }
+
+    public Builder wrappedDataKey(byte[] wrappedDataKey) {
+      this.wrappedDataKey = copy(wrappedDataKey);
+      return this;
+    }
+
+    public Builder fileCryptoId(byte[] fileCryptoId) {
+      this.fileCryptoId = copy(fileCryptoId);
+      return this;
+    }
+
+    private Builder nextChunkOrdinal(AtomicLong nextChunkOrdinal) {
+      this.nextChunkOrdinal = nextChunkOrdinal;
+      return this;
+    }
+
+    private Builder newFileClaimed(AtomicBoolean newFileClaimed) {
+      this.newFileClaimed = newFileClaimed;
+      return this;
+    }
+
+    public EncryptParameter build() {
+      return new EncryptParameter(this);
+    }
   }
 }

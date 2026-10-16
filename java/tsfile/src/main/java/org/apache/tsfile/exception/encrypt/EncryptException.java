@@ -20,6 +20,16 @@
 package org.apache.tsfile.exception.encrypt;
 
 public class EncryptException extends RuntimeException {
+  /** Crypto failures are fatal even when a read API historically tolerates ordinary I/O errors. */
+  public static boolean isEncryptionFailure(Throwable failure) {
+    for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      if (cause instanceof EncryptException) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   public EncryptException(String message) {
     super("Encrypt problem: " + message);
   }

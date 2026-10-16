@@ -51,6 +51,9 @@ public class MetaMarker {
   /** Chunk header marker and this chunk has only one page. */
   public static final byte ONLY_ONE_PAGE_CHUNK_HEADER = 5;
 
+  /** Optional file encryption header immediately following the TsFile version byte. */
+  public static final byte ENCRYPTION_HEADER = 6;
+
   /** Time Chunk header marker and this chunk has more than one page. */
   public static final byte TIME_CHUNK_HEADER =
       (byte) (CHUNK_HEADER | TsFileConstant.TIME_COLUMN_MASK);

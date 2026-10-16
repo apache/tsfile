@@ -258,8 +258,17 @@ public class EncryptUtils {
     return encryptParam;
   }
 
-  /** Get the second EncryptParameter object according to the given type and first key. */
+  /**
+   * Returns a page-AEAD file descriptor unchanged, or derives the legacy second key from the given
+   * type and first key. A null parameter selects unencrypted operation.
+   */
   public static EncryptParameter getEncryptParameter(EncryptParameter param) {
+    if (param == null) {
+      return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    if (param.isTdePageAead()) {
+      return param;
+    }
     return encryptParamCache.computeIfAbsent(param, EncryptUtils::generateEncryptParameter);
   }
 
@@ -295,6 +304,16 @@ public class EncryptUtils {
 
   public static IEncrypt getEncrypt() {
     return getEncrypt(TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public static IEncrypt getEncrypt(EncryptParameter encryptParameter) {
+    if (encryptParameter == null) {
+      return getEncrypt("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    if (encryptParameter.isTdePageAead()) {
+      return encryptParameter.getOrCreateFileEncrypt();
+    }
+    return getEncrypt(encryptParameter.getType(), encryptParameter.getKey());
   }
 
   public static IEncrypt getEncrypt(String encryptType, byte[] dataEncryptKey) {

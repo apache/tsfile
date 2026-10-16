@@ -18,9 +18,12 @@
  */
 package org.apache.tsfile.encrypt;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
+
 import java.util.concurrent.ConcurrentHashMap;
 
-public interface IEncrypt {
+public interface IEncrypt extends AutoCloseable {
 
   static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
       new ConcurrentHashMap<>();
@@ -30,4 +33,42 @@ public interface IEncrypt {
   IDecryptor getDecryptor();
 
   IEncryptor getEncryptor();
+
+  /**
+   * Returns the fixed number of bytes added to every encrypted page body by this profile.
+   *
+   * <p>Page AEAD providers must override this method. The value is part of the profile contract and
+   * must not change while files using that profile exist.
+   */
+  default int getPageBodyOverhead() {
+    return -1;
+  }
+
+  /**
+   * Returns this immutable profile's chunk-position proof size. Page-AEAD providers must override
+   * this method; unsupported providers fail closed. The size must be positive and no larger than
+   * {@link ChunkCryptoContext#MAX_AUTHENTICATION_SIZE}.
+   */
+  default int getChunkAuthenticationSize() {
+    return -1;
+  }
+
+  /**
+   * Returns a fixed-size opaque proof authenticating a chunk's physical position. The proof is
+   * exactly {@link #getChunkAuthenticationSize()} bytes. Providers using AEAD must use a fresh
+   * nonce under the file DEK, independently of page encryption calls.
+   */
+  default byte[] authenticateChunk(ChunkCryptoContext context) {
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
+  }
+
+  /** Verifies the proof before a chunk identity is used; unsupported providers fail closed. */
+  default void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
+  }
+
+  @Override
+  default void close() {}
 }

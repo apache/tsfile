@@ -29,12 +29,14 @@ import org.apache.tsfile.read.reader.IBatchReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class TsFileTimeGenerator extends TimeGenerator {
 
   private IChunkLoader chunkLoader;
   private IMetadataQuerier metadataQuerier;
+  private final List<FileSeriesReader> readers = new ArrayList<>();
 
   public TsFileTimeGenerator(
       IExpression iexpression, IChunkLoader chunkLoader, IMetadataQuerier metadataQuerier)
@@ -42,7 +44,16 @@ public class TsFileTimeGenerator extends TimeGenerator {
     this.chunkLoader = chunkLoader;
     this.metadataQuerier = metadataQuerier;
 
-    super.constructNode(iexpression);
+    try {
+      super.constructNode(iexpression);
+    } catch (IOException | RuntimeException | Error e) {
+      try {
+        close();
+      } catch (IOException closeError) {
+        e.addSuppressed(closeError);
+      }
+      throw e;
+    }
   }
 
   @Override
@@ -50,7 +61,29 @@ public class TsFileTimeGenerator extends TimeGenerator {
       throws IOException {
     List<IChunkMetadata> chunkMetadataList =
         metadataQuerier.getChunkMetaDataList(expression.getSeriesPath());
-    return new FileSeriesReader(chunkLoader, chunkMetadataList, expression.getFilter());
+    FileSeriesReader reader =
+        new FileSeriesReader(chunkLoader, chunkMetadataList, expression.getFilter());
+    readers.add(reader);
+    return reader;
+  }
+
+  @Override
+  public void close() throws IOException {
+    IOException failure = null;
+    for (FileSeriesReader reader : readers) {
+      try {
+        reader.closeChunkReader();
+      } catch (IOException e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
   }
 
   @Override

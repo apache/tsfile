@@ -118,7 +118,7 @@ public class TsFileWriter implements AutoCloseable {
 
   public TsFileWriter(File file, EncryptParameter firstEncryptParam) throws IOException {
     this(
-        new TsFileIOWriter(file),
+        new TsFileIOWriter(file, firstEncryptParam),
         new Schema(),
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -151,7 +151,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(File file, Schema schema, EncryptParameter firstEncryptParam)
       throws IOException {
     this(
-        new TsFileIOWriter(file),
+        new TsFileIOWriter(file, firstEncryptParam),
         schema,
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -170,7 +170,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(TsFileOutput output, Schema schema, EncryptParameter firstEncryptParam)
       throws IOException {
     this(
-        new TsFileIOWriter(output),
+        new TsFileIOWriter(output, firstEncryptParam),
         schema,
         TSFileDescriptor.getInstance().getConfig(),
         firstEncryptParam);
@@ -190,7 +190,7 @@ public class TsFileWriter implements AutoCloseable {
   public TsFileWriter(
       File file, Schema schema, TSFileConfig conf, EncryptParameter firstEncryptParam)
       throws IOException {
-    this(new TsFileIOWriter(file), schema, conf, firstEncryptParam);
+    this(new TsFileIOWriter(file, conf, firstEncryptParam), schema, conf, firstEncryptParam);
   }
 
   /**
@@ -231,20 +231,41 @@ public class TsFileWriter implements AutoCloseable {
     if (this.pageSize >= chunkGroupSizeThreshold) {
       LOG.warn(Messages.get("log.write.page_size_warn"), pageSize, chunkGroupSizeThreshold);
     }
-    this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
-    String encryptLevel;
-    if (firstEncryptParam != null
-        && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
-        && !Objects.equals(firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      encryptLevel = "2";
-      String str =
-          EncryptUtils.getKeyStr(
-              IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
-                  .encrypt(secondEncryptParam.getKey()));
-      fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
+    EncryptParameter fileEncryptParameter = fileWriter.getEncryptParameter();
+    if (fileWriter instanceof RestorableTsFileIOWriter
+        && firstEncryptParam != null
+        && firstEncryptParam.isTdePageAead()
+        && (fileEncryptParameter == null || !fileEncryptParameter.isTdePageAead())) {
+      firstEncryptParam = fileEncryptParameter;
+    }
+    EncryptParameter effectiveEncryptParameter =
+        fileEncryptParameter != null && fileEncryptParameter.isTdePageAead()
+            ? fileEncryptParameter
+            : firstEncryptParam;
+    if (effectiveEncryptParameter != null && effectiveEncryptParameter.isTdePageAead()) {
+      this.secondEncryptParam =
+          effectiveEncryptParameter == fileEncryptParameter
+              ? effectiveEncryptParameter
+              : effectiveEncryptParameter.copy();
+      fileWriter.setEncryptParam(this.secondEncryptParam);
+      fileWriter.writeEncryptionHeaderIfNecessary();
     } else {
-      encryptLevel = "0";
-      fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
+      this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
+      String encryptLevel;
+      if (firstEncryptParam != null
+          && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
+          && !Objects.equals(
+              firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
+        encryptLevel = "2";
+        String str =
+            EncryptUtils.getKeyStr(
+                IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
+                    .encrypt(secondEncryptParam.getKey()));
+        fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
+      } else {
+        encryptLevel = "0";
+        fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
+      }
     }
   }
 
@@ -729,8 +750,14 @@ public class TsFileWriter implements AutoCloseable {
   @TsFileApi
   public void close() throws IOException {
     LOG.info(Messages.get("log.write.close_file"));
-    flush();
-    fileWriter.endFile();
+    try {
+      flush();
+      fileWriter.endFile();
+    } finally {
+      if (secondEncryptParam != null && secondEncryptParam.isTdePageAead()) {
+        secondEncryptParam.close();
+      }
+    }
   }
 
   /**

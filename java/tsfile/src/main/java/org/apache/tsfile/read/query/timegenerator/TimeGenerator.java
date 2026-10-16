@@ -44,7 +44,10 @@ import java.util.List;
  * that satisfies the filter condition. Then we use this timestamp to get values in other series
  * that are not included in IExpression
  */
-public abstract class TimeGenerator {
+public abstract class TimeGenerator implements AutoCloseable {
+
+  @Override
+  public void close() throws IOException {}
 
   private HashMap<Path, List<LeafNode>> leafNodeCache = new HashMap<>();
   private HashMap<Path, List<Object>> leafValuesCache;
