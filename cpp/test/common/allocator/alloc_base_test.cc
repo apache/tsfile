@@ -20,6 +20,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace common {
 
 const uint32_t HEADER_SIZE_4B = 4;
@@ -59,6 +61,43 @@ TEST(AllocBaseTest, AllocLargeSize) {
     EXPECT_EQ((header >> 8), size);
     EXPECT_EQ((header & 0x7F), mid);
     mem_free(ptr);
+}
+
+TEST(AllocBaseTest, SizeAboveUint32ReachesAllocatorWithoutTruncation) {
+    if (sizeof(size_t) < sizeof(uint64_t)) GTEST_SKIP();
+    const size_t size = static_cast<uint64_t>(UINT32_MAX) + 1;
+    TEST_fail_mem_alloc_after(MOD_DEFAULT, 0);
+    BaseAllocator allocator;
+    EXPECT_EQ(allocator.alloc(size, MOD_DEFAULT), nullptr);
+    EXPECT_EQ(TEST_get_failed_mem_alloc_size(), size);
+
+    char* ptr = static_cast<char*>(allocator.alloc(8, MOD_DEFAULT));
+    ASSERT_NE(ptr, nullptr);
+    memset(ptr, 'x', 8);
+    TEST_fail_next_mem_realloc();
+    EXPECT_EQ(mem_realloc(ptr, size), nullptr);
+    EXPECT_EQ(TEST_get_failed_mem_alloc_size(), size);
+    for (int i = 0; i < 8; ++i) EXPECT_EQ(ptr[i], 'x');
+    allocator.free(ptr);
+}
+
+TEST(AllocBaseTest, UnrepresentableSizeReturnsNullAndPreservesReallocInput) {
+    const size_t size = std::numeric_limits<size_t>::max();
+    void* oversized = mem_alloc(size, MOD_DEFAULT);
+    EXPECT_EQ(oversized, nullptr);
+    if (oversized) mem_free(oversized);
+
+    char* ptr = static_cast<char*>(mem_alloc(8, MOD_DEFAULT));
+    ASSERT_NE(ptr, nullptr);
+    memset(ptr, 'x', 8);
+    void* resized = mem_realloc(ptr, size);
+    EXPECT_EQ(resized, nullptr);
+    if (resized) {
+        mem_free(resized);
+    } else {
+        for (int i = 0; i < 8; ++i) EXPECT_EQ(ptr[i], 'x');
+        mem_free(ptr);
+    }
 }
 
 TEST(AllocBaseTest, ReallocateToLargerSize) {
