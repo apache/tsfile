@@ -21,6 +21,38 @@ under the License.
 # build wrappers out of the export: install bundled archives and describe
 # imported link-only targets, or rediscover system packages on the consumer.
 # install(FILES) also works on CMake 3.11 for targets in another directory.
+# Resolve system interface wrappers as well as imported archive/shared targets.
+function(tsfile_pkgconfig_system_libraries OUTPUT)
+    set(_FLAGS "")
+    foreach (_LIBRARY IN LISTS ARGN)
+        if (TARGET "${_LIBRARY}")
+            get_target_property(_TYPE "${_LIBRARY}" TYPE)
+            if (NOT _TYPE STREQUAL "INTERFACE_LIBRARY")
+                string(APPEND _FLAGS " \"$<TARGET_FILE:${_LIBRARY}>\"")
+            endif ()
+            get_target_property(_LINKS "${_LIBRARY}" INTERFACE_LINK_LIBRARIES)
+            if (_LINKS)
+                tsfile_pkgconfig_system_libraries(_TRANSITIVE ${_LINKS})
+                string(APPEND _FLAGS "${_TRANSITIVE}")
+            endif ()
+        elseif (IS_ABSOLUTE "${_LIBRARY}" AND _LIBRARY MATCHES "\\.framework$")
+            get_filename_component(_FRAMEWORK_DIR "${_LIBRARY}" DIRECTORY)
+            get_filename_component(_FRAMEWORK_NAME "${_LIBRARY}" NAME_WE)
+            string(APPEND _FLAGS " -F\"${_FRAMEWORK_DIR}\" -framework ${_FRAMEWORK_NAME}")
+        elseif (IS_ABSOLUTE "${_LIBRARY}")
+            string(APPEND _FLAGS " \"${_LIBRARY}\"")
+        elseif (_LIBRARY MATCHES "^-")
+            string(APPEND _FLAGS " ${_LIBRARY}")
+        elseif (_LIBRARY MATCHES "^\\$<LINK_ONLY:(.*)>$")
+            tsfile_pkgconfig_system_libraries(_TRANSITIVE "${CMAKE_MATCH_1}")
+            string(APPEND _FLAGS "${_TRANSITIVE}")
+        else ()
+            string(APPEND _FLAGS " -l${_LIBRARY}")
+        endif ()
+    endforeach ()
+    set(${OUTPUT} "${_FLAGS}" PARENT_SCOPE)
+endfunction()
+
 function(tsfile_install_static_dependency NAME SOURCE SYSTEM_TARGET FIND_CODE)
     if (NOT TARGET TsFile::${NAME})
         return()
@@ -28,11 +60,14 @@ function(tsfile_install_static_dependency NAME SOURCE SYSTEM_TARGET FIND_CODE)
     target_link_libraries(tsfile INTERFACE
             $<INSTALL_INTERFACE:$<LINK_ONLY:TsFile::Static_${NAME}>>)
     set(_CODE "${TSFILE_STATIC_DEPENDENCY_CODE}")
+    set(_PKGCONFIG "${TSFILE_PKGCONFIG_LIBS_PRIVATE}")
     if (SOURCE STREQUAL "BUNDLED")
         get_target_property(_TARGET TsFile::${NAME} INTERFACE_LINK_LIBRARIES)
         install(FILES $<TARGET_FILE:${_TARGET}>
                 DESTINATION "${CMAKE_INSTALL_LIBDIR}/tsfile/$<CONFIG>"
                 COMPONENT development)
+        string(APPEND _PKGCONFIG
+                " \"\${libdir}/tsfile/$<CONFIG>/$<TARGET_FILE_NAME:${_TARGET}>\"")
         string(APPEND _CODE
                 "if (NOT TARGET TsFile::Static_${NAME})\n"
                 "    add_library(TsFile::Static_${NAME} STATIC IMPORTED)\n"
@@ -40,6 +75,8 @@ function(tsfile_install_static_dependency NAME SOURCE SYSTEM_TARGET FIND_CODE)
                 "set_property(TARGET TsFile::Static_${NAME} APPEND PROPERTY IMPORTED_CONFIGURATIONS $<UPPER_CASE:$<CONFIG>>)\n"
                 "set_target_properties(TsFile::Static_${NAME} PROPERTIES IMPORTED_LOCATION_$<UPPER_CASE:$<CONFIG>> \"\${CMAKE_CURRENT_LIST_DIR}/../../tsfile/$<CONFIG>/$<TARGET_FILE_NAME:${_TARGET}>\")\n")
     else ()
+        tsfile_pkgconfig_system_libraries(_SYSTEM_FLAGS TsFile::${NAME})
+        string(APPEND _PKGCONFIG "${_SYSTEM_FLAGS}")
         string(APPEND _CODE "${FIND_CODE}\n"
                 "if (NOT TARGET TsFile::Static_${NAME})\n"
                 "    add_library(TsFile::Static_${NAME} INTERFACE IMPORTED)\n"
@@ -47,9 +84,11 @@ function(tsfile_install_static_dependency NAME SOURCE SYSTEM_TARGET FIND_CODE)
                 "endif ()\n")
     endif ()
     set(TSFILE_STATIC_DEPENDENCY_CODE "${_CODE}" PARENT_SCOPE)
+    set(TSFILE_PKGCONFIG_LIBS_PRIVATE "${_PKGCONFIG}" PARENT_SCOPE)
 endfunction()
 
 set(TSFILE_STATIC_DEPENDENCY_CODE "")
+set(TSFILE_PKGCONFIG_LIBS_PRIVATE "")
 # Keep the build-side compatibility interval when a static consumer rediscovers
 # ANTLR4. Explicit comparisons also support CMake 3.11 and packages that report
 # ANTLR_VERSION instead of antlr4-runtime_VERSION.
@@ -79,13 +118,16 @@ tsfile_install_static_dependency(ANTLR4 "${TSFILE_ANTLR4_SOURCE}"
 unset(_TSFILE_FIND_STATIC_ANTLR4)
 if (ENABLE_ANTLR4 AND TSFILE_ANTLR4_SOURCE STREQUAL "BUNDLED")
     if (WIN32)
+        string(APPEND TSFILE_PKGCONFIG_LIBS_PRIVATE " -lole32")
         string(APPEND TSFILE_STATIC_DEPENDENCY_CODE
                 "set_property(TARGET TsFile::Static_ANTLR4 PROPERTY INTERFACE_LINK_LIBRARIES ole32)\n")
     else ()
         if (APPLE)
             set(_PLATFORM_LIBRARY CoreFoundation)
+            string(APPEND TSFILE_PKGCONFIG_LIBS_PRIVATE " -framework CoreFoundation")
         else ()
             set(_PLATFORM_LIBRARY uuid)
+            string(APPEND TSFILE_PKGCONFIG_LIBS_PRIVATE " -luuid")
         endif ()
         string(APPEND TSFILE_STATIC_DEPENDENCY_CODE
                 "find_library(_TSFILE_ANTLR4_PLATFORM_LIBRARY ${_PLATFORM_LIBRARY})\n"
@@ -116,6 +158,21 @@ tsfile_install_static_dependency(ZSTD "${TSFILE_ZSTD_SOURCE}"
         "find_dependency(zstd ${TSFILE_ZSTD_MIN_VERSION} CONFIG)")
 tsfile_install_static_dependency(LibLZMA "${TSFILE_LIBLZMA_SOURCE}" LibLZMA::LibLZMA
         "find_dependency(LibLZMA ${TSFILE_LIBLZMA_MIN_VERSION})\nif (NOT TARGET LibLZMA::LibLZMA)\n    add_library(LibLZMA::LibLZMA INTERFACE IMPORTED)\n    set_target_properties(LibLZMA::LibLZMA PROPERTIES INTERFACE_LINK_LIBRARIES \"\${LIBLZMA_LIBRARIES}\")\nendif ()")
+
+# pkg-config can be consumed by a C linker, which does not implicitly add the
+# C++ runtime. Keep compiler/platform libraries private to static linking.
+if (ENABLE_THREADS AND CMAKE_THREAD_LIBS_INIT)
+    string(APPEND TSFILE_PKGCONFIG_LIBS_PRIVATE " ${CMAKE_THREAD_LIBS_INIT}")
+endif ()
+set(_TSFILE_CXX_LIBRARIES ${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES})
+if (CMAKE_C_IMPLICIT_LINK_LIBRARIES)
+    list(REMOVE_ITEM _TSFILE_CXX_LIBRARIES ${CMAKE_C_IMPLICIT_LINK_LIBRARIES})
+endif ()
+tsfile_pkgconfig_system_libraries(_TSFILE_CXX_FLAGS ${_TSFILE_CXX_LIBRARIES})
+string(APPEND TSFILE_PKGCONFIG_LIBS_PRIVATE "${_TSFILE_CXX_FLAGS}")
+set(TSFILE_PKGCONFIG_LIBS_PRIVATE "${TSFILE_PKGCONFIG_LIBS_PRIVATE}" PARENT_SCOPE)
+unset(_TSFILE_CXX_LIBRARIES)
+unset(_TSFILE_CXX_FLAGS)
 
 configure_file("${CMAKE_SOURCE_DIR}/cmake/TsFileStaticDependencies.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/TsFileStaticDependencies.cmake.in" @ONLY)
