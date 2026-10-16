@@ -205,9 +205,11 @@ if (ENABLE_ANTLR4 AND TSFILE_UTF8CPP_INCLUDE_ROOT)
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 endif ()
 target_compile_features(tsfile PUBLIC cxx_std_11)
+# ENABLE_ANTLR4 selects the parser dependency but is not a compile definition
+# on the SDK object targets. Exporting it would change inline Path definitions
+# only in consumers, violating the ODR (and rejecting stored raw identifiers).
 set(_TSFILE_PUBLIC_FEATURE_DEFINITIONS "")
 foreach (_TSFILE_PUBLIC_FEATURE
-        ENABLE_ANTLR4
         ENABLE_MEM_STAT
         ENABLE_SNAPPY
         ENABLE_LZ4

@@ -28,4 +28,5 @@ Description: Apache TsFile C++ library
 Version: @TSFILE_PACKAGE_VERSION@
 URL: https://tsfile.apache.org/
 Libs: -L${libdir} -ltsfile
+Libs.private: @TSFILE_PKGCONFIG_LIBS_PRIVATE@
 Cflags: -I${includedir} -I${includedir}/tsfile@TSFILE_PKGCONFIG_CFLAGS@

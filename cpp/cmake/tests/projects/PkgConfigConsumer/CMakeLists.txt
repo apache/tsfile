@@ -20,13 +20,29 @@ cmake_minimum_required(VERSION 3.11)
 project(TsFilePkgConfigConsumer LANGUAGES C CXX)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(TsFile REQUIRED IMPORTED_TARGET libtsfile)
+option(TSFILE_PKGCONFIG_STATIC "Link using pkg-config --static" OFF)
+pkg_check_modules(TsFile REQUIRED libtsfile)
 if (NOT TsFile_INCLUDEDIR MATCHES "/include$")
     message(FATAL_ERROR "pkg-config did not report the installed include root: ${TsFile_INCLUDEDIR}")
 endif ()
 
+# FindPkgConfig's STATIC variables also work with the CMake 3.11 baseline.
+if (TSFILE_PKGCONFIG_STATIC)
+    set(_TSFILE_PKGCONFIG_FLAGS ${TsFile_STATIC_LDFLAGS})
+else ()
+    set(_TSFILE_PKGCONFIG_FLAGS ${TsFile_LDFLAGS})
+endif ()
+# target_link_libraries treats a bare framework name as -l<name>. Preserve
+# pkg-config's paired Darwin linker option as one flag instead.
+string(REGEX REPLACE "-framework;([^;]+)" "-framework \\1"
+        _TSFILE_PKGCONFIG_FLAGS "${_TSFILE_PKGCONFIG_FLAGS}")
+add_library(tsfile_pkgconfig INTERFACE)
+target_compile_options(tsfile_pkgconfig INTERFACE ${TsFile_CFLAGS})
+target_link_libraries(tsfile_pkgconfig INTERFACE ${_TSFILE_PKGCONFIG_FLAGS})
+set(CMAKE_BUILD_RPATH ${TsFile_LIBRARY_DIRS})
+
 add_executable(tsfile_pkgconfig_consumer main.c)
-target_link_libraries(tsfile_pkgconfig_consumer PRIVATE PkgConfig::TsFile)
+target_link_libraries(tsfile_pkgconfig_consumer PRIVATE tsfile_pkgconfig)
 
 add_executable(tsfile_pkgconfig_cpp_consumer main.cc)
-target_link_libraries(tsfile_pkgconfig_cpp_consumer PRIVATE PkgConfig::TsFile)
+target_link_libraries(tsfile_pkgconfig_cpp_consumer PRIVATE tsfile_pkgconfig)

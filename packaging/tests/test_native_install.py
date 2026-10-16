@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Opt-in native configure/install/link regressions (requires CMake and LZ4)."""
+"""Opt-in native builds requiring CMake, Ninja, pkg-config, LZ4 and an archive cache."""
 
 import os
 import re
@@ -351,7 +351,9 @@ class NativeInstallTest(unittest.TestCase):
         self.run_command(*arguments, *options)
 
     def install(self):
-        self.run_command("cmake", "--build", self.build, "--parallel", "8")
+        self.run_command(
+            "cmake", "--build", self.build, "--config", "Release", "--parallel", "8"
+        )
         self.run_command("cmake", "--install", self.build, "--config", "Release")
         relocated = self.directory / "relocated"
         self.stage.rename(relocated)
@@ -379,35 +381,73 @@ class NativeInstallTest(unittest.TestCase):
         self.configure("-DTSFILE_BUILD_SHARED=OFF", "-DENABLE_LZ4=ON")
         self.install()
         self.consumer("InstalledConsumer", "tsfile_installed_consumer")
+        self.pkgconfig_consumers(static=True)
 
     def test_static_bundled_install_and_relocated_consumer(self):
         self.configure(
+            "-G",
+            "Ninja Multi-Config",
             "-DTSFILE_BUILD_SHARED=OFF",
             "-DTSFILE_DEPENDENCY_SOURCE=BUNDLED",
             "-DENABLE_ANTLR4=ON",
+            "-DENABLE_SNAPPY=ON",
+            "-DENABLE_LZ4=ON",
             "-DENABLE_ZLIB=ON",
             "-DENABLE_LZOKAY=ON",
+            "-DENABLE_ZSTD=ON",
+            "-DENABLE_LZMA2=ON",
             "-DTSFILE_DEPENDENCY_OFFLINE=ON",
             f"-DTSFILE_DEPENDENCY_CACHE={os.environ['TSFILE_TEST_DEPENDENCY_CACHE']}",
         )
         self.install()
         self.consumer("InstalledConsumer", "tsfile_installed_consumer")
+        self.pkgconfig_consumers(static=True)
 
-    def test_multiarch_pkgconfig_install_and_relocated_consumers(self):
-        self.configure("-DCMAKE_INSTALL_LIBDIR=lib/x86_64-linux-gnu")
-        self.install()
+    def pkgconfig_consumers(self, libdir="lib", static=False):
         env = dict(
             os.environ,
-            PKG_CONFIG_PATH=str(self.stage / "lib/x86_64-linux-gnu/pkgconfig"),
+            PKG_CONFIG_PATH=str(self.stage / libdir / "pkgconfig"),
         )
         prefix = self.run_command(
             "pkg-config", "--variable=prefix", "libtsfile", env=env
         )
         self.assertEqual(Path(prefix).resolve(), self.stage.resolve())
-        self.consumer("PkgConfigConsumer", "tsfile_pkgconfig_consumer", env)
+        self.consumer(
+            "PkgConfigConsumer",
+            "tsfile_pkgconfig_consumer",
+            env,
+            f"-DTSFILE_PKGCONFIG_STATIC={'ON' if static else 'OFF'}",
+        )
         self.run_command(
             self.directory / "PkgConfigConsumer/tsfile_pkgconfig_cpp_consumer", env=env
         )
+
+    def test_multiarch_pkgconfig_install_and_relocated_consumers(self):
+        self.configure("-DCMAKE_INSTALL_LIBDIR=lib/x86_64-linux-gnu")
+        self.install()
+        self.pkgconfig_consumers("lib/x86_64-linux-gnu")
+
+    def cli_rpath(self, libdir):
+        self.configure("-DBUILD_TOOLS=ON", f"-DCMAKE_INSTALL_LIBDIR={libdir}")
+        env = dict(os.environ)
+        for name in (
+            "LD_LIBRARY_PATH",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+        ):
+            env.pop(name, None)
+        self.run_command("cmake", "--build", self.build, "--parallel", "8")
+        self.run_command(self.build / "bin/tsfile-cli", "--version", env=env)
+        self.install()
+        # A build-directory RPATH must not mask a broken installed RPATH.
+        shutil.rmtree(self.build)
+        self.run_command(self.stage / "bin/tsfile-cli", "--version", env=env)
+
+    def test_lib64_cli_build_and_relocated_install(self):
+        self.cli_rpath("lib64")
+
+    def test_multiarch_cli_build_and_relocated_install(self):
+        self.cli_rpath("lib/x86_64-linux-gnu")
 
     def test_installed_smoke_requires_a_library_symbol(self):
         self.configure()

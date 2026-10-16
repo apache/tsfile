@@ -545,7 +545,6 @@ if (NOT TSFILE_BUILD_SHARED)
     endif ()
 endif ()
 foreach (_TSFILE_PUBLIC_FEATURE
-        ENABLE_ANTLR4
         ENABLE_MEM_STAT
         ENABLE_SNAPPY
         ENABLE_LZ4
@@ -565,10 +564,13 @@ file(RELATIVE_PATH TSFILE_PKGCONFIG_PREFIX_RELATIVE
         "${CMAKE_INSTALL_FULL_LIBDIR}/pkgconfig" "${CMAKE_INSTALL_PREFIX}")
 configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/libtsfile.pc.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"
+        "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc.in"
         @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc"
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/libtsfile-$<CONFIG>.pc"
+        INPUT "${CMAKE_CURRENT_BINARY_DIR}/libtsfile.pc.in")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libtsfile-$<CONFIG>.pc"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+        RENAME libtsfile.pc
         COMPONENT development)
 unset(_TSFILE_PUBLIC_FEATURE)
 
