@@ -510,7 +510,7 @@ std::shared_ptr<TableSchema> TsFileWriter::get_table_schema(
 
 template <typename MeasurementNamesGetter>
 int TsFileWriter::do_check_schema(
-    std::shared_ptr<IDeviceID> device_id,
+    const std::shared_ptr<IDeviceID>& device_id,
     MeasurementNamesGetter& measurement_names,
     SimpleVector<ChunkWriter*>& chunk_writers,
     SimpleVector<common::TSDataType>& data_types) {
@@ -583,7 +583,7 @@ int TsFileWriter::ensure_aligned_value_chunk_writer(
 
 template <typename MeasurementNamesGetter>
 int TsFileWriter::do_check_schema_aligned(
-    std::shared_ptr<IDeviceID> device_id,
+    const std::shared_ptr<IDeviceID>& device_id,
     MeasurementNamesGetter& measurement_names,
     storage::TimeChunkWriter*& time_chunk_writer,
     common::SimpleVector<storage::ValueChunkWriter*>& value_chunk_writers,
