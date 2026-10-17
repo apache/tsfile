@@ -62,6 +62,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int fill_measurements(
         std::vector<MeasurementColumnContext*>& column_contexts);
     int fill_ids();
+    int satisfy_field_filter(bool& satisfied);
     int advance_column(MeasurementColumnContext* column_context);
     int32_t compute_dense_row_count(
         const std::vector<ITimeseriesIndex*>& ts_indexes);
