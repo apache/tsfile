@@ -59,6 +59,10 @@ class ChunkWriter {
     int init(const std::string& measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
              common::CompressionType compression_type);
+    int init(const std::string& measurement_name, common::TSDataType data_type,
+             common::TSEncoding encoding,
+             common::CompressionType compression_type,
+             const std::map<std::string, std::string>& props);
     void reset();
     void destroy();
 

@@ -19,6 +19,8 @@
 #ifndef WRITER_PAGE_VALUE_WRITER_H
 #define WRITER_PAGE_VALUE_WRITER_H
 
+#include <map>
+#include <string>
 #include <vector>
 
 #include "common/allocator/byte_stream.h"
@@ -100,6 +102,9 @@ class ValuePageWriter {
     ~ValuePageWriter() { destroy(); }
     int init(common::TSDataType data_type, common::TSEncoding encoding,
              common::CompressionType compression);
+    int init(common::TSDataType data_type, common::TSEncoding encoding,
+             common::CompressionType compression,
+             const std::map<std::string, std::string>& props);
     void reset();
     void destroy();
 

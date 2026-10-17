@@ -305,6 +305,7 @@ int TsFileWriter::register_aligned_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
+    ms->props_ = measurement_schema.props_;
     int ret = register_aligned_timeseries(device_id,
                                           std::vector<MeasurementSchema*>{ms});
     if (ret != E_OK) {
@@ -354,6 +355,7 @@ int TsFileWriter::register_timeseries(
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
+    ms->props_ = measurement_schema.props_;
     int ret = register_timeseries(device_id, ms);
     if (ret != E_OK) {
         delete ms;
@@ -533,9 +535,9 @@ int TsFileWriter::do_check_schema(
             MeasurementSchema* ms = ms_iter->second;
             if (IS_NULL(ms->chunk_writer_)) {
                 ms->chunk_writer_ = new ChunkWriter;
-                ret = ms->chunk_writer_->init(ms->measurement_name_,
-                                              ms->data_type_, ms->encoding_,
-                                              ms->compression_type_);
+                ret = ms->chunk_writer_->init(
+                    ms->measurement_name_, ms->data_type_, ms->encoding_,
+                    ms->compression_type_, ms->props_);
                 if (IS_SUCC(ret)) {
                     chunk_writers.push_back(ms->chunk_writer_);
                 } else {
@@ -569,7 +571,8 @@ int TsFileWriter::ensure_aligned_value_chunk_writer(
     }
     int ret = value_chunk_writer->init(
         measurement_schema->measurement_name_, measurement_schema->data_type_,
-        measurement_schema->encoding_, measurement_schema->compression_type_);
+        measurement_schema->encoding_, measurement_schema->compression_type_,
+        measurement_schema->props_);
     if (RET_FAIL(ret)) {
         delete value_chunk_writer;
         return (ret == E_OOM) ? ret : common::E_INVALID_ARG;
@@ -696,7 +699,7 @@ int TsFileWriter::do_check_schema_table(
                 ms->value_chunk_writer_ = new ValueChunkWriter;
                 ret = ms->value_chunk_writer_->init(
                     ms->measurement_name_, ms->data_type_, ms->encoding_,
-                    ms->compression_type_);
+                    ms->compression_type_, ms->props_);
                 if (IS_SUCC(ret)) {
                     value_chunk_writers.push_back(ms->value_chunk_writer_);
                 } else {

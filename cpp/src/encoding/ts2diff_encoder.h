@@ -585,14 +585,16 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
 // 2^63 rather than (double)INT64_MAX, which rounds up to 2^63 and would
 // let exactly 2^63 through; the lower limits are exactly representable.
 template <typename Int>
-inline Int java_round(double x) {
+FORCE_INLINE Int java_round(double x) {
     const double r = std::floor(x + 0.5);
     if (sizeof(Int) < 8) {
-        if (r > static_cast<double>(std::numeric_limits<Int>::max())) {
-            return std::numeric_limits<Int>::max();
+        // Include NaN in the existing upper saturation branch: Java rounds
+        // it to zero. Ordinary values keep the lower-bound fast path.
+        if (!(r <= static_cast<double>(std::numeric_limits<Int>::max()))) {
+            return std::isnan(r) ? 0 : std::numeric_limits<Int>::max();
         }
-    } else if (r >= 9223372036854775808.0) {  // 2^63
-        return std::numeric_limits<Int>::max();
+    } else if (!(r < 9223372036854775808.0)) {  // 2^63, or NaN
+        return std::isnan(r) ? 0 : std::numeric_limits<Int>::max();
     }
     if (r < static_cast<double>(std::numeric_limits<Int>::min())) {
         return std::numeric_limits<Int>::min();
