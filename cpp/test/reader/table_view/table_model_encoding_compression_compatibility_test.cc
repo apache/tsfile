@@ -501,7 +501,10 @@ std::vector<FixtureCase> BuildMatrix() {
         Compressor* compressor =
             CompressorFactory::alloc_compressor(compression);
         EXPECT_NE(nullptr, compressor) << get_compression_name(compression);
-        if (compressor != nullptr) CompressorFactory::free(compressor);
+        if (compressor != nullptr) {
+            compressor->~Compressor();
+            CompressorFactory::free(compressor);
+        }
         for (TSDataType data_type : all_types) {
             for (int value = PLAIN; value <= CAMEL; ++value) {
                 TSEncoding encoding = static_cast<TSEncoding>(value);
@@ -510,8 +513,14 @@ std::vector<FixtureCase> BuildMatrix() {
                 Decoder* decoder =
                     DecoderFactory::alloc_value_decoder(encoding, data_type);
                 bool supported = encoder != nullptr && decoder != nullptr;
-                if (encoder != nullptr) EncoderFactory::free(encoder);
-                if (decoder != nullptr) DecoderFactory::free(decoder);
+                if (encoder != nullptr) {
+                    encoder->~Encoder();
+                    EncoderFactory::free(encoder);
+                }
+                if (decoder != nullptr) {
+                    decoder->~Decoder();
+                    DecoderFactory::free(decoder);
+                }
                 if (supported)
                     cases.emplace_back(data_type, encoding, compression,
                                        kRowCounts[0]);
