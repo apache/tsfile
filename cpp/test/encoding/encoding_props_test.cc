@@ -19,8 +19,8 @@
 
 #include <gtest/gtest.h>
 
-#include "encoding/decoder_factory.h"
 #include "encoding/encoder_factory.h"
+#include "encoding/ts2diff_decoder.h"
 
 namespace {
 using namespace common;
@@ -211,9 +211,11 @@ TEST(EncodingProps, ZeroOnlyPagesEscapeReservedPrecisionMarkers) {
                         EXPECT_EQ(stored_precision,
                                   static_cast<uint32_t>(precision));
                     }
-                    auto* decoder =
-                        DecoderFactory::alloc_value_decoder(TS_2DIFF, type);
-                    ASSERT_NE(decoder, nullptr);
+                    FloatTS2DIFFDecoder float_decoder;
+                    DoubleTS2DIFFDecoder double_decoder;
+                    Decoder* decoder =
+                        type == FLOAT ? static_cast<Decoder*>(&float_decoder)
+                                      : static_cast<Decoder*>(&double_decoder);
                     for (int row = 0; row < rows; ++row) {
                         double actual = -1;
                         if (type == FLOAT) {
@@ -228,7 +230,6 @@ TEST(EncodingProps, ZeroOnlyPagesEscapeReservedPrecisionMarkers) {
                         EXPECT_FALSE(std::signbit(actual));
                     }
                     EXPECT_FALSE(decoder->has_remaining(bytes));
-                    DecoderFactory::free(decoder);
                     encoder->reset();
                 }
             }
