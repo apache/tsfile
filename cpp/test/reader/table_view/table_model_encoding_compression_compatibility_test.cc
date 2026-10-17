@@ -672,6 +672,10 @@ std::vector<FixtureCase> ReadManifest(const std::string& directory) {
 void AssertValue(const FixtureCase& fixture_case, int row,
                  TableResultSet* result_set) {
     switch (fixture_case.data_type) {
+        case BOOLEAN:
+            ASSERT_EQ(row % 192 < 64 ? row % 2 == 0 : row % 192 < 128,
+                      result_set->get_value<bool>(3));
+            break;
         case INT32:
             ASSERT_EQ(IntValue(row), result_set->get_value<int32_t>(3));
             break;

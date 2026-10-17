@@ -310,6 +310,30 @@ public class TableModelEncodingCompressionCompatibilityTest {
         cases.add(new FixtureCase(dataType, compression, NULL_PAGE_ROWS, NullPattern.ALL));
       }
     }
+    // Java-only fixtures: exercise the default BOOLEAN encoding without requiring
+    // the C++ writer to support RLE booleans as well.
+    for (CompressionType compression :
+        Arrays.asList(
+            CompressionType.UNCOMPRESSED,
+            CompressionType.LZ4,
+            CompressionType.ZSTD,
+            CompressionType.LZMA2)) {
+      for (NullPattern pattern : NullPattern.values()) {
+        cases.add(
+            new FixtureCase(
+                FixtureCase.fileName(TSDataType.BOOLEAN, TSEncoding.RLE, compression)
+                    + ".default."
+                    + pattern.name().toLowerCase(Locale.ROOT),
+                TABLE_NAME,
+                TAG_COLUMN,
+                VALUE_COLUMN,
+                TSDataType.BOOLEAN,
+                TSEncoding.RLE,
+                compression,
+                NULL_PAGE_ROWS * 8,
+                pattern));
+      }
+    }
     return cases;
   }
 
@@ -423,6 +447,20 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (isTs2DiffFloatCase(fixtureCase) && fixtureCase.fileName.endsWith(".mpn0")) {
       props = Collections.singletonMap(Encoder.MAX_POINT_NUMBER, "0");
     }
+    MeasurementSchema valueSchema;
+    if (fixtureCase.dataType == TSDataType.BOOLEAN) {
+      valueSchema = new MeasurementSchema(fixtureCase.valueColumn, TSDataType.BOOLEAN);
+      assertEquals("Java default BOOLEAN encoding", TSEncoding.RLE, valueSchema.getEncodingType());
+      valueSchema.setCompressionType(fixtureCase.compression);
+    } else {
+      valueSchema =
+          new MeasurementSchema(
+              fixtureCase.valueColumn,
+              fixtureCase.dataType,
+              fixtureCase.encoding,
+              fixtureCase.compression,
+              props);
+    }
     List<IMeasurementSchema> schemas =
         Arrays.asList(
             new MeasurementSchema(
@@ -430,12 +468,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
                 TSDataType.STRING,
                 TSEncoding.PLAIN,
                 CompressionType.UNCOMPRESSED),
-            new MeasurementSchema(
-                fixtureCase.valueColumn,
-                fixtureCase.dataType,
-                fixtureCase.encoding,
-                fixtureCase.compression,
-                props));
+            valueSchema);
     List<ColumnCategory> categories =
         new ArrayList<>(Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
     if (fixtureCase.nullPattern != NullPattern.NONE) {
@@ -474,6 +507,9 @@ public class TableModelEncodingCompressionCompatibilityTest {
   private static void addValue(Tablet tablet, FixtureCase fixtureCase, int row) {
     TSDataType dataType = fixtureCase.dataType;
     switch (dataType) {
+      case BOOLEAN:
+        tablet.addValue(row, VALUE_COLUMN, booleanValue(row));
+        break;
       case INT32:
         tablet.addValue(row, VALUE_COLUMN, intValue(row));
         break;
@@ -497,6 +533,9 @@ public class TableModelEncodingCompressionCompatibilityTest {
 
   private static void assertValue(FixtureCase fixtureCase, int row, ResultSet resultSet) {
     switch (fixtureCase.dataType) {
+      case BOOLEAN:
+        assertEquals("BOOLEAN at row " + row, booleanValue(row), resultSet.getBoolean(3));
+        break;
       case INT32:
         assertEquals("INT32 at row " + row, intValue(row), resultSet.getInt(3));
         break;
@@ -522,6 +561,11 @@ public class TableModelEncodingCompressionCompatibilityTest {
       default:
         throw new IllegalArgumentException("Unsupported data type: " + fixtureCase.dataType);
     }
+  }
+
+  // Alternate bits and long true/false runs to cover both RLE packing modes.
+  private static boolean booleanValue(int row) {
+    return row % 192 < 64 ? row % 2 == 0 : row % 192 < 128;
   }
 
   private static int intValue(int row) {
