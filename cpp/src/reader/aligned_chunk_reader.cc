@@ -37,16 +37,15 @@ int AlignedChunkReader::init(RandomAccessReadFile* read_file, String m_name,
                              TSDataType data_type, Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
-    time_decoder_ = DecoderFactory::alloc_time_decoder();
+    // Aligned time chunks carry their own encoding. Allocate after reading the
+    // chunk header instead of fixing the decoder to the process default.
+    time_decoder_ = nullptr;
     value_decoder_ = nullptr;
     time_compressor_ = nullptr;
     value_compressor_ = nullptr;
     time_filter_ = time_filter;
     time_uncompressed_buf_ = nullptr;
     value_uncompressed_buf_ = nullptr;
-    if (IS_NULL(time_decoder_)) {
-        return E_OOM;
-    }
     return E_OK;
 }
 
@@ -317,7 +316,7 @@ int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
     } else if (RET_FAIL(alloc_compressor_and_decoder(
                    time_decoder_, time_compressor_,
                    time_chunk_header_.encoding_type_,
-                   time_chunk_header_.data_type_,
+                   common::INT64,
                    time_chunk_header_.compression_type_))) {
     } else if (RET_FAIL(alloc_compressor_and_decoder(
                    value_decoder_, value_compressor_,
@@ -1264,7 +1263,7 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
         if (RET_FAIL(alloc_compressor_and_decoder(
                 time_decoder_, time_compressor_,
                 time_chunk_header_.encoding_type_,
-                time_chunk_header_.data_type_,
+                common::INT64,
                 time_chunk_header_.compression_type_))) {
             return ret;
         }
@@ -1833,7 +1832,9 @@ int AlignedChunkReader::decode_all_planned_pages() {
             for (size_t w = 0; w < worker_count; w++) {
                 if (time_decoder_pool_[w] == nullptr) {
                     time_decoder_pool_[w] =
-                        DecoderFactory::alloc_time_decoder();
+                        DecoderFactory::alloc_value_decoder(
+                            time_chunk_header_.encoding_type_,
+                            common::INT64);
                     if (time_decoder_pool_[w] == nullptr) return E_OOM;
                 }
                 if (time_compressor_pool_[w] == nullptr) {
