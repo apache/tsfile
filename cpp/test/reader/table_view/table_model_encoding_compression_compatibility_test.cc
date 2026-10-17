@@ -50,9 +50,6 @@
 #include "common/db_common.h"
 #include "common/schema.h"
 #include "common/tablet.h"
-#include "compress/compressor_factory.h"
-#include "encoding/decoder_factory.h"
-#include "encoding/encoder_factory.h"
 #include "file/local_random_access_read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "file/write_file.h"
@@ -489,6 +486,35 @@ int32_t DateValue(int row) {
     return kDateValues[row % (sizeof(kDateValues) / sizeof(kDateValues[0]))];
 }
 
+// Implemented intersection with Java (keep in sync with cppSupports there).
+// Fixture generation and validation exercise the real factories for every case.
+bool SupportsCommonEncoding(TSDataType type, TSEncoding encoding) {
+    bool integer = type == INT32 || type == INT64;
+    bool integral = integer || type == DATE || type == TIMESTAMP;
+    bool floating = type == FLOAT || type == DOUBLE;
+    switch (encoding) {
+        case PLAIN:
+            return true;
+        case DICTIONARY:
+            return type == TEXT || type == STRING;
+        case RLE:
+            return integral;
+        case TS_2DIFF:
+        case GORILLA:
+        case CHIMP:
+        case RLBE:
+            return integral || floating;
+        case ZIGZAG:
+            return integer;
+        case SPRINTZ:
+            return integer || floating;
+        case CAMEL:
+            return type == DOUBLE;
+        default:
+            return false;
+    }
+}
+
 std::vector<FixtureCase> BuildMatrix() {
     std::vector<FixtureCase> cases;
     CompressionType compressions[] = {UNCOMPRESSED, SNAPPY, GZIP,
@@ -497,31 +523,10 @@ std::vector<FixtureCase> BuildMatrix() {
     TSDataType all_types[] = {BOOLEAN, INT32,  DATE, INT64,  TIMESTAMP,
                               FLOAT,   DOUBLE, TEXT, STRING, BLOB};
     for (CompressionType compression : compressions) {
-        // Fail rather than silently dropping an advertised compressor from CI.
-        Compressor* compressor =
-            CompressorFactory::alloc_compressor(compression);
-        EXPECT_NE(nullptr, compressor) << get_compression_name(compression);
-        if (compressor != nullptr) {
-            compressor->~Compressor();
-            CompressorFactory::free(compressor);
-        }
         for (TSDataType data_type : all_types) {
             for (int value = PLAIN; value <= CAMEL; ++value) {
                 TSEncoding encoding = static_cast<TSEncoding>(value);
-                Encoder* encoder =
-                    EncoderFactory::alloc_value_encoder(encoding, data_type);
-                Decoder* decoder =
-                    DecoderFactory::alloc_value_decoder(encoding, data_type);
-                bool supported = encoder != nullptr && decoder != nullptr;
-                if (encoder != nullptr) {
-                    encoder->~Encoder();
-                    EncoderFactory::free(encoder);
-                }
-                if (decoder != nullptr) {
-                    decoder->~Decoder();
-                    DecoderFactory::free(decoder);
-                }
-                if (supported)
+                if (SupportsCommonEncoding(data_type, encoding))
                     cases.emplace_back(data_type, encoding, compression,
                                        kRowCounts[0]);
             }
