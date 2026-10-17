@@ -82,6 +82,7 @@ class DecoderFactory {
 
             case RLE:
                 switch (data_type) {
+                    case BOOLEAN:
                     case INT32:
                     case DATE:
                         ALLOC_AND_RETURN_DECODER(Int32RleDecoder);

@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/allocator/byte_stream.h"
+#include "encoding/decoder_factory.h"
 #include "encoding/dictionary_decoder.h"
 #include "encoding/dictionary_encoder.h"
 #include "encoding/gorilla_decoder.h"
@@ -44,6 +45,13 @@
 #include "gtest/gtest.h"
 
 namespace storage {
+
+TEST(EncodingCoverage, BooleanRleDecoderFactory) {
+    Decoder* decoder =
+        DecoderFactory::alloc_value_decoder(common::RLE, common::BOOLEAN);
+    ASSERT_NE(nullptr, decoder);
+    DecoderFactory::free(decoder);
+}
 
 // ── Type-mismatch returns ────────────────────────────────────────────────
 //

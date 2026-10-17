@@ -42,6 +42,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Assume;
 import org.junit.Test;
+import org.junit.runners.model.MultipleFailureException;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -55,10 +56,13 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -69,15 +73,16 @@ public class TableModelEncodingCompressionCompatibilityTest {
   private static final String VALIDATE_DIR_PROPERTY = "tsfile.compat.validate.dir";
   private static final String MANIFEST_FILE = "manifest.csv";
   private static final String MANIFEST_HEADER =
-      "file,table,tagColumn,valueColumn,dataType,encoding,compression,rowCount,nullPattern";
+      "file,table,tagColumn,valueColumn,dataType,encoding,compression,rowCount,nullPattern,booleanEncoding";
   private static final String TABLE_NAME = "compat_table";
   private static final String TAG_COLUMN = "device";
   private static final String VALUE_COLUMN = "value";
   private static final String TAG_VALUE = "compat_device";
-  // Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
-  // page-wide bitmaps must survive block transitions. Applied to every case.
-  private static final int ROW_COUNT = 300;
+
   private static final int NULL_PAGE_ROWS = 64;
+  private static final String BOOLEAN_COLUMN = "boolean_value";
+  private static final int[] ROW_COUNTS = {32, 4096, 1_000_000};
+  private static final int NULL_PERCENT = 10;
   private static final String ANCHOR_COLUMN = "anchor";
 
   // Keep this contract in sync with the C++ compatibility test. MIXED has
@@ -85,11 +90,15 @@ public class TableModelEncodingCompressionCompatibilityTest {
   // page 4 mixes null/non-null rows and pages 1/5 are entirely non-null.
   private enum NullPattern {
     NONE,
+    RANDOM,
     MIXED,
     ALL
   }
 
   private static boolean isNull(FixtureCase fixtureCase, int row) {
+    if (fixtureCase.nullPattern == NullPattern.RANDOM) {
+      return randomNull(row, 0x12345678);
+    }
     if (fixtureCase.nullPattern == NullPattern.ALL) {
       return true;
     }
@@ -98,6 +107,24 @@ public class TableModelEncodingCompressionCompatibilityTest {
     }
     int page = row / NULL_PAGE_ROWS;
     return page == 0 || page == 2 || page == 3 || page >= 6 || (page == 4 && row % 2 == 0);
+  }
+
+  // Fixed-seed 32-bit mixing, shared with C++. Separate salts make each
+  // column's 10% NULL mask independent and reproducible in either language.
+  private static int rowHash(int row, int salt) {
+    int value = (row + 1) * 0x9e3779b9 ^ salt;
+    value ^= value >>> 16;
+    value *= 0x85ebca6b;
+    value ^= value >>> 13;
+    return value;
+  }
+
+  private static boolean randomNull(int row, int salt) {
+    return Integer.remainderUnsigned(rowHash(row, salt), 100) < NULL_PERCENT;
+  }
+
+  private static boolean booleanNull(int row) {
+    return randomNull(row, 0x87654321);
   }
 
   private static final int[] INT_VALUES = {
@@ -235,6 +262,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     Files.createDirectories(directory);
 
     List<FixtureCase> cases = buildMatrix();
+    assertFalse("empty compatibility matrix", cases.isEmpty());
     for (FixtureCase fixtureCase : cases) {
       writeFixture(directory, fixtureCase);
     }
@@ -248,34 +276,75 @@ public class TableModelEncodingCompressionCompatibilityTest {
         VALIDATE_DIR_PROPERTY + " is not set", inputDir != null && !inputDir.isEmpty());
 
     Path directory = Paths.get(inputDir);
-    for (FixtureCase fixtureCase : readManifest(directory)) {
-      validateFixture(directory, fixtureCase);
+    List<FixtureCase> fixtures = readManifest(directory);
+    Set<String> expectedCoverage = new HashSet<>();
+    for (FixtureCase fixtureCase : buildMatrix()) {
+      expectedCoverage.add(coverageKey(fixtureCase));
     }
+    Set<String> actualCoverage = new HashSet<>();
+    List<Throwable> failures = new ArrayList<>();
+    for (FixtureCase fixtureCase : fixtures) {
+      String compressionFilter = System.getProperty("tsfile.compat.compression", "");
+      String rowsFilter = System.getProperty("tsfile.compat.rows", "");
+      if ((!compressionFilter.isEmpty()
+              && !fixtureCase.compression.name().equals(compressionFilter))
+          || (!rowsFilter.isEmpty() && fixtureCase.rowCount != Integer.parseInt(rowsFilter))) {
+        continue;
+      }
+      actualCoverage.add(coverageKey(fixtureCase));
+      try {
+        validateFixture(directory, fixtureCase);
+      } catch (Exception | AssertionError failure) {
+        failures.add(new AssertionError(fixtureCase.fileName, failure));
+      }
+    }
+    assertFalse("empty compatibility coverage", expectedCoverage.isEmpty());
+    assertEquals("writer/reader matrix coverage", expectedCoverage, actualCoverage);
+    MultipleFailureException.assertEmpty(failures);
+  }
+
+  private static String coverageKey(FixtureCase fixtureCase) {
+    return fixtureCase.dataType
+        + "/"
+        + fixtureCase.encoding
+        + "/"
+        + fixtureCase.compression
+        + "/"
+        + fixtureCase.rowCount
+        + "/"
+        + fixtureCase.nullPattern;
   }
 
   private static List<FixtureCase> buildMatrix() {
     List<FixtureCase> cases = new ArrayList<>();
     List<CompressionType> compressions =
-        Arrays.asList(CompressionType.UNCOMPRESSED, CompressionType.ZSTD, CompressionType.LZMA2);
+        Arrays.asList(
+            CompressionType.UNCOMPRESSED,
+            CompressionType.SNAPPY,
+            CompressionType.GZIP,
+            CompressionType.LZ4,
+            CompressionType.ZSTD,
+            CompressionType.LZMA2);
     for (CompressionType compression : compressions) {
       for (TSDataType dataType :
           Arrays.asList(
+              TSDataType.BOOLEAN,
               TSDataType.INT32,
               TSDataType.DATE,
               TSDataType.INT64,
               TSDataType.TIMESTAMP,
               TSDataType.FLOAT,
-              TSDataType.DOUBLE)) {
-        cases.add(new FixtureCase(dataType, TSEncoding.CHIMP, compression, ROW_COUNT));
-        cases.add(new FixtureCase(dataType, TSEncoding.RLBE, compression, ROW_COUNT));
+              TSDataType.DOUBLE,
+              TSDataType.TEXT,
+              TSDataType.STRING,
+              TSDataType.BLOB)) {
+        for (TSEncoding encoding : TSEncoding.values()) {
+          if (cppSupports(dataType, encoding)) {
+            assertTrue(dataType + "/" + encoding, TSEncoding.isSupported(dataType, encoding));
+            cases.add(new FixtureCase(dataType, encoding, compression, ROW_COUNTS[0]));
+          }
+        }
         if (dataType == TSDataType.FLOAT || dataType == TSDataType.DOUBLE) {
-          // The value set exercises scaled, scale-overflow, and raw-bit
-          // forms, including the page-wide bitmaps across the 129-value
-          // TS_2DIFF block boundary.
-          cases.add(new FixtureCase(dataType, TSEncoding.TS_2DIFF, compression, ROW_COUNT));
-          // Explicit max_point_number=0 fixture: a canonical page starting
-          // with the 0x00 maxPointNumber byte must enter the Form 1
-          // parsing path.
           cases.add(
               new FixtureCase(
                   FixtureCase.fileName(dataType, TSEncoding.TS_2DIFF, compression) + ".mpn0",
@@ -285,10 +354,9 @@ public class TableModelEncodingCompressionCompatibilityTest {
                   dataType,
                   TSEncoding.TS_2DIFF,
                   compression,
-                  ROW_COUNT));
+                  ROW_COUNTS[0]));
         }
       }
-      cases.add(new FixtureCase(TSDataType.DOUBLE, TSEncoding.CAMEL, compression, ROW_COUNT));
     }
     for (CompressionType compression :
         Arrays.asList(
@@ -310,7 +378,63 @@ public class TableModelEncodingCompressionCompatibilityTest {
         cases.add(new FixtureCase(dataType, compression, NULL_PAGE_ROWS, NullPattern.ALL));
       }
     }
-    return cases;
+    List<FixtureCase> scaled = new ArrayList<>();
+    for (FixtureCase fixtureCase : cases) {
+      if (fixtureCase.nullPattern != NullPattern.NONE) {
+        scaled.add(fixtureCase);
+        continue;
+      }
+      for (int rows : ROW_COUNTS) {
+        String name = fixtureCase.fileName.replace(".tsfile", "." + rows + ".tsfile");
+        scaled.add(
+            new FixtureCase(
+                name,
+                TABLE_NAME,
+                TAG_COLUMN,
+                VALUE_COLUMN,
+                fixtureCase.dataType,
+                fixtureCase.encoding,
+                fixtureCase.compression,
+                rows,
+                NullPattern.RANDOM));
+      }
+    }
+    String compressionFilter = System.getProperty("tsfile.compat.compression", "");
+    String rowsFilter = System.getProperty("tsfile.compat.rows", "");
+    scaled.removeIf(
+        f ->
+            (!compressionFilter.isEmpty() && !f.compression.name().equals(compressionFilter))
+                || (!rowsFilter.isEmpty() && f.rowCount != Integer.parseInt(rowsFilter)));
+    return scaled;
+  }
+
+  // Intersection with the implemented C++ encoder/decoder factories. Excludes
+  // enum placeholders and Java-only FLOAT RLE/GORILLA_V1/REGULAR combinations.
+  private static boolean cppSupports(TSDataType type, TSEncoding encoding) {
+    boolean integer = type == TSDataType.INT32 || type == TSDataType.INT64;
+    boolean integral = integer || type == TSDataType.DATE || type == TSDataType.TIMESTAMP;
+    boolean floating = type == TSDataType.FLOAT || type == TSDataType.DOUBLE;
+    switch (encoding) {
+      case PLAIN:
+        return true;
+      case DICTIONARY:
+        return type == TSDataType.TEXT || type == TSDataType.STRING;
+      case RLE:
+        return integral;
+      case TS_2DIFF:
+      case GORILLA:
+      case CHIMP:
+      case RLBE:
+        return integral || floating;
+      case ZIGZAG:
+        return integer;
+      case SPRINTZ:
+        return integer || floating;
+      case CAMEL:
+        return type == TSDataType.DOUBLE;
+      default:
+        return false;
+    }
   }
 
   private static void writeFixture(Path directory, FixtureCase fixtureCase) throws Exception {
@@ -321,7 +445,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
     int oldPageBytes = config.getPageSizeInByte();
     try {
       if (fixtureCase.nullPattern != NullPattern.NONE) {
-        config.setMaxNumberOfPointsInPage(NULL_PAGE_ROWS);
+        config.setMaxNumberOfPointsInPage(
+            fixtureCase.nullPattern == NullPattern.RANDOM ? 4096 : NULL_PAGE_ROWS);
         config.setPageSizeInByte(1024 * 1024);
       }
       try (TsFileWriter writer = new TsFileWriter(file)) {
@@ -365,14 +490,43 @@ public class TableModelEncodingCompressionCompatibilityTest {
   }
 
   private static void validateFixture(Path directory, FixtureCase fixtureCase) throws Exception {
+    assertOnWireCodecs(directory, fixtureCase);
+    if (fixtureCase.nullPattern == NullPattern.RANDOM) {
+      validateQuery(directory, fixtureCase, true, 0, fixtureCase.rowCount - 1);
+      validateQuery(
+          directory,
+          fixtureCase,
+          false,
+          Math.max(0, fixtureCase.rowCount - 3),
+          fixtureCase.rowCount - 1);
+      return;
+    }
     validateQuery(directory, fixtureCase, false, 0, fixtureCase.rowCount - 1);
     if (fixtureCase.nullPattern != NullPattern.NONE) {
       validateQuery(directory, fixtureCase, true, 0, fixtureCase.rowCount - 1);
-      if (fixtureCase.rowCount > NULL_PAGE_ROWS) {
+      if (fixtureCase.rowCount > 383) {
         // Start inside/at page boundaries and query an entirely null interval.
         validateQuery(directory, fixtureCase, false, 63, 321);
         validateQuery(directory, fixtureCase, true, 128, 255);
         validateQuery(directory, fixtureCase, true, 320, 383);
+      }
+    }
+  }
+
+  private static void assertOnWireCodecs(Path directory, FixtureCase fixtureCase) throws Exception {
+    try (TsFileSequenceReader reader =
+        new TsFileSequenceReader(directory.resolve(fixtureCase.fileName).toString())) {
+      String[] columns = {fixtureCase.valueColumn, BOOLEAN_COLUMN};
+      TSEncoding[] encodings = {fixtureCase.encoding, fixtureCase.booleanEncoding};
+      for (int index = 0; index < columns.length; index++) {
+        List<ChunkMetadata> chunks =
+            reader.getChunkMetadataList(reader.getAllDevices().get(0), columns[index], false);
+        assertFalse(columns[index] + " has no chunks", chunks.isEmpty());
+        for (ChunkMetadata chunk : chunks) {
+          Chunk data = reader.readMemChunk(chunk);
+          assertEquals(encodings[index], data.getHeader().getEncodingType());
+          assertEquals(fixtureCase.compression, data.getHeader().getCompressionType());
+        }
       }
     }
   }
@@ -382,7 +536,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
       throws Exception {
     File file = directory.resolve(fixtureCase.fileName).toFile();
     List<String> columns =
-        new ArrayList<>(Arrays.asList(fixtureCase.tagColumn, fixtureCase.valueColumn));
+        new ArrayList<>(
+            Arrays.asList(fixtureCase.tagColumn, fixtureCase.valueColumn, BOOLEAN_COLUMN));
     if (withAnchor) {
       columns.add(ANCHOR_COLUMN);
     }
@@ -395,6 +550,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
       assertEquals(TSDataType.STRING, metadata.getColumnType(2));
       assertEquals(fixtureCase.valueColumn, metadata.getColumnName(3));
       assertEquals(fixtureCase.dataType, metadata.getColumnType(3));
+      assertEquals(BOOLEAN_COLUMN, metadata.getColumnName(4));
+      assertEquals(TSDataType.BOOLEAN, metadata.getColumnType(4));
       int row = start;
       while (resultSet.next()) {
         assertTrue("unexpected row in " + fixtureCase.fileName, row <= end);
@@ -408,9 +565,13 @@ public class TableModelEncodingCompressionCompatibilityTest {
         if (!isNull(fixtureCase, row)) {
           assertValue(fixtureCase, row, resultSet);
         }
+        assertEquals("BOOLEAN NULL at row " + row, booleanNull(row), resultSet.isNull(4));
+        if (!booleanNull(row)) {
+          assertEquals("BOOLEAN at row " + row, booleanValue(row), resultSet.getBoolean(4));
+        }
         if (withAnchor) {
-          assertFalse(resultSet.isNull(4));
-          assertEquals(row, resultSet.getLong(4));
+          assertFalse(resultSet.isNull(5));
+          assertEquals(row, resultSet.getLong(5));
         }
         row++;
       }
@@ -423,6 +584,16 @@ public class TableModelEncodingCompressionCompatibilityTest {
     if (isTs2DiffFloatCase(fixtureCase) && fixtureCase.fileName.endsWith(".mpn0")) {
       props = Collections.singletonMap(Encoder.MAX_POINT_NUMBER, "0");
     }
+    MeasurementSchema valueSchema =
+        new MeasurementSchema(
+            fixtureCase.valueColumn,
+            fixtureCase.dataType,
+            fixtureCase.encoding,
+            fixtureCase.compression,
+            props);
+    MeasurementSchema booleanSchema = new MeasurementSchema(BOOLEAN_COLUMN, TSDataType.BOOLEAN);
+    assertEquals("Java default BOOLEAN encoding", TSEncoding.RLE, booleanSchema.getEncodingType());
+    booleanSchema.setCompressionType(fixtureCase.compression);
     List<IMeasurementSchema> schemas =
         Arrays.asList(
             new MeasurementSchema(
@@ -430,14 +601,11 @@ public class TableModelEncodingCompressionCompatibilityTest {
                 TSDataType.STRING,
                 TSEncoding.PLAIN,
                 CompressionType.UNCOMPRESSED),
-            new MeasurementSchema(
-                fixtureCase.valueColumn,
-                fixtureCase.dataType,
-                fixtureCase.encoding,
-                fixtureCase.compression,
-                props));
+            valueSchema,
+            booleanSchema);
     List<ColumnCategory> categories =
-        new ArrayList<>(Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+        new ArrayList<>(
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD, ColumnCategory.FIELD));
     if (fixtureCase.nullPattern != NullPattern.NONE) {
       schemas = new ArrayList<>(schemas);
       schemas.add(
@@ -464,6 +632,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
       } else {
         addValue(tablet, fixtureCase, row);
       }
+      tablet.addValue(BOOLEAN_COLUMN, row, booleanNull(row) ? null : booleanValue(row));
       if (fixtureCase.nullPattern != NullPattern.NONE) {
         tablet.addValue(ANCHOR_COLUMN, row, (long) row);
       }
@@ -474,6 +643,14 @@ public class TableModelEncodingCompressionCompatibilityTest {
   private static void addValue(Tablet tablet, FixtureCase fixtureCase, int row) {
     TSDataType dataType = fixtureCase.dataType;
     switch (dataType) {
+      case TEXT:
+      case STRING:
+      case BLOB:
+        tablet.addValue(row, VALUE_COLUMN, binaryValue(row));
+        break;
+      case BOOLEAN:
+        tablet.addValue(row, VALUE_COLUMN, booleanValue(row));
+        break;
       case INT32:
         tablet.addValue(row, VALUE_COLUMN, intValue(row));
         break;
@@ -497,6 +674,14 @@ public class TableModelEncodingCompressionCompatibilityTest {
 
   private static void assertValue(FixtureCase fixtureCase, int row, ResultSet resultSet) {
     switch (fixtureCase.dataType) {
+      case TEXT:
+      case STRING:
+      case BLOB:
+        assertArrayEquals("binary at row " + row, binaryValue(row), resultSet.getBinary(3));
+        break;
+      case BOOLEAN:
+        assertEquals("BOOLEAN at row " + row, booleanValue(row), resultSet.getBoolean(3));
+        break;
       case INT32:
         assertEquals("INT32 at row " + row, intValue(row), resultSet.getInt(3));
         break;
@@ -522,6 +707,23 @@ public class TableModelEncodingCompressionCompatibilityTest {
       default:
         throw new IllegalArgumentException("Unsupported data type: " + fixtureCase.dataType);
     }
+  }
+
+  private static byte[] binaryValue(int row) {
+    // Empty values, repeated dictionary entries, embedded NUL and non-ASCII bytes.
+    return new byte[][] {
+          new byte[0],
+          {97, 108, 112, 104, 97},
+          {0, 1, -1, 127},
+          {97, 108, 112, 104, 97},
+          {-28, -72, -83, -26, -106, -121}
+        }
+        [row % 5];
+  }
+
+  // Alternate bits and long true/false runs to cover both RLE packing modes.
+  private static boolean booleanValue(int row) {
+    return row % 192 < 64 ? row % 2 == 0 : row % 192 < 128;
   }
 
   private static int intValue(int row) {
@@ -639,6 +841,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     private final CompressionType compression;
     private final int rowCount;
     private final NullPattern nullPattern;
+    private TSEncoding booleanEncoding = TSEncoding.RLE;
 
     private FixtureCase(
         TSDataType dataType, TSEncoding encoding, CompressionType compression, int rowCount) {
@@ -715,19 +918,22 @@ public class TableModelEncodingCompressionCompatibilityTest {
 
     private static FixtureCase fromManifestLine(String line) {
       String[] parts = line.split(",", -1);
-      if (parts.length != 9) {
+      if (parts.length != 10) {
         throw new IllegalArgumentException("Bad manifest line: " + line);
       }
-      return new FixtureCase(
-          parts[0],
-          parts[1],
-          parts[2],
-          parts[3],
-          TSDataType.valueOf(parts[4]),
-          TSEncoding.valueOf(parts[5]),
-          CompressionType.valueOf(parts[6]),
-          Integer.parseInt(parts[7]),
-          NullPattern.valueOf(parts[8]));
+      FixtureCase fixtureCase =
+          new FixtureCase(
+              parts[0],
+              parts[1],
+              parts[2],
+              parts[3],
+              TSDataType.valueOf(parts[4]),
+              TSEncoding.valueOf(parts[5]),
+              CompressionType.valueOf(parts[6]),
+              Integer.parseInt(parts[7]),
+              NullPattern.valueOf(parts[8]));
+      fixtureCase.booleanEncoding = TSEncoding.valueOf(parts[9]);
+      return fixtureCase;
     }
 
     private String toManifestLine() {
@@ -741,7 +947,8 @@ public class TableModelEncodingCompressionCompatibilityTest {
           encoding.name(),
           compression.name(),
           String.valueOf(rowCount),
-          nullPattern.name());
+          nullPattern.name(),
+          booleanEncoding.name());
     }
 
     private static String fileName(

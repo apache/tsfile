@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
@@ -29,6 +30,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -65,16 +67,16 @@ const char* const kValidateDirEnv = "TSFILE_COMPAT_VALIDATE_DIR";
 const char* const kManifestFile = "manifest.csv";
 const char* const kManifestHeader =
     "file,table,tagColumn,valueColumn,dataType,encoding,compression,rowCount,"
-    "nullPattern";
+    "nullPattern,booleanEncoding";
 const char* const kTableName = "compat_table";
 const char* const kTagColumn = "device";
 const char* const kValueColumn = "value";
 const char* const kTagValue = "compat_device";
+const char* const kBooleanColumn = "boolean_value";
+constexpr int kRowCounts[] = {32, 4096, 1000000};
+constexpr uint32_t kNullPercent = 10;
 const char* const kAnchorColumn = "anchor";
 const int kNullPageRows = 64;
-// Crosses the 129-value TS_2DIFF block boundary (300 -> 129+129+42), so
-// page-wide bitmaps must survive block transitions. Applied to every case.
-constexpr int kRowCount = 300;
 
 const int32_t kIntValues[] = {
     0,
@@ -187,6 +189,7 @@ struct FixtureCase {
     CompressionType compression;
     int row_count;
     std::string null_pattern = "NONE";
+    TSEncoding boolean_encoding = PLAIN;
 
     FixtureCase()
         : table_name(kTableName),
@@ -228,7 +231,7 @@ struct FixtureCase {
             << value_column << "," << get_data_type_name(data_type) << ","
             << get_encoding_name(encoding) << ","
             << get_compression_name(compression) << "," << row_count << ","
-            << null_pattern;
+            << null_pattern << "," << get_encoding_name(boolean_encoding);
         return out.str();
     }
 };
@@ -271,7 +274,7 @@ bool ParseCompressionName(const std::string& value, CompressionType& out) {
 FixtureCase ParseManifestLine(const std::string& line) {
     FixtureCase fixture_case;
     std::vector<std::string> parts = Split(line, ',');
-    if (parts.size() != 9) {
+    if (parts.size() != 10) {
         ADD_FAILURE() << "Bad manifest line: " << line;
         return fixture_case;
     }
@@ -290,7 +293,9 @@ FixtureCase ParseManifestLine(const std::string& line) {
     }
     fixture_case.row_count = std::atoi(parts[7].c_str());
     fixture_case.null_pattern = parts[8];
+    EXPECT_TRUE(ParseEncodingName(parts[9], fixture_case.boolean_encoding));
     EXPECT_TRUE(fixture_case.null_pattern == "NONE" ||
+                fixture_case.null_pattern == "RANDOM" ||
                 fixture_case.null_pattern == "MIXED" ||
                 fixture_case.null_pattern == "ALL");
     return fixture_case;
@@ -481,22 +486,51 @@ int32_t DateValue(int row) {
     return kDateValues[row % (sizeof(kDateValues) / sizeof(kDateValues[0]))];
 }
 
+// Implemented intersection with Java (keep in sync with cppSupports there).
+// Fixture generation and validation exercise the real factories for every case.
+bool SupportsCommonEncoding(TSDataType type, TSEncoding encoding) {
+    bool integer = type == INT32 || type == INT64;
+    bool integral = integer || type == DATE || type == TIMESTAMP;
+    bool floating = type == FLOAT || type == DOUBLE;
+    switch (encoding) {
+        case PLAIN:
+            return true;
+        case DICTIONARY:
+            return type == TEXT || type == STRING;
+        case RLE:
+            return integral;
+        case TS_2DIFF:
+        case GORILLA:
+        case CHIMP:
+        case RLBE:
+            return integral || floating;
+        case ZIGZAG:
+            return integer;
+        case SPRINTZ:
+            return integer || floating;
+        case CAMEL:
+            return type == DOUBLE;
+        default:
+            return false;
+    }
+}
+
 std::vector<FixtureCase> BuildMatrix() {
     std::vector<FixtureCase> cases;
-    CompressionType compressions[] = {UNCOMPRESSED, ZSTD, LZMA2};
+    CompressionType compressions[] = {UNCOMPRESSED, SNAPPY, GZIP,
+                                      LZ4,          ZSTD,   LZMA2};
     TSDataType data_types[] = {INT32, DATE, INT64, TIMESTAMP, FLOAT, DOUBLE};
+    TSDataType all_types[] = {BOOLEAN, INT32,  DATE, INT64,  TIMESTAMP,
+                              FLOAT,   DOUBLE, TEXT, STRING, BLOB};
     for (CompressionType compression : compressions) {
-        for (TSDataType data_type : data_types) {
-            cases.emplace_back(data_type, CHIMP, compression, kRowCount);
-            cases.emplace_back(data_type, RLBE, compression, kRowCount);
-            if (data_type == FLOAT || data_type == DOUBLE) {
-                // The value set exercises scaled, scale-overflow, and
-                // raw-bit forms, including the page-wide bitmaps across
-                // the 129-value TS_2DIFF block boundary.
-                cases.emplace_back(data_type, TS_2DIFF, compression, kRowCount);
+        for (TSDataType data_type : all_types) {
+            for (int value = PLAIN; value <= CAMEL; ++value) {
+                TSEncoding encoding = static_cast<TSEncoding>(value);
+                if (SupportsCommonEncoding(data_type, encoding))
+                    cases.emplace_back(data_type, encoding, compression,
+                                       kRowCounts[0]);
             }
         }
-        cases.emplace_back(DOUBLE, CAMEL, compression, kRowCount);
     }
     for (CompressionType compression : {UNCOMPRESSED, LZ4, ZSTD, LZMA2}) {
         for (TSDataType data_type : data_types) {
@@ -513,12 +547,78 @@ std::vector<FixtureCase> BuildMatrix() {
             cases.push_back(fixture);
         }
     }
-    return cases;
+    std::vector<FixtureCase> scaled;
+    const char* compression_filter = std::getenv("TSFILE_COMPAT_COMPRESSION");
+    const char* rows_filter = std::getenv("TSFILE_COMPAT_ROWS");
+    for (const FixtureCase& fixture : cases) {
+        if (fixture.null_pattern != "NONE") {
+            scaled.push_back(fixture);
+        } else {
+            for (int rows : kRowCounts) {
+                FixtureCase copy = fixture;
+                copy.row_count = rows;
+                copy.null_pattern = "RANDOM";
+                copy.file_name += "." + std::to_string(rows);
+                scaled.push_back(copy);
+            }
+        }
+    }
+    scaled.erase(
+        std::remove_if(scaled.begin(), scaled.end(),
+                       [&](const FixtureCase& f) {
+                           return (compression_filter != nullptr &&
+                                   std::string(get_compression_name(
+                                       f.compression)) != compression_filter) ||
+                                  (rows_filter != nullptr &&
+                                   f.row_count != std::atoi(rows_filter));
+                       }),
+        scaled.end());
+    return scaled;
+}
+
+std::set<std::string> CoverageKeys(const std::vector<FixtureCase>& cases) {
+    std::set<std::string> keys;
+    const char* compression_filter = std::getenv("TSFILE_COMPAT_COMPRESSION");
+    const char* rows_filter = std::getenv("TSFILE_COMPAT_ROWS");
+    for (const FixtureCase& f : cases) {
+        if ((compression_filter != nullptr &&
+             std::string(get_compression_name(f.compression)) !=
+                 compression_filter) ||
+            (rows_filter != nullptr && f.row_count != std::atoi(rows_filter)))
+            continue;
+        keys.insert(std::string(get_data_type_name(f.data_type)) + "/" +
+                    get_encoding_name(f.encoding) + "/" +
+                    get_compression_name(f.compression) + "/" +
+                    std::to_string(f.row_count) + "/" + f.null_pattern);
+    }
+    return keys;
+}
+
+// Same fixed-seed unsigned 32-bit mixing and per-column salts as Java.
+uint32_t RowHash(int row, uint32_t salt) {
+    uint32_t value =
+        (static_cast<uint32_t>(row) + 1) * UINT32_C(0x9e3779b9) ^ salt;
+    value ^= value >> 16;
+    value *= UINT32_C(0x85ebca6b);
+    value ^= value >> 13;
+    return value;
+}
+
+bool RandomNull(int row, uint32_t salt) {
+    return RowHash(row, salt) % 100 < kNullPercent;
+}
+
+bool BooleanNull(int row) { return RandomNull(row, UINT32_C(0x87654321)); }
+
+bool BooleanValue(int row) {
+    return row % 192 < 64 ? row % 2 == 0 : row % 192 < 128;
 }
 
 // Shared contract with the Java test: empty first/middle/consecutive/trailing
 // pages, non-empty pages 1/5, and alternating null values inside page 4.
 bool IsNull(const FixtureCase& fixture_case, int row) {
+    if (fixture_case.null_pattern == "RANDOM")
+        return RandomNull(row, UINT32_C(0x12345678));
     if (fixture_case.null_pattern == "ALL") return true;
     if (fixture_case.null_pattern == "NONE") return false;
     int page = row / kNullPageRows;
@@ -533,7 +633,8 @@ class ScopedNullPageSize {
         : old_rows_(g_config_value_.page_writer_max_point_num_),
           old_bytes_(g_config_value_.page_writer_max_memory_bytes_) {
         if (fixture_case.null_pattern != "NONE") {
-            g_config_value_.page_writer_max_point_num_ = kNullPageRows;
+            g_config_value_.page_writer_max_point_num_ =
+                fixture_case.null_pattern == "RANDOM" ? 4096 : kNullPageRows;
             g_config_value_.page_writer_max_memory_bytes_ = 1024 * 1024;
         }
     }
@@ -557,6 +658,10 @@ TableSchema* CreateTableSchema(const FixtureCase& fixture_case) {
         new MeasurementSchema(fixture_case.value_column, fixture_case.data_type,
                               fixture_case.encoding, fixture_case.compression));
     column_categories.emplace_back(ColumnCategory::FIELD);
+    measurement_schemas.emplace_back(new MeasurementSchema(
+        kBooleanColumn, BOOLEAN, fixture_case.boolean_encoding,
+        fixture_case.compression));
+    column_categories.emplace_back(ColumnCategory::FIELD);
     if (fixture_case.null_pattern != "NONE") {
         measurement_schemas.emplace_back(new MeasurementSchema(
             kAnchorColumn, INT64, PLAIN, fixture_case.compression));
@@ -566,8 +671,27 @@ TableSchema* CreateTableSchema(const FixtureCase& fixture_case) {
                            column_categories);
 }
 
+std::string BinaryValue(int row) {
+    static const std::string values[] = {
+        "", "alpha", std::string("\x00\x01\xff\x7f", 4), "alpha", "中文"};
+    return values[row % 5];
+}
+
 void AddValue(Tablet& tablet, const FixtureCase& fixture_case, int row) {
     switch (fixture_case.data_type) {
+        case BOOLEAN:
+            ASSERT_EQ(E_OK,
+                      tablet.add_value(row, kValueColumn, BooleanValue(row)));
+            break;
+        case TEXT:
+        case STRING:
+        case BLOB: {
+            std::string bytes = BinaryValue(row);
+            common::String value(bytes.data(),
+                                 static_cast<uint32_t>(bytes.size()));
+            ASSERT_EQ(E_OK, tablet.add_value(row, kValueColumn, value));
+            break;
+        }
         case INT32:
             ASSERT_EQ(E_OK, tablet.add_value(row, kValueColumn, IntValue(row)));
             break;
@@ -608,6 +732,10 @@ Tablet CreateTablet(TableSchema* table_schema,
         // Tablet entries remain null until add_value is called.
         if (!IsNull(fixture_case, row)) {
             AddValue(tablet, fixture_case, row);
+        }
+        if (!BooleanNull(row)) {
+            EXPECT_EQ(E_OK,
+                      tablet.add_value(row, kBooleanColumn, BooleanValue(row)));
         }
         if (fixture_case.null_pattern != "NONE") {
             EXPECT_EQ(E_OK, tablet.add_value(row, kAnchorColumn,
@@ -672,6 +800,17 @@ std::vector<FixtureCase> ReadManifest(const std::string& directory) {
 void AssertValue(const FixtureCase& fixture_case, int row,
                  TableResultSet* result_set) {
     switch (fixture_case.data_type) {
+        case TEXT:
+        case STRING:
+        case BLOB:
+            ASSERT_EQ(
+                BinaryValue(row),
+                result_set->get_value<common::String*>(3)->to_std_string());
+            break;
+        case BOOLEAN:
+            ASSERT_EQ(row % 192 < 64 ? row % 2 == 0 : row % 192 < 128,
+                      result_set->get_value<bool>(3));
+            break;
         case INT32:
             ASSERT_EQ(IntValue(row), result_set->get_value<int32_t>(3));
             break;
@@ -696,8 +835,9 @@ void AssertValue(const FixtureCase& fixture_case, int row,
     }
 }
 
-void AssertOnWireCodec(const std::string& directory,
-                       const FixtureCase& fixture_case) {
+void AssertColumnCodec(const std::string& directory,
+                       const FixtureCase& fixture_case,
+                       const std::string& measurement, TSEncoding encoding) {
     TsFileIOReader io_reader;
     ASSERT_EQ(E_OK,
               io_reader.init(JoinPath(directory, fixture_case.file_name)));
@@ -714,7 +854,7 @@ void AssertOnWireCodec(const std::string& directory,
     common::PageArena arena;
     arena.init(512, common::MOD_TSFILE_READER);
     std::vector<ITimeseriesIndex*> indexes(1, nullptr);
-    std::unordered_set<std::string> measurements = {fixture_case.value_column};
+    std::unordered_set<std::string> measurements = {measurement};
     ASSERT_EQ(E_OK, io_reader.get_timeseries_indexes(device_id, measurements,
                                                      indexes, arena));
     ASSERT_NE(nullptr, indexes.front());
@@ -743,9 +883,19 @@ void AssertOnWireCodec(const std::string& directory,
         stream.wrap_from(header_buf, read_len);
         ChunkHeader chunk_header;
         ASSERT_EQ(E_OK, chunk_header.deserialize_from(stream));
-        ASSERT_EQ(fixture_case.encoding, chunk_header.encoding_type_);
+        ASSERT_EQ(encoding, chunk_header.encoding_type_);
         ASSERT_EQ(fixture_case.compression, chunk_header.compression_type_);
     }
+}
+
+void AssertOnWireCodec(const std::string& directory,
+                       const FixtureCase& fixture_case) {
+    ASSERT_NO_FATAL_FAILURE(AssertColumnCodec(directory, fixture_case,
+                                              fixture_case.value_column,
+                                              fixture_case.encoding));
+    ASSERT_NO_FATAL_FAILURE(AssertColumnCodec(directory, fixture_case,
+                                              kBooleanColumn,
+                                              fixture_case.boolean_encoding));
 }
 
 void ValidateQuery(const std::string& directory,
@@ -756,8 +906,8 @@ void ValidateQuery(const std::string& directory,
                  << " range=" << start << ":" << end);
     TsFileReader reader;
     ASSERT_EQ(E_OK, reader.open(JoinPath(directory, fixture_case.file_name)));
-    std::vector<std::string> columns = {fixture_case.tag_column,
-                                        fixture_case.value_column};
+    std::vector<std::string> columns = {
+        fixture_case.tag_column, fixture_case.value_column, kBooleanColumn};
     if (with_anchor) columns.push_back(kAnchorColumn);
     ResultSet* raw_result_set = nullptr;
     ASSERT_EQ(E_OK, reader.query(fixture_case.table_name, columns, start, end,
@@ -771,7 +921,7 @@ void ValidateQuery(const std::string& directory,
     std::unique_ptr<TableResultSet, decltype(cleanup)> owned_result(result_set,
                                                                     cleanup);
     std::shared_ptr<ResultSetMetadata> metadata = result_set->get_metadata();
-    ASSERT_EQ(with_anchor ? 4U : 3U, metadata->get_column_count());
+    ASSERT_EQ(with_anchor ? 5U : 4U, metadata->get_column_count());
     ASSERT_EQ("time", metadata->get_column_name(1));
     ASSERT_EQ(INT64, metadata->get_column_type(1));
     ASSERT_EQ(fixture_case.tag_column, metadata->get_column_name(2));
@@ -779,6 +929,8 @@ void ValidateQuery(const std::string& directory,
     ASSERT_EQ(fixture_case.value_column, metadata->get_column_name(3));
     ASSERT_EQ(fixture_case.data_type, metadata->get_column_type(3));
 
+    ASSERT_EQ(kBooleanColumn, metadata->get_column_name(4));
+    ASSERT_EQ(BOOLEAN, metadata->get_column_type(4));
     bool has_next = false;
     int row = start;
     while (true) {
@@ -794,9 +946,13 @@ void ValidateQuery(const std::string& directory,
         if (!IsNull(fixture_case, row)) {
             ASSERT_NO_FATAL_FAILURE(AssertValue(fixture_case, row, result_set));
         }
+        ASSERT_EQ(BooleanNull(row), result_set->is_null(4));
+        if (!BooleanNull(row)) {
+            ASSERT_EQ(BooleanValue(row), result_set->get_value<bool>(4));
+        }
         if (with_anchor) {
-            ASSERT_FALSE(result_set->is_null(4));
-            ASSERT_EQ(row, result_set->get_value<int64_t>(4));
+            ASSERT_FALSE(result_set->is_null(5));
+            ASSERT_EQ(row, result_set->get_value<int64_t>(5));
         }
         ++row;
     }
@@ -809,12 +965,21 @@ void ValidateFixture(const std::string& directory,
                      const FixtureCase& fixture_case) {
     SCOPED_TRACE(fixture_case.ToManifestLine());
     ASSERT_NO_FATAL_FAILURE(AssertOnWireCodec(directory, fixture_case));
+    if (fixture_case.null_pattern == "RANDOM") {
+        ASSERT_NO_FATAL_FAILURE(ValidateQuery(directory, fixture_case, true, 0,
+                                              fixture_case.row_count - 1));
+        ASSERT_NO_FATAL_FAILURE(
+            ValidateQuery(directory, fixture_case, false,
+                          std::max(0, fixture_case.row_count - 3),
+                          fixture_case.row_count - 1));
+        return;
+    }
     ASSERT_NO_FATAL_FAILURE(ValidateQuery(directory, fixture_case, false, 0,
                                           fixture_case.row_count - 1));
     if (fixture_case.null_pattern != "NONE") {
         ASSERT_NO_FATAL_FAILURE(ValidateQuery(directory, fixture_case, true, 0,
                                               fixture_case.row_count - 1));
-        if (fixture_case.row_count > kNullPageRows) {
+        if (fixture_case.row_count > 383) {
             ASSERT_NO_FATAL_FAILURE(
                 ValidateQuery(directory, fixture_case, false, 63, 321));
             ASSERT_NO_FATAL_FAILURE(
@@ -840,6 +1005,7 @@ TEST_F(TableModelEncodingCompressionCompatibilityTest, GenerateFixtures) {
     }
     EnsureDirectory(output_dir);
     std::vector<FixtureCase> cases = BuildMatrix();
+    ASSERT_FALSE(cases.empty());
     for (const FixtureCase& fixture_case : cases) {
         WriteFixture(output_dir, fixture_case);
         AssertOnWireCodec(output_dir, fixture_case);
@@ -853,7 +1019,19 @@ TEST_F(TableModelEncodingCompressionCompatibilityTest, ValidateFixtures) {
         GTEST_SKIP() << kValidateDirEnv << " is not set";
     }
     std::vector<FixtureCase> cases = ReadManifest(input_dir);
+    auto expected = CoverageKeys(BuildMatrix());
+    ASSERT_FALSE(expected.empty());
+    ASSERT_EQ(expected, CoverageKeys(cases)) << "writer/reader matrix coverage";
     for (const FixtureCase& fixture_case : cases) {
-        ASSERT_NO_FATAL_FAILURE(ValidateFixture(input_dir, fixture_case));
+        const char* compression_filter =
+            std::getenv("TSFILE_COMPAT_COMPRESSION");
+        const char* rows_filter = std::getenv("TSFILE_COMPAT_ROWS");
+        if ((compression_filter != nullptr &&
+             std::string(get_compression_name(fixture_case.compression)) !=
+                 compression_filter) ||
+            (rows_filter != nullptr &&
+             fixture_case.row_count != std::atoi(rows_filter)))
+            continue;
+        EXPECT_NO_FATAL_FAILURE(ValidateFixture(input_dir, fixture_case));
     }
 }
