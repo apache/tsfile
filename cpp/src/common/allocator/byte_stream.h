@@ -1280,7 +1280,7 @@ class SerializationUtil {
             } else if (len != read_len) {
                 ret = E_BUF_NOT_ENOUGH;
             } else {
-                str = std::string(tmp_buf);
+                str.assign(tmp_buf, len);
             }
             mem_free(tmp_buf);
         }
