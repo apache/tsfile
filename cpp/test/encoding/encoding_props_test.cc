@@ -256,4 +256,36 @@ TEST(EncodingProps, JavaRoundingKeepsSaturationAndNaNBehavior) {
     EXPECT_EQ(java_round<int64_t>(-1.5), -1);
 }
 
+TEST(EncodingProps, JavaRoundingPreservesHalfNeighborsAndLargeIntegers) {
+    const std::vector<std::pair<double, int64_t>> cases{
+        {std::nextafter(0.5, 0.0), 0},
+        {0.5, 1},
+        {std::nextafter(0.5, 1.0), 1},
+        {std::nextafter(1.5, 1.0), 1},
+        {1.5, 2},
+        {std::nextafter(1.5, 2.0), 2},
+        {std::nextafter(-0.5, -1.0), -1},
+        {-0.5, 0},
+        {std::nextafter(-0.5, 0.0), 0},
+        {std::nextafter(-1.5, -2.0), -2},
+        {-1.5, -1},
+        {std::nextafter(-1.5, -1.0), -1},
+        {2147483647.5, 2147483648LL},
+        {-2147483648.5, -2147483648LL},
+        {4503599627370495.5, 4503599627370496LL},
+        {4503599627370497.0, 4503599627370497LL},
+        {-4503599627370497.0, -4503599627370497LL},
+        {std::nextafter(9223372036854775808.0, 0.0), 9223372036854774784LL},
+        {std::nextafter(-9223372036854775808.0, 0.0), -9223372036854774784LL}};
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.first);
+        EXPECT_EQ(java_round<int64_t>(item.first), item.second);
+        const int64_t expected = std::max<int64_t>(
+            std::numeric_limits<int32_t>::min(),
+            std::min<int64_t>(std::numeric_limits<int32_t>::max(),
+                              item.second));
+        EXPECT_EQ(java_round<int32_t>(item.first), expected);
+    }
+}
+
 }  // namespace
