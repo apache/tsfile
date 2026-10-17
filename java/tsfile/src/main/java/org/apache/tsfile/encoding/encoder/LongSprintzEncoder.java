@@ -41,6 +41,8 @@ public class LongSprintzEncoder extends SprintzEncoder {
   // we save all value in a list and calculate its bitwidth.
   protected Vector<Long> values;
 
+  private boolean unsafeResidual;
+
   public LongSprintzEncoder() {
     super();
     values = new Vector<>();
@@ -73,10 +75,16 @@ public class LongSprintzEncoder extends SprintzEncoder {
       throw new TsFileEncodingException(
           Messages.get("error.encoding.sprintz_encoder_unsupported_predict_method"));
     }
+    // Larger residuals overflow the historical signed mapping.
+    long limit = 1L << 62;
+    if (pred <= -limit || pred >= limit) {
+      unsafeResidual = true;
+      return 0L;
+    }
     if (pred <= 0) {
       pred = -2 * pred;
     } else {
-      pred = 2 * pred - 1; // TODO:overflow
+      pred = 2 * pred - 1;
     }
     return pred;
   }
@@ -139,15 +147,31 @@ public class LongSprintzEncoder extends SprintzEncoder {
     if (values.size() == Block_size + 1) {
       try {
         long pre = values.get(0);
+        Vector<Long> rawValues = new Vector<>(values);
+        unsafeResidual = false;
         firePred.reset();
         for (int i = 1; i <= Block_size; i++) {
           long tmp = values.get(i);
           values.set(i, predict(values.get(i), pre));
           pre = tmp;
         }
-        bitPack();
-        isFirstCached = false;
-        values.clear();
+        if (unsafeResidual) {
+          // Use the existing raw fallback format and retain the ninth value.
+          ReadWriteForEncodingUtils.writeIntLittleEndianPaddedOnBitWidth(
+              Block_size | 0x80, byteCache, 1);
+          LongRleEncoder encoder = new LongRleEncoder();
+          for (int i = 0; i < Block_size; i++) {
+            encoder.encode(rawValues.get(i), byteCache);
+          }
+          encoder.flush(byteCache);
+          values.clear();
+          values.add(rawValues.lastElement());
+          isFirstCached = true;
+        } else {
+          bitPack();
+          isFirstCached = false;
+          values.clear();
+        }
         groupNum++;
         if (groupNum == groupMax) {
           flush(out);
