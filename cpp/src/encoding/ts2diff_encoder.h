@@ -889,7 +889,13 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         return common::E_OK;
     }
     const int num_values = static_cast<int>(underflow_flags_.size());
-    if (has_overflow()) {
+    // The two largest precisions collide with the leading overflow tags.
+    // Always wrap them, even for all-scaled zeroes, so the actual precision
+    // appears after the bitmap where both Java and C++ read it as a value.
+    if (has_overflow() ||
+        max_point_number_ >=
+            static_cast<int>(
+                ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW)) {
         std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
         std::vector<uint8_t> raw_bits_bitmap(
@@ -959,7 +965,10 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         return common::E_OK;
     }
     const int num_values = static_cast<int>(underflow_flags_.size());
-    if (has_overflow()) {
+    if (has_overflow() ||
+        max_point_number_ >=
+            static_cast<int>(
+                ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW)) {
         std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
         std::vector<uint8_t> raw_bits_bitmap(

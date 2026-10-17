@@ -153,6 +153,90 @@ TEST(EncodingProps, InfiniteScaleRoundsZeroLikeJava) {
     }
 }
 
+TEST(EncodingProps, ZeroOnlyPagesEscapeReservedPrecisionMarkers) {
+    for (auto type : {FLOAT, DOUBLE}) {
+        for (int precision : {1000, 2147483645, 2147483646, 2147483647}) {
+            auto* encoder = EncoderFactory::alloc_value_encoder(
+                TS_2DIFF, type,
+                {{"max_point_number", std::to_string(precision)}});
+            ASSERT_NE(encoder, nullptr);
+            for (int rows : {1, 8, 129, 260}) {
+                SCOPED_TRACE(std::to_string(type) + ":" +
+                             std::to_string(precision) + ":" +
+                             std::to_string(rows));
+                for (int page = 0; page < 2; ++page) {
+                    ByteStream bytes(64, MOD_DEFAULT);
+                    ASSERT_EQ(encoder->flush(bytes), E_OK);
+                    EXPECT_EQ(bytes.total_size(), 0U);
+                    for (int row = 0; row < rows; ++row) {
+                        const double zero = row % 2 == 0 ? 0.0 : -0.0;
+                        ASSERT_EQ(type == FLOAT
+                                      ? encoder->encode(
+                                            static_cast<float>(zero), bytes)
+                                      : encoder->encode(zero, bytes),
+                                  E_OK);
+                    }
+                    ASSERT_EQ(encoder->flush(bytes), E_OK);
+                    std::vector<char> copy(bytes.total_size());
+                    ASSERT_EQ(copy_bs_to_buf(bytes, copy.data(), copy.size()),
+                              E_OK);
+                    ByteStream header;
+                    header.wrap_from(copy.data(), copy.size());
+                    uint32_t tag = 0;
+                    ASSERT_EQ(SerializationUtil::read_var_uint(tag, header),
+                              E_OK);
+                    EXPECT_EQ(tag, precision >= 2147483646
+                                       ? 2147483647U
+                                       : static_cast<uint32_t>(precision));
+                    if (precision >= 2147483646) {
+                        uint32_t count = 0;
+                        ASSERT_EQ(
+                            SerializationUtil::read_var_uint(count, header),
+                            E_OK);
+                        EXPECT_EQ(count, static_cast<uint32_t>(rows));
+                        for (int i = 0; i < rows / 8 + 1; ++i) {
+                            uint8_t bitmap = 0;
+                            ASSERT_EQ(
+                                SerializationUtil::read_ui8(bitmap, header),
+                                E_OK);
+                            const int remaining = rows - i * 8;
+                            EXPECT_EQ(bitmap, remaining >= 8
+                                                  ? 255U
+                                                  : (1U << remaining) - 1);
+                        }
+                        uint32_t stored_precision = 0;
+                        ASSERT_EQ(SerializationUtil::read_var_uint(
+                                      stored_precision, header),
+                                  E_OK);
+                        EXPECT_EQ(stored_precision,
+                                  static_cast<uint32_t>(precision));
+                    }
+                    auto* decoder =
+                        DecoderFactory::alloc_value_decoder(TS_2DIFF, type);
+                    ASSERT_NE(decoder, nullptr);
+                    for (int row = 0; row < rows; ++row) {
+                        double actual = -1;
+                        if (type == FLOAT) {
+                            float value = -1;
+                            ASSERT_EQ(decoder->read_float(value, bytes), E_OK);
+                            actual = value;
+                        } else {
+                            ASSERT_EQ(decoder->read_double(actual, bytes),
+                                      E_OK);
+                        }
+                        EXPECT_EQ(actual, 0.0);
+                        EXPECT_FALSE(std::signbit(actual));
+                    }
+                    EXPECT_FALSE(decoder->has_remaining(bytes));
+                    DecoderFactory::free(decoder);
+                    encoder->reset();
+                }
+            }
+            EncoderFactory::free(encoder);
+        }
+    }
+}
+
 TEST(EncodingProps, JavaRoundingKeepsSaturationAndNaNBehavior) {
     const double infinity = std::numeric_limits<double>::infinity();
     const double nan = std::numeric_limits<double>::quiet_NaN();

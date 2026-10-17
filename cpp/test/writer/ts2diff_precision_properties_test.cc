@@ -63,6 +63,7 @@ TEST_P(TS2DiffPrecisionProperties, KeepsPrecisionAcrossPagesAndChunks) {
     const bool copied = std::get<2>(GetParam());
     const bool batch = std::get<3>(GetParam());
     const int precision = std::get<4>(GetParam());
+    const double input = precision >= 2147483646 ? 0.0 : 1.23456;
     const auto type = is_float ? FLOAT : DOUBLE;
     MeasurementSchema schema("v", type, TS_2DIFF, UNCOMPRESSED);
     if (precision >= 0)
@@ -102,9 +103,11 @@ TEST_P(TS2DiffPrecisionProperties, KeepsPrecisionAcrossPagesAndChunks) {
                     ASSERT_EQ(tablet.add_timestamp(row, chunk * 260 + row),
                               E_OK);
                     if (is_float)
-                        ASSERT_EQ(tablet.add_value(row, "v", 1.23456f), E_OK);
+                        ASSERT_EQ(tablet.add_value(row, "v",
+                                                   static_cast<float>(input)),
+                                  E_OK);
                     else
-                        ASSERT_EQ(tablet.add_value(row, "v", 1.23456), E_OK);
+                        ASSERT_EQ(tablet.add_value(row, "v", input), E_OK);
                 }
                 ASSERT_EQ(aligned ? writer.write_tablet_aligned(tablet)
                                   : writer.write_tablet(tablet),
@@ -113,9 +116,9 @@ TEST_P(TS2DiffPrecisionProperties, KeepsPrecisionAcrossPagesAndChunks) {
                 for (int row = 0; row < 260; ++row) {
                     TsRecord record(chunk * 260 + row, "root.d");
                     if (is_float)
-                        record.add_point("v", 1.23456f);
+                        record.add_point("v", static_cast<float>(input));
                     else
-                        record.add_point("v", 1.23456);
+                        record.add_point("v", input);
                     ASSERT_EQ(aligned ? writer.write_record_aligned(record)
                                       : writer.write_record(record),
                               E_OK);
@@ -144,9 +147,10 @@ TEST_P(TS2DiffPrecisionProperties, KeepsPrecisionAcrossPagesAndChunks) {
     EXPECT_EQ(rows, 520);
     reader.destroy_query_data_set(result);
     ASSERT_EQ(reader.close(), E_OK);
-    const double expected = precision == 0   ? 1.0
-                            : precision == 4 ? 1.2346
-                                             : 1.23;
+    const double expected = precision >= 2147483646 ? 0.0
+                            : precision == 0        ? 1.0
+                            : precision == 4        ? 1.2346
+                                                    : 1.23;
     for (double value : actual) {
         ASSERT_EQ(value, is_float
                              ? static_cast<double>(static_cast<float>(expected))
@@ -216,6 +220,7 @@ TEST_F(TS2DiffTablePrecision, ConfiguresTableValueChunk) {
 INSTANTIATE_TEST_SUITE_P(WriterPaths, TS2DiffPrecisionProperties,
                          testing::Combine(testing::Bool(), testing::Bool(),
                                           testing::Bool(), testing::Bool(),
-                                          testing::Values(0, 4, -1)));
+                                          testing::Values(0, 4, -1, 2147483646,
+                                                          2147483647)));
 
 }  // namespace
