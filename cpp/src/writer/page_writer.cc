@@ -76,12 +76,19 @@ int PageData::init(ByteStream& time_bs, ByteStream& value_bs,
 /* ================ PageWriter ================ */
 int PageWriter::init(TSDataType data_type, TSEncoding encoding,
                      CompressionType compression) {
+    return init(data_type, encoding, compression,
+                std::map<std::string, std::string>());
+}
+
+int PageWriter::init(TSDataType data_type, TSEncoding encoding,
+                     CompressionType compression,
+                     const std::map<std::string, std::string>& props) {
     int ret = E_OK;
     data_type_ = data_type;
     if (nullptr == (time_encoder_ = EncoderFactory::alloc_time_encoder())) {
         ret = E_OOM;
     } else if (nullptr == (value_encoder_ = EncoderFactory::alloc_value_encoder(
-                               encoding, data_type))) {
+                               encoding, data_type, props))) {
         ret = E_OOM;
     } else if (nullptr ==
                (statistic_ = StatisticFactory::alloc_statistic(data_type))) {

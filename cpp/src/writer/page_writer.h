@@ -19,6 +19,9 @@
 #ifndef WRITER_PAGE_WRITER_H
 #define WRITER_PAGE_WRITER_H
 
+#include <map>
+#include <string>
+
 #include "common/allocator/byte_stream.h"
 #include "common/allocator/my_string.h"
 #include "common/statistic.h"
@@ -104,6 +107,9 @@ class PageWriter {
           is_inited_(false) {}
     int init(common::TSDataType data_type, common::TSEncoding encoding,
              common::CompressionType compression);
+    int init(common::TSDataType data_type, common::TSEncoding encoding,
+             common::CompressionType compression,
+             const std::map<std::string, std::string>& props);
     ~PageWriter() { destroy(); }
     // reset statistic_, time_out_stream_, value_out_stream_
     void reset();

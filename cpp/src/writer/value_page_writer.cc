@@ -87,10 +87,17 @@ int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
 
 int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
                           CompressionType compression) {
+    return init(data_type, encoding, compression,
+                std::map<std::string, std::string>());
+}
+
+int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
+                          CompressionType compression,
+                          const std::map<std::string, std::string>& props) {
     int ret = E_OK;
     data_type_ = data_type;
     if (nullptr == (value_encoder_ = EncoderFactory::alloc_value_encoder(
-                        encoding, data_type))) {
+                        encoding, data_type, props))) {
         ret = E_OOM;
     } else if (nullptr ==
                (statistic_ = StatisticFactory::alloc_statistic(data_type))) {
