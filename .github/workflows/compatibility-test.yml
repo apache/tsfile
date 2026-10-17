@@ -63,13 +63,14 @@ env:
 
 jobs:
   generate-fixtures:
-    name: Generate ${{ matrix.language }} fixtures
+    name: Generate ${{ matrix.language }} ${{ matrix.compression }} fixtures
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         language: [ java, cpp ]
+        compression: [ UNCOMPRESSED, SNAPPY, GZIP, LZ4, ZSTD, LZMA2 ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -102,6 +103,7 @@ jobs:
           ./mvnw -P with-java \
             -Dtest=TableModelEncodingCompressionCompatibilityTest#generateFixtures \
             -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtsfile.compat.compression="${{ matrix.compression }}" \
             -Dtsfile.compat.generate.dir="$PWD/compat-fixtures/java" \
             test
 
@@ -115,10 +117,10 @@ jobs:
             -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
-            -Denable.snappy=OFF \
+            -Denable.snappy=ON \
             -Denable.lz4=ON \
             -Denable.lzokay=OFF \
-            -Denable.zlib=OFF \
+            -Denable.zlib=ON \
             -Denable.zstd=ON \
             -Denable.lzma2=ON \
             -Denable.simd=OFF \
@@ -129,6 +131,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p compat-fixtures/cpp
+          TSFILE_COMPAT_COMPRESSION="${{ matrix.compression }}" \
           TSFILE_COMPAT_GENERATE_DIR="$PWD/compat-fixtures/cpp" \
             ./cpp/target/build/test/lib/TsFile_Test \
             --gtest_filter=TableModelEncodingCompressionCompatibilityTest.GenerateFixtures
@@ -136,20 +139,21 @@ jobs:
       - name: Upload ${{ matrix.language }} fixtures
         uses: actions/upload-artifact@v7
         with:
-          name: tsfile-${{ matrix.language }}-compat-fixtures
+          name: tsfile-${{ matrix.language }}-${{ matrix.compression }}-compat-fixtures
           path: compat-fixtures/${{ matrix.language }}/
           if-no-files-found: error
           retention-days: 1
 
   validate-fixtures:
-    name: Validate ${{ matrix.writer }} fixtures with ${{ matrix.reader }}
+    name: Validate ${{ matrix.pair.writer }} ${{ matrix.compression }} with ${{ matrix.pair.reader }}
     needs: generate-fixtures
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
+        compression: [ UNCOMPRESSED, SNAPPY, GZIP, LZ4, ZSTD, LZMA2 ]
+        pair:
           - writer: java
             reader: cpp
           - writer: cpp
@@ -172,30 +176,31 @@ jobs:
           restore-keys: ${{ runner.os }}-m2-
 
       - name: Cache verified C++ dependency archives
-        if: matrix.reader == 'cpp'
+        if: matrix.pair.reader == 'cpp'
         uses: actions/cache@v6
         with:
           path: cpp/target/dependency-cache
           key: ${{ runner.os }}-tsfile-cpp-deps-${{ hashFiles('cpp/CMakeLists.txt', 'cpp/cmake/*Source.cmake', 'cpp/third_party/CMakeLists.txt') }}
 
-      - name: Download ${{ matrix.writer }} fixtures
+      - name: Download ${{ matrix.pair.writer }} fixtures
         uses: actions/download-artifact@v8
         with:
-          name: tsfile-${{ matrix.writer }}-compat-fixtures
-          path: compat-fixtures/${{ matrix.writer }}
+          name: tsfile-${{ matrix.pair.writer }}-${{ matrix.compression }}-compat-fixtures
+          path: compat-fixtures/${{ matrix.pair.writer }}
 
-      - name: Validate ${{ matrix.writer }} fixtures with Java
-        if: matrix.reader == 'java'
+      - name: Validate ${{ matrix.pair.writer }} fixtures with Java
+        if: matrix.pair.reader == 'java'
         shell: bash
         run: |
           ./mvnw -P with-java \
             -Dtest=TableModelEncodingCompressionCompatibilityTest#validateFixtures \
             -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.writer }}" \
+            -Dtsfile.compat.compression="${{ matrix.compression }}" \
+            -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.pair.writer }}" \
             test
 
       - name: Build C++ tests
-        if: matrix.reader == 'cpp'
+        if: matrix.pair.reader == 'cpp'
         shell: bash
         run: |
           ./mvnw -P with-cpp \
@@ -204,19 +209,20 @@ jobs:
             -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
-            -Denable.snappy=OFF \
+            -Denable.snappy=ON \
             -Denable.lz4=ON \
             -Denable.lzokay=OFF \
-            -Denable.zlib=OFF \
+            -Denable.zlib=ON \
             -Denable.zstd=ON \
             -Denable.lzma2=ON \
             -Denable.simd=OFF \
             package
 
-      - name: Validate ${{ matrix.writer }} fixtures with C++
-        if: matrix.reader == 'cpp'
+      - name: Validate ${{ matrix.pair.writer }} fixtures with C++
+        if: matrix.pair.reader == 'cpp'
         shell: bash
         run: |
-          TSFILE_COMPAT_VALIDATE_DIR="$PWD/compat-fixtures/${{ matrix.writer }}" \
+          TSFILE_COMPAT_COMPRESSION="${{ matrix.compression }}" \
+          TSFILE_COMPAT_VALIDATE_DIR="$PWD/compat-fixtures/${{ matrix.pair.writer }}" \
             ./cpp/target/build/test/lib/TsFile_Test \
             --gtest_filter=TableModelEncodingCompressionCompatibilityTest.ValidateFixtures
