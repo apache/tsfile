@@ -490,7 +490,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
   }
 
   private static void validateFixture(Path directory, FixtureCase fixtureCase) throws Exception {
-    assertBooleanCodec(directory, fixtureCase);
+    assertOnWireCodecs(directory, fixtureCase);
     if (fixtureCase.nullPattern == NullPattern.RANDOM) {
       validateQuery(directory, fixtureCase, true, 0, fixtureCase.rowCount - 1);
       validateQuery(
@@ -513,15 +513,20 @@ public class TableModelEncodingCompressionCompatibilityTest {
     }
   }
 
-  private static void assertBooleanCodec(Path directory, FixtureCase fixtureCase) throws Exception {
+  private static void assertOnWireCodecs(Path directory, FixtureCase fixtureCase) throws Exception {
     try (TsFileSequenceReader reader =
         new TsFileSequenceReader(directory.resolve(fixtureCase.fileName).toString())) {
-      List<ChunkMetadata> chunks =
-          reader.getChunkMetadataList(reader.getAllDevices().get(0), BOOLEAN_COLUMN, false);
-      assertFalse(chunks.isEmpty());
-      for (ChunkMetadata chunk : chunks) {
-        assertEquals(
-            fixtureCase.booleanEncoding, reader.readMemChunk(chunk).getHeader().getEncodingType());
+      String[] columns = {fixtureCase.valueColumn, BOOLEAN_COLUMN};
+      TSEncoding[] encodings = {fixtureCase.encoding, fixtureCase.booleanEncoding};
+      for (int index = 0; index < columns.length; index++) {
+        List<ChunkMetadata> chunks =
+            reader.getChunkMetadataList(reader.getAllDevices().get(0), columns[index], false);
+        assertFalse(columns[index] + " has no chunks", chunks.isEmpty());
+        for (ChunkMetadata chunk : chunks) {
+          Chunk data = reader.readMemChunk(chunk);
+          assertEquals(encodings[index], data.getHeader().getEncodingType());
+          assertEquals(fixtureCase.compression, data.getHeader().getCompressionType());
+        }
       }
     }
   }
