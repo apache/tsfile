@@ -22,6 +22,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace common {
 
@@ -65,6 +67,21 @@ class ByteStreamTest : public ::testing::Test {
 
     ByteStream* byte_stream_;
 };
+
+TEST_F(ByteStreamTest, VarStringPreservesEmbeddedNulls) {
+    const std::vector<std::string> values = {
+        "", std::string("\0", 1), std::string("a\0b", 3),
+        std::string("\0\1\xff\x7f", 4), std::string("tail\0", 5)};
+    for (const auto& value : values) {
+        ASSERT_EQ(SerializationUtil::write_var_str(value, *byte_stream_), E_OK);
+    }
+    for (const auto& expected : values) {
+        std::string actual = "previous value";
+        ASSERT_EQ(SerializationUtil::read_var_str(actual, *byte_stream_), E_OK);
+        ASSERT_EQ(actual, expected);
+    }
+    ASSERT_EQ(byte_stream_->remaining_size(), 0);
+}
 
 TEST_F(ByteStreamTest, WriteReadTest) {
     const uint8_t data[] = {0x01, 0x02, 0x03};

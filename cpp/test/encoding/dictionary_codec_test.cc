@@ -55,6 +55,50 @@ TEST_F(DictionaryTest, DictionaryEncoder) {
     }
 }
 
+TEST_F(DictionaryTest, ReadJavaBinaryDictionary) {
+    // Java DictionaryEncoder: empty, NUL-prefixed binary, embedded/trailing
+    // NUL, and repeated dictionary entries.
+    const uint8_t java_bytes[] = {8,  0, 8,  0,  1,   255, 127, 6,
+                                  97, 0, 98, 10, 116, 97,  105, 108,
+                                  0,  5, 2,  3,  6,   27,  64};
+    const std::vector<std::string> expected = {"",
+                                               std::string("\0\1\xff\x7f", 4),
+                                               std::string("a\0b", 3),
+                                               std::string("tail\0", 5),
+                                               std::string("\0\1\xff\x7f", 4),
+                                               ""};
+    common::ByteStream stream(16, common::MOD_DICENCODE_OBJ);
+    ASSERT_EQ(stream.write_buf(java_bytes, sizeof(java_bytes)), common::E_OK);
+    DictionaryDecoder decoder;
+    decoder.init();
+    for (const auto& value : expected) {
+        ASSERT_TRUE(decoder.has_next(stream));
+        ASSERT_EQ(decoder.read_string(stream), value);
+    }
+    ASSERT_FALSE(decoder.has_next(stream));
+}
+
+TEST_F(DictionaryTest, DictionaryPreservesBinaryStrings) {
+    const std::vector<std::string> values = {"",
+                                             std::string("\0\1\xff\x7f", 4),
+                                             std::string("a\0b", 3),
+                                             std::string("tail\0", 5),
+                                             std::string("\0\1\xff\x7f", 4),
+                                             ""};
+    DictionaryEncoder encoder;
+    common::ByteStream stream(16, common::MOD_DICENCODE_OBJ);
+    encoder.init();
+    for (const auto& value : values) encoder.encode(value, stream);
+    ASSERT_EQ(encoder.flush(stream), common::E_OK);
+    DictionaryDecoder decoder;
+    decoder.init();
+    for (const auto& expected : values) {
+        ASSERT_TRUE(decoder.has_next(stream));
+        ASSERT_EQ(decoder.read_string(stream), expected);
+    }
+    ASSERT_FALSE(decoder.has_next(stream));
+}
+
 TEST_F(DictionaryTest, DictionaryEncoderAndDecoder) {
     DictionaryEncoder encoder;
     common::ByteStream stream(1024, common::MOD_DICENCODE_OBJ);
