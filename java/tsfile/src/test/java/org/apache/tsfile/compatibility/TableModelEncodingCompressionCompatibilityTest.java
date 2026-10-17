@@ -446,7 +446,7 @@ public class TableModelEncodingCompressionCompatibilityTest {
     try {
       if (fixtureCase.nullPattern != NullPattern.NONE) {
         config.setMaxNumberOfPointsInPage(
-            fixtureCase.nullPattern == NullPattern.RANDOM ? 256 : NULL_PAGE_ROWS);
+            fixtureCase.nullPattern == NullPattern.RANDOM ? 4096 : NULL_PAGE_ROWS);
         config.setPageSizeInByte(1024 * 1024);
       }
       try (TsFileWriter writer = new TsFileWriter(file)) {

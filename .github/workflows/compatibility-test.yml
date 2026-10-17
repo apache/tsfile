@@ -105,7 +105,7 @@ jobs:
             -Dsurefire.failIfNoSpecifiedTests=false \
             -Dtsfile.compat.compression="${{ matrix.compression }}" \
             -Dtsfile.compat.generate.dir="$PWD/compat-fixtures/java" \
-            test
+            test-compile surefire:test
 
       - name: Build C++ tests
         if: matrix.language == 'cpp'
@@ -197,7 +197,7 @@ jobs:
             -Dsurefire.failIfNoSpecifiedTests=false \
             -Dtsfile.compat.compression="${{ matrix.compression }}" \
             -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.pair.writer }}" \
-            test
+            test-compile surefire:test
 
       - name: Build C++ tests
         if: matrix.pair.reader == 'cpp'

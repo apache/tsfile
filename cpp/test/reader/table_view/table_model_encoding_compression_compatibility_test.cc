@@ -620,7 +620,7 @@ class ScopedNullPageSize {
           old_bytes_(g_config_value_.page_writer_max_memory_bytes_) {
         if (fixture_case.null_pattern != "NONE") {
             g_config_value_.page_writer_max_point_num_ =
-                fixture_case.null_pattern == "RANDOM" ? 256 : kNullPageRows;
+                fixture_case.null_pattern == "RANDOM" ? 4096 : kNullPageRows;
             g_config_value_.page_writer_max_memory_bytes_ = 1024 * 1024;
         }
     }
