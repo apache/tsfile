@@ -24,6 +24,7 @@
 #include <set>
 
 #include "common/db_common.h"
+#include "reader/filter/table_field_filter.h"
 
 namespace storage {
 
@@ -239,7 +240,7 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                 break;
             }
         }
-        if (can_multi) {
+        if (can_multi && field_filter == nullptr) {
             std::vector<std::string> meas_names(meas_cols.begin(),
                                                 meas_cols.end());
             // Stable order by first appearance in the result schema so the
@@ -365,7 +366,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
-    if (!field_column_contexts_.empty() && dense_row_count_ >= 0 &&
+    if (field_filter == nullptr && !field_column_contexts_.empty() &&
+        dense_row_count_ >= 0 &&
         aligned_col_count_ == field_column_contexts_.size()) {
         all_aligned_ = true;
         aligned_vec_.reserve(field_column_contexts_.size());
@@ -476,7 +478,7 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
             break;
         }
 
-        if (remaining_offset_ > 0) {
+        if (remaining_offset_ > 0 && field_filter_ == nullptr) {
             for (auto* col_ctx : min_time_columns) {
                 int advance_ret = advance_column(col_ctx);
                 if (IS_FAIL(advance_ret)) return advance_ret;
@@ -636,8 +638,16 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
 int SingleDeviceTsBlockReader::fill_measurements(
     std::vector<MeasurementColumnContext*>& column_contexts) {
     int ret = common::E_OK;
-    if (field_filter_ ==
-        nullptr /*TODO: || field_filter_->satisfy(column_contexts)*/) {
+    bool satisfied = true;
+    if (field_filter_ != nullptr) {
+        if (RET_FAIL(satisfy_field_filter(satisfied))) return ret;
+        // OFFSET and LIMIT count rows that passed the predicate.
+        if (satisfied && remaining_offset_ > 0) {
+            --remaining_offset_;
+            satisfied = false;
+        }
+    }
+    if (satisfied) {
         row_appender_->add_row();
         if (!col_appenders_[time_column_index_]->add_row()) {
             assert(false);
@@ -654,9 +664,7 @@ int SingleDeviceTsBlockReader::fill_measurements(
         }
         for (auto& column_context : column_contexts) {
             column_context->fill_into(col_appenders_);
-            if (RET_FAIL(advance_column(column_context))) {
-                break;
-            }
+            if (RET_FAIL(advance_column(column_context))) return ret;
         }
 
         // Align all columns, filling with nulls where data is missing.
@@ -673,8 +681,40 @@ int SingleDeviceTsBlockReader::fill_measurements(
                 col_appender->append_null();
             }
         }
+    } else {
+        // Rejected rows must also advance, including the last row in a page.
+        for (auto* column_context : column_contexts) {
+            if (RET_FAIL(advance_column(column_context))) return ret;
+        }
     }
     return ret;
+}
+
+int SingleDeviceTsBlockReader::satisfy_field_filter(bool& satisfied) {
+    int ret = common::E_OK;
+    std::vector<TableFieldValue> fields;
+    const auto& names =
+        device_query_task_->get_column_mapping()->get_measurement_columns();
+    fields.reserve(names.size());
+    for (const auto& name : names) {
+        char* value = nullptr;
+        uint32_t length = 0;
+        auto context = field_column_contexts_.find(name);
+        if (context != field_column_contexts_.end()) {
+            int64_t time = 0;
+            ret = context->second->get_current_time(time);
+            if (ret != common::E_OK && ret != common::E_NO_MORE_DATA)
+                return ret;
+            if (ret == common::E_OK && time == next_time_ &&
+                RET_FAIL(context->second->get_current_value(value, length)))
+                return ret;
+        }
+        auto schema =
+            device_query_task_->get_table_schema()->get_column_schema(name);
+        fields.push_back({name, schema.data_type_, value, length});
+    }
+    return evaluate_table_field_filter(*field_filter_, {next_time_, fields},
+                                       satisfied);
 }
 
 int SingleDeviceTsBlockReader::advance_column(
