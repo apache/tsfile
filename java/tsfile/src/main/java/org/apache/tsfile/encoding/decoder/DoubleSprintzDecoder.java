@@ -50,7 +50,7 @@ public class DoubleSprintzDecoder extends SprintzDecoder {
   @Override
   public boolean hasNext(ByteBuffer buffer) throws IOException {
     // int minLenth = Long.BYTES + 1;
-    return (isBlockReaded && currentCount < Block_size) || buffer.remaining() > 0;
+    return (isBlockReaded && currentCount < decodeSize) || buffer.hasRemaining();
   }
 
   @Override
