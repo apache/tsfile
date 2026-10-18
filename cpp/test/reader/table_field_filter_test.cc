@@ -177,12 +177,13 @@ class TableFieldFilterTest
         std::vector<ColumnSchema> columns;
         columns.emplace_back("id", STRING, UNCOMPRESSED, PLAIN,
                              ColumnCategory::TAG);
-        const std::vector<std::string> names{"v",    "i",     "flag", "f",
-                                             "d",    "s",     "text", "blob",
-                                             "date", "stamp", "empty"};
-        const std::vector<TSDataType> types{INT64,  INT32,     BOOLEAN, FLOAT,
-                                            DOUBLE, STRING,    TEXT,    BLOB,
-                                            DATE,   TIMESTAMP, INT64};
+        const std::vector<std::string> names{
+            "v",     "i",         "flag",         "f",    "d",
+            "s",     "text",      "blob",         "date", "stamp",
+            "empty", "tail_null", "nullable_flag"};
+        const std::vector<TSDataType> types{
+            INT64, INT32, BOOLEAN,   FLOAT, DOUBLE, STRING, TEXT,
+            BLOB,  DATE,  TIMESTAMP, INT64, INT64,  BOOLEAN};
         for (size_t i = 0; i < names.size(); ++i)
             columns.emplace_back(names[i], types[i], UNCOMPRESSED, PLAIN,
                                  ColumnCategory::FIELD);
@@ -211,6 +212,14 @@ class TableFieldFilterTest
                               E_OK);
                     ASSERT_EQ(tablet.add_value(index, "d", -double(t) - 0.5),
                               E_OK);
+                    if (t % 3 == 0)
+                        ASSERT_EQ(
+                            tablet.add_value(index, "tail_null", int64_t(t)),
+                            E_OK);
+                    if (t % 3 != 0)
+                        ASSERT_EQ(tablet.add_value(index, "nullable_flag",
+                                                   bool(t % 2)),
+                                  E_OK);
                     const std::string bytes =
                         t % 2 ? std::string("a\0b", 3) : std::string();
                     for (const std::string& name : {"s", "text", "blob"})
@@ -397,7 +406,7 @@ TEST_P(TableFieldFilterTest, OffsetLimitApplyAfterFilterAcrossDevices) {
 
 TEST_P(TableFieldFilterTest, TimeAndTagFiltersComposeWithFieldFilter) {
     auto* time = TimeFilter::gt_eq(base_ + 5);
-    auto* tag = new TagEq(1, "d1");
+    TagEq tag(1, "d1");
     EXPECT_EQ(scan({"id", "v"},
                    new RowPredicate([](const TableFieldRow& row, bool& ok) {
                        int64_t v = 0;
@@ -405,7 +414,7 @@ TEST_P(TableFieldFilterTest, TimeAndTagFiltersComposeWithFieldFilter) {
                        ok = v >= 100 && v % 2 == 0;
                        return E_OK;
                    }),
-                   1, 3, time, tag),
+                   1, 3, time, &tag),
               std::vector<int64_t>({base_ + 8, base_ + 10, base_ + 12}));
 }
 
@@ -462,6 +471,89 @@ TEST_P(TableFieldFilterTest, TimeOnlyRowsDoNotInventFieldValues) {
              })),
         expected([](int t) { return t >= 10; }));
     EXPECT_EQ(calls, 28);
+}
+
+TEST_P(TableFieldFilterTest, NullRowsOutsideValueStatisticsReachPredicate) {
+    int calls = 0;
+    auto* filter = new RowPredicate([&](const TableFieldRow& row, bool& ok) {
+        ++calls;
+        const auto* field = row.find("tail_null");
+        EXPECT_NE(field, nullptr);
+        ok = field != nullptr && field->is_null();
+        return E_OK;
+    });
+    // Each page starts with one non-NULL value followed by NULLs. The first
+    // value page has range [base, base], but its time page includes base+1/2.
+    EXPECT_EQ(scan({"tail_null"}, filter, 0, -1,
+                   TimeFilter::between(base_ + 1, base_ + 2, false)),
+              expected([](int t) { return t == 1 || t == 2; }));
+    EXPECT_EQ(calls, 4);
+}
+
+TEST_P(TableFieldFilterTest, NullBooleanRowsRespectTimeBeforeFieldAndOffset) {
+    for (int offset : {0, 1}) {
+        int calls = 0;
+        auto* filter =
+            new RowPredicate([&](const TableFieldRow& row, bool& ok) {
+                ++calls;
+                EXPECT_GE(row.timestamp, base_ + 1);
+                EXPECT_LE(row.timestamp, base_ + 2);
+                bool value = false;
+                const auto* field = row.find("nullable_flag");
+                EXPECT_NE(field, nullptr);
+                EXPECT_TRUE(field != nullptr && field->get(value));
+                ok = true;
+                return E_OK;
+            });
+        std::vector<int64_t> wanted =
+            offset == 0 ? expected([](int t) { return t == 1 || t == 2; })
+                        : std::vector<int64_t>{base_ + 2, base_ + 1};
+        EXPECT_EQ(scan({"nullable_flag"}, filter, offset, offset == 0 ? -1 : 2,
+                       TimeFilter::between(base_ + 1, base_ + 2, false)),
+                  wanted);
+        EXPECT_GE(calls, int(wanted.size()));
+    }
+}
+
+TEST_P(TableFieldFilterTest, OnlyAllNullFieldStillSuppliesTimestampRows) {
+    for (bool accept : {true, false}) {
+        int calls = 0;
+        auto* filter =
+            new RowPredicate([&](const TableFieldRow& row, bool& ok) {
+                ++calls;
+                EXPECT_EQ(row.fields.size(), 1u);
+                const auto* empty = row.find("empty");
+                EXPECT_NE(empty, nullptr);
+                if (!empty) return E_DECODE_ERR;
+                EXPECT_EQ(empty->type, INT64);
+                EXPECT_TRUE(empty->is_null());
+                ok = accept && empty->is_null();
+                return E_OK;
+            });
+        EXPECT_EQ(scan({"empty"}, filter),
+                  expected([accept](int) { return accept; }));
+        EXPECT_EQ(calls, 28);
+    }
+    // Legacy value predicates reject NULL instead of receiving a made-up 0.
+    EXPECT_TRUE(scan({"empty"}, new LegacyPredicate()).empty());
+}
+
+TEST_P(TableFieldFilterTest, AllNullProjectionAppliesTimeOffsetLimit) {
+    auto predicate = []() -> Filter* {
+        return new RowPredicate([](const TableFieldRow& row, bool& ok) {
+            const auto* field = row.find("empty");
+            ok = field != nullptr && field->is_null();
+            return E_OK;
+        });
+    };
+    EXPECT_EQ(scan({"empty"}, predicate(), 15, 2),
+              std::vector<int64_t>({base_ + 1, base_ + 2}));
+    EXPECT_EQ(scan({"empty"}, predicate(), 1, 2,
+                   TimeFilter::between(base_ + 1, base_ + 2, false)),
+              std::vector<int64_t>({base_ + 2, base_ + 1}));
+    EXPECT_TRUE(scan({"empty"}, predicate(), 0, -1,
+                     TimeFilter::between(base_ + 20, base_ + 21, false))
+                    .empty());
 }
 
 INSTANTIATE_TEST_SUITE_P(RowAndBatchParallelModes, TableFieldFilterTest,

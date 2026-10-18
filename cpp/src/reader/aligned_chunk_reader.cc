@@ -510,13 +510,10 @@ int AlignedChunkReader::read_from_file_and_rewrap(
 // page cannot be ruled out, while "fully satisfies" means every row is known
 // to match and the page count can safely be used for offset pushdown.
 bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
-    bool value_satisfy = filter == nullptr ||
-                         cur_value_page_header_.statistic_ == nullptr ||
-                         filter->satisfy(cur_value_page_header_.statistic_);
-    bool time_satisfy = filter == nullptr ||
-                        cur_time_page_header_.statistic_ == nullptr ||
-                        filter->satisfy(cur_time_page_header_.statistic_);
-    return time_satisfy && value_satisfy;
+    // Value statistics exclude NULLs, whose timestamps may still match.
+    // Only the shared time page can rule out every aligned row.
+    return filter == nullptr || cur_time_page_header_.statistic_ == nullptr ||
+           filter->satisfy(cur_time_page_header_.statistic_);
 }
 
 bool AlignedChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
@@ -737,6 +734,11 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 ret = time_decoder_->read_int64(time, time_in);                \
                 if (ret != E_OK) {                                             \
                     break;                                                     \
+                }                                                              \
+                if (filter != nullptr &&                                       \
+                    !filter->satisfy_start_end_time(time, time)) {             \
+                    row_appender.backoff_add_row();                            \
+                    continue;                                                  \
                 }                                                              \
                 row_appender.append(0, (char*)&time, sizeof(time));            \
                 row_appender.append_null(1);                                   \
