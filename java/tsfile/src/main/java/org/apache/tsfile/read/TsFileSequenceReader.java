@@ -91,7 +91,6 @@ import org.slf4j.LoggerFactory;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
@@ -160,6 +159,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   private long dataStartOffset = BASE_FILE_HEADER_SIZE;
   private boolean fileEncryptionHeaderLoaded;
+  private int firstDataMarker = -1;
 
   /**
    * Create a file reader of the given file. The reader will read the tail of the file to get the
@@ -465,13 +465,14 @@ public class TsFileSequenceReader implements AutoCloseable {
   private void loadFileVersion(LongConsumer ioSizeRecorder) throws IOException {
     try {
       tsFileInput.position(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length);
-      final ByteBuffer buffer = ByteBuffer.allocate(Byte.BYTES);
+      final ByteBuffer buffer = ByteBuffer.allocate(2 * Byte.BYTES);
+      int bytesRead = ReadWriteIOUtils.readAsPossible(tsFileInput, buffer);
       if (ioSizeRecorder != null) {
-        ioSizeRecorder.accept(Byte.BYTES);
+        ioSizeRecorder.accept(bytesRead);
       }
-      tsFileInput.read(buffer);
       buffer.flip();
       fileVersion = buffer.get();
+      firstDataMarker = buffer.hasRemaining() ? Byte.toUnsignedInt(buffer.get()) : -1;
 
       checkFileVersion();
       configDeserializer();
@@ -491,9 +492,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (tsFileInput.size() <= BASE_FILE_HEADER_SIZE) {
         return;
       }
-      tsFileInput.position(BASE_FILE_HEADER_SIZE);
-      InputStream inputStream = tsFileInput.wrapAsInputStream();
-      int marker = inputStream.read();
+      boolean markerPrefetched = firstDataMarker >= 0;
+      tsFileInput.position(BASE_FILE_HEADER_SIZE + (markerPrefetched ? Byte.BYTES : 0));
+      int marker = markerPrefetched ? firstDataMarker : tsFileInput.wrapAsInputStream().read();
       if (marker < 0) {
         throw new EOFException();
       }
@@ -511,16 +512,17 @@ public class TsFileSequenceReader implements AutoCloseable {
               MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER -> {}
           default -> MetaMarker.handleUnexpectedMarker((byte) marker);
         }
-        if (ioSizeRecorder != null) {
+        if (ioSizeRecorder != null && !markerPrefetched) {
           ioSizeRecorder.accept(Byte.BYTES);
         }
         return;
       }
 
-      fileEncryptionParam = FileEncryptionHeader.deserialize(inputStream);
+      fileEncryptionParam = FileEncryptionHeader.deserialize(tsFileInput.wrapAsInputStream());
       dataStartOffset = tsFileInput.position();
       if (ioSizeRecorder != null) {
-        ioSizeRecorder.accept(dataStartOffset - BASE_FILE_HEADER_SIZE);
+        ioSizeRecorder.accept(
+            dataStartOffset - BASE_FILE_HEADER_SIZE - (markerPrefetched ? Byte.BYTES : 0));
       }
     } catch (EncryptException e) {
       throw new IOException(e.getMessage(), e);

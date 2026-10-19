@@ -605,6 +605,8 @@ public class ChunkHeader {
         + numOfPages
         + ", serializedSize="
         + serializedSize
+        + ", chunkOrdinal="
+        + chunkOrdinal
         + '}';
   }
 
