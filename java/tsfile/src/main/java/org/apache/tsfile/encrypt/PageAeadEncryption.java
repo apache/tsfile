@@ -22,6 +22,7 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.i18n.Messages;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Enforces page-only, fail-closed semantics independently of a provider's legacy methods. */
@@ -119,6 +120,18 @@ final class PageAeadEncryption implements IEncrypt {
   public int getPageBodyOverhead() {
     ensureOpen();
     return delegate.getPageBodyOverhead();
+  }
+
+  @Override
+  public int getEncryptedPageBodySize(int plaintextSize) {
+    ensureOpen();
+    return delegate.getEncryptedPageBodySize(plaintextSize);
+  }
+
+  @Override
+  public int getPagePlaintextSize(ByteBuffer encryptedBody) {
+    ensureOpen();
+    return delegate.getPagePlaintextSize(encryptedBody.asReadOnlyBuffer());
   }
 
   @Override

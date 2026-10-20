@@ -29,6 +29,7 @@ import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -103,6 +104,44 @@ public class PageCryptoContextTest {
       assertEquals(1, TestAeadEncryptionProvider.getCreateCount());
     } finally {
       parameter.close();
+    }
+  }
+
+  @Test
+  public void testPaddedLengthFramingAndAuthenticatedCandidate() {
+    try (EncryptParameter parameter =
+        TestAeadEncryptionProvider.createPaddedParameter(new byte[16], new byte[16])) {
+      for (int size : new int[] {0, 1, 15, 16, 17, 31, 32, 65536}) {
+        byte[] plaintext = new byte[size];
+        PageCryptoContext write = PageCryptoContext.forEncryption(parameter, size, size, 0, 2);
+        byte[] body = IEncryptor.getEncryptor(parameter).encryptPage(plaintext, 0, size, write);
+        assertEquals(write.getEncryptedPageBodySize(), body.length);
+        ByteBuffer slice = ByteBuffer.allocateDirect(body.length + 9);
+        slice.position(5);
+        slice.put(body).flip().position(5);
+        PageCryptoContext read = PageCryptoContext.forDecryption(parameter, size, slice, 0, 2);
+        assertEquals(5, slice.position());
+        assertEquals(size, read.getCompressedPlaintextSize());
+        assertArrayEquals(write.getAssociatedData(), read.getAssociatedData());
+        assertArrayEquals(
+            plaintext, IDecryptor.getDecryptor(parameter).decryptPage(body, 0, body.length, read));
+        if (size > 1 && size % 16 != 0) {
+          ByteBuffer.wrap(body).putInt(size - 1);
+          PageCryptoContext modified =
+              PageCryptoContext.forDecryption(parameter, size, ByteBuffer.wrap(body), 0, 2);
+          assertThrows(
+              EncryptException.class,
+              () -> IDecryptor.getDecryptor(parameter).decryptPage(body, 0, body.length, modified));
+        }
+      }
+      assertThrows(
+          EncryptException.class,
+          () -> PageCryptoContext.forDecryption(parameter, 1, ByteBuffer.allocate(3), 0, 2));
+      assertThrows(
+          EncryptException.class,
+          () ->
+              PageCryptoContext.forDecryption(
+                  parameter, 1, ByteBuffer.allocate(48).putInt(-1).flip(), 0, 2));
     }
   }
 

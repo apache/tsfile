@@ -89,7 +89,7 @@ public class LazyLoadPageData {
           PageCryptoContext.forDecryption(
               encryptParam,
               pageHeader.getUncompressedSize(),
-              compressedPageBodyLength,
+              ByteBuffer.wrap(chunkData, pageDataOffset, compressedPageBodyLength).slice(),
               pageIndex,
               chunkOrdinal);
       decryptedPageData =

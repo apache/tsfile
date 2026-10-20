@@ -92,19 +92,26 @@ public class PageBodyEncoderTest {
 
   @Test
   public void testEncryptedBodyRoundTripForSlicedInput() throws Exception {
+    encryptedBodyRoundTrip(false);
+    encryptedBodyRoundTrip(true);
+  }
+
+  private void encryptedBodyRoundTrip(boolean padded) throws Exception {
     for (CompressionType compression :
         new CompressionType[] {
           CompressionType.UNCOMPRESSED, CompressionType.GZIP, CompressionType.LZ4
         }) {
       ByteBuffer input = slicedInput();
       try (EncryptParameter parameter =
-          TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16])) {
+          padded
+              ? TestAeadEncryptionProvider.createPaddedParameter(new byte[16], new byte[16])
+              : TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16])) {
         ByteBuffer encoded =
             PageBodyEncoder.encode(
                 input, input.remaining(), ICompressor.getCompressor(compression), parameter, 3, 7);
         PageCryptoContext context =
             PageCryptoContext.forDecryption(
-                parameter, input.remaining(), encoded.remaining(), 3, 7);
+                parameter, input.remaining(), encoded.asReadOnlyBuffer(), 3, 7);
         byte[] compressed =
             IDecryptor.getDecryptor(parameter)
                 .decryptPage(

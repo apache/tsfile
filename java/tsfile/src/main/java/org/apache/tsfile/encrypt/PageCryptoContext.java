@@ -67,8 +67,7 @@ public final class PageCryptoContext {
       int pageIndex,
       long chunkOrdinal) {
     validate(parameter, uncompressedSize, compressedPlaintextSize, pageIndex, chunkOrdinal);
-    int encryptedPageBodySize =
-        Math.addExact(compressedPlaintextSize, parameter.getPageBodyOverhead());
+    int encryptedPageBodySize = parameter.getEncryptedPageBodySize(compressedPlaintextSize);
     return new PageCryptoContext(
         parameter,
         uncompressedSize,
@@ -102,6 +101,24 @@ public final class PageCryptoContext {
 
   public int getUncompressedSize() {
     return uncompressedSize;
+  }
+
+  /** Builds AAD using profile framing; the candidate length is authenticated by decryptPage. */
+  public static PageCryptoContext forDecryption(
+      EncryptParameter parameter,
+      int uncompressedSize,
+      ByteBuffer encryptedBody,
+      int pageIndex,
+      long chunkOrdinal) {
+    validate(parameter, uncompressedSize, 0, pageIndex, chunkOrdinal);
+    int plaintextSize = parameter.getPagePlaintextSize(encryptedBody);
+    return new PageCryptoContext(
+        parameter,
+        uncompressedSize,
+        plaintextSize,
+        encryptedBody.remaining(),
+        pageIndex,
+        chunkOrdinal);
   }
 
   /** Returns the compressed plaintext size on both encryption and decryption paths. */

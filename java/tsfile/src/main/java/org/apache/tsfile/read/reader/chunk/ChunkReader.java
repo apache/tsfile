@@ -273,7 +273,7 @@ public class ChunkReader extends AbstractChunkReader {
           PageCryptoContext.forDecryption(
               encryptParameter,
               pageHeader.getUncompressedSize(),
-              compressedPageBodyLength,
+              compressedPageData.slice().limit(compressedPageBodyLength),
               pageIndex,
               chunkOrdinal);
       byte[] decryptedPageData =
