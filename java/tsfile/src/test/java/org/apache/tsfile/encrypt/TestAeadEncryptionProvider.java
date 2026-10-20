@@ -39,6 +39,7 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   public static final String PROVIDER_ID = "test-aead-provider";
   public static final String PROFILE_ID = "AES_GCM_128_AES_WRAP_128_V1";
   public static final String MAC_PROFILE_ID = "TEST_AES_GCM_HMAC_SHA256_V1";
+  public static final String PADDED_PROFILE_ID = "TEST_PADDED_AES_GCM_V1";
 
   private static final int IV_LENGTH = 12;
   private static final int TAG_LENGTH = 16;
@@ -62,12 +63,15 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   @Override
   public IEncrypt create(EncryptParameter encryptParameter) {
     if (!PROFILE_ID.equals(encryptParameter.getProfileId())
-        && !MAC_PROFILE_ID.equals(encryptParameter.getProfileId())) {
+        && !MAC_PROFILE_ID.equals(encryptParameter.getProfileId())
+        && !PADDED_PROFILE_ID.equals(encryptParameter.getProfileId())) {
       throw new EncryptException("unsupported test encryption profile");
     }
     CREATE_COUNT.incrementAndGet();
     return new TestAeadEncrypt(
-        resolveDataKey(encryptParameter), MAC_PROFILE_ID.equals(encryptParameter.getProfileId()));
+        resolveDataKey(encryptParameter),
+        MAC_PROFILE_ID.equals(encryptParameter.getProfileId()),
+        PADDED_PROFILE_ID.equals(encryptParameter.getProfileId()));
   }
 
   public static EncryptParameter createParameter(byte[] dataKey, byte[] fileCryptoId) {
@@ -77,6 +81,10 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   /** Test-only 32-byte proof profile; page bodies still use the existing AES-GCM test cipher. */
   public static EncryptParameter createMacParameter(byte[] dataKey, byte[] fileCryptoId) {
     return createParameter(dataKey, fileCryptoId, MAC_PROFILE_ID);
+  }
+
+  public static EncryptParameter createPaddedParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, PADDED_PROFILE_ID);
   }
 
   private static EncryptParameter createParameter(
@@ -134,25 +142,45 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
 
     private final byte[] dataKey;
     private final boolean macProof;
+    private final boolean padded;
 
-    private TestAeadEncrypt(byte[] dataKey, boolean macProof) {
+    private TestAeadEncrypt(byte[] dataKey, boolean macProof, boolean padded) {
       this.dataKey = dataKey;
       this.macProof = macProof;
+      this.padded = padded;
     }
 
     @Override
     public IDecryptor getDecryptor() {
-      return new AeadDecryptor(dataKey);
+      return new AeadDecryptor(dataKey, padded);
     }
 
     @Override
     public IEncryptor getEncryptor() {
-      return new AeadEncryptor(dataKey);
+      return new AeadEncryptor(dataKey, padded);
     }
 
     @Override
     public int getPageBodyOverhead() {
-      return IV_LENGTH + TAG_LENGTH;
+      return padded ? -1 : IV_LENGTH + TAG_LENGTH;
+    }
+
+    @Override
+    public int getEncryptedPageBodySize(int plaintextSize) {
+      return padded
+          ? 32 + (plaintextSize / 16 + 1) * 16
+          : IEncrypt.super.getEncryptedPageBodySize(plaintextSize);
+    }
+
+    @Override
+    public int getPagePlaintextSize(java.nio.ByteBuffer body) {
+      if (!padded) {
+        return IEncrypt.super.getPagePlaintextSize(body);
+      }
+      if (body.remaining() < 48) {
+        throw new EncryptException("Truncated test padded page");
+      }
+      return body.getInt();
     }
 
     @Override
@@ -206,9 +234,15 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   private static final class AeadEncryptor implements IEncryptor {
 
     private final byte[] dataKey;
+    private final boolean padded;
 
     private AeadEncryptor(byte[] dataKey) {
+      this(dataKey, false);
+    }
+
+    private AeadEncryptor(byte[] dataKey, boolean padded) {
       this.dataKey = dataKey;
+      this.padded = padded;
     }
 
     @Override
@@ -224,7 +258,14 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     @Override
     public byte[] encryptPage(
         byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
-      return encryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      if (!padded) {
+        return encryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      }
+      byte[] input = new byte[(size / 16 + 1) * 16];
+      System.arraycopy(data, offset, input, 0, size);
+      byte[] encrypted =
+          encryptWithAad(input, 0, input.length, pageCryptoContext.getAssociatedData());
+      return java.nio.ByteBuffer.allocate(4 + encrypted.length).putInt(size).put(encrypted).array();
     }
 
     private byte[] encryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {
@@ -256,9 +297,15 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
   private static final class AeadDecryptor implements IDecryptor {
 
     private final byte[] dataKey;
+    private final boolean padded;
 
     private AeadDecryptor(byte[] dataKey) {
+      this(dataKey, false);
+    }
+
+    private AeadDecryptor(byte[] dataKey, boolean padded) {
       this.dataKey = dataKey;
+      this.padded = padded;
     }
 
     @Override
@@ -274,7 +321,12 @@ public final class TestAeadEncryptionProvider implements IEncryptProvider {
     @Override
     public byte[] decryptPage(
         byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
-      return decryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      if (!padded) {
+        return decryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      }
+      byte[] decoded =
+          decryptWithAad(data, offset + 4, size - 4, pageCryptoContext.getAssociatedData());
+      return Arrays.copyOf(decoded, pageCryptoContext.getCompressedPlaintextSize());
     }
 
     private byte[] decryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {

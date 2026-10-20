@@ -2402,7 +2402,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           PageCryptoContext.forDecryption(
               encryptParameter,
               header.getUncompressedSize(),
-              buffer.remaining(),
+              buffer.asReadOnlyBuffer(),
               pageIndex,
               chunkOrdinal);
       byte[] plaintext =

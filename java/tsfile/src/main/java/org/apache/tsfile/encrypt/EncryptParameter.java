@@ -235,6 +235,24 @@ public class EncryptParameter implements AutoCloseable, Destroyable {
     return pageAead;
   }
 
+  public int getEncryptedPageBodySize(int plaintextSize) {
+    int size = getOrCreateFileEncrypt().getEncryptedPageBodySize(plaintextSize);
+    if (plaintextSize < 0 || size <= plaintextSize) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return size;
+  }
+
+  public int getPagePlaintextSize(ByteBuffer encryptedBody) {
+    int size = getOrCreateFileEncrypt().getPagePlaintextSize(encryptedBody.asReadOnlyBuffer());
+    if (size < 0
+        || size >= encryptedBody.remaining()
+        || getEncryptedPageBodySize(size) != encryptedBody.remaining()) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return size;
+  }
+
   public int getChunkAuthenticationSize() {
     return getOrCreateFileEncrypt().getChunkAuthenticationSize();
   }

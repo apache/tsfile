@@ -21,6 +21,7 @@ package org.apache.tsfile.encrypt;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.i18n.Messages;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
 public interface IEncrypt extends AutoCloseable {
@@ -42,6 +43,28 @@ public interface IEncrypt extends AutoCloseable {
    */
   default int getPageBodyOverhead() {
     return -1;
+  }
+
+  /** Returns the exact encoded size, including profile-specific framing and padding. */
+  default int getEncryptedPageBodySize(int plaintextSize) {
+    int overhead = getPageBodyOverhead();
+    if (plaintextSize < 0 || overhead <= 0) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return Math.addExact(plaintextSize, overhead);
+  }
+
+  /**
+   * Returns the candidate compressed plaintext size from a bounded, read-only encoded body. This is
+   * untrusted framing until decryptPage authenticates it together with the page context.
+   * Implementations must not decrypt, allocate based on this value, or modify the input.
+   */
+  default int getPagePlaintextSize(ByteBuffer encryptedBody) {
+    int overhead = getPageBodyOverhead();
+    if (overhead <= 0 || encryptedBody.remaining() < overhead) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return encryptedBody.remaining() - overhead;
   }
 
   /**

@@ -104,6 +104,21 @@ public class PageAeadReaderLifecycleTest {
   }
 
   @Test
+  public void testPaddedBodiesInAlignedAndNonAlignedQueries() throws Exception {
+    for (boolean aligned : new boolean[] {false, true}) {
+      File file = writeFile(aligned, true);
+      try (TsFileReader reader = new TsFileReader(file)) {
+        QueryDataSet query = reader.query(queryExpression());
+        int count = 0;
+        while (query.hasNext()) {
+          assertEquals(++count * 10L, query.next().getFields().get(0).getLongV());
+        }
+        assertEquals(3, count);
+      }
+    }
+  }
+
+  @Test
   public void testSeriesScanReleasesEachChunkAndCreatesOneProvider() throws Exception {
     File file = writeFile(false);
     int createCount = TestAeadEncryptionProvider.getCreateCount();
@@ -384,10 +399,16 @@ public class PageAeadReaderLifecycleTest {
   }
 
   private File writeFile(boolean aligned) throws Exception {
-    File file = new File(temporaryFolder.getRoot(), "lifecycle.tsfile");
+    return writeFile(aligned, false);
+  }
+
+  private File writeFile(boolean aligned, boolean padded) throws Exception {
+    File file =
+        new File(temporaryFolder.getRoot(), "lifecycle-" + aligned + "-" + padded + ".tsfile");
     try (EncryptParameter parameter =
-            TestAeadEncryptionProvider.createParameter(
-                new byte[16], new byte[EncryptParameter.FILE_CRYPTO_ID_LENGTH]);
+            padded
+                ? TestAeadEncryptionProvider.createPaddedParameter(new byte[16], new byte[16])
+                : TestAeadEncryptionProvider.createParameter(new byte[16], new byte[16]);
         TsFileWriter writer = new TsFileWriter(file, parameter)) {
       MeasurementSchema first = new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN);
       if (aligned) {
