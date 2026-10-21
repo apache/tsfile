@@ -56,7 +56,8 @@ class TsFileIOWriter {
     typedef DeviceNodeMap::iterator DeviceNodeMapIterator;
 
    public:
-    static const uint32_t WRITE_STREAM_PAGE_SIZE = 512;  // FIXME
+    static const uint32_t WRITE_STREAM_PAGE_SIZE = 16 * 1024;
+
    public:
     TsFileIOWriter()
         : meta_allocator_(),
