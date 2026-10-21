@@ -324,29 +324,25 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     if (field_column_contexts_.empty()) {
-        // An all-NULL aligned FIELD has no value context, but its shared
-        // timestamps must still reach a NULL-aware FIELD predicate. Preserve
-        // the empty-result shortcut for other filtered-out value queries,
-        // particularly non-aligned devices that cannot use alloc_multi_ssi().
+        // An aligned device can still have rows in its shared time pages even
+        // when none of the requested FIELDs yields a value context: all values
+        // may be NULL in the selected time range, or non-NULL values may exist
+        // only outside it. A row predicate must see those rows as NULL.
+        // Preserve the empty-result shortcut for non-aligned sources, which
+        // cannot use the aligned time-only fallback.
         bool any_value_column_requested = false;
-        bool all_values_null_aligned = true;
+        bool all_value_columns_aligned = true;
         for (const auto* ts_idx : time_series_indexs) {
             if (ts_idx != nullptr) {
                 any_value_column_requested = true;
-                const auto* aligned =
-                    dynamic_cast<const AlignedTimeseriesIndex*>(ts_idx);
-                const auto* value_stat =
-                    aligned != nullptr && aligned->value_ts_idx_ != nullptr
-                        ? aligned->value_ts_idx_->get_statistic()
-                        : nullptr;
-                if (value_stat == nullptr || value_stat->count_ != 0) {
-                    all_values_null_aligned = false;
+                if (!ts_idx->is_aligned()) {
+                    all_value_columns_aligned = false;
                     break;
                 }
             }
         }
         if (any_value_column_requested &&
-            (field_filter == nullptr || !all_values_null_aligned)) {
+            (field_filter == nullptr || !all_value_columns_aligned)) {
             return common::E_OK;
         }
 

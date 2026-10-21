@@ -178,12 +178,12 @@ class TableFieldFilterTest
         columns.emplace_back("id", STRING, UNCOMPRESSED, PLAIN,
                              ColumnCategory::TAG);
         const std::vector<std::string> names{
-            "v",     "i",         "flag",         "f",    "d",
-            "s",     "text",      "blob",         "date", "stamp",
-            "empty", "tail_null", "nullable_flag"};
+            "v",     "i",         "flag",          "f",         "d",
+            "s",     "text",      "blob",          "date",      "stamp",
+            "empty", "tail_null", "nullable_flag", "chunk_null"};
         const std::vector<TSDataType> types{
-            INT64, INT32, BOOLEAN,   FLOAT, DOUBLE, STRING, TEXT,
-            BLOB,  DATE,  TIMESTAMP, INT64, INT64,  BOOLEAN};
+            INT64, INT32, BOOLEAN,   FLOAT, DOUBLE, STRING,  TEXT,
+            BLOB,  DATE,  TIMESTAMP, INT64, INT64,  BOOLEAN, INT64};
         for (size_t i = 0; i < names.size(); ++i)
             columns.emplace_back(names[i], types[i], UNCOMPRESSED, PLAIN,
                                  ColumnCategory::FIELD);
@@ -220,6 +220,10 @@ class TableFieldFilterTest
                         ASSERT_EQ(tablet.add_value(index, "nullable_flag",
                                                    bool(t % 2)),
                                   E_OK);
+                    if (t < 7)
+                        ASSERT_EQ(
+                            tablet.add_value(index, "chunk_null", int64_t(t)),
+                            E_OK);
                     const std::string bytes =
                         t % 2 ? std::string("a\0b", 3) : std::string();
                     for (const std::string& name : {"s", "text", "blob"})
@@ -536,6 +540,26 @@ TEST_P(TableFieldFilterTest, OnlyAllNullFieldStillSuppliesTimestampRows) {
     }
     // Legacy value predicates reject NULL instead of receiving a made-up 0.
     EXPECT_TRUE(scan({"empty"}, new LegacyPredicate()).empty());
+}
+
+TEST_P(TableFieldFilterTest, NullOnlyChunkInTimeRangeReachesPredicate) {
+    int calls = 0;
+    auto predicate = [&calls]() -> Filter* {
+        return new RowPredicate([&calls](const TableFieldRow& row, bool& ok) {
+            ++calls;
+            const auto* field = row.find("chunk_null");
+            ok = field != nullptr && field->is_null();
+            return E_OK;
+        });
+    };
+    EXPECT_EQ(scan({"chunk_null"}, predicate()),
+              expected([](int t) { return t >= 7; }));
+    EXPECT_EQ(calls, 28);
+    calls = 0;
+    EXPECT_EQ(scan({"chunk_null"}, predicate(), 0, -1,
+                   TimeFilter::between(base_ + 7, base_ + 13, false)),
+              expected([](int t) { return t >= 7; }));
+    EXPECT_EQ(calls, 14);
 }
 
 TEST_P(TableFieldFilterTest, AllNullProjectionAppliesTimeOffsetLimit) {
