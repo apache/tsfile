@@ -767,53 +767,6 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         }                                                                      \
     } while (false)
 
-int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
-    ByteStream& time_in, ByteStream& value_in, RowAppender& row_appender,
-    Filter* filter) {
-    int ret = E_OK;
-    uint32_t mask = 1 << 7;
-    int64_t time = 0;
-    int32_t value;
-    while (time_decoder_->has_remaining(time_in)) {
-        cur_value_index++;
-        if (value_page_col_notnull_bitmap_.empty() ||
-            ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
-             (mask >> (cur_value_index % 8))) == 0) {
-            ret = time_decoder_->read_int64(time, time_in);
-            if (ret != E_OK) {
-                break;
-            }
-            if (UNLIKELY(!row_appender.add_row())) {
-                ret = E_OVERFLOW;
-                break;
-            }
-            row_appender.append(0, (char*)&time, sizeof(time));
-            row_appender.append_null(1);
-            continue;
-        }
-        assert(value_decoder_->has_remaining(value_in));
-        if (!value_decoder_->has_remaining(value_in)) {
-            return common::E_DATA_INCONSISTENCY;
-        }
-        if (UNLIKELY(!row_appender.add_row())) {
-            ret = E_OVERFLOW;
-            cur_value_index--;
-            break;
-        } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
-        } else if (RET_FAIL(value_decoder_->read_int32(value, value_in))) {
-        } else if (filter != nullptr && !filter->satisfy(time, value)) {
-            row_appender.backoff_add_row();
-            continue;
-        } else {
-            /*std::cout << "decoder: time=" << time << ", value=" << value
-             * << std::endl;*/
-            row_appender.append(0, (char*)&time, sizeof(time));
-            row_appender.append(1, (char*)&value, sizeof(value));
-        }
-    }
-    return ret;
-}
-
 namespace {
 // Type-dispatched exact read / skip for decode_tv_batch<T>. Overload
 // resolution on the value pointer selects the matching Decoder method.

@@ -219,10 +219,6 @@ class AlignedChunkReader : public IChunkReader {
                                                common::TsBlock* ret_tsblock,
                                                Filter* filter,
                                                common::PageArena* pa);
-    int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
-                                         common::ByteStream& value_in,
-                                         common::RowAppender& row_appender,
-                                         Filter* filter);
     // Unified fixed-width aligned time+value page decode for
     // INT32/INT64/FLOAT/DOUBLE.  Defined in the .cc; instantiated there for
     // each value type by decode_tv_buf_into_tsblock_by_datatype().
