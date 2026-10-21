@@ -386,6 +386,14 @@ int MetaIndexNode::binary_search_children(
     std::shared_ptr<IComparable> key, bool exact_search,
     std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
     int64_t& ret_end_offset) {
+    return binary_search_children(key, exact_search, ret_index_entry,
+                                  ret_end_offset, *pa_);
+}
+
+int MetaIndexNode::binary_search_children(
+    std::shared_ptr<IComparable> key, bool exact_search,
+    std::shared_ptr<IMetaIndexEntry>& ret_index_entry, int64_t& ret_end_offset,
+    common::PageArena& result_pa) {
 #if DEBUG_SE
     std::cout << "MetaIndexNode::binary_search_children start, name=" << key
               << ", exact_search=" << exact_search
@@ -436,7 +444,7 @@ int MetaIndexNode::binary_search_children(
             return E_NOT_EXIST;
         }
     }
-    ret_index_entry = children_[l]->clone(pa_);
+    ret_index_entry = children_[l]->clone(&result_pa);
     if (l == (int)children_.size() - 1) {
         ret_end_offset = this->end_offset_;
     } else {

@@ -1008,6 +1008,13 @@ struct MetaIndexNode {
         std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
         int64_t& ret_end_offset);
 
+    // Lookup copies can outlive the source node but must not accumulate in a
+    // cached node's arena. The caller keeps result_pa alive with the result.
+    int binary_search_children(
+        std::shared_ptr<IComparable> key, bool exact_search,
+        std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
+        int64_t& ret_end_offset, common::PageArena& result_pa);
+
     int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
 #if DEBUG_SE

@@ -557,6 +557,110 @@ TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
 #endif
 }
 
+class HotDeviceMetadataTest : public TsFileReaderTest,
+                              public ::testing::WithParamInterface<bool> {
+   protected:
+    void SetUp() override {
+        TsFileReaderTest::SetUp();
+        saved_degree_ = g_config_value_.max_degree_of_index_node_;
+        ASSERT_EQ(set_max_degree_of_index_node(2), E_OK);
+    }
+    void TearDown() override {
+        set_max_degree_of_index_node(saved_degree_);
+        TsFileReaderTest::TearDown();
+    }
+    uint32_t saved_degree_ = 0;
+};
+
+TEST_P(HotDeviceMetadataTest, RepeatedLookupsDoNotGrowRetainedArenas) {
+    const std::string device = "root.followup.d0";
+    const int measurements = GetParam() ? 12 : 1;
+    for (int i = 0; i < measurements; ++i) {
+        const std::string measurement = "value" + std::to_string(i);
+        ASSERT_EQ(tsfile_writer_->register_timeseries(
+                      device, MeasurementSchema(measurement, INT32, PLAIN,
+                                                UNCOMPRESSED)),
+                  E_OK);
+        TsRecord record(1, device);
+        record.add_point(measurement, int32_t(42 + i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileIOReader reader;
+    ASSERT_EQ(reader.init(file_name_), E_OK);
+    auto id = std::make_shared<StringArrayDeviceID>(device);
+    PageArena query_pa;
+    query_pa.init(512, MOD_TSFILE_READER);
+    auto load = [&]() {
+        TsFileSeriesScanIterator* ssi = nullptr;
+        int ret = reader.alloc_ssi(id, "value0", ssi, query_pa);
+        if (ssi != nullptr) reader.revert_ssi(ssi);
+        query_pa.reset();
+        return ret;
+    };
+    ASSERT_EQ(load(), E_OK);
+#ifdef ENABLE_MEM_STAT
+    const int64_t before = reader.TEST_reader_memory_bytes();
+#endif
+    for (int i = 0; i < 10000; ++i) ASSERT_EQ(load(), E_OK);
+    EXPECT_EQ(reader.TEST_device_node_cache_size(), 1u);
+#ifdef ENABLE_MEM_STAT
+    EXPECT_EQ(reader.TEST_reader_memory_bytes(), before);
+#endif
+}
+
+INSTANTIATE_TEST_SUITE_P(IndexDepth, HotDeviceMetadataTest,
+                         ::testing::Values(false, true));
+
+TEST_F(TsFileReaderTest, ActiveIteratorSurvivesDeviceCacheEviction) {
+    const size_t capacity = TsFileIOReader::TEST_device_node_cache_capacity();
+    for (size_t i = 0; i <= capacity; ++i) {
+        const std::string device = "root.eviction.d" + std::to_string(i);
+        ASSERT_EQ(
+            tsfile_writer_->register_timeseries(
+                device, MeasurementSchema("value", INT32, PLAIN, UNCOMPRESSED)),
+            E_OK);
+        TsRecord record(1, device);
+        record.add_point("value", int32_t(42));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    TsFileIOReader reader;
+    ASSERT_EQ(reader.init(file_name_), E_OK);
+    PageArena active_pa;
+    active_pa.init(512, MOD_TSFILE_READER);
+    TsFileSeriesScanIterator* active = nullptr;
+    ASSERT_EQ(reader.alloc_ssi(
+                  std::make_shared<StringArrayDeviceID>("root.eviction.d0"),
+                  "value", active, active_pa),
+              E_OK);
+    ASSERT_NE(active, nullptr);
+    PageArena transient_pa;
+    transient_pa.init(512, MOD_TSFILE_READER);
+    for (size_t i = 1; i <= capacity; ++i) {
+        TsFileSeriesScanIterator* transient = nullptr;
+        ASSERT_EQ(reader.alloc_ssi(std::make_shared<StringArrayDeviceID>(
+                                       "root.eviction.d" + std::to_string(i)),
+                                   "value", transient, transient_pa),
+                  E_OK);
+        reader.revert_ssi(transient);
+        transient_pa.reset();
+    }
+    EXPECT_EQ(reader.TEST_device_node_cache_size(), capacity);
+    TsBlock* block = nullptr;
+    ASSERT_EQ(active->get_next(block, true), E_OK);
+    ASSERT_NE(block, nullptr);
+    ASSERT_EQ(block->get_row_count(), 1u);
+    ColIterator time(0, block);
+    ColIterator value(1, block);
+    uint32_t len = 0;
+    EXPECT_EQ(*reinterpret_cast<int64_t*>(time.read(&len)), 1);
+    EXPECT_EQ(*reinterpret_cast<int32_t*>(value.read(&len)), 42);
+    active->revert_tsblock();
+    reader.revert_ssi(active);
+}
+
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
