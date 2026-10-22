@@ -1421,6 +1421,68 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     return ret;
 }
 
+void AlignedChunkReader::build_filter_column_mask() {
+    filter_column_mask_.assign(value_columns_.size(), false);
+    if (field_filter_ == nullptr) return;
+    std::set<std::string> filter_columns;
+    for (const auto& name : field_filter_->referenced_columns()) {
+        filter_columns.insert(name);
+    }
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        filter_column_mask_[c] =
+            filter_columns.count(
+                value_columns_[c]
+                    ->chunk_meta->measurement_name_.to_std_string()) > 0;
+    }
+}
+
+int AlignedChunkReader::evaluate_page_field_mask(size_t page_idx) {
+    if (field_filter_ == nullptr) return E_OK;
+    const ChunkPageInfo& page_info = chunk_pages_[page_idx];
+    std::vector<AlignedFieldFilter::ColumnView> views;
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (!filter_column_mask_[c]) continue;
+        auto* col = value_columns_[c];
+        auto& pps = col->per_page_state[page_idx];
+        AlignedFieldFilter::ColumnView view;
+        view.name = col->chunk_meta->measurement_name_.to_std_string();
+        view.type = col->chunk_header.data_type_;
+        view.notnull_bitmap =
+            pps.notnull_bitmap.empty() ? nullptr : pps.notnull_bitmap.data();
+        view.notnull_bitmap_size =
+            static_cast<uint32_t>(pps.notnull_bitmap.size());
+        view.row_offset = static_cast<uint32_t>(page_info.row_begin);
+        view.nonnull_start = static_cast<uint32_t>(
+            count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin));
+        if (view.type == common::STRING || view.type == common::TEXT ||
+            view.type == common::BLOB) {
+            view.string_values = pps.predecoded_strings.data();
+        } else {
+            view.fixed_values = pps.predecoded_values.data();
+        }
+        views.push_back(std::move(view));
+    }
+
+    const uint32_t row_count =
+        static_cast<uint32_t>(page_info.row_end - page_info.row_begin);
+    current_page_field_mask_.reset(row_count);
+    int ret = field_filter_->evaluate_columns(views, row_count,
+                                              current_page_field_mask_);
+    if (ret != E_OK) return ret;
+    current_page_field_mask_valid_ = true;
+    return E_OK;
+}
+
+int AlignedChunkReader::decode_output_columns_for_page(size_t page_idx) {
+    if (field_filter_ == nullptr) return E_OK;
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (filter_column_mask_[c]) continue;
+        int ret = decode_value_page_for_slot(c, page_idx);
+        if (IS_FAIL(ret)) return ret;
+    }
+    return E_OK;
+}
+
 int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     int ret = E_OK;
     chunk_pages_.clear();
@@ -1475,44 +1537,74 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
             break;
         }
 
+        bool field_page_skip = false;
+        bool field_all_match = false;
+        if (field_filter_ != nullptr) {
+            std::map<std::string, Statistic*> field_statistics;
+            for (uint32_t c = 0; c < num_cols; ++c) {
+                auto* col = value_columns_[c];
+                field_statistics[col->chunk_meta->measurement_name_
+                                     .to_std_string()] =
+                    col->cur_page_header.statistic_;
+            }
+            const int64_t row_count =
+                cur_time_page_header_.statistic_ != nullptr
+                    ? cur_time_page_header_.statistic_->count_
+                    : 0;
+            field_page_skip =
+                !field_filter_->may_match(field_statistics, row_count);
+            field_all_match =
+                !field_page_skip &&
+                field_filter_->all_match(field_statistics, row_count);
+        }
+
         Statistic* stat = cur_time_page_header_.statistic_;
-        if (filter == nullptr) {
+        const bool time_full_match =
+            filter == nullptr ||
+            (stat != nullptr && filter->contain_start_end_time(
+                                    stat->start_time_, stat->end_time_));
+        if (field_page_skip ||
+            (stat != nullptr && filter != nullptr && !filter->satisfy(stat))) {
+            page_info.pass_type = PagePassType::SKIP;
+        } else if (time_full_match &&
+                   (field_filter_ == nullptr || field_all_match)) {
             page_info.pass_type = PagePassType::FULL_PASS;
             page_info.row_begin = 0;
             page_info.row_end = stat != nullptr ? stat->count_ : 0;
-        } else if (stat != nullptr && !filter->satisfy(stat)) {
-            page_info.pass_type = PagePassType::SKIP;
-        } else if (stat != nullptr && filter->contain_start_end_time(
-                                          stat->start_time_, stat->end_time_)) {
-            page_info.pass_type = PagePassType::FULL_PASS;
-            page_info.row_begin = 0;
-            page_info.row_end = stat->count_;
         } else {
             page_info.pass_type = PagePassType::BOUNDARY;
-            std::vector<int64_t> times;
-            if (RET_FAIL(decode_time_page_direct(page_info, times))) {
-                break;
-            }
-            int32_t first = -1;
-            int32_t last = -1;
-            for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
-                if (filter->satisfy_start_end_time(times[i], times[i])) {
-                    // Offset is defined on the filtered row stream. Consume
-                    // matching rows only; holes inside a boundary page do not
-                    // count toward it.
-                    if (row_offset > 0) {
-                        row_offset--;
-                        continue;
-                    }
-                    if (first < 0) first = i;
-                    last = i;
-                }
-            }
-            if (first >= 0) {
-                page_info.row_begin = first;
-                page_info.row_end = last + 1;
+            if (filter == nullptr) {
+                // There is no time predicate to narrow the rows; keep the
+                // whole page and let the FIELD mask decide exact rows.
+                page_info.row_begin = 0;
+                page_info.row_end = stat != nullptr ? stat->count_ : 0;
             } else {
-                page_info.pass_type = PagePassType::SKIP;
+                std::vector<int64_t> times;
+                if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                    break;
+                }
+                int32_t first = -1;
+                int32_t last = -1;
+                for (int32_t i = 0; i < static_cast<int32_t>(times.size());
+                     i++) {
+                    if (filter->satisfy_start_end_time(times[i], times[i])) {
+                        // Offset is defined on the filtered row stream. Consume
+                        // matching rows only; holes inside a boundary page do
+                        // not count toward it.
+                        if (field_filter_ == nullptr && row_offset > 0) {
+                            row_offset--;
+                            continue;
+                        }
+                        if (first < 0) first = i;
+                        last = i;
+                    }
+                }
+                if (first >= 0) {
+                    page_info.row_begin = first;
+                    page_info.row_end = last + 1;
+                } else {
+                    page_info.pass_type = PagePassType::SKIP;
+                }
             }
         }
 
@@ -1774,6 +1866,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
 // (see decode_page_lazy() / release_page_slot()).  Bounds memory to one page.
 int AlignedChunkReader::decode_all_planned_pages() {
     if (chunk_pages_.empty()) return E_OK;
+    build_filter_column_mask();
 
 #ifdef ENABLE_THREADS
     if (decode_pool_ != nullptr && value_columns_.size() > 1) {
@@ -1803,6 +1896,7 @@ int AlignedChunkReader::decode_all_planned_pages() {
         std::vector<std::future<void>> futures;
         std::vector<int> col_rets(value_columns_.size(), E_OK);
         for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            if (field_filter_ != nullptr && !filter_column_mask_[c]) continue;
             int* col_ret = &col_rets[c];
             futures.push_back(decode_pool_->submit([this, c, col_ret]() {
                 for (size_t p = 0; p < chunk_pages_.size(); p++) {
@@ -1854,20 +1948,47 @@ int AlignedChunkReader::decode_all_planned_pages() {
     return E_OK;
 }
 
-// Decode time + all value columns for a single page slot on demand.
-// Used by the single-thread path to keep memory bounded to one page.
+// Decode one page slot on demand. With a FIELD filter, decode only its filter
+// columns first and leave output-only columns untouched when the page has no
+// matching row.
 int AlignedChunkReader::decode_page_lazy(size_t page_idx) {
     int ret = E_OK;
     if (RET_FAIL(decode_time_page_direct(chunk_pages_[page_idx],
                                          per_page_times_[page_idx]))) {
         return ret;
     }
-    for (uint32_t c = 0; c < value_columns_.size(); c++) {
-        if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) {
-            return ret;
-        }
+    if (field_filter_ != nullptr &&
+        filter_column_mask_.size() != value_columns_.size()) {
+        build_filter_column_mask();
     }
-    return E_OK;
+    if (field_filter_ == nullptr) {
+        for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+            if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+        }
+        return E_OK;
+    }
+    if (chunk_pages_[page_idx].pass_type == PagePassType::FULL_PASS) {
+        // Every row matches; no mask evaluation is needed, so decode all
+        // columns once instead of first decoding the filter columns.
+        for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+            if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+        }
+        current_page_field_mask_.reset(static_cast<uint32_t>(
+            chunk_pages_[page_idx].row_end - chunk_pages_[page_idx].row_begin));
+        current_page_field_mask_.set_all();
+        current_page_field_mask_valid_ = true;
+        return E_OK;
+    }
+
+    // BOUNDARY page: decode only the filter columns, evaluate the mask, then
+    // decode output columns only when at least one row survives.
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (!filter_column_mask_[c]) continue;
+        if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+    }
+    if (RET_FAIL(evaluate_page_field_mask(page_idx))) return ret;
+    if (current_page_field_mask_.empty()) return E_OK;
+    return decode_output_columns_for_page(page_idx);
 }
 
 // Release the decoded buffers of one page slot so they can be reused by the
@@ -1911,7 +2032,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi());
     const bool use_page_plan =
         page_plan_built_ || (!serial_page_in_progress &&
-                             (row_offset > 0 || use_parallel_page_plan));
+                             (row_offset > 0 || use_parallel_page_plan ||
+                              field_filter_ != nullptr));
     if (!use_page_plan) {
         return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
@@ -1947,7 +2069,33 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
             page_time_cursor_ = page_info.row_begin;
             page_time_count_ = page_info.row_end;
             current_page_loaded_ = true;
+            current_page_field_mask_valid_ = false;
         }
+
+        if (field_filter_ != nullptr && !current_page_field_mask_valid_) {
+            if (page_info.pass_type == PagePassType::FULL_PASS) {
+                current_page_field_mask_.reset(static_cast<uint32_t>(
+                    page_info.row_end - page_info.row_begin));
+                current_page_field_mask_.set_all();
+                current_page_field_mask_valid_ = true;
+            } else if (RET_FAIL(evaluate_page_field_mask(
+                           current_page_plan_index_))) {
+                return ret;
+            }
+            if (current_page_field_mask_.empty()) {
+                if (single_thread_lazy)
+                    release_page_slot(current_page_plan_index_);
+                current_page_plan_index_++;
+                current_page_loaded_ = false;
+                current_page_field_mask_valid_ = false;
+                continue;
+            }
+            if (!single_thread_lazy && RET_FAIL(decode_output_columns_for_page(
+                                           current_page_plan_index_))) {
+                return ret;
+            }
+        }
+
         const std::vector<int64_t>& times =
             per_page_times_[current_page_plan_index_];
 
@@ -2033,7 +2181,12 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                 return E_OK;
             }
             int64_t ts = times[page_time_cursor_];
-            if (boundary_filter && !filter->satisfy_start_end_time(ts, ts)) {
+            const uint32_t field_row = page_time_cursor_ - page_info.row_begin;
+            const bool field_rejected =
+                field_filter_ != nullptr &&
+                !current_page_field_mask_.test(field_row);
+            if (field_rejected ||
+                (boundary_filter && !filter->satisfy_start_end_time(ts, ts))) {
                 for (uint32_t c = 0; c < num_cols; c++) {
                     auto* col = value_columns_[c];
                     auto& pps = col->per_page_state[current_page_plan_index_];
@@ -2095,6 +2248,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         }
         current_page_plan_index_++;
         current_page_loaded_ = false;
+        current_page_field_mask_valid_ = false;
     }
     return E_NO_MORE_DATA;
 }

@@ -29,6 +29,7 @@
 #include "common/tablet.h"
 #include "file/local_random_access_read_file.h"
 #include "file/write_file.h"
+#include "reader/filter/aligned_field_filter.h"
 #include "reader/filter/tag_filter.h"
 #include "reader/filter/time_filter.h"
 #include "reader/filter/time_operator.h"
@@ -306,6 +307,99 @@ class TableFieldFilterTest
     std::string filename_;
     const int64_t base_ = INT64_C(1099511627776);
 };
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterAndOrUsesFilterOnlyColumns) {
+    auto left = AlignedFieldFilter::and_filter(
+        AlignedFieldFilter::compare("i", AlignedFieldFilter::CompareOp::LE,
+                                    AlignedFieldFilter::Literal::int32(-4)),
+        AlignedFieldFilter::compare(
+            "flag", AlignedFieldFilter::CompareOp::EQ,
+            AlignedFieldFilter::Literal::boolean(true)));
+    auto right = AlignedFieldFilter::is_not_null("tail_null");
+    auto filter =
+        AlignedFieldFilter::or_filter(std::move(left), std::move(right));
+
+    EXPECT_EQ(scan({"v"}, filter.release()), expected([](int t) {
+                  const bool and_branch = t % 3 != 0 && t >= 4 && (t % 2 == 1);
+                  const bool or_branch = t % 3 == 0;
+                  return and_branch || or_branch;
+              }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterSupportsNotAndChunkNulls) {
+    auto filter = AlignedFieldFilter::not_filter(
+        AlignedFieldFilter::is_null("chunk_null"));
+    EXPECT_EQ(scan({"v"}, filter.release()),
+              expected([](int t) { return t < 7; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterNotComparisonExcludesNulls) {
+    // NOT over a nullable comparison must exclude NULL rows (SQL three-valued
+    // logic): NOT(i <= -5) == i > -5, and NULL > -5 is still NULL, not TRUE.
+    auto filter = AlignedFieldFilter::not_filter(
+        AlignedFieldFilter::compare("i", AlignedFieldFilter::CompareOp::LE,
+                                    AlignedFieldFilter::Literal::int32(-5)));
+    EXPECT_EQ(scan({"v"}, filter.release()),
+              expected([](int t) { return t % 3 != 0 && t < 5; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterAppliesOffsetAfterMask) {
+    for (int offset : {0, 1, 3, 8}) {
+        for (int limit : {0, 1, 4, -1}) {
+            auto filter = AlignedFieldFilter::compare(
+                "i", AlignedFieldFilter::CompareOp::LE,
+                AlignedFieldFilter::Literal::int32(-5));
+            auto all = expected([](int t) { return t % 3 != 0 && t >= 5; });
+            auto begin = all.begin() + std::min<size_t>(offset, all.size());
+            auto end = limit < 0
+                           ? all.end()
+                           : begin + std::min<size_t>(limit, all.end() - begin);
+            std::vector<int64_t> wanted(begin, end);
+            EXPECT_EQ(
+                scan({"v"}, filter.release(), offset, limit, nullptr, nullptr),
+                wanted);
+        }
+    }
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterSharedProjectionColumn) {
+    auto filter =
+        AlignedFieldFilter::compare("i", AlignedFieldFilter::CompareOp::LE,
+                                    AlignedFieldFilter::Literal::int32(-5));
+    EXPECT_EQ(scan({"i"}, filter.release()),
+              expected([](int t) { return t % 3 != 0 && t >= 5; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterAllMatchFastPath) {
+    auto filter =
+        AlignedFieldFilter::compare("v", AlignedFieldFilter::CompareOp::GE,
+                                    AlignedFieldFilter::Literal::int64(0));
+    EXPECT_EQ(scan({"v"}, filter.release()),
+              expected([](int) { return true; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterAllNullFilterOnlyColumn) {
+    auto filter = AlignedFieldFilter::is_null("empty");
+    EXPECT_EQ(scan({"v"}, filter.release()),
+              expected([](int) { return true; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterCombinesTimeAndFieldMask) {
+    auto filter =
+        AlignedFieldFilter::compare("i", AlignedFieldFilter::CompareOp::LE,
+                                    AlignedFieldFilter::Literal::int32(-5));
+    EXPECT_EQ(scan({"v"}, filter.release(), 0, -1,
+                   TimeFilter::between(base_ + 7, base_ + 10, false)),
+              expected([](int t) { return t >= 7 && t <= 10 && t % 3 != 0; }));
+}
+
+TEST_P(TableFieldFilterTest, AlignedBatchFilterSupportsStringLiterals) {
+    auto filter = AlignedFieldFilter::compare(
+        "s", AlignedFieldFilter::CompareOp::EQ,
+        AlignedFieldFilter::Literal::string(std::string("a\0b", 3)));
+    EXPECT_EQ(scan({"v"}, filter.release()),
+              expected([](int t) { return t % 2 == 1; }));
+}
 
 TEST_P(TableFieldFilterTest, NullTrueFalseAndRejectWholePages) {
     EXPECT_EQ(scan({"v"}, nullptr), expected([](int) { return true; }));

@@ -297,8 +297,8 @@ int TsFileIOReader::alloc_prepared_multi_ssi(
 int TsFileIOReader::alloc_multi_ssi(
     std::shared_ptr<IDeviceID> device_id,
     const std::vector<std::string>& measurement_names,
-    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
-    Filter* time_filter) {
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa, Filter* time_filter,
+    AlignedFieldFilter* field_filter) {
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
 
@@ -307,7 +307,7 @@ int TsFileIOReader::alloc_multi_ssi(
     if (IS_NULL(ssi_buf)) return E_OOM;
     ssi = new (ssi_buf) TsFileSeriesScanIterator;
     ssi->init(device_id, measurement_names.empty() ? "" : measurement_names[0],
-              read_file_, time_filter, pa);
+              read_file_, time_filter, pa, field_filter);
 
     auto& ssi_pa = ssi->timeseries_index_pa_;
 

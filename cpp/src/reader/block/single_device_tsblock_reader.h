@@ -21,7 +21,9 @@
 
 #include "common/tsblock/tsblock.h"
 #include "reader/block/tsblock_reader.h"
+#include "reader/filter/aligned_field_filter.h"
 #include "reader/filter/filter.h"
+#include "reader/filter/selection_mask.h"
 #include "reader/imeta_data_querier.h"
 #include "reader/task/device_query_task.h"
 
@@ -69,9 +71,11 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     // Fast path for aligned data: all columns share the same timestamps,
     // so no per-row merge-sort is needed.
     int has_next_aligned(bool& has_next);
+    int has_next_aligned_filtered(bool& has_next);
 
     DeviceQueryTask* device_query_task_;
     Filter* field_filter_;
+    AlignedFieldFilter* aligned_field_filter_ = nullptr;
     uint32_t block_size_;
     common::TsBlock* current_block_ = nullptr;
     std::vector<common::ColAppender*> col_appenders_;
@@ -93,6 +97,9 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     bool all_aligned_ = false;
     uint32_t aligned_col_count_ = 0;
     std::vector<MeasurementColumnContext*> aligned_vec_;
+    SelectionMask aligned_filter_mask_;
+    uint32_t aligned_filter_next_row_ = 0;
+    bool aligned_filter_mask_valid_ = false;
 };
 
 class MeasurementColumnContext {
@@ -194,7 +201,8 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
              const std::vector<std::string>& measurement_names,
              Filter* time_filter,
              std::vector<std::vector<int32_t>>& pos_in_result,
-             common::PageArena& pa, int ssi_offset = 0, int ssi_limit = -1);
+             common::PageArena& pa, AlignedFieldFilter* field_filter = nullptr,
+             int ssi_offset = 0, int ssi_limit = -1);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;
@@ -205,11 +213,20 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
                        common::RowAppender* row_appender,
                        uint32_t count) override;
     int skip_rows(uint32_t count) override;
+    int evaluate_filter(const AlignedFieldFilter& filter, SelectionMask& mask);
+    int filtered_bulk_copy_into(
+        std::vector<common::ColAppender*>& col_appenders,
+        common::ColAppender* time_appender,
+        common::ColAppender* extra_time_appender,
+        common::RowAppender* row_appender, const SelectionMask& mask,
+        uint32_t& source_row, int& remaining_offset, int& remaining_limit,
+        uint32_t& copied, bool& block_exhausted);
 
    private:
     std::vector<std::string> column_names_;
     std::vector<std::vector<int32_t>> pos_in_result_;
     std::vector<common::ColIterator*> value_iters_;
+    bool exhausted_ = false;
 };
 
 class IdColumnContext {

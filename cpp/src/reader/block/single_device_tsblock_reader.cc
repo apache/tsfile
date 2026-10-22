@@ -40,7 +40,9 @@ SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
       field_filter_(field_filter),
       block_size_(block_size),
       tuple_desc_(),
-      tsfile_io_reader_(tsfile_io_reader) {}
+      tsfile_io_reader_(tsfile_io_reader) {
+    aligned_field_filter_ = dynamic_cast<AlignedFieldFilter*>(field_filter_);
+}
 
 int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
                                     uint32_t block_size, Filter* time_filter,
@@ -240,7 +242,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                 break;
             }
         }
-        if (can_multi && field_filter == nullptr) {
+        if (can_multi &&
+            (field_filter == nullptr || aligned_field_filter_ != nullptr)) {
             std::vector<std::string> meas_names(meas_cols.begin(),
                                                 meas_cols.end());
             // Stable order by first appearance in the result schema so the
@@ -280,8 +283,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                  dense_row_count_ >= 0)
                     ? remaining_offset_
                     : 0;
-            int ctx_ret = ctx->init(device_query_task_, meas_names, time_filter,
-                                    pos_list, pa_, ssi_offset, -1);
+            int ctx_ret =
+                ctx->init(device_query_task_, meas_names, time_filter, pos_list,
+                          pa_, aligned_field_filter_, ssi_offset, -1);
             if (ctx_ret == common::E_OK) {
                 if (ssi_offset > 0) {
                     row_offset_pushed_to_ssi_ = true;
@@ -299,6 +303,13 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                 used_multi = true;
             } else {
                 delete ctx;
+                if (ctx_ret == common::E_NO_MORE_DATA &&
+                    aligned_field_filter_ != nullptr) {
+                    // Page statistics can prove that no row in this device can
+                    // pass the structured FIELD filter. This is a valid empty
+                    // result, not a reason to fall back to the row path.
+                    return common::E_OK;
+                }
                 if (ctx_ret != common::E_NO_MORE_DATA &&
                     ctx_ret != common::E_NOT_SUPPORT) {
                     return ctx_ret;
@@ -342,7 +353,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
         }
         if (any_value_column_requested &&
-            (field_filter == nullptr || !all_value_columns_aligned)) {
+            ((field_filter == nullptr && aligned_field_filter_ == nullptr) ||
+             !all_value_columns_aligned)) {
             return common::E_OK;
         }
 
@@ -350,9 +362,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         std::vector<std::vector<int32_t>> empty_positions;
         auto* time_only_ctx =
             new VectorMeasurementColumnContext(tsfile_io_reader_);
-        int time_only_ret =
-            time_only_ctx->init(device_query_task_, empty_measurements,
-                                time_filter, empty_positions, pa_);
+        int time_only_ret = time_only_ctx->init(
+            device_query_task_, empty_measurements, time_filter,
+            empty_positions, pa_, nullptr, 0, -1);
         if (common::E_OK == time_only_ret) {
             field_column_contexts_.insert(
                 std::make_pair(kTimeOnlyContextName, time_only_ctx));
@@ -369,8 +381,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
-    if (field_filter == nullptr && !field_column_contexts_.empty() &&
-        dense_row_count_ >= 0 &&
+    if ((field_filter == nullptr || aligned_field_filter_ != nullptr) &&
+        !field_column_contexts_.empty() &&
+        (dense_row_count_ >= 0 || aligned_field_filter_ != nullptr) &&
         aligned_col_count_ == field_column_contexts_.size()) {
         all_aligned_ = true;
         aligned_vec_.reserve(field_column_contexts_.size());
@@ -384,6 +397,13 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                 aligned_vec_.push_back(kv.second);
             }
         }
+    }
+
+    if (aligned_field_filter_ != nullptr && !all_aligned_ &&
+        !field_column_contexts_.empty()) {
+        // The structured batch filter is aligned-only. Legacy Filter objects
+        // continue to use the row-oriented path.
+        return common::E_NOT_SUPPORT;
     }
 
     if (field_column_contexts_.empty()) {
@@ -526,7 +546,79 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
     return ret;
 }
 
+int SingleDeviceTsBlockReader::has_next_aligned_filtered(
+    bool& result_has_next) {
+    int ret = common::E_OK;
+    if (aligned_vec_.empty()) {
+        result_has_next = false;
+        return common::E_OK;
+    }
+    auto* context =
+        dynamic_cast<VectorMeasurementColumnContext*>(aligned_vec_[0]);
+    if (context == nullptr) {
+        return common::E_NOT_SUPPORT;
+    }
+
+    const int time_in_query_index = tuple_desc_.get_time_column_index();
+    common::ColAppender* extra_time_appender =
+        time_in_query_index == -1 ? nullptr
+                                  : col_appenders_[time_in_query_index];
+
+    while (current_block_->get_row_count() < block_size_) {
+        if (remaining_limit_ == 0) break;
+
+        if (!aligned_filter_mask_valid_) {
+            if (context->available_rows() == 0) {
+                int next_ret = context->get_next_tsblock(false);
+                if (next_ret == common::E_NO_MORE_DATA) break;
+                if (next_ret != common::E_OK) return next_ret;
+            }
+            if (RET_FAIL(context->evaluate_filter(*aligned_field_filter_,
+                                                  aligned_filter_mask_))) {
+                return ret;
+            }
+            aligned_filter_next_row_ = 0;
+            aligned_filter_mask_valid_ = true;
+            if (aligned_filter_mask_.empty()) {
+                const uint32_t skip = context->available_rows();
+                if (RET_FAIL(context->skip_rows(skip))) return ret;
+                aligned_filter_mask_valid_ = false;
+                continue;
+            }
+        }
+
+        uint32_t copied = 0;
+        bool block_exhausted = false;
+        if (RET_FAIL(context->filtered_bulk_copy_into(
+                col_appenders_, col_appenders_[time_column_index_],
+                extra_time_appender, row_appender_, aligned_filter_mask_,
+                aligned_filter_next_row_, remaining_offset_, remaining_limit_,
+                copied, block_exhausted))) {
+            return ret;
+        }
+        if (block_exhausted) {
+            aligned_filter_mask_valid_ = false;
+        }
+        if (remaining_limit_ == 0) break;
+        if (current_block_->get_row_count() >= block_size_) break;
+        if (copied == 0 && !block_exhausted) break;
+    }
+
+    if (current_block_->get_row_count() > 0) {
+        if (RET_FAIL(fill_ids())) return ret;
+        current_block_->fill_trailling_nulls();
+        last_block_returned_ = false;
+        result_has_next = true;
+    } else {
+        result_has_next = false;
+    }
+    return ret;
+}
+
 int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
+    if (aligned_field_filter_ != nullptr) {
+        return has_next_aligned_filtered(result_has_next);
+    }
     int ret = common::E_OK;
     int time_in_query_index = tuple_desc_.get_time_column_index();
 
@@ -1081,13 +1173,13 @@ int VectorMeasurementColumnContext::init(
     DeviceQueryTask* device_query_task,
     const std::vector<std::string>& measurement_names, Filter* time_filter,
     std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa,
-    int ssi_offset, int ssi_limit) {
+    AlignedFieldFilter* field_filter, int ssi_offset, int ssi_limit) {
     int ret = common::E_OK;
     pos_in_result_ = pos_in_result;
     column_names_ = measurement_names;
     if (RET_FAIL(tsfile_io_reader_->alloc_multi_ssi(
             device_query_task->get_device_id(), measurement_names, ssi_, pa,
-            time_filter))) {
+            time_filter, field_filter))) {
         return ret;
     }
     ssi_->set_row_range(ssi_offset, ssi_limit);
@@ -1099,6 +1191,7 @@ int VectorMeasurementColumnContext::init(
 
 int VectorMeasurementColumnContext::get_next_tsblock(bool alloc_mem) {
     int ret = common::E_OK;
+    if (exhausted_) return common::E_NO_MORE_DATA;
     if (tsblock_ != nullptr) {
         if (time_iter_) {
             delete time_iter_;
@@ -1111,6 +1204,7 @@ int VectorMeasurementColumnContext::get_next_tsblock(bool alloc_mem) {
         tsblock_->reset();
     }
     if (RET_FAIL(ssi_->get_next(tsblock_, alloc_mem))) {
+        if (ret == common::E_NO_MORE_DATA) exhausted_ = true;
         if (time_iter_) {
             delete time_iter_;
             time_iter_ = nullptr;
@@ -1199,8 +1293,93 @@ void VectorMeasurementColumnContext::remove_from(
 }
 
 uint32_t VectorMeasurementColumnContext::available_rows() const {
-    if (!time_iter_ || time_iter_->end()) return 0;
+    if (exhausted_ || !time_iter_ || time_iter_->end()) return 0;
     return time_iter_->remaining();
+}
+
+int VectorMeasurementColumnContext::evaluate_filter(
+    const AlignedFieldFilter& filter, SelectionMask& mask) {
+    if (tsblock_ == nullptr) return common::E_NO_MORE_DATA;
+    if (ssi_ != nullptr && ssi_->field_filter_applied_in_chunk()) {
+        mask.reset(tsblock_->get_row_count());
+        mask.set_all();
+        return common::E_OK;
+    }
+    return filter.evaluate(*tsblock_, column_names_, mask);
+}
+
+int VectorMeasurementColumnContext::filtered_bulk_copy_into(
+    std::vector<common::ColAppender*>& col_appenders,
+    common::ColAppender* time_appender,
+    common::ColAppender* extra_time_appender, common::RowAppender* row_appender,
+    const SelectionMask& mask, uint32_t& source_row, int& remaining_offset,
+    int& remaining_limit, uint32_t& copied, bool& block_exhausted) {
+    copied = 0;
+    block_exhausted = false;
+    if (tsblock_ == nullptr || time_iter_ == nullptr || time_iter_->end()) {
+        block_exhausted = true;
+        return common::E_OK;
+    }
+
+    const uint32_t row_count = tsblock_->get_row_count();
+    while (source_row < row_count) {
+        if (remaining_limit == 0) break;
+        if (row_appender != nullptr && row_appender->remaining() == 0) break;
+
+        uint32_t time_len = 0;
+        int64_t time = *reinterpret_cast<int64_t*>(time_iter_->read(&time_len));
+        bool selected = mask.test(source_row);
+        if (selected && remaining_offset > 0) {
+            --remaining_offset;
+            selected = false;
+        }
+
+        if (selected) {
+            if (time_appender != nullptr) {
+                time_appender->add_row();
+                time_appender->append(reinterpret_cast<char*>(&time),
+                                      sizeof(time));
+            }
+            if (extra_time_appender != nullptr) {
+                extra_time_appender->add_row();
+                extra_time_appender->append(reinterpret_cast<char*>(&time),
+                                            sizeof(time));
+            }
+            for (uint32_t c = 0;
+                 c < value_iters_.size() && c < pos_in_result_.size(); ++c) {
+                uint32_t len = 0;
+                bool is_null = false;
+                char* value = value_iters_[c]->read(&len, &is_null);
+                for (int32_t pos : pos_in_result_[c]) {
+                    auto* appender = col_appenders[pos + 1];
+                    appender->add_row();
+                    if (is_null) {
+                        appender->append_null();
+                    } else {
+                        appender->append(value, len);
+                    }
+                }
+            }
+            if (row_appender != nullptr) row_appender->add_row();
+            ++copied;
+            if (remaining_limit > 0) --remaining_limit;
+        } else {
+            // Reading is required even for rejected rows because variable
+            // length cursors use the current row length when advancing.
+            for (auto* value_iter : value_iters_) {
+                uint32_t len = 0;
+                bool is_null = false;
+                value_iter->read(&len, &is_null);
+            }
+        }
+
+        time_iter_->next();
+        for (auto* value_iter : value_iters_) value_iter->next();
+        ++source_row;
+    }
+
+    if (source_row >= row_count) block_exhausted = true;
+    return common::E_OK;
 }
 
 int VectorMeasurementColumnContext::bulk_copy_into(

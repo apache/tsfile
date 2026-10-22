@@ -304,7 +304,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
                         continue;
                     }
-                    if (chunk_fully_satisfies_filter(time_cm, filter) &&
+                    if (field_filter_ == nullptr &&
+                        chunk_fully_satisfies_filter(time_cm, filter) &&
                         should_skip_multi_aligned_chunk_by_offset(time_cm,
                                                                   value_cms)) {
                         continue;
@@ -512,6 +513,7 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
                       itimeseries_index_->get_data_type(), time_filter_))) {
         return ret;
     }
+    acr->set_field_filter(field_filter_);
 
     // No chunks → nothing to load; iteration short-circuits via
     // has_next_chunk() returning false.
