@@ -72,6 +72,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TS_ENCODING_SPRINTZ = 12,
         TS_ENCODING_RLBE = 13,
         TS_ENCODING_CAMEL = 14,
+        TS_ENCODING_ALP = 15,
         TS_ENCODING_INVALID = 255
 
     ctypedef enum CompressionType:
