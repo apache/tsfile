@@ -20,71 +20,112 @@
 -->
 # 快速上手 - C
 
-## 依赖
-
-- CMake >=3.11
-- Maven >=3.9.6
-- GCC >=4.8.5
-- Make >=4.3
-
 ## 安装
 
-从git克隆源代码:
+C/C++ 2.5.0 提供预编译运行库、开发包和 CLI，**不必先用 Maven 编译 TsFile**。
+开发应用需要 C/C++ 编译器。安装包提供的 CMake 配置支持 CMake 3.11+；选择 Windows 运行时需要 CMake 3.15+。只运行 CLI 不需要编译工具链。
+完整下载链接和校验步骤见[下载与安装页面](../../../Download/README.md#cpp-packages)。
 
-```shell
+### 选择安装方式
+
+| 平台 | 开发 C/C++ 应用 | 说明 |
+| --- | --- | --- |
+| Ubuntu 22.04 / 24.04 | `tsfile` + `tsfile-dev` | [DEB 下载、校验和安装](../../../Download/README.md#cpp-ubuntu) |
+| AlmaLinux 9 | `tsfile` + `tsfile-devel` | [RPM 下载、校验和安装](../../../Download/README.md#cpp-rpm) |
+| macOS | Homebrew Formula，或 SDK 压缩包 | [Homebrew 安装](../../../Download/README.md#cpp-homebrew)，包含库、头文件和 CLI |
+| Linux / macOS | 完整 SDK 压缩包 | 适合不修改系统目录的安装，示例见下文 |
+| Windows | 对应架构的 SDK/CLI ZIP | [Windows 安装](../../../Download/README.md#cpp-windows)，保留 DLL 与 `bin/` 布局 |
+
+`tsfile-dev` / `tsfile-devel` 是开发文件包，不是开发版发行；CLI 位于 `tsfile-tools`。
+下载并校验 DEB/RPM 后，可直接安装本地运行库与开发包，例如：
+
+```bash
+# Ubuntu amd64；arm64 使用对应文件名
+sudo apt install ./tsfile_2.5.0-1_amd64.deb ./tsfile-dev_2.5.0-1_amd64.deb
+```
+
+```bash
+# AlmaLinux 9 x86_64；aarch64 使用对应文件名
+sudo dnf install ./tsfile-2.5.0-1.el9.x86_64.rpm ./tsfile-devel-2.5.0-1.el9.x86_64.rpm
+```
+
+### 解压安装 SDK（Linux / macOS）
+
+在空目录执行下例。Apple Silicon Mac 使用 `macos12-arm64`；Intel Mac 使用 `macos12-x86_64`；
+Linux 根据架构使用 `manylinux_2_28-x86_64` 或 `manylinux_2_28-aarch64`。
+
+```bash
+VERSION=2.5.0
+PLATFORM=macos12-arm64
+ARCHIVE="tsfile-sdk-${PLATFORM}-${VERSION}.tar.gz"
+URL="https://packages.apache.org/artifactory/tsfile/sdk/release/versions/${VERSION}/${PLATFORM}/${ARCHIVE}"
+curl --fail --location "$URL" --output "$ARCHIVE"
+SHA256="$(curl --fail --silent --show-error "$URL.sha256")"
+if command -v sha256sum >/dev/null 2>&1; then
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c - || exit 1
+else
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | shasum -a 256 -c - || exit 1
+fi
+mkdir tsfile-sdk
+tar -xzf "$ARCHIVE" -C tsfile-sdk --strip-components=1
+export TSFILE_HOME="$PWD/tsfile-sdk"
+export PATH="$TSFILE_HOME/bin:$PATH"
+tsfile-cli --version
+```
+
+若使用 Homebrew，先按下载页导入 Formula，再设置 `TSFILE_HOME="$(brew --prefix local/tsfile250/tsfile)"`。
+SDK 包含 `include/`、`lib/`、`lib/cmake/TsFile/`、`lib/pkgconfig/`、`bin/` 和 `share/`；保留其相对布局。
+
+### CMake 集成
+
+在项目的 `CMakeLists.txt` 中使用安装包导出的 target，而不是只用 `find_library` 查找单个库文件：
+
+```cmake
+cmake_minimum_required(VERSION 3.11)
+project(tsfile_example LANGUAGES C CXX)
+find_package(TsFile 2.5.0 CONFIG REQUIRED)
+add_executable(tsfile_example main.c)
+target_link_libraries(tsfile_example PRIVATE TsFile::tsfile)
+```
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$TSFILE_HOME"
+cmake --build build --config Release
+```
+
+在系统标准目录安装 DEB/RPM 后，通常无需设置 `CMAKE_PREFIX_PATH`。导出的 target 会传递所需头文件目录和编译定义。
+Windows 使用匹配架构的 MSVC 和 CMake 3.15+，选择包要求的 Release `/MT` 运行时：
+
+```powershell
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$env:TSFILE_HOME" `
+  -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+cmake --build build --config Release
+```
+
+### pkg-config（Linux / macOS）
+
+SDK 或 Homebrew 安装可通过前缀定位元数据；系统包通常可以直接查询：
+
+```bash
+export PKG_CONFIG_PATH="$TSFILE_HOME/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+pkg-config --modversion libtsfile
+pkg-config --cflags --libs libtsfile
+```
+
+### 可选：从源码构建
+
+只有需要修改 TsFile 或定制构建选项时才需要源码构建。此时需 JDK 17+、CMake、C++11 编译器和 Make/Ninja；
+Maven 可使用仓库自带的 wrapper。源码构建版本取决于检出的分支或 commit，不等同于上面的 2.5.0 二进制包。
+
+```bash
 git clone https://github.com/apache/tsfile.git
-```
-在 TsFile 根目录下执行 maven 编译:
-
-```shell
-mvn clean install -P with-cpp -DskipTests
+cd tsfile
+./mvnw clean package -P with-cpp -Dbuild.test=OFF
+cmake --install cpp/target/build --prefix "$PWD/tsfile-sdk"
 ```
 
-如果没有安装 maven, 你可以执行下面的指令完成编译:
-
-在 Linux 或 Macos上：
-```shell
-mvnw clean install -P with-cpp -DskipTests
-```
-在 Windows 上:
-
-```shell
-mvnw.cmd clean install -P with-cpp -DskipTests
-```
-### 编译选项
-TsFile提供编译选项控制生成库的大小：
-```shell
-#最小化编译
-mvn clean install -P with-cpp -DskipTests \
-  -Dbuild.test=OFF    \
-  -Denable.snappy=OFF \
-  -Denable.lz4=OFF    \
-  -Denable.lzokay=OFF \
-  -Denable.zlib=OFF   \
-  -Denable.antlr4=OFF
-```
-**选项说明：**
-- `enable.*=OFF`：不编译压缩算法（减少库体积）
-- `enable.antlr4=OFF`：不编译ANTLR4依赖（减少库体积）
-
-**库大小对比：**
-- 完整编译：约3.2MB
-- 关闭ANTLR4：约1.9MB
-- 关闭所有压缩算法：约1.7MB
-### 目录结构
-
-• **​Include 目录**: 位于 `tsfile/cpp/target/build/include/cwrapper`，包含用于集成的头文件。将该路径添加到编译器的包含路径中（例如，使用 -I 标志）。
-
-• **​Lib 目录**: 位于 `tsfile/cpp/target/build/lib`，存放编译后的库文件。链接时指定该路径和库名称（例如，使用 -L 和 -l 标志）。
-
-### 配置CMake
-
-在您的 CMakeLists.txt 中添加：
-```CMAKE
-find_library(TSFILE_LIB NAMES tsfile PATHS ${SDK_LIB} REQUIRED)
-target_link_libraries(your_target ${TSFILE_LIB})
-```
-注意：将 ${SDK_LIB} 设置为您的 TSFile 库目录。
+Windows 使用 `mvnw.cmd`。随后将 `CMAKE_PREFIX_PATH` 指向安装后的 `tsfile-sdk`；
+不要将源码树内部的头文件与另一个版本的已安装库混用。CLI 的安装与使用另见 [TsFile CLI](../Tools/Tsfile-CLI.md)。
 
 ## 写入流程
 
