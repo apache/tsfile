@@ -215,9 +215,10 @@ $env:Path = "$env:TSFILE_HOME\bin;$env:Path"
 tsfile-cli --version
 ```
 
-ZIP 包含 `bin/tsfile-cli.exe`、`bin/tsfile.dll`、头文件、导入库和 CMake 配置；
-不要分离 CLI 和 DLL。开发应用需要匹配架构的 MSVC 工具链。
-发布的 Windows 库采用 Release `/MT` 运行时；CMake 消费者使用 CMake 3.15+，
+ZIP 包含 `bin/tsfile-cli.exe`、`bin/tsfile.dll`、头文件、导入库和 CMake 配置。
+仅运行 CLI 时，解压后直接执行 `bin\tsfile-cli.exe` 即可：它会从同目录加载 `tsfile.dll`，无需编译，也不需要额外运行时（C 运行库已通过 `/MT` 静态链接）。不要分离 CLI 和 DLL。
+
+开发应用需要匹配架构的 MSVC 工具链。CMake 消费者使用 CMake 3.15+，
 配置 `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded` 并以 `--config Release` 构建。
 
 <a id="cpp-checksums"></a>

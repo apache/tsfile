@@ -213,9 +213,10 @@ $env:Path = "$env:TSFILE_HOME\bin;$env:Path"
 tsfile-cli --version
 ```
 
-The ZIP includes `bin/tsfile-cli.exe`, `bin/tsfile.dll`, headers, an import library, and CMake configuration;
-do not separate the CLI from its DLL. Development requires a matching-architecture MSVC toolchain.
-The published Windows library uses the Release `/MT` runtime. CMake consumers should use CMake 3.15+,
+The ZIP includes `bin/tsfile-cli.exe`, `bin/tsfile.dll`, headers, an import library, and CMake configuration.
+To run the CLI, just extract the archive and invoke `bin\tsfile-cli.exe`: it loads `tsfile.dll` from the same directory, needs no build, and needs no extra runtime (the C runtime is statically linked with `/MT`). Do not separate the CLI from its DLL.
+
+Developing an application requires a matching-architecture MSVC toolchain. CMake consumers should use CMake 3.15+,
 configure with `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, and build with `--config Release`.
 
 <a id="cpp-checksums"></a>
