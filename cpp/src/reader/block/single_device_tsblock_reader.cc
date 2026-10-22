@@ -381,7 +381,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
-    if ((field_filter == nullptr || aligned_field_filter_ != nullptr) &&
+    if ((field_filter == nullptr ||
+         (aligned_field_filter_ != nullptr && used_multi)) &&
         !field_column_contexts_.empty() &&
         (dense_row_count_ >= 0 || aligned_field_filter_ != nullptr) &&
         aligned_col_count_ == field_column_contexts_.size()) {
@@ -401,9 +402,15 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
 
     if (aligned_field_filter_ != nullptr && !all_aligned_ &&
         !field_column_contexts_.empty()) {
-        // The structured batch filter is aligned-only. Legacy Filter objects
-        // continue to use the row-oriented path.
-        return common::E_NOT_SUPPORT;
+        // Missing metadata (or unequal chunk counts) can make an aligned
+        // device use per-column contexts. Keep the row merge for that case,
+        // with absent FIELDs exposed as NULL, but still reject non-aligned
+        // sources for the aligned-only structured filter.
+        for (const auto* ts_index : time_series_indexs) {
+            if (ts_index != nullptr && !ts_index->is_aligned()) {
+                return common::E_NOT_SUPPORT;
+            }
+        }
     }
 
     if (field_column_contexts_.empty()) {
@@ -807,6 +814,36 @@ int SingleDeviceTsBlockReader::satisfy_field_filter(bool& satisfied) {
         auto schema =
             device_query_task_->get_table_schema()->get_column_schema(name);
         fields.push_back({name, schema.data_type_, value, length});
+    }
+    if (aligned_field_filter_ != nullptr) {
+        // Aligned devices missing one of the requested measurements cannot
+        // use the shared multi-column SSI. Evaluate their merged row through
+        // the same typed column-view evaluator, including explicit NULL
+        // views for measurements that have no metadata on this device.
+        const uint8_t notnull = 0x80;
+        std::vector<common::String> strings(fields.size());
+        std::vector<AlignedFieldFilter::ColumnView> views;
+        views.reserve(fields.size());
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const auto& field = fields[i];
+            AlignedFieldFilter::ColumnView view;
+            view.name = field.name;
+            view.type = field.type;
+            view.notnull_bitmap = field.is_null() ? nullptr : &notnull;
+            view.notnull_bitmap_size = 1;
+            if (field.type == common::STRING || field.type == common::TEXT ||
+                field.type == common::BLOB) {
+                strings[i] = common::String(field.data, field.size);
+                view.string_values = &strings[i];
+            } else {
+                view.fixed_values = field.data;
+            }
+            views.push_back(std::move(view));
+        }
+        SelectionMask mask;
+        ret = aligned_field_filter_->evaluate_columns(views, 1, mask);
+        satisfied = ret == common::E_OK && mask.test(0);
+        return ret;
     }
     return evaluate_table_field_filter(*field_filter_, {next_time_, fields},
                                        satisfied);
@@ -1308,91 +1345,22 @@ int VectorMeasurementColumnContext::evaluate_filter(
     return filter.evaluate(*tsblock_, column_names_, mask);
 }
 
-int VectorMeasurementColumnContext::filtered_bulk_copy_into(
+void VectorMeasurementColumnContext::copy_rows_in_current_block(
     std::vector<common::ColAppender*>& col_appenders,
     common::ColAppender* time_appender,
     common::ColAppender* extra_time_appender, common::RowAppender* row_appender,
-    const SelectionMask& mask, uint32_t& source_row, int& remaining_offset,
-    int& remaining_limit, uint32_t& copied, bool& block_exhausted) {
-    copied = 0;
-    block_exhausted = false;
-    if (tsblock_ == nullptr || time_iter_ == nullptr || time_iter_->end()) {
-        block_exhausted = true;
-        return common::E_OK;
-    }
-
-    const uint32_t row_count = tsblock_->get_row_count();
-    while (source_row < row_count) {
-        if (remaining_limit == 0) break;
-        if (row_appender != nullptr && row_appender->remaining() == 0) break;
-
-        uint32_t time_len = 0;
-        int64_t time = *reinterpret_cast<int64_t*>(time_iter_->read(&time_len));
-        bool selected = mask.test(source_row);
-        if (selected && remaining_offset > 0) {
-            --remaining_offset;
-            selected = false;
-        }
-
-        if (selected) {
-            if (time_appender != nullptr) {
-                time_appender->add_row();
-                time_appender->append(reinterpret_cast<char*>(&time),
-                                      sizeof(time));
-            }
-            if (extra_time_appender != nullptr) {
-                extra_time_appender->add_row();
-                extra_time_appender->append(reinterpret_cast<char*>(&time),
-                                            sizeof(time));
-            }
-            for (uint32_t c = 0;
-                 c < value_iters_.size() && c < pos_in_result_.size(); ++c) {
-                uint32_t len = 0;
-                bool is_null = false;
-                char* value = value_iters_[c]->read(&len, &is_null);
-                for (int32_t pos : pos_in_result_[c]) {
-                    auto* appender = col_appenders[pos + 1];
-                    appender->add_row();
-                    if (is_null) {
-                        appender->append_null();
-                    } else {
-                        appender->append(value, len);
-                    }
-                }
-            }
-            if (row_appender != nullptr) row_appender->add_row();
-            ++copied;
-            if (remaining_limit > 0) --remaining_limit;
-        } else {
-            // Reading is required even for rejected rows because variable
-            // length cursors use the current row length when advancing.
-            for (auto* value_iter : value_iters_) {
-                uint32_t len = 0;
-                bool is_null = false;
-                value_iter->read(&len, &is_null);
-            }
-        }
-
-        time_iter_->next();
-        for (auto* value_iter : value_iters_) value_iter->next();
-        ++source_row;
-    }
-
-    if (source_row >= row_count) block_exhausted = true;
-    return common::E_OK;
-}
-
-int VectorMeasurementColumnContext::bulk_copy_into(
-    std::vector<common::ColAppender*>& col_appenders,
-    common::ColAppender* time_appender, common::RowAppender* row_appender,
     uint32_t count) {
-    int ret = common::E_OK;
     const uint32_t time_elem_size = sizeof(int64_t);
 
     // Bulk copy time column (only when time_appender is provided).
     if (time_appender) {
         time_appender->bulk_append_fixed(time_iter_->data_ptr(), count,
                                          time_elem_size);
+    }
+
+    if (extra_time_appender != nullptr) {
+        extra_time_appender->bulk_append_fixed(time_iter_->data_ptr(), count,
+                                               time_elem_size);
     }
 
     // Advance output row count.
@@ -1453,34 +1421,108 @@ int VectorMeasurementColumnContext::bulk_copy_into(
         // Variable-length iterators and fixed-length iterators with nulls were
         // already advanced in the copy loop above.
     }
-
-    // If source TsBlock exhausted, load next.
-    if (time_iter_->end()) {
-        if (RET_FAIL(get_next_tsblock(false))) return ret;
-    }
-    return ret;
 }
 
-int VectorMeasurementColumnContext::skip_rows(uint32_t count) {
-    if (!time_iter_ || time_iter_->end()) return common::E_OK;
+int VectorMeasurementColumnContext::filtered_bulk_copy_into(
+    std::vector<common::ColAppender*>& col_appenders,
+    common::ColAppender* time_appender,
+    common::ColAppender* extra_time_appender, common::RowAppender* row_appender,
+    const SelectionMask& mask, uint32_t& source_row, int& remaining_offset,
+    int& remaining_limit, uint32_t& copied, bool& block_exhausted) {
+    copied = 0;
+    block_exhausted = false;
+    if (tsblock_ == nullptr || time_iter_ == nullptr || time_iter_->end()) {
+        block_exhausted = true;
+        return common::E_OK;
+    }
+
+    const uint32_t row_count = tsblock_->get_row_count();
+    if (mask.row_count() != row_count ||
+        source_row != time_iter_->get_row_id()) {
+        return common::E_INVALID_ARG;
+    }
+    while (source_row < row_count) {
+        if (remaining_limit == 0) break;
+        if (row_appender != nullptr && row_appender->remaining() == 0) break;
+
+        uint32_t begin = 0, end = 0;
+        if (!mask.next_selected_run(source_row, begin, end)) {
+            skip_rows_in_current_block(row_count - source_row);
+            source_row = row_count;
+            break;
+        }
+        // Reject gaps without copying them. Do not prefetch another source
+        // block: mask/source_row must remain bound to this one until exhausted.
+        if (begin > source_row) {
+            skip_rows_in_current_block(begin - source_row);
+            source_row = begin;
+        }
+        uint32_t count = end - source_row;
+        if (remaining_offset > 0) {
+            const uint32_t skip =
+                std::min(count, static_cast<uint32_t>(remaining_offset));
+            skip_rows_in_current_block(skip);
+            source_row += skip;
+            remaining_offset -= static_cast<int>(skip);
+            count -= skip;
+            if (count == 0) continue;
+        }
+        if (row_appender != nullptr) {
+            count = std::min(count, row_appender->remaining());
+        }
+        if (remaining_limit > 0) {
+            count = std::min(count, static_cast<uint32_t>(remaining_limit));
+        }
+
+        // A full mask is one run. Dense fixed-width columns use memcpy for
+        // the whole retained run; NULL/string columns retain scalar copying.
+        copy_rows_in_current_block(col_appenders, time_appender,
+                                   extra_time_appender, row_appender, count);
+        source_row += count;
+        copied += count;
+        if (remaining_limit > 0) remaining_limit -= static_cast<int>(count);
+    }
+    block_exhausted = source_row == row_count;
+    return common::E_OK;
+}
+
+int VectorMeasurementColumnContext::bulk_copy_into(
+    std::vector<common::ColAppender*>& col_appenders,
+    common::ColAppender* time_appender, common::RowAppender* row_appender,
+    uint32_t count) {
+    copy_rows_in_current_block(col_appenders, time_appender, nullptr,
+                               row_appender, count);
+    // Preserve eager refill for the unfiltered caller. Masked copies must
+    // instead let their caller invalidate the old mask before loading more.
+    if (time_iter_->end()) return get_next_tsblock(false);
+    return common::E_OK;
+}
+
+void VectorMeasurementColumnContext::skip_rows_in_current_block(
+    uint32_t count) {
     const uint32_t time_elem_size = sizeof(int64_t);
-    uint32_t to_skip = std::min(count, time_iter_->remaining());
-    time_iter_->advance(to_skip, time_elem_size);
+    time_iter_->advance(count, time_elem_size);
     for (uint32_t c = 0; c < value_iters_.size(); c++) {
         auto dt = value_iters_[c]->get_data_type();
         bool is_varlen =
             (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
         if (!is_varlen && !value_iters_[c]->has_null()) {
             uint32_t val_elem_size = common::get_data_type_size(dt);
-            value_iters_[c]->advance(to_skip, val_elem_size);
+            value_iters_[c]->advance(count, val_elem_size);
         } else {
             // Variable-length and fixed-length-with-null vectors need next()
             // to keep the payload offset aligned with non-null rows.
-            for (uint32_t r = 0; r < to_skip; r++) {
+            for (uint32_t r = 0; r < count; r++) {
                 value_iters_[c]->next();
             }
         }
     }
+}
+
+int VectorMeasurementColumnContext::skip_rows(uint32_t count) {
+    if (!time_iter_ || time_iter_->end()) return common::E_OK;
+    const uint32_t to_skip = std::min(count, time_iter_->remaining());
+    skip_rows_in_current_block(to_skip);
     consume_ssi_row_offset(static_cast<int>(to_skip));
     if (time_iter_->end()) {
         int r = get_next_tsblock(false);

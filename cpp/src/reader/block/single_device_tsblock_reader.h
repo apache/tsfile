@@ -223,6 +223,15 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
         uint32_t& copied, bool& block_exhausted);
 
    private:
+    // These helpers never load another SSI TsBlock: callers may still hold a
+    // selection mask and source-row cursor belonging to the current block.
+    void copy_rows_in_current_block(
+        std::vector<common::ColAppender*>& col_appenders,
+        common::ColAppender* time_appender,
+        common::ColAppender* extra_time_appender,
+        common::RowAppender* row_appender, uint32_t count);
+    void skip_rows_in_current_block(uint32_t count);
+
     std::vector<std::string> column_names_;
     std::vector<std::vector<int32_t>> pos_in_result_;
     std::vector<common::ColIterator*> value_iters_;

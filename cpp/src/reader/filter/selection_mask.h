@@ -48,6 +48,9 @@ class SelectionMask {
 
     uint32_t count_ones() const;
     bool next_set_bit(uint32_t from, uint32_t& next) const;
+    // Find the next contiguous selected interval [begin, end), starting at
+    // or after from. The end is clamped to row_count(), excluding padding.
+    bool next_selected_run(uint32_t from, uint32_t& begin, uint32_t& end) const;
     void clear_from(uint32_t row);
 
    private:

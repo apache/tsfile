@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -68,9 +69,14 @@ int compare_string(const char* data, uint32_t len, const std::string& literal,
     return false;
 }
 
-bool is_integer_type(common::TSDataType type) {
-    return type == common::INT32 || type == common::DATE ||
-           type == common::INT64 || type == common::TIMESTAMP;
+// NaN values count as non-NULL, but may not change finite min/max values.
+// Their presence is retained in the sum, including after statistics merge.
+// A NaN sum can also result from opposite infinities; conservatively falling
+// back to row evaluation is safe in that case as well.
+template <typename S>
+bool has_nan_statistics(const S& statistic) {
+    return std::isnan(statistic.sum_value_) ||
+           std::isnan(statistic.min_value_) || std::isnan(statistic.max_value_);
 }
 
 bool is_string_type(common::TSDataType type) {
@@ -312,7 +318,8 @@ bool AlignedFieldFilter::may_match(
         }
     }
     if (auto* typed = dynamic_cast<FloatStatistic*>(statistic)) {
-        if (literal_.type != common::FLOAT) return true;
+        if (literal_.type != common::FLOAT || has_nan_statistics(*typed))
+            return true;
         switch (compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.float_value &&
@@ -332,7 +339,8 @@ bool AlignedFieldFilter::may_match(
         }
     }
     if (auto* typed = dynamic_cast<DoubleStatistic*>(statistic)) {
-        if (literal_.type != common::DOUBLE) return true;
+        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed))
+            return true;
         switch (compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.double_value &&
@@ -424,7 +432,8 @@ bool AlignedFieldFilter::all_match(
         }
     }
     if (auto* typed = dynamic_cast<FloatStatistic*>(statistic)) {
-        if (literal_.type != common::FLOAT) return false;
+        if (literal_.type != common::FLOAT || has_nan_statistics(*typed))
+            return false;
         switch (compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.float_value &&
@@ -443,7 +452,8 @@ bool AlignedFieldFilter::all_match(
         }
     }
     if (auto* typed = dynamic_cast<DoubleStatistic*>(statistic)) {
-        if (literal_.type != common::DOUBLE) return false;
+        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed))
+            return false;
         switch (compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.double_value &&

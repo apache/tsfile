@@ -135,6 +135,26 @@ bool SelectionMask::next_set_bit(uint32_t from, uint32_t& next) const {
     }
 }
 
+bool SelectionMask::next_selected_run(uint32_t from, uint32_t& begin,
+                                      uint32_t& end) const {
+    if (!next_set_bit(from, begin)) return false;
+    uint32_t word_index = begin >> 6U;
+    uint64_t unselected =
+        ~words_[word_index] & (~static_cast<uint64_t>(0) << (begin & 63U));
+    while (true) {
+        if (unselected != 0) {
+            end = std::min(row_count_,
+                           (word_index << 6U) + trailing_zeros(unselected));
+            return true;
+        }
+        if (++word_index >= words_.size()) {
+            end = row_count_;
+            return true;
+        }
+        unselected = ~words_[word_index];
+    }
+}
+
 void SelectionMask::clear_from(uint32_t row) {
     if (row >= row_count_) return;
     const uint32_t first_word = row >> 6U;

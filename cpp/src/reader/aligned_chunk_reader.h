@@ -328,6 +328,7 @@ class AlignedChunkReader : public IChunkReader {
     std::vector<ChunkPageInfo> chunk_pages_;
     std::vector<std::vector<int64_t>> per_page_times_;
     bool page_plan_built_ = false;
+    bool page_plan_lazy_ = true;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;
     std::vector<bool> filter_column_mask_;

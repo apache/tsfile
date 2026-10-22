@@ -1865,11 +1865,16 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
 // empty so the scatter loop decodes on demand and releases after each page
 // (see decode_page_lazy() / release_page_slot()).  Bounds memory to one page.
 int AlignedChunkReader::decode_all_planned_pages() {
+    // Keep this decision stable while a page spans multiple SSI TsBlocks.
+    // A populated first-page buffer does not imply that later pages were
+    // eagerly decoded.
+    page_plan_lazy_ = true;
     if (chunk_pages_.empty()) return E_OK;
     build_filter_column_mask();
 
 #ifdef ENABLE_THREADS
     if (decode_pool_ != nullptr && value_columns_.size() > 1) {
+        page_plan_lazy_ = false;
         // Lazily grow the per-worker time decoder/compressor pool.  Both
         // factories can return nullptr on OOM/unsupported config; without
         // checking, the worker task below dereferences null when calling
@@ -2053,9 +2058,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     const uint32_t null_mask_base = 1 << 7;
     const uint32_t num_cols = value_columns_.size();
     RowAppender row_appender(ret_tsblock);
-    // Detect single-thread lazy mode by whether decode_all_planned_pages left
-    // per_page_times_ empty (it leaves slots empty when there's no pool).
-    const bool single_thread_lazy = per_page_times_[0].empty();
+    const bool single_thread_lazy = page_plan_lazy_;
 
     while (current_page_plan_index_ < chunk_pages_.size()) {
         const ChunkPageInfo& page_info = chunk_pages_[current_page_plan_index_];
