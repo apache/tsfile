@@ -41,63 +41,105 @@ The CLI supports both tree-model and table-model TsFiles. Normal results go to s
 
 - Inspection of existing files covers only structures, data, and status that can be read safely. It does not certify the validity of the entire file.
 
-## Building and running
+## Installation and running
 
-### Prerequisites
+Version 2.5.0 provides a prebuilt CLI: **Maven, a JDK, and a C++ compiler are not required to run it**.
+Choose an installation method below; CLI use does not require the `tsfile-dev` / `tsfile-devel` development packages.
+See the [download and installation page](../../../Download/README.md#cpp-packages) for artifacts, architectures, and verification instructions.
 
-Building from source requires:
+### Ubuntu 22.04 / 24.04
 
-- JDK 8 or later to run Maven;
-
-- A compiler supporting C++11, such as GCC or Clang;
-
-- CMake 3.11 or later when building directly with CMake.
-
-### Building with Maven
-
-Run the following from the Apache TsFile repository root:
+Download and verify the matching-architecture runtime and tools packages from [DEB downloads and installation](../../../Download/README.md#cpp-ubuntu), then install the local files:
 
 ```bash
-./mvnw clean package -P with-cpp
+# amd64 example; use matching filenames for arm64
+sudo apt install ./tsfile_2.5.0-1_amd64.deb ./tsfile-tools_2.5.0-1_amd64.deb
+tsfile-cli --version
 ```
 
-Build artifacts are located under `cpp/target/build/`:
+### AlmaLinux 9
 
-|Artifact|Path|
-|---|---|
-|CLI executable|`cpp/target/build/bin/tsfile-cli`|
-|Linux shared library|`cpp/target/build/lib/libtsfile.so`|
-|macOS shared library|`cpp/target/build/lib/libtsfile.dylib`|
-
-### Building with CMake
-
-To build only the C++ module and CLI, run the following from `cpp/`:
+Download and verify the two matching-architecture packages from [RPM downloads and installation](../../../Download/README.md#cpp-rpm):
 
 ```bash
-mkdir -p build/Release
-cd build/Release
-cmake ../.. -DCMAKE_BUILD_TYPE=Release
-make -j tsfile_cli
+# x86_64 example; use matching filenames for aarch64
+sudo dnf install ./tsfile-2.5.0-1.el9.x86_64.rpm ./tsfile-tools-2.5.0-1.el9.x86_64.rpm
+tsfile-cli --version
 ```
 
-The executable is generated at `cpp/build/Release/bin/tsfile-cli`, and the shared library is generated under `cpp/build/Release/lib/`.
+### macOS: Homebrew
 
-### Checking the installation
-
-When run by its full path in the build directory, the CLI automatically locates `libtsfile` from the same build:
+For a new installation, import the published Formula with these Homebrew 7 steps. Plan migration first if an older installation exists in another tap.
+The Formula is keg-only: do not use `brew link --force` to overwrite other packages' headers.
+Published bottles are `arm64_tahoe` for Apple Silicon and `sequoia` for Intel; use an SDK below on other platforms.
 
 ```bash
+brew tap-new --no-git local/tsfile250
+FORMULA="$(brew --repository local/tsfile250)/Formula/tsfile.rb"
+URL=https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/2.5.0/Formula/tsfile.rb
+curl --fail --location "$URL" --output "$FORMULA"
+printf '%s  %s\n' "$(curl --fail --silent --show-error "$URL.sha256")" "$FORMULA" \
+  | shasum -a 256 -c - || exit 1
+brew trust --formula local/tsfile250/tsfile
+brew install --force-bottle local/tsfile250/tsfile
+TSFILE_HOME="$(brew --prefix local/tsfile250/tsfile)"
+export PATH="$TSFILE_HOME/bin:$PATH"
+tsfile-cli --version
+```
+
+### Linux / macOS: extract an SDK
+
+The standalone SDK also includes the CLI. This example is for Apple Silicon;
+use `manylinux_2_28-x86_64` / `manylinux_2_28-aarch64` on Linux or `macos12-x86_64` on Intel Macs. Run in an empty directory:
+
+```bash
+VERSION=2.5.0
+PLATFORM=macos12-arm64
+ARCHIVE="tsfile-sdk-${PLATFORM}-${VERSION}.tar.gz"
+URL="https://packages.apache.org/artifactory/tsfile/sdk/release/versions/${VERSION}/${PLATFORM}/${ARCHIVE}"
+curl --fail --location "$URL" --output "$ARCHIVE"
+SHA256="$(curl --fail --silent --show-error "$URL.sha256")"
+if command -v sha256sum >/dev/null 2>&1; then
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c - || exit 1
+else
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | shasum -a 256 -c - || exit 1
+fi
+mkdir tsfile-sdk
+tar -xzf "$ARCHIVE" -C tsfile-sdk --strip-components=1
+export TSFILE_HOME="$PWD/tsfile-sdk"
+export PATH="$TSFILE_HOME/bin:$PATH"
+tsfile-cli --version
+```
+
+### Windows
+
+Follow the [Windows ZIP installation steps](../../../Download/README.md#cpp-windows) to download, verify, and extract the matching-architecture package.
+The ZIP supplies both `bin/tsfile-cli.exe` and `bin/tsfile.dll`; keep the layout intact and run in PowerShell:
+
+```powershell
+& "$env:TSFILE_HOME\bin\tsfile-cli.exe" --version
+& "$env:TSFILE_HOME\bin\tsfile-cli.exe" --help
+```
+
+### Optional: build from source
+
+Build from source only to customize or develop the CLI. The Maven route requires JDK 17+; both routes need a C++11 compiler, CMake, and build tools.
+Choose one route from the Apache TsFile repository root:
+
+```bash
+./mvnw clean package -P with-cpp -Dbuild.test=OFF
 cpp/target/build/bin/tsfile-cli --version
-cpp/target/build/bin/tsfile-cli --help
 ```
-
-If you copy the executable to another directory, the dynamic loader must be able to locate the shared library. For example, on Linux:
 
 ```bash
-export LD_LIBRARY_PATH=/path/to/cpp/target/build/lib:$LD_LIBRARY_PATH
+cmake -S cpp -B cpp/build/Release -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TOOLS=ON -DBUILD_TEST=OFF
+cmake --build cpp/build/Release --target tsfile_cli --parallel
+cpp/build/Release/bin/tsfile-cli --version
 ```
 
-On macOS, use `DYLD_LIBRARY_PATH`. You can also install the shared library in a standard library location according to your operating system's conventions.
+Use `mvnw.cmd` on Windows. Prebuilt SDKs and standard installations handle library discovery without default `LD_LIBRARY_PATH` or
+`DYLD_LIBRARY_PATH` overrides; do not copy the CLI alone and lose its shared library. See the [C++ quick start](../QuickStart/QuickStart-CPP.md) for application linking.
 
 ## Quick start
 

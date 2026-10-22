@@ -41,63 +41,105 @@ CLI 同时支持树模型和表模型 TsFile。正常结果写入 stdout（标�
 
 - 对已有文件的检查仅限于能够安全读取的结构、数据和状态，不等同于对整个文件进行完整合法性认证。
 
-## 构建与运行
+## 安装与运行
 
-### 前置条件
+2.5.0 已提供预编译 CLI，**不需要先安装 Maven、JDK 或 C++ 编译器**。
+CLI 可通过以下方式安装；使用 CLI 不需要额外的开发包 `tsfile-dev` / `tsfile-devel`。
+完整的下载链接、架构选择及校验步骤见[下载与安装页面](../../../Download/README.md#cpp-packages)。
 
-从源码构建需要：
+### Ubuntu 22.04 / 24.04
 
-- JDK 8 或更高版本，用于运行 Maven；
-
-- 支持 C++11 的编译器，例如 GCC 或 Clang；
-
-- 直接使用 CMake 构建时，需要 CMake 3.11 或更高版本。
-
-### 使用 Maven 构建
-
-在 Apache TsFile 仓库根目录执行：
+先从[DEB 下载与安装](../../../Download/README.md#cpp-ubuntu)获取并校验匹配架构的运行库和工具包，然后安装本地文件：
 
 ```bash
-./mvnw clean package -P with-cpp
+# amd64 示例；arm64 使用对应文件名
+sudo apt install ./tsfile_2.5.0-1_amd64.deb ./tsfile-tools_2.5.0-1_amd64.deb
+tsfile-cli --version
 ```
 
-构建产物位于 `cpp/target/build/`：
+### AlmaLinux 9
 
-|产物|路径|
-|---|---|
-|CLI 可执行文件|`cpp/target/build/bin/tsfile-cli`|
-|Linux 共享库|`cpp/target/build/lib/libtsfile.so`|
-|macOS 共享库|`cpp/target/build/lib/libtsfile.dylib`|
-
-### 使用 CMake 构建
-
-如果只构建 C++ 模块和 CLI，可在 `cpp/` 目录执行：
+先从[RPM 下载与安装](../../../Download/README.md#cpp-rpm)获取并校验匹配架构的两个包：
 
 ```bash
-mkdir -p build/Release
-cd build/Release
-cmake ../.. -DCMAKE_BUILD_TYPE=Release
-make -j tsfile_cli
+# x86_64 示例；aarch64 使用对应文件名
+sudo dnf install ./tsfile-2.5.0-1.el9.x86_64.rpm ./tsfile-tools-2.5.0-1.el9.x86_64.rpm
+tsfile-cli --version
 ```
 
-可执行文件生成在 `cpp/build/Release/bin/tsfile-cli`，共享库生成在 `cpp/build/Release/lib/`。
+### macOS：Homebrew
 
-### 检查安装
-
-在构建目录中使用完整路径运行时，CLI 会自动查找同一构建产物中的 `libtsfile`：
+新安装环境可使用以下 Homebrew 7 步骤导入已发布的 Formula。已有其他 tap 的旧安装时，请先规划迁移；
+Formula 为 keg-only，不要使用 `brew link --force` 覆盖其他包的头文件。
+已发布 bottles 为 Apple Silicon 的 `arm64_tahoe` 和 Intel 的 `sequoia`；其他平台可使用下方 SDK。
 
 ```bash
+brew tap-new --no-git local/tsfile250
+FORMULA="$(brew --repository local/tsfile250)/Formula/tsfile.rb"
+URL=https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/2.5.0/Formula/tsfile.rb
+curl --fail --location "$URL" --output "$FORMULA"
+printf '%s  %s\n' "$(curl --fail --silent --show-error "$URL.sha256")" "$FORMULA" \
+  | shasum -a 256 -c - || exit 1
+brew trust --formula local/tsfile250/tsfile
+brew install --force-bottle local/tsfile250/tsfile
+TSFILE_HOME="$(brew --prefix local/tsfile250/tsfile)"
+export PATH="$TSFILE_HOME/bin:$PATH"
+tsfile-cli --version
+```
+
+### Linux / macOS：解压 SDK
+
+独立 SDK 也包含 CLI。下面以 Apple Silicon 为例；Linux 改用 `manylinux_2_28-x86_64` 或
+`manylinux_2_28-aarch64`，Intel Mac 改用 `macos12-x86_64`。在空目录中执行：
+
+```bash
+VERSION=2.5.0
+PLATFORM=macos12-arm64
+ARCHIVE="tsfile-sdk-${PLATFORM}-${VERSION}.tar.gz"
+URL="https://packages.apache.org/artifactory/tsfile/sdk/release/versions/${VERSION}/${PLATFORM}/${ARCHIVE}"
+curl --fail --location "$URL" --output "$ARCHIVE"
+SHA256="$(curl --fail --silent --show-error "$URL.sha256")"
+if command -v sha256sum >/dev/null 2>&1; then
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c - || exit 1
+else
+  printf '%s  %s\n' "$SHA256" "$ARCHIVE" | shasum -a 256 -c - || exit 1
+fi
+mkdir tsfile-sdk
+tar -xzf "$ARCHIVE" -C tsfile-sdk --strip-components=1
+export TSFILE_HOME="$PWD/tsfile-sdk"
+export PATH="$TSFILE_HOME/bin:$PATH"
+tsfile-cli --version
+```
+
+### Windows
+
+按 [Windows ZIP 安装步骤](../../../Download/README.md#cpp-windows)下载、校验并解压对应架构的包。
+ZIP 同时提供 `bin/tsfile-cli.exe` 和 `bin/tsfile.dll`；保持目录布局，在 PowerShell 中运行：
+
+```powershell
+& "$env:TSFILE_HOME\bin\tsfile-cli.exe" --version
+& "$env:TSFILE_HOME\bin\tsfile-cli.exe" --help
+```
+
+### 可选：从源码构建
+
+仅在定制或开发 CLI 时需要源码构建。Maven 路径需要 JDK 17+，两种路径都需要 C++11 编译器、CMake 和构建工具。
+在 Apache TsFile 仓库根目录中选择一种方式：
+
+```bash
+./mvnw clean package -P with-cpp -Dbuild.test=OFF
 cpp/target/build/bin/tsfile-cli --version
-cpp/target/build/bin/tsfile-cli --help
 ```
-
-如果将可执行文件复制到其他目录，需要让动态加载器可以找到共享库。例如 Linux 可设置：
 
 ```bash
-export LD_LIBRARY_PATH=/path/to/cpp/target/build/lib:$LD_LIBRARY_PATH
+cmake -S cpp -B cpp/build/Release -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TOOLS=ON -DBUILD_TEST=OFF
+cmake --build cpp/build/Release --target tsfile_cli --parallel
+cpp/build/Release/bin/tsfile-cli --version
 ```
 
-macOS 使用 `DYLD_LIBRARY_PATH`。也可以按操作系统约定将共享库安装到标准库路径。
+Windows 使用 `mvnw.cmd`。预编译 SDK 和标准安装已处理运行库定位，无需默认设置 `LD_LIBRARY_PATH` 或
+`DYLD_LIBRARY_PATH`；不要把 CLI 单独复制出来而丢失同包的共享库。开发应用的链接方法见 [C++ 快速上手](../QuickStart/QuickStart-CPP.md)。
 
 ## 快速开始
 
