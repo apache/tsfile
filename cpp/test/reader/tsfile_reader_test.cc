@@ -652,11 +652,13 @@ TEST_F(TsFileReaderTest, ActiveIteratorSurvivesDeviceCacheEviction) {
     ASSERT_EQ(active->get_next(block, true), E_OK);
     ASSERT_NE(block, nullptr);
     ASSERT_EQ(block->get_row_count(), 1u);
-    ColIterator time(0, block);
-    ColIterator value(1, block);
-    uint32_t len = 0;
-    EXPECT_EQ(*reinterpret_cast<int64_t*>(time.read(&len)), 1);
-    EXPECT_EQ(*reinterpret_cast<int32_t*>(value.read(&len)), 42);
+    {
+        ColIterator time(0, block);
+        ColIterator value(1, block);
+        uint32_t len = 0;
+        EXPECT_EQ(*reinterpret_cast<int64_t*>(time.read(&len)), 1);
+        EXPECT_EQ(*reinterpret_cast<int32_t*>(value.read(&len)), 42);
+    }
     active->revert_tsblock();
     reader.revert_ssi(active);
 }
