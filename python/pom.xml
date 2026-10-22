@@ -29,6 +29,13 @@
     <name>TsFile: Python</name>
     <properties>
         <unity.version>2.6.0</unity.version>
+        <!--
+            Root of the C++ build tree produced by '-Pwith-cpp'. When the Python
+            module is built on its own ('-Pwith-python-only') it reuses those
+            artifacts instead of rebuilding the native library. Override with
+            -Dtsfile.cpp.build=<path>.
+        -->
+        <tsfile.cpp.build>${project.basedir}/../cpp/target/build</tsfile.cpp.build>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
@@ -69,7 +76,36 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Point setup.py at the C++ build tree produced by
+                        '-Pwith-cpp' so the native library is reused instead of
+                        being rebuilt by this module.
+                    -->
+                    <environmentVariables>
+                        <TSFILE_CPP_BUILD>${tsfile.cpp.build}</TSFILE_CPP_BUILD>
+                    </environmentVariables>
+                </configuration>
                 <executions>
+                    <!--
+                        Fail fast when the C++ artifacts required by this module
+                        are missing, instead of failing later inside setup.py.
+                    -->
+                    <execution>
+                        <id>check-cpp-build</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${tsfile.cpp.check.skip}</skip>
+                            <executable>${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>${project.basedir}/check_cpp_build.py</argument>
+                                <argument>${tsfile.cpp.build}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                     <!-- Create python virtual environment -->
                     <execution>
                         <id>python-venv</id>

@@ -26,7 +26,7 @@ set(TSFILE_DEPENDENCY_OFFLINE OFF
         CACHE BOOL
         "Disallow network downloads and require cached dependency archives")
 
-set(TSFILE_DEPENDENCY_SOURCE "AUTO"
+set(TSFILE_DEPENDENCY_SOURCE "BUNDLED"
         CACHE STRING
         "Dependency source policy: AUTO, SYSTEM, or BUNDLED")
 set_property(CACHE TSFILE_DEPENDENCY_SOURCE

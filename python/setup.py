@@ -20,15 +20,26 @@ import os
 import platform
 import shutil
 import sys
+
 import numpy as np
 
 from pathlib import Path
 from Cython.Build import cythonize
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
+from setuptools.command.build_py import build_py
 
 ROOT = Path(__file__).parent.resolve()
 PKG = ROOT / "tsfile"
+
+# PEP 517 hooks execute setup.py without adding its directory to sys.path.
+sys.path.insert(0, str(ROOT))
+from _build_support import (
+    copy_runtime_library,
+    msvc_runtime_flag,
+    read_sdk_config,
+    strip_wheel_binaries,
+)
 
 version = "2.5.0"
 
@@ -92,10 +103,9 @@ if sys.platform.startswith("linux"):
     if not candidates:
         raise FileNotFoundError("missing libtsfile.so* in build output")
     src = candidates[0]
-    dst = PKG / src.name
-    shutil.copy2(src, dst)
-    link_name = PKG / "libtsfile.so"
-    shutil.copy2(src, link_name)
+    sdk_config = read_sdk_config(CPP_OUT, src)
+    copy_runtime_library(PKG, src, sdk_config)
+    native_link_dir = src.parent
 
 elif sys.platform == "darwin":
     candidates = sorted(CPP_LIB.rglob("libtsfile.*.dylib")) or list(
@@ -104,10 +114,9 @@ elif sys.platform == "darwin":
     if not candidates:
         raise FileNotFoundError("missing libtsfile*.dylib in build output")
     src = candidates[0]
-    dst = PKG / src.name
-    shutil.copy2(src, dst)
-    link_name = PKG / "libtsfile.dylib"
-    shutil.copy2(src, link_name)
+    sdk_config = read_sdk_config(CPP_OUT, src)
+    copy_runtime_library(PKG, src, sdk_config)
+    native_link_dir = src.parent
 
 elif sys.platform == "win32":
     # The shared library is named tsfile.dll (MSVC) or libtsfile.dll (MinGW).
@@ -133,8 +142,9 @@ elif sys.platform == "win32":
     # name (libtsfile.dll): the import library (libtsfile.dll.a) has that name
     # baked in, so Cython .pyd files record "libtsfile.dll" in their PE import
     # table and Windows must find it by that exact name at runtime.
-    dll_dst = PKG / dll_src.name
-    shutil.copy2(dll_src, dll_dst)
+    sdk_config = read_sdk_config(CPP_OUT, dll_src)
+    dll_dst = copy_runtime_library(PKG, dll_src, sdk_config)
+    native_link_dir = PKG
 
     # Copy import library with a name matching the DLL.
     if win_toolchain == "mingw":
@@ -189,9 +199,34 @@ else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
 
+# Retain license/notice texts even though SDK headers are build inputs only.
+license_dir = PKG / "licenses"
+license_dir.mkdir(exist_ok=True)
+for document in ("LICENSE", "NOTICE"):
+    candidates = [CPP_OUT / "share/doc/tsfile" / document, ROOT.parent / document]
+    source = next((path for path in candidates if path.is_file()), None)
+    if source is None:
+        raise FileNotFoundError(f"Missing SDK {document}: {candidates}")
+    shutil.copy2(source, license_dir / document)
+
+
+class BuildPy(build_py):
+    def run(self):
+        if "bdist_wheel" in self.distribution.script_args:
+            # Reused build directories must not carry old SDK headers, import
+            # libraries or binary aliases into a new runtime-only wheel.
+            staging = Path(self.build_lib) / "tsfile"
+            if staging.resolve() == PKG:
+                raise ValueError("Wheel build_lib must be outside the source package")
+            shutil.rmtree(staging, ignore_errors=True)
+        super().run()
+
+
 class BuildExt(build_ext):
     def run(self):
         super().run()
+        if "bdist_wheel" in self.distribution.script_args and not self.inplace:
+            strip_wheel_binaries(self.build_lib, sys.platform)
 
     def finalize_options(self):
         # MinGW must be requested explicitly; MSVC is the default Windows
@@ -205,8 +240,11 @@ extra_compile_args = []
 extra_link_args = []
 runtime_library_dirs = []
 libraries = []
-library_dirs = [str(PKG)]
+library_dirs = [str(native_link_dir)]
 include_dirs = [str(PKG), np.get_include(), str(PKG / "include")]
+sdk_include = PKG / "include" / "tsfile"
+if sdk_include.is_dir():
+    include_dirs.append(str(sdk_include))
 
 if sys.platform.startswith("linux"):
     libraries = ["tsfile"]
@@ -233,6 +271,8 @@ elif sys.platform == "win32":
         ]
     else:  # msvc
         libraries = ["tsfile"]
+        # The SDK records its resolved CRT; callers do not configure it twice.
+        extra_compile_args.append(msvc_runtime_flag(sdk_config))
         # cl.exe rejects the GCC-style flags above. Mirror the options the
         # C++ module itself is built with (see cpp/CMakeLists.txt). C++17 is
         # required because Cython 3 emits inline variables (error C7525); the
@@ -293,7 +333,7 @@ setup(
     version=version,
     packages=["tsfile", "tsfile.dataset"],
     package_dir={"": "."},
-    include_package_data=True,
+    include_package_data=False,
     ext_modules=cythonize(exts, compiler_directives={"language_level": 3}),
-    cmdclass={"build_ext": BuildExt},
+    cmdclass={"build_ext": BuildExt, "build_py": BuildPy},
 )
