@@ -254,11 +254,7 @@ class TableSchema {
         }
     }
 
-    TableSchema(TableSchema&& other) noexcept
-        : table_name_(std::move(other.table_name_)),
-          column_schemas_(std::move(other.column_schemas_)),
-          column_categories_(std::move(other.column_categories_)),
-          updatable_(other.updatable_) {}
+    TableSchema(TableSchema&& other) noexcept = default;
 
     TableSchema(const TableSchema& other) noexcept
         : table_name_(other.table_name_),
