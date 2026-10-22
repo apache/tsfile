@@ -140,7 +140,6 @@ tsfile-cli --version
 ### macOS (Homebrew)
 
 Import the published [Formula](https://packages.apache.org/artifactory/tsfile/homebrew/release/versions/2.5.0/Formula/tsfile.rb) into a local tap.
-These are new-install steps for Homebrew 7; they do not assume a maintained official TsFile tap.
 Published bottles are `arm64_tahoe` (macOS 26, Apple Silicon) and `sequoia` (macOS 15, Intel).
 `--force-bottle` requires an available binary bottle; use an SDK below on other platforms instead of unexpectedly building from source.
 
