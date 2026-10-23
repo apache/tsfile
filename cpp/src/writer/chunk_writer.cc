@@ -32,12 +32,19 @@ int ChunkWriter::init(const ColumnSchema& col_schema) {
 
 int ChunkWriter::init(const std::string& measurement_name, TSDataType data_type,
                       TSEncoding encoding, CompressionType compression_type) {
+    return init(measurement_name, data_type, encoding, compression_type,
+                std::map<std::string, std::string>());
+}
+
+int ChunkWriter::init(const std::string& measurement_name, TSDataType data_type,
+                      TSEncoding encoding, CompressionType compression_type,
+                      const std::map<std::string, std::string>& props) {
     int ret = E_OK;
     chunk_statistic_ = StatisticFactory::alloc_statistic(data_type);
     if (chunk_statistic_ == nullptr) {
         return E_OOM;
-    } else if (RET_FAIL(
-                   page_writer_.init(data_type, encoding, compression_type))) {
+    } else if (RET_FAIL(page_writer_.init(data_type, encoding, compression_type,
+                                          props))) {
     } else if (IS_NULL((first_page_statistic_ =
                             StatisticFactory::alloc_statistic(data_type)))) {
         ret = E_OOM;
