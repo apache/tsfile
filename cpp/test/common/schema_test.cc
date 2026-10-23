@@ -77,11 +77,13 @@ TEST(TableSchemaTest, MovePreservesColumnIndex) {
         {new MeasurementSchema("Value", common::INT64, common::PLAIN,
                                common::UNCOMPRESSED)},
         {common::ColumnCategory::FIELD});
+    auto measurement = original.get_measurement_schemas().front();
     TableSchema moved(std::move(original));
 
     EXPECT_EQ(moved.get_table_name(), "table");
     ASSERT_EQ(moved.get_columns_num(), 1);
     EXPECT_EQ(moved.get_column_pos_index_num(), 1);
+    EXPECT_EQ(moved.get_measurement_schemas().front(), measurement);
     EXPECT_EQ(moved.find_column_index("VALUE"), 0);
     EXPECT_EQ(moved.get_data_types(),
               std::vector<common::TSDataType>({common::INT64}));

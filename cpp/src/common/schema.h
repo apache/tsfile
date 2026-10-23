@@ -254,7 +254,15 @@ class TableSchema {
         }
     }
 
-    TableSchema(TableSchema&& other) noexcept = default;
+    // Keep this explicit for the supported MSVC v141 toolset.
+    TableSchema(TableSchema&& other) noexcept
+        : table_name_(std::move(other.table_name_)),
+          column_schemas_(std::move(other.column_schemas_)),
+          column_categories_(std::move(other.column_categories_)),
+          column_pos_index_(std::move(other.column_pos_index_)),
+          is_virtual_table_(other.is_virtual_table_),
+          max_level_(other.max_level_),
+          updatable_(other.updatable_) {}
 
     TableSchema(const TableSchema& other) noexcept
         : table_name_(other.table_name_),
