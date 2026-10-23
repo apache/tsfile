@@ -133,6 +133,51 @@ class TsFileWriterTableTest : public ::testing::Test {
     }
 };
 
+TEST_F(TsFileWriterTableTest, RegisterMovedSchemaAndReadWrittenValue) {
+    TableSchema original(
+        "moved", {new MeasurementSchema("value", INT64, PLAIN, UNCOMPRESSED)},
+        {ColumnCategory::FIELD});
+    auto schema = std::make_shared<TableSchema>(std::move(original));
+    TsFileWriter writer;
+    ASSERT_EQ(writer.init(&write_file_), E_OK);
+    ASSERT_EQ(writer.register_table(schema), E_OK);
+
+    Tablet tablet(schema->get_measurement_names(), schema->get_data_types(), 1);
+    tablet.set_table_name("moved");
+    ASSERT_EQ(tablet.add_timestamp(0, 17), E_OK);
+    ASSERT_EQ(tablet.add_value(0, "value", int64_t(42)), E_OK);
+    ASSERT_EQ(writer.write_table(tablet), E_OK);
+    ASSERT_EQ(writer.close(), E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query("moved", {"value"}, 0, INT64_MAX, result), E_OK);
+    ASSERT_NE(result, nullptr);
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_EQ(result->get_value<int64_t>("time"), 17);
+    EXPECT_EQ(result->get_value<int64_t>("value"), 42);
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+TEST_F(TsFileWriterTableTest, MovedSchemaStillRejectsDuplicateColumns) {
+    TableSchema original(
+        "duplicates",
+        {new MeasurementSchema("Value", INT64, PLAIN, UNCOMPRESSED),
+         new MeasurementSchema("value", INT64, PLAIN, UNCOMPRESSED)},
+        {ColumnCategory::FIELD, ColumnCategory::FIELD});
+    auto schema = std::make_shared<TableSchema>(std::move(original));
+    TsFileWriter writer;
+    ASSERT_EQ(writer.init(&write_file_), E_OK);
+    EXPECT_EQ(writer.register_table(schema), E_INVALID_ARG);
+    EXPECT_EQ(writer.close(), E_OK);
+}
+
 TEST_F(TsFileWriterTableTest, WriteTableTest) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
