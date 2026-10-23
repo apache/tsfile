@@ -28,6 +28,7 @@ from ..constants import ColumnCategory, NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from ._arrow import arrow_column_to_float64
+from .merge import build_aligned_matrix
 from .metadata import (
     MetadataCatalog,
     MODEL_TABLE,
@@ -89,6 +90,7 @@ class TsFileSeriesReader:
             raise FileNotFoundError(f"TsFile not found: {file_path}")
 
         self.file_path = file_path
+        self._file_size = os.stat(file_path).st_size
         self.show_progress = show_progress
 
         try:
@@ -492,6 +494,10 @@ class TsFileSeriesReader:
     def read_series_by_ref(
         self, device_id: int, field_idx: int, start_time: int, end_time: int
     ) -> Tuple[np.ndarray, np.ndarray]:
+        if self._model_kind == MODEL_TREE:
+            return self._read_tree_series(
+                device_id, field_idx, start_time=start_time, end_time=end_time
+            )
         table_entry, _, field_name = self._resolve_series_ref(device_id, field_idx)
         timestamps, field_values = self.read_device_fields_by_time_range(
             device_id, [field_idx], start_time, end_time
@@ -518,8 +524,9 @@ class TsFileSeriesReader:
         )
 
         if self._model_kind == MODEL_TREE:
-            device_path = self._build_tree_device_path(table_entry, device_entry)
-            return self._read_series_by_row_tree(device_path, field_name, offset, limit)
+            return self._read_tree_series(
+                device_id, field_idx, offset=offset, limit=limit
+            )
 
         tag_values = _device_exact_tag_values(table_entry, device_entry)
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
@@ -568,74 +575,49 @@ class TsFileSeriesReader:
             return timestamp_parts[0], value_parts[0]
         return np.concatenate(timestamp_parts), np.concatenate(value_parts)
 
-    def _read_series_by_row_tree(
-        self, device_path: str, field_name: str, offset: int, limit: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Tree-model row read: scan on-tree result, filter device, apply offset/limit."""
-        target_path_segments = device_path.split(".")
-        # +1 because cwrapper prepends the root as an extra col_i cell.
-        expected_path_len = (
-            max(len(t.tag_columns) for t in self._catalog.table_entries) + 1
-        )
-        timestamps = []
-        values = []
-        skipped = 0
-        # PERF: O(total_rows). query_table_on_tree scans every device's rows
-        # for this field and we filter down to one device client-side, so an
-        # aligned read over N devices is O(N * total_rows). Per-device tree
-        # pushdown (query_tree_by_row) isn't reliable in the cwrapper yet
-        # (stale col_i path columns leak across queries on a reused reader);
-        # see PR #816. Hot path for profilers.
-        with self._reader.query_table_on_tree([field_name]) as result_set:
-            md = result_set.get_metadata()
-            num_cols = md.get_column_num()
-            col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
-            try:
-                field_idx = col_names.index(field_name) + 1
-            except ValueError:
-                return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
-            all_col_indices = [
-                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
-            ]
-            # Only the trailing expected_path_len col_i cells are genuine; the
-            # leading duplicates are stale from prior queries on this reader.
-            col_indices = all_col_indices[-expected_path_len:]
-            # Fail fast if the cwrapper col_ leak pattern changes: the trailing
-            # slice assumes at least expected_path_len col_ cells. A count
-            # mismatch means the heuristic is stale and could silently pick the
-            # wrong path columns (returning wrong-device data). Guards the count
-            # only -- it can't catch a leak where the genuine columns are no
-            # longer the trailing ones.
-            assert len(col_indices) == expected_path_len, (
-                f"tree path col_ columns: expected {expected_path_len}, got "
-                f"{len(col_indices)} of {len(all_col_indices)}; cwrapper col_ "
-                f"leak pattern may have changed"
-            )
-            while result_set.next():
-                row_path_segments = [
-                    result_set.get_value_by_index(ci) for ci in col_indices
-                ]
-                # Trim trailing Nones for the (possibly-shorter) device path.
-                while row_path_segments and row_path_segments[-1] is None:
-                    row_path_segments.pop()
-                if row_path_segments != target_path_segments:
-                    continue
-                if skipped < offset:
-                    skipped += 1
-                    continue
-                if len(timestamps) >= limit:
-                    break
-                ts = result_set.get_value_by_index(1)
-                raw = result_set.get_value_by_index(field_idx)
-                timestamps.append(int(ts))
-                values.append(np.nan if raw is None else float(raw))
+    def _read_tree_series(self, device_id: int, field_idx: int, **query):
+        """Read an exact series with its own physical type and timeline.
 
-        if not timestamps:
-            return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
-        return (
-            np.asarray(timestamps, dtype=np.int64),
-            np.asarray(values, dtype=np.float64),
+        The all-device tree table query assumes a shared type for each
+        measurement name. Exact metadata locators avoid that assumption and
+        the synthetic path columns, even without a persisted Dataset Index.
+        """
+        stats = self._catalog.series_stats_by_ref[(device_id, field_idx)]
+        locator = (
+            id(self._catalog),
+            0,
+            self._file_size,
+            0,
+            0,
+            stats.layout,
+            stats.locator_flags,
+            stats.value_metadata_offset,
+            stats.value_metadata_length,
+            stats.time_metadata_offset,
+            stats.time_metadata_length,
         )
+        timestamp_parts = []
+        value_parts = []
+        with self._reader.prepare_series(locator) as prepared:
+            with self._reader.query_prepared(prepared, **query) as result_set:
+                while True:
+                    batch = result_set.read_arrow_batch()
+                    if batch is None:
+                        break
+                    if batch.num_rows == 0:
+                        continue
+                    timestamp_parts.append(
+                        np.asarray(
+                            batch.column(0).to_numpy(zero_copy_only=False),
+                            dtype=np.int64,
+                        )
+                    )
+                    value_parts.append(arrow_column_to_float64(batch.column(1)))
+        if not timestamp_parts:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+        if len(timestamp_parts) == 1:
+            return timestamp_parts[0], value_parts[0]
+        return np.concatenate(timestamp_parts), np.concatenate(value_parts)
 
     def read_device_fields_by_time_range(
         self, device_id: int, field_indices: List[int], start_time: int, end_time: int
@@ -647,10 +629,16 @@ class TsFileSeriesReader:
             table_entry.field_columns[field_idx] for field_idx in field_indices
         ]
         if self._model_kind == MODEL_TREE:
-            device_path = self._build_tree_device_path(table_entry, device_entry)
-            return self._read_arrow_tree(
-                device_path, requested_field_columns, start_time, end_time
-            )
+            parts = {
+                name: self._read_tree_series(
+                    device_id, field_idx, start_time=start_time, end_time=end_time
+                )
+                for name, field_idx in zip(requested_field_columns, field_indices)
+            }
+            timestamps, values = build_aligned_matrix(requested_field_columns, parts)
+            return timestamps, {
+                name: values[:, idx] for idx, name in enumerate(requested_field_columns)
+            }
         return self._read_arrow_table(
             table_entry.table_name,
             requested_field_columns,
@@ -659,34 +647,6 @@ class TsFileSeriesReader:
             start_time,
             end_time,
         )
-
-    @staticmethod
-    def _build_tree_device_path(table_entry, device_entry) -> str:
-        """Reassemble the cwrapper-facing tree device path from catalog state.
-
-        The native ``query_timeseries`` / ``query_tree_by_row`` APIs split the
-        device path on ``.`` internally, so segments themselves must not
-        contain ``.``. Tree-model writers enforce this convention; we surface
-        an explicit error if a future writer ever violates it.
-        """
-        components = [str(table_entry.table_name)]
-        for value in device_entry.tag_values:
-            if value is None:
-                # Should not happen: trailing-None devices are normalized to a
-                # shorter tag tuple. An interior None signals a sparse-tag
-                # device, which is not part of the tree-model contract.
-                raise ValueError(
-                    f"Tree device path cannot include a null segment: "
-                    f"{device_entry.tag_values!r}"
-                )
-            text = str(value)
-            if "." in text:
-                raise NotImplementedError(
-                    f"Tree device segment with '.' is not supported by the "
-                    f"underlying cwrapper path API: {text!r}"
-                )
-            components.append(text)
-        return ".".join(components)
 
     def _read_arrow_table(
         self,
@@ -756,94 +716,3 @@ class TsFileSeriesReader:
         }
 
         return timestamps, field_values
-
-    def _read_arrow_tree(
-        self,
-        device_path: str,
-        field_columns: List[str],
-        start_time: int,
-        end_time: int,
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-        """Tree-model time-range read for one device (multi-field)."""
-        field_columns = list(field_columns)
-        if not field_columns:
-            return (
-                np.array([], dtype=np.int64),
-                {},
-            )
-
-        target_path_segments = device_path.split(".")
-        expected_path_len = (
-            max(len(t.tag_columns) for t in self._catalog.table_entries) + 1
-        )
-        timestamps = []
-        value_buckets = {col: [] for col in field_columns}
-
-        # PERF: O(total_rows) full tree scan filtered to one device
-        # client-side; aligned reads over N devices are O(N * total_rows).
-        # See _read_series_by_row_tree / PR #816 for the cwrapper limitation
-        # that blocks per-device pushdown (query_timeseries). Hot path.
-        with self._reader.query_table_on_tree(
-            field_columns, start_time, end_time
-        ) as result_set:
-            md = result_set.get_metadata()
-            num_cols = md.get_column_num()
-            col_names = [md.get_column_name(i + 1) for i in range(num_cols)]
-            value_indices = {}
-            for col in field_columns:
-                try:
-                    value_indices[col] = col_names.index(col) + 1
-                except ValueError:
-                    # Column missing (no device in file owns it). Yield empty.
-                    return (
-                        np.array([], dtype=np.int64),
-                        {
-                            col2: np.array([], dtype=np.float64)
-                            for col2 in field_columns
-                        },
-                    )
-            all_col_indices = [
-                idx + 1 for idx, name in enumerate(col_names) if name.startswith("col_")
-            ]
-            col_indices = all_col_indices[-expected_path_len:]
-            # Fail fast if the cwrapper col_ leak pattern changes: the trailing
-            # slice assumes at least expected_path_len col_ cells. A count
-            # mismatch means the heuristic is stale and could silently pick the
-            # wrong path columns (returning wrong-device data). Guards the count
-            # only -- it can't catch a leak where the genuine columns are no
-            # longer the trailing ones.
-            assert len(col_indices) == expected_path_len, (
-                f"tree path col_ columns: expected {expected_path_len}, got "
-                f"{len(col_indices)} of {len(all_col_indices)}; cwrapper col_ "
-                f"leak pattern may have changed"
-            )
-            while result_set.next():
-                row_path_segments = [
-                    result_set.get_value_by_index(ci) for ci in col_indices
-                ]
-                while row_path_segments and row_path_segments[-1] is None:
-                    row_path_segments.pop()
-                if row_path_segments != target_path_segments:
-                    continue
-                ts = int(result_set.get_value_by_index(1))
-                # The on-tree scan already honors start/end_time at the
-                # cwrapper level, but defensively re-clip on the boundary.
-                if ts < start_time or ts > end_time:
-                    continue
-                timestamps.append(ts)
-                for col, vidx in value_indices.items():
-                    raw = result_set.get_value_by_index(vidx)
-                    value_buckets[col].append(np.nan if raw is None else float(raw))
-
-        if not timestamps:
-            return (
-                np.array([], dtype=np.int64),
-                {col: np.array([], dtype=np.float64) for col in field_columns},
-            )
-
-        timestamps_arr = np.asarray(timestamps, dtype=np.int64)
-        field_values = {
-            col: np.asarray(value_buckets[col], dtype=np.float64)
-            for col in field_columns
-        }
-        return timestamps_arr, field_values

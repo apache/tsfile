@@ -122,6 +122,28 @@ with TsFileReader("example.tsfile") as reader:
 Values do not carry a data type; use an explicit portable encoding when storing
 numbers or structures.
 
+## Numeric tree-model sequences
+
+V4 tree-model TsFiles can use the same `TsFileDataFrame` sequence and window APIs
+as table-model files. Select each measurement by its full logical path. Different
+devices may have different physical types for the same measurement name; numeric
+values are returned as `float64` arrays, with null values preserved as `NaN`.
+
+```python
+from tsfile import TsFileDataFrame
+
+with TsFileDataFrame("tree_data/", use_index=True) as dataset:
+    with dataset["root.training.d1.temperature"] as series:
+        window = series[0:128]
+        timestamps = series.timestamps
+        statistics = series.stats  # start_time, end_time, count
+```
+
+Statistics and positional slices follow the sequence's timeline, including null
+positions in aligned data. The index validates physical types across shards of
+the same full path. Load table-model and tree-model files in separate DataFrames;
+non-numeric measurements are omitted from the numeric dataset view.
+
 ## Dataset indexes
 
 Enable the persistent dataset index with `use_index=True`. The first open
