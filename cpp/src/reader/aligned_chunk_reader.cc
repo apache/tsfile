@@ -218,6 +218,11 @@ void AlignedChunkReader::destroy() {
     // page_all_times_ handling above.
     std::vector<ValueColumnState*>().swap(value_columns_);
     std::vector<std::vector<int64_t>>().swap(per_page_times_);
+    // Page-plan filter state added for FIELD filtering. These two own their
+    // heap buffers and, like the vectors above, are only reachable through
+    // this destroy() path.
+    std::vector<bool>().swap(filter_column_mask_);
+    current_page_field_mask_.release_storage();
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned
     for (auto* d : time_decoder_pool_) {
@@ -510,13 +515,10 @@ int AlignedChunkReader::read_from_file_and_rewrap(
 // page cannot be ruled out, while "fully satisfies" means every row is known
 // to match and the page count can safely be used for offset pushdown.
 bool AlignedChunkReader::cur_page_may_satisfy_filter(Filter* filter) {
-    bool value_satisfy = filter == nullptr ||
-                         cur_value_page_header_.statistic_ == nullptr ||
-                         filter->satisfy(cur_value_page_header_.statistic_);
-    bool time_satisfy = filter == nullptr ||
-                        cur_time_page_header_.statistic_ == nullptr ||
-                        filter->satisfy(cur_time_page_header_.statistic_);
-    return time_satisfy && value_satisfy;
+    // Value statistics exclude NULLs, whose timestamps may still match.
+    // Only the shared time page can rule out every aligned row.
+    return filter == nullptr || cur_time_page_header_.statistic_ == nullptr ||
+           filter->satisfy(cur_time_page_header_.statistic_);
 }
 
 bool AlignedChunkReader::cur_page_fully_satisfies_filter(Filter* filter) {
@@ -738,6 +740,11 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
+                if (filter != nullptr &&                                       \
+                    !filter->satisfy_start_end_time(time, time)) {             \
+                    row_appender.backoff_add_row();                            \
+                    continue;                                                  \
+                }                                                              \
                 row_appender.append(0, (char*)&time, sizeof(time));            \
                 row_appender.append_null(1);                                   \
                 continue;                                                      \
@@ -764,53 +771,6 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             }                                                                  \
         }                                                                      \
     } while (false)
-
-int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
-    ByteStream& time_in, ByteStream& value_in, RowAppender& row_appender,
-    Filter* filter) {
-    int ret = E_OK;
-    uint32_t mask = 1 << 7;
-    int64_t time = 0;
-    int32_t value;
-    while (time_decoder_->has_remaining(time_in)) {
-        cur_value_index++;
-        if (value_page_col_notnull_bitmap_.empty() ||
-            ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
-             (mask >> (cur_value_index % 8))) == 0) {
-            ret = time_decoder_->read_int64(time, time_in);
-            if (ret != E_OK) {
-                break;
-            }
-            if (UNLIKELY(!row_appender.add_row())) {
-                ret = E_OVERFLOW;
-                break;
-            }
-            row_appender.append(0, (char*)&time, sizeof(time));
-            row_appender.append_null(1);
-            continue;
-        }
-        assert(value_decoder_->has_remaining(value_in));
-        if (!value_decoder_->has_remaining(value_in)) {
-            return common::E_DATA_INCONSISTENCY;
-        }
-        if (UNLIKELY(!row_appender.add_row())) {
-            ret = E_OVERFLOW;
-            cur_value_index--;
-            break;
-        } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
-        } else if (RET_FAIL(value_decoder_->read_int32(value, value_in))) {
-        } else if (filter != nullptr && !filter->satisfy(time, value)) {
-            row_appender.backoff_add_row();
-            continue;
-        } else {
-            /*std::cout << "decoder: time=" << time << ", value=" << value
-             * << std::endl;*/
-            row_appender.append(0, (char*)&time, sizeof(time));
-            row_appender.append(1, (char*)&value, sizeof(value));
-        }
-    }
-    return ret;
-}
 
 namespace {
 // Type-dispatched exact read / skip for decode_tv_batch<T>. Overload
@@ -1466,12 +1426,80 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
     return ret;
 }
 
+void AlignedChunkReader::build_filter_column_mask() {
+    filter_column_mask_.assign(value_columns_.size(), false);
+    if (field_filter_ == nullptr) return;
+    std::set<std::string> filter_columns;
+    for (const auto& name : field_filter_->referenced_columns()) {
+        filter_columns.insert(name);
+    }
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        filter_column_mask_[c] =
+            filter_columns.count(
+                value_columns_[c]
+                    ->chunk_meta->measurement_name_.to_std_string()) > 0;
+    }
+}
+
+int AlignedChunkReader::evaluate_page_field_mask(size_t page_idx) {
+    if (field_filter_ == nullptr) return E_OK;
+    const ChunkPageInfo& page_info = chunk_pages_[page_idx];
+    std::vector<AlignedFieldFilter::ColumnView> views;
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (!filter_column_mask_[c]) continue;
+        auto* col = value_columns_[c];
+        auto& pps = col->per_page_state[page_idx];
+        AlignedFieldFilter::ColumnView view;
+        view.name = col->chunk_meta->measurement_name_.to_std_string();
+        view.type = col->chunk_header.data_type_;
+        view.notnull_bitmap =
+            pps.notnull_bitmap.empty() ? nullptr : pps.notnull_bitmap.data();
+        view.notnull_bitmap_size =
+            static_cast<uint32_t>(pps.notnull_bitmap.size());
+        view.row_offset = static_cast<uint32_t>(page_info.row_begin);
+        view.nonnull_start = static_cast<uint32_t>(
+            count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin));
+        if (view.type == common::STRING || view.type == common::TEXT ||
+            view.type == common::BLOB) {
+            view.string_values = pps.predecoded_strings.data();
+        } else {
+            view.fixed_values = pps.predecoded_values.data();
+        }
+        views.push_back(std::move(view));
+    }
+
+    const uint32_t row_count =
+        static_cast<uint32_t>(page_info.row_end - page_info.row_begin);
+    current_page_field_mask_.reset(row_count);
+    int ret = field_filter_->evaluate_columns(views, row_count,
+                                              current_page_field_mask_);
+    if (ret != E_OK) return ret;
+    current_page_field_mask_valid_ = true;
+    return E_OK;
+}
+
+int AlignedChunkReader::decode_output_columns_for_page(size_t page_idx) {
+    if (field_filter_ == nullptr) return E_OK;
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (filter_column_mask_[c]) continue;
+        int ret = decode_value_page_for_slot(c, page_idx);
+        if (IS_FAIL(ret)) return ret;
+    }
+    return E_OK;
+}
+
 int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     int ret = E_OK;
     chunk_pages_.clear();
     current_page_plan_index_ = 0;
     current_page_loaded_ = false;
     page_plan_built_ = false;
+    // A structurally broken predicate (e.g. an OR missing one operand) must
+    // fail here rather than be classified by page statistics: statistics-based
+    // FULL_PASS would otherwise return rows without ever running evaluation.
+    if (field_filter_ != nullptr && !field_filter_->is_valid()) {
+        return E_INVALID_ARG;
+    }
 
     const uint32_t num_cols = value_columns_.size();
     while (IS_SUCC(ret)) {
@@ -1520,44 +1548,74 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
             break;
         }
 
+        bool field_page_skip = false;
+        bool field_all_match = false;
+        if (field_filter_ != nullptr) {
+            std::map<std::string, Statistic*> field_statistics;
+            for (uint32_t c = 0; c < num_cols; ++c) {
+                auto* col = value_columns_[c];
+                field_statistics[col->chunk_meta->measurement_name_
+                                     .to_std_string()] =
+                    col->cur_page_header.statistic_;
+            }
+            const int64_t row_count =
+                cur_time_page_header_.statistic_ != nullptr
+                    ? cur_time_page_header_.statistic_->count_
+                    : 0;
+            field_page_skip =
+                !field_filter_->may_match(field_statistics, row_count);
+            field_all_match =
+                !field_page_skip &&
+                field_filter_->all_match(field_statistics, row_count);
+        }
+
         Statistic* stat = cur_time_page_header_.statistic_;
-        if (filter == nullptr) {
+        const bool time_full_match =
+            filter == nullptr ||
+            (stat != nullptr && filter->contain_start_end_time(
+                                    stat->start_time_, stat->end_time_));
+        if (field_page_skip ||
+            (stat != nullptr && filter != nullptr && !filter->satisfy(stat))) {
+            page_info.pass_type = PagePassType::SKIP;
+        } else if (time_full_match &&
+                   (field_filter_ == nullptr || field_all_match)) {
             page_info.pass_type = PagePassType::FULL_PASS;
             page_info.row_begin = 0;
             page_info.row_end = stat != nullptr ? stat->count_ : 0;
-        } else if (stat != nullptr && !filter->satisfy(stat)) {
-            page_info.pass_type = PagePassType::SKIP;
-        } else if (stat != nullptr && filter->contain_start_end_time(
-                                          stat->start_time_, stat->end_time_)) {
-            page_info.pass_type = PagePassType::FULL_PASS;
-            page_info.row_begin = 0;
-            page_info.row_end = stat->count_;
         } else {
             page_info.pass_type = PagePassType::BOUNDARY;
-            std::vector<int64_t> times;
-            if (RET_FAIL(decode_time_page_direct(page_info, times))) {
-                break;
-            }
-            int32_t first = -1;
-            int32_t last = -1;
-            for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
-                if (filter->satisfy_start_end_time(times[i], times[i])) {
-                    // Offset is defined on the filtered row stream. Consume
-                    // matching rows only; holes inside a boundary page do not
-                    // count toward it.
-                    if (row_offset > 0) {
-                        row_offset--;
-                        continue;
-                    }
-                    if (first < 0) first = i;
-                    last = i;
-                }
-            }
-            if (first >= 0) {
-                page_info.row_begin = first;
-                page_info.row_end = last + 1;
+            if (filter == nullptr) {
+                // There is no time predicate to narrow the rows; keep the
+                // whole page and let the FIELD mask decide exact rows.
+                page_info.row_begin = 0;
+                page_info.row_end = stat != nullptr ? stat->count_ : 0;
             } else {
-                page_info.pass_type = PagePassType::SKIP;
+                std::vector<int64_t> times;
+                if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                    break;
+                }
+                int32_t first = -1;
+                int32_t last = -1;
+                for (int32_t i = 0; i < static_cast<int32_t>(times.size());
+                     i++) {
+                    if (filter->satisfy_start_end_time(times[i], times[i])) {
+                        // Offset is defined on the filtered row stream. Consume
+                        // matching rows only; holes inside a boundary page do
+                        // not count toward it.
+                        if (field_filter_ == nullptr && row_offset > 0) {
+                            row_offset--;
+                            continue;
+                        }
+                        if (first < 0) first = i;
+                        last = i;
+                    }
+                }
+                if (first >= 0) {
+                    page_info.row_begin = first;
+                    page_info.row_end = last + 1;
+                } else {
+                    page_info.pass_type = PagePassType::SKIP;
+                }
             }
         }
 
@@ -1818,10 +1876,16 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
 // empty so the scatter loop decodes on demand and releases after each page
 // (see decode_page_lazy() / release_page_slot()).  Bounds memory to one page.
 int AlignedChunkReader::decode_all_planned_pages() {
+    // Keep this decision stable while a page spans multiple SSI TsBlocks.
+    // A populated first-page buffer does not imply that later pages were
+    // eagerly decoded.
+    page_plan_lazy_ = true;
     if (chunk_pages_.empty()) return E_OK;
+    build_filter_column_mask();
 
 #ifdef ENABLE_THREADS
     if (decode_pool_ != nullptr && value_columns_.size() > 1) {
+        page_plan_lazy_ = false;
         // Lazily grow the per-worker time decoder/compressor pool.  Both
         // factories can return nullptr on OOM/unsupported config; without
         // checking, the worker task below dereferences null when calling
@@ -1848,6 +1912,7 @@ int AlignedChunkReader::decode_all_planned_pages() {
         std::vector<std::future<void>> futures;
         std::vector<int> col_rets(value_columns_.size(), E_OK);
         for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            if (field_filter_ != nullptr && !filter_column_mask_[c]) continue;
             int* col_ret = &col_rets[c];
             futures.push_back(decode_pool_->submit([this, c, col_ret]() {
                 for (size_t p = 0; p < chunk_pages_.size(); p++) {
@@ -1899,20 +1964,47 @@ int AlignedChunkReader::decode_all_planned_pages() {
     return E_OK;
 }
 
-// Decode time + all value columns for a single page slot on demand.
-// Used by the single-thread path to keep memory bounded to one page.
+// Decode one page slot on demand. With a FIELD filter, decode only its filter
+// columns first and leave output-only columns untouched when the page has no
+// matching row.
 int AlignedChunkReader::decode_page_lazy(size_t page_idx) {
     int ret = E_OK;
     if (RET_FAIL(decode_time_page_direct(chunk_pages_[page_idx],
                                          per_page_times_[page_idx]))) {
         return ret;
     }
-    for (uint32_t c = 0; c < value_columns_.size(); c++) {
-        if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) {
-            return ret;
-        }
+    if (field_filter_ != nullptr &&
+        filter_column_mask_.size() != value_columns_.size()) {
+        build_filter_column_mask();
     }
-    return E_OK;
+    if (field_filter_ == nullptr) {
+        for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+            if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+        }
+        return E_OK;
+    }
+    if (chunk_pages_[page_idx].pass_type == PagePassType::FULL_PASS) {
+        // Every row matches; no mask evaluation is needed, so decode all
+        // columns once instead of first decoding the filter columns.
+        for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+            if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+        }
+        current_page_field_mask_.reset(static_cast<uint32_t>(
+            chunk_pages_[page_idx].row_end - chunk_pages_[page_idx].row_begin));
+        current_page_field_mask_.set_all();
+        current_page_field_mask_valid_ = true;
+        return E_OK;
+    }
+
+    // BOUNDARY page: decode only the filter columns, evaluate the mask, then
+    // decode output columns only when at least one row survives.
+    for (uint32_t c = 0; c < value_columns_.size(); ++c) {
+        if (!filter_column_mask_[c]) continue;
+        if (RET_FAIL(decode_value_page_for_slot(c, page_idx))) return ret;
+    }
+    if (RET_FAIL(evaluate_page_field_mask(page_idx))) return ret;
+    if (current_page_field_mask_.empty()) return E_OK;
+    return decode_output_columns_for_page(page_idx);
 }
 
 // Release the decoded buffers of one page slot so they can be reused by the
@@ -1956,7 +2048,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi());
     const bool use_page_plan =
         page_plan_built_ || (!serial_page_in_progress &&
-                             (row_offset > 0 || use_parallel_page_plan));
+                             (row_offset > 0 || use_parallel_page_plan ||
+                              field_filter_ != nullptr));
     if (!use_page_plan) {
         return get_next_page_multi_serial(ret_tsblock, filter, pa, row_offset);
     }
@@ -1976,9 +2069,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     const uint32_t null_mask_base = 1 << 7;
     const uint32_t num_cols = value_columns_.size();
     RowAppender row_appender(ret_tsblock);
-    // Detect single-thread lazy mode by whether decode_all_planned_pages left
-    // per_page_times_ empty (it leaves slots empty when there's no pool).
-    const bool single_thread_lazy = per_page_times_[0].empty();
+    const bool single_thread_lazy = page_plan_lazy_;
 
     while (current_page_plan_index_ < chunk_pages_.size()) {
         const ChunkPageInfo& page_info = chunk_pages_[current_page_plan_index_];
@@ -1992,7 +2083,33 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
             page_time_cursor_ = page_info.row_begin;
             page_time_count_ = page_info.row_end;
             current_page_loaded_ = true;
+            current_page_field_mask_valid_ = false;
         }
+
+        if (field_filter_ != nullptr && !current_page_field_mask_valid_) {
+            if (page_info.pass_type == PagePassType::FULL_PASS) {
+                current_page_field_mask_.reset(static_cast<uint32_t>(
+                    page_info.row_end - page_info.row_begin));
+                current_page_field_mask_.set_all();
+                current_page_field_mask_valid_ = true;
+            } else if (RET_FAIL(evaluate_page_field_mask(
+                           current_page_plan_index_))) {
+                return ret;
+            }
+            if (current_page_field_mask_.empty()) {
+                if (single_thread_lazy)
+                    release_page_slot(current_page_plan_index_);
+                current_page_plan_index_++;
+                current_page_loaded_ = false;
+                current_page_field_mask_valid_ = false;
+                continue;
+            }
+            if (!single_thread_lazy && RET_FAIL(decode_output_columns_for_page(
+                                           current_page_plan_index_))) {
+                return ret;
+            }
+        }
+
         const std::vector<int64_t>& times =
             per_page_times_[current_page_plan_index_];
 
@@ -2078,7 +2195,12 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                 return E_OK;
             }
             int64_t ts = times[page_time_cursor_];
-            if (boundary_filter && !filter->satisfy_start_end_time(ts, ts)) {
+            const uint32_t field_row = page_time_cursor_ - page_info.row_begin;
+            const bool field_rejected =
+                field_filter_ != nullptr &&
+                !current_page_field_mask_.test(field_row);
+            if (field_rejected ||
+                (boundary_filter && !filter->satisfy_start_end_time(ts, ts))) {
                 for (uint32_t c = 0; c < num_cols; c++) {
                     auto* col = value_columns_[c];
                     auto& pps = col->per_page_state[current_page_plan_index_];
@@ -2140,6 +2262,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         }
         current_page_plan_index_++;
         current_page_loaded_ = false;
+        current_page_field_mask_valid_ = false;
     }
     return E_NO_MORE_DATA;
 }

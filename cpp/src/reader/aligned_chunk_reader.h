@@ -25,6 +25,7 @@
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
 #include "file/random_access_read_file.h"
+#include "reader/filter/aligned_field_filter.h"
 #include "reader/filter/filter.h"
 #include "reader/ichunk_reader.h"
 
@@ -122,6 +123,12 @@ class AlignedChunkReader : public IChunkReader {
           cur_value_index(-1) {}
     int init(RandomAccessReadFile* read_file, common::String m_name,
              common::TSDataType data_type, Filter* time_filter) override;
+    void set_field_filter(AlignedFieldFilter* field_filter) {
+        field_filter_ = field_filter;
+    }
+    bool field_filter_applied() const {
+        return field_filter_ != nullptr && page_plan_built_;
+    }
     void reset() override;
     void destroy() override;
     ~AlignedChunkReader() override = default;
@@ -219,10 +226,6 @@ class AlignedChunkReader : public IChunkReader {
                                                common::TsBlock* ret_tsblock,
                                                Filter* filter,
                                                common::PageArena* pa);
-    int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
-                                         common::ByteStream& value_in,
-                                         common::RowAppender& row_appender,
-                                         Filter* filter);
     // Unified fixed-width aligned time+value page decode for
     // INT32/INT64/FLOAT/DOUBLE.  Defined in the .cc; instantiated there for
     // each value type by decode_tv_buf_into_tsblock_by_datatype().
@@ -261,6 +264,9 @@ class AlignedChunkReader : public IChunkReader {
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
     int build_page_plan(Filter* filter, int& row_offset);
+    void build_filter_column_mask();
+    int evaluate_page_field_mask(size_t page_idx);
+    int decode_output_columns_for_page(size_t page_idx);
     int decode_time_page_direct(const ChunkPageInfo& page_info,
                                 std::vector<int64_t>& out_times);
     int decode_time_page_with(const ChunkPageInfo& page_info,
@@ -296,6 +302,7 @@ class AlignedChunkReader : public IChunkReader {
     Compressor* time_compressor_;
     Compressor* value_compressor_;
     Filter* time_filter_;
+    AlignedFieldFilter* field_filter_ = nullptr;
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
@@ -321,8 +328,12 @@ class AlignedChunkReader : public IChunkReader {
     std::vector<ChunkPageInfo> chunk_pages_;
     std::vector<std::vector<int64_t>> per_page_times_;
     bool page_plan_built_ = false;
+    bool page_plan_lazy_ = true;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;
+    std::vector<bool> filter_column_mask_;
+    SelectionMask current_page_field_mask_;
+    bool current_page_field_mask_valid_ = false;
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned
