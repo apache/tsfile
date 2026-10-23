@@ -22,6 +22,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
@@ -109,6 +110,17 @@ public class TsFileIOWriterTest {
     File file = new File(FILE_PATH);
     if (file.exists()) {
       file.delete();
+    }
+  }
+
+  @Test
+  public void testLegacyParameterSetterPreservesSuppliedKey() throws IOException {
+    EncryptParameter parameter =
+        new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", new byte[] {1, 2, 3});
+    try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
+      writer.setEncryptParam(parameter);
+      Assert.assertSame(parameter, writer.getEncryptParameter());
+      Assert.assertArrayEquals(new byte[] {1, 2, 3}, writer.getEncryptParameter().getKey());
     }
   }
 

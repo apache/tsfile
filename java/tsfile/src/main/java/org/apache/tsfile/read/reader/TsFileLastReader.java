@@ -19,14 +19,13 @@
 
 package org.apache.tsfile.read.reader;
 
-import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
-import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -181,6 +180,8 @@ public class TsFileLastReader
     ByteBuffer chunkData = chunk.getData();
     PageHeader lastPageHeader = null;
     ByteBuffer lastPageData = null;
+    int pageIndex = 0;
+    int lastPageIndex = -1;
     while (chunkData.hasRemaining()) {
       PageHeader pageHeader;
       if (chunk.isSinglePageChunk()) {
@@ -196,17 +197,20 @@ public class TsFileLastReader
           || (pageHeader.getStatistics() != null && pageHeader.getStatistics().getCount() > 0)) {
         lastPageHeader = pageHeader;
         lastPageData = pageData;
+        lastPageIndex = pageIndex;
       }
+      pageIndex++;
     }
 
     if (lastPageHeader != null) {
-      CompressionType compressionType = chunk.getHeader().getCompressionType();
-      if (compressionType != CompressionType.UNCOMPRESSED) {
-        ByteBuffer uncompressedPage = ByteBuffer.allocate(lastPageHeader.getUncompressedSize());
-        IUnCompressor.getUnCompressor(compressionType).uncompress(lastPageData, uncompressedPage);
-        lastPageData = uncompressedPage;
-        lastPageData.flip();
-      }
+      lastPageData =
+          ChunkReader.deserializePageData(
+              lastPageHeader,
+              lastPageData,
+              chunk.getHeader(),
+              IDecryptor.getDecryptor(chunk.getEncryptParam()),
+              chunk.getEncryptParam(),
+              lastPageIndex);
 
       ValuePageReader valuePageReader =
           new ValuePageReader(
@@ -265,15 +269,15 @@ public class TsFileLastReader
       return new Pair<>(seriesMeta.getMeasurementId(), null);
     }
 
-    Chunk chunk = sequenceReader.readMemChunk(lastNonEmptyChunkMetadata);
-
-    if (!isAligned) {
-      return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
-    } else {
-      return new Pair<>(
-          seriesMeta.getMeasurementId(),
-          readAlignedLastPoint(
-              chunk, lastNonEmptyChunkMetadata, seriesMeta.getStatistics().getEndTime()));
+    try (Chunk chunk = sequenceReader.readMemChunk(lastNonEmptyChunkMetadata)) {
+      if (!isAligned) {
+        return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
+      } else {
+        return new Pair<>(
+            seriesMeta.getMeasurementId(),
+            readAlignedLastPoint(
+                chunk, lastNonEmptyChunkMetadata, seriesMeta.getStatistics().getEndTime()));
+      }
     }
   }
 

@@ -66,6 +66,41 @@ public class DataSetWithTimeGenerator extends QueryDataSet {
   }
 
   @Override
+  public void close() throws IOException {
+    if (isClosed()) {
+      return;
+    }
+    super.close();
+    IOException failure = null;
+    for (FileSeriesReaderByTimestamp reader : readers) {
+      if (reader == null) {
+        continue;
+      }
+      try {
+        reader.close();
+      } catch (IOException e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    try {
+      timeGenerator.close();
+    } catch (IOException e) {
+      if (failure == null) {
+        failure = e;
+      } else {
+        failure.addSuppressed(e);
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
+  }
+
+  @Override
   public RowRecord nextWithoutConstraint() throws IOException {
     long timestamp = timeGenerator.next();
     RowRecord rowRecord = new RowRecord(timestamp);

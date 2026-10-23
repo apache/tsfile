@@ -24,7 +24,7 @@ import org.apache.tsfile.read.common.BatchData;
 import java.io.IOException;
 import java.util.List;
 
-public interface IChunkReader {
+public interface IChunkReader extends AutoCloseable {
 
   boolean hasNextSatisfiedPage() throws IOException;
 
