@@ -218,6 +218,11 @@ void AlignedChunkReader::destroy() {
     // page_all_times_ handling above.
     std::vector<ValueColumnState*>().swap(value_columns_);
     std::vector<std::vector<int64_t>>().swap(per_page_times_);
+    // Page-plan filter state added for FIELD filtering. These two own their
+    // heap buffers and, like the vectors above, are only reachable through
+    // this destroy() path.
+    std::vector<bool>().swap(filter_column_mask_);
+    current_page_field_mask_.release_storage();
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned
     for (auto* d : time_decoder_pool_) {
@@ -1489,6 +1494,12 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     current_page_plan_index_ = 0;
     current_page_loaded_ = false;
     page_plan_built_ = false;
+    // A structurally broken predicate (e.g. an OR missing one operand) must
+    // fail here rather than be classified by page statistics: statistics-based
+    // FULL_PASS would otherwise return rows without ever running evaluation.
+    if (field_filter_ != nullptr && !field_filter_->is_valid()) {
+        return E_INVALID_ARG;
+    }
 
     const uint32_t num_cols = value_columns_.size();
     while (IS_SUCC(ret)) {

@@ -88,6 +88,11 @@ class AlignedFieldFilter : public Filter {
 
     std::vector<std::string> referenced_columns() const;
 
+    // False when a composite node is missing one of its operands. Callers use
+    // this to reject a malformed tree before page statistics can classify it
+    // as a full-page match and skip evaluation.
+    bool is_valid() const;
+
     // Conservatively decides whether any row in a page can satisfy the filter.
     // Missing or unsupported statistics always return true.
     bool may_match(const std::map<std::string, Statistic*>& statistics,
@@ -105,7 +110,7 @@ class AlignedFieldFilter : public Filter {
 
    private:
     AlignedFieldFilter(Kind kind, std::string column, CompareOp op,
-                       Literal literal);
+                       Literal literal, bool negated = false);
     AlignedFieldFilter(Kind kind, Ptr left, Ptr right);
     // Push NOT down to the leaves so negation keeps SQL three-valued NULL
     // semantics; a single SelectionMask bit cannot represent NULL vs FALSE.
@@ -120,6 +125,11 @@ class AlignedFieldFilter : public Filter {
     std::string column_;
     CompareOp compare_op_ = CompareOp::EQ;
     Literal literal_;
+    // True when this comparison leaf negates an ordered FLOAT/DOUBLE
+    // comparison. Flipping the operator is not equivalent there: NaN makes
+    // every ordered comparison false, so the negation must be evaluated as
+    // !(value <op> literal). NULL still never satisfies either form.
+    bool negated_ = false;
     Ptr left_;
     Ptr right_;
 };

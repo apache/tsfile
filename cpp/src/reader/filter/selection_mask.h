@@ -35,6 +35,9 @@ class SelectionMask {
 
     void reset(uint32_t row_count);
     void set_all(bool value = true);
+    // Releases the backing storage. Readers are torn down through an explicit
+    // destroy() that never runs destructors, so clear() alone would leak it.
+    void release_storage();
 
     uint32_t row_count() const { return row_count_; }
     bool empty() const { return count_ones() == 0; }

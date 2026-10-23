@@ -61,6 +61,11 @@ void SelectionMask::reset(uint32_t row_count) {
     words_.assign(word_count(row_count), 0);
 }
 
+void SelectionMask::release_storage() {
+    std::vector<uint64_t>().swap(words_);
+    row_count_ = 0;
+}
+
 void SelectionMask::set_all(bool value) {
     const uint64_t fill = value ? ~static_cast<uint64_t>(0) : 0;
     for (auto& word : words_) {

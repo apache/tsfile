@@ -138,11 +138,13 @@ AlignedFieldFilter::Literal AlignedFieldFilter::Literal::string(
 }
 
 AlignedFieldFilter::AlignedFieldFilter(Kind kind, std::string column,
-                                       CompareOp op, Literal literal)
+                                       CompareOp op, Literal literal,
+                                       bool negated)
     : kind_(kind),
       column_(std::move(column)),
       compare_op_(op),
-      literal_(std::move(literal)) {}
+      literal_(std::move(literal)),
+      negated_(negated) {}
 
 AlignedFieldFilter::AlignedFieldFilter(Kind kind, Ptr left, Ptr right)
     : kind_(kind), left_(std::move(left)), right_(std::move(right)) {}
@@ -185,6 +187,23 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
     if (node == nullptr) return nullptr;
     switch (node->kind_) {
         case Kind::COMPARISON: {
+            // Flipping an ordered operator is not the same as negating the
+            // comparison when the value is NaN: every ordered comparison with
+            // NaN is false, so NOT (x < 5) is true for a NaN value while
+            // x >= 5 stays false. Keep the operand and mark the leaf negated;
+            // evaluation then computes !(value <op> literal) for non-null
+            // rows. Equality negation stays exact (NOT (x == v) is x != v for
+            // every value), so it keeps its operator flip and its pruning.
+            const bool ordered = node->compare_op_ == CompareOp::LT ||
+                                 node->compare_op_ == CompareOp::LE ||
+                                 node->compare_op_ == CompareOp::GT ||
+                                 node->compare_op_ == CompareOp::GE;
+            if (ordered && (node->literal_.type == common::FLOAT ||
+                            node->literal_.type == common::DOUBLE)) {
+                return Ptr(new AlignedFieldFilter(
+                    Kind::COMPARISON, node->column_, node->compare_op_,
+                    node->literal_, !node->negated_));
+            }
             CompareOp neg_op = CompareOp::EQ;
             switch (node->compare_op_) {
                 case CompareOp::EQ:
@@ -247,6 +266,22 @@ std::vector<std::string> AlignedFieldFilter::referenced_columns() const {
     return columns;
 }
 
+bool AlignedFieldFilter::is_valid() const {
+    switch (kind_) {
+        case Kind::COMPARISON:
+        case Kind::IS_NULL:
+        case Kind::IS_NOT_NULL:
+            return true;
+        case Kind::NOT:
+            return left_ != nullptr && left_->is_valid();
+        case Kind::AND:
+        case Kind::OR:
+            return left_ != nullptr && right_ != nullptr && left_->is_valid() &&
+                   right_->is_valid();
+    }
+    return false;
+}
+
 bool AlignedFieldFilter::may_match(
     const std::map<std::string, Statistic*>& statistics,
     int64_t row_count) const {
@@ -276,6 +311,11 @@ bool AlignedFieldFilter::may_match(
         return statistic->count_ > 0;
     }
     if (statistic->count_ <= 0) return false;
+
+    // A negated comparison admits rows that the page's min/max statistics do
+    // not describe (NaN is non-NULL but never extends either bound), so it
+    // cannot rule the page out. Evaluation resolves the exact rows.
+    if (negated_) return true;
 
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return true;
@@ -371,8 +411,12 @@ bool AlignedFieldFilter::all_match(
                right_->all_match(statistics, row_count);
     }
     if (kind_ == Kind::OR) {
-        return (left_ && left_->all_match(statistics, row_count)) ||
-               (right_ && right_->all_match(statistics, row_count));
+        // Both operands are required: a half-built OR must fall through to
+        // row evaluation, which reports E_INVALID_ARG, instead of matching a
+        // page through its remaining operand as a full-page pass.
+        return left_ && right_ &&
+               (left_->all_match(statistics, row_count) ||
+                right_->all_match(statistics, row_count));
     }
     if (kind_ == Kind::NOT) {
         // Physical plans may keep a NOT node for now. Do not infer a
@@ -392,6 +436,10 @@ bool AlignedFieldFilter::all_match(
     // Ordinary comparisons do not match NULL. A page-wide match requires that
     // every row has a non-NULL value and that the whole min/max range passes.
     if (statistic->count_ != row_count) return false;
+
+    // The negated form depends on values (NaN) rather than min/max bounds;
+    // leave the page to row evaluation.
+    if (negated_) return false;
 
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return false;
@@ -706,6 +754,8 @@ int AlignedFieldFilter::evaluate_leaf(const ColumnView& column,
             } else {
                 return common::E_NOT_SUPPORT;
             }
+            // NULL never satisfies a comparison, negated or not.
+            if (negated_) satisfied = !satisfied;
         }
         if (satisfied) mask.set_one(row);
     }
@@ -775,6 +825,8 @@ int AlignedFieldFilter::evaluate_leaf(
             } else {
                 return common::E_NOT_SUPPORT;
             }
+            // NULL never satisfies a comparison, negated or not.
+            if (negated_) satisfied = !satisfied;
         }
         if (satisfied) mask.set_one(row);
         iter.next();

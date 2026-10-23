@@ -151,19 +151,33 @@ class AlignedFieldFilterRegressionTest
         WriteFile file;
         create(file);
         TsFileTableWriter writer(&file, &schema);
-        for (int device = 0; device < 2; ++device) {
-            Tablet tablet("t", schema.get_measurement_names(),
-                          schema.get_data_types(),
-                          schema.get_column_categories(), float_values_.size());
+        // d0/d1 carry the floating-point values; d2 omits both float columns,
+        // so every row of d2 presents NULL to the predicate.
+        for (int device = 0; device < 3; ++device) {
+            std::vector<std::string> names{"id", "v"};
+            std::vector<TSDataType> types{STRING, INT64};
+            std::vector<ColumnCategory> categories{ColumnCategory::TAG,
+                                                   ColumnCategory::FIELD};
+            if (device < 2) {
+                names.push_back("f");
+                types.push_back(FLOAT);
+                categories.push_back(ColumnCategory::FIELD);
+                names.push_back("d");
+                types.push_back(DOUBLE);
+                categories.push_back(ColumnCategory::FIELD);
+            }
+            Tablet tablet("t", names, types, categories, float_values_.size());
+            const std::string id = "d" + std::to_string(device);
             for (uint32_t r = 0; r < float_values_.size(); ++r) {
                 ASSERT_EQ(tablet.add_timestamp(r, r), E_OK);
-                ASSERT_EQ(tablet.add_value(r, "id", device == 0 ? "d0" : "d1"),
-                          E_OK);
+                ASSERT_EQ(tablet.add_value(r, "id", id.c_str()), E_OK);
                 ASSERT_EQ(tablet.add_value(r, "v", int64_t(device * 100 + r)),
                           E_OK);
-                ASSERT_EQ(tablet.add_value(r, "f", float(float_values_[r])),
-                          E_OK);
-                ASSERT_EQ(tablet.add_value(r, "d", float_values_[r]), E_OK);
+                if (device < 2) {
+                    ASSERT_EQ(tablet.add_value(r, "f", float(float_values_[r])),
+                              E_OK);
+                    ASSERT_EQ(tablet.add_value(r, "d", float_values_[r]), E_OK);
+                }
             }
             ASSERT_EQ(writer.write_table(tablet), E_OK);
             ASSERT_EQ(writer.flush(), E_OK);
@@ -264,6 +278,71 @@ TEST_P(AlignedFieldFilterRegressionTest, FloatingStatisticsKeepNaNRowsCorrect) {
             }
         }
     }
+}
+
+TEST_P(AlignedFieldFilterRegressionTest, NotPreservesFloatingNaNRowSemantics) {
+    write_floats();
+    // Control: d2 has no float data at all, so IS NULL must see all of its
+    // rows. This proves the NULL device is actually part of the result stream
+    // and that the NOT expectations below are not vacuous.
+    Rows null_rows;
+    for (uint32_t r = 0; r < float_values_.size(); ++r) {
+        null_rows.push_back({r, 200 + r});
+    }
+    EXPECT_EQ(scan({"v"}, A::is_null("f")), null_rows);
+    for (bool is_float : {true, false}) {
+        for (auto op : {A::CompareOp::EQ, A::CompareOp::NE, A::CompareOp::LT,
+                        A::CompareOp::LE, A::CompareOp::GT, A::CompareOp::GE}) {
+            for (double literal :
+                 {1.0, 2.0, std::numeric_limits<double>::quiet_NaN(),
+                  std::numeric_limits<double>::infinity(),
+                  -std::numeric_limits<double>::infinity()}) {
+                SCOPED_TRACE(::testing::Message() << "not:" << is_float << ":"
+                                                  << int(op) << ":" << literal);
+                auto filter = A::not_filter(
+                    A::compare(is_float ? "f" : "d", op,
+                               is_float ? A::Literal::float32(float(literal))
+                                        : A::Literal::float64(literal)));
+                Rows expected;
+                // Negation follows IEEE comparison semantics: NaN never
+                // satisfies a comparison, so it always satisfies its
+                // negation. NULL rows (device d2) satisfy neither form.
+                for (int device = 0; device < 2; ++device)
+                    for (uint32_t r = 0; r < float_values_.size(); ++r)
+                        if (!compare(float_values_[r], literal, op))
+                            expected.push_back({r, device * 100 + r});
+                EXPECT_EQ(scan({"v"}, std::move(filter)), expected);
+            }
+        }
+    }
+}
+
+TEST_P(AlignedFieldFilterRegressionTest, IncompleteOrCannotBypassEvaluation) {
+    write_floats();
+    // Every row of every page satisfies the left operand, so page statistics
+    // classify the page as a full match. The missing right operand must still
+    // surface as an error instead of being silently accepted.
+    auto filter = A::or_filter(
+        A::compare("v", A::CompareOp::GE, A::Literal::int64(0)), nullptr);
+    LocalRandomAccessReadFile file;
+    ASSERT_EQ(file.open(filename_), E_OK);
+    TableQueryExecutor executor(&file, std::get<1>(GetParam()));
+    ResultSet* result = nullptr;
+    int ret = executor.query("t", {"v"}, nullptr, nullptr, filter.release(), 0,
+                             -1, result);
+    if (ret == E_OK) {
+        ASSERT_NE(result, nullptr);
+        bool next = false;
+        int rows = 0;
+        while ((ret = result->next(next)) == E_OK && next) {
+            // Bound the loop: the broken path can stream rows indefinitely
+            // instead of failing, which would otherwise hang the test.
+            if (++rows > 1000) break;
+        }
+        executor.destroy_query_data_set(result);
+        EXPECT_EQ(rows, 0) << "incomplete OR returned rows";
+    }
+    EXPECT_EQ(ret, E_INVALID_ARG);
 }
 
 TEST_P(AlignedFieldFilterRegressionTest, PagePlanResumesAcrossSmallTsBlocks) {
