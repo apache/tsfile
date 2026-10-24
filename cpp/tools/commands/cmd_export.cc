@@ -37,6 +37,7 @@
 #include "common/device_id.h"
 #include "common/schema.h"
 #include "format/atomic_output.h"
+#include "format/output_format.h"
 #include "reader/tsfile_reader.h"
 
 namespace tsfile_cli {
@@ -141,32 +142,6 @@ std::string numbered_file_name(size_t index, ParsedArgs::Format fmt) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%04zu", index + 1);
     return std::string(buf) + extension_for_format(fmt);
-}
-
-std::string json_escape(const std::string& s) {
-    std::ostringstream out;
-    for (char c : s) {
-        switch (c) {
-            case '\\':
-                out << "\\\\";
-                break;
-            case '"':
-                out << "\\\"";
-                break;
-            case '\n':
-                out << "\\n";
-                break;
-            case '\r':
-                out << "\\r";
-                break;
-            case '\t':
-                out << "\\t";
-                break;
-            default:
-                out << c;
-        }
-    }
-    return out.str();
 }
 
 struct ManifestEntry {
@@ -286,6 +261,23 @@ int validate_multi_export_objects(const ParsedArgs& args,
             }
         }
     }
+    OutputNameValidator validator;
+    const bool table_mode = !args.tables.empty();
+    const std::vector<std::string>& objects =
+        table_mode ? args.tables : args.devices;
+    for (const std::string& object : objects) {
+        const std::string name =
+            table_mode ? storage::to_lower(object) : object;
+        if (!validator.add_object(name)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
+        ParsedArgs scope = args;
+        scope.table = table_mode ? name : "";
+        scope.device = table_mode ? "" : name;
+        const int code = validate_row_query_names(scope, reader, err);
+        if (code != kExitOk) return code;
+    }
     return kExitOk;
 }
 
@@ -356,28 +348,11 @@ int cmd_export(const ParsedArgs& args, storage::TsFileReader& reader,
 
     ParsedArgs query = args;
     query.command = "cat";
+    const int code = validate_row_query_names(query, reader, err);
+    if (code != kExitOk) return code;
     long long rows = 0;
     return stream_query_to_file(query, reader, fmt, args.output, args.force,
                                 rows, err);
-}
-
-int cmd_sketch(const ParsedArgs& args, storage::TsFileReader& reader,
-               std::ostream& out, std::ostream& err) {
-    std::ostringstream content;
-    content << "-------------------------------- TsFile Sketch "
-               "--------------------------------\n"
-            << "file path: " << args.file << "\n"
-            << "model: " << (is_table_model(args, reader) ? "table" : "tree")
-            << "\n"
-            << "---------------------------------- TsFile Sketch End "
-               "----------------------------------\n";
-    if (args.output.empty()) {
-        out << content.str();
-        out.flush();
-        return out.good() ? kExitOk : kExitRuntime;
-    }
-    return write_atomic_text(args.output, content.str(), args.file, args.force,
-                             err);
 }
 
 }  // namespace tsfile_cli

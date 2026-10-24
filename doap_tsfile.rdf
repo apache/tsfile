@@ -39,6 +39,7 @@
     <programming-language>C++</programming-language>
     <programming-language>C</programming-language>
     <programming-language>Python</programming-language>
+    <programming-language>Go</programming-language>
 
     <category rdf:resource="https://projects.apache.org/category/big-data" />
     <category rdf:resource="https://projects.apache.org/category/iot" />
@@ -46,6 +47,14 @@
     <category rdf:resource="http://projects.apache.org/category/python"/>
     <category rdf:resource="http://projects.apache.org/category/c++"/>
     <category rdf:resource="http://projects.apache.org/category/c"/>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2026-10-14</created>
+        <revision>2.5.0</revision>
+      </Version>
+    </release>
 
     <release>
       <Version>

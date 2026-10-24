@@ -335,6 +335,26 @@ class ValuePageWriter {
                    value_out_stream_.allocated_bytes()) +
                value_encoder_->get_max_byte_size();
     }
+    /**
+     * Append `count` all-NULL rows to the current page: one zero bit per row
+     * in the not-null bitmap, no value bytes, no statistic update.
+     *
+     * Used to keep a value column row-aligned with the time column when a row
+     * carries no value for that column.  The null bit has to be recorded for
+     * that row, otherwise the column's bitmap would start at the wrong row
+     * index and every later value would be paired with the wrong timestamp on
+     * read.
+     */
+    int write_null_rows(uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            size_++;
+        }
+        return common::E_OK;
+    }
+
     int write_to_chunk(common::ByteStream& pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
     FORCE_INLINE common::ByteStream& get_col_notnull_bitmap_data() {

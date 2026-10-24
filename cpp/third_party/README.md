@@ -31,7 +31,9 @@ must be updated together.
 The build provides explicit `SYSTEM`, `BUNDLED`, and `AUTO` dependency source
 modes. ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma have
 migrated to these modes. In `BUNDLED` mode, source is downloaded into the build
-cache rather than kept in this repository.
+cache rather than kept in this repository. `BUNDLED` is the default for both
+CMake and Maven and is used by every native release package, including Homebrew.
+`AUTO` and `SYSTEM` remain explicit options for custom source builds.
 
 LZMA2 support is disabled by default so this optional codec does not raise the
 CMake 3.11 baseline for long-lived industrial and legacy toolchains. Set
@@ -86,7 +88,7 @@ dependency before compiling and linking TsFile.
   `Vocabulary.cpp`, `ATN.cpp`, `LL1Analyzer.cpp`, `LL1Analyzer.h`,
   `LexerATNSimulator.cpp`, `LexerATNSimulator.h`, `IntervalSet.cpp`, `Any.h`,
   and `CPPUtils.cpp`. utf8cpp is not modified.
-- Resolution: `SYSTEM` accepts ANTLR4 4.9.3 or newer and earlier than 5.0.0
+- Resolution: `SYSTEM` accepts ANTLR4 4.9.3 or newer and earlier than 4.13.0
   through an `antlr4_static` or `antlr4_shared` target; `BUNDLED` downloads or
   reuses both verified archives; and `AUTO` prefers a compatible system
   package before falling back to the verified archives.

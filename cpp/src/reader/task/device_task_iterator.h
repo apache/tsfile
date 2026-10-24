@@ -72,7 +72,7 @@ class DeviceTaskIterator {
 
     void flush_remaining_device_meta_cache();
 
-    bool has_next() const;
+    int has_next(bool& has_next) const;
 
     int next(DeviceQueryTask*& task);
 

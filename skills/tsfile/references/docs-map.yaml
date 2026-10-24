@@ -25,10 +25,10 @@ path_bases:
 skill_baseline:
   scope: current-source
   source_ref: develop
-  maven_project_version: "2.3.2-SNAPSHOT"
+  maven_project_version: "2.5.1-SNAPSHOT"
   java_release: "17"
-  cpp_sdk_version: "2.3.2.dev"
-  python_package_version: "2.3.2.dev"
+  cpp_sdk_version: "2.5.1.dev"
+  python_package_version: "2.5.1.dev"
 
 official_url_prefixes:
   - https://tsfile.apache.org/

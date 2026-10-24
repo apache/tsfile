@@ -27,9 +27,11 @@ import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.reader.TsFileInput;
 
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
@@ -135,8 +137,13 @@ public class ReadWriteIOUtils {
    * @param buffer buffer
    * @param size size
    * @return bytes array
+   * @throws BufferUnderflowException if size exceeds the remaining bytes in buffer
    */
   public static byte[] readBytes(ByteBuffer buffer, int size) {
+    // Check the buffer limit before allocating an array from an untrusted length.
+    if (size > buffer.remaining()) {
+      throw new BufferUnderflowException();
+    }
     byte[] res = new byte[size];
     buffer.get(res);
     return res;
@@ -596,9 +603,21 @@ public class ReadWriteIOUtils {
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[LONG_LEN];
-    int readLen = inputStream.read(bytes);
-    if (readLen != LONG_LEN) {
-      throw new IOException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+    int readLen = 0;
+    while (readLen < LONG_LEN) {
+      int count = inputStream.read(bytes, readLen, LONG_LEN - readLen);
+      if (count < 0) {
+        throw new EOFException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+      }
+      if (count == 0) {
+        int value = inputStream.read();
+        if (value < 0) {
+          throw new EOFException(Messages.format(RETURN_ERROR_KEY, LONG_LEN, readLen));
+        }
+        bytes[readLen++] = (byte) value;
+      } else {
+        readLen += count;
+      }
     }
     return BytesUtils.bytesToLong(bytes);
   }
@@ -642,28 +661,12 @@ public class ReadWriteIOUtils {
 
   /** Read string from byteBuffer. */
   public static String readString(ByteBuffer buffer) {
-    int strLength = readInt(buffer);
-    if (strLength < 0) {
-      return null;
-    } else if (strLength == 0) {
-      return "";
-    }
-    byte[] bytes = new byte[strLength];
-    buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
+    return readStringWithLength(buffer, readInt(buffer));
   }
 
   /** String length's type is varInt */
   public static String readVarIntString(ByteBuffer buffer) {
-    int strLength = ReadWriteForEncodingUtils.readVarInt(buffer);
-    if (strLength < 0) {
-      return null;
-    } else if (strLength == 0) {
-      return "";
-    }
-    byte[] bytes = new byte[strLength];
-    buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
+    return readStringWithLength(buffer, ReadWriteForEncodingUtils.readVarInt(buffer));
   }
 
   /** Read string from byteBuffer with user define length. */
@@ -673,8 +676,7 @@ public class ReadWriteIOUtils {
     } else if (length == 0) {
       return "";
     }
-    byte[] bytes = new byte[length];
-    buffer.get(bytes, 0, length);
+    byte[] bytes = readBytes(buffer, length);
     return new String(bytes, 0, length, TSFileConfig.STRING_CHARSET);
   }
 
@@ -730,6 +732,7 @@ public class ReadWriteIOUtils {
     if (length == NO_BYTE_TO_READ) {
       return null;
     }
+    checkMapSize(buffer, length);
     Map<String, String> map = new HashMap<>(length);
     for (int i = 0; i < length; i++) {
       // key
@@ -762,6 +765,7 @@ public class ReadWriteIOUtils {
     if (length == NO_BYTE_TO_READ) {
       return null;
     }
+    checkMapSize(buffer, length);
     LinkedHashMap<String, String> map = new LinkedHashMap<>(length);
     for (int i = 0; i < length; i++) {
       // key
@@ -771,6 +775,13 @@ public class ReadWriteIOUtils {
       map.put(key, value);
     }
     return map;
+  }
+
+  private static void checkMapSize(ByteBuffer buffer, int size) {
+    // Each entry needs two string length prefixes, even for null or empty strings.
+    if (size < 0 || size > buffer.remaining() / (2 * INT_LEN)) {
+      throw new BufferUnderflowException();
+    }
   }
 
   public static List<Map<String, String>> readMaps(ByteBuffer buffer, int totalSize) {
@@ -811,9 +822,7 @@ public class ReadWriteIOUtils {
    */
   public static byte[] readByteBufferWithSelfDescriptionLength(ByteBuffer buffer) {
     int byteLength = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-    byte[] bytes = new byte[byteLength];
-    buffer.get(bytes);
-    return bytes;
+    return readBytes(buffer, byteLength);
   }
 
   /** read bytes from buffer with offset position to the end of buffer. */

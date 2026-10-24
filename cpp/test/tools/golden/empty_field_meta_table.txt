@@ -1,2 +1,2 @@
 size_bytes  format_version  model
-457         4               table
+451         4               table

@@ -1,4 +1,20 @@
 -------------------------------- TsFile Sketch --------------------------------
 file path: tsfile_cli_empty_table_golden.tsfile
-model: table
+file length: 190
+
+            POSITION|	CONTENT
+            -------- 	-------
+                   0|	[magic head] TsFile
+                   6|	[version number] 4
+                  24|	[marker] 2
+||||||||||||||||||||| [TsFileMetadata] begins
+                  25|	TableIndexRootCnt=0
+                  29|	TableSchemaCnt=1
+                  33|	[TableSchema] TableSchema{tableName='sensors', columnSchemas=[[site,STRING,PLAIN,,UNCOMPRESSED], [room,STRING,PLAIN,,UNCOMPRESSED], [temp,DOUBLE,PLAIN,,UNCOMPRESSED]], columnTypes=[TAG, TAG, FIELD]}, size=58
+                 102|	[Meta Offset] 24
+||||||||||||||||||||| [TsFileMetadata] ends
+                 180|	[TsFileMetadataSize] 155
+                 184|	[magic tail] TsFile
+                 190|	END of TsFile
+---------------------------- IndexOfTimerseriesIndex Tree -----------------------------
 ---------------------------------- TsFile Sketch End ----------------------------------

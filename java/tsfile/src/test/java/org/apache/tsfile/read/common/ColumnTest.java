@@ -42,6 +42,7 @@ import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -55,6 +56,30 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public class ColumnTest {
+
+  @Test
+  public void testDictionaryTsPrimitiveType() {
+    Column dictionary = new LongColumn(3, Optional.empty(), new long[] {10L, 20L, 30L});
+    // The logical input excludes 10 and repeats 30 beyond the dictionary's position count.
+    Column column = DictionaryColumn.create(4, dictionary, new int[] {2, 1, 2, 2});
+    long[] expected = {30L, 20L, 30L, 30L};
+    for (int i = 0; i < expected.length; i++) {
+      Assert.assertEquals(TSDataType.INT64, column.getTsPrimitiveType(i).getDataType());
+      Assert.assertEquals(expected[i], column.getTsPrimitiveType(i).getLong());
+    }
+  }
+
+  @Test
+  public void testDictionaryTsPrimitiveTypeWithOffsets() {
+    Column dictionary =
+        new LongColumn(4, Optional.empty(), new long[] {-1L, 10L, 20L, 30L}).getRegion(1, 3);
+    Column column = DictionaryColumn.create(4, dictionary, new int[] {0, 2, 1, 2}).getRegion(1, 3);
+    // Both the dictionary values and the logical IDs have nonzero offsets.
+    long[] expected = {30L, 20L, 30L};
+    for (int i = 0; i < expected.length; i++) {
+      Assert.assertEquals(expected[i], column.getTsPrimitiveType(i).getLong());
+    }
+  }
 
   @Test
   public void testConvertTo() {
@@ -303,6 +328,42 @@ public class ColumnTest {
     Assert.assertTrue(nullColumn.arePositionsEqual(0, 1));
     Assert.assertTrue(nullColumn.arePositionsEqual(0, that, 2));
     Assert.assertFalse(nullColumn.arePositionsEqual(0, that, 0));
+  }
+
+  @Test
+  public void timeColumnPrimitiveAccessorsTest() {
+    long[] values = {10L, 20L, 30L, 40L};
+    TimeColumn timeColumn = (TimeColumn) new TimeColumn(values.length, values).getRegion(1, 2);
+
+    Assert.assertEquals(TSDataType.INT64, timeColumn.getDataType());
+    Assert.assertEquals(20, timeColumn.getInt(0));
+    Assert.assertEquals(20L, timeColumn.getLong(0));
+    Assert.assertEquals(20.0D, timeColumn.getDouble(0), 0);
+    Assert.assertEquals(20L, timeColumn.getObject(0));
+    Assert.assertEquals(new Binary("20", StandardCharsets.UTF_8), timeColumn.getBinary(0));
+    Assert.assertTrue(timeColumn.getTsPrimitiveType(0) instanceof TsPrimitiveType.TsLong);
+    Assert.assertEquals(20L, timeColumn.getTsPrimitiveType(0).getLong());
+
+    Assert.assertArrayEquals(values, timeColumn.getLongs());
+    Assert.assertArrayEquals(new double[] {10.0D, 20.0D, 30.0D, 40.0D}, timeColumn.getDoubles(), 0);
+    Assert.assertArrayEquals(
+        new Binary[] {
+          new Binary("10", StandardCharsets.UTF_8),
+          new Binary("20", StandardCharsets.UTF_8),
+          new Binary("30", StandardCharsets.UTF_8),
+          new Binary("40", StandardCharsets.UTF_8)
+        },
+        timeColumn.getBinaries());
+    Assert.assertFalse(timeColumn.mayHaveNull());
+    Assert.assertFalse(timeColumn.isNull(0));
+  }
+
+  @Test
+  public void timeColumnSetPositionCountTest() {
+    TimeColumn timeColumn = new TimeColumn(4);
+    Assert.assertEquals(0, timeColumn.getPositionCount());
+    timeColumn.setPositionCount(2);
+    Assert.assertEquals(2, timeColumn.getPositionCount());
   }
 
   @Test

@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tsfile"
-version = "2.3.2.dev"
+version = "2.5.1.dev"
 requires-python = ">=3.9"
 description = "TsFile Python"
 readme = {file = "README.md", content-type = "text/markdown"}
@@ -58,23 +58,21 @@ Issues = "https://github.com/apache/tsfile/issues"
 
 [tool.setuptools]
 package-dir = {"" = "."}
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["tsfile*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 tsfile = [
-    "python_random_access_read_file.h",
-    "*.pxd",
-    "*.pxi",
-    "*.so",
-    "*.so.*",
-    "*.dylib",
-    "*.dylib.*",
-    "*.dll",
-    "*.dll.a",
-    "*.lib",
-    "*.lib.a",
-    "include/**/*"
+    "libtsfile.so*",
+    "libtsfile*.dylib",
+    "tsfile.dll",
+    "libtsfile.dll",
+    "libstdc++-6.dll",
+    "libgcc_s_seh-1.dll",
+    "libwinpthread-1.dll",
+    "licenses/*"
 ]

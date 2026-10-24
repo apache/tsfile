@@ -24,27 +24,12 @@
 namespace storage {
 
 MetadataQuerier::MetadataQuerier(TsFileIOReader* tsfile_io_reader)
-    : io_reader_(tsfile_io_reader) {
-    file_metadata_ = io_reader_->get_tsfile_meta();
-    device_chunk_meta_cache_ = std::unique_ptr<
-        common::Cache<std::string /*ToDO: Device ID*/,
-                      std::vector<std::shared_ptr<ChunkMeta>>, std::mutex>>(
-        new common::Cache<std::string, std::vector<std::shared_ptr<ChunkMeta>>,
-                          std::mutex>(CACHED_ENTRY_NUMBER,
-                                      CACHED_ENTRY_NUMBER / 10));
-}
+    : io_reader_(tsfile_io_reader) {}
 
 MetadataQuerier::~MetadataQuerier() {}
 
 std::vector<std::shared_ptr<ChunkMeta>>
 MetadataQuerier::get_chunk_metadata_list(const Path& path) const {
-    // std::vector<std::shared_ptr<ChunkMeta>> chunk_meta_list;
-    // if (device_chunk_meta_cache_->tryGet(path.device_, chunk_meta_list)) {
-    //     return chunk_meta_list;
-    // } else {
-    //     io_reader_->get_chunk_metadata_list(path.device_, path.measurement_,
-    //     chunk_meta_list);
-    // }
     // return io_reader_->get_chunk_metadata_list(path);
     ASSERT(false);
     return {};
@@ -68,9 +53,8 @@ MetadataQuerier::get_chunk_metadata_map(const std::vector<Path>& paths) const {
     return {};
 }
 
-int MetadataQuerier::get_whole_file_metadata(TsFileMeta* tsfile_meta) const {
-    tsfile_meta = io_reader_->get_tsfile_meta();
-    return common::E_OK;
+int MetadataQuerier::get_whole_file_metadata(TsFileMeta*& tsfile_meta) const {
+    return io_reader_->get_tsfile_meta(tsfile_meta);
 }
 
 void MetadataQuerier::load_chunk_metadatas(const std::vector<Path>& paths) {

@@ -18,15 +18,15 @@
 name: tsfile-cli
 description: >-
   Use specifically for the project's C++ `tsfile-cli` in cpp/tools: inspect,
-  preview, export, or sample an Apache TsFile; report metadata or per-series
+  preview, export, or create an Apache TsFile; report metadata or per-column
   counts; or use its explicit single-table CSV write command.
 ---
 
 # tsfile-cli
 
-Single pipe-friendly C++ binary to inspect `.tsfile` files and create a new
-table-model TsFile from CSV (TsFile's analogue of `parquet-cli`/`pqrs`).
-Source `cpp/tools/`. Read data → stdout, diagnostics → stderr.
+Single pipe-friendly C++ binary to inspect, read, export, and create `.tsfile`
+files. Source `cpp/tools/`. Result data goes to stdout except `export`,
+`sketch -o`, and `write`; diagnostics go to stderr.
 
 ## Scope
 
@@ -36,14 +36,17 @@ point-count metadata checks or backfill, and programmatic tree-model writes,
 load the sibling `tsfile` skill at `../tsfile/SKILL.md`.
 
 The names overlap but the semantics do not: `tsfile-cli count` is a read-only
-per-series report, not the Java table point-count property tool. `tsfile-cli
+per-column report, not the Java table point-count property tool. `tsfile-cli
 write` is the C++ binary's narrow one-file/stream, one-table CSV import; it
 does not replace the Java batch and format-aware import tools.
 
 ## Binary
 
-- Name `tsfile-cli` (CMake target `tsfile_cli`). Find: `ls cpp/build/*/bin/tsfile-cli`.
+- Name `tsfile-cli` (CMake target `tsfile_cli`). Check `PATH`,
+  `cpp/build/*/bin/tsfile-cli`, or `cpp/target/build/bin/tsfile-cli`.
 - Build only if missing: `cd cpp && bash build.sh -t=Debug`.
+- Use `tsfile-cli <command> --help` for the installed binary's supported
+  syntax and result fields before choosing flags.
 
 ## Read
 
@@ -51,81 +54,116 @@ does not replace the Java batch and format-aware import tools.
 
 | cmd | output | scans pages |
 |---|---|---|
-| `ls` | device (tree) / table (table) per line | no |
-| `schema` | `target,measurement,datatype,encoding,compression` | no |
-| `meta` | model, device/table/series counts, time range, size | no |
-| `stats` | per-series `count,start,end,min,max,first,last,sum` | no |
-| `count` | per-series counts + `total` row | no |
+| `ls` | `model,object` rows for tree devices or table names | no |
+| `schema` | `model,object,column,category,data_type,encoding,compression` | no |
+| `meta` | `size_bytes,format_version,model` | no |
+| `stats` | FIELD statistics, null counts, and `stats_source` | maybe |
+| `count` | per-column row/entity/value counts; no summary row | maybe |
 | `head` | first N rows (default 10, `-n`) | yes |
 | `cat` | all matching rows (streamed; `table` format buffers) | yes |
-| `sample` | reservoir sample (default 10, `-n` + `--seed`) | yes |
+| `sketch` | physical layout text with offsets and chunk/page details | no FIELD decode |
+| `export` | writes one object file or a numbered multi-object directory | yes |
 
-Prefer no-scan verbs (`ls/schema/meta/stats/count`) — cheap and never hit the page-decode caveat.
+Inspect `ls`, `schema`, and `meta` before querying rows to identify the model,
+objects, and columns. `stats` can scan when statistics are unavailable, and
+table-model `count` scans rows; neither is guaranteed to be metadata-only.
 
-Table model + row verbs (`head/cat/sample`): without `-t`, only the **first** table is queried. Pass `-t <table>` to target a specific one (`count` covers all tables).
+For `head` and `cat`, omit `-d/-t` only when the selected model has exactly one
+accessible object. Multi-object files require explicit scope. `schema`,
+`stats`, and `count` visit every object when scope is omitted.
 
-```
-opts: -f csv|tsv|json|table  (default TTY→table, pipe→tsv)
+```text
+opts: -f table|ndjson|csv  (default table, including pipes)
       -d <device> | -t <table>   (mutually exclusive)
-      -m a,b,c (projection) · -n N · --offset N · --start <ms> · --end <ms> (inclusive)
-      --tag-filter C OP V · --tag-between C L U · --tag-not-between C L U (table TAG predicates)
-      --seed N · --no-header · --model tree|table (else auto)
-applies: -m → schema/stats/count/head/cat/sample · -d/-t → row cmds/schema/stats/count
-         (-d needs tree model, -t needs table model in head/cat/sample/schema) · --offset ∉ sample
-         tag filters → head/cat/sample table model; OP=eq|neq|lt|lteq|gt|gteq|regexp|not-regexp
-json=NDJSON (num/bool bare, else quoted, null→null, NaN/Inf→null) · csv=RFC4180 · ts=raw epoch ms
-exit: 0 ok · 1 usage · 2 file open/corrupt · 3 query/runtime
+      -m <column> repeat for projection or metadata filtering; no comma lists
+      -n N · --offset N · --start <int64> · --end <int64> for head/cat/export
+      --tag-filter C OP [V] for table TAG predicates
+        OP=eq|neq|regexp (requires V) or is-null|not-null (no V)
+      --tag-match all|any when two or more tag filters are present
 ```
 
-The aligned `table` format buffers rows. Prefer `csv`, `tsv`, or `json` for
-large dumps and pipelines.
+- Row time bounds are inclusive. Table results include `time`, all TAG columns,
+  and then selected FIELD columns; `-m` does not remove TAG columns.
+- `stats` reports `non_null_count,null_count,min_time,max_time,min,max,first,last,sum`
+  with model/object/FIELD identity and `stats_source`; table rows include
+  `tag.<name>` columns after `object`.
+- `count` reports `model,object,column,category,row_count,entity_count,non_null_count,null_count,min_time,max_time,time_source`.
+- `ndjson` emits one JSON object per line. INT64/TIMESTAMP values are decimal
+  strings; BOOLEAN/INT32/FLOAT/DOUBLE are bare values, and NULL/NaN/Inf become
+  JSON `null`. CSV includes a header and quotes cells using RFC 4180 rules.
+- The aligned `table` format buffers rows and renders control characters as
+  visible escapes. Prefer `csv` or `ndjson` for large dumps and pipelines.
 
-```sh
-B=cpp/build/Debug/bin/tsfile-cli
-$B meta data.tsfile; $B count -t table1 -f tsv data.tsfile
-$B cat -t table1 --tag-filter device eq dev_1 -m temp -f tsv data.tsfile
-$B cat -m temp --start 1700000000000 -f csv data.tsfile 2>/dev/null | head
+## Sketch and export
+
+`sketch [-o <file>] [--force] <file.tsfile>` prints the physical layout to
+stdout or an output file. It does not accept `-f` or object scope. `--force`
+requires an output path and replaces only an existing regular file.
+
+```text
+export (-d <device> | -t <table>) --type table|ndjson|csv -o <file> [query options] [--force] <file.tsfile>
+export (-d <device>... | -t <table>...) --type table|ndjson|csv --output-dir <dir> [query options] <file.tsfile>
 ```
+
+`export` requires explicit scope and `--type`; `-f` does not select the export
+type. It accepts the row query options above. Single-object export commits
+the output file atomically; `--force` allows replacing a regular file.
+Multi-object export repeats only devices or only tables, writes numbered
+files and `_manifest.json`, and requires a new output directory.
 
 ## Write
 
-`tsfile-cli write --table <name> (--tag <name> STRING)* (--field <name> <TYPE>)+ (-i <input.csv>|--stdin) -o <out.tsfile> [-v]`
+`tsfile-cli write --table <name> (--tag <name> STRING)* (--field <name> <TYPE>)+ [--encoding <TYPE> <ENC>] [--compression <TYPE> <COMP>] (-i <input.csv>|--stdin) -o <out.tsfile> [-v]`
 
 Imports rows into a **new table-model** file. The target must not already exist.
 Input is strict CSV with a required `time` header; all other columns are declared
 explicitly by `--tag` and `--field` — **no type inference**.
 
-```
+```text
 TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE, BLOB }
 ```
 
 - `--tag` declarations must use `STRING`; at least one `--field` is required.
-- The CSV header must contain `time` and exactly the declared TAG/FIELD names.
+- The CSV header must contain `time` and exactly the declared TAG/FIELD names;
+  rows are mapped by header name rather than physical column order.
 - `--encoding` and `--compression` may override the bound defaults by data type.
 - `--stdin` or `-i <input.csv>` is required; TSV, `--columns`, `--no-header`, and
   `--header-match` are not supported.
-- Empty cells use the CSV null spelling; `DATE` cells are `YYYY-MM-DD`, and
+- Unquoted `\N` denotes NULL. Empty STRING/TEXT cells are empty strings;
+  quoted `"\N"` is literal text. `DATE` cells are `YYYY-MM-DD`, and
   `TIMESTAMP`/`time` use strict decimal int64 values.
 - A failed import leaves no partial output; success is silent unless `-v` is used.
 - **timestamps must be strictly increasing per device** (device = tag-column values); rows for
   different tags may interleave/reuse timestamps. Out-of-order input → error with line number.
-- a failed import deletes its partial output (no half-written `.tsfile` left behind).
-- exit: `1` usage/parameter error · `2` CSV/input problem · `3` target/write/commit failure.
-
-```sh
-printf 'time,id1,s1\n0,dev,0\n1,dev,10\n' \
-  | tsfile-cli write --table t1 --tag id1 STRING --field s1 INT64 --stdin -o out.tsfile
-tsfile-cli count -f tsv out.tsfile        # -> t1.dev  s1  2
-```
+- `-v` writes a post-commit summary and resolved column physical settings to stderr.
 
 Tree-model / JSON / programmatic writes → C++ SDK `cpp/examples/cpp_examples/demo_write.cpp`
 (`TsFileTableWriter`/`TsFileWriter` + `Tablet`); Java/Python writers under `java/`, `python/`.
 
-## Caveats
+## Example workflow
 
-- `head`/`cat`/`sample` decode pages → may abort (`decode_cur_time_page_data`, exit 134) on
-  some aligned files incl. bundled `cpp/examples/test_cpp.tsfile`. Storage-engine/file issue,
-  not a CLI bug; metadata verbs still work. Use a well-formed (e.g. self-written) file for rows.
-- table-model `target` is derived from tag bytes → may show non-printable chars in `stats/count/schema`.
-- `schema` lists all columns; `meta/stats/count` count only field series → `series_count` can be
-  fewer than `schema` rows (not a bug).
+Set `B` to the discovered executable. Use new output paths for this example.
+
+```sh
+B=tsfile-cli
+printf 'time,site,temperature,humidity\n0,north,21.5,40\n1,north,21.7,41\n' \
+  | "$B" write --table sensors --tag site STRING \
+      --field temperature DOUBLE --field humidity INT32 --stdin -o sensors.tsfile
+"$B" ls -f ndjson sensors.tsfile
+"$B" meta -f ndjson sensors.tsfile
+"$B" schema -t sensors -f csv sensors.tsfile
+"$B" stats -t sensors -m temperature -f csv sensors.tsfile
+"$B" count -t sensors -f csv sensors.tsfile
+"$B" head -t sensors -m temperature -m humidity -n 20 -f csv sensors.tsfile
+"$B" cat -t sensors --tag-filter site eq north -m temperature -f ndjson sensors.tsfile
+"$B" export -t sensors --type csv -o sensors.csv sensors.tsfile
+"$B" sketch -o layout.txt sensors.tsfile
+```
+
+## Exit status
+
+- `0`: success; `1`: usage/parameter error; `2`: TsFile/CSV input problem;
+  `3`: query/runtime, target, or write/commit failure.
+- On nonzero exit, produced stdout or files are not complete results.
+- Shell redirection (`cat > file`) is not atomic; use `export` for atomic
+  single-object output.

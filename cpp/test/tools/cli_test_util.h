@@ -698,6 +698,44 @@ inline std::string write_empty_field_fixture() {
     return path;
 }
 
+// A single-table file whose STRING FIELD values embed control characters
+// (newline, tab, backslash). Used to verify that the readable `table` output
+// escapes them into visible two-character sequences while CSV/NDJSON keep
+// their machine-format semantics.
+inline std::string write_control_char_fixture() {
+    storage::libtsfile_init();
+    std::string path = unique_temp_path("tsfile_cli_control_char", ".tsfile");
+    storage::WriteFile file;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    file.create(path, flags, 0666);
+    auto* schema = new storage::TableSchema(
+        "t1",
+        {common::ColumnSchema("site", common::STRING, common::UNCOMPRESSED,
+                              common::PLAIN, common::ColumnCategory::TAG),
+         common::ColumnSchema("note", common::STRING, common::UNCOMPRESSED,
+                              common::PLAIN, common::ColumnCategory::FIELD)});
+    auto* writer = new storage::TsFileTableWriter(&file, schema);
+    const char* sites[] = {"s1", "s2", "s3"};
+    const std::string notes[] = {"line1\nline2", "tab\there", "back\\slash"};
+    for (int row = 0; row < 3; ++row) {
+        storage::Tablet tablet(
+            "t1", {"site", "note"}, {common::STRING, common::STRING},
+            {common::ColumnCategory::TAG, common::ColumnCategory::FIELD}, 1);
+        tablet.add_timestamp(0, 1000 + row * 1000);
+        tablet.add_value(0, "site", sites[row]);
+        tablet.add_value(0, "note", notes[row]);
+        writer->write_table(tablet);
+    }
+    writer->flush();
+    writer->close();
+    delete writer;
+    delete schema;
+    return path;
+}
+
 }  // namespace tsfile_cli_test
 
 #endif  // TSFILE_CLI_TEST_UTIL_H

@@ -25,11 +25,14 @@ import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
@@ -105,8 +108,46 @@ public class TimeColumn implements Column {
   }
 
   @Override
+  public int getInt(int position) {
+    return (int) getLong(position);
+  }
+
+  @Override
+  public double getDouble(int position) {
+    return getLong(position);
+  }
+
+  @Override
+  public Binary getBinary(int position) {
+    return new Binary(String.valueOf(getLong(position)), StandardCharsets.UTF_8);
+  }
+
+  @Override
+  public double[] getDoubles() {
+    double[] doubles = new double[values.length];
+    for (int i = 0; i < values.length; i++) {
+      doubles[i] = values[i];
+    }
+    return doubles;
+  }
+
+  @Override
+  public Binary[] getBinaries() {
+    Binary[] binaries = new Binary[values.length];
+    for (int i = 0; i < values.length; i++) {
+      binaries[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+    }
+    return binaries;
+  }
+
+  @Override
   public Object getObject(int position) {
     return getLong(position);
+  }
+
+  @Override
+  public TsPrimitiveType getTsPrimitiveType(int position) {
+    return new TsPrimitiveType.TsLong(getLong(position));
   }
 
   @Override
@@ -253,7 +294,7 @@ public class TimeColumn implements Column {
 
   @Override
   public void setPositionCount(int count) {
-    this.positionCount = positionCount;
+    this.positionCount = count;
   }
 
   @Override

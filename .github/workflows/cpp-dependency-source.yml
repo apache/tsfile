@@ -26,6 +26,7 @@ on:
     paths:
       - '.github/workflows/cpp-dependency-source.yml'
       - 'cpp/**'
+      - 'packaging/tests/test_native_install.py'
       - 'pom.xml'
   pull_request:
     branches:
@@ -36,6 +37,7 @@ on:
     paths:
       - '.github/workflows/cpp-dependency-source.yml'
       - 'cpp/**'
+      - 'packaging/tests/test_native_install.py'
       - 'pom.xml'
   workflow_dispatch:
 
@@ -255,6 +257,32 @@ jobs:
 
       - name: Build TsFile offline
         run: cmake --build "$TSFILE_BUILD_DIR" --target tsfile --parallel 2
+
+  installed-sdk:
+    name: Relocated static SDK and CLI install layouts
+    needs: bundled
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download verified dependency archives
+        uses: actions/download-artifact@v8
+        with:
+          name: tsfile-cpp-dependency-archives
+          path: ${{ env.TSFILE_DEPENDENCY_CACHE }}
+
+      - name: Install SDK test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-dev liblz4-dev pkg-config ninja-build
+
+      - name: Test installed CMake and pkg-config consumers and CLI RPATH
+        env:
+          TSFILE_RUN_INSTALL_TESTS: '1'
+          TSFILE_TEST_DEPENDENCY_CACHE: ${{ github.workspace }}/${{ env.TSFILE_DEPENDENCY_CACHE }}
+        run: python3 -m unittest discover -s packaging/tests -p test_native_install.py -v
 
   system:
     name: SYSTEM from an external package prefix

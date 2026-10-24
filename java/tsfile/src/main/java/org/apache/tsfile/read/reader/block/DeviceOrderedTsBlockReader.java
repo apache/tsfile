@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.reader.block;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -31,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.NoSuchElementException;
 
 public class DeviceOrderedTsBlockReader implements TsBlockReader {
@@ -43,6 +45,7 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
   private SingleDeviceTsBlockReader currentReader;
   private ExpressionTree timeFilter;
   private ExpressionTree measurementFilter;
+  private boolean closed;
 
   public DeviceOrderedTsBlockReader(
       DeviceTaskIterator taskIterator,
@@ -61,9 +64,13 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
 
   @Override
   public boolean hasNext() {
+    if (closed) {
+      return false;
+    }
     if (currentReader != null && currentReader.hasNext()) {
       return true;
     }
+    closeCurrentReaderForIteration();
     while (taskIterator.hasNext()) {
       final DeviceQueryTask nextTask = taskIterator.next();
       try {
@@ -71,11 +78,16 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
             new SingleDeviceTsBlockReader(
                 nextTask, metadataQuerier, chunkLoader, blockSize, timeFilter, measurementFilter);
       } catch (IOException e) {
+        if (EncryptException.isEncryptionFailure(e)) {
+          closed = true;
+          throw new UncheckedIOException(e);
+        }
         LOGGER.error(Messages.get("log.read.block_reader_construct_error"), nextTask, e);
       }
       if (currentReader != null && currentReader.hasNext()) {
         return true;
       }
+      closeCurrentReaderForIteration();
     }
     return false;
   }
@@ -90,8 +102,25 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
 
   @Override
   public void close() throws Exception {
+    closed = true;
+    closeCurrentReader();
+  }
+
+  private void closeCurrentReaderForIteration() {
+    try {
+      closeCurrentReader();
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private void closeCurrentReader() throws Exception {
     if (currentReader != null) {
-      currentReader.close();
+      try {
+        currentReader.close();
+      } finally {
+        currentReader = null;
+      }
     }
   }
 }

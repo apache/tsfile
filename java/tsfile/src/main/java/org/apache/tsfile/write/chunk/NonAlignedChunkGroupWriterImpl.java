@@ -26,6 +26,8 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.BitMap;
+import org.apache.tsfile.utils.TypeServices;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -116,20 +118,35 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       String measurementId = timeseries.get(column).getMeasurementName();
       Type type = Type.fromTsDataType(timeseries.get(column).getType());
       ChunkWriterImpl chunkWriter = chunkWriters.get(measurementId);
-      pointCount = 0;
-      for (int row = startRowIndex; row < endRowIndex; row++) {
-        // check isNull in tablet
-        if (tablet.getBitMaps() != null
-            && tablet.getBitMaps()[column] != null
-            && tablet.getBitMaps()[column].isMarked(row)) {
-          continue;
-        }
-        long time = tablet.getTimestamps()[row];
-        checkIsHistoryData(measurementId, time);
-        pointCount++;
-        type.write(chunkWriter, time, tablet.getValues()[column], row);
-        lastTimeMap.put(measurementId, time);
+      BitMap nulls = tablet.getBitMaps() == null ? null : tablet.getBitMaps()[column];
+      int firstRow = startRowIndex;
+      while (firstRow < endRowIndex && nulls != null && nulls.isMarked(firstRow)) {
+        firstRow++;
       }
+      // An empty column must not inspect its value array or invoke a value writer.
+      if (firstRow >= endRowIndex) {
+        continue;
+      }
+      TabletWriteContext context =
+          new TabletWriteContext(deviceId, measurementId, lastTimeMap.get(measurementId));
+      try {
+        TypeServices.WRITE_TABLET_COLUMN_SERVICE
+            .call(type)
+            .write(
+                chunkWriter,
+                tablet.getTimestamps(),
+                tablet.getValues()[column],
+                nulls,
+                firstRow,
+                endRowIndex,
+                context);
+      } finally {
+        // Commit the successfully written prefix even when a later row is out of order.
+        if (context.getPointCount() != 0) {
+          lastTimeMap.put(measurementId, context.getLastTime());
+        }
+      }
+      pointCount = context.getPointCount();
       maxPointCount = Math.max(pointCount, maxPointCount);
     }
     return maxPointCount;

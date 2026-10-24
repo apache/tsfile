@@ -22,6 +22,8 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.read.common.type.Type;
+import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -30,6 +32,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public class TabletBuilder {
 
@@ -70,31 +73,54 @@ public class TabletBuilder {
       Object timeValue = batch.getValue(row, timeColumnSourceIndex);
       long timestamp = timeConverter.convert(timeValue, importSchema.getTimePrecision());
       tablet.addTimestamp(i, timestamp);
+    }
 
-      for (int col = 0; col < tableSchema.getColumnSchemas().size(); col++) {
-        IMeasurementSchema colSchema = tableSchema.getColumnSchemas().get(col);
-        String colName = colSchema.getMeasurementName();
+    // SourceBatch and Tablet are columnar. Keep schema lookup and type dispatch outside the row
+    // loop.
+    for (int col = 0; col < tableSchema.getColumnSchemas().size(); col++) {
+      IMeasurementSchema colSchema = tableSchema.getColumnSchemas().get(col);
+      String colName = colSchema.getMeasurementName();
+      Type type = Type.fromTsDataType(colSchema.getType());
+      Object targetValues = tablet.getValues()[col];
+      // addTimestamp initialized the API bitmap; resolve it and the column type only once.
+      BitMap nulls = rowCount == 0 ? null : tablet.getBitMaps()[col];
 
-        if (tagDefaults.containsKey(colName)) {
-          tablet.addValue(colName, i, tagDefaults.get(colName));
-          continue;
+      if (tagDefaults.containsKey(colName)) {
+        Object defaultValue = tagDefaults.get(colName);
+        for (int i = 0; i < rowCount; i++) {
+          type.addValue(i, defaultValue, targetValues);
+          if (defaultValue != null) {
+            nulls.unmark(i);
+          }
         }
+        continue;
+      }
 
-        Integer srcIdx = sourceColumnIndex.get(colName);
-        if (srcIdx == null) {
-          continue;
-        }
+      Integer srcIdx = sourceColumnIndex.get(colName);
+      if (srcIdx == null) {
+        continue;
+      }
 
-        Object rawValue = batch.getValue(row, srcIdx);
+      Object[] sourceValues = batch.getColumn(srcIdx);
+      Function<Object, Object> converter = null;
+      for (int i = 0; i < rowCount; i++) {
+        Object rawValue = sourceValues[sortedIndices[i]];
         if (isNull(rawValue)) {
           continue;
         }
 
-        boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
-        Object converted =
-            ValueConverter.convert(
-                rawValue, colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
-        tablet.addValue(colName, i, converted);
+        // Preserve the no-conversion behavior of empty/all-null columns.
+        if (converter == null) {
+          boolean isMeasurement = tableSchema.getColumnTypes().get(col) == ColumnCategory.FIELD;
+          converter =
+              ValueConverter.converterFor(
+                  colSchema.getType(), isMeasurement, importSchema.getTimePrecision());
+        }
+        Object converted = converter.apply(rawValue);
+        type.addValue(i, converted, targetValues);
+        if (converted != null) {
+          nulls.unmark(i);
+        }
       }
     }
 

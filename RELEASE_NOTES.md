@@ -19,6 +19,54 @@
 
 -->
 
+# Apache TsFile 2.5.0
+
+## New Features
+
+- [Go] Added table-model read and write APIs backed by the C++ library, with Tablet and Arrow batch writes, time-range and TAG filtering, pagination, and Arrow batch reads. (#929, #949)
+- [Python] Added opt-in persistent dataset indexes and a native query runtime for `TsFileDataFrame`, supporting indexed row slicing and time-range queries across multiple TsFile files. (#911)
+- [Java/C++/Python] Added read and write support for binary file-level properties. (#882, #897)
+- [Java] Added optional table point counting and a tool to inspect and repair stored table point counts. (#882)
+- [C++/Python] Added seekable random-access data sources, including Python binary file objects and remote files opened through libraries such as `fsspec`. (#939)
+- [C++/Python] Added an optional memory-mapped local file read backend with `PREAD`, `MMAP`, and `AUTO` modes. (#920)
+- [C++] Added CHIMP, RLBE, and CAMEL encodings, Zstandard compression, and optional LZMA2 compression, with Java/C++ compatibility coverage. (#905)
+- [C++] Added `tsfile-cli`, a command-line tool for tree-model and table-model inspection, filtered reads, CSV/NDJSON export, CSV import, and physical file layout inspection with `sketch`. (#829, #838, #915, #994, #996, #997, #1002)
+- [Tools] Added reusable agent skills for TsFile development and `tsfile-cli` workflows. (#907)
+
+## Improvements
+
+- [Python] Accelerated dataset-index metadata lookups with Cython and descriptor caching, added configurable read-cache and concurrency limits, and added an index-trust option for immutable datasets. (#959, #1004)
+- [Python] Aligned Python exceptions and error codes with the native library for consistent error reporting. (#870)
+- [C++] Improved batch read throughput with faster Gorilla decoding, bulk column output, and aligned row-offset pushdown. (#873, #898, #863)
+- [C++] Added static-library builds and configurable system or verified source-archive dependency sourcing, including offline builds from cached archives. (#894, #905)
+- [Java] Added buffered input and configurable `TsFileInput` construction for readers. (#868, #869)
+- [Java] Streamlined data-type handling, cached page-reader type services, and moved type dispatch outside batch read and write loops. (#872, #955, #963)
+- [Java] Reduced query merge overhead and boxing allocations with primitive long heaps and sets. (#906)
+- [Java] Optimized small bitmaps with a long-backed implementation and added range-query APIs. (#871, #884)
+- [Java] Added batched null writes and independent bitmap offsets to `ValuePageWriter` for efficient nullable-column writes. (#948)
+
+## Bug Fixes
+
+- [Java] Propagated `IOException` from table-writer `close()` so flush and file-finalization failures are reported to callers instead of being swallowed. (#899)
+- [C++] Fixed loss of buffered data when closing writers by flushing pending rows before finalizing the file. (#969)
+- [C++/Python] Fixed silent data loss from table-read failures by propagating metadata, decoding, and I/O errors to callers. (#970)
+- [C++] Fixed scans ending prematurely when a decoded page contains no rows matching the filter, allowing later matching pages and chunks to be read. (#975)
+- [C++] Fixed value/timestamp misalignment when aligned records or Tablets omit measurements, including null padding and synchronized page sealing across columns. (#968)
+- [C++] Fixed empty aligned value-page headers and page advancement so leading, intermediate, and consecutive all-null pages do not hide or corrupt subsequent data. (#976, #1001)
+- [C++/Python] Fixed residual row-offset handling in non-aligned page decoding, correcting indexed dataset slices across page and chunk boundaries. (#1007)
+- [C++] Stopped writing empty chunks for registered but unwritten non-aligned measurements, preventing Java readers from rejecting otherwise valid files as crashed. (#909)
+- [C++] Fixed UTF-8 file paths on Windows for reads, writes, and recovery, and prevented existing output files from being overwritten. (#927)
+- [C++] Fixed TS_2DIFF FLOAT/DOUBLE page decoding, wide INT64 decoding, SIMD min/max statistics, and Gorilla sentinel-value handling. (#901, #947, #883)
+- [Java/C++] Fixed RLBE decoding of malformed blocks by validating block sizes, segment widths, and run lengths. (#913)
+- [C++] Fixed reader schema reporting and append recovery to use the encoding and compression stored in the latest chunk instead of library defaults or stale chunk settings. (#926)
+- [C++] Preserved shared time statistics in filtered table metadata so FIELD null counts can be calculated correctly. (#989)
+- [Java] Fixed `VectorMeasurementSchema` stream deserialization for per-column compressors and partial stream reads. (#941)
+- [Java] Fixed dictionary primitive-value lookup through dictionary IDs, corrected `TimeColumn` position counts, and completed its typed accessors. (#961)
+- [Python] Fixed omitted BOOLEAN and TIMESTAMP dataset fields and preserved null field values during Arrow-to-NumPy conversion. (#935, #942)
+- [Python] Fixed DataFrame subsets closing shared readers and guarded dataset-index access after close to prevent invalid reads and crashes. (#946, #999)
+- [C++] Fixed double-free, memory-leak, and null-dereference paths in readers, compressors, Tablets, containers, and C API string getters. (#879, #881)
+- [Java] Strengthened encryption metadata length and implementation-type validation while preserving compatibility with custom encryption implementations. (#925, #956)
+
 # Apache TsFile 2.4.0
 
 ## New Features

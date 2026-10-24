@@ -43,6 +43,47 @@ TEST(PageHeaderTest, Reset) {
     EXPECT_EQ(header.compressed_size_, 0);
 }
 
+TEST(PageHeaderTest, DeserializeEmptyPageConsumesSingleVarint) {
+    // Java writes an empty value page as a single zero varint (see
+    // ValueChunkWriter.writeEmptyPageToPageBuffer): it carries no compressed
+    // size and no statistics. The C++ deserializer must not read past it.
+    common::ByteStream in(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, in));
+    // A following non-empty page header (uncompressed=10, compressed=5).
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(10, in));
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(5, in));
+
+    PageHeader header;
+    ASSERT_EQ(common::E_OK,
+              header.deserialize_from(in, false, common::TSDataType::INT32));
+    EXPECT_EQ(header.uncompressed_size_, 0U);
+    EXPECT_EQ(header.compressed_size_, 0U);
+    EXPECT_EQ(header.statistic_, nullptr);
+    // The empty page header consumes exactly one byte (a single varint),
+    // leaving the following page header intact.
+    EXPECT_EQ(1U, in.read_pos());
+
+    PageHeader next;
+    ASSERT_EQ(common::E_OK,
+              next.deserialize_from(in, false, common::TSDataType::INT32));
+    EXPECT_EQ(next.uncompressed_size_, 10U);
+    EXPECT_EQ(next.compressed_size_, 5U);
+    EXPECT_EQ(next.statistic_, nullptr);
+}
+
+TEST(PageHeaderTest, DeserializeEmptyPageWithStatisticConsumesSingleVarint) {
+    common::ByteStream in(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, common::SerializationUtil::write_var_uint(0, in));
+
+    PageHeader header;
+    ASSERT_EQ(common::E_OK,
+              header.deserialize_from(in, true, common::TSDataType::INT32));
+    EXPECT_EQ(header.uncompressed_size_, 0U);
+    EXPECT_EQ(header.compressed_size_, 0U);
+    EXPECT_EQ(header.statistic_, nullptr);
+    EXPECT_EQ(1U, in.read_pos());
+}
+
 TEST(ChunkHeaderTest, DefaultConstructor) {
     ChunkHeader header;
     EXPECT_EQ(header.measurement_name_, "");

@@ -25,10 +25,12 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.header.FileEncryptionHeader;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
@@ -136,6 +138,14 @@ public class TsFileIOWriter implements AutoCloseable {
 
   protected String encryptKey;
 
+  protected EncryptParameter encryptParameter;
+  private EncryptParameter ownedEncryptParameter;
+  private boolean newFileContextClaimed;
+
+  private boolean fileStarted;
+
+  private boolean encryptionHeaderWritten;
+
   private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
   protected String currentTable;
@@ -187,13 +197,18 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public TsFileIOWriter(File file, TSFileConfig conf, EncryptParameter param) throws IOException {
-    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
+    prepareNewFileEncryption(param);
     this.file = file;
-    if (resourceLogger.isDebugEnabled()) {
-      resourceLogger.debug("{} writer is opened.", file.getName());
+    try {
+      this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
+      if (resourceLogger.isDebugEnabled()) {
+        resourceLogger.debug("{} writer is opened.", file.getName());
+      }
+      startFile();
+    } catch (IOException | RuntimeException | Error e) {
+      closeAfterNewFileFailure(e);
+      throw e;
     }
-    setEncryptParam(param);
-    startFile();
   }
 
   /**
@@ -210,8 +225,47 @@ public class TsFileIOWriter implements AutoCloseable {
 
   public TsFileIOWriter(TsFileOutput output, EncryptParameter param) throws IOException {
     this.out = output;
-    setEncryptParam(param);
-    startFile();
+    try {
+      prepareNewFileEncryption(param);
+      startFile();
+    } catch (IOException | RuntimeException | Error e) {
+      closeAfterNewFileFailure(e);
+      throw e;
+    }
+  }
+
+  private void prepareNewFileEncryption(EncryptParameter parameter) {
+    if (parameter != null && parameter.isTdePageAead()) {
+      ownedEncryptParameter = parameter.copy();
+      try {
+        ownedEncryptParameter.claimForNewFile();
+      } catch (RuntimeException | Error e) {
+        ownedEncryptParameter.close();
+        throw e;
+      }
+      newFileContextClaimed = true;
+      setEncryptParam(ownedEncryptParameter);
+    } else {
+      setEncryptParam(parameter);
+    }
+  }
+
+  private void closeAfterNewFileFailure(Throwable failure) {
+    try {
+      if (out != null) {
+        out.close();
+      }
+    } catch (IOException | RuntimeException e) {
+      failure.addSuppressed(e);
+    } finally {
+      closeOwnedEncryptParameter();
+    }
+  }
+
+  private void closeOwnedEncryptParameter() {
+    if (ownedEncryptParameter != null) {
+      ownedEncryptParameter.close();
+    }
   }
 
   /** for test only */
@@ -236,14 +290,28 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
+    if (encryptionHeaderWritten) {
+      throw new EncryptException(Messages.get("error.write.encryption_context_immutable"));
+    }
     this.encryptLevel = encryptLevel;
     this.encryptType = encryptType;
     this.encryptKey = encryptKey;
+    this.encryptParameter = new EncryptParameter(encryptType, null);
   }
 
   public void setEncryptParam(EncryptParameter param) {
+    if (encryptionHeaderWritten && encryptParameter != param) {
+      throw new EncryptException(Messages.get("error.write.encryption_context_immutable"));
+    }
+    this.encryptParameter = param;
     if (param == null) {
       setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    } else if (param.isTdePageAead()) {
+      // File-level encryption metadata is persisted in FileEncryptionHeader. Legacy footer fields
+      // stay explicitly unencrypted so wrapped key material is not duplicated.
+      encryptLevel = "0";
+      encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
+      encryptKey = "";
     } else {
       if (!Objects.equals(param.getType(), "UNENCRYPTED")
           && !Objects.equals(param.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
@@ -258,6 +326,34 @@ public class TsFileIOWriter implements AutoCloseable {
         setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
       }
     }
+    this.encryptParameter = param;
+  }
+
+  public EncryptParameter getEncryptParameter() {
+    return encryptParameter;
+  }
+
+  protected void markExistingFileStarted(boolean hasEncryptionHeader) {
+    fileStarted = true;
+    encryptionHeaderWritten = hasEncryptionHeader;
+  }
+
+  public void writeEncryptionHeaderIfNecessary() throws IOException {
+    if (encryptParameter == null || !encryptParameter.isTdePageAead() || encryptionHeaderWritten) {
+      return;
+    }
+    long baseHeaderSize = MAGIC_STRING_BYTES.length + Byte.BYTES;
+    if (!fileStarted || out.getPosition() != baseHeaderSize) {
+      throw new IOException(Messages.get("error.write.encryption_header_must_precede_data"));
+    }
+    if (!newFileContextClaimed) {
+      encryptParameter.claimForNewFile();
+      newFileContextClaimed = true;
+    }
+    FileEncryptionHeader.serialize(encryptParameter, out.wrapAsStream());
+    // Make the header visible to readers without a separate durability synchronization.
+    out.flush();
+    encryptionHeaderWritten = true;
   }
 
   /** Add a custom property to the TsFile metadata. */
@@ -277,15 +373,19 @@ public class TsFileIOWriter implements AutoCloseable {
    * @throws IOException if an I/O error occurs.
    */
   public void writeBytesToStream(PublicBAOS bytes) throws IOException {
+    writeEncryptionHeaderIfNecessary();
     bytes.writeTo(out.wrapAsStream());
   }
 
   protected void startFile() throws IOException {
     out.write(MAGIC_STRING_BYTES);
     out.write(VERSION_NUMBER_BYTE);
+    fileStarted = true;
+    writeEncryptionHeaderIfNecessary();
   }
 
   public int startChunkGroup(IDeviceID deviceId) throws IOException {
+    writeEncryptionHeaderIfNecessary();
     updateTableSize(deviceId);
     this.currentChunkGroupDeviceId = deviceId;
     if (logger.isDebugEnabled()) {
@@ -348,6 +448,41 @@ public class TsFileIOWriter implements AutoCloseable {
       int numOfPages,
       int mask)
       throws IOException {
+    startFlushChunk(
+        measurementId,
+        compressionCodecName,
+        tsDataType,
+        encodingType,
+        statistics,
+        dataSize,
+        numOfPages,
+        mask,
+        -1,
+        null);
+  }
+
+  public void startFlushChunk(
+      String measurementId,
+      CompressionType compressionCodecName,
+      TSDataType tsDataType,
+      TSEncoding encodingType,
+      Statistics<? extends Serializable> statistics,
+      int dataSize,
+      int numOfPages,
+      int mask,
+      long chunkOrdinal,
+      EncryptParameter chunkEncryptParameter)
+      throws IOException {
+
+    boolean pageAead = encryptParameter != null && encryptParameter.isTdePageAead();
+    if (pageAead != (chunkOrdinal >= 0)) {
+      throw new IOException(Messages.get("error.write.invalid_chunk_ordinal"));
+    }
+    if (pageAead && !encryptParameter.sharesPageAeadFileContext(chunkEncryptParameter)) {
+      throw new IOException(Messages.get("error.write.encrypted_chunk_context_mismatch"));
+    }
+
+    writeEncryptionHeaderIfNecessary();
 
     currentChunkMetadata =
         new ChunkMetadata(
@@ -367,12 +502,15 @@ public class TsFileIOWriter implements AutoCloseable {
             compressionCodecName,
             encodingType,
             numOfPages,
-            mask);
-    header.serializeTo(out.wrapAsStream());
+            mask,
+            chunkOrdinal);
+    writeChunkHeader(header);
   }
 
   /** Write a whole chunk in another file into this file. Providing fast merge for IoTDB. */
   public void writeChunk(Chunk chunk, ChunkMetadata chunkMetadata) throws IOException {
+    writeEncryptionHeaderIfNecessary();
+    validateChunkEncryptionContext(chunk);
     ChunkHeader chunkHeader = chunk.getHeader();
     currentChunkMetadata =
         new ChunkMetadata(
@@ -383,7 +521,7 @@ public class TsFileIOWriter implements AutoCloseable {
             out.getPosition(),
             chunkMetadata.getStatistics());
     currentChunkMetadata.setMask(chunkMetadata.getMask());
-    chunkHeader.serializeTo(out.wrapAsStream());
+    writeChunkHeader(chunkHeader);
     out.write(chunk.getData());
     endCurrentChunk();
     if (logger.isDebugEnabled()) {
@@ -402,6 +540,7 @@ public class TsFileIOWriter implements AutoCloseable {
       TSEncoding encodingType,
       Statistics<? extends Serializable> statistics)
       throws IOException {
+    writeEncryptionHeaderIfNecessary();
     currentChunkMetadata =
         new ChunkMetadata(
             measurementId,
@@ -419,12 +558,17 @@ public class TsFileIOWriter implements AutoCloseable {
             compressionType,
             encodingType,
             0,
-            TsFileConstant.VALUE_COLUMN_MASK);
-    emptyChunkHeader.serializeTo(out.wrapAsStream());
+            TsFileConstant.VALUE_COLUMN_MASK,
+            encryptParameter != null && encryptParameter.isTdePageAead()
+                ? encryptParameter.nextChunkOrdinal()
+                : -1);
+    writeChunkHeader(emptyChunkHeader);
     endCurrentChunk();
   }
 
   public void writeChunk(Chunk chunk) throws IOException {
+    writeEncryptionHeaderIfNecessary();
+    validateChunkEncryptionContext(chunk);
     ChunkHeader chunkHeader = chunk.getHeader();
     currentChunkMetadata =
         new ChunkMetadata(
@@ -438,9 +582,17 @@ public class TsFileIOWriter implements AutoCloseable {
         (byte)
             (chunkHeader.getChunkType()
                 & (TsFileConstant.TIME_COLUMN_MASK | TsFileConstant.VALUE_COLUMN_MASK)));
-    chunkHeader.serializeTo(out.wrapAsStream());
+    writeChunkHeader(chunkHeader);
     out.write(chunk.getData());
     endCurrentChunk();
+  }
+
+  private void writeChunkHeader(ChunkHeader header) throws IOException {
+    byte[] authentication =
+        encryptParameter != null && encryptParameter.isTdePageAead()
+            ? encryptParameter.authenticateChunk(out.getPosition(), header.getChunkOrdinal())
+            : null;
+    header.serializeTo(out.wrapAsStream(), authentication);
   }
 
   /** end chunk and write some log. */
@@ -449,7 +601,7 @@ public class TsFileIOWriter implements AutoCloseable {
     chunkMetadataCount++;
     if (recordTablePointCount
         && currentChunkGroupDeviceId != null
-        && currentChunkGroupDeviceId.isTableModel()
+        && schema.getTableSchemaMap().containsKey(currentChunkGroupDeviceId.getTableName())
         && (currentChunkMetadata.getMask() & TsFileConstant.TIME_COLUMN_MASK) == 0) {
       tablePointCountMap.merge(
           currentChunkGroupDeviceId.getTableName(),
@@ -470,6 +622,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (!canWrite) {
       return;
     }
+    writeEncryptionHeaderIfNecessary();
     updateTableSize(null);
 
     checkInMemoryPathCount();
@@ -486,7 +639,11 @@ public class TsFileIOWriter implements AutoCloseable {
     // flush page cache data to disk
     out.force();
     // close file
-    out.close();
+    try {
+      out.close();
+    } finally {
+      closeOwnedEncryptParameter();
+    }
 
     if (resourceLogger.isDebugEnabled() && file != null) {
       resourceLogger.debug("{} writer is closed.", file.getName());
@@ -691,9 +848,13 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public void close() throws IOException {
     canWrite = false;
-    out.close();
-    if (tempOutput != null) {
-      this.tempOutput.close();
+    try {
+      out.close();
+      if (tempOutput != null) {
+        this.tempOutput.close();
+      }
+    } finally {
+      closeOwnedEncryptParameter();
     }
   }
 
@@ -714,10 +875,24 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public void writePlanIndices() throws IOException {
+    writeEncryptionHeaderIfNecessary();
     ReadWriteIOUtils.write(MetaMarker.OPERATION_INDEX_RANGE, out.wrapAsStream());
     ReadWriteIOUtils.write(minPlanIndex, out.wrapAsStream());
     ReadWriteIOUtils.write(maxPlanIndex, out.wrapAsStream());
     out.flush();
+  }
+
+  private void validateChunkEncryptionContext(Chunk chunk) throws IOException {
+    EncryptParameter sourceParameter = chunk.getEncryptParam();
+    boolean targetUsesPageAead = encryptParameter != null && encryptParameter.isTdePageAead();
+    boolean sourceUsesPageAead = sourceParameter != null && sourceParameter.isTdePageAead();
+    if (!targetUsesPageAead && !sourceUsesPageAead) {
+      if (chunk.getHeader().getChunkOrdinal() >= 0) {
+        throw new IOException(Messages.get("error.write.unencrypted_chunk_has_ordinal"));
+      }
+      return;
+    }
+    throw new IOException(Messages.get("error.write.encrypted_chunk_copy_unsupported"));
   }
 
   public void truncate(long offset) throws IOException {
@@ -958,7 +1133,7 @@ public class TsFileIOWriter implements AutoCloseable {
     // endFile
     boolean endFile = currentStartChunkGroupDeviceId == null;
     if (endFile
-        || (currentStartChunkGroupDeviceId.isTableModel()
+        || (schema.getTableSchemaMap().containsKey(currentStartChunkGroupDeviceId.getTableName())
             && !currentStartChunkGroupDeviceId.getTableName().equals(currentTable))) {
       if (currentTable != null) {
         long size = currentPosition - currentTableStartOffset;

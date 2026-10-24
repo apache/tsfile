@@ -28,7 +28,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-public abstract class QueryDataSet {
+public abstract class QueryDataSet implements AutoCloseable {
+  private boolean closed;
 
   protected List<Path> paths;
   protected List<TSDataType> dataTypes;
@@ -122,6 +123,37 @@ public abstract class QueryDataSet {
   }
 
   public boolean hasNext() throws IOException {
+    if (closed) {
+      return false;
+    }
+    boolean hasNext;
+    try {
+      hasNext = hasNextRow();
+    } catch (IOException | RuntimeException | Error e) {
+      try {
+        close();
+      } catch (IOException closeError) {
+        e.addSuppressed(closeError);
+      }
+      throw e;
+    }
+    if (!hasNext) {
+      close();
+    }
+    return hasNext;
+  }
+
+  /** Releases query-owned resources; the underlying file remains owned by its file reader. */
+  @Override
+  public void close() throws IOException {
+    closed = true;
+  }
+
+  public final boolean isClosed() {
+    return closed;
+  }
+
+  private boolean hasNextRow() throws IOException {
     // proceed to the OFFSET row by skipping rows
     while (rowOffset > 0) {
       if (hasNextWithoutConstraint()) {

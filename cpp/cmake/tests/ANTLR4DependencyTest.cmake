@@ -22,6 +22,14 @@ if (NOT TEST_BINARY_ROOT)
 endif ()
 include("${CMAKE_CURRENT_LIST_DIR}/TestGeneratorArguments.cmake")
 
+# Package lookup is intentionally isolated below. Keep compiler discovery out
+# of that isolation by reusing the compiler selected by the outer build.
+set(_TSFILE_ANTLR4_COMPILER_ARGUMENTS "")
+if (TEST_CMAKE_CXX_COMPILER)
+    list(APPEND _TSFILE_ANTLR4_COMPILER_ARGUMENTS
+            "-DCMAKE_CXX_COMPILER=${TEST_CMAKE_CXX_COMPILER}")
+endif ()
+
 set(_TSFILE_FIXTURE_SOURCE
         "${CMAKE_CURRENT_LIST_DIR}/projects/ANTLR4Dependency")
 set(_TSFILE_TEST_ROOT "${TEST_BINARY_ROOT}/antlr4-dependency")
@@ -54,6 +62,7 @@ function(_tsfile_run_antlr4_case NAME POLICY EXPECTED_SOURCE EXPECT_SUCCESS ROOT
     execute_process(
             COMMAND "${CMAKE_COMMAND}"
                     ${_TSFILE_TEST_GENERATOR_ARGUMENTS}
+                    ${_TSFILE_ANTLR4_COMPILER_ARGUMENTS}
                     "-DTSFILE_DEPENDENCY_SOURCE=${POLICY}"
                     "-DEXPECTED_ANTLR4_SOURCE=${EXPECTED_SOURCE}"
                     "-DCMAKE_PREFIX_PATH=${ROOT}"
@@ -86,7 +95,7 @@ endfunction()
 
 _tsfile_write_fake_antlr4("${_TSFILE_COMPATIBLE_ROOT}" 4.9.3 antlr4_static)
 _tsfile_write_fake_antlr4("${_TSFILE_TOO_OLD_ROOT}" 4.9.2 antlr4_static)
-_tsfile_write_fake_antlr4("${_TSFILE_INCOMPATIBLE_ROOT}" 5.0.0 antlr4_shared)
+_tsfile_write_fake_antlr4("${_TSFILE_INCOMPATIBLE_ROOT}" 4.13.0 antlr4_shared)
 file(MAKE_DIRECTORY "${_TSFILE_MISSING_ROOT}")
 
 _tsfile_run_antlr4_case(system-compatible SYSTEM SYSTEM TRUE

@@ -2329,6 +2329,38 @@ def _write_tree_rows(path, device_measurements, t_start=0, t_count=3):
     writer.close()
 
 
+@pytest.mark.parametrize("dtype", [TSDataType.INT32, TSDataType.DOUBLE])
+def test_dataset_tree_model_row_slices_apply_page_offset(
+    tmp_path, dataframe_use_index, dtype
+):
+    paths = [tmp_path / "part0.tsfile", tmp_path / "part1.tsfile"]
+    for start, path in zip((0, 40), paths):
+        _write_tree_rows(
+            path, {"root.offset": [("value", dtype)]}, t_start=start, t_count=40
+        )
+    expected = np.arange(80, dtype=np.float64)
+    if dtype == TSDataType.DOUBLE:
+        expected += 0.5
+
+    # Check both the initial build and reopening the persisted index.
+    for _ in range(2):
+        with TsFileDataFrame(
+            [str(path) for path in paths],
+            show_progress=False,
+            use_index=dataframe_use_index,
+        ) as dataframe:
+            series = dataframe["root.offset.value"]
+            assert series[30] == expected[30]
+            for window in (
+                slice(30, 40),
+                slice(35, 55),
+                slice(43, 47),
+                slice(-10, None),
+                slice(30, 40, 3),
+            ):
+                np.testing.assert_array_equal(series[window], expected[window])
+
+
 def test_dataset_tree_model_merges_identical_structure_across_files(
     tmp_path, dataframe_use_index
 ):

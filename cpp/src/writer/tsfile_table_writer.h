@@ -125,7 +125,7 @@ class TsFileTableWriter {
     int add_tsfile_property(const std::string& key,
                             const std::vector<uint8_t>& value);
     /**
-     * Closes the writer and releases any resources held by it.
+     * Flushes pending data, finalizes the file, and releases writer resources.
      * After calling this method, no further operations should be performed on
      * this instance.
      *

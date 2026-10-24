@@ -94,7 +94,7 @@ class TsFileReaderTest : public ::testing::Test {
 
     void TearDown() override {
         delete tsfile_writer_;
-        // remove(file_name_.c_str());
+        remove(file_name_.c_str());
         libtsfile_destroy();
     }
 
@@ -253,16 +253,18 @@ TEST_P(MetadataReadLengthTest, RejectsIncompleteRangesBeforeParsing) {
     for (const bool aligned : {false, true}) {
         const std::string device = aligned ? "root.aligned" : "root.unaligned";
         TsRecord record(100, device);
+        std::vector<MeasurementSchema*> schemas;
         for (int column = 0; column < GetParam(); ++column) {
             const std::string name = "value" + std::to_string(column);
-            MeasurementSchema schema(name, INT32, PLAIN, UNCOMPRESSED);
-            ASSERT_EQ(aligned
-                          ? tsfile_writer_->register_aligned_timeseries(device,
-                                                                        schema)
-                          : tsfile_writer_->register_timeseries(device, schema),
-                      E_OK);
+            schemas.push_back(
+                new MeasurementSchema(name, INT32, PLAIN, UNCOMPRESSED));
             record.add_point(name, static_cast<int32_t>(42));
         }
+        ASSERT_EQ(
+            aligned
+                ? tsfile_writer_->register_aligned_timeseries(device, schemas)
+                : tsfile_writer_->register_timeseries(device, schemas),
+            E_OK);
         ASSERT_EQ(aligned ? tsfile_writer_->write_record_aligned(record)
                           : tsfile_writer_->write_record(record),
                   E_OK);
@@ -491,6 +493,68 @@ TEST_F(TsFileReaderTest, ReadsThroughRandomAccessReadFile) {
 
     reader.destroy_query_data_set(result);
     reader.close();
+}
+
+TEST_F(TsFileReaderTest, DeviceNodeCacheIsBoundedAndReloadsEvictedDevices) {
+    const size_t capacity = TsFileIOReader::TEST_device_node_cache_capacity();
+    const size_t device_count = capacity + 8;
+    const std::string measurement = "value";
+
+    for (size_t i = 0; i < device_count; ++i) {
+        const std::string device = "root.cache.d" + std::to_string(i);
+        ASSERT_EQ(tsfile_writer_->register_timeseries(
+                      device, MeasurementSchema(measurement, INT32, PLAIN,
+                                                UNCOMPRESSED)),
+                  E_OK);
+        TsRecord record(static_cast<int64_t>(i), device);
+        record.add_point(measurement, static_cast<int32_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    PageArena pa;
+    pa.init(512, MOD_TSFILE_READER);
+
+    auto load_device = [&](size_t i) {
+        const std::string device = "root.cache.d" + std::to_string(i);
+        auto device_id = std::make_shared<StringArrayDeviceID>(device);
+        TsFileSeriesScanIterator* ssi = nullptr;
+        ASSERT_EQ(io_reader.alloc_ssi(device_id, measurement, ssi, pa), E_OK);
+        ASSERT_NE(ssi, nullptr);
+        io_reader.revert_ssi(ssi);
+        pa.reset();
+        EXPECT_LE(io_reader.TEST_device_node_cache_size(), capacity);
+    };
+
+    for (size_t i = 0; i < capacity; ++i) {
+        load_device(i);
+    }
+    ASSERT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
+    const int64_t memory_at_capacity = io_reader.TEST_reader_memory_bytes();
+    ASSERT_GT(memory_at_capacity, 0);
+#endif
+
+    // Filling beyond capacity must evict old nodes and reclaim their per-entry
+    // arenas rather than retaining more reader metadata memory.
+    for (size_t i = capacity; i < device_count; ++i) {
+        load_device(i);
+    }
+    EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
+    EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
+#endif
+
+    // d0 was the least-recently-used entry and has been evicted. Loading it
+    // again must still work, evict another entry, and keep memory flat.
+    load_device(0);
+    EXPECT_EQ(io_reader.TEST_device_node_cache_size(), capacity);
+#ifdef ENABLE_MEM_STAT
+    EXPECT_EQ(io_reader.TEST_reader_memory_bytes(), memory_at_capacity);
+#endif
 }
 
 TEST_F(TsFileReaderTest, ResultSetMetadata) {
@@ -826,6 +890,13 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
     auto selected_list = selected_meta.begin()->second;
     std::unordered_map<std::string, TSDataType> type_by_measurement;
     for (const auto& index : selected_list) {
+        auto* aligned =
+            dynamic_cast<storage::AlignedTimeseriesIndex*>(index.get());
+        ASSERT_NE(aligned, nullptr)
+            << "filtered metadata must preserve the shared time index";
+        ASSERT_NE(aligned->time_ts_idx_, nullptr);
+        ASSERT_NE(aligned->time_ts_idx_->get_statistic(), nullptr);
+        EXPECT_EQ(aligned->time_ts_idx_->get_statistic()->get_count(), 5);
         type_by_measurement[index->get_measurement_name().to_std_string()] =
             index->get_data_type();
     }

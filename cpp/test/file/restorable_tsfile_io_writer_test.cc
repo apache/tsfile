@@ -485,6 +485,84 @@ TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
     reader.close();
 }
 
+TEST_F(RestorableTsFileIOWriterTest,
+       RecoveredAlignedDeviceRejectsMeasurementRegistration) {
+    std::string device = "d1";
+    {
+        TsFileWriter writer;
+        ASSERT_EQ(writer.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED),
+            new MeasurementSchema("s1", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(writer.register_aligned_timeseries(device, schemas), E_OK);
+        TsRecord record(0, device);
+        record.add_point("s0", int64_t(100));
+        // s1 is registered but entirely NULL before recovery.
+        ASSERT_EQ(writer.write_record_aligned(record), E_OK);
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter recovery;
+    ASSERT_EQ(recovery.open(file_name_, true), E_OK);
+    ASSERT_TRUE(recovery.can_write());
+    {
+        TsFileTreeWriter writer(&recovery);
+        for (const std::string& name : {"extra", "s0"}) {
+            auto* schema =
+                new MeasurementSchema(name, INT64, PLAIN, UNCOMPRESSED);
+            int ret = writer.register_timeseries(
+                device, std::vector<MeasurementSchema*>{schema});
+            EXPECT_EQ(ret, E_INVALID_ARG);
+            if (ret != E_OK) {
+                delete schema;
+            }
+        }
+        MeasurementSchema schema("nonaligned_extra", INT64, PLAIN,
+                                 UNCOMPRESSED);
+        EXPECT_EQ(writer.register_timeseries(device, &schema), E_INVALID_ARG);
+        TsRecord record(1, device);
+        record.add_point("s0", int64_t(101));
+        record.add_point("s1", int64_t(201));
+        ASSERT_EQ(writer.write(record), E_OK);
+
+        // The restriction belongs to the recovered device, not the whole file.
+        std::string other_device = "d2";
+        std::vector<MeasurementSchema*> schemas{
+            new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED)};
+        ASSERT_EQ(writer.register_timeseries(other_device, schemas), E_OK);
+        TsRecord other(2, other_device);
+        other.add_point("s0", int64_t(302));
+        ASSERT_EQ(writer.write(other), E_OK);
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query({device}, {"s0", "s1"}, 0, 10, result), E_OK);
+    auto it = result->iterator();
+    int row = 0;
+    while (it.hasNext()) {
+        RowRecord* record = it.next();
+        EXPECT_EQ(record->get_timestamp(), row);
+        EXPECT_EQ(record->get_field(1)->type_, INT64);
+        EXPECT_EQ(record->get_field(1)->value_.lval_, 100 + row);
+        if (row == 0) {
+            EXPECT_EQ(record->get_field(2)->type_, NULL_TYPE);
+        } else {
+            EXPECT_EQ(record->get_field(2)->type_, INT64);
+            EXPECT_EQ(record->get_field(2)->value_.lval_, 201);
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 2);
+    reader.destroy_query_data_set(result);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
 // -----------------------------------------------------------------------------
 // Recovery + continued write with TsFileTableWriter (table model), then
 // read-back
@@ -1060,4 +1138,130 @@ TEST_F(RestorableTsFileIOWriterTest, RecoveryAlignedSparseStatRespectsBitmap) {
         }
     }
     EXPECT_TRUE(found_value_chunk);
+}
+
+// Sparse aligned records (a row only carries a subset of the device's
+// measurements, without explicit NULL DataPoints) must survive a crash +
+// recovery: the recovered chunk statistics have to describe the rows that
+// really carry a value, and continued sparse writes have to stay row-aligned
+// with the time column.
+TEST_F(RestorableTsFileIOWriterTest,
+       AlignedTimeseriesRecoverAndWriteNullValue) {
+    using namespace std;
+    const string device = "d1";
+    // even rows carry s1..s3, odd rows carry s4..s6
+    vector<string> even_names = {"s1", "s2", "s3"};
+    vector<string> odd_names = {"s4", "s5", "s6"};
+    {
+        TsFileWriter tw;
+        ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+        std::vector<MeasurementSchema*> schemas;
+        schemas.push_back(new MeasurementSchema("s1", BOOLEAN));
+        schemas.push_back(new MeasurementSchema("s2", INT32));
+        schemas.push_back(new MeasurementSchema("s3", TEXT));
+        schemas.push_back(new MeasurementSchema("s4", INT64));
+        schemas.push_back(new MeasurementSchema("s5", FLOAT));
+        schemas.push_back(new MeasurementSchema("s6", STRING));
+        ASSERT_EQ(tw.register_aligned_timeseries(device, schemas), E_OK);
+        for (int i = 0; i < 10; i++) {
+            TsRecord record(i, device);
+            if (i % 2 == 0) {
+                record.add_point(even_names[0], true);
+                record.add_point(even_names[1], static_cast<int32_t>(i));
+                record.add_point(even_names[2], "even");
+            } else {
+                record.add_point(odd_names[0], static_cast<int64_t>(i));
+                record.add_point(odd_names[1], static_cast<float>(i));
+                record.add_point(odd_names[2], "odd");
+            }
+            ASSERT_EQ(tw.write_record_aligned(record), E_OK);
+        }
+        ASSERT_EQ(tw.flush(), E_OK);
+        ASSERT_EQ(tw.close(), E_OK);
+    }
+
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+    ASSERT_TRUE(rw.can_write());
+    {
+        // Keep writing sparse rows after the recovery point.
+        TsFileTreeWriter tw2(&rw);
+        for (int i = 10; i < 20; i++) {
+            TsRecord record(i, device);
+            if (i % 2 == 0) {
+                record.add_point(even_names[0], true);
+                record.add_point(even_names[1], static_cast<int32_t>(i));
+                record.add_point(even_names[2], "even");
+            } else {
+                record.add_point(odd_names[0], static_cast<int64_t>(i));
+                record.add_point(odd_names[1], static_cast<float>(i));
+                record.add_point(odd_names[2], "odd");
+            }
+            ASSERT_EQ(tw2.write(record), E_OK);
+        }
+        ASSERT_EQ(tw2.flush(), E_OK);
+        ASSERT_EQ(tw2.close(), E_OK);
+    }
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    DeviceTimeseriesMetadataMap metadata = reader.get_timeseries_metadata();
+    std::map<std::string, storage::ITimeseriesIndex*> meta_by_name;
+    for (auto& entry : metadata) {
+        for (auto& ts_idx : entry.second) {
+            meta_by_name[ts_idx->get_measurement_name().to_std_string()] =
+                ts_idx.get();
+        }
+    }
+    ASSERT_EQ(meta_by_name.size(), 6u);
+    // Columns carried by the even rows: 5 points before the crash + 5 after,
+    // spanning timestamp 0..18.
+    for (auto& name : even_names) {
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->count_, 10);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->start_time_, 0);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->end_time_, 18);
+    }
+    // Columns carried by the odd rows: first value at timestamp 1, last at 19.
+    for (auto& name : odd_names) {
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->count_, 10);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->start_time_, 1);
+        EXPECT_EQ(meta_by_name[name]->get_statistic()->end_time_, 19);
+    }
+
+    vector<string> measurement_names = {"s1", "s2", "s3", "s4", "s5", "s6"};
+    ASSERT_EQ(CountTreeReaderRows(reader, measurement_names), 20);
+
+    ResultSet* result_set = nullptr;
+    vector<string> device_ids = {device};
+    ASSERT_EQ(reader.query(device_ids, measurement_names, 0, 100, result_set),
+              E_OK);
+    auto it = result_set->iterator();
+    int row = 0;
+    while (it.hasNext()) {
+        RowRecord* rec = it.next();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), row);
+        for (int c = 0; c < 3; c++) {
+            Field* field = rec->get_field(c + 1);
+            if (row % 2 == 0) {
+                EXPECT_NE(field->type_, common::NULL_TYPE);
+            } else {
+                EXPECT_EQ(field->type_, common::NULL_TYPE);
+            }
+        }
+        for (int c = 3; c < 6; c++) {
+            Field* field = rec->get_field(c + 1);
+            if (row % 2 == 0) {
+                EXPECT_EQ(field->type_, common::NULL_TYPE);
+            } else {
+                EXPECT_NE(field->type_, common::NULL_TYPE);
+            }
+        }
+        row++;
+    }
+    EXPECT_EQ(row, 20);
+    reader.destroy_query_data_set(result_set);
+    reader.close();
 }

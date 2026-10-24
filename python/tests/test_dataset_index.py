@@ -17,6 +17,8 @@
 
 from types import SimpleNamespace
 import os
+import struct
+import sys
 import threading
 
 import numpy as np
@@ -37,6 +39,8 @@ from tsfile.constants import TSDataType
 from tsfile.dataset.index import (
     COLUMN_SCHEMA,
     DEVICE_FILE_SPAN,
+    DEVICE_NAME_INDEX,
+    DEVICE_RECORD,
     DIRECTORY,
     HEADER,
     LOGICAL_SERIES,
@@ -44,6 +48,7 @@ from tsfile.dataset.index import (
     RECORDS,
     SERIES_FILE_SPAN,
     SERIES_LOCATOR,
+    TABLE_RECORD,
     TSFILE_RECORD,
     build_sections_from_dataframe,
     crc32c,
@@ -90,6 +95,22 @@ def _synthetic_dataframe(source_path):
     )
 
 
+def _index_section_entry(blob, section_type):
+    return DIRECTORY.unpack_from(
+        blob, HEADER.size + (section_type - 1) * DIRECTORY.size
+    )
+
+
+def _patch_index_field(path, section_type, field_offset, value, fmt="<I"):
+    """Rewrite one raw index field, invalidating that section's checksum."""
+    with open(path, "r+b") as stream:
+        blob = bytearray(stream.read())
+        entry = _index_section_entry(blob, section_type)
+        struct.pack_into(fmt, blob, entry[2] + field_offset, value)
+        stream.seek(0)
+        stream.write(blob)
+
+
 def test_binary_layout_matches_cpp_v1():
     assert HEADER.size == 64
     assert DIRECTORY.size == 32
@@ -124,27 +145,382 @@ def test_build_publish_map_and_lookup(tmp_path):
         assert index.string(file_record[0]) == str(source)
 
 
-def test_child_lookup_checks_full_bytes_for_hash_collisions(monkeypatch):
-    rows = [
-        (0, 10, 42, 0, 0),
-        (0, 11, 42, 1, 0),
-        (0, 12, 42, 2, 0),
+@pytest.mark.parametrize("close_mode", ["explicit", "context", "runtime"])
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("__enter__", ()),
+        ("count", (LOGICAL_SERIES,)),
+        ("record", (LOGICAL_SERIES, 0)),
+        ("records", (LOGICAL_SERIES,)),
+        ("records", (LOGICAL_SERIES, 0, 0)),
+        ("string_bytes", (0,)),
+        ("string", (0,)),
+        ("find_table_ids", ("root",)),
+        ("find_table_ids", ("missing",)),
+        ("find_device_id", (0, "root.")),
+        ("find_column_id", (0, "s1")),
+        ("find_series_id", (0, 0)),
+        ("describe_series", (0,)),
+        ("series_identity", (0,)),
+        ("find_series_span", (0, 0)),
+        ("locator_metadata", (0,)),
+        ("prepared_locator_metadata", (0, 0)),
+        ("device_route", (0,)),
+        ("table_name_id", (0,)),
+        ("column_name_id", (0,)),
+        ("device_time_bounds", (0,)),
+    ],
+)
+def test_index_reads_after_close_raise_runtime_error(
+    tmp_path, close_mode, method, args
+):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    write_index_atomic(
+        str(output), build_sections_from_dataframe(_synthetic_dataframe(str(source)))
+    )
+
+    if close_mode == "runtime":
+        runtime = DatasetRuntime(str(output))
+        lease = runtime.lease()
+        index = runtime.index
+        lease.close()
+        assert runtime._torn_down
+    elif close_mode == "context":
+        with MappedDatasetIndex(str(output)) as index:
+            pass
+    else:
+        index = MappedDatasetIndex(str(output))
+        index.close()
+
+    index.close()
+    assert index._view is None
+    assert index._mmap is None
+    assert index._file is None
+    assert index._lookup is None
+    with pytest.raises(RuntimeError, match="Dataset Index is closed"):
+        result = getattr(index, method)(*args)
+        if method == "records":
+            list(result)
+
+
+@pytest.mark.parametrize("started", [False, True])
+def test_records_iterator_rejects_reads_after_close(tmp_path, started):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    write_index_atomic(
+        str(output), build_sections_from_dataframe(_synthetic_dataframe(str(source)))
+    )
+
+    with MappedDatasetIndex(str(output)) as index:
+        records = index.records(index_module.STRING_OFFSETS)
+        if started:
+            next(records)
+
+    with pytest.raises(RuntimeError, match="Dataset Index is closed"):
+        next(records)
+
+
+def test_closed_subset_rejects_named_read_after_runtime_teardown(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(tmp_path), show_progress=False, use_index=True) as first:
+        with first[:1] as subset:
+            name = str(subset.list_timeseries()[0])
+            runtime = first._runtime
+            first.close()
+        assert runtime._torn_down
+        assert runtime.index._view is None
+        with pytest.raises(RuntimeError, match="closed"):
+            subset[name][:]
+
+
+def test_index_lookup_is_required_and_does_not_unpack_python_record_tuples(
+    tmp_path, monkeypatch
+):
+    assert index_module.IndexLookup is not None
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        assert isinstance(index._lookup, index_module.IndexLookup)
+        assert not hasattr(index, "_fast_lookup")
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("index lookup should not unpack Python record tuples")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.find_device_id(0, "root.") == 0
+        assert index.find_column_id(0, "s1") == 0
+        assert index.find_series_id(0, 0) == 0
+
+
+def test_series_description_does_not_unpack_python_record_tuples(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+        span = index.record(SERIES_FILE_SPAN, series[2])
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+        expected = (series[0], series[1], series[4], series[5])
+        expected_count = device_span[6] if device_span[4] == 1 else span[6]
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("series description should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        device_id, column_id, min_time, max_time, count, shards = index.describe_series(
+            0
+        )
+
+        assert (device_id, column_id, min_time, max_time) == expected
+        assert count == expected_count
+        assert shards == [(span[1], span[2], expected_count, span[4], span[5])]
+
+
+def test_span_and_locator_metadata_do_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+        span = index.record(SERIES_FILE_SPAN, series[2])
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("span metadata should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.find_series_span(0, span[1]) == (
+            span[2],
+            span[4],
+            span[5],
+            span[6],
+        )
+        assert index.locator_metadata(span[2]) == (
+            locator[0],
+            locator[1],
+            device_span[1],
+            device_span[4],
+            device_span[6],
+        )
+
+
+def test_runtime_reader_span_lookup_uses_index_metadata(tmp_path, monkeypatch):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        reader = dataframe._runtime.catalog.reader_for(0)
+        series = dataframe._runtime.index.record(LOGICAL_SERIES, 0)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("runtime span lookup should not unpack records")
+
+        monkeypatch.setattr(dataframe._runtime.index, "record", fail_record)
+        locator_id, min_time, max_time, length = reader._span(series[0], series[1])
+
+        assert locator_id >= 0
+        assert min_time == 0
+        assert max_time == 1
+        assert length >= 0
+
+
+def test_prepared_locator_metadata_does_not_unpack_python_records(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        span = index.record(SERIES_FILE_SPAN, 0)
+        locator = index.record(SERIES_LOCATOR, span[2])
+        device_span = index.record(DEVICE_FILE_SPAN, locator[0])
+        file_record = index.record(TSFILE_RECORD, span[1])
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("prepared locator should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.prepared_locator_metadata(span[1], span[2]) == (
+            file_record[2],
+            file_record[3],
+            locator[1],
+            locator[2],
+            locator[3],
+            locator[4],
+            device_span[2],
+            device_span[3],
+        )
+
+
+def test_identity_and_device_bounds_do_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        device = index.record(index_module.DEVICE_RECORD, 0)
+        table = index.record(index_module.TABLE_RECORD, device[0])
+        column = index.record(COLUMN_SCHEMA, 0)
+        expected_device = (device[0], device[1])
+        expected_table_name_id = table[0]
+        expected_column_name_id = column[1]
+        expected_bounds = (device[8], device[9])
+        expected_name = index.string(expected_column_name_id)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("identity metadata should not unpack records")
+
+        def fail_string_bytes(*_args, **_kwargs):
+            raise AssertionError("index string lookup should not copy bytes")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        monkeypatch.setattr(index, "string_bytes", fail_string_bytes)
+        assert index.device_route(0) == expected_device
+        assert index.table_name_id(device[0]) == expected_table_name_id
+        assert index.column_name_id(0) == expected_column_name_id
+        assert index.device_time_bounds(0) == expected_bounds
+        assert index.string(expected_column_name_id) == expected_name
+
+
+def test_series_identity_does_not_unpack_python_records(tmp_path, monkeypatch):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    with MappedDatasetIndex(str(output), verify_sections=True) as index:
+        series = index.record(LOGICAL_SERIES, 0)
+
+        def fail_record(*_args, **_kwargs):
+            raise AssertionError("series identity should not unpack records")
+
+        monkeypatch.setattr(index, "record", fail_record)
+        assert index.series_identity(0) == (series[0], series[1])
+
+
+def test_child_lookup_checks_full_bytes_for_hash_collisions(tmp_path):
+    """A stored hash match with different bytes must not resolve to that row."""
+    source = tmp_path / "devices.tsfile"
+    _write_runtime_devices_file(source)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        index_path = dataframe._runtime.index.path
+
+    with MappedDatasetIndex(index_path) as index:
+        rows = list(index.records(DEVICE_NAME_INDEX))
+        names = [index.string(row[3]) for row in rows]
+    assert len(rows) >= 3
+
+    # Same length as the row it must not match, so only the bytes can reject it.
+    tail = names[-1][:-1]
+    probe = None
+    for replacement in "xyz019":
+        value = tail[:-1] + replacement + "."
+        if (
+            len(value) == len(names[-1])
+            and value not in names
+            and index_module.name_hash(value.encode("utf-8")) >= rows[-1][2]
+        ):
+            probe = value
+            break
+    assert probe is not None
+
+    # Give the last row the probe's hash: the lookup finds that row by hash and
+    # can only reject it by comparing the stored bytes.
+    with open(index_path, "r+b") as stream:
+        blob = bytearray(stream.read())
+        entry = _index_section_entry(blob, DEVICE_NAME_INDEX)
+        struct.pack_into(
+            "<Q",
+            blob,
+            entry[2] + (entry[4] - 1) * entry[1] + 8,
+            index_module.name_hash(probe.encode("utf-8")),
+        )
+        stream.seek(0)
+        stream.write(blob)
+
+    with MappedDatasetIndex(index_path) as index:
+        untouched = list(index.records(DEVICE_NAME_INDEX))[:-1]
+        for table_id, device_id, _, sid, _ in untouched:
+            assert index.find_device_id(table_id, index.string(sid)) == device_id
+        with pytest.raises(KeyError):
+            index.find_device_id(untouched[0][0], probe)
+
+
+@pytest.mark.parametrize(
+    ("section_type", "field_offset", "lookup"),
+    [
+        (TABLE_RECORD, 12, lambda index: index.find_device_id(0, "root.")),
+        (TABLE_RECORD, 20, lambda index: index.find_column_id(0, "s1")),
+        (DEVICE_RECORD, 20, lambda index: index.find_series_id(0, 0)),
+    ],
+)
+def test_out_of_range_child_ranges_raise_instead_of_reading_out_of_bounds(
+    tmp_path, section_type, field_offset, lookup
+):
+    """Corrupt child ranges must raise, not walk past the mmap (SIGSEGV/SIGBUS)."""
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+    _patch_index_field(output, section_type, field_offset, 0xFFFFFF00)
+
+    # section checksums stay unverified here, matching DatasetRuntime's load path
+    with MappedDatasetIndex(str(output)) as index:
+        with pytest.raises(IndexError):
+            lookup(index)
+
+
+def test_lookup_rejects_negative_ids_with_index_error(tmp_path):
+    source = tmp_path / "source.tsfile"
+    source.write_bytes(b"T" * 4096)
+    output = tmp_path / "dataset.tsidx"
+    dataframe = _synthetic_dataframe(str(source))
+    write_index_atomic(str(output), build_sections_from_dataframe(dataframe))
+
+    calls = [
+        lambda index: index.find_device_id(-1, "root."),
+        lambda index: index.find_column_id(-1, "s1"),
+        lambda index: index.find_series_id(-1, 0),
+        lambda index: index.describe_series(-1),
+        lambda index: index.series_identity(-1),
+        lambda index: index.find_series_span(-1, 0),
+        lambda index: index.locator_metadata(-1),
+        lambda index: index.prepared_locator_metadata(-1, 0),
+        lambda index: index.device_route(-1),
+        lambda index: index.table_name_id(-1),
+        lambda index: index.column_name_id(-1),
+        lambda index: index.device_time_bounds(-1),
+        lambda index: index.string(-1),
     ]
-    names = [b"alpha", b"beta", b"gamma"]
-    monkeypatch.setattr(index_module, "name_hash", lambda _value: 42)
-
-    class _Index:
-        @staticmethod
-        def record(_section_type, record_id):
-            return rows[record_id]
-
-        @staticmethod
-        def string_bytes(sid):
-            return names[sid]
-
-    assert MappedDatasetIndex._find_child(_Index(), 0, 0, "beta", 0, 3) == 11
-    with pytest.raises(KeyError):
-        MappedDatasetIndex._find_child(_Index(), 0, 0, "missing", 0, 3)
+    with MappedDatasetIndex(str(output)) as index:
+        for call in calls:
+            with pytest.raises(IndexError):
+                call(index)
 
 
 def test_rejects_damaged_header_checksum(tmp_path):
@@ -262,6 +638,67 @@ def test_hot_construction_maps_index_without_opening_readers(tmp_path, monkeypat
         assert series[1] == 1.0
         assert second._runtime.prepared.size == 1
         series.close()
+
+
+@pytest.mark.parametrize("capacity", [0, 1, 2])
+def test_trust_index_defaults_to_skipping_generation_checks(
+    tmp_path, monkeypatch, capacity
+):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True):
+        pass
+
+    stat = os.stat(source)
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    def fail_check(*_args, **_kwargs):
+        raise AssertionError("trusted indexes must not check source generations")
+
+    monkeypatch.setattr(index_module, "file_fingerprint", fail_check)
+    monkeypatch.setattr(runtime_module, "file_fingerprint", fail_check)
+    monkeypatch.setattr(
+        runtime_module._ReaderSession, "_validate_generation", fail_check
+    )
+    monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", fail_check)
+    with TsFileDataFrame(
+        str(source),
+        show_progress=False,
+        use_index=True,
+        max_prepared_series=capacity,
+        descriptor_cache_size=capacity,
+    ) as dataframe:
+        with dataframe[:1] as subset:
+            assert subset._trust_index is True
+            np.testing.assert_array_equal(subset[0][:], np.array([0.0, 1.0]))
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        assert dataframe._runtime.prepared.size <= capacity
+
+
+def test_trust_index_false_rebuilds_a_stale_index(tmp_path):
+    source = tmp_path / "part.tsfile"
+    _write_runtime_file(source, 0)
+    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+        index_path = dataframe._runtime.index.path
+        fingerprint = dataframe._runtime.index.record(TSFILE_RECORD, 0)[3]
+
+    stat = os.stat(source)
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    assert index_module.index_matches_paths(index_path, [str(source)])
+    assert not index_module.index_matches_paths(
+        index_path, [str(source)], trust_index=False
+    )
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, trust_index=False
+    ) as dataframe:
+        assert dataframe._runtime.index.record(TSFILE_RECORD, 0)[3] != fingerprint
+        np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+
+
+@pytest.mark.parametrize("trust_index", [None, 1, "true"])
+def test_trust_index_requires_a_bool(tmp_path, trust_index):
+    with pytest.raises(TypeError, match="trust_index must be a bool"):
+        TsFileDataFrame(str(tmp_path / "missing.tsfile"), trust_index=trust_index)
 
 
 def test_dataframe_does_not_use_or_create_index_by_default(tmp_path):
@@ -421,9 +858,9 @@ def test_series_path_from_another_index_falls_back_to_its_name(tmp_path, monkeyp
 def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch):
     source = tmp_path / "devices.tsfile"
     _write_runtime_devices_file(source)
-    monkeypatch.setattr(runtime_module, "_SERIES_DESCRIPTOR_CACHE_SIZE", 2)
-
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, descriptor_cache_size=2
+    ) as dataframe:
         names = [str(name) for name in dataframe.list_timeseries()]
         find_device_calls = 0
         original_find_device = dataframe._runtime.index.find_device_id
@@ -446,6 +883,17 @@ def test_runtime_descriptor_cache_evicts_least_recent_name(tmp_path, monkeypatch
         # d0 was the least recently used name and must be resolved again.
         dataframe[names[0]].close()
         assert find_device_calls == 4
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="dataclasses only support slots on 3.10+"
+)
+def test_runtime_descriptor_objects_use_slots():
+    shard = runtime_module.RuntimeSeriesShard(None, 1, 2, 3, 4, 5, 6)
+    descriptor = runtime_module.RuntimeSeriesDescriptor((1, 2), 3, 4, (shard,), 5, 6, 7)
+
+    assert not hasattr(shard, "__dict__")
+    assert not hasattr(descriptor, "__dict__")
 
 
 def test_reader_pool_enforces_open_file_cap(tmp_path, monkeypatch):
@@ -538,8 +986,9 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
         runtime = dataframe._runtime
         series = runtime.index.record(LOGICAL_SERIES, 0)
         span = runtime.index.record(SERIES_FILE_SPAN, series[2])
-        with runtime.readers.acquire(0) as reader:
-            prepared = runtime.prepared.get(0, span[2], reader)
+        with runtime.readers.acquire(0) as reader, runtime.prepared.acquire(
+            0, span[2], reader
+        ) as prepared:
             with reader.query_prepared(prepared, offset=1, limit=7) as result:
                 batches = []
                 while True:
@@ -564,7 +1013,8 @@ def test_prepared_query_reads_nullable_offset_window_in_arrow_batches(tmp_path):
     )
 
 
-def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
+@pytest.mark.parametrize("trust_index", [True, False])
+def test_prepared_locator_generation_checks_and_bounds(tmp_path, trust_index):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
     with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
@@ -575,27 +1025,38 @@ def test_prepared_locator_rejects_stale_generation_and_bad_range(tmp_path):
         with runtime.readers.acquire(0) as reader:
             stale = list(locator)
             stale[3] ^= 1
-            with pytest.raises(Exception, match="prepare Dataset Index locator"):
-                reader.prepare_series(stale)
+            if trust_index:
+                reader.prepare_series(stale, trust_index=True).close()
+            else:
+                with pytest.raises(Exception, match="prepare Dataset Index locator"):
+                    reader.prepare_series(stale)
 
             out_of_range = list(locator)
             out_of_range[7] = os.path.getsize(source) + 1
             with pytest.raises(Exception, match="prepare Dataset Index locator"):
-                reader.prepare_series(out_of_range)
+                reader.prepare_series(out_of_range, trust_index=trust_index)
 
 
-def test_reader_session_revalidates_generation_when_reused(tmp_path):
+@pytest.mark.parametrize("trust_index", [True, False])
+def test_reader_session_generation_checks_follow_trust_index(tmp_path, trust_index):
     source = tmp_path / "part.tsfile"
     _write_runtime_file(source, 0)
-    with TsFileDataFrame(str(source), show_progress=False, use_index=True) as dataframe:
+    with TsFileDataFrame(
+        str(source), show_progress=False, use_index=True, trust_index=trust_index
+    ) as dataframe:
         pool = dataframe._runtime.readers
         with pool.acquire(0):
             pass
         stat = os.stat(source)
         os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
-        with pytest.raises(RuntimeError, match="generation changed"):
+        if trust_index:
             with pool.acquire(0):
                 pass
+            np.testing.assert_array_equal(dataframe[0][:], np.array([0.0, 1.0]))
+        else:
+            with pytest.raises(RuntimeError, match="generation changed"):
+                with pool.acquire(0):
+                    pass
 
 
 def test_runtime_lease_close_waits_for_query_lease(tmp_path):

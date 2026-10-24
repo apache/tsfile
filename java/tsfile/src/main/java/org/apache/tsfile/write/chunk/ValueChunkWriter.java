@@ -61,6 +61,7 @@ public class ValueChunkWriter {
   private final CompressionType compressionType;
 
   private final EncryptParameter encryptParam;
+  private long chunkOrdinal = -1;
 
   /** all pages of this chunk. */
   private final PublicBAOS pageBuffer;
@@ -100,6 +101,7 @@ public class ValueChunkWriter {
     this.dataType = dataType;
     this.compressionType = compressionType;
     this.encryptParam = EncryptUtils.getEncryptParameter();
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -112,6 +114,7 @@ public class ValueChunkWriter {
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
   }
 
   public ValueChunkWriter(
@@ -126,6 +129,7 @@ public class ValueChunkWriter {
     this.dataType = dataType;
     this.compressionType = compressionType;
     this.encryptParam = encryptParam;
+    this.chunkOrdinal = nextChunkOrdinal();
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -138,6 +142,13 @@ public class ValueChunkWriter {
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
+    this.pageWriter.setChunkOrdinal(chunkOrdinal);
+  }
+
+  private long nextChunkOrdinal() {
+    return encryptParam != null && encryptParam.isTdePageAead()
+        ? encryptParam.nextChunkOrdinal()
+        : -1;
   }
 
   public void write(long time, long value, boolean isNull) {
@@ -162,6 +173,11 @@ public class ValueChunkWriter {
 
   public void write(long time, Binary value, boolean isNull) {
     pageWriter.write(time, value, isNull);
+  }
+
+  /** Appends nulls to the current page without type dispatch, encoding, or statistics updates. */
+  public void writeNull(int count) {
+    pageWriter.writeNull(count);
   }
 
   public void write(long[] timestamps, int[] values, boolean[] isNull, int batchSize, int pos) {
@@ -209,7 +225,8 @@ public class ValueChunkWriter {
           // record the firstPageStatistics if it is not empty page
           this.firstPageStatistics = pageWriter.getStatistics();
         }
-        this.sizeWithoutStatistic = pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true);
+        this.sizeWithoutStatistic =
+            pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true, numOfPages);
       } else if (numOfPages == 1) { // put the firstPageStatistics into pageBuffer
         if (firstPageStatistics != null) { // Consider previous page is an empty page
           byte[] b = pageBuffer.toByteArray();
@@ -218,10 +235,10 @@ public class ValueChunkWriter {
           firstPageStatistics.serialize(pageBuffer);
           pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
         }
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
         firstPageStatistics = null;
       } else {
-        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false);
+        pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
       }
 
       // update statistics of this chunk
@@ -237,6 +254,10 @@ public class ValueChunkWriter {
 
   public void writePageHeaderAndDataIntoBuff(ByteBuffer data, PageHeader header)
       throws PageException {
+    if (chunkOrdinal >= 0) {
+      throw new org.apache.tsfile.exception.encrypt.EncryptException(
+          Messages.get("error.write.aead_raw_page_copy_unsupported"));
+    }
     // write the page header to pageBuffer
     try {
       logger.debug(Messages.get("log.write.page_header_flush_start"), pageBuffer.size());
@@ -309,6 +330,10 @@ public class ValueChunkWriter {
     sizeWithoutStatistic = 0;
     firstPageStatistics = null;
     this.statistics = Statistics.getStatsByType(dataType);
+    this.chunkOrdinal = nextChunkOrdinal();
+    if (pageWriter != null) {
+      pageWriter.setChunkOrdinal(chunkOrdinal);
+    }
   }
 
   public long estimateMaxSeriesMemSize() {
@@ -330,11 +355,15 @@ public class ValueChunkWriter {
     // Empty chunk, it may happen if pageBuffer stores empty bits and only chunk header will be
     // flushed.
     if (statistics.getCount() == 0) {
-      return ChunkHeader.getSerializedSize(measurementId, 0);
+      return ChunkHeader.getSerializedSize(
+          measurementId, 0, chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0);
     }
 
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementId, pageBuffer.size())
+    return ChunkHeader.getSerializedSize(
+            measurementId,
+            pageBuffer.size(),
+            chunkOrdinal >= 0 ? encryptParam.getChunkAuthenticationSize() : 0)
         + (long) pageBuffer.size();
   }
 
@@ -380,6 +409,10 @@ public class ValueChunkWriter {
     return numOfPages;
   }
 
+  public long getChunkOrdinal() {
+    return chunkOrdinal;
+  }
+
   public TSDataType getDataType() {
     return dataType;
   }
@@ -416,7 +449,9 @@ public class ValueChunkWriter {
           statistics,
           0,
           0,
-          TsFileConstant.VALUE_COLUMN_MASK);
+          TsFileConstant.VALUE_COLUMN_MASK,
+          chunkOrdinal,
+          encryptParam);
       writer.endCurrentChunk();
       return;
     }
@@ -430,7 +465,9 @@ public class ValueChunkWriter {
         statistics,
         pageBuffer.size(),
         numOfPages,
-        TsFileConstant.VALUE_COLUMN_MASK);
+        TsFileConstant.VALUE_COLUMN_MASK,
+        chunkOrdinal,
+        encryptParam);
 
     long dataOffset = writer.getPos();
 

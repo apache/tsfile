@@ -21,10 +21,11 @@
 #define COMMON_CACHE_LRU_CACHE_H
 
 #include <algorithm>
+#include <limits>
 #include <list>
+#include <stdexcept>
 #include <unordered_map>
-
-#include "utils/errno_define.h"
+#include <utility>
 
 namespace common {
 
@@ -38,10 +39,20 @@ struct KeyValuePair {
 };
 
 /**
- *	The LRU Cache class templated by
- *		Key - key type
- *		Value - value type
- *		MapType - an associative container like std::unordered_map
+ * Least-recently-used cache.
+ *
+ * The cache is not internally synchronized. A caller that shares one cache
+ * across threads must serialize every operation, including the full lifetime
+ * of a pointer/reference returned by getPtr(), getRef(), or tryGetRef().
+ *
+ * maxSize is the normal retained-entry limit. elasticity allows the cache to
+ * grow temporarily to maxSize + elasticity; the insertion that would exceed
+ * that hard limit prunes least-recently-used entries back to maxSize. A
+ * maxSize of 0 means unbounded and elasticity is ignored.
+ *
+ * Pointers/references returned by non-copying lookups remain valid until that
+ * entry is updated, removed, or evicted, or until clear()/destruction. Any
+ * insertion can evict an entry when the cache is bounded.
  */
 template <class Key, class Value,
           class Map = std::unordered_map<
@@ -51,26 +62,23 @@ class Cache {
     typedef KeyValuePair<Key, Value> node_type;
     typedef std::list<KeyValuePair<Key, Value>> list_type;
     typedef Map map_type;
-    /**
-     * the maxSize is the soft limit of entries and (maxSize + elasticity) is
-     * the hard limit the cache is allowed to grow till (maxSize + elasticity)
-     * and is pruned back to maxSize entries set maxSize = 0 for an unbounded
-     * cache (but in that case, you're better off using a std::unordered_map
-     * directly anyway! :)
-     */
+
     explicit Cache(size_t maxSize = 64, size_t elasticity = 10)
         : maxSize_(maxSize), elasticity_(elasticity) {}
     virtual ~Cache() = default;
+
     size_t size() const { return cache_.size(); }
     bool empty() const { return cache_.empty(); }
+
     void clear() {
         cache_.clear();
         entries_.clear();
     }
+
     void insert(const Key& k, Value v) {
         const auto iter = cache_.find(k);
         if (iter != cache_.end()) {
-            iter->second->value = v;
+            iter->second->value = std::move(v);
             entries_.splice(entries_.begin(), entries_, iter->second);
             return;
         }
@@ -79,39 +87,44 @@ class Cache {
         cache_[k] = entries_.begin();
         prune();
     }
-    /**
-      for backward compatibility. redirects to tryGetCopy()
-     */
-    bool tryGet(const Key& kIn, Value& vOut) { return tryGetCopy(kIn, vOut); }
 
-    bool tryGetCopy(const Key& kIn, Value& vOut) {
-        Value tmp;
-        if (!tryGetRef_nolock(kIn, tmp)) {
+    bool tryGetCopy(const Key& k, Value& vOut) {
+        const Value* value = getPtr(k);
+        if (value == nullptr) {
             return false;
         }
-        vOut = tmp;
+        vOut = *value;
         return true;
     }
 
-    bool tryGetRef(const Key& kIn, Value& vOut) {
-        return tryGetRef_nolock(kIn, vOut);
+    /**
+     * Non-copying lookup. On success vOut points at the cached value and the
+     * entry is promoted to most-recently-used.
+     */
+    bool tryGetRef(const Key& k, const Value*& vOut) {
+        vOut = getPtr(k);
+        return vOut != nullptr;
     }
-    /**
-     *	The const reference returned here is only
-     *    guaranteed to be valid till the next insert/delete
-     *  in multi-threaded apps use getCopy() to be threadsafe
-     */
-    const Value& getRef(const Key& k) { return get_nolock(k); }
 
-    /**
-        added for backward compatibility
-     */
-    Value get(const Key& k) { return getCopy(k); }
-    /**
-     * returns a copy of the stored object (if found)
-     * safe to use/recommended in multi-threaded apps
-     */
-    Value getCopy(const Key& k) { return get_nolock(k); }
+    /** Returns nullptr on miss and promotes a hit without copying the value. */
+    const Value* getPtr(const Key& k) {
+        const auto iter = cache_.find(k);
+        if (iter == cache_.end()) {
+            return nullptr;
+        }
+        entries_.splice(entries_.begin(), entries_, iter->second);
+        return &iter->second->value;
+    }
+
+    const Value& getRef(const Key& k) {
+        const Value* value = getPtr(k);
+        if (value == nullptr) {
+            throw std::out_of_range("LRU cache key not found");
+        }
+        return *value;
+    }
+
+    Value getCopy(const Key& k) { return getRef(k); }
 
     bool remove(const Key& k) {
         auto iter = cache_.find(k);
@@ -122,29 +135,30 @@ class Cache {
         cache_.erase(iter);
         return true;
     }
+
     bool contains(const Key& k) const { return cache_.find(k) != cache_.end(); }
 
     size_t getMaxSize() const { return maxSize_; }
     size_t getElasticity() const { return elasticity_; }
-    size_t getMaxAllowedSize() const { return maxSize_ + elasticity_; }
+    size_t getMaxAllowedSize() const {
+        if (maxSize_ == 0) {
+            return 0;
+        }
+        const size_t max = std::numeric_limits<size_t>::max();
+        if (elasticity_ > max - maxSize_) {
+            return max;
+        }
+        return maxSize_ + elasticity_;
+    }
+
     template <typename F>
     void cwalk(F& f) const {
         std::for_each(entries_.begin(), entries_.end(), f);
     }
 
    protected:
-    bool tryGetRef_nolock(const Key& kIn, Value& vOut) {
-        const auto iter = cache_.find(kIn);
-        if (iter == cache_.end()) {
-            return false;
-        }
-        entries_.splice(entries_.begin(), entries_, iter->second);
-        vOut = iter->second->value;
-        return true;
-    }
     size_t prune() {
-        size_t maxAllowed = maxSize_ + elasticity_;
-        if (maxSize_ == 0 || cache_.size() < maxAllowed) {
+        if (maxSize_ == 0 || cache_.size() <= getMaxAllowedSize()) {
             return 0;
         }
         size_t count = 0;
@@ -157,7 +171,6 @@ class Cache {
     }
 
    private:
-    // Disallow copying.
     Cache(const Cache&) = delete;
     Cache& operator=(const Cache&) = delete;
 

@@ -65,25 +65,34 @@ public class TsFileAlignedSeriesReaderIterator {
     long totalSize = 0;
     long totalPointNum = 0;
     int notNullChunkNum = 0;
-    for (IChunkMetadata valueChunkMetadata : valueChunkMetadataList) {
-      if (valueChunkMetadata == null) {
-        continue;
+    try {
+      for (IChunkMetadata valueChunkMetadata : valueChunkMetadataList) {
+        if (valueChunkMetadata == null) {
+          continue;
+        }
+        while (!valueChunkMetadata
+            .getMeasurementUid()
+            .equals(schemaList.get(schemaIdx).getMeasurementName())) {
+          schemaIdx++;
+        }
+        Chunk chunk = reader.readMemChunk((ChunkMetadata) valueChunkMetadata);
+        valueChunks[schemaIdx++] = chunk;
+        notNullChunkNum++;
+        totalPointNum += ((ChunkMetadata) valueChunkMetadata).getNumOfPoints();
+        totalSize += chunk.getHeader().getSerializedSize() + chunk.getHeader().getDataSize();
       }
-      while (!valueChunkMetadata
-          .getMeasurementUid()
-          .equals(schemaList.get(schemaIdx).getMeasurementName())) {
-        schemaIdx++;
+      AlignedChunkReader chunkReader =
+          new AlignedChunkReader(timeChunk, Arrays.asList(valueChunks));
+      return new NextAlignedChunkInfo(chunkReader, totalSize, notNullChunkNum, totalPointNum);
+    } catch (IOException | RuntimeException | Error e) {
+      timeChunk.close();
+      for (Chunk valueChunk : valueChunks) {
+        if (valueChunk != null) {
+          valueChunk.close();
+        }
       }
-      Chunk chunk = reader.readMemChunk((ChunkMetadata) valueChunkMetadata);
-      valueChunks[schemaIdx++] = chunk;
-      notNullChunkNum++;
-      totalPointNum += ((ChunkMetadata) valueChunkMetadata).getNumOfPoints();
-      totalSize += chunk.getHeader().getSerializedSize() + chunk.getHeader().getDataSize();
+      throw e;
     }
-
-    AlignedChunkReader chunkReader = new AlignedChunkReader(timeChunk, Arrays.asList(valueChunks));
-
-    return new NextAlignedChunkInfo(chunkReader, totalSize, notNullChunkNum, totalPointNum);
   }
 
   public class NextAlignedChunkInfo {

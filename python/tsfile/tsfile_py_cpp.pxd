@@ -44,10 +44,10 @@ cdef public api void free_c_row_record(TsRecord record)
 cdef public api TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except NULL
 cdef public api TsFileReader tsfile_reader_new_c(object pathname) except NULL
 cdef public api PreparedSeriesHandle tsfile_reader_prepare_series_c(
-    TsFileReader reader, object locator) except NULL
+    TsFileReader reader, object locator, bint trust_index) except NULL
 cdef public api PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
     TsFileReader reader, object locator,
-    PreparedSeriesHandle aligned_time_owner) except NULL
+    PreparedSeriesHandle aligned_time_owner, bint trust_index) except NULL
 cdef public api ResultSet tsfile_reader_query_prepared_c(
     TsFileReader reader, PreparedSeriesHandle prepared, int64_t start_time,
     int64_t end_time, int offset, int limit)

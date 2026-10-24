@@ -182,23 +182,15 @@ public class ArrowSourceReader implements SourceReader {
       }
 
       int numCols = schemaColumnNames.size();
-      List<Object[]> rows = new ArrayList<>(rowCount);
-
-      for (int r = 0; r < rowCount; r++) {
-        Object[] row = new Object[numCols];
-        for (int c = 0; c < numCols; c++) {
-          String colName = schemaColumnNames.get(c);
-          FieldVector vec = vectorMap.get(colName);
-          if (vec == null || vec.isNull(r)) {
-            row[c] = null;
-          } else {
-            row[c] = extractValue(vec, r);
-          }
+      Object[][] columns = new Object[numCols][rowCount];
+      // Arrow and SourceBatch are columnar: resolve each vector once and avoid a row transpose.
+      for (int c = 0; c < numCols; c++) {
+        FieldVector vec = vectorMap.get(schemaColumnNames.get(c));
+        if (vec != null) {
+          readColumn(vec, columns[c]);
         }
-        rows.add(row);
       }
-
-      return SourceBatch.fromRows(schemaColumnNames, rows);
+      return new SourceBatch(schemaColumnNames.toArray(new String[0]), columns, rowCount);
     } catch (IOException e) {
       LOGGER.error(Messages.format("log.tools.arrow_read_error", sourceFile.getAbsolutePath()), e);
       exhausted = true;
@@ -293,40 +285,75 @@ public class ArrowSourceReader implements SourceReader {
     return names;
   }
 
-  private Object extractValue(FieldVector vec, int row) {
-    // Date / Timestamp checks must come BEFORE the BigIntVector/IntVector branches: although
-    // they hold int/long underneath, DateDayVector / TimeStampVector do NOT extend
-    // IntVector / BigIntVector, so without these branches Date columns fall through to the
-    // generic getObject().toString() path and produce strings that don't match TSDataType.DATE.
-    if (vec instanceof DateDayVector) {
-      // Days since 1970-01-01. ValueConverter.toLocalDate handles Integer → LocalDate.
-      return ((DateDayVector) vec).get(row);
-    } else if (vec instanceof DateMilliVector) {
-      // Millis since 1970-01-01; collapse to date.
-      long millis = ((DateMilliVector) vec).get(row);
-      return LocalDate.ofEpochDay(Math.floorDiv(millis, 86_400_000L));
-    } else if (vec instanceof TimeStampVector) {
-      // Long in the vector's native precision; matches the precision detected by
-      // detectTimestampPrecision() and stored on the schema.
-      return ((TimeStampVector) vec).get(row);
-    } else if (vec instanceof BigIntVector) {
-      return ((BigIntVector) vec).get(row);
-    } else if (vec instanceof IntVector) {
-      return ((IntVector) vec).get(row);
-    } else if (vec instanceof Float4Vector) {
-      return ((Float4Vector) vec).get(row);
-    } else if (vec instanceof Float8Vector) {
-      return ((Float8Vector) vec).get(row);
-    } else if (vec instanceof BitVector) {
-      return ((BitVector) vec).get(row) != 0;
-    } else if (vec instanceof VarCharVector) {
-      byte[] bytes = ((VarCharVector) vec).get(row);
-      return new String(bytes, StandardCharsets.UTF_8);
-    } else if (vec instanceof VarBinaryVector) {
-      return ((VarBinaryVector) vec).get(row);
+  /** Select the physical vector type once for the entire column. */
+  private void readColumn(FieldVector vec, Object[] output) {
+    if (vec instanceof DateDayVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof DateMilliVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = LocalDate.ofEpochDay(Math.floorDiv(v.get(row), 86_400_000L));
+        }
+      }
+    } else if (vec instanceof TimeStampVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof BigIntVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof IntVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof Float4Vector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof Float8Vector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
+    } else if (vec instanceof BitVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row) != 0;
+        }
+      }
+    } else if (vec instanceof VarCharVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = new String(v.get(row), StandardCharsets.UTF_8);
+        }
+      }
+    } else if (vec instanceof VarBinaryVector v) {
+      for (int row = 0; row < output.length; row++) {
+        if (!v.isNull(row)) {
+          output[row] = v.get(row);
+        }
+      }
     } else {
-      Object obj = vec.getObject(row);
-      return obj != null ? obj.toString() : null;
+      for (int row = 0; row < output.length; row++) {
+        if (!vec.isNull(row)) {
+          Object value = vec.getObject(row);
+          output[row] = value == null ? null : value.toString();
+        }
+      }
     }
   }
 

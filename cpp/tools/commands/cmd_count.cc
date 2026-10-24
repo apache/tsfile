@@ -93,11 +93,16 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
                         TableCountSummary& summary, std::ostream& err,
                         bool require_all_measurements) {
     std::string table_name = storage::to_lower(args.table);
-    std::shared_ptr<storage::TableSchema> schema =
-        reader.get_table_schema(table_name);
-    if (!schema) {
-        err << "Error: table '" << args.table << "' does not exist\n";
-        return kExitUsage;
+    std::shared_ptr<storage::TableSchema> schema;
+    const int schema_ret = reader.get_table_schema(table_name, schema);
+    if (schema_ret != common::E_OK) {
+        if (schema_ret == common::E_TABLE_NOT_EXIST) {
+            err << "Error: table '" << args.table << "' does not exist\n";
+            return kExitUsage;
+        }
+        err << "Error: failed to read schema for table '" << args.table
+            << "': " << error_code_message(schema_ret) << "\n";
+        return kExitFile;
     }
     summary.table_name = schema->get_table_name();
 
@@ -228,6 +233,11 @@ int collect_table_count(const ParsedArgs& args, storage::TsFileReader& reader,
 
 int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
               OutputFormat fmt, std::ostream& out, std::ostream& err) {
+    bool table_model = false;
+    const int model_ret = resolve_table_model(args, reader, table_model, err);
+    if (model_ret != kExitOk) {
+        return model_ret;
+    }
     RowWriter w(
         out, fmt,
         {"model", "object", "column", "category", "row_count", "entity_count",
@@ -237,9 +247,9 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
          common::INT64, common::INT64, common::STRING},
         args.no_header);
 
-    if (is_table_model(args, reader)) {
+    if (table_model) {
         const std::vector<std::shared_ptr<storage::TableSchema>> all_schemas =
-            reader.get_all_table_schemas();
+            sorted_table_schemas(reader);
         if (args.table.empty()) {
             for (const std::string& requested : args.measurements) {
                 const std::string canonical = storage::to_lower(requested);
@@ -298,6 +308,15 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
                 return ret;
             }
         }
+        OutputNameValidator validator;
+        for (const TableCountSummary& summary : summaries) {
+            for (const CountColumn& column : summary.columns) {
+                if (!validator.add_column(summary.table_name, column.name)) {
+                    err << "Error: " << validator.error() << "\n";
+                    return kExitFile;
+                }
+            }
+        }
         for (const TableCountSummary& summary : summaries) {
             for (const CountColumn& c : summary.columns) {
                 long long null_count = summary.row_count - c.non_null_count;
@@ -333,6 +352,13 @@ int cmd_count(const ParsedArgs& args, storage::TsFileReader& reader,
     int collect_ret = collect_series_stats(args, reader, rows, err);
     if (collect_ret != kExitOk) {
         return collect_ret;
+    }
+    OutputNameValidator validator;
+    for (const SeriesStatRow& row : rows) {
+        if (!validator.add_column(row.target, row.measurement)) {
+            err << "Error: " << validator.error() << "\n";
+            return kExitFile;
+        }
     }
     for (const SeriesStatRow& row : rows) {
         const long long null_count = row.row_count - row.count;

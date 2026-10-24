@@ -159,6 +159,10 @@ void ValueChunkWriter::save_first_page_data(
 int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
                                             bool with_statistic) {
     int ret = E_OK;
+    if (first_page_data_.uncompressed_size_ == 0) {
+        // The empty first page is already complete in chunk_data_.
+        return ret;
+    }
     if (with_statistic &&
         RET_FAIL(first_page_statistic_->serialize_to(pages_data))) {
     } else if (RET_FAIL(

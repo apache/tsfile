@@ -78,6 +78,12 @@ struct PageHeader {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
                 uncompressed_size_, in))) {
+        } else if (uncompressed_size_ == 0) {
+            // Empty page: the Java writer stores only a single zero varint and
+            // writes no compressed size or statistics (see
+            // ValueChunkWriter.writeEmptyPageToPageBuffer). Reading further
+            // would consume the following page's bytes as this page's header.
+            compressed_size_ = 0;
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(
                        compressed_size_, in))) {
         } else if (deserialize_stat) {

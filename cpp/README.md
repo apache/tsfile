@@ -161,16 +161,17 @@ cmake --build cpp/build/static --target tsfile
 The global `TSFILE_DEPENDENCY_SOURCE` CMake option defines how migrated C++
 dependencies are resolved:
 
-- `AUTO` (default): prefer a compatible system package and fall back to the
+- `AUTO`: prefer a compatible system package and fall back to the
   verified source archive managed by the build.
 - `SYSTEM`: require compatible system packages and fail configuration with a
   clear error when one is unavailable.
-- `BUNDLED`: download and build pinned dependency source archives managed by
-  the TsFile build.
+- `BUNDLED` (default): download and build pinned dependency source archives
+  managed by the TsFile build. Native release packages use this mode to avoid
+  runtime dependencies on third-party libraries installed on the build host.
 
 ANTLR4, Snappy, LZ4, lzokay, SIMDe, zlib, Zstandard, and liblzma are currently
 resolved through this policy. A compatible system ANTLR4 must be version 4.9.3
-or newer and earlier than 5.0.0, and provide an `antlr4_static` or
+or newer and earlier than 4.13.0, and provide an `antlr4_static` or
 `antlr4_shared` target. A compatible system Snappy must be version 1.2.1 or
 newer in the 1.x release series and provide the `Snappy::snappy` CMake target.
 A compatible system LZ4 must be version 1.9.4 or newer in the 1.x release
