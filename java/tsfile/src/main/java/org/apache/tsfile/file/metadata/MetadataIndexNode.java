@@ -125,6 +125,14 @@ public class MetadataIndexNode {
     return new MetadataIndexNode(children, offset, nodeType);
   }
 
+  /**
+   * Finds the child entry for key. Exact search requires an equal key; non-exact search returns the
+   * floor entry. The selected entry's end offset is the exclusive upper bound of the child scan
+   * range.
+   *
+   * @param key -the sorted search key
+   * @param exactSearch -whether an exact key match is required
+   */
   public Pair<IMetadataIndexEntry, Long> getChildIndexEntry(Comparable key, boolean exactSearch) {
     int index = binarySearchInChildren(key, exactSearch);
     if (index == -1) {
