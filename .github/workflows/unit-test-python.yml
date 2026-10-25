@@ -43,7 +43,8 @@ jobs:
       fail-fast: false
       max-parallel: 15
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        # Keep Python 3.9 available on Linux as ubuntu-latest advances.
+        os: [ ubuntu-24.04, macos-latest, windows-latest ]
         python-version: ["3.9", "3.11", "3.14"]
     runs-on: ${{ matrix.os }}
 
@@ -92,10 +93,10 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y clang-format-17 uuid-dev
             sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
             sudo update-alternatives --set clang-format /usr/bin/clang-format-17
-            sudo apt-get update
-            sudo apt-get install -y uuid-dev
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             choco install llvm --version 17.0.6 --force
           else
