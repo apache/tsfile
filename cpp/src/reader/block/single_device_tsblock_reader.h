@@ -83,6 +83,8 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     common::TupleDesc tuple_desc_;
     bool last_block_returned_ = true;
     std::map<std::string, MeasurementColumnContext*> field_column_contexts_;
+    // Borrowed from field_column_contexts_; it supplies timestamps, not values.
+    MeasurementColumnContext* time_only_context_ = nullptr;
     std::map<std::string, IdColumnContext> id_column_contexts_;
     int64_t next_time_ = 0;
     int64_t time_column_index_ = 0;

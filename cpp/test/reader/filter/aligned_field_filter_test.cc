@@ -215,6 +215,10 @@ TEST(AlignedFieldFilterTest, NaNStatisticsCannotProvePageMatchesOrExclusion) {
             auto filter = AlignedFieldFilter::compare("v", op, literal);
             EXPECT_TRUE(filter->may_match(stats, 3));
             EXPECT_FALSE(filter->all_match(stats, 3));
+            auto negated = AlignedFieldFilter::not_filter(
+                AlignedFieldFilter::compare("v", op, literal));
+            EXPECT_TRUE(negated->may_match(stats, 3));
+            EXPECT_FALSE(negated->all_match(stats, 3));
         }
     };
     FloatStatistic floats;
@@ -248,6 +252,81 @@ TEST(AlignedFieldFilterTest, FiniteFloatingStatisticsRetainFastPaths) {
         AlignedFieldFilter::compare("v", AlignedFieldFilter::CompareOp::LT,
                                     AlignedFieldFilter::Literal::float32(0));
     EXPECT_FALSE(below->may_match({{"v", &floats}}, 3));
+}
+
+TEST(AlignedFieldFilterTest, NegatedFloatingStatisticsPreserveSafeShortcuts) {
+    using A = AlignedFieldFilter;
+    FloatStatistic floats;
+    DoubleStatistic doubles;
+    for (int value : {10, 15, 20}) {
+        floats.update(value, static_cast<float>(value));
+        doubles.update(value, static_cast<double>(value));
+    }
+    for (bool is_float : {true, false}) {
+        const std::map<std::string, Statistic*> stats{
+            {"v", is_float ? static_cast<Statistic*>(&floats)
+                           : static_cast<Statistic*>(&doubles)}};
+        for (auto op : {A::CompareOp::LT, A::CompareOp::LE, A::CompareOp::GT,
+                        A::CompareOp::GE}) {
+            for (double threshold :
+                 {-std::numeric_limits<double>::infinity(), 0.0, 10.0, 15.0,
+                  20.0, 30.0, std::numeric_limits<double>::infinity()}) {
+                SCOPED_TRACE(::testing::Message()
+                             << is_float << ":" << int(op) << ":" << threshold);
+                int matches = 0;
+                for (double value : {10.0, 15.0, 20.0}) {
+                    bool comparison = false;
+                    switch (op) {
+                        case A::CompareOp::LT:
+                            comparison = value < threshold;
+                            break;
+                        case A::CompareOp::LE:
+                            comparison = value <= threshold;
+                            break;
+                        case A::CompareOp::GT:
+                            comparison = value > threshold;
+                            break;
+                        case A::CompareOp::GE:
+                            comparison = value >= threshold;
+                            break;
+                        default:
+                            FAIL() << "unexpected ordered comparison";
+                    }
+                    matches += !comparison;
+                }
+                const auto literal =
+                    is_float
+                        ? A::Literal::float32(static_cast<float>(threshold))
+                        : A::Literal::float64(threshold);
+                auto filter = A::not_filter(A::compare("v", op, literal));
+                EXPECT_EQ(filter->may_match(stats, 3), matches != 0);
+                EXPECT_EQ(filter->all_match(stats, 3), matches == 3);
+                // The same non-NULL statistics can describe a page with
+                // another NULL row, which must never match a comparison.
+                EXPECT_EQ(filter->may_match(stats, 4), matches != 0);
+                EXPECT_FALSE(filter->all_match(stats, 4));
+                auto original = A::compare("v", op, literal);
+                auto twice =
+                    A::not_filter(A::not_filter(A::compare("v", op, literal)));
+                EXPECT_EQ(twice->may_match(stats, 3),
+                          original->may_match(stats, 3));
+                EXPECT_EQ(twice->all_match(stats, 3),
+                          original->all_match(stats, 3));
+            }
+            const auto nan =
+                is_float ? A::Literal::float32(
+                               std::numeric_limits<float>::quiet_NaN())
+                         : A::Literal::float64(
+                               std::numeric_limits<double>::quiet_NaN());
+            auto filter = A::not_filter(A::compare("v", op, nan));
+            EXPECT_TRUE(filter->may_match(stats, 3));
+            EXPECT_FALSE(filter->all_match(stats, 3));
+        }
+        auto mismatched = A::not_filter(
+            A::compare("v", A::CompareOp::LT, A::Literal::int32(15)));
+        EXPECT_TRUE(mismatched->may_match(stats, 3));
+        EXPECT_FALSE(mismatched->all_match(stats, 3));
+    }
 }
 
 }  // namespace

@@ -2075,6 +2075,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         const ChunkPageInfo& page_info = chunk_pages_[current_page_plan_index_];
 
         if (!current_page_loaded_) {
+            current_page_field_mask_valid_ = false;
             if (single_thread_lazy) {
                 if (RET_FAIL(decode_page_lazy(current_page_plan_index_))) {
                     return ret;
@@ -2083,7 +2084,6 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
             page_time_cursor_ = page_info.row_begin;
             page_time_count_ = page_info.row_end;
             current_page_loaded_ = true;
-            current_page_field_mask_valid_ = false;
         }
 
         if (field_filter_ != nullptr && !current_page_field_mask_valid_) {
@@ -2096,18 +2096,20 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                            current_page_plan_index_))) {
                 return ret;
             }
-            if (current_page_field_mask_.empty()) {
-                if (single_thread_lazy)
-                    release_page_slot(current_page_plan_index_);
-                current_page_plan_index_++;
-                current_page_loaded_ = false;
-                current_page_field_mask_valid_ = false;
-                continue;
-            }
-            if (!single_thread_lazy && RET_FAIL(decode_output_columns_for_page(
-                                           current_page_plan_index_))) {
+            if (!single_thread_lazy && !current_page_field_mask_.empty() &&
+                RET_FAIL(
+                    decode_output_columns_for_page(current_page_plan_index_))) {
                 return ret;
             }
+        }
+        // Lazy decoding may already have produced the mask, including an
+        // empty one that deliberately left output columns undecoded.
+        if (field_filter_ != nullptr && current_page_field_mask_.empty()) {
+            if (single_thread_lazy) release_page_slot(current_page_plan_index_);
+            current_page_plan_index_++;
+            current_page_loaded_ = false;
+            current_page_field_mask_valid_ = false;
+            continue;
         }
 
         const std::vector<int64_t>& times =

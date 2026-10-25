@@ -72,8 +72,9 @@ int TableQueryExecutor::query(const std::string& table_name,
     }
     if (auto* aligned_filter =
             dynamic_cast<AlignedFieldFilter*>(field_filter)) {
-        ret =
-            column_mapping->add_filter_columns(*aligned_filter, *table_schema);
+        ret = aligned_filter->is_valid() ? column_mapping->add_filter_columns(
+                                               *aligned_filter, *table_schema)
+                                         : common::E_INVALID_ARG;
         if (ret != common::E_OK) {
             delete time_filter;
             delete field_filter;
@@ -155,8 +156,9 @@ int TableQueryExecutor::query(const std::string& table_name,
     }
     if (auto* aligned_filter =
             dynamic_cast<AlignedFieldFilter*>(field_filter)) {
-        ret =
-            column_mapping->add_filter_columns(*aligned_filter, *table_schema);
+        ret = aligned_filter->is_valid() ? column_mapping->add_filter_columns(
+                                               *aligned_filter, *table_schema)
+                                         : common::E_INVALID_ARG;
         if (ret != common::E_OK) {
             delete time_filter;
             delete field_filter;

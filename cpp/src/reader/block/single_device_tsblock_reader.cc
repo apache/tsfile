@@ -368,6 +368,7 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         if (common::E_OK == time_only_ret) {
             field_column_contexts_.insert(
                 std::make_pair(kTimeOnlyContextName, time_only_ctx));
+            time_only_context_ = time_only_ctx;
         } else {
             delete time_only_ctx;
             // Only treat "no data" as an acceptable empty result; I/O
@@ -802,7 +803,8 @@ int SingleDeviceTsBlockReader::satisfy_field_filter(bool& satisfied) {
         char* value = nullptr;
         uint32_t length = 0;
         auto context = field_column_contexts_.find(name);
-        if (context != field_column_contexts_.end()) {
+        if (context != field_column_contexts_.end() &&
+            context->second != time_only_context_) {
             int64_t time = 0;
             ret = context->second->get_current_time(time);
             if (ret != common::E_OK && ret != common::E_NO_MORE_DATA)
@@ -914,6 +916,7 @@ int SingleDeviceTsBlockReader::next(common::TsBlock*& ret_block) {
 
 void SingleDeviceTsBlockReader::close() {
     aligned_vec_.clear();  // non-owning; owned by field_column_contexts_
+    time_only_context_ = nullptr;
     // De-duplicate pointers before deleting: VectorMeasurementColumnContext
     // has multiple map entries pointing to the same object.
     std::set<MeasurementColumnContext*> unique_contexts;

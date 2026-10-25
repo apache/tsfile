@@ -190,7 +190,9 @@ class AlignedFieldFilterRegressionTest
             {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
             {"absent", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
             {"s", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
-            {"ghost", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}};
+            {"ghost", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"__time_only_aligned_context__", INT64, UNCOMPRESSED, PLAIN,
+             ColumnCategory::FIELD}};
         TableSchema schema("t", columns);
         WriteFile file;
         create(file);
@@ -345,6 +347,122 @@ TEST_P(AlignedFieldFilterRegressionTest, IncompleteOrCannotBypassEvaluation) {
     EXPECT_EQ(ret, E_INVALID_ARG);
 }
 
+TEST_P(AlignedFieldFilterRegressionTest,
+       InvalidTreesCannotBypassEmptyTableOrZeroLimit) {
+    for (bool populated : {false, true}) {
+        {
+            TableSchema schema("t", {{"v", INT64, UNCOMPRESSED, PLAIN,
+                                      ColumnCategory::FIELD}});
+            WriteFile file;
+            create(file);
+            TsFileTableWriter writer(&file, &schema);
+            if (populated) {
+                Tablet tablet("t", {"v"}, {INT64}, {ColumnCategory::FIELD}, 1);
+                ASSERT_EQ(tablet.add_timestamp(0, 0), E_OK);
+                ASSERT_EQ(tablet.add_value(0, "v", int64_t(1)), E_OK);
+                ASSERT_EQ(writer.write_table(tablet), E_OK);
+            }
+            ASSERT_EQ(writer.close(), E_OK);
+        }
+        for (int mode : {0, 1, 2}) {
+            for (bool conjunction : {false, true}) {
+                for (bool malformed : {false, true}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << populated << ":" << mode << ":"
+                                 << conjunction << ":" << malformed);
+                    auto left = A::is_not_null("v");
+                    auto right = malformed ? A::Ptr() : A::is_null("v");
+                    auto filter =
+                        conjunction
+                            ? A::and_filter(std::move(left), std::move(right))
+                            : A::or_filter(std::move(left), std::move(right));
+                    LocalRandomAccessReadFile file;
+                    ASSERT_EQ(file.open(filename_), E_OK);
+                    TableQueryExecutor executor(&file, std::get<1>(GetParam()));
+                    ResultSet* result = nullptr;
+                    const int ret =
+                        mode == 0 ? executor.query("t", {"v"}, nullptr, nullptr,
+                                                   filter.release(), result)
+                                  : executor.query("t", {"v"}, nullptr, nullptr,
+                                                   filter.release(), 0,
+                                                   mode == 2 ? 0 : -1, result);
+                    EXPECT_EQ(ret, malformed ? E_INVALID_ARG : E_OK);
+                    if (malformed) EXPECT_EQ(result, nullptr);
+                    if (result != nullptr) {
+                        if (!malformed) {
+                            bool next = false;
+                            EXPECT_EQ(result->next(next), E_OK);
+                            EXPECT_EQ(next,
+                                      populated && mode != 2 && !conjunction);
+                        }
+                        executor.destroy_query_data_set(result);
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_P(AlignedFieldFilterRegressionTest,
+       MissingFieldNamedLikeInternalContextRemainsNull) {
+    write_missing_columns();
+    const std::string internal_name = "__time_only_aligned_context__";
+    for (const auto& columns :
+         {std::vector<std::string>{}, std::vector<std::string>{"ghost"},
+          std::vector<std::string>{internal_name},
+          std::vector<std::string>{"ghost", internal_name},
+          std::vector<std::string>{"v", internal_name}}) {
+        Rows expected;
+        for (int device = 0; device < 3; ++device) {
+            for (int r = 0; r < 6; ++r) {
+                std::vector<int64_t> row{r};
+                for (const auto& column : columns)
+                    row.push_back(column == "v" && device != 2
+                                      ? device * 100 + r
+                                      : kNull);
+                expected.push_back(std::move(row));
+            }
+        }
+        EXPECT_EQ(scan(columns, A::is_null(internal_name)), expected);
+        EXPECT_EQ(scan(columns, A::is_null("ghost")), expected);
+        EXPECT_TRUE(scan(columns, A::is_not_null(internal_name)).empty());
+    }
+}
+
+TEST_P(AlignedFieldFilterRegressionTest,
+       RealFieldNamedLikeInternalContextRetainsValues) {
+    const std::string internal_name = "__time_only_aligned_context__";
+    TableSchema schema(
+        "t",
+        {{"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+         {internal_name, INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+         {"ghost", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+    WriteFile file;
+    create(file);
+    TsFileTableWriter writer(&file, &schema);
+    Tablet tablet("t", {"v", internal_name}, {INT64, INT64},
+                  {ColumnCategory::FIELD, ColumnCategory::FIELD}, 6);
+    Rows nulls, nonnulls;
+    for (int r = 0; r < 6; ++r) {
+        ASSERT_EQ(tablet.add_timestamp(r, r), E_OK);
+        ASSERT_EQ(tablet.add_value(r, "v", int64_t(r)), E_OK);
+        if (r % 3 == 0) {
+            nulls.push_back({r, r, kNull, kNull});
+        } else {
+            ASSERT_EQ(tablet.add_value(r, internal_name, int64_t(100 + r)),
+                      E_OK);
+            nonnulls.push_back({r, r, kNull, 100 + r});
+        }
+    }
+    ASSERT_EQ(writer.write_table(tablet), E_OK);
+    ASSERT_EQ(writer.close(), E_OK);
+    // The absent ghost column forces the row fallback, where the actual
+    // same-named FIELD must still be read rather than treated as internal.
+    const std::vector<std::string> columns{"v", "ghost", internal_name};
+    EXPECT_EQ(scan(columns, A::is_null(internal_name)), nulls);
+    EXPECT_EQ(scan(columns, A::is_not_null(internal_name)), nonnulls);
+}
+
 TEST_P(AlignedFieldFilterRegressionTest, PagePlanResumesAcrossSmallTsBlocks) {
     g_config_value_.page_writer_max_point_num_ = 32;
     g_config_value_.tsblock_max_memory_ = 128;
@@ -378,6 +496,46 @@ TEST_P(AlignedFieldFilterRegressionTest, PagePlanResumesAcrossSmallTsBlocks) {
     EXPECT_EQ(scan({"v"}, A::is_not_null("v")), single_column);
     EXPECT_EQ(scan({"v", "w", "v"}, A::is_not_null("v"), 29, 38),
               Rows(all.begin() + 29, all.begin() + 67));
+}
+
+TEST_P(AlignedFieldFilterRegressionTest,
+       EmptyFieldMaskResumesIntoPartialAndFullPages) {
+    g_config_value_.page_writer_max_point_num_ = 8;
+    g_config_value_.tsblock_max_memory_ = 64;
+    TableSchema schema(
+        "t", {{"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+              {"flag", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+              {"w", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+    WriteFile file;
+    create(file);
+    TsFileTableWriter writer(&file, &schema);
+    Tablet tablet("t", schema.get_measurement_names(), schema.get_data_types(),
+                  schema.get_column_categories(), 24);
+    Rows expected;
+    for (int r = 0; r < 24; ++r) {
+        ASSERT_EQ(tablet.add_timestamp(r, r), E_OK);
+        const int64_t value = r < 16 ? r % 8 : r - 6;
+        const int64_t flag = r < 8 ? int64_t(r < 4) : 1;
+        ASSERT_EQ(tablet.add_value(r, "v", value), E_OK);
+        ASSERT_EQ(tablet.add_value(r, "flag", flag), E_OK);
+        ASSERT_EQ(tablet.add_value(r, "w", int64_t(1000 + r)), E_OK);
+        if (value >= 4 && flag == 1) expected.push_back({r, 1000 + r});
+    }
+    ASSERT_EQ(writer.write_table(tablet), E_OK);
+    ASSERT_EQ(writer.close(), E_OK);
+    const auto make_filter = [] {
+        return A::and_filter(
+            A::compare("v", A::CompareOp::GE, A::Literal::int64(4)),
+            A::compare("flag", A::CompareOp::EQ, A::Literal::int64(1)));
+    };
+    // The first page passes both independent statistics checks, but the
+    // conjunction matches no row. Its output-only w column stays undecoded.
+    EXPECT_EQ(scan({"w"}, make_filter()), expected);
+    EXPECT_EQ(scan({"w"}, make_filter(), 3, 6),
+              Rows(expected.begin() + 3, expected.begin() + 9));
+    EXPECT_EQ(
+        scan({"w"}, make_filter(), 1, 4, TimeFilter::between(14, 20, false)),
+        Rows(expected.begin() + 3, expected.begin() + 7));
 }
 
 TEST_P(AlignedFieldFilterRegressionTest,

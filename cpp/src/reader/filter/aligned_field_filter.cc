@@ -49,6 +49,26 @@ bool compare_values(T left, T right, AlignedFieldFilter::CompareOp op) {
     return false;
 }
 
+AlignedFieldFilter::CompareOp negate_comparison(
+    AlignedFieldFilter::CompareOp op) {
+    using Op = AlignedFieldFilter::CompareOp;
+    switch (op) {
+        case Op::EQ:
+            return Op::NE;
+        case Op::NE:
+            return Op::EQ;
+        case Op::LT:
+            return Op::GE;
+        case Op::LE:
+            return Op::GT;
+        case Op::GT:
+            return Op::LE;
+        case Op::GE:
+            return Op::LT;
+    }
+    return Op::EQ;
+}
+
 int compare_string(const char* data, uint32_t len, const std::string& literal,
                    AlignedFieldFilter::CompareOp op) {
     const std::string value(data, len);
@@ -204,29 +224,9 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
                     Kind::COMPARISON, node->column_, node->compare_op_,
                     node->literal_, !node->negated_));
             }
-            CompareOp neg_op = CompareOp::EQ;
-            switch (node->compare_op_) {
-                case CompareOp::EQ:
-                    neg_op = CompareOp::NE;
-                    break;
-                case CompareOp::NE:
-                    neg_op = CompareOp::EQ;
-                    break;
-                case CompareOp::LT:
-                    neg_op = CompareOp::GE;
-                    break;
-                case CompareOp::LE:
-                    neg_op = CompareOp::GT;
-                    break;
-                case CompareOp::GT:
-                    neg_op = CompareOp::LE;
-                    break;
-                case CompareOp::GE:
-                    neg_op = CompareOp::LT;
-                    break;
-            }
-            return Ptr(new AlignedFieldFilter(Kind::COMPARISON, node->column_,
-                                              neg_op, node->literal_));
+            return Ptr(new AlignedFieldFilter(
+                Kind::COMPARISON, node->column_,
+                negate_comparison(node->compare_op_), node->literal_));
         }
         case Kind::IS_NULL:
             return is_not_null(node->column_);
@@ -312,11 +312,6 @@ bool AlignedFieldFilter::may_match(
     }
     if (statistic->count_ <= 0) return false;
 
-    // A negated comparison admits rows that the page's min/max statistics do
-    // not describe (NaN is non-NULL but never extends either bound), so it
-    // cannot rule the page out. Evaluation resolves the exact rows.
-    if (negated_) return true;
-
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return true;
         switch (compare_op_) {
@@ -358,9 +353,14 @@ bool AlignedFieldFilter::may_match(
         }
     }
     if (auto* typed = dynamic_cast<FloatStatistic*>(statistic)) {
-        if (literal_.type != common::FLOAT || has_nan_statistics(*typed))
+        if (literal_.type != common::FLOAT || has_nan_statistics(*typed) ||
+            (negated_ && std::isnan(literal_.float_value)))
             return true;
-        switch (compare_op_) {
+        // Complementing an ordered operator is safe only when neither the
+        // page nor the literal can contain NaN.
+        const CompareOp op =
+            negated_ ? negate_comparison(compare_op_) : compare_op_;
+        switch (op) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.float_value &&
                        literal_.float_value <= typed->max_value_;
@@ -379,9 +379,12 @@ bool AlignedFieldFilter::may_match(
         }
     }
     if (auto* typed = dynamic_cast<DoubleStatistic*>(statistic)) {
-        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed))
+        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed) ||
+            (negated_ && std::isnan(literal_.double_value)))
             return true;
-        switch (compare_op_) {
+        const CompareOp op =
+            negated_ ? negate_comparison(compare_op_) : compare_op_;
+        switch (op) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.double_value &&
                        literal_.double_value <= typed->max_value_;
@@ -437,10 +440,6 @@ bool AlignedFieldFilter::all_match(
     // every row has a non-NULL value and that the whole min/max range passes.
     if (statistic->count_ != row_count) return false;
 
-    // The negated form depends on values (NaN) rather than min/max bounds;
-    // leave the page to row evaluation.
-    if (negated_) return false;
-
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return false;
         switch (compare_op_) {
@@ -480,9 +479,12 @@ bool AlignedFieldFilter::all_match(
         }
     }
     if (auto* typed = dynamic_cast<FloatStatistic*>(statistic)) {
-        if (literal_.type != common::FLOAT || has_nan_statistics(*typed))
+        if (literal_.type != common::FLOAT || has_nan_statistics(*typed) ||
+            (negated_ && std::isnan(literal_.float_value)))
             return false;
-        switch (compare_op_) {
+        const CompareOp op =
+            negated_ ? negate_comparison(compare_op_) : compare_op_;
+        switch (op) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.float_value &&
                        typed->max_value_ == literal_.float_value;
@@ -500,9 +502,12 @@ bool AlignedFieldFilter::all_match(
         }
     }
     if (auto* typed = dynamic_cast<DoubleStatistic*>(statistic)) {
-        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed))
+        if (literal_.type != common::DOUBLE || has_nan_statistics(*typed) ||
+            (negated_ && std::isnan(literal_.double_value)))
             return false;
-        switch (compare_op_) {
+        const CompareOp op =
+            negated_ ? negate_comparison(compare_op_) : compare_op_;
+        switch (op) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.double_value &&
                        typed->max_value_ == literal_.double_value;
