@@ -80,6 +80,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Set up Python for clang-format
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v6.0.1
         with:
@@ -121,10 +127,10 @@ jobs:
             elif command -v yum >/dev/null 2>&1; then
               sudo yum install -y libuuid-devel
             fi
-            sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
-            sudo update-alternatives --set clang-format /usr/bin/clang-format-17
-            sudo apt-get update
-            sudo apt-get install -y uuid-dev
+            python -m venv "$RUNNER_TEMP/clang-format"
+            "$RUNNER_TEMP/clang-format/bin/python" -m pip install --only-binary=:all: clang-format==17.0.6
+            "$RUNNER_TEMP/clang-format/bin/clang-format" --version
+            echo "$RUNNER_TEMP/clang-format/bin" >> "$GITHUB_PATH"
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             choco install llvm --version 17.0.6 --force
           else
