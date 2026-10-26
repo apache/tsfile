@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -169,7 +170,17 @@ class AlignedReaderFailureTest : public ::testing::Test {
                      {"s", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
                      {"missing", INT64, UNCOMPRESSED, PLAIN,
                       ColumnCategory::FIELD}});
-        path_ = "aligned_reader_failure.tsfile";
+        // CTest runs the cases in separate processes sharing one directory.
+        // Each case needs its own file, including concurrent/repeated runs.
+        path_ =
+            "aligned_reader_failure_" +
+            std::string(::testing::UnitTest::GetInstance()
+                            ->current_test_info()
+                            ->name()) +
+            "_" +
+            std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()) +
+            ".tsfile";
         WriteFile file;
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
