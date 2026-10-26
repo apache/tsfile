@@ -36,8 +36,7 @@ Data has three levels of organization within a file:
 
 - A **Page** holds a batch of encoded values. Each Page is compressed independently.
 - A **Chunk** holds the Pages of one physical column. Its header identifies the data type,
-  encoding, and compression method. An aligned Value Chunk can have `data_size = 0`; in that
-  case the Header exists but contains no Page.
+  encoding, and compression method.
 - A **Chunk Group** holds a batch of Chunks for one device. The same device can appear in several
   Chunk Groups as the writer flushes more data.
 

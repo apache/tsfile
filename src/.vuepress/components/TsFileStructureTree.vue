@@ -468,8 +468,35 @@ function collapseAll(): void {
 
 @container (max-width: 38rem) {
   .tsfile-structure-toolbar {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
+  }
+
+  .tsfile-structure-actions {
+    order: 1;
+    width: 100%;
+  }
+
+  .tsfile-structure-toolbar > p {
+    order: 2;
+    flex: 0 0 auto;
+  }
+}
+
+@container (min-width: 46rem) {
+  .tsfile-structure-body {
+    display: grid;
+    grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .tsfile-detail-panel {
+    position: sticky;
+    top: 5rem;
+    max-height: calc(100vh - 6rem);
+    overflow: auto;
+    border-top: 0;
+    border-left: 1px solid var(--vp-c-border);
   }
 }
 </style>

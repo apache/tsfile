@@ -38,6 +38,10 @@ export default defineUserConfig({
     },
   },
 
+  extendsMarkdown: (md) => {
+    md.options.breaks = false;
+  },
+
   theme,
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
