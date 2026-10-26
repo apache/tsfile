@@ -127,6 +127,11 @@ suffix; the Chunk marker remains the same. The ordinal, proof format, and valida
 described in [AEAD Chunk Header](Encryption.md#aead-chunk-header). Like the rest of the Header,
 the suffix is excluded from `data_size`.
 
+The Chunk Header contains no Statistics field. Page Statistics are stored in each non-empty Page
+Header when a Chunk has multiple Pages; Chunk-level Statistics are stored with the Chunk Metadata
+in the footer. A single-Page Chunk omits Page Statistics and relies on the Chunk or series
+Statistics. See [Data Pages](README.md) and [Statistics](../Metadata.md#statistics).
+
 `data_size` is the total size of all Page Headers and stored Page data in the Chunk. It does not
 include the Chunk Header. A reader consumes exactly `data_size` bytes after the Chunk Header.
 

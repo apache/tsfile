@@ -130,6 +130,11 @@ ChunkHeader :=
 本身不变。序号、认证证明及校验规则见[AEAD Chunk 头部](Encryption.md#aead-chunk-header)。
 这些后缀字节和其他 Header 字段一样，不计入 `data_size`。
 
+Chunk Header 不包含 Statistics 字段。Chunk 包含多个 Page 时，每个非空 Page Header 保存
+Page Statistics；Chunk 级 Statistics 保存在文件尾的 Chunk Metadata 中。单 Page Chunk
+不保存 Page Statistics，改用 Chunk 或序列级 Statistics。详见[数据页](README.md)和
+[统计信息](../Metadata.md#statistics)。
+
 `data_size` 是 Chunk 中全部 Page Header 和已保存 Page 数据的总长度，不包括 Chunk
 Header。读取器从 Chunk Header 结束处读取恰好 `data_size` 字节。
 
