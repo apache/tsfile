@@ -32,13 +32,15 @@ int ValueChunkWriter::init(const ColumnSchema& col_schema) {
 
 int ValueChunkWriter::init(const std::string& measurement_name,
                            TSDataType data_type, TSEncoding encoding,
-                           CompressionType compression_type) {
+                           CompressionType compression_type,
+                           int max_point_number) {
     int ret = E_OK;
     chunk_statistic_ = StatisticFactory::alloc_statistic(data_type);
     if (chunk_statistic_ == nullptr) {
         return E_OOM;
     } else if (RET_FAIL(value_page_writer_.init(data_type, encoding,
-                                                compression_type))) {
+                                                compression_type,
+                                                max_point_number))) {
     } else if (IS_NULL((first_page_statistic_ =
                             StatisticFactory::alloc_statistic(data_type)))) {
         ret = E_OOM;

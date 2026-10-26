@@ -58,7 +58,8 @@ class ValueChunkWriter {
     int init(const common::ColumnSchema& col_schema);
     int init(const std::string& measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
-             common::CompressionType compression_type);
+             common::CompressionType compression_type,
+             int max_point_number = -1);
     void reset();
     void destroy();
 

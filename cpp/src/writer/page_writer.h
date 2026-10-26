@@ -103,7 +103,7 @@ class PageWriter {
           compressor_(nullptr),
           is_inited_(false) {}
     int init(common::TSDataType data_type, common::TSEncoding encoding,
-             common::CompressionType compression);
+             common::CompressionType compression, int max_point_number = -1);
     ~PageWriter() { destroy(); }
     // reset statistic_, time_out_stream_, value_out_stream_
     void reset();
