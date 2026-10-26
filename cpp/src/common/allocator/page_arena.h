@@ -76,8 +76,6 @@ class PageArena {
     class Page {
        public:
         Page() : next_(nullptr), page_end_(nullptr), cur_alloc_(nullptr) {}
-        explicit Page(Page* next_page)
-            : next_(next_page), page_end_(nullptr), cur_alloc_(nullptr) {}
         Page(uint32_t page_size, Page* next_page) {
             next_ = next_page;
             cur_alloc_ =

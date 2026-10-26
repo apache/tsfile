@@ -55,6 +55,37 @@ TEST(PageArenaTest, AllocMoreThanPageSize) {
     page_arena.reset();
 }
 
+TEST(PageArenaTest, OversizedAllocationTracksUsedBytesAndPreservesData) {
+    PageArena arena;
+    arena.init(64, MOD_DEFAULT);
+    char* large = arena.alloc(256);
+    ASSERT_NE(large, nullptr);
+    memset(large, 'x', 256);
+    ASSERT_EQ(arena.get_total_used_bytes(), 256);
+
+    char* small = arena.alloc(8);
+    ASSERT_NE(small, nullptr);
+    memset(small, 'y', 8);
+    EXPECT_EQ(arena.get_total_used_bytes(), 264);
+    EXPECT_EQ(arena.TEST_get_page_count(), 2);
+    for (int i = 0; i < 256; i++) {
+        ASSERT_EQ(large[i], 'x');
+    }
+    arena.reset();
+    EXPECT_EQ(arena.get_total_used_bytes(), 0);
+}
+
+TEST(PageArenaTest, ConsecutiveOversizedAllocationsTrackUsedBytes) {
+    PageArena arena;
+    arena.init(64, MOD_DEFAULT);
+    ASSERT_NE(arena.alloc(256), nullptr);
+    ASSERT_NE(arena.alloc(512), nullptr);
+    ASSERT_EQ(arena.get_total_used_bytes(), 768);
+    EXPECT_EQ(arena.TEST_get_page_count(), 2);
+    ASSERT_NE(arena.alloc(8), nullptr);
+    EXPECT_EQ(arena.get_total_used_bytes(), 776);
+}
+
 struct MyStruct {
     double x;
     int64_t y;
