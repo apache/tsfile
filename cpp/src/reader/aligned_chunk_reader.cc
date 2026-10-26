@@ -183,6 +183,10 @@ void AlignedChunkReader::destroy() {
     }
     cur_value_page_header_.reset();
     chunk_header_.~ChunkHeader();
+    // The placement-new reader is freed without member destructors. These
+    // single-value headers also own string buffers for long measurement names.
+    std::string().swap(time_chunk_header_.measurement_name_);
+    std::string().swap(value_chunk_header_.measurement_name_);
 
     // Multi-value destroy
     for (size_t ci = 0; ci < value_columns_.size(); ci++) {
