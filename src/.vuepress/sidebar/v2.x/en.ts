@@ -36,6 +36,8 @@ export const enSidebar = {
     {
       text: 'File Format',
       collapsible: true,
+      expanded: true,
+      prefix: '/UserGuide/latest/FileFormat/',
       link: '/UserGuide/latest/FileFormat/',
       children: [
         { text: 'Binary Representation', link: '/UserGuide/latest/FileFormat/Binary-Representation' },
@@ -47,6 +49,8 @@ export const enSidebar = {
         {
           text: 'Data Pages',
           collapsible: true,
+          expanded: true,
+          prefix: '/UserGuide/latest/FileFormat/DataPages/',
           link: '/UserGuide/latest/FileFormat/DataPages/',
           children: [
             { text: 'Chunks', link: '/UserGuide/latest/FileFormat/DataPages/Chunks' },
