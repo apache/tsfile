@@ -456,6 +456,24 @@ TEST_F(MetaIndexNodeSearchTest, NonExactSearchNotFound) {
     ASSERT_EQ(result, common::E_NOT_EXIST);
 }
 
+TEST_F(MetaIndexNodeSearchTest, ResultCopyOutlivesSourceArena) {
+    common::PageArena result_arena;
+    std::shared_ptr<IMetaIndexEntry> result;
+    int64_t end_offset = 0;
+    ASSERT_EQ(node_.binary_search_children(
+                  std::make_shared<StringComparable>("banana"), true, result,
+                  end_offset, result_arena),
+              common::E_OK);
+    node_.children_.clear();
+    entry1_.reset();
+    entry2_.reset();
+    entry3_.reset();
+    arena_.reset();
+    EXPECT_EQ(result->get_name().to_std_string(), "banana");
+    EXPECT_EQ(result->get_offset(), 20);
+    EXPECT_EQ(end_offset, 30);
+}
+
 class TsFileMetaTest : public ::testing::Test {
    protected:
     common::PageArena pa_;

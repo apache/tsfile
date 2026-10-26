@@ -45,6 +45,13 @@ jobs:
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
         python-version: ["3.9", "3.11", "3.14"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          # Python 3.9 has no setup-python build for Ubuntu 26.04.
+          - os: ubuntu-22.04
+            python-version: "3.9"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -92,8 +99,10 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
-            sudo update-alternatives --set clang-format /usr/bin/clang-format-17
+            python -m venv "$RUNNER_TEMP/clang-format"
+            "$RUNNER_TEMP/clang-format/bin/python" -m pip install --only-binary=:all: clang-format==17.0.6
+            "$RUNNER_TEMP/clang-format/bin/clang-format" --version
+            echo "$RUNNER_TEMP/clang-format/bin" >> "$GITHUB_PATH"
             sudo apt-get update
             sudo apt-get install -y uuid-dev
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
