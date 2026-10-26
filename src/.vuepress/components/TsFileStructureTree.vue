@@ -102,6 +102,27 @@ const selectedNode = computed(() => {
 
 const selectedText = computed(() => selectedNode.value.text[props.locale]);
 
+function splitLayout(layout: string | undefined): string[] {
+  if (!layout) return [];
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of layout) {
+    if (char === '(' || char === '[' || char === '{') depth += 1;
+    else if (char === ')' || char === ']' || char === '}') depth = Math.max(0, depth - 1);
+    if (char === '|' && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+const selectedLayoutParts = computed(() => splitLayout(selectedText.value.layout));
+
 const detailsLink = computed(() => {
   if (!selectedNode.value.link) return undefined;
   const prefix = props.locale === 'zh' ? '/zh/UserGuide/latest/FileFormat/' : '/UserGuide/latest/FileFormat/';
@@ -191,7 +212,9 @@ function collapseAll(): void {
 
             <div v-if="selectedText.layout" class="tsfile-detail-layout">
               <span>{{ ui.layout }}</span>
-              <code>{{ selectedText.layout }}</code>
+              <div class="tsfile-layout-flow">
+                <code v-for="(part, index) in selectedLayoutParts" :key="index">{{ part }}</code>
+              </div>
             </div>
           </div>
         </div>
@@ -450,12 +473,21 @@ function collapseAll(): void {
 }
 
 .tsfile-detail-layout code {
+  display: block;
   padding: 0;
   color: var(--vp-c-text);
   font-size: 0.86rem;
   line-height: 1.55;
   overflow-wrap: anywhere;
   background: transparent;
+}
+
+.tsfile-layout-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid var(--vp-c-border);
 }
 
 .tsfile-detail-note {
