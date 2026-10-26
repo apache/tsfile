@@ -348,7 +348,7 @@ class AlignedChunkReader : public IChunkReader {
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned
-    // Per-worker time decoder + compressor pool for parallel time-page decode.
+    // Per-task time decoder + compressor pool for parallel time-page decode.
     // Sized to decode_pool_->num_threads() on first use, owned by this reader.
     std::vector<Decoder*> time_decoder_pool_;
     std::vector<Compressor*> time_compressor_pool_;

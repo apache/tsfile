@@ -1894,9 +1894,9 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
 
 // Multi-thread path: one task per value column, each decoding all non-SKIP
 // pages of that column serially.  Time pages dispatched as worker-bucketed
-// strided tasks using per-worker decoder/compressor (filled from
-// time_decoder_pool_ / time_compressor_pool_) so they don't contend on the
-// shared time_decoder_/time_compressor_.
+// strided tasks using a separate decoder/compressor for each task (filled
+// from time_decoder_pool_ / time_compressor_pool_) so they do not contend on
+// the shared time_decoder_/time_compressor_.
 //
 // Single-thread: do NOT pre-decode every page upfront — leave per_page_state
 // empty so the scatter loop decodes on demand and releases after each page
@@ -1912,7 +1912,7 @@ int AlignedChunkReader::decode_all_planned_pages() {
 #ifdef ENABLE_THREADS
     if (decode_pool_ != nullptr && value_columns_.size() > 1) {
         page_plan_lazy_ = false;
-        // Lazily grow the per-worker time decoder/compressor pool.  Both
+        // Lazily grow the per-task time decoder/compressor pool. Both
         // factories can return nullptr on OOM/unsupported config; without
         // checking, the worker task below dereferences null when calling
         // decode_time_page_with().
@@ -1920,18 +1920,18 @@ int AlignedChunkReader::decode_all_planned_pages() {
         if (time_decoder_pool_.size() < worker_count) {
             time_decoder_pool_.resize(worker_count, nullptr);
             time_compressor_pool_.resize(worker_count, nullptr);
-            for (size_t w = 0; w < worker_count; w++) {
-                if (time_decoder_pool_[w] == nullptr) {
-                    time_decoder_pool_[w] =
-                        DecoderFactory::alloc_time_decoder();
-                    if (time_decoder_pool_[w] == nullptr) return E_OOM;
-                }
-                if (time_compressor_pool_[w] == nullptr) {
-                    time_compressor_pool_[w] =
-                        CompressorFactory::alloc_compressor(
-                            time_chunk_header_.compression_type_);
-                    if (time_compressor_pool_[w] == nullptr) return E_OOM;
-                }
+        }
+        // A previous allocation failure can leave partially initialized slots
+        // even when the vectors already have the requested size.
+        for (size_t w = 0; w < worker_count; w++) {
+            if (time_decoder_pool_[w] == nullptr) {
+                time_decoder_pool_[w] = DecoderFactory::alloc_time_decoder();
+                if (time_decoder_pool_[w] == nullptr) return E_OOM;
+            }
+            if (time_compressor_pool_[w] == nullptr) {
+                time_compressor_pool_[w] = CompressorFactory::alloc_compressor(
+                    time_chunk_header_.compression_type_);
+                if (time_compressor_pool_[w] == nullptr) return E_OOM;
             }
         }
 
@@ -1956,12 +1956,15 @@ int AlignedChunkReader::decode_all_planned_pages() {
         std::vector<int> time_rets(time_task_count, E_OK);
         for (size_t k = 0; k < time_task_count; k++) {
             int* tr = &time_rets[k];
-            futures.push_back(decode_pool_->submit(
-                [this, k, tr, time_task_count, worker_count]() {
-                    size_t wid = common::ThreadPool::current_worker_id();
-                    if (wid >= worker_count) wid = 0;
-                    Decoder* dec = time_decoder_pool_[wid];
-                    Compressor* comp = time_compressor_pool_[wid];
+            futures.push_back(
+                decode_pool_->submit([this, k, tr, time_task_count]() {
+                    // Each strided task owns a distinct slot. An external
+                    // thread pool can live across a DLL boundary where the
+                    // header-inline worker TLS is a different instance; using
+                    // that ID (or falling back to slot zero) can share mutable
+                    // decoder state between concurrent tasks.
+                    Decoder* dec = time_decoder_pool_[k];
+                    Compressor* comp = time_compressor_pool_[k];
                     for (size_t p = k; p < chunk_pages_.size();
                          p += time_task_count) {
                         int r = decode_time_page_with(

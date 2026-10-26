@@ -270,6 +270,8 @@ class AlignedReaderFailureTest : public ::testing::Test {
             reader, free_reader);
         reader->set_field_filter(filter.get());
 #ifdef ENABLE_THREADS
+        // This pool lives in the caller executable. Decoder ownership must
+        // also work when its inline worker TLS is distinct from the DLL's.
         common::ThreadPool pool(2);
         if (parallel) reader->set_decode_pool(&pool);
 #else
