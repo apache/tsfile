@@ -108,6 +108,10 @@ cdef inline int64_t _find_child(
         uint64_t string_offsets_base,
         uint64_t string_bytes_base,
         uint32_t string_count,
+        uint64_t schema_base,
+        uint32_t schema_size,
+        uint32_t schema_count,
+        int role,
 ) noexcept nogil:
     cdef uint32_t low = first
     cdef uint32_t high = first + count
@@ -144,6 +148,12 @@ cdef inline int64_t _find_child(
                 length,
         ):
             row_id = _read_u32(view, row_base + 4)
+            if role >= 0:
+                if row_id >= schema_count:
+                    return -2
+                if _read_u16(view, schema_base + <uint64_t>row_id * schema_size + 20) != role:
+                    low += 1
+                    continue
             return row_id
         low += 1
     return -1
@@ -207,12 +217,16 @@ cdef class IndexLookup:
                 self._section_offsets[1],
                 self._section_offsets[2],
                 self._section_counts[1],
+                0,
+                0,
+                0,
+                -1,
             )
         if result < 0:
             raise KeyError(name)
         return result
 
-    def find_column_id(self, Py_ssize_t table_id, object name):
+    def find_column_id(self, Py_ssize_t table_id, object name, int role=-1):
         cdef const char* data
         cdef Py_ssize_t length
         cdef const uint8_t[:] view = self._view
@@ -244,7 +258,13 @@ cdef class IndexLookup:
                 self._section_offsets[1],
                 self._section_offsets[2],
                 self._section_counts[1],
+                self._section_offsets[8],
+                self._section_sizes[8],
+                self._section_counts[8],
+                role,
             )
+        if result == -2:
+            raise IndexError(name)
         if result < 0:
             raise KeyError(name)
         return result

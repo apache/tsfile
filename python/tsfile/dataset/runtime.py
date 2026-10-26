@@ -32,7 +32,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from ..constants import NUMERIC_DATASET_FIELD_TYPES, TSDataType
+from ..constants import ColumnCategory, NUMERIC_DATASET_FIELD_TYPES, TSDataType
 from ..tag_filter import tag_eq, tag_is_null
 from ..tsfile_reader import TsFileReaderPy
 from ._arrow import arrow_column_to_float64
@@ -776,7 +776,9 @@ class _RouteMapping(Mapping):
             self._catalog.index.table_name_id(table_id)
         )
         field_name = self._catalog.table_entries[table_name].field_columns[field_idx]
-        column_id = self._catalog.index.find_column_id(table_id, field_name)
+        column_id = self._catalog.index.find_column_id(
+            table_id, field_name, role=int(ColumnCategory.FIELD)
+        )
         return self._catalog.index.find_series_id(device_id, column_id)
 
     def describe(self, ref, series_id=None, column_id=None):
@@ -885,7 +887,9 @@ class MappedDataFrameCatalog:
         device_id = self.index.find_device_id(
             table_id, _join_series_path(table_name, tags, "")
         )
-        column_id = self.index.find_column_id(table_id, field_name)
+        column_id = self.index.find_column_id(
+            table_id, field_name, role=int(ColumnCategory.FIELD)
+        )
         series_id = self.index.find_series_id(device_id, column_id)
         result = self.series_shards.describe(
             (device_id, field_idx), series_id=series_id, column_id=column_id

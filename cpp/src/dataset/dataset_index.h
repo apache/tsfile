@@ -142,6 +142,8 @@ struct ColumnSchemaRecord {
     uint32_t name_sid;
     uint32_t column_ordinal;
     uint16_t logical_type;
+    // 0xFFFF denotes mixed physical types on independent tree devices.
+    // Decode each series using its located TimeseriesMetadata.
     uint16_t physical_type;
     uint16_t encoding;
     uint16_t compression;

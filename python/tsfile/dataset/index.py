@@ -34,7 +34,7 @@ import os
 import struct
 from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
 
-from ..constants import ColumnCategory
+from ..constants import ColumnCategory, TSDataType
 from .metadata import MODEL_TREE, _join_series_path
 from ._index import IndexLookup
 
@@ -47,6 +47,9 @@ SECTION_COUNT = 13
 ALIGNMENT = 64
 INDEX_FILE_PREFIX = ".tsfile_dataframe_index"
 INDEX_FILE_SUFFIX = ".tsidx"
+# The virtual tree column describes float64 output when devices have different
+# physical types. Each locator's TimeseriesMetadata determines actual decoding.
+MIXED_PHYSICAL_TYPE = 0xFFFF
 
 STRING_OFFSETS = 1
 STRING_BYTES = 2
@@ -430,9 +433,11 @@ class MappedDatasetIndex:
         self._assert_open()
         return self._lookup.find_device_id(table_id, name)
 
-    def find_column_id(self, table_id: int, name: str) -> int:
+    def find_column_id(
+        self, table_id: int, name: str, role: Optional[int] = None
+    ) -> int:
         self._assert_open()
-        return self._lookup.find_column_id(table_id, name)
+        return self._lookup.find_column_id(table_id, name, -1 if role is None else role)
 
     def find_series_id(self, device_id: int, column_id: int) -> int:
         self._assert_open()
@@ -538,10 +543,11 @@ def build_sections_from_dataframe(dataframe) -> Mapping[int, bytes]:
 
     table_names = sorted(index.table_entries)
     table_ids = {name: table_id for table_id, name in enumerate(table_names)}
+    is_tree = getattr(index, "model", None) == MODEL_TREE
     field_types: Dict[Tuple[str, str], int] = {}
     for series_ref, shards in index.series_shards.items():
         device_idx, field_idx = series_ref
-        table_name, _ = index.devices[device_idx]
+        table_name, tags = index.devices[device_idx]
         table_entry = index.table_entries[table_name]
         field_name = table_entry.field_columns[field_idx]
         declared_type = (
@@ -549,8 +555,16 @@ def build_sections_from_dataframe(dataframe) -> Mapping[int, bytes]:
             if field_idx < len(table_entry.field_types)
             else None
         )
+        series_type = None
         for reader, local_device, local_field in shards:
             stats = reader.catalog.series_stats_by_ref[(local_device, local_field)]
+            if is_tree:
+                # Only shards of the same full path must agree. Measurements
+                # with the same name on different devices are independent.
+                if series_type is not None and series_type != stats.data_type:
+                    name = _join_series_path(table_name, tags, field_name)
+                    raise ValueError(f"incompatible physical type for {name}")
+                series_type = stats.data_type
             if declared_type is not None and declared_type != stats.data_type:
                 raise ValueError(
                     f"physical type for {table_name}.{field_name} does not match "
@@ -558,9 +572,12 @@ def build_sections_from_dataframe(dataframe) -> Mapping[int, bytes]:
                 )
             current = field_types.setdefault((table_name, field_name), stats.data_type)
             if current != stats.data_type:
-                raise ValueError(
-                    f"incompatible physical type for {table_name}.{field_name}"
-                )
+                if is_tree:
+                    field_types[(table_name, field_name)] = MIXED_PHYSICAL_TYPE
+                else:
+                    raise ValueError(
+                        f"incompatible physical type for {table_name}.{field_name}"
+                    )
 
     columns = []
     columns_by_table = defaultdict(list)
@@ -595,13 +612,18 @@ def build_sections_from_dataframe(dataframe) -> Mapping[int, bytes]:
                 ]
             )
         for ordinal, name, data_type, role in definitions:
+            logical_type = (
+                int(TSDataType.DOUBLE)
+                if data_type == MIXED_PHYSICAL_TYPE
+                else data_type
+            )
             column_id = len(columns)
             columns.append(
                 (
                     table_id,
                     pool.intern(name),
                     ordinal,
-                    data_type,
+                    logical_type,
                     data_type,
                     0,
                     0,

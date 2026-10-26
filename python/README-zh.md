@@ -68,6 +68,26 @@ mvn -P with-cpp,with-python clean verify
 python setup.py build_ext --inplace
 ```
 
+## 树模型数值序列
+
+V4 树模型 TsFile 可以使用与表模型相同的 `TsFileDataFrame` 序列读取和窗口切片接口。
+通过完整逻辑路径选择测点。不同设备的同名测点可以具有不同的物理类型；
+数值统一返回为 `float64` 数组，空值保留为 `NaN`。
+
+```python
+from tsfile import TsFileDataFrame
+
+with TsFileDataFrame("tree_data/", use_index=True) as dataset:
+    with dataset["root.training.d1.temperature"] as series:
+        window = series[0:128]
+        timestamps = series.timestamps
+        statistics = series.stats  # start_time、end_time、count
+```
+
+统计信息和按位置切片以序列时间线为准，包括对齐数据中的空值位置。
+索引仍会校验同一完整路径在不同文件分片中的物理类型是否一致。
+表模型与树模型文件应分别加载到不同的 DataFrame；数值视图不包含非数值测点。
+
 ## Dataset 索引
 
 通过 `use_index=True` 启用持久化 Dataset 索引。第一次打开时构建索引，之后
