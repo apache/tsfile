@@ -70,7 +70,7 @@ the nullable `VarBinary` used for footer properties.
 The **provider** identifies the encryption implementation or service. Its **profile** names a
 fixed byte-format contract: Page framing, nonce and tag representation, size mapping, and Chunk
 proof size. A provider can offer several profiles. The file stores these public identifiers and
-the wrapped data key, rather than a Java implementation class or plaintext key. The reader needs
+the wrapped data key, rather than an implementation class name or the plaintext key. The reader needs
 the matching provider/profile and access to the external key material.
 
 Header version `0x01` is the supported layout. Unknown versions, truncated fields, trailing bytes,

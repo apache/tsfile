@@ -50,14 +50,14 @@ For a writer using UTF-8, the filter input is the byte representation of the com
 UTF8(join(DeviceID segments, ".") + "." + measurement_id)
 ```
 
-A null device segment is represented by the ASCII text `null` in the path. The current Java
-implementation calls `String.getBytes()` with the platform default charset; that charset is not
-stored in the file. The examples below use UTF-8. A reader must match the writer's charset and
-hashing behavior; if either is unknown, bypass the Bloom filter and use the metadata index.
+A null device segment is represented by the ASCII text `null` in the path. The charset used to
+build the path bytes is not stored in the file. The examples below use UTF-8. A reader must match
+the writer's charset and hashing behavior; if either is unknown, bypass the Bloom filter and use
+the metadata index.
 
 ## Hashing
 
-TsFile uses the Java `Murmur128Hash` variant of MurmurHash3 x64 128-bit. Its complete 16-byte
+TsFile uses the `Murmur128Hash` variant of MurmurHash3 x64 128-bit. Its complete 16-byte
 blocks use the standard little-endian unsigned-byte assembly and mixing. Its incomplete final
 block differs from standard MurmurHash3: **each tail byte is sign-extended from signed 8-bit to
 64-bit before shifting**, and the shifted terms are XORed, not ORed.

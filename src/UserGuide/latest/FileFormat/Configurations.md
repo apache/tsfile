@@ -69,7 +69,7 @@ Page size.
 
 A writer may limit the number of logical positions in one Page independently of the Page size
 target. This prevents a Page containing many compact values from growing to an excessive number
-of points. The reference writer configuration uses `10,000` points.
+of points. A common writer setting is `10,000` points.
 
 For aligned series, the Time Page and its corresponding Value Pages must cover the same logical
 position range. A writer therefore applies a common boundary to the aligned columns.
@@ -81,8 +81,7 @@ aligned Value Page, `position_count`.
 
 Index fanout is the maximum number of children in an internal metadata index node.
 A larger fanout produces a shallower tree with larger nodes; a smaller fanout produces a deeper
-tree with smaller nodes. The value should be at least `2`; the reference writer configuration uses
-`256`.
+tree with smaller nodes. The value should be at least `2`; a common value is `256`.
 
 The configured limit is not serialized. Each metadata index node stores its node type, children,
 and end offset, so a reader traverses the resulting tree without knowing the writer setting.

@@ -52,16 +52,15 @@ BloomFilter :=
 UTF8(join(DeviceID segments, ".") + "." + measurement_id)
 ```
 
-null 设备片段在路径文本中表示为 ASCII `null`。当前 Java 实现调用无参数的
-`String.getBytes()`，使用平台默认字符集，且文件不保存该字符集。下列示例使用 UTF-8。
-读取器必须匹配写入端的字符集和哈希行为；无法确定时应绕过布隆过滤器，直接查询元数据
-索引。
+null 设备片段在路径文本中表示为 ASCII `null`。构建路径字节时使用的字符集不保存在
+文件中。下列示例使用 UTF-8。读取器必须匹配写入端的字符集和哈希行为；无法确定时应
+绕过布隆过滤器，直接查询元数据索引。
 
 <div id="hashing"></div>
 
 ## 哈希计算
 
-TsFile 使用 Java `Murmur128Hash` 所实现的 MurmurHash3 x64 128 位变体。完整的 16 字节块
+TsFile 使用 `Murmur128Hash` 所实现的 MurmurHash3 x64 128 位变体。完整的 16 字节块
 使用标准的小端无符号字节组装与混合步骤；不足 16 字节的尾块与标准算法不同：**每个尾部
 字节先从有符号 8 位符号扩展到 64 位，再移位；各项使用 XOR 而非 OR 合并**。
 

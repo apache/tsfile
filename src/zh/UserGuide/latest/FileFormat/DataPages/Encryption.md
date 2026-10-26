@@ -69,7 +69,7 @@ FileEncryptionHeader :=
 
 **Provider** 标识加密实现或服务，**profile** 则为一套固定的字节格式命名，其中包括
 Page 帧、nonce 和认证标签的表示、长度映射以及 Chunk 证明长度。一个 provider 可以
-提供多个 profile。文件保存这些公开标识和封装密钥，不依赖 Java 实现类名，也不保存
+提供多个 profile。文件保存这些公开标识和封装密钥，不依赖实现类名，也不保存
 AEAD 的明文密钥。读取端需要相应的 provider/profile，并能取得外部密钥材料。
 
 当前支持的头版本为 `0x01`。未知版本、字段截断、尾随字节、重复的加密头，或加密头

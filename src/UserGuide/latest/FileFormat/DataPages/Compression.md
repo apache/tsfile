@@ -42,8 +42,7 @@ Header's `uncompressed_size` records the uncompressed payload length. `compresse
 the stored body length after compression and any encryption, including Page AEAD framing and tags.
 
 The numeric values are stable wire identifiers rather than the ordinal positions of a compressor
-library. Values `3` through `6` are legacy identifiers from earlier TsFile versions. The reference
-Java implementation does not define or implement them and rejects these bytes while parsing a
+library. Values `3` through `6` are legacy identifiers from earlier TsFile versions. The Java implementation does not define or implement them and rejects these bytes while parsing a
 Chunk Header. The C++ implementation retains them as `LZO`, `SDT`, `PAA`, and `PLA`; only `LZO`
 has a codec (enabled at build time), while `SDT`, `PAA`, and `PLA` remain reserved without a codec.
 A reader that does not provide the codec cannot decode the affected Chunk.

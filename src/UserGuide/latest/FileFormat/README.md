@@ -25,10 +25,9 @@ A TsFile stores time series data in columns. Writers append data in device group
 the indexes at the end of the file. Readers usually work in the opposite direction: they open
 the footer, look up a series, and seek to the Chunks that contain its values.
 
-This guide describes the v4 file layout, identified by version byte `0x04`, using the Java
-reference implementation as of 2026-10-26. It covers the file structures and how they fit together.
-The encoding chapter gives codec identifiers and the `PLAIN` layout; the bit layouts of the other
-value codecs are outside its scope.
+This guide describes the v4 file layout, identified by version byte `0x04`. It covers the file
+structures and how they fit together. The encoding chapter gives codec identifiers and the
+`PLAIN` layout; the bit layouts of the other value codecs are outside its scope.
 
 ## Scope and Terminology
 

@@ -161,36 +161,38 @@ function collapseAll(): void {
       </div>
 
       <aside class="tsfile-detail-panel" aria-live="polite">
-        <div class="tsfile-detail-copy">
-          <p class="tsfile-detail-eyebrow">{{ ui.selectedNode }}</p>
-          <h3>{{ selectedText.title }}</h3>
-          <p>{{ selectedText.description }}</p>
+        <div class="tsfile-detail-inner">
+          <div class="tsfile-detail-copy">
+            <p class="tsfile-detail-eyebrow">{{ ui.selectedNode }}</p>
+            <h3>{{ selectedText.title }}</h3>
+            <p>{{ selectedText.description }}</p>
 
-          <p v-if="selectedText.note" class="tsfile-detail-note">
-            {{ selectedText.note }}
-          </p>
+            <p v-if="selectedText.note" class="tsfile-detail-note">
+              {{ selectedText.note }}
+            </p>
 
-          <a v-if="detailsLink" class="tsfile-detail-link" :href="detailsLink">
-            {{ ui.details }}
-            <span aria-hidden="true">→</span>
-          </a>
-        </div>
+            <a v-if="detailsLink" class="tsfile-detail-link" :href="detailsLink">
+              {{ ui.details }}
+              <span aria-hidden="true">→</span>
+            </a>
+          </div>
 
-        <div class="tsfile-detail-spec">
-          <dl v-if="selectedText.offset || selectedText.size">
-            <div v-if="selectedText.offset">
-              <dt>{{ ui.offset }}</dt>
-              <dd><code>{{ selectedText.offset }}</code></dd>
+          <div class="tsfile-detail-spec">
+            <dl v-if="selectedText.offset || selectedText.size">
+              <div v-if="selectedText.offset">
+                <dt>{{ ui.offset }}</dt>
+                <dd><code>{{ selectedText.offset }}</code></dd>
+              </div>
+              <div v-if="selectedText.size">
+                <dt>{{ ui.size }}</dt>
+                <dd><code>{{ selectedText.size }}</code></dd>
+              </div>
+            </dl>
+
+            <div v-if="selectedText.layout" class="tsfile-detail-layout">
+              <span>{{ ui.layout }}</span>
+              <code>{{ selectedText.layout }}</code>
             </div>
-            <div v-if="selectedText.size">
-              <dt>{{ ui.size }}</dt>
-              <dd><code>{{ selectedText.size }}</code></dd>
-            </div>
-          </dl>
-
-          <div v-if="selectedText.layout" class="tsfile-detail-layout">
-            <span>{{ ui.layout }}</span>
-            <code>{{ selectedText.layout }}</code>
           </div>
         </div>
       </aside>
@@ -367,6 +369,12 @@ function collapseAll(): void {
 }
 
 .tsfile-detail-panel {
+  padding: 0;
+  border-top: 1px solid var(--vp-c-border);
+  background: color-mix(in srgb, var(--tree-accent) 3%, var(--vp-c-bg-elv));
+}
+
+.tsfile-detail-inner {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
@@ -374,8 +382,6 @@ function collapseAll(): void {
   );
   gap: 1rem 1.5rem;
   padding: 1rem 1.1rem;
-  border-top: 1px solid var(--vp-c-border);
-  background: color-mix(in srgb, var(--tree-accent) 3%, var(--vp-c-bg-elv));
 }
 
 .tsfile-detail-eyebrow {
@@ -403,7 +409,7 @@ function collapseAll(): void {
 
 .tsfile-detail-panel dl {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.55rem;
   margin: 0 0 0.7rem;
 }
@@ -491,12 +497,16 @@ function collapseAll(): void {
   }
 
   .tsfile-detail-panel {
+    align-self: stretch;
+    border-top: 0;
+    border-left: 1px solid var(--vp-c-border);
+  }
+
+  .tsfile-detail-inner {
     position: sticky;
     top: 5rem;
     max-height: calc(100vh - 6rem);
     overflow: auto;
-    border-top: 0;
-    border-left: 1px solid var(--vp-c-border);
   }
 }
 </style>
