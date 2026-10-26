@@ -71,6 +71,63 @@ TEST(MeasurementSchemaGroupTest, DefaultConstructor) {
     EXPECT_FALSE(group.is_aligned_);
 }
 
+TEST(TableSchemaTest, MovePreservesColumnIndex) {
+    TableSchema original(
+        "Table",
+        {new MeasurementSchema("Value", common::INT64, common::PLAIN,
+                               common::UNCOMPRESSED)},
+        {common::ColumnCategory::FIELD});
+    auto measurement = original.get_measurement_schemas().front();
+    TableSchema moved(std::move(original));
+
+    EXPECT_EQ(moved.get_table_name(), "table");
+    ASSERT_EQ(moved.get_columns_num(), 1);
+    EXPECT_EQ(moved.get_column_pos_index_num(), 1);
+    EXPECT_EQ(moved.get_measurement_schemas().front(), measurement);
+    EXPECT_EQ(moved.find_column_index("VALUE"), 0);
+    EXPECT_EQ(moved.get_data_types(),
+              std::vector<common::TSDataType>({common::INT64}));
+    EXPECT_EQ(
+        moved.get_column_categories(),
+        std::vector<common::ColumnCategory>({common::ColumnCategory::FIELD}));
+}
+
+TEST(TableSchemaTest, MovePreservesVirtualTableCaseSensitivity) {
+    TableSchema original(
+        "Tree",
+        {common::ColumnSchema("Device", common::STRING, common::UNCOMPRESSED,
+                              common::PLAIN, common::ColumnCategory::TAG)},
+        true);
+    TableSchema moved(std::move(original));
+
+    EXPECT_TRUE(moved.is_virtual_table());
+    EXPECT_EQ(moved.get_table_name(), "Tree");
+    EXPECT_EQ(moved.find_column_index("Device"), 0);
+    EXPECT_EQ(moved.find_column_index("device"), -1);
+    EXPECT_EQ(moved.find_id_column_order("Device"), 0);
+    EXPECT_EQ(moved.find_id_column_order("device"), -1);
+}
+
+TEST(TableSchemaTest, MovePreservesPendingTreeLevels) {
+    common::PageArena arena;
+    ChunkGroupMeta metadata(&arena);
+    auto device = std::make_shared<StringArrayDeviceID>(
+        std::vector<std::string>{"root", "device", "sensor"});
+    ASSERT_EQ(device->segment_num(), 3);
+    ASSERT_EQ(metadata.init(device), common::E_OK);
+    TableSchema original;
+    original.update(&metadata);
+    TableSchema moved(std::move(original));
+    moved.finalize_column_schema();
+
+    EXPECT_EQ(moved.get_measurement_names(),
+              std::vector<std::string>({"__level1", "__level2"}));
+    EXPECT_EQ(
+        moved.get_column_categories(),
+        std::vector<common::ColumnCategory>(2, common::ColumnCategory::TAG));
+    EXPECT_EQ(moved.find_id_column_order("__level2"), 1);
+}
+
 #if DEBUG_SE
 TEST(TableSchemaTest, BasicTest) {
     using namespace storage;
