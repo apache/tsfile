@@ -40,6 +40,39 @@ export default defineUserConfig({
 
   extendsMarkdown: (md) => {
     md.options.breaks = false;
+
+    // With breaks disabled, hard-wrapped source lines become softbreaks.
+    // Remove softbreaks between CJK characters and punctuation while keeping
+    // spaces between Chinese text and Latin words or inline code.
+    md.core.ruler.push("collapse-cjk-spaces", (state) => {
+      const isCjk = (char) =>
+        /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(
+          char,
+        );
+      state.tokens.forEach((token) => {
+        if (token.type !== "inline" || !token.children) {
+          return;
+        }
+        const children = token.children;
+        for (let index = 0; index < children.length; index += 1) {
+          if (children[index].type !== "softbreak") {
+            continue;
+          }
+          const previous = children[index - 1];
+          const next = children[index + 1];
+          const before =
+            previous && previous.type === "text"
+              ? previous.content.slice(-1)
+              : "";
+          const after =
+            next && next.type === "text" ? next.content.slice(0, 1) : "";
+          if (before && after && isCjk(before) && isCjk(after)) {
+            children.splice(index, 1);
+            index -= 1;
+          }
+        }
+      });
+    });
   },
 
   theme,
