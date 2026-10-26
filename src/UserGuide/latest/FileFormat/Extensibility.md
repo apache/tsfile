@@ -21,48 +21,36 @@
 
 # Extensibility
 
-TsFile v4 provides numbered or self-describing extension points in the following locations:
+TsFile has three main ways to introduce new capabilities: assign a new type or codec identifier,
+add a footer property, or define a new file layout. The choice depends on whether a reader can
+still locate the next structure without understanding the new feature.
 
-- Data types, encodings, and compression methods use single-byte identifiers.
-- A length-delimited string property map is stored at the end of `TsFileMetadata`.
-- The file version byte selects the complete file layout.
-
-A new data type, encoding, or compression method requires a new identifier. The wire meaning of
-an existing identifier does not change.
-
-Each footer property consists of a `VarString` key and value. A reader can consume an
-unrecognized property without changing the boundaries of the other footer fields.
-
-Data-section markers do not have a common length field. A reader cannot safely skip an unknown
-marker. A new data-section structure that cannot be fully delimited by an existing marker
-therefore requires either a new file version or an encoding contained within an existing
-structure.
+Footer properties are easy to delimit. Each has a `VarString` key and a nullable `VarBinary`
+value, so a reader can preserve an unknown value without decoding it. A Chunk also has a known
+byte length, which lets a scanner skip it even if it cannot decode the selected codec.
+Data-section markers have no shared length field, so the same approach does not work for an
+unknown marker.
 
 ## Safe Evolution Rules
 
-An extension is safely skippable only when an older reader can determine its complete byte range
-without interpreting the new payload. Examples are a new footer property value and a new codec
-inside a Chunk whose `data_size` is known. Adding bytes to a non-length-delimited header is not
-skippable because every following field would move.
+A compatible extension keeps existing field meanings and boundaries intact:
 
-Within v4, extension authors must:
+- Give a new type or codec an unused identifier; keep the meaning of assigned identifiers.
+- Define the supported data types, byte layout, output sizes, and error handling for a new codec.
+- Keep the existing byte order and length conventions.
+- Report an unsupported feature when it is needed to decode the requested data.
 
-- allocate a previously unassigned identifier and never reuse an existing value;
-- preserve byte order, length interpretation, and containment boundaries of existing structures;
-- define which physical data types are valid for a new encoding;
-- define output-size, element-count, and malformed-input behavior for new codecs;
-- require an explicit capability error when a reader cannot decode the extension.
+Adding bytes to a Header without a rule that selects the extended layout shifts the fields an
+older reader expects. Such a change requires a new version or an explicit extension mechanism.
 
-Reserved or unknown identifiers are not aliases for a default. In particular, an unknown encoding
-is not `PLAIN`, an unknown compression method is not `UNCOMPRESSED`, and an unknown marker is not
-padding.
+The Page AEAD extension is an example of the latter. Its `0x06` file encryption header selects
+extra Chunk Header fields and profile-specific Page framing while retaining version byte `0x04`.
+Older v4 readers may reject those files. [Encryption](DataPages/Encryption.md) defines the layout
+and required capabilities; knowing the base format version alone is not enough.
 
 ## Properties and Semantics
 
-Length delimitation makes an unknown footer property structurally readable, but it does not make
-the property's semantics optional. A property that changes how existing bytes must be interpreted
-must define how readers advertise and enforce support. Security-critical properties must fail
-closed when recognized semantics cannot be applied.
-
-Changes that alter the grammar of top-level structures, reinterpret assigned identifiers, or make
-old boundaries ambiguous require a new format version.
+Being able to skip a property does not mean its meaning can always be ignored. An informational
+property may be optional, but a property that changes how Page bytes are decoded needs an explicit
+support rule. If a reader cannot apply required encryption or another required interpretation,
+it must report an error rather than decode the bytes with a default.

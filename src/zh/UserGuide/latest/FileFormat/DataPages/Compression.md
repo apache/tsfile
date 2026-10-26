@@ -28,33 +28,39 @@
 | 0 | `UNCOMPRESSED` | 原始字节 |
 | 1 | `SNAPPY` | Snappy raw block |
 | 2 | `GZIP` | 单个 gzip member |
-| 3 | `LZO` | LZO block |
+| 3 | `LZO` | LZO block（C++ 实现，编译期可选启用） |
+| 4 | `SDT` | 保留编号，无编解码器 |
+| 5 | `PAA` | 保留编号，无编解码器 |
+| 6 | `PLA` | 保留编号，无编解码器 |
 | 7 | `LZ4` | LZ4 raw block |
 | 8 | `ZSTD` | Zstandard frame |
 | 9 | `LZMA2` | XZ container 中的 LZMA2 流 |
 
 每个 Page 独立压缩，不跨 Page 共享压缩状态。Page Header 的 `uncompressed_size` 和
-`compressed_size` 分别保存压缩前和压缩后的负载长度。
+`compressed_size` 分别保存未压缩负载长度及压缩、加密后的磁盘载荷长度。Page AEAD 的
+磁盘长度还包含密文帧和认证标签。
 
-这些数值是稳定的文件格式编号，不是某个压缩库枚举中的位置。v4 未分配编号 `4` 到
-`6`。`LZO` 作为历史编号保留；读取器未提供该编解码器时，不能解码相应 Chunk。
+这些数值是稳定的文件格式编号，不是某个压缩库枚举中的位置。编号 `3` 到 `6` 是早期
+TsFile 版本留下的历史标识符。参考 Java 实现不定义也不实现它们，解析 Chunk Header 时
+会直接拒绝这些字节。C++ 实现保留 `LZO`、`SDT`、`PAA`、`PLA` 四个标识；其中只有
+`LZO` 有编解码器（编译期可选启用），`SDT`、`PAA`、`PLA` 仍是无编解码器的保留值。
+读取器未提供该编解码器时，不能解码相应 Chunk。
 
 ## Page 级帧边界
 
-若 Page 起始偏移量为 `P`，其序列化 Page Header 占 `H` 字节，则磁盘负载恰好位于以下
-左闭右开区间：
+设 Page 从偏移 `P` 开始，Header 占 `H` 字节，载荷就取后续恰好 `compressed_size` 字节：
 
 ```text
 [P + H, P + H + compressed_size)
 ```
 
-使用 `UNCOMPRESSED` 时，`compressed_size` 等于 `uncompressed_size`，这些字节已经是编码
-后的 Page 负载。使用其他方式时，解压结果必须恰好包含 `uncompressed_size` 字节。结果
-更短、更长，或编解码器要求读取上述区间外的字节，都表示 Page 无效。
+这里使用的是磁盘长度，包含加密帧信息。解密后，`UNCOMPRESSED` 已经是编码后的 Page
+载荷；其他方式还需要解压。两种路径最终都应得到恰好 `uncompressed_size` 字节。
+不加密或加密保持长度时，`UNCOMPRESSED` 的这两个长度相等；Page AEAD 会增加帧开销，
+因而不再相等。
 
-每个 Page 都是独立的压缩单元。因此，读取器可以先用 Page Statistics 排除不需要的
-Page，再直接前进 `compressed_size` 字节，而不必初始化解压器。随机访问也不依赖前一个
-Page 的字典或历史状态。
+Page 之间不共享压缩历史。读取器可以直接跳转到目标 Page，也可以按磁盘长度跳过它，
+无需先解压前面的 Page。
 
 ## 读取顺序与校验
 
@@ -63,12 +69,12 @@ Page 的字典或历史状态。
 ```text
 读取 Page Header
   -> 准确读取 compressed_size 字节
-  -> 文件属性要求时解密
+  -> 按文件加密头或旧版属性进行认证/解密
   -> 按 compression_type 解压
   -> 要求结果恰好为 uncompressed_size 字节
   -> 解码 Page 内各数据流
 ```
 
-实现应在分配内存前拒绝会导致偏移量运算溢出或超过资源限制的长度。不支持某个
-`compression_type` 时，读取器不能解码相应 Chunk，但仍可通过 `data_size` 跳过该
-Chunk；不能把未知方式当作 `UNCOMPRESSED`。
+分配缓冲区之前，按[二进制表示](../Binary-Representation.md)检查长度。编解码器不可用时，
+无法解压该 Chunk；扫描器直接解析原始 Header 字段后，仍可利用 `data_size` 跳过它，
+即使编解码器注册表拒绝这个编号。不能把该编号当作 `UNCOMPRESSED`。

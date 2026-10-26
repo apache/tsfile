@@ -21,63 +21,56 @@
 
 # 错误恢复
 
-完成写入的 TsFile 包含头魔数、版本字节、`0x02` separator、Footer 元数据、4 字节
-`TsFileMetadata` 长度和尾魔数。没有 Footer 长度或尾魔数的文件是未完成文件。
-
-恢复读取器可以从偏移量 7 开始按 marker 扫描数据区，并利用 Chunk Header 的
-`data_size` 跳过完整 Chunk。在 Chunk 内部，所有 Page 的序列化长度之和等于
-`data_size`。
-
-扫描器不能把 Page 数据中出现的任意 `0x02` 当作 separator；只有在完整解析或跳过
-前一个 marker 所界定的结构后，才可以读取下一个 marker。
+Footer 在数据区之后写入。如果写入提前中断，文件虽然无法通过索引正常打开，前面仍可能
+保留一些完整的 Chunk。恢复时从文件头向后扫描，找到可以保留的结构，再据此重建缺失的
+索引和 Footer。
 
 ## 完成性检查
 
-设文件大小为 `F`，区间 `[F - 10, F - 6)` 中保存的大端 Footer 长度为 `L`。普通的
-元数据优先读取开始前，完整文件必须满足：
+设文件大小为 `F`，从 `[F - 10, F - 6)` 读取大端元数据长度 `L`。完成写入的文件具有
+以下关系：
 
 ```text
-bytes[F - 6, F)         = "TsFile"
-TsFileMetadata 区间     = [F - 10 - L, F - 10)
-meta_offset             = 顶层 0x02 separator 的偏移量
+bytes[F - 6, F)            = "TsFile"
+TsFileMetadata interval    = [F - 10 - L, F - 10)
+meta_offset                = offset of the top-level 0x02 separator
 meta_offset < F - 10 - L
 ```
 
-头魔数和版本也必须有效，并且 `TsFileMetadata` 解码器必须恰好消费 `L` 字节。仅有合法的
-尾魔数并不能证明文件完整。
+还要校验头部魔数和版本，并恰好解析 `L` 字节的 `TsFileMetadata`。仅有尾部魔数不够，
+Footer 长度和其中的偏移量也必须能正确使用。
 
 ## 安全正向扫描
 
-恢复扫描器可以识别数据区中最长的结构完整前缀：
+正向扫描使用与普通读取器相同的 Chunk 布局，但不依赖 Footer：
 
-1. 校验头魔数和版本，把游标置于偏移量 `7`；
-2. 仅在已知顶层边界读取一个 marker；
-3. 遇到 Chunk Group Header（`0x00`）时，解码完整 `DeviceID` 并保存组上下文；
-4. 遇到 Chunk marker 时，解码完整 Chunk Header，校验 `cursor + data_size`，再跳过该
-   区间或校验其中所有 Page 边界；
-5. 遇到 Operation Index Range（`0x04`）时，准确消费两个大端 `int64`；
-6. 遇到顶层 separator（`0x02`）时正常结束；字段或负载不完整时，在最后一个已知安全
-   边界停止。
+1. 校验魔数和版本，检查偏移 `7`，读取可选的 `0x06` 加密头。数据区从 `7 + E` 开始，
+   `E` 为该头的总长度；不存在时为零。
+2. 在结构边界读取标记。遇到 `0x00` 时读取 DeviceID，并记住当前分组。
+3. 遇到 Chunk 标记时读取完整 Header，包括需要的 AEAD 后缀。在使用 Chunk 身份之前
+   验证位置证明，再检查剩余文件是否容得下 `data_size` 字节。随后检查 Page，或按该
+   长度完整跳过。
+4. 遇到 `0x04` 时，读过两个操作索引 `int64`。
+5. 遇到顶层 `0x02` 分隔符时，停止扫描数据区。
 
-最后安全边界是一个完整定界结构的末尾，不是“最后一个碰巧可读的字节”。恢复工具可以
-使用该边界之前的完整 Chunk 重建索引和新 Footer，但不能臆造或部分解码被截断的 Chunk。
+字段或载荷被截断时，在最后一个完整结构处停止。未知标记、重复或位置错误的加密头、
+无效长度和认证失败都应作为错误处理，不能通过搜索下一个熟悉的字节来绕过。
+Page 载荷中的 `0x02` 是数据，不能据此确定数据区结束。
 
-检测到以下情况时，文件结构不完整或已损坏：
-
-- Chunk 的 `data_size` 超出文件或下一个结构边界。
-- Page 的长度字段超出 Chunk 边界。
-- Footer 长度无法定位到完整的 `TsFileMetadata`。
-- `meta_offset` 没有指向 `0x02` separator。
-- 索引 offset 位于文件之外或指入结构中间。
-
-其他失败还包括：未知顶层 marker、未终止的 VarInt 或 VarString、计算结束偏移量时整数
-溢出、Page 解码结果数量错误，以及对齐 Time/Value Page 不匹配。
+只保留已经完整读取并检查过的结构。被截断 Chunk 中尚能读取的部分，不会自动成为有效
+Chunk。通用边界检查见[二进制表示](../Binary-Representation.md)，Page 边界见[数据页](README.md)。
 
 ## 恢复能力边界
 
-恢复只能重建结构，不能补回缺失信息。完整的压缩或加密 Page 仍需要其声明的编解码器，
-必要时还需要外部密钥。由于没有文件级校验和，结构仍合法的字节替换可能无法与原始数据
-区分。Operation Index Range 可以帮助存储引擎把保留下来的前缀与外部操作日志关联，
-但不能替代对 Chunk 和 Page 边界的校验。
+重建索引不能补回缺失的值，也无法识别所有结构仍有效的字节改动。保留的 Page 仍需要
+相应的编解码器；已加密的数据还需要密钥。操作索引记录有助于把保留数据与外部日志关联，
+但不能替代结构检查。
 
-TsFile v4 没有通用校验和；相关限制见 [Checksumming](Checksumming.md)。
+Page AEAD 恢复要保留原加密头、文件加密 ID、Chunk 序号和 Page 索引。仅截断文件尾并
+重写 Footer 时，可以保留 Chunk 的原始偏移。移动 Chunk 需要新的位置证明；改变文件
+身份、Chunk 序号或 Page 上下文时，还要按变化内容对相关数据重新认证和加密。追加写入
+应从已保留的最大 Chunk 序号之后继续分配。
+
+认证恢复需要相应的 provider 和外部密钥。AEAD 文件的旧版 Footer 字段故意设为未加密，
+因此不能用它代替损坏的加密头。模式判断见[加密](Encryption.md)，格式完整性检查仍有哪些
+限制，见[校验和](Checksumming.md)。

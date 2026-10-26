@@ -47,17 +47,17 @@ encoder. See [Encodings](DataPages/Encodings.md) for wire representations of val
 
 ## Physical and Logical Types
 
-The identifier determines the physical decoder. `TIMESTAMP` and `DATE` additionally carry a
-logical interpretation:
+A data type describes the value domain; the encoding determines how those values become bytes.
+`TIMESTAMP` and `DATE` also assign a meaning to the underlying integer:
 
-- `TIMESTAMP` has the same eight-byte physical value domain as `INT64`. The time unit is supplied
+- `TIMESTAMP` has the same signed 64-bit value domain as `INT64`. The time unit is supplied
   by the protocol or dataset using the file; TsFile v4 does not serialize that unit.
 - `DATE` has the same integer encoder interface as `INT32`, but valid logical values use decimal
   `YYYYMMDD` form.
 - `TEXT` is a length-delimited byte string. `STRING` uses the same physical binary container but
   has UTF-8 string semantics. `BLOB` is uninterpreted binary data.
-- `OBJECT` is an opaque binary representation whose object contract must be agreed outside the
-  file format.
+- `OBJECT` stores object bytes. The applications exchanging the file agree on how to reconstruct
+  an object from them.
 
 `VECTOR` is a physical marker for the shared time column of aligned data. It is not a scalar value
 type and does not define a standalone value-stream encoding. `UNKNOWN` is a sentinel, not a valid
@@ -80,7 +80,7 @@ cannot decode values or type-specific Statistics for that series.
 ## Ordering and Comparison
 
 Integer and floating-point values use their numeric order for min/max Statistics. `STRING`
-min/max values use binary lexicographic comparison of their serialized bytes. `TEXT` stores only
+min/max values compare their raw value bytes lexicographically, excluding length prefixes. `TEXT` stores only
 first and last values, while `BLOB` and `OBJECT` store no type-specific value Statistics.
 
 Type promotion and application-level casts are not encoded in TsFile. A reader can expose such

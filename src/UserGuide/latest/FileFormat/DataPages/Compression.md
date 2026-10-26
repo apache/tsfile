@@ -29,36 +29,42 @@ Page in that Chunk.
 | 0 | `UNCOMPRESSED` | Raw bytes |
 | 1 | `SNAPPY` | Snappy raw block |
 | 2 | `GZIP` | One gzip member |
-| 3 | `LZO` | LZO block |
+| 3 | `LZO` | LZO block (C++ implementation, enabled at build time) |
+| 4 | `SDT` | Reserved; no codec |
+| 5 | `PAA` | Reserved; no codec |
+| 6 | `PLA` | Reserved; no codec |
 | 7 | `LZ4` | LZ4 raw block |
 | 8 | `ZSTD` | Zstandard frame |
 | 9 | `LZMA2` | LZMA2 stream in an XZ container |
 
 Each Page is compressed independently; compression state is not shared across Pages. The Page
-Header's `uncompressed_size` and `compressed_size` record the payload lengths before and after
-compression, respectively.
+Header's `uncompressed_size` records the uncompressed payload length. `compressed_size` records
+the stored body length after compression and any encryption, including Page AEAD framing and tags.
 
 The numeric values are stable wire identifiers rather than the ordinal positions of a compressor
-library. Values `4` through `6` are not assigned by this version. `LZO` is retained as a historical
-identifier; a reader that does not provide the codec cannot decode that Chunk.
+library. Values `3` through `6` are legacy identifiers from earlier TsFile versions. The reference
+Java implementation does not define or implement them and rejects these bytes while parsing a
+Chunk Header. The C++ implementation retains them as `LZO`, `SDT`, `PAA`, and `PLA`; only `LZO`
+has a codec (enabled at build time), while `SDT`, `PAA`, and `PLA` remain reserved without a codec.
+A reader that does not provide the codec cannot decode the affected Chunk.
 
 ## Page-local Framing
 
-If a Page begins at offset `P` and its serialized Page Header occupies `H` bytes, the stored payload
-is exactly the half-open interval:
+Let a Page start at `P` and its Header occupy `H` bytes. Read exactly `compressed_size` bytes
+for its body:
 
 ```text
 [P + H, P + H + compressed_size)
 ```
 
-For `UNCOMPRESSED`, `compressed_size` equals `uncompressed_size` and the bytes are already the
-encoded Page payload. For every other method, decompression must produce exactly
-`uncompressed_size` bytes. A shorter result, a longer result, or a codec request for bytes outside
-the interval makes the Page invalid.
+This is the stored length, including any encryption framing. After decryption, `UNCOMPRESSED`
+already contains the encoded Page payload; other methods need decompression. Either path must
+produce exactly `uncompressed_size` bytes. With length-preserving encryption or no encryption,
+`UNCOMPRESSED` has equal stored and uncompressed lengths. Page AEAD adds framing, so that equality
+no longer holds.
 
-Because each Page is an independent compression unit, a reader can use Page Statistics to reject a
-Page and advance by `compressed_size` without initializing the codec. Random access does not need
-the preceding Page's dictionary or history.
+Pages do not share compression history. A reader can seek directly to a selected Page or skip
+its body using the stored length, without decompressing earlier Pages.
 
 ## Read Pipeline and Validation
 
@@ -68,13 +74,13 @@ decompressing:
 ```text
 read Page Header
   -> read exactly compressed_size bytes
-  -> decrypt when file properties require it
+  -> authenticate/decrypt according to the file encryption header or legacy properties
   -> decompress according to compression_type
   -> require exactly uncompressed_size bytes
   -> decode the Page streams
 ```
 
-Implementations should reject sizes that overflow offset arithmetic or exceed configured resource
-limits before allocating memory. An unsupported `compression_type` prevents decoding the affected
-Chunk, but the Chunk remains skippable through its `data_size`; it must not be interpreted as
-`UNCOMPRESSED`.
+Apply the length checks in [Binary Representation](../Binary-Representation.md) before allocating
+buffers. An unavailable codec prevents decompression. A scanner can still use `data_size` to skip
+the Chunk if it parses the raw Header fields, even when the codec registry rejects the identifier;
+it must not treat that identifier as `UNCOMPRESSED`.

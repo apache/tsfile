@@ -21,9 +21,9 @@
 
 # Encodings
 
-The single-byte `encoding_type` in a Chunk Header selects the value-stream encoding. In an
-aligned Time Chunk, it selects the time-stream encoding. In a non-aligned Chunk, it selects only
-the value-stream encoding.
+Encoding turns a sequence of typed values into a byte stream before compression. The Chunk
+Header records the selected codec in `encoding_type`. This field describes values in a Value or
+non-aligned Chunk, and timestamps in an aligned Time Chunk.
 
 | Value | Name |
 | ---: | --- |
@@ -43,7 +43,8 @@ the value-stream encoding.
 | 13 | `RLBE` |
 | 14 | `CAMEL` |
 
-The following data-type and encoding combinations are defined:
+The following combinations are supported by the reference value encoders. An assigned codec
+number does not mean that every data type can use it:
 
 | Data type | Available encodings |
 | --- | --- |
@@ -66,11 +67,11 @@ format identifiers, not implementation-specific enumeration ordinals.
 | Run length / bit packing | `RLE`, `RLBE` | Repeated values or small bit widths |
 | Delta and prediction | `DIFF`, `TS_2DIFF`, `REGULAR`, `SPRINTZ` | Small or regular changes between adjacent values |
 | Integer remapping | `ZIGZAG` | Small signed integers represented as small unsigned integers |
-| XOR-based floating-point | `GORILLA_V1`, `GORILLA`, `CHIMP`, `CAMEL` | Stable leading and trailing bits between adjacent floating-point values |
+| XOR-based | `GORILLA_V1`, `GORILLA`, `CHIMP`, `CAMEL` | Stable leading and trailing bits between adjacent floating-point values |
 | Legacy or specialized | `BITMAP`, `FREQ` | Reserved historical layouts; `FREQ` is deprecated |
 
-The best encoding depends on the data distribution. The file does not record why a writer selected
-an encoding, and a reader must select its decoder from both `data_type` and `encoding_type`.
+Different distributions favor different encodings. Whatever the writer chooses, the reader
+selects a decoder from the pair `(data_type, encoding_type)`.
 
 ## Plain Encoding
 
@@ -94,18 +95,15 @@ decode an unknown encoding as `PLAIN`.
 
 ## Decoder Contract
 
-Encoding state is scoped to one uncompressed Page stream. After Page decompression, a reader:
+A decoder's state lasts for one Page stream. After decryption and decompression, select the codec,
+decode within the stream boundary, and check that the number of values matches the Page context.
+Start with fresh decoding state for the next Page.
 
-1. creates a decoder for the Chunk's `data_type` and `encoding_type`;
-2. decodes exactly the number of logical elements required by the Page context;
-3. verifies that decoding neither reads past the Page boundary nor leaves an invalid partial block;
-4. discards the decoder state before processing the next Page.
+For aligned data, the Time Chunk Header names the time codec; an aligned Value Page decodes one
+value for each set bitmap bit. For non-aligned data, the Chunk Header names only the value codec.
+Its time codec comes from shared configuration, defaulting to `TS_2DIFF`; there is no serialized
+`time_encoder` footer field. See [Configurations](../Configurations.md#non-aligned-time-encoding).
 
-For a non-aligned Page, the time stream has its own encoding declared by `time_encoder` in the file
-metadata; `encoding_type` applies to the value stream only. For an aligned Time Page,
-`encoding_type` applies to the Page's time stream. For an aligned Value Page, null positions are
-removed before value encoding, so the value decoder must produce exactly the number of set bits in
-the bitmap.
-
-An unsupported encoding prevents decoding the affected Chunk, but its byte range can still be
-skipped using `data_size`. Falling back to another decoder is not valid.
+An unsupported encoding prevents value decoding. A scanner that parses the raw Header fields
+can still locate the next Chunk using `data_size`, even if a higher-level codec registry rejects
+the identifier. It must not substitute `PLAIN` or another decoder.

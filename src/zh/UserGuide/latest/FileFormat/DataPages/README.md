@@ -21,10 +21,13 @@
 
 # 数据页
 
-Chunk Header 之后连续保存一个或多个 Page。Page 之间没有填充字节；Chunk Header 的
-`data_size` 给出全部 Page Header 和 Page 数据的总长度。
+一个 Chunk 的 Page 连续存放在 Chunk Header 之后，Page 之间没有填充字节。`data_size`
+统计所有 Page Header 和载荷的总长度。空的对齐 Value Chunk 的 `data_size = 0`，
+不包含任何 Page。
 
-## Page Header
+<div id="page-header"></div>
+
+## 页头（Page Header）
 
 非空 Page 的格式为：
 
@@ -37,21 +40,18 @@ Page :=
 ```
 
 `uncompressed_size` 是解密、解压后的 Page 负载大小，`compressed_size` 是文件中保存的
-Page 负载大小。当 `compression_type = UNCOMPRESSED` 时，两个值相等。
+Page 负载大小。仅在 `compression_type = UNCOMPRESSED` 且加密不扩展长度时二者相等。
+Page AEAD 的 `compressed_size` 包含密文帧和认证开销，即使不压缩也可能更大，详见
+[加密](Encryption.md#aead-page-body-and-context)。
 
-Chunk marker 的低 6 位决定 Page Header 是否包含 Statistics：
-
-- `0x01`：Chunk 有多页，每个非空 Page Header 包含 Statistics。
-- `0x05`：Chunk 只有一页或没有 Page，Page Header 不包含 Statistics。
-
-Statistics 的二进制格式见 [Metadata](../Metadata.md#statistics)。
-
-因此，无需检查 Page 载荷即可根据 Chunk marker 选择 Header 结构：
+Chunk marker 的低 6 位决定页头中是否包含统计信息：
 
 | Chunk marker 低位 | Page 数量 | Page Statistics |
 | ---: | --- | --- |
 | `0x01` | 多于一个 | 每个非空 Page Header 中存在 |
 | `0x05` | 零个或一个 | 不存在 |
+
+统计信息的字节布局见[元数据](../Metadata.md#statistics)。
 
 若 Page 起始偏移为 `P`，两个长度字段和可选 Statistics 的序列化总长度为 `h`，则磁盘
 载荷占用半开区间 `[P + h, P + h + compressed_size)`；如果还有下一个 Page，它从
@@ -60,16 +60,18 @@ Statistics 的二进制格式见 [Metadata](../Metadata.md#statistics)。
 解密并解压后，载荷必须恰好产生 `uncompressed_size` 字节。即使压缩库报告成功，实际输出
 长度不一致时读取器也必须拒绝该 Page。
 
-## Page Encoding
+<div id="page-encoding"></div>
+
+## 写入与读取顺序
 
 写入非空 Page 时，数据依次经过：
 
 ```text
-logical values
-  -> value encoding
-  -> assemble uncompressed page payload
-  -> compression
-  -> optional encryption
+时间戳和值
+  -> 编码
+  -> 组成未压缩的 Page 载荷
+  -> 压缩
+  -> 按需加密
   -> stored_data
 ```
 
@@ -78,7 +80,9 @@ logical values
 编码与压缩相互独立。编码把有类型的值转换成未压缩字节流，压缩把该结果视为普通字节。
 Page 边界会重置值编码器/解码器和压缩器/解压器，状态不会跨 Page 延续。
 
-## Non-aligned Page
+<div id="non-aligned-page"></div>
+
+## 非对齐 Page
 
 非对齐 Page 的解压后负载为：
 
@@ -99,13 +103,15 @@ NonAlignedPagePayload :=
 value_stream_size = U - v - time_stream_size
 ```
 
-结果必须非负。解码后，两个流的解码器都必须恰好到达各自边界，并产生相同的数据点数量。
-存在尾随字节、提前结束或数量不一致时，该 Page 格式错误。
+该长度必须非负。两个流都受 Page 载荷边界约束，必须按各自编码格式完整结束，并解出
+相同数量的数据点，才能将时间戳和值一一对应。
 
 非对齐 Chunk Header 只记录值流的 `encoding_type`。时间流编码见
-[Configurations](../Configurations.md#non-aligned-time-encoding)。
+[配置](../Configurations.md#non-aligned-time-encoding)。
 
-## Aligned Time Page
+<div id="aligned-time-page"></div>
+
+## 对齐 Time Page
 
 对齐 Time Page 的解压后负载完全由时间编码流组成：
 
@@ -118,7 +124,9 @@ AlignedTimePagePayload := byte encoded_time_stream[remaining bytes]
 解码得到的时间戳数量就是该 Page 的逻辑位置数。所有对应对齐 Value Page 的 bitmap 宽度
 和 null 重建都由该数量决定。
 
-## Aligned Value Page
+<div id="aligned-value-page"></div>
+
+## 对齐 Value Page
 
 非空对齐 Value Page 的解压后负载为：
 
@@ -130,7 +138,7 @@ AlignedValuePagePayload :=
 ```
 
 同一对齐集合中，第 `i` 个 Value Page 对应第 `i` 个 Time Page。null 位图和全 null
-空 Page 的格式见 [Nulls](../Nulls.md)。
+空 Page 的格式见 [空值](../Nulls.md)。
 
 `position_count` 必须等于对应 Time Page 解码得到的时间戳数量。bitmap 必须恰好具有
 `ceil(position_count / 8)` 字节；最后一个字节中未使用的低位不表示逻辑位置。值解码器只
@@ -138,13 +146,11 @@ AlignedValuePagePayload :=
 
 ## Page 选择与跳过
 
-Page Statistics 允许读取器在读取磁盘 Page 数据前判断时间和值谓词。只有当 Statistics
-能够证明没有数据点满足谓词时，才能跳过 Page。Statistics 是保守摘要：区间重叠只表示
-“可能匹配”，并不表示“一定匹配”。
+Page Statistics 可以在读取载荷之前排除不需要的 Page。例如，Page 的时间范围与查询
+范围不相交时，就可以直接跳过。各类型提供哪些值摘要，见[统计信息](../Metadata.md#statistics)。
 
-单 Page Chunk 的 Page Header 不包含 Statistics。读取器可以在跳转到 Chunk 前使用文件尾
-中的 Chunk 或 Timeseries Statistics。某种数据类型的 Statistics 不包含查询所需摘要时，
-读取器必须解码 Page 或依赖其他谓词，不能据此排除数据。
+单 Page Chunk 不保存 Page Statistics，需要使用 Footer 中的 Chunk 或序列级统计信息。
+如果现有摘要无法排除匹配，就要读取 Page 并检查具体值。
 
 ## 全 null 对齐 Value Page
 
@@ -158,11 +164,13 @@ EmptyAlignedValuePage := UVarInt(0)  # uncompressed_size
 该零之后没有 `compressed_size`、Page Statistics、bitmap 或磁盘载荷。位置数继承自对应
 Time Page。只有在对齐 Page 序列能够提供外部位置数时，才允许使用这种表示。
 
-## Data Page Details
+<div id="data-page-details"></div>
 
-- [Chunks](Chunks.md)
-- [Compression](Compression.md)
-- [Encodings](Encodings.md)
-- [Encryption](Encryption.md)
-- [Checksumming](Checksumming.md)
-- [Error Recovery](Error-Recovery.md)
+## 相关章节
+
+- [Chunk 与 Chunk Group](Chunks.md)
+- [压缩](Compression.md)
+- [编码](Encodings.md)
+- [加密](Encryption.md)
+- [校验和](Checksumming.md)
+- [错误恢复](Error-Recovery.md)

@@ -50,17 +50,19 @@ export const tsFileStructure: TsFileStructureNode = {
     en: {
       title: 'TsFile v4',
       description:
-        'The complete physical file. All offsets are absolute byte offsets measured from the first byte. Readers normally locate the footer from the tail, traverse metadata, and then read only selected Chunks and Pages.',
+        'Data is written in device groups, with indexes at the end. A reader usually opens the footer first, then seeks to the Chunks and Pages it needs.',
       offset: '0 … F - 1',
       size: 'F bytes',
-      layout: 'File Header | Data Section | Separator | Metadata | Footer',
+      layout: 'File Header | FileEncryptionHeader? | Data | Separator | Indexed Metadata | TsFileMetadata | Length | Tail Magic',
+      note: 'F is the file length, L is the TsFileMetadata length, and E is the total encryption-header length (0 when absent).',
     },
     zh: {
       title: 'TsFile v4',
-      description: '完整的物理文件。所有偏移均为从文件第一个字节开始计算的绝对字节偏移。读取器通常先从文件尾定位 Footer、遍历元数据，再按需读取选中的 Chunk 和 Page。',
+      description: '数据按设备分组写入，索引放在文件尾部。读取器通常先查 Footer，再跳转到需要的 Chunk 和 Page。',
       offset: '0 … F - 1',
       size: 'F 字节',
-      layout: '文件头 | 数据区 | 分隔符 | 元数据 | 文件尾',
+      layout: '文件头 | FileEncryptionHeader? | 数据区 | 分隔符 | 索引元数据 | TsFileMetadata | 长度 | 尾魔数',
+      note: 'F 为文件长度，L 为 TsFileMetadata 长度，E 为可选加密头的总长度；无加密头时 E = 0。',
     },
   },
   children: [
@@ -71,14 +73,14 @@ export const tsFileStructure: TsFileStructureNode = {
       text: {
         en: {
           title: 'File Header',
-          description: 'A fixed seven-byte prefix identifying TsFile and format version 4. The version byte selects the complete grammar before any data marker is interpreted.',
+          description: 'The first seven bytes contain the TsFile magic string and format version. Read these before choosing how to parse the rest of the file.',
           offset: '0 … 6',
           size: '7 bytes',
           layout: 'magic[6] | version[1]',
         },
         zh: {
           title: '文件头',
-          description: '固定的 7 字节前缀，用于标识 TsFile 以及第 4 版文件格式。解释任何数据区标记之前，必须先用版本字节选择完整语法。',
+          description: '文件最前面的七个字节保存 TsFile 魔数和格式版本。先读取这部分，再确定后续结构的解析方式。',
           offset: '0 … 6',
           size: '7 字节',
           layout: 'magic[6] | version[1]',
@@ -91,14 +93,14 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Head Magic',
-              description: 'The UTF-8 bytes of the literal string "TsFile". They identify the container but are not a checksum or a content-integrity proof.',
+              description: 'The six bytes spelling "TsFile" identify the file format.',
               offset: '0 … 5',
               size: '6 bytes',
               layout: '54 73 46 69 6c 65',
             },
             zh: {
               title: '头部魔数',
-              description: '字符串 “TsFile” 的 UTF-8 字节。它用于识别容器，但不是校验和，也不能证明内容完整。',
+              description: '由字符串“TsFile”对应的六个字节组成，用于识别文件格式。',
               offset: '0 … 5',
               size: '6 字节',
               layout: '54 73 46 69 6c 65',
@@ -112,14 +114,14 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Format Version',
-              description: 'The one-byte on-disk format identifier. Value 0x04 selects this layout; it is independent of the project 2.x release label.',
+              description: 'Value 0x04 identifies format v4. This byte is separate from the project release number.',
               offset: '6',
               size: '1 byte',
               layout: '04',
             },
             zh: {
               title: '格式版本',
-              description: '单字节磁盘格式标识。数值 0x04 选择本页面所述布局，它与项目的 2.x 发布版本标签相互独立。',
+              description: '数值 0x04 表示 v4 文件格式，与项目的发布版本号分开定义。',
               offset: '6',
               size: '1 字节',
               layout: '04',
@@ -129,6 +131,29 @@ export const tsFileStructure: TsFileStructureNode = {
       ],
     },
     {
+      id: 'file-encryption-header',
+      kind: 'record',
+      link: 'DataPages/Encryption.html#file-encryption-header',
+      text: {
+        en: {
+          title: 'File Encryption Header (optional)',
+          description: 'An optional header at offset 7 selects Page AEAD. It identifies the provider, profile, file crypto ID, and wrapped data key.',
+          offset: '7 … 6 + E; absent when E = 0',
+          size: 'E = 1 + UVarInt-size(payload_size) + payload_size',
+          layout: '06 | payload_size | 01 | provider_id | profile_id | key_id | key_version | file_crypto_id_size | file_crypto_id | wrapped_data_key_size | wrapped_data_key',
+          note: 'The header selects the AEAD layout even though legacy footer encryptLevel is 0. E is its total serialized size; E = 0 when absent.',
+        },
+        zh: {
+          title: '文件加密头（可选）',
+          description: '偏移 7 处的可选加密头用于选择 Page AEAD，记录 provider、profile、文件加密 ID 和封装数据密钥。',
+          offset: '7 … 6 + E；E = 0 时不存在',
+          size: 'E = 1 + UVarInt-size(payload_size) + payload_size',
+          layout: '06 | payload_size | 01 | provider_id | profile_id | key_id | key_version | file_crypto_id_size | file_crypto_id | wrapped_data_key_size | wrapped_data_key',
+          note: '即使旧版 Footer 的 encryptLevel 为 0，也以该头选择 AEAD 布局。E 是该头的总序列化长度，不存在时为 0。',
+        },
+      },
+    },
+    {
       id: 'data-section',
       kind: 'region',
       link: 'DataPages/Chunks.html',
@@ -136,17 +161,17 @@ export const tsFileStructure: TsFileStructureNode = {
         en: {
           title: 'Data Section',
           description:
-            'Marker-delimited Chunk Groups and optional Operation Index Ranges. Structures are written sequentially, and every marker is interpreted only at a known top-level boundary.',
-          offset: '7 … meta_offset - 1',
+            'Chunk Groups and operation-index records appear here in write order. The section begins after any file encryption header and ends before the separator.',
+          offset: '7 + E … meta_offset - 1',
           size: 'variable',
-          layout: 'Chunk Group* | Operation Index Range*',
+          layout: '(ChunkGroup | OperationIndexRange)*',
         },
         zh: {
           title: '数据区',
-          description: '由标记分隔的 Chunk Group 和可选 Operation Index Range。各结构顺序写入，只有位于已知顶层边界的字节才可解释为 marker。',
-          offset: '7 … meta_offset - 1',
+          description: '这里按写入顺序保存 Chunk Group 和操作索引记录，从可选文件加密头之后开始，到分隔符之前结束。',
+          offset: '7 + E … meta_offset - 1',
           size: '可变',
-          layout: 'Chunk Group* | Operation Index Range*',
+          layout: '(ChunkGroup | OperationIndexRange)*',
         },
       },
       children: [
@@ -158,14 +183,14 @@ export const tsFileStructure: TsFileStructureNode = {
             en: {
               title: 'Chunk Group',
               description:
-                'A repeated device-scoped container. All following Chunks belong to its device until another top-level marker is encountered. The group has no total-length field of its own.',
+                'A batch of Chunks for one device. Another Chunk continues the group; a new group, operation-index record, or separator ends it.',
               offset: 'chunk_group_offset',
               size: 'variable · repeated',
               layout: 'Chunk Group Header | Chunk*',
             },
             zh: {
-              title: 'Chunk Group',
-              description: '按设备组织的重复容器。后续 Chunk 均属于该设备，直到遇到下一个顶层标记。Chunk Group 自身没有总长度字段。',
+              title: '设备分组（Chunk Group）',
+              description: '同一设备的一批 Chunk。后续 Chunk 标记表示分组继续，新的分组、操作索引记录或分隔符表示当前分组结束。',
               offset: 'chunk_group_offset',
               size: '可变 · 重复',
               layout: 'Chunk Group Header | Chunk*',
@@ -179,14 +204,14 @@ export const tsFileStructure: TsFileStructureNode = {
               text: {
                 en: {
                   title: 'Chunk Group Header',
-                  description: 'Starts one device group and serializes the segmented DeviceID. The segment count is an element count, and every segment is a separate VarString.',
+                  description: 'Begins a device group with its DeviceID. The identifier stores a segment count followed by separately length-prefixed string segments.',
                   offset: 'chunk_group_offset',
                   size: 'variable',
                   layout: 'marker 0x00 | DeviceID',
                 },
                 zh: {
-                  title: 'Chunk Group Header',
-                  description: '开始一个设备分组，并序列化分片 DeviceID。片段数表示元素数量，每个片段都是独立 VarString。',
+                  title: 'Chunk Group 头部',
+                  description: '开始一个设备分组，并保存 DeviceID：先记录片段数量，再依次记录各个带长度的字符串片段。',
                   offset: 'chunk_group_offset',
                   size: '可变',
                   layout: 'marker 0x00 | DeviceID',
@@ -201,14 +226,14 @@ export const tsFileStructure: TsFileStructureNode = {
                 en: {
                   title: 'Chunk Layout',
                   description:
-                    'A device contains non-aligned Chunks, aligned Chunk sets, or both. Each Chunk stores one physical column.',
+                    'Non-aligned Chunks store time and values together. Aligned Chunk sets put shared timestamps in a Time Chunk and measurements in Value Chunks.',
                   offset: 'after Chunk Group Header',
                   size: 'variable · repeated',
                   layout: 'Non-aligned Chunk | Aligned Chunk Set',
                 },
                 zh: {
                   title: 'Chunk 布局',
-                  description: '一个设备可包含非对齐 Chunk、对齐 Chunk 集，或同时包含两者。每个 Chunk 保存一个物理列。',
+                  description: '非对齐 Chunk 把时间和值放在一起；对齐 Chunk 集用一个 Time Chunk 保存共享时间戳，再用各个 Value Chunk 保存测量值。',
                   offset: 'Chunk Group Header 之后',
                   size: '可变 · 重复',
                   layout: '非对齐 Chunk | 对齐 Chunk 集',
@@ -223,14 +248,14 @@ export const tsFileStructure: TsFileStructureNode = {
                     en: {
                       title: 'Non-aligned Chunk',
                       description:
-                        'Stores one measurement and its independent timestamp stream. Every Page contains both streams, and the decoded timestamp and value counts must match.',
+                        'Stores one measurement with its own timestamps. Each Page contains a time stream and a value stream with matching point counts.',
                       offset: 'chunk_offset',
                       size: 'header + data_size',
                       layout: 'Chunk Header | Non-aligned Page*',
                     },
                     zh: {
                       title: '非对齐 Chunk',
-                      description: '保存一个测量列及其独立时间戳流。每个 Page 同时包含时间流和值流，解码后的时间戳数和值数必须相等。',
+                      description: '保存一个测量及其独立的时间戳。每个 Page 都有时间流和值流，两者解码后的数据点数量相同。',
                       offset: 'chunk_offset',
                       size: 'header + data_size',
                       layout: 'Chunk Header | 非对齐 Page*',
@@ -245,21 +270,21 @@ export const tsFileStructure: TsFileStructureNode = {
                         en: {
                           title: 'Chunk Header',
                           description:
-                            'Describes the value column and gives the exact total byte length of all Page Headers and stored Page data. This boundary lets readers skip the whole Chunk without decoding its codec.',
+                            'Names the measurement and its codecs. data_size counts all Page Headers and stored bodies after this Header, so a reader can locate the next Chunk without decoding values.',
                           offset: 'chunk_offset',
                           size: 'variable',
                           layout:
-                            'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type',
-                          note: 'For a non-aligned Chunk, encoding_type describes the value stream.',
+                            'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type | AEAD suffix?',
+                          note: 'encoding_type describes values; time encoding is external configuration (default TS_2DIFF). The AEAD suffix is int64 ordinal | int32 proof_size | proof[proof_size], outside data_size.',
                         },
                         zh: {
-                          title: 'Chunk Header',
-                          description: '描述值列，并给出全部 Page Header 与磁盘 Page 数据的准确总字节数。读取器可以利用该边界跳过整个 Chunk，而无需调用其编解码器。',
+                          title: 'Chunk 头部',
+                          description: '记录测量名及编解码方式。data_size 统计头部之后全部 Page Header 和载荷的长度，读取器无需解码值就能定位下一个 Chunk。',
                           offset: 'chunk_offset',
                           size: '可变',
                           layout:
-                            'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type',
-                          note: '对于非对齐 Chunk，encoding_type 描述的是值流。',
+                            'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type | AEAD suffix?',
+                          note: 'encoding_type 描述值流；时间编码来自外部配置，默认 TS_2DIFF。AEAD 后缀为 int64 序号 | int32 证明长度 | 证明字节，不计入 data_size。',
                         },
                       },
                     },
@@ -271,21 +296,21 @@ export const tsFileStructure: TsFileStructureNode = {
                         en: {
                           title: 'Non-aligned Page',
                           description:
-                            'The Page Header is followed by one stored Page payload. After decryption and decompression, a length-delimited time stream comes first and the value stream occupies the remaining bytes.',
+                            'After decryption and decompression, the payload starts with the time-stream length and time bytes. The value stream fills the rest of the payload.',
                           offset: 'inside Chunk data_size',
                           size: 'variable · repeated',
                           layout:
                             'Page Header | time_stream_size | encoded_time_stream | encoded_value_stream',
-                          note: 'Timestamps and values pair by position; they are not interleaved point by point.',
+                          note: 'Time and values pair by position. Their codecs can differ; the time codec comes from shared configuration.',
                         },
                         zh: {
                           title: '非对齐 Page',
-                          description: 'Page Header 后是一个磁盘 Page 载荷。解密并解压后，先存带长度的完整时间流，值流占据剩余全部字节。',
+                          description: '解密、解压后的载荷先保存时间流长度和时间流字节，剩余部分保存值流。',
                           offset: 'Chunk data_size 内部',
                           size: '可变 · 重复',
                           layout:
                             'Page Header | time_stream_size | encoded_time_stream | encoded_value_stream',
-                          note: '时间戳和值按位置配对，并不是逐点交错存储。',
+                          note: '时间戳和值按位置配对，可以使用不同编码；时间编码由共享配置提供。',
                         },
                       },
                     },
@@ -299,14 +324,14 @@ export const tsFileStructure: TsFileStructureNode = {
                     en: {
                       title: 'Aligned Chunk Set',
                       description:
-                        'Stores one shared time column followed by aligned measurement value columns. Chunks are contiguous rather than interleaved Page by Page, while equal Page ordinals define correspondence.',
+                        'One Time Chunk is followed by its Value Chunks. Page i in each Value Chunk corresponds to Page i in the Time Chunk; the set has no separate header.',
                       offset: 'first aligned Chunk offset',
                       size: 'variable · repeated',
                       layout: 'Time Chunk | Value Chunk*',
                     },
                     zh: {
                       title: '对齐 Chunk 集',
-                      description: '先保存一个共享时间列，再保存各个对齐测量值列。不同 Chunk 连续存放而不按 Page 交错；相同 Page 序号建立对应关系。',
+                      description: '一个 Time Chunk 后跟若干 Value Chunk。每个 Value Chunk 的第 i 个 Page 对应 Time Chunk 的第 i 个 Page，集合本身没有额外头部。',
                       offset: '第一个对齐 Chunk 的偏移',
                       size: '可变 · 重复',
                       layout: 'Time Chunk | Value Chunk*',
@@ -320,14 +345,14 @@ export const tsFileStructure: TsFileStructureNode = {
                       text: {
                         en: {
                           title: 'Time Chunk',
-                          description: 'Contains all Time Pages for the aligned set. Its Chunk Header records the time encoding, and each decoded Page establishes the logical positions shared by matching Value Pages.',
+                          description: 'Stores the timestamps shared by the aligned measurements. Its Header names the time codec, and each Time Page defines positions for the corresponding Value Pages.',
                           offset: 'time_chunk_offset',
                           size: 'header + data_size',
                           layout: 'Time Chunk Header | Time Page*',
                         },
                         zh: {
-                          title: 'Time Chunk',
-                          description: '包含该对齐集合的全部 Time Page；其 Chunk Header 记录时间编码。每个解码后的 Page 建立对应 Value Page 共用的逻辑位置。',
+                          title: '时间列（Time Chunk）',
+                          description: '保存各对齐测量共享的时间戳。头部说明时间编码，每个 Time Page 确定对应 Value Page 使用的那组位置。',
                           offset: 'time_chunk_offset',
                           size: 'header + data_size',
                           layout: 'Time Chunk Header | Time Page*',
@@ -342,14 +367,14 @@ export const tsFileStructure: TsFileStructureNode = {
                         en: {
                           title: 'Value Chunk',
                           description:
-                            'Contains one aligned measurement column. Value Page number i corresponds to Time Page number i; its bitmap maps present values and nulls onto those shared positions.',
+                            'Stores one aligned measurement. Its Page bitmaps place the stored values at the matching timestamps and leave other positions null.',
                           offset: 'value_chunk_offset',
                           size: 'header + data_size · repeated',
                           layout: 'Value Chunk Header | Value Page*',
                         },
                         zh: {
-                          title: 'Value Chunk',
-                          description: '包含一个对齐测量值列。编号为 i 的 Value Page 对应编号为 i 的 Time Page，并通过位图把实际值和 null 映射到共享位置。',
+                          title: '测量列（Value Chunk）',
+                          description: '保存一个对齐测量列，通过各 Page 的位图把值对应到时间戳，其余位置为 null。',
                           offset: 'value_chunk_offset',
                           size: 'header + data_size · 重复',
                           layout: 'Value Chunk Header | Value Page*',
@@ -369,15 +394,15 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Operation Index Range',
-              description: 'An optional storage-engine record containing two operation sequence numbers for checkpoint, snapshot, backup, or recovery coordination. They are not timestamps or file offsets.',
-              offset: 'between Chunk Groups',
+              description: 'Records the minimum and maximum operation sequence numbers for a flushed batch. A storage engine can use them to relate file data to checkpoints or its operation log.',
+              offset: 'top-level boundary',
               size: '17 bytes',
               layout: 'marker 0x04 | min_operation_index[8] | max_operation_index[8]',
             },
             zh: {
-              title: 'Operation Index Range',
-              description: '可选的存储引擎顶层记录，包含两个操作序列号，用于协调检查点、快照、备份或恢复。它们不是时间戳，也不是文件偏移量。',
-              offset: 'Chunk Group 之间',
+              title: '操作索引范围',
+              description: '记录已刷出批次的最小和最大操作序号，供存储引擎把文件数据与检查点或操作日志关联。',
+              offset: '顶层结构边界',
               size: '17 字节',
               layout: 'marker 0x04 | min_operation_index[8] | max_operation_index[8]',
             },
@@ -392,14 +417,14 @@ export const tsFileStructure: TsFileStructureNode = {
       text: {
         en: {
           title: 'Data/Metadata Separator',
-          description: 'The single top-level separator ending the data section. TsFileMetadata.meta_offset points to this byte; a matching 0x02 inside payload data has no marker meaning.',
+          description: 'Byte 0x02 ends the data section. meta_offset points here, and indexed metadata starts at the next byte.',
           offset: 'meta_offset',
           size: '1 byte',
           layout: '02',
         },
         zh: {
           title: '数据/元数据分隔符',
-          description: '结束数据区的唯一顶层分隔符，TsFileMetadata.meta_offset 指向这个字节。负载内部出现相同的 0x02 不具有 marker 含义。',
+          description: '字节 0x02 结束数据区，meta_offset 指向此处，索引元数据从下一个字节开始。',
           offset: 'meta_offset',
           size: '1 字节',
           layout: '02',
@@ -414,17 +439,17 @@ export const tsFileStructure: TsFileStructureNode = {
         en: {
           title: 'Indexed Metadata Section',
           description:
-            'Timeseries Metadata and metadata index nodes. Their physical ranges can be interleaved and are delimited by absolute offsets; this is a graph of referenced byte ranges, not one self-delimiting list.',
+            'Holds series metadata and index nodes. They can be interleaved, so follow their absolute offsets rather than assuming a fixed order.',
           offset: 'meta_offset + 1 … file_metadata_pos - 1',
           size: 'variable',
-          layout: 'TimeseriesMetadata* | MetadataIndexNode*',
+          layout: '(TimeseriesMetadata | MetadataIndexNode)*',
         },
         zh: {
           title: '索引元数据区',
-          description: 'Timeseries Metadata 与元数据索引节点。两类记录的物理区间可以交错，并由绝对偏移划分；这里是由字节范围引用形成的图，而不是单一自定界列表。',
+          description: '保存时间序列元数据和索引节点。两者可以交错存放，读取时应跟随绝对偏移量，不依赖固定顺序。',
           offset: 'meta_offset + 1 … file_metadata_pos - 1',
           size: '可变',
-          layout: 'TimeseriesMetadata* | MetadataIndexNode*',
+          layout: '(TimeseriesMetadata | MetadataIndexNode)*',
         },
       },
       children: [
@@ -435,15 +460,15 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Timeseries Metadata',
-              description: 'One logical-series record containing aggregate Statistics and a byte-length-delimited Chunk Metadata list. Entries point back to physical Chunk Headers in the data section.',
+              description: 'Describes one series, with summary Statistics and a list of its Chunks. Each Chunk entry points to a Header in the data section.',
               offset: 'referenced by a measurement index entry',
               size: 'variable · repeated',
               layout:
                 'timeseries_type | measurement_id | data_type | chunk_metadata_list_size | Statistics | ChunkMetadata*',
             },
             zh: {
-              title: 'Timeseries Metadata',
-              description: '每个逻辑序列对应一条记录，包含聚合 Statistics 和按字节长度定界的 Chunk Metadata 列表。各条目反向指向数据区的物理 Chunk Header。',
+              title: '时间序列元数据',
+              description: '描述一条时间序列，包含汇总统计信息和 Chunk 列表。列表中的每个条目指向数据区的一个 Chunk Header。',
               offset: '由测量索引条目引用',
               size: '可变 · 重复',
               layout:
@@ -458,14 +483,14 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Metadata Index Node',
-              description: 'An ordered internal or leaf node used to locate devices, measurements, and metadata ranges. Each child offset starts a range whose end is the next child offset or end_offset.',
+              description: 'Locates devices, measurements, or further index nodes. An entry covers bytes from its offset up to, but not including, the next offset or end_offset.',
               offset: 'referenced by a parent node or TsFileMetadata',
               size: 'variable · repeated',
               layout: 'child_count | MetadataEntry* | end_offset | node_type',
             },
             zh: {
-              title: 'Metadata Index Node',
-              description: '用于定位设备、测量列和元数据区间的有序内部节点或叶子节点。每个子项的范围从自身 offset 开始，到下一子项 offset 或 end_offset 结束。',
+              title: '元数据索引节点',
+              description: '用于查找设备、测量或下一级索引节点。每个条目的字节范围从自身偏移开始，到下一偏移或 end_offset 之前结束。',
               offset: '由父节点或 TsFileMetadata 引用',
               size: '可变 · 重复',
               layout: 'child_count | MetadataEntry* | end_offset | node_type',
@@ -482,7 +507,7 @@ export const tsFileStructure: TsFileStructureNode = {
         en: {
           title: 'TsFileMetadata',
           description:
-            'The file-level index roots, table schemas, data-section offset, Bloom filter, and properties. Its start is derived from the trailing fixed-width length, so no preceding marker is needed.',
+            'The entry point for metadata lookup: table index roots, schemas, separator offset, Bloom filter, and properties. Its start is calculated from the trailing length.',
           offset: 'file_metadata_pos = F - 6 - 4 - L',
           size: 'L bytes',
           layout:
@@ -491,7 +516,7 @@ export const tsFileStructure: TsFileStructureNode = {
         },
         zh: {
           title: 'TsFileMetadata',
-          description: '包含文件级索引根、表 Schema、数据区偏移、布隆过滤器以及文件属性。其起点由尾部定宽长度反向计算，因此前面无需 marker。',
+          description: '元数据查找的入口，保存表索引根、Schema、分隔符偏移、布隆过滤器和属性。通过文件尾的长度反向定位其起点。',
           offset: 'file_metadata_pos = F - 6 - 4 - L',
           size: 'L 字节',
           layout: 'table indexes | table schemas | meta_offset | BloomFilter | properties',
@@ -505,13 +530,13 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Table Index Roots',
-              description: 'Named device-index roots for tree-model and table-model data. A root stores the entry range used to descend toward one device and then one measurement.',
+              description: 'Stores each table\'s device-index root. Follow a root to find a device, then its measurements.',
               offset: 'inside TsFileMetadata',
               size: 'variable · repeated',
             },
             zh: {
               title: '表索引根',
-              description: '树模型与表模型数据使用的具名设备索引根。根节点保存向下定位某个设备、再定位某个测点所需的条目范围。',
+              description: '保存各表的设备索引根。从根节点查找设备，再查找设备下的测量。',
               offset: 'TsFileMetadata 内部',
               size: '可变 · 重复',
             },
@@ -524,13 +549,13 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Table Schemas',
-              description: 'Named schemas for explicit table-model data. Column names, physical types, and categories preserve a common column order.',
+              description: 'Describes table columns in their declared order, including names, types, and categories. FIELD Chunks are matched by measurement name.',
               offset: 'inside TsFileMetadata',
               size: 'variable · repeated',
             },
             zh: {
               title: '表 Schema',
-              description: '显式表模型数据使用的具名 Schema。列名、物理类型和列类别共同保持同一个列顺序。',
+              description: '按声明顺序描述表的列，记录列名、类型和类别；FIELD Chunk 通过测量名与列对应。',
               offset: 'TsFileMetadata 内部',
               size: '可变 · 重复',
             },
@@ -542,14 +567,14 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'meta_offset',
-              description: 'Absolute offset of the top-level 0x02 separator at the end of the data section. The indexed metadata section begins at the following byte.',
+              description: 'The absolute offset of the separator. Add one to find the start of indexed metadata.',
               offset: 'inside TsFileMetadata',
               size: '8 bytes',
               layout: 'int64, big-endian',
             },
             zh: {
               title: 'meta_offset',
-              description: '数据区末尾顶层 0x02 分隔符的绝对偏移；索引元数据区从它的下一个字节开始。',
+              description: '分隔符的绝对偏移量，加一就是索引元数据区的起点。',
               offset: 'TsFileMetadata 内部',
               size: '8 字节',
               layout: 'int64，大端序',
@@ -563,37 +588,38 @@ export const tsFileStructure: TsFileStructureNode = {
           text: {
             en: {
               title: 'Bloom Filter',
-              description: 'Optional membership filter used to reject missing full paths without index traversal. A negative answer is definitive; a positive answer still requires metadata lookup.',
+              description: 'Can rule out a missing path before an index lookup. Trust a negative result only when path encoding and hashing match the writer.',
               offset: 'inside TsFileMetadata',
               size: 'variable',
-              layout: 'filter bytes | bit count | hash-function count',
+              layout: 'byte_length | filter bytes | bit count | hash-function count',
             },
             zh: {
               title: '布隆过滤器',
-              description: '可选的成员过滤器，无需遍历索引即可排除不存在的完整路径。否定结果是确定的，肯定结果仍需查询元数据确认。',
+              description: '可以在查索引之前排除不存在的路径，但要先确认路径编码和哈希方式与写入端一致。',
               offset: 'TsFileMetadata 内部',
               size: '可变',
-              layout: 'filter bytes | bit count | hash-function count',
+              layout: 'byte_length | filter bytes | bit count | hash-function count',
             },
           },
         },
         {
           id: 'file-properties',
           kind: 'repeated',
+          link: 'Metadata.html#file-metadata',
           text: {
             en: {
               title: 'File Properties',
-              description: 'A length-delimited map of string keys and values, including encryption properties when present. Unknown properties remain structurally consumable.',
+              description: 'Maps UTF-8 keys to nullable binary values. Keep unknown values as raw bytes; only a property\'s own definition can say whether its value is text.',
               offset: 'end of TsFileMetadata',
               size: 'variable · repeated',
-              layout: 'property_count | (key | value)*',
+              layout: 'VarInt property_count | (VarString key | VarBinary value)*',
             },
             zh: {
               title: '文件属性',
-              description: '按长度定界的字符串键值映射；启用加密时也包含加密属性。未知属性在结构上仍可读取和跳过。',
+              description: '把 UTF-8 键映射到可空的二进制值。未知值按原始字节保留，只有具体属性定义才能决定它是否应按文本解释。',
               offset: 'TsFileMetadata 尾部',
               size: '可变 · 重复',
-              layout: 'property_count | (key | value)*',
+              layout: 'VarInt property_count | (VarString key | VarBinary value)*',
             },
           },
         },
@@ -605,14 +631,14 @@ export const tsFileStructure: TsFileStructureNode = {
       text: {
         en: {
           title: 'TsFileMetadata Size',
-          description: 'The big-endian serialized byte length L of TsFileMetadata. With file size F, metadata occupies exactly [F - 10 - L, F - 10).',
+          description: 'Stores L, the byte length of TsFileMetadata. Subtract L and the ten trailing bytes from file size F to locate that metadata.',
           offset: 'F - 10 … F - 7',
           size: '4 bytes',
           layout: 'int32 L, big-endian',
         },
         zh: {
           title: 'TsFileMetadata 长度',
-          description: 'TsFileMetadata 的大端序列化字节长度 L。文件大小为 F 时，元数据恰好位于 [F - 10 - L, F - 10)。',
+          description: '保存 TsFileMetadata 的字节长度 L。用文件大小 F 减去 L 和尾部十个字节，即可找到元数据起点。',
           offset: 'F - 10 … F - 7',
           size: '4 字节',
           layout: 'int32 L，大端序',
@@ -625,14 +651,14 @@ export const tsFileStructure: TsFileStructureNode = {
       text: {
         en: {
           title: 'Tail Magic',
-          description: 'The same six-byte magic string as the file header. It supports completion checks but is not sufficient without validating the footer length and structure.',
+          description: 'The same six magic bytes as the header. Check this suffix together with the footer length and metadata structure before opening the file.',
           offset: 'F - 6 … F - 1',
           size: '6 bytes',
           layout: '54 73 46 69 6c 65',
         },
         zh: {
           title: '尾部魔数',
-          description: '与文件头相同的 6 字节魔数字符串。它可用于完成性检查，但还必须同时校验 Footer 长度与结构。',
+          description: '与文件头相同的六个魔数字节。打开文件时，还要同时检查 Footer 长度和元数据结构。',
           offset: 'F - 6 … F - 1',
           size: '6 字节',
           layout: '54 73 46 69 6c 65',

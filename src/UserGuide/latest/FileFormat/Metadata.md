@@ -30,7 +30,8 @@ Footer metadata starts after `SEPARATOR (0x02)`. Ranges of `TimeseriesMetadata` 
 index nodes may be interleaved. The `offset` and `end_offset` fields in the indexes delimit each
 range. Every offset is an absolute byte offset measured from the beginning of the file.
 
-The metadata hierarchy supports progressively finer pruning:
+A lookup follows the hierarchy below. Each level narrows the search, from a table to the Pages
+that may contain matching values:
 
 | Level | Identifies | Primary use |
 | --- | --- | --- |
@@ -78,15 +79,13 @@ they correspond to the values at the first and last covered timestamps. The `sta
 `end_time` fields are inclusive. Numeric `sum` fields are intended for aggregation; notably, an
 `INT64` sum is stored as `float64` and can lose integer precision for large magnitudes.
 
-Statistics are conservative pruning metadata. A reader may skip a structure when its time range
-does not intersect the query range, or when a supported value summary proves that no value can
-match. It must not infer a match merely from overlapping ranges. Types without minimum/maximum
-fields, such as `BLOB` and `OBJECT`, cannot support range pruning through Statistics.
+Statistics help rule out data that cannot match a query. For example, a Page whose time range
+falls entirely before the requested range can be skipped. Overlapping ranges only mean the Page
+might match; the reader still needs to check its values. Types without minimum/maximum
+fields, such as `BLOB`, `OBJECT`, and `TEXT`, cannot support range pruning through Statistics.
 
-Statistics at a parent level summarize all values represented by that parent. For a series with
-multiple Chunks, series Statistics cover the union of the Chunk Statistics. For a multi-Page
-Chunk, Chunk Statistics cover the union of Page Statistics. Counts and time bounds must be
-consistent with those lower-level records.
+Chunk Statistics summarize all Pages in that Chunk; series Statistics summarize all of its
+Chunks. Parent counts add the child counts, and parent time bounds cover the child ranges.
 
 ## Timeseries Metadata
 
@@ -114,7 +113,7 @@ low 6 bits = 1: more than one Chunk; every ChunkMetadata contains Statistics
 
 ## Chunk Metadata
 
-When `timeseries_type & 0x3f == 0`, the timeseries has exactly one Chunk:
+When `(timeseries_type & 0x3f) == 0`, the timeseries has exactly one Chunk:
 
 ```text
 ChunkMetadata := int64 offset_of_chunk_header
@@ -122,7 +121,7 @@ ChunkMetadata := int64 offset_of_chunk_header
 
 The Chunk uses `series_statistics` as its Statistics.
 
-When `timeseries_type & 0x3f != 0`:
+When `(timeseries_type & 0x3f) != 0`:
 
 ```text
 ChunkMetadata :=
@@ -132,9 +131,9 @@ ChunkMetadata :=
 
 `offset_of_chunk_header` points to the Chunk marker, which is the first byte of the Chunk Header.
 
-`chunk_metadata_list_size` is a byte boundary, not a Chunk count. A reader first computes the end
-of the list, then deserializes Chunk Metadata records until it reaches exactly that end. Ending
-early, crossing the boundary, or leaving trailing bytes is a format error.
+`chunk_metadata_list_size` is the serialized byte length of the list. Add it to the list start
+to find the end, then read Chunk Metadata records until that end is reached exactly. The field
+does not give the number of Chunks.
 
 ## Metadata Index
 
@@ -167,8 +166,9 @@ MeasurementIndexEntry :=
     int64     offset
 ```
 
-The `offset` of an Entry is the start of its range. Its end is the `offset` of the next Entry; the
-last Entry ends at the node's `end_offset`.
+An Entry describes a half-open byte range `[offset, next_offset)`. The next Entry supplies
+`next_offset`; for the last Entry, use the node's `end_offset`. The end byte belongs to the next
+range, not the current one.
 
 ```text
 entry[0].offset <= entry[1].offset <= ... <= end_offset
@@ -185,7 +185,10 @@ To find key `K` in an index node, select the last Entry whose first key is less 
 or at the node's `end_offset` for the last Entry. An internal node range contains another index
 node; a leaf range contains the object named in the table above.
 
-An index reader validates the node before following it:
+If no Entry key is less than or equal to `K`, the key is absent from this node. A measurement
+leaf can cover several Timeseries Metadata records; read that range to find the exact measurement.
+
+Before following a node, check that:
 
 - `child_count` is consistent with the number of complete Entries in the node.
 - Entry keys are sorted according to the node's key comparator.
@@ -221,8 +224,13 @@ NamedTableSchema :=
 
 Property :=
     VarString key
-    VarString value
+    VarBinary value
 ```
+
+Property keys are UTF-8 strings; values are nullable raw byte arrays, not UTF-8 strings.
+For example, value bytes `ff fe 00 80` serialize as `08 ff fe 00 80`: `08` is `VarInt(4)`.
+A null value is `01` (`VarInt(-1)`), while an empty value is `00`. Preserve unknown values
+byte-for-byte, and decode them as text only when the property contract requires it.
 
 `meta_offset` points to the `0x02` separator at the end of the data section. There is no marker
 before `TsFileMetadata`; its starting position is determined by the 4-byte length stored at the
@@ -278,7 +286,10 @@ Column category identifiers are:
 | 2 | `ATTRIBUTE` |
 | 3 | `TIME` |
 
-Column order is significant because table records and aligned value columns refer to the schema
-positionally. `TAG` columns participate in device identity, `FIELD` columns hold measured values,
-`ATTRIBUTE` columns describe entities, and `TIME` identifies the time column. The category does
-not replace `data_type`; both fields are required to interpret a column.
+The schema preserves column order. In particular, TAG column order determines the order of
+DeviceID segments. FIELD Chunks are identified by `measurement_id`; their physical order does not
+have to match the FIELD column order in the schema.
+
+`TAG` columns identify a device, `FIELD` columns hold measured values, `ATTRIBUTE` columns
+describe an entity, and `TIME` identifies the time column. A column needs both its category and
+its `data_type`: the category describes its role, while the type describes its values.

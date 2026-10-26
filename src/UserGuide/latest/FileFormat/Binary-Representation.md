@@ -46,12 +46,9 @@ is written first.
 value = Σ ((byte[i] & 0x7f) << (7 * i))
 ```
 
-The encoding occupies one to five bytes and uses the shortest form.
-
-For example, decimal `300` is split into low-order seven-bit groups `0x2c` and `0x02`, producing
-`ac 02`. A reader must stop after at most five bytes for a 32-bit field and must detect a shift or
-value overflow. Writers emit the canonical shortest representation; overlong representations are
-not generated.
+The encoding uses the shortest representation, from one to five bytes. For example, decimal
+`300` splits into the seven-bit groups `0x2c` and `0x02`, so its encoded bytes are `ac 02`.
+A 32-bit decoder rejects an unterminated sequence after five bytes and checks for overflow.
 
 ## Signed Variable-length Integer
 
@@ -76,13 +73,17 @@ zigzag(n) = (n << 1) XOR (n >> 31)
 | `VarString` | `VarInt byte_length` + `byte[byte_length]` |
 | `String32` | `int32 byte_length` + `byte[byte_length]` |
 | `Binary32` | `int32 byte_length` + `byte[byte_length]` |
+| `VarBinary` | `VarInt byte_length` + `byte[byte_length]` |
 
-A length of `-1` represents null, and a length of `0` represents an empty string or byte array.
-`VarString` and `String32` contain UTF-8; `Binary32` contains raw bytes.
+For `VarString`, `String32`, and `VarBinary`, a length of `-1` represents null; a length of `0`
+represents an empty string or byte array. `Binary32` does not accept a negative length.
+`VarString` and `String32` contain UTF-8; `Binary32` and `VarBinary` contain raw bytes.
+`VarBinary` uses a signed ZigZag length, unlike the unsigned lengths of the binary components in
+[FileEncryptionHeader](DataPages/Encryption.md#file-encryption-header).
 
-The length counts encoded bytes, not Unicode code points or characters. For example, a UTF-8
-string containing one non-ASCII character can have a byte length greater than one. Null and empty
-are distinct wire values and must remain distinct in structures whose fields are nullable.
+String lengths count bytes after UTF-8 encoding. For example, `温` occupies three bytes, so its
+`VarString` length field is `VarInt(3)`, encoded as `06`. A nullable field preserves the distinction
+between null and an empty value.
 
 ## Boundaries and Defensive Decoding
 
@@ -96,9 +97,9 @@ current_offset + N >= current_offset
 current_offset + N <= enclosing_end
 ```
 
-The second comparison detects integer wraparound. A reader should additionally enforce a local
-resource limit; a structurally valid length does not require an implementation to allocate an
-unbounded amount of memory.
+The second comparison detects wraparound when offset arithmetic uses fixed-width integers.
+Check these bounds before allocating memory, and apply an implementation-specific size limit
+as well: a length can fit within the file and still be too large for the reader to allocate.
 
 Fixed-width values require their complete byte width. A truncated `int64`, unterminated VarInt,
 negative non-null length, invalid UTF-8 where a string is required, or bytes left over after a
@@ -109,5 +110,11 @@ length-delimited record are format errors.
 Offsets stored in metadata are signed 64-bit values but represent non-negative absolute byte
 positions. An offset points to the first byte of the named structure: for example,
 `offset_of_chunk_header` points to the Chunk marker, and `meta_offset` points to the `0x02`
-separator. Lengths are not implicit offsets; arithmetic that combines an offset and length must
-be checked for overflow and against the enclosing file or record boundary.
+separator. To find the end of a structure, add its length to its start offset using the bounds checks above.
+
+## Reading Layout Examples
+
+In layout examples, `?` marks an optional field or structure, `*` allows zero or more repetitions,
+and `[n]` means n elements. The surrounding description or a preceding length field determines
+which case applies. `remaining bytes` means the unused bytes up to the enclosing payload boundary;
+for a Page layout, that is the end of its decrypted, decompressed payload.

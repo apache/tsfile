@@ -39,21 +39,22 @@ Chunk Header、Timeseries Metadata 和 Table Schema 使用单字节 `data_type` 
 | 11 | `STRING` | UTF-8 字符串 |
 | 12 | `OBJECT` | 对象值的字节表示 |
 
-`DATE` 的物理值示例：2026-07-27 写为十进制整数 `20260727`，不是 Unix epoch day。
+例如，日期 2026-07-27 用十进制整数 `20260727` 表示，并非从 Unix 纪元起累计的天数。
 
-数据类型决定 Statistics 的附加字段和值编码器的输入类型。具体线上值格式见
-[Encodings](DataPages/Encodings.md)。
+数据类型决定 Statistics 的附加字段和值编码器的输入类型。值的字节布局见
+[编码](DataPages/Encodings.md)。
 
 ## 物理类型与逻辑类型
 
-类型编号决定物理解码器；`TIMESTAMP` 和 `DATE` 还具有额外的逻辑解释：
+数据类型说明值的取值范围，编码方式决定这些值如何写成字节。`TIMESTAMP` 和 `DATE`
+还为底层整数赋予了具体含义：
 
-- `TIMESTAMP` 与 `INT64` 具有相同的八字节物理值域。时间单位由使用该文件的协议或数据集
-  提供，TsFile v4 不序列化该单位。
+- `TIMESTAMP` 与 `INT64` 具有相同的有符号 64 位取值范围，时间单位由使用该文件的协议
+  或数据集约定，TsFile v4 不保存这个单位。
 - `DATE` 与 `INT32` 使用相同的整数编码接口，但有效逻辑值采用十进制 `YYYYMMDD` 形式。
 - `TEXT` 是带长度的字节串。`STRING` 使用相同的物理二进制容器，但具有 UTF-8 字符串
   语义；`BLOB` 是不解释的二进制数据。
-- `OBJECT` 是不透明的二进制表示，其对象契约必须在文件格式之外约定。
+- `OBJECT` 保存对象的字节表示，如何从这些字节还原对象，由交换文件的应用约定。
 
 `VECTOR` 是对齐数据共享时间列使用的物理标记，不是标量值类型，也不定义独立值流编码。
 `UNKNOWN` 是哨兵值，不能作为可解码测量 Page 的有效类型。
@@ -73,9 +74,9 @@ Chunk Header、Timeseries Metadata 和 Table Schema 使用单字节 `data_type` 
 
 ## 排序与比较
 
-整数和浮点值按数值顺序生成最小/最大 Statistics。`STRING` 的最小/最大值按序列化字节的
-二进制字典序比较。`TEXT` 只保存 first 和 last，`BLOB` 与 `OBJECT` 不保存类型专有的值
-Statistics。
+整数和浮点值按数值顺序生成最小/最大 Statistics。`STRING` 的最小/最大值按原始值字节的
+字典序比较，不包含长度前缀。`TEXT` 只保存 first 和 last，`BLOB` 与 `OBJECT` 不保存
+类型专有的值统计信息。
 
 类型提升和应用层转换不编码在 TsFile 中。读取器可以对外提供转换，但这不会改变磁盘
 `data_type`，也不会改变计算 Statistics 时使用的字节和值域。

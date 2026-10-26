@@ -57,12 +57,13 @@ position_count      = 对应 Time Page 的 decoded_timestamp_count
 如果整个 Value Page 都是 null，Page 只写一个值为 0 的 `uncompressed_size`：
 
 ```text
-EmptyPage := UVarInt(0)
+EmptyAlignedValuePage := UVarInt(0)
 ```
 
 空 Page 不保存 `compressed_size`、Statistics、位图或值流。其位置数量由对应的
 Time Page 确定。
 
-缺少 Value Chunk 与空 Value Page 的含义不同。缺少 Chunk 表示该 Chunk Group 中没有
-该测点的物理列；空 Page 表示该值列存在，并维持 Page 之间的位置对应关系，但在这个
-区间的所有位置均为 null。
+空 Value Page 会保留它在 Page 序列中的位置，使后续 Value Page 仍能对应到正确的
+Time Page。缺少 Value Chunk 则表示这个对齐 Chunk 集中没有该测量的物理列。还有一种
+情况是 `data_size = 0` 的 Value Chunk：它有 Header，但不包含任何 Page。遍历对齐
+Chunk 集时，需要区分这三种情况。

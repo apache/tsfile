@@ -60,12 +60,13 @@ bitmap bits or encoded values.
 If an entire Value Page is null, the Page consists only of an `uncompressed_size` equal to zero:
 
 ```text
-EmptyPage := UVarInt(0)
+EmptyAlignedValuePage := UVarInt(0)
 ```
 
 An empty Page has no `compressed_size`, Statistics, bitmap, or value stream. Its position count is
 obtained from the corresponding Time Page.
 
-An absent Value Chunk and an empty Value Page are different. An absent Chunk means that the
-measurement has no physical column in that Chunk Group. An empty Page preserves the Page-to-Page
-alignment of an existing value column while stating that every position in that interval is null.
+An empty Value Page preserves its position in the Page sequence, so subsequent Value Pages still
+match the correct Time Pages. An absent Value Chunk has no physical column for that aligned Chunk
+set. A Value Chunk with `data_size = 0` is a third case: its Header exists, but it contains no
+Pages. These cases must be distinguished when walking the aligned Chunk set.

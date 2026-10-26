@@ -21,50 +21,41 @@
 
 # Format Versions
 
-The TsFile format version follows the leading magic string:
+The format version is the byte immediately after the leading magic string:
 
 ```text
 6-byte magic string "TsFile"
 1-byte format version
 ```
 
-This documentation describes version byte `0x04`. After validating the leading magic string, a
-reader selects the corresponding file layout from the version byte.
+This guide describes `0x04`. The format byte and the project release number serve different
+purposes: a release in the 2.x series can use file format v4. The project release label is not
+stored in the file header.
 
-Version 4 uses segmented `DeviceID` values and stores per-table device-index roots and Table
-Schemas in `TsFileMetadata`. Version 3 uses a single-string device identifier and a different
-footer layout; it cannot be parsed with the version 4 `DeviceID` or `TsFileMetadata` structures.
+Version 4 uses segmented DeviceIDs and stores per-table device-index roots and Table Schemas
+in `TsFileMetadata`. Version 3 uses a single-string device identifier and a different footer.
+A reader needs the corresponding version's structures to parse either file correctly.
 
 ## Reader Dispatch
 
-The version byte is interpreted before any data-section marker. A reader therefore follows this
-order:
+Read the version before interpreting data markers, then select the encryption mode:
 
 ```text
-validate leading magic -> read version -> select complete version grammar -> parse data/footer
+validate leading magic -> read version -> inspect optional encryption header
+  -> resolve encryption mode/profile -> parse the matching data/footer grammar
 ```
 
-An implementation that supports version 4 but not the observed byte must report an unsupported
-version. It must not probe the file as v4 based on a familiar marker or footer suffix, because the
-meaning and width of structures may differ between versions.
+If the observed version is unsupported, report that before parsing the data. A familiar marker
+or tail magic does not establish that the rest of the file uses the expected layout.
 
 ## Compatibility Contract
 
-Compatibility is defined at the byte-format level:
+Within a supported version, a reader also needs the types, codecs, and encryption features used
+by the requested data. For example, v4 Page AEAD files have a `0x06` encryption header at offset
+`7`, which selects an extended Chunk Header and a Page-body profile. The version byte stays
+`0x04`; a v4 reader without this capability must report it as unsupported.
 
-- A v4 reader may read a v4 file when it supports every identifier required by the selected data.
-- A v4 writer emits the v4 grammar described by this documentation, independent of its programming
-  language or in-memory classes.
-- Unknown footer properties can be consumed because each key and value is length-delimited.
-- Unknown data-section markers cannot generally be skipped because markers have no common payload
-  length.
-- Numeric identifiers already assigned to types, encodings, compression methods, markers, and
-  index-node kinds retain their meanings within v4.
-
-Support for a version does not imply support for every optional codec or encryption algorithm.
-When such a feature is unavailable, the containing Chunk may remain structurally skippable, but
-its sample values are not decodable.
-
-The project release series and the on-disk format byte are separate version spaces. A product in
-the 2.x release series can read and write format byte `0x04`; the release label is not serialized
-in the TsFile header.
+Assigned identifiers keep their meanings. Unknown footer properties have length-delimited keys
+and values, so their byte ranges can be consumed. Unknown data markers generally cannot be
+skipped because they have no common payload length. [Extensibility](Extensibility.md) explains
+these boundaries, and [Encryption](DataPages/Encryption.md) defines the AEAD layout.

@@ -21,19 +21,23 @@
 
 # Chunks
 
-The TsFile data section starts at offset 7 and consists of marker-delimited Chunk Groups, Chunks,
-and Operation Index Ranges.
+The TsFile data section consists of marker-delimited Chunk Groups, Chunks, and Operation Index
+Ranges. It starts at offset `7` without a file encryption header, or at `7 + E` when a Page AEAD
+[FileEncryptionHeader](Encryption.md#file-encryption-header) of total serialized size `E` occupies
+offset `7`. That optional header occurs exactly once, before the data section.
 
 The top-level grammar is:
 
 ```text
-DataSection := (ChunkGroup | OperationIndexRange)* Separator
+FilePrefix  := magic[6] version[1] FileEncryptionHeader?
+DataSection := (ChunkGroup | OperationIndexRange)*
 ChunkGroup  := ChunkGroupHeader Chunk*
 Separator   := byte(0x02)
 ```
 
-`Chunk*` is not length-prefixed as a group. A reader recognizes the end of a Chunk Group only
-after consuming each Chunk by its `data_size` and then reading the next top-level marker.
+The `0x02` separator follows the data section; it is not part of a Chunk Group. A Chunk Group
+has no total-length field. After reading each Chunk, the reader examines the next marker: another
+Chunk continues the group, while a new group, operation-index record, or separator ends it.
 
 ```text
 File
@@ -57,6 +61,7 @@ File
 | `0x03` | `VERSION` | Unused since v3; identifier reserved |
 | `0x04` | `OPERATION_INDEX_RANGE` | Two `int64` values |
 | `0x05` | `ONLY_ONE_PAGE_CHUNK_HEADER` | Single-page non-aligned Chunk |
+| `0x06` | `ENCRYPTION_HEADER` | File encryption header at offset `7` only; not a Chunk |
 | `0x41` | `VALUE_CHUNK_HEADER` | Multi-page aligned Value Chunk |
 | `0x45` | `ONLY_ONE_PAGE_VALUE_CHUNK_HEADER` | Single-page aligned Value Chunk |
 | `0x81` | `TIME_CHUNK_HEADER` | Multi-page aligned Time Chunk |
@@ -74,8 +79,8 @@ low 6 bits = 0x05: one Page or no Page
 
 An aligned Value Chunk with `data_size = 0` can contain no Page.
 
-A marker is interpreted only at a known structure boundary. Marker values can occur inside an
-encoded or compressed Page payload and have no structural meaning there.
+Read markers only after consuming the preceding structure. A Page body can contain any byte
+value, including bytes that look like markers.
 
 ## Chunk Group Header
 
@@ -89,17 +94,16 @@ DeviceID :=
     VarString  segment[segment_count]
 ```
 
-A device identifier is an ordered tuple of nullable string segments. Trailing null segments are
-removed during serialization, and a device identifier cannot consist entirely of null segments.
-On read, `segment_count = 0` represents a device containing one empty-string segment.
+A DeviceID is an ordered list of string segments; individual segments can be null. Serialization
+removes trailing nulls, but at least one segment must be non-null. The special `segment_count = 0`
+form is read as one empty-string segment.
 
 Chunks following a Chunk Group Header belong to that device until the next Chunk Group Header,
 Operation Index Range, or Separator.
 
-`segment_count` counts serialized tuple elements, not UTF-8 bytes. Each segment is independently
-length-delimited. Device identity is the ordered tuple itself; joining segments with a display
-separator is not part of the binary format and can be ambiguous when a segment contains that
-separator.
+`segment_count` counts segments. Each segment has its own byte length. Keep the segments separate
+when comparing device identities: joining them with dots for display can be ambiguous if a segment
+itself contains a dot.
 
 ## Chunk Header
 
@@ -113,7 +117,15 @@ ChunkHeader :=
     byte       data_type
     byte       compression_type
     byte       encoding_type
+    int64      chunk_ordinal?
+    int32      chunk_authentication_size?
+    byte       chunk_authentication[chunk_authentication_size]?
 ```
+
+The final three fields appear only in Page AEAD files. The file encryption header selects this
+suffix; the Chunk marker remains the same. The ordinal, proof format, and validation rules are
+described in [AEAD Chunk Header](Encryption.md#aead-chunk-header). Like the rest of the Header,
+the suffix is excluded from `data_size`.
 
 `data_size` is the total size of all Page Headers and stored Page data in the Chunk. It does not
 include the Chunk Header. A reader consumes exactly `data_size` bytes after the Chunk Header.
@@ -134,7 +146,8 @@ Aligned data is stored Chunk by Chunk, not as interleaved Time Pages and Value P
 Chunk stores the complete sequence of Time Pages, and each Value Chunk stores its own sequence of
 Value Pages. Pages correspond by ordinal position.
 
-An aligned set has the following invariants:
+An aligned Chunk set is one Time Chunk followed by its Value Chunks. It has no separate set
+header. The relationships within a set are:
 
 - The Time Chunk appears before the Value Chunks that use it.
 - A Value Chunk identifies an individual measurement; the Time Chunk uses an empty
@@ -151,10 +164,13 @@ elements.
 
 A streaming or recovery reader can process the data section with this state machine:
 
-1. At offset 7, read one top-level marker.
+1. Validate the prefix, inspect offset `7`, and consume the optional `0x06` encryption header.
+   Resolve its provider/profile before parsing Chunks; continue at `data_start = 7 + E` (`E = 0`
+   when absent). A later or repeated `0x06` is invalid. Read the first data-section marker there.
 2. For `0x00`, read the DeviceID and enter that Chunk Group.
-3. For a Chunk marker, read its Header and advance by exactly `data_size` bytes after optionally
-   parsing its Pages.
+3. For a Chunk marker, read its complete Header, including the AEAD suffix when selected, and
+   verify the Chunk-position proof before using its identity. Advance by exactly `data_size` bytes
+   after optionally parsing its Pages.
 4. For `0x04`, consume the following 16 bytes as an operation-index range.
 5. For `0x02`, stop. The following byte belongs to the indexed metadata region.
 6. Reject an unrecognized top-level marker or a structure whose declared boundary exceeds the
@@ -169,13 +185,11 @@ OperationIndexRange :=
     int64  max_operation_index
 ```
 
-This structure records the minimum and maximum operation indexes involved in the most recent
-write batch. Operation indexes are storage-engine sequence numbers; they are not timestamps,
-measurement indexes, or file offsets. They can support checkpoint, snapshot, backup, and recovery
-logic by describing which logical operations have reached the file.
+This optional record lets a storage engine associate a flushed batch with its operation log.
+The two values are the minimum and maximum operation sequence numbers in that batch. They help
+coordinate checkpoints, snapshots, backups, and recovery; they are unrelated to timestamps or
+file offsets.
 
-The record is optional for a general-purpose writer. A writer without operation-index semantics
-may omit it or write a placeholder range. A reader that does not use this information still has
-to recognize marker `0x04` and skip the complete 16-byte payload so that the next marker is read
-at the correct boundary. Multiple records can occur because multiple write batches can be
-flushed into one file.
+A general-purpose writer can omit this record. A reader that does not use operation indexes
+still consumes both `int64` fields before reading the next marker. Several records can appear
+when several batches are flushed into the same file.

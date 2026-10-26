@@ -21,21 +21,15 @@
 
 # Error Recovery
 
-A completed TsFile contains the leading magic string, version byte, `0x02` separator, footer
-metadata, 4-byte `TsFileMetadata` length, and trailing magic string. A file without the footer
-length or trailing magic string is incomplete.
-
-A recovery reader can scan the data section from offset 7 by markers and use the `data_size` in
-each Chunk Header to skip a complete Chunk. Within a Chunk, the sum of the serialized Page lengths
-equals `data_size`.
-
-A scanner cannot treat an arbitrary `0x02` byte in Page data as a separator. It may read the next
-marker only after completely parsing or skipping the structure delimited by the preceding marker.
+The footer is written after the data section. If writing stops before that happens, some complete
+Chunks may still be present even though the file cannot be opened through its indexes. Recovery
+finds those structures by scanning forward from the file header, then rebuilds the missing indexes
+and footer from the data it can retain.
 
 ## Completion Check
 
-Given file size `F` and the big-endian footer length `L` stored at `[F - 10, F - 6)`, a completed
-file must satisfy all of the following before ordinary metadata-first reading begins:
+For a file of size `F`, read the big-endian metadata length `L` from `[F - 10, F - 6)`. A completed
+file has these relationships:
 
 ```text
 bytes[F - 6, F)            = "TsFile"
@@ -44,44 +38,45 @@ meta_offset                = offset of the top-level 0x02 separator
 meta_offset < F - 10 - L
 ```
 
-The leading magic and version must also be valid, and the `TsFileMetadata` decoder must consume
-exactly `L` bytes. A valid tail magic by itself does not prove that the file is complete.
+Also check the leading magic and version, and parse exactly `L` bytes of `TsFileMetadata`.
+Tail magic alone is insufficient: the footer length and its internal offsets must be usable.
 
 ## Safe Forward Scan
 
-A recovery scanner can identify the longest structurally complete prefix of the data section:
+A forward scan uses the same Chunk layout as an ordinary reader, but does not rely on the footer:
 
-1. validate the leading magic and version and set the cursor to offset `7`;
-2. at a known top-level boundary, read one marker;
-3. for a Chunk Group Header (`0x00`), decode its complete `DeviceID` and remember the group context;
-4. for a Chunk marker, decode the complete Chunk Header, validate `cursor + data_size`, then either
-   skip that range or validate all Page boundaries inside it;
-5. for an Operation Index Range (`0x04`), consume exactly two big-endian `int64` values;
-6. stop successfully at the top-level separator (`0x02`), or stop at the last known-good boundary
-   when a field or payload is incomplete.
+1. Check the magic and version. Inspect offset `7` and consume an optional `0x06` encryption
+   header. The data starts at `7 + E`, where `E` is the header's total size or zero when absent.
+2. At a structure boundary, read a marker. For `0x00`, read the DeviceID and remember the group.
+3. For a Chunk marker, read its complete Header, including the AEAD suffix when required.
+   Verify the Chunk proof before using its identity, then check that `data_size` fits in the
+   remaining file. Inspect the Pages or skip exactly that many bytes.
+4. For `0x04`, consume the two operation-index `int64` values.
+5. At the top-level `0x02` separator, stop scanning the data section.
 
-The last known-good boundary is the end of a complete delimited structure, not the last byte that
-happened to be readable. A recovery tool may use the complete Chunks before that boundary to
-rebuild indexes and a new footer; it must not invent or partially decode the truncated Chunk.
+Stop at the last complete structure if a field or body is truncated. An unknown marker, a second
+or misplaced encryption header, an invalid length, or an authentication failure must be treated
+as an error, not skipped by searching for another familiar byte. A `0x02` inside a Page body is
+data and cannot identify the end of the data section.
 
-The file is incomplete or corrupt when any of these conditions is detected:
-
-- A Chunk's `data_size` extends beyond the file or the next structure boundary.
-- A Page length extends beyond its Chunk boundary.
-- The footer length cannot locate a complete `TsFileMetadata` structure.
-- `meta_offset` does not point to the `0x02` separator.
-- An index offset is outside the file or points into the middle of a structure.
-
-Other failures include an unknown top-level marker, an unterminated VarInt or VarString, integer
-overflow while computing an end offset, a Page decoder that produces the wrong number of elements,
-and an aligned Time/Value Page mismatch.
+Retain only structures that have been read completely and checked. The readable part of a truncated
+Chunk is not automatically a valid Chunk. The common bounds checks are in
+[Binary Representation](../Binary-Representation.md), and Page boundaries are in [Data Pages](README.md).
 
 ## Recovery Limits
 
-Recovery reconstructs structure, not missing information. A complete compressed or encrypted Page
-still requires its declared codec and, where applicable, the external key. Without a file-level
-checksum, a structurally valid byte substitution may be indistinguishable from original data.
-Operation Index Range records can help a storage engine relate the salvaged prefix to its external
-operation log, but their meaning does not replace Chunk and Page boundary validation.
+Rebuilding an index cannot restore missing values or identify every change to otherwise valid
+bytes. The retained Pages still need their codecs and, when encrypted, their key material.
+Operation-index records can help a storage engine relate the retained data to its external log,
+but they do not replace structure checks.
 
-TsFile v4 has no general checksum. See [Checksumming](Checksumming.md) for the resulting limits.
+For Page AEAD, preserve the original encryption header, file crypto ID, Chunk ordinals, and Page
+indexes. Truncating the tail and replacing the footer can leave retained Chunks at their original
+offsets. Moving a Chunk requires a new position proof; changing its file identity, ordinal, or
+Page context also requires authenticating and re-encrypting the affected data as appropriate.
+When appending, allocate ordinals above the highest retained ordinal.
+
+An authenticated recovery needs the matching provider and external keys. The legacy footer cannot
+replace a damaged AEAD header, because its legacy encryption fields are deliberately set to
+unencrypted. [Encryption](Encryption.md) describes that mode selection; [Checksumming](Checksumming.md)
+explains which changes remain outside the format's integrity checks.

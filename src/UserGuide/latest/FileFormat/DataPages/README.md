@@ -21,8 +21,9 @@
 
 # Data Pages
 
-One or more Pages follow a Chunk Header without padding between Pages. The Chunk Header's
-`data_size` is the total byte length of all Page Headers and stored Page data in that Chunk.
+A Chunk stores its Pages consecutively after the Chunk Header, without padding between them.
+`data_size` counts all Page Headers and stored bodies together. An empty aligned Value Chunk
+has `data_size = 0` and no Pages.
 
 ## Page Header
 
@@ -38,21 +39,18 @@ Page :=
 
 `uncompressed_size` is the size of the Page payload after decryption and decompression.
 `compressed_size` is the size of the Page payload stored in the file. The two values are equal
-when `compression_type = UNCOMPRESSED`.
+when `compression_type = UNCOMPRESSED` and no length-expanding encryption is used. For Page AEAD,
+`compressed_size` includes the encrypted body framing and authentication overhead, even when
+compression is disabled. See [Encryption](Encryption.md#aead-page-body-and-context).
 
-The low six bits of the Chunk marker determine whether the Page Header contains Statistics:
-
-- `0x01`: the Chunk has multiple Pages; every non-empty Page Header contains Statistics.
-- `0x05`: the Chunk has one Page or no Page; the Page Header does not contain Statistics.
-
-See [Metadata](../Metadata.md#statistics) for the binary format of Statistics.
-
-The Header shape can therefore be selected without inspecting the Page payload:
+The low six bits of the Chunk marker determine whether Page Statistics are present:
 
 | Chunk marker low bits | Page count | Page Statistics |
 | ---: | --- | --- |
 | `0x01` | More than one | Present in every non-empty Page Header |
 | `0x05` | Zero or one | Absent |
+
+The Statistics layout is defined in [Metadata](../Metadata.md#statistics).
 
 If a Page starts at `P`, let `h` be the serialized size of its two length fields and optional
 Statistics. The stored payload occupies the half-open interval `[P + h, P + h + compressed_size)`
@@ -69,7 +67,7 @@ When writing a non-empty Page, the data passes through these stages:
 
 ```text
 logical values
-  -> value encoding
+  -> encode time and/or values
   -> assemble uncompressed page payload
   -> compression
   -> optional encryption
@@ -106,9 +104,8 @@ the value stream length is:
 value_stream_size = U - v - time_stream_size
 ```
 
-The result must be non-negative. After decoding, both stream decoders must reach their boundaries
-and produce the same point count. A trailing byte, an early end, or unequal counts is a malformed
-Page.
+The length must be non-negative. Both streams are bounded by the Page payload and must decode
+to the same number of points, with valid endings for their respective codecs.
 
 A non-aligned Chunk Header records only the value stream's `encoding_type`. See
 [Configurations](../Configurations.md#non-aligned-time-encoding) for the time-stream encoding.
@@ -147,14 +144,12 @@ number of set bits.
 
 ## Page Selection and Skipping
 
-Page Statistics allow a reader to evaluate time and value predicates before reading stored Page
-data. A Page can be skipped only when its Statistics prove that no point can satisfy the
-predicate. Statistics are conservative summaries: overlap means “possibly matches,” not
-“definitely matches.”
+Page Statistics can rule out a Page before its body is read. For example, a Page whose time
+range misses the query range can be skipped. See [Statistics](../Metadata.md#statistics) for
+which value summaries are available.
 
-For a one-Page Chunk, the Page Header omits Statistics. The equivalent Chunk or Timeseries
-Statistics in the footer can be used before seeking to the Chunk. If Statistics for a data type do
-not contain the requested summary, the reader must decode the Page or rely on another predicate.
+A one-Page Chunk omits Page Statistics, so use its Chunk or series Statistics from the footer.
+If the available summary cannot rule out a match, read the Page and check its values.
 
 ## Empty Aligned Value Page
 

@@ -21,36 +21,29 @@
 
 # Checksumming
 
-TsFile v4 does not store a general Page checksum, Chunk checksum, or file checksum.
-
-The leading and trailing magic strings, length fields, markers, offsets, and structure boundaries
-can expose some truncation or structural corruption. They do not provide content verification or
-a cryptographic integrity guarantee.
+TsFile v4 has no general Page, Chunk, or whole-file checksum. A completed-looking file can still
+contain damaged values, so the head and tail magic strings should not be used as content checksums.
 
 ## What Structural Validation Detects
 
-A strict reader can detect many malformed layouts by requiring:
+Lengths, offsets, and counts help detect incomplete or malformed structures. A Page that extends
+beyond its Chunk, a footer length outside the file, or a decompressed payload with the wrong size
+can all be rejected. These checks are described in [Binary Representation](../Binary-Representation.md)
+and [Data Pages](README.md).
 
-- both magic strings and the version byte to be present;
-- the footer length and `meta_offset` to resolve to valid boundaries;
-- every `data_size`, `compressed_size`, string length, and metadata-list size to remain inside its
-  containing structure;
-- decompression to produce exactly `uncompressed_size` bytes;
-- decoded element counts, aligned bitmaps, Statistics, and index ranges to be internally
-  consistent.
-
-These checks are necessary even when an external checksum exists. They can detect truncation and
-many accidental changes, but a byte substitution may preserve every length and boundary and remain
-undetected.
+They do not detect every change. A modified value can occupy the same number of bytes and leave
+all surrounding boundaries intact. Structural checks remain necessary even when a separate
+checksum is available.
 
 ## Integrity at Rest or in Transit
 
-Systems that need corruption detection should protect the complete file with an external checksum
-or object-store integrity field. Systems that need protection against intentional modification
-should use an authenticated digest or signature whose key or trusted value is stored outside the
-TsFile. The external value must cover the exact complete-file byte sequence, including the footer
-length and trailing magic string.
+To detect changes anywhere in a file, maintain an external checksum or use the storage system's
+integrity mechanism. If protection against intentional modification is required, use a keyed
+authentication code or signature with a trusted key or reference stored outside the file. Cover
+the complete byte sequence, including the footer length and tail magic.
 
-Encryption of Page payloads is a separate feature. Unless the selected encryption algorithm
-explicitly authenticates its ciphertext, encryption alone does not add a TsFile checksum or verify
-the unencrypted headers and metadata.
+Page AEAD provides a narrower guarantee: it authenticates non-empty Page bodies and their context,
+and binds Chunk ordinals to file positions. It does not cover all visible headers, Statistics,
+indexes, or footer metadata. Empty aligned Value Pages have no Page authentication tag, and
+legacy encryption does not necessarily authenticate its ciphertext. See [Encryption](Encryption.md)
+for the exact scope.

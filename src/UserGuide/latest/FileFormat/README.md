@@ -21,132 +21,131 @@
 
 # File Format
 
-This document describes the language-independent binary format of TsFile version 4. The file
-version byte is `0x04`.
+A TsFile stores time series data in columns. Writers append data in device groups, then write
+the indexes at the end of the file. Readers usually work in the opposite direction: they open
+the footer, look up a series, and seek to the Chunks that contain its values.
 
-<TsFileStructureTree locale="en" />
+This guide describes the v4 file layout, identified by version byte `0x04`, using the Java
+reference implementation as of 2026-10-26. It covers the file structures and how they fit together.
+The encoding chapter gives codec identifiers and the `PLAIN` layout; the bit layouts of the other
+value codecs are outside its scope.
 
 ## Scope and Terminology
 
-This specification defines the bytes required to exchange a completed TsFile v4 between
-independent implementations. It distinguishes four levels of organization:
+Data has three levels of organization within a file:
 
-- A **Page** is the smallest independently compressed and decoded data unit.
-- A **Chunk** contains the Pages of one physical column and fixes their data type, encoding, and
-  compression method.
-- A **Chunk Group** associates a sequence of Chunks with one device identifier.
-- A **file** contains the sequential data section followed by indexes and file-level metadata.
+- A **Page** holds a batch of encoded values. Each Page is compressed independently.
+- A **Chunk** holds the Pages of one physical column. Its header identifies the data type,
+  encoding, and compression method. An aligned Value Chunk can have `data_size = 0`; in that
+  case the Header exists but contains no Page.
+- A **Chunk Group** holds a batch of Chunks for one device. The same device can appear in several
+  Chunk Groups as the writer flushes more data.
 
-“Aligned” describes measurements that share one physical time column. “Non-aligned” describes a
-measurement that carries its own time stream. Alignment changes the Page payload layout; it does
-not change the meaning of a timestamp or value.
+In **non-aligned** data, each measurement stores its own timestamps alongside its values. In
+**aligned** data, a Time Chunk stores the timestamps shared by several Value Chunks. A bitmap in
+each Value Page identifies the positions that have values. [Data Pages](DataPages/README.md)
+explains both layouts.
 
-All byte intervals in this specification are inclusive unless expressed as a half-open range.
-An absolute offset is measured from the first byte of the file. A serialized length excludes the
-field that stores that length unless stated otherwise.
+<TsFileStructureTree locale="en" />
 
 ## Physical Regions
 
-For a file of length `F`, let `L` be the four-byte length of `TsFileMetadata` and let
-`meta_offset` be the value stored inside `TsFileMetadata`:
+The file begins with the six-byte magic string `TsFile` and a one-byte version. An optional
+file encryption header follows for Page AEAD files. The data section ends at a single `0x02`
+separator; indexes and file metadata follow it. The last ten bytes hold the metadata length and
+the trailing magic string.
+
+The table below uses these names:
+
+- `F`: total file length.
+- `L`: serialized length of `TsFileMetadata`, stored in the four-byte trailing length field.
+- `E`: total serialized length of the optional encryption header, or `0` when absent.
+- `data_start = 7 + E`: start of the data section.
+- `meta_offset`: separator offset, stored inside `TsFileMetadata`.
 
 | Region | Inclusive byte interval | How it is located |
 | --- | --- | --- |
 | Header magic | `0 … 5` | Fixed position |
 | Version | `6` | Fixed position |
-| Data section | `7 … meta_offset - 1` | Ends immediately before the separator |
+| Optional file encryption header | `7 … 6 + E` | Present only for Page AEAD; marker `0x06` |
+| Data section | `data_start … meta_offset - 1` | Ends immediately before the separator |
 | Separator | `meta_offset` | `0x02`, referenced by `TsFileMetadata` |
 | Indexed metadata | `meta_offset + 1 … F - 11 - L` | Delimited by metadata offsets |
 | `TsFileMetadata` | `F - 10 - L … F - 11` | Located from the trailing length |
 | Metadata length | `F - 10 … F - 7` | Fixed position relative to the end |
 | Tail magic | `F - 6 … F - 1` | Fixed position relative to the end |
 
-The indexed metadata interval can contain Timeseries Metadata and Metadata Index Nodes in an
-implementation-dependent physical order. Their absolute offsets, rather than adjacency, define
-their relationships.
+All offsets are absolute, starting at the first byte of the file. The table uses inclusive
+intervals; `[start, end)` elsewhere denotes a half-open interval. A length excludes its own
+length field unless stated otherwise. The optional-header interval is absent when `E = 0`.
+
+Timeseries Metadata and index nodes can be interleaved in the indexed metadata section. Readers
+follow their offsets rather than assuming a fixed physical order. `TsFileMetadata` has no marker
+of its own: its length locates it from the end of the file.
 
 ## Write Model
 
-The data is divided into Chunk Groups by device. A Chunk stores one measurement column and
-contains one or more Pages. A non-aligned Chunk stores its time stream and value stream in the
-same Page. Aligned data stores one shared time column in a Time Chunk and the measurement columns
-in Value Chunks.
+A writer appends Chunk Groups, then writes the indexes and footer when it finishes the file.
+Page sizes, flush thresholds, and index fanout affect where structures begin and end, but readers
+can recover those boundaries from headers and offsets. Timestamp units and non-aligned time
+encoding need the shared context described in [Configurations](Configurations.md).
 
-File metadata follows the data, so a writer can write all Chunk Groups sequentially before
-writing the indexes and footer. A reader normally starts at the end of the file, uses the
-`TsFile Metadata size` to locate `TsFileMetadata`, and follows its indexes to the required Chunks.
-
-Writers may choose Page sizes, Chunk Group flush thresholds, metadata-index fanout, encodings,
-and compression methods. Those choices affect performance and physical boundaries, but readers
-derive the resulting layout entirely from the bytes in the file.
-
-## Metadata-first Read Algorithm
-
-A random-access reader can open a completed file without scanning the data section:
-
-1. Verify the six-byte tail magic.
-2. Read `L` at `F - 10` and compute `file_metadata_pos = F - 10 - L`.
-3. Deserialize `TsFileMetadata`, then verify that `meta_offset` points to `0x02`.
-4. Optionally test the complete path with the Bloom filter. A negative result proves absence; a
-   positive result requires index lookup.
-5. Traverse the table/device index and then the measurement index to locate the requested
-   Timeseries Metadata range.
-6. Read the Chunk Metadata offsets selected by the time and value predicates.
-7. Seek to each Chunk Header, use Page Statistics when present, and decode only the required
-   Pages.
-
-This path makes metadata size proportional to the selected devices, measurements, Chunks, and
-Pages rather than to the size of the complete file.
-
-## Structural Invariants
-
-A conforming reader validates at least the following relationships before allocating or reading
-an externally supplied length:
-
-- The head and tail magic strings are identical and the version byte is supported.
-- `0 <= L <= F - 10` and the computed `file_metadata_pos` is after `meta_offset`.
-- `meta_offset` is an in-file absolute offset whose byte is `0x02`.
-- Every Chunk ends exactly `data_size` bytes after its Chunk Header.
-- Every non-empty Page fits inside its Chunk; its stored payload contains exactly
-  `compressed_size` bytes.
-- Metadata entry offsets are monotonic within a node and do not exceed `end_offset`.
-- An aligned Value Page corresponds to the Time Page at the same ordinal position; its
-  `position_count` equals the number of positions in that Time Page.
-
-Length or offset violations are format errors. A reader must not use a marker byte found inside a
-length-delimited Page payload as a top-level marker.
-
-The file contains exactly one top-level `0x02` separator that terminates the data section. It precedes all
-metadata and is referenced by `meta_offset`. There is no separate separator or marker immediately
-before `TsFileMetadata`; its position is determined by the length field at the end of the file.
-
-For a file of length `F` whose serialized `TsFileMetadata` has length `L`:
-
-```text
-metadata_size_pos = F - 6 - 4
-file_metadata_pos = F - 6 - 4 - L
-```
-
-The magic bytes at both the beginning and the end of the file are:
+Both magic strings use the same bytes:
 
 ```text
 54 73 46 69 6c 65    # "TsFile"
 ```
 
+## Metadata-first Read Algorithm
+
+A reader can locate the requested series without scanning the data section:
+
+1. Check the leading magic and version. Inspect offset `7` for an optional
+   [file encryption header](DataPages/Encryption.md#file-encryption-header), which determines
+   how Chunk Headers and Page bodies are parsed.
+2. Check the tail magic, read `L` at `F - 10`, and calculate `file_metadata_pos = F - 10 - L`.
+3. Read `TsFileMetadata` and check that `meta_offset` points to the separator.
+4. Optionally check the complete path in the [Bloom filter](Bloom-Filter.md). Use a negative
+   result only when the writer's charset, path construction, and hash behavior are known to
+   match.
+5. Follow the table/device index, then the measurement index, to find the series metadata.
+6. Use the series and Chunk Statistics to select Chunk offsets. Seek to those Chunks and use
+   any Page Statistics to narrow the selection further.
+7. Read the selected Page bodies, decrypt when required, decompress, and decode their streams.
+
+This avoids reading the payloads of unrelated Pages. A single-Page Chunk omits Page Statistics,
+so pruning at that level relies on the Chunk or series Statistics instead.
+
+## Structural Invariants
+
+The main relationships to check when reading are:
+
+- Both magic strings and the version are valid.
+- A file encryption header, when present, appears once at offset `7`; its length and version
+  are valid.
+- `0 <= L <= F - 10`, and `file_metadata_pos` lies after the separator.
+- A Chunk's Pages occupy exactly `data_size` bytes after its complete Header.
+- Each non-empty Page body occupies exactly `compressed_size` bytes within that Chunk.
+- Index offsets are monotonic (non-decreasing) within a node and do not exceed `end_offset`.
+- An aligned Value Page covers the same positions as the Time Page with the same ordinal; its
+  `position_count` equals the Time Page's position count.
+
+A violation is a format error.
+
+[Binary Representation](Binary-Representation.md) describes the common length and offset checks.
+[Encryption](DataPages/Encryption.md) adds the authentication checks for Page AEAD. Marker bytes
+have meaning only at structure boundaries; the same bytes can occur inside a Page body.
+
 ## Format Details
 
-- [Binary Representation](Binary-Representation.md)
-- [Configurations](Configurations.md)
-- [Extensibility](Extensibility.md)
-- [Metadata](Metadata.md)
-- [Types](Types.md)
+For a first reading, start with [Binary Representation](Binary-Representation.md),
+[Chunks](DataPages/Chunks.md), and [Data Pages](DataPages/README.md), then follow the metadata
+lookup in [Metadata](Metadata.md).
+
+- [Types](Types.md) and [Encodings](DataPages/Encodings.md)
+- [Nulls](Nulls.md) and [Compression](DataPages/Compression.md)
 - [Bloom Filter](Bloom-Filter.md)
-- [Data Pages](DataPages/README.md)
-  - [Chunks](DataPages/Chunks.md)
-  - [Compression](DataPages/Compression.md)
-  - [Encodings](DataPages/Encodings.md)
-  - [Encryption](DataPages/Encryption.md)
-  - [Checksumming](DataPages/Checksumming.md)
-  - [Error Recovery](DataPages/Error-Recovery.md)
-- [Nulls](Nulls.md)
-- [Format Versions](Format-Versions.md)
+- [Encryption](DataPages/Encryption.md) and [Checksumming](DataPages/Checksumming.md)
+- [Error Recovery](DataPages/Error-Recovery.md)
+- [Configurations](Configurations.md), [Format Versions](Format-Versions.md), and
+  [Extensibility](Extensibility.md)

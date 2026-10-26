@@ -21,13 +21,12 @@
 
 # Configurations
 
-Most TsFile configurations are writer policies. They control buffering, Page boundaries,
-Chunk Group boundaries, and the shape of metadata indexes, but they are not additional fields in
-the file. A reader determines the actual layout from markers, length fields, Chunk Headers, and
-serialized metadata.
+Most settings affect how a writer groups and buffers data. A reader does not need the original
+Page-size target or flush threshold: the resulting boundaries are recorded in the file. A few
+settings, including timestamp units and non-aligned time encoding, still need to be agreed by
+the applications exchanging the file.
 
-The names below identify format-level concepts. Individual APIs may expose different setting names,
-but the effect on bytes and the reader requirement are the same.
+The table distinguishes those cases. Setting names in language-specific APIs may differ.
 
 | Conceptual setting | Observable file effect | Setting serialized directly? | Reader needs original setting? |
 | --- | --- | --- | --- |
@@ -40,10 +39,9 @@ but the effect on bytes and the reader requirement are the same.
 | Compression | Stored Page payload | Yes, as `compression_type` in each Chunk | No |
 | Time precision and zone | Interpretation of `int64` timestamps | No | Yes, from the surrounding protocol |
 | Non-aligned time encoding | Encoded time stream in each non-aligned Page | No | Yes |
-| Encryption | Stored Page payload and footer properties | Properties are serialized; key context may be external | Yes, when encrypted |
+| Encryption | File encryption header, Chunk authentication, Page bodies, or legacy footer properties | Provider/profile or legacy properties are serialized; key context is external | Yes, when encrypted |
 
-“Not serialized directly” means that the configured threshold or rate is absent as a named field.
-Its result can still be visible in the physical layout.
+For example, a Page-size target is not stored as a setting, but each Page records its actual size.
 
 ## Chunk Group Size
 
@@ -53,8 +51,8 @@ I/O, but require more writer memory. Smaller Chunk Groups reduce peak memory and
 available to the output sooner.
 
 The configured size is a flush threshold, not an exact on-disk size. The format does not prescribe
-a default. Chunk Group boundaries are identified by the `0x00` Chunk Group Header marker and the
-next top-level marker.
+a default. A group begins with a `0x00` Chunk Group Header and ends at the next group, operation-index
+record, or separator. Individual Chunk markers continue the current group.
 
 ## Data Page Size
 
@@ -81,9 +79,9 @@ aligned Value Page, `position_count`.
 
 ## Metadata Index Fanout
 
-The metadata index fanout limits the number of children in one internal metadata index node.
+Index fanout is the maximum number of children in an internal metadata index node.
 A larger fanout produces a shallower tree with larger nodes; a smaller fanout produces a deeper
-tree with smaller nodes. The value must be at least `2`; the reference writer configuration uses
+tree with smaller nodes. The value should be at least `2`; the reference writer configuration uses
 `256`.
 
 The configured limit is not serialized. Each metadata index node stores its node type, children,
@@ -91,8 +89,8 @@ and end offset, so a reader traverses the resulting tree without knowing the wri
 
 ## Bloom Filter False-positive Rate
 
-The Bloom filter false-positive rate controls the space/accuracy tradeoff for path lookup. A lower
-rate uses more bits and hash functions. Standard writers constrain the value to the range `0.01`
+A Bloom filter can report “possibly present” for a path that is absent. Lowering the target
+false-positive rate reduces those extra lookups at the cost of more bits and hash functions. Standard writers constrain the value to the range `0.01`
 through `0.10` and use `0.05` by default.
 
 The rate itself is not serialized. The resulting filter bytes, bit count, and hash-function count
@@ -129,9 +127,11 @@ encoding in `encoding_type`.
 
 ## Encryption
 
-The `encryptLevel`, `encryptType`, and `encryptKey` properties in `TsFileMetadata` describe whether
-Page data is encrypted and which algorithm is used. The key material required to open an encrypted
-file remains external to the file. See [Encryption](DataPages/Encryption.md).
+Encryption uses one of two descriptions: the optional file encryption header for Page AEAD,
+or footer properties for legacy encryption. Both record how to interpret the Page bytes, while
+key access remains external. The AEAD header is authoritative even though its legacy footer
+properties say unencrypted. The layouts and mode-selection rules are in
+[Encryption](DataPages/Encryption.md).
 
 ## Implementation Settings
 

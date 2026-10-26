@@ -21,8 +21,9 @@
 
 # 编码
 
-Chunk Header 使用单字节 `encoding_type` 指定值流编码。对齐 Time Chunk 的该字段指定
-时间流编码；非对齐 Chunk 的该字段只指定值流编码。
+编码先把一串有类型的值转换为字节流，再交给压缩器处理。Chunk Header 的
+`encoding_type` 保存所选编码：在 Value Chunk 和非对齐 Chunk 中，它描述值流；
+在对齐 Time Chunk 中，它描述时间戳流。
 
 | 值 | 名称 |
 | ---: | --- |
@@ -42,7 +43,7 @@ Chunk Header 使用单字节 `encoding_type` 指定值流编码。对齐 Time Ch
 | 13 | `RLBE` |
 | 14 | `CAMEL` |
 
-类型与编码组合如下：
+参考值编码器支持下列组合。一个编码已经分配了编号，并不表示所有数据类型都能使用它：
 
 | 数据类型 | 可用编码 |
 | --- | --- |
@@ -65,13 +66,15 @@ Chunk Header 使用单字节 `encoding_type` 指定值流编码。对齐 Time Ch
 | 游程与位打包 | `RLE`, `RLBE` | 重复值或较小的有效位宽 |
 | 差分与预测 | `DIFF`, `TS_2DIFF`, `REGULAR`, `SPRINTZ` | 相邻值之间较小或较规律的变化 |
 | 整数重映射 | `ZIGZAG` | 把绝对值较小的有符号整数映射为较小的无符号整数 |
-| 基于异或的浮点编码 | `GORILLA_V1`, `GORILLA`, `CHIMP`, `CAMEL` | 相邻浮点数具有稳定的前导位和尾随位 |
+| 基于异或的编码 | `GORILLA_V1`, `GORILLA`, `CHIMP`, `CAMEL` | 相邻浮点数具有稳定的前导位和尾随位 |
 | 历史或专用编码 | `BITMAP`, `FREQ` | 保留的历史布局；`FREQ` 已弃用 |
 
-最合适的编码取决于数据分布。文件不记录写入器选择某种编码的原因；读取器必须同时
-根据 `data_type` 和 `encoding_type` 选择解码器。
+不同的数据分布适合不同的编码。读取时，无论写入器为什么选择某种编码，都需要根据
+`(data_type, encoding_type)` 这一组合选择解码器。
 
-## Plain Encoding
+<div id="plain-encoding"></div>
+
+## PLAIN 编码
 
 `PLAIN` 流不保存元素个数，元素数量由 Page 上下文、时间流或 null 位图确定。各元素
 连续写入：
@@ -92,16 +95,14 @@ Chunk Header 使用单字节 `encoding_type` 指定值流编码。对齐 Time Ch
 
 ## 解码约束
 
-编码状态只在一个解压后的 Page 流内有效。Page 解压完成后，读取器需要：
+解码状态只在一个 Page 流内有效。解密和解压之后，选择对应的解码器，在流的边界内读取，
+并检查值的数量是否符合 Page 上下文。处理下一个 Page 时，重新开始解码状态。
 
-1. 根据 Chunk 的 `data_type` 和 `encoding_type` 创建解码器；
-2. 解码出 Page 上下文所要求的准确逻辑元素数量；
-3. 验证解码过程既没有越过 Page 边界，也没有留下不完整的编码块；
-4. 在处理下一个 Page 前丢弃当前解码状态。
+对齐数据的时间编码来自 Time Chunk Header，Value Page 每遇到一个置位的位图位置就
+解码一个值。非对齐 Chunk Header 只说明值编码，时间编码来自共享配置，默认
+`TS_2DIFF`；Footer 中没有序列化的 `time_encoder` 字段。详见
+[配置](../Configurations.md#non-aligned-time-encoding)。
 
-非对齐 Page 的时间流使用文件元数据中 `time_encoder` 指定的独立编码，
-`encoding_type` 只作用于值流。对齐 Time Page 中，`encoding_type` 作用于时间流；对齐
-Value Page 会先移除 null 位置再编码，因此值解码器必须恰好产生位图中置位的元素数。
-
-读取器不支持某种编码时，不能解码对应 Chunk，但仍可借助 `data_size` 跳过其字节范围；
-退回到另一种解码器并不合法。
+编码不受支持时，无法解码具体值。扫描器如果直接解析原始 Header 字段，仍能通过
+`data_size` 找到下一个 Chunk，即使上层编解码器注册表拒绝该编号。此时不能擅自改用
+`PLAIN` 或其他解码器。

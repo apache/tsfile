@@ -21,12 +21,11 @@
 
 # 配置
 
-TsFile 的大多数配置属于写入策略。它们控制缓冲、Page 边界、Chunk Group 边界以及
-元数据索引的形状，但不会作为额外字段写入文件。读取器根据标记、长度字段、
-Chunk Header 和已序列化的元数据确定实际布局。
+多数配置影响写入器如何分组和缓冲数据。读取器无需知道原来的 Page 大小目标或刷出阈值，
+因为最终形成的边界已经记录在文件中。时间单位、非对齐时间编码等少数信息则仍需由
+交换文件的应用共同约定。
 
-下列名称表示文件格式层面的概念。不同接口暴露的配置名称可能不同，但它们对磁盘字节的
-影响以及读取端是否需要原始配置是一致的。
+下表区分了这些情况。不同语言接口中的配置名称可能不同。
 
 | 概念配置 | 可观察的文件影响 | 配置值是否直接写入 | 读取器是否需要原始配置 |
 | --- | --- | --- | --- |
@@ -39,21 +38,25 @@ Chunk Header 和已序列化的元数据确定实际布局。
 | 压缩 | Page 磁盘负载 | 是，每个 Chunk 的 `compression_type` | 否 |
 | 时间精度和时区 | `int64` 时间戳的解释 | 否 | 是，由上层协议提供 |
 | 非对齐时间编码 | 每个非对齐 Page 的时间编码流 | 否 | 是 |
-| 加密 | Page 磁盘负载和 Footer 属性 | 属性会写入；密钥上下文可能在外部 | 加密时需要 |
+| 加密 | 文件加密头、Chunk 认证、Page 载荷或旧版 Footer 属性 | provider/profile 或旧版属性会写入；密钥上下文在外部 | 加密时需要 |
 
-“不直接写入”表示文件中没有以该阈值或比率命名的字段，但配置造成的布局结果仍可能被
-观察到。
+例如，文件不会保存“Page 大小目标”这个配置值，但会记录每个 Page 的实际长度。
 
-## Chunk Group Size
+<div id="chunk-group-size"></div>
+
+## Chunk Group 大小
 
 Chunk Group 大小表示写入器在刷出当前设备的各个 Chunk 之前允许缓冲的数据量。
 较大的 Chunk Group 可以减少标记与元数据开销，并有利于顺序 I/O，但需要更多写入内存；
 较小的 Chunk Group 可以降低峰值内存，并更早地将数据写入输出。
 
 该配置是刷出阈值，并不表示精确的磁盘占用大小。文件格式不规定默认值。
-Chunk Group 的实际边界由 `0x00` Chunk Group Header 标记以及下一个顶层标记确定。
+分组从 `0x00` Chunk Group Header 开始，到下一个分组、操作索引记录或分隔符结束；
+中间的 Chunk 标记表示当前分组仍在继续。
 
-## Data Page Size
+<div id="data-page-size"></div>
+
+## Page 大小
 
 Data Page 大小是单个序列写入器在内存中累计数据量的目标值。较小的 Page 可以提供
 更细粒度的 Statistics 和数据跳过能力；较大的 Page 可以减少 Page Header 开销并可能
@@ -63,7 +66,9 @@ Data Page 大小是单个序列写入器在内存中累计数据量的目标值�
 边界时，写入器都可以提前结束当前 Page。实际 Page 边界由 Page Header 中的长度确定。
 文件格式不规定默认的 Page 大小。
 
-## Maximum Points per Page
+<div id="maximum-points-per-page"></div>
+
+## 每个 Page 的最大点数
 
 除 Page 大小目标外，写入器还可以限制一个 Page 中的逻辑位置数，以防大量紧凑值让
 单个 Page 包含过多数据点。参考写入配置使用 `10,000` 点。
@@ -74,25 +79,31 @@ Data Page 大小是单个序列写入器在内存中累计数据量的目标值�
 该上限不会作为独立字段写入文件。读取器使用 Page 边界；对于对齐 Value Page，
 还会使用 `position_count`。
 
-## Metadata Index Fanout
+<div id="metadata-index-fanout"></div>
 
-元数据索引扇出限制一个内部元数据索引节点可以包含的子节点数量。较大的扇出形成
-层数更少但节点更大的树；较小的扇出形成层数更多但节点更小的树。该值必须至少为 `2`，
+## 索引扇出
+
+索引扇出就是一个内部索引节点最多能包含多少个子节点。较大的扇出形成
+层数更少但节点更大的树；较小的扇出形成层数更多但节点更小的树。该值应至少为 `2`，
 参考写入配置使用 `256`。
 
 配置的上限不会写入文件。每个元数据索引节点都会保存节点类型、子节点和结束偏移，
 因此读取器无需知道写入配置即可遍历最终生成的树。
 
-## Bloom Filter False-positive Rate
+<div id="bloom-filter-false-positive-rate"></div>
 
-布隆过滤器误判率控制路径查找的空间与准确率权衡。误判率越低，需要的位数和哈希函数
-越多。标准写入器将该值限制在 `0.01` 到 `0.10` 之间，默认使用 `0.05`。
+## 布隆过滤器误判率
+
+布隆过滤器有时会把不存在的路径判为“可能存在”，导致一次额外的索引查找。降低目标
+误判率可以减少这种情况，代价是使用更多位和哈希函数。标准写入器将该值限制在 `0.01` 到 `0.10` 之间，默认使用 `0.05`。
 
 误判率本身不会写入文件。最终生成的过滤器字节、位数和哈希函数数量保存在
 `TsFileMetadata` 中，因此读取器不需要写入端的配置。详见
-[Bloom Filter](Bloom-Filter.md)。
+[布隆过滤器](Bloom-Filter.md)。
 
-## Value Encoding and Compression
+<div id="value-encoding-and-compression"></div>
+
+## 值编码与压缩
 
 写入器可以按物理类型选择默认值编码，并选择默认压缩方式。这些默认值属于 Schema
 与写入策略，不是读写端必须共享的配置：
@@ -101,15 +112,19 @@ Data Page 大小是单个序列写入器在内存中累计数据量的目标值�
 - Chunk Header 中的 `compression_type` 标识该 Chunk 内所有 Page 使用的压缩方式。
 
 因此读取器直接使用 Chunk Header，不需要知道写入器的默认值。支持的标识符及其
-载荷格式见 [Encodings](DataPages/Encodings.md) 和
-[Compression](DataPages/Compression.md)。
+载荷格式见 [编码](DataPages/Encodings.md) 和
+[压缩](DataPages/Compression.md)。
 
-## Time Precision and Time Zone
+<div id="time-precision-and-time-zone"></div>
+
+## 时间精度与时区
 
 物理时间戳是有符号 64 位整数。TsFile v4 不在文件中保存时间单位或时区；毫秒、微秒、
 纳秒等时间精度以及时区语义由使用该文件的上层协议确定。
 
-## Non-aligned Time Encoding
+<div id="non-aligned-time-encoding"></div>
+
+## 非对齐时间编码
 
 非对齐 Chunk Header 的 `encoding_type` 描述值流编码，不描述同一 Page 内的时间流编码。
 非对齐时间流编码由读写配置共同确定，默认值为 `TS_2DIFF`。
@@ -117,13 +132,17 @@ Data Page 大小是单个序列写入器在内存中累计数据量的目标值�
 对齐 Time Chunk 不受这一限制；其时间编码保存在 Time Chunk Header 的
 `encoding_type` 中。
 
-## Encryption
+<div id="encryption"></div>
 
-Page 数据是否加密以及所用算法由 `TsFileMetadata` 的 `encryptLevel`、`encryptType`
-和 `encryptKey` 属性描述。打开加密文件所需的密钥材料仍然保存在文件之外。
-详细格式见 [Encryption](DataPages/Encryption.md)。
+## 加密
 
-## Implementation Settings
+加密方式有两处描述来源：Page AEAD 使用可选的文件加密头，旧版加密使用 Footer 属性。
+它们记录 Page 字节应如何解释，取得密钥仍需外部环境。AEAD 文件的旧版 Footer 属性虽然
+写为未加密状态，实际模式仍以文件加密头为准。布局和判断规则见[加密](DataPages/Encryption.md)。
+
+<div id="implementation-settings"></div>
+
+## 与格式无关的配置
 
 内存分配、内存检查频率、批大小、并行执行、线程数、存储后端以及关闭文件时的同步
 策略都不定义 TsFile 字节。它们属于具体实现与部署范围，不属于本文件格式规约。
