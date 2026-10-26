@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/config/config.h"
+#include "common/record.h"
 #include "common/tablet.h"
 #include "file/local_random_access_read_file.h"
 #include "file/write_file.h"
@@ -239,6 +240,62 @@ class AlignedFieldFilterRegressionTest
         }
         ASSERT_EQ(writer.close(), E_OK);
     }
+    void write_layouts(bool mixed) {
+        const std::vector<ColumnSchema> columns{
+            {"id", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::TAG},
+            {"anchor", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"w", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"f", FLOAT, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"flag", BOOLEAN, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"s", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+            {"ghost", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}};
+        WriteFile file;
+        create(file);
+        TsFileWriter writer;
+        ASSERT_EQ(writer.init(&file), E_OK);
+        writer.set_generate_table_schema(false);
+        ASSERT_EQ(
+            writer.register_table(std::make_shared<TableSchema>("t", columns)),
+            E_OK);
+        // Explicit table schema + ordinary per-device registration writes
+        // real table metadata with either independent or shared timestamps.
+        for (int device = 0; device < 3; ++device) {
+            const std::string name = "t.d" + std::to_string(device);
+            const bool aligned = mixed && device % 2 == 0;
+            std::vector<MeasurementSchema*> measurements;
+            for (size_t c = 1; c + 1 < columns.size(); ++c)
+                measurements.push_back(new MeasurementSchema(
+                    columns[c].column_name_, columns[c].data_type_, PLAIN,
+                    UNCOMPRESSED));
+            ASSERT_EQ(
+                aligned ? writer.register_aligned_timeseries(name, measurements)
+                        : writer.register_timeseries(name, measurements),
+                E_OK);
+            for (int r = 0; r < 12; ++r) {
+                const std::string bytes =
+                    r % 2 == 0 ? std::string("a\0b", 3) : "other";
+                TsRecord record(device * 20 + r, name);
+                record.add_point("anchor", int64_t(device * 100 + r));
+                if (device != 1 && r % 3 != 0)
+                    record.add_point("v", int64_t(device * 1000 + r));
+                if (r % 2 != 0)
+                    record.add_point("w", int64_t(device * 1000 + r));
+                if (r % 4 != 0)
+                    record.add_point(
+                        "f", r == 5 ? std::numeric_limits<float>::quiet_NaN()
+                                    : float(r));
+                if (r % 2 == 0) record.add_point("flag", r % 4 == 0);
+                if (r % 3 != 1)
+                    record.add_point("s", String(bytes.data(), bytes.size()));
+                ASSERT_EQ(aligned ? writer.write_record_aligned(record)
+                                  : writer.write_record(record),
+                          E_OK);
+                if (r % 4 == 3) ASSERT_EQ(writer.flush(), E_OK);
+            }
+        }
+        ASSERT_EQ(writer.close(), E_OK);
+    }
     ConfigValue saved_;
     std::string filename_;
     const std::vector<double> float_values_{
@@ -255,6 +312,135 @@ class AlignedFieldFilterRegressionTest
         -std::numeric_limits<double>::infinity(),
         std::numeric_limits<double>::quiet_NaN()};
 };
+
+TEST_P(AlignedFieldFilterRegressionTest,
+       NonAlignedAndMixedSourcesUseTheRowEvaluator) {
+    auto make_filter = [](int predicate) -> A::Ptr {
+        switch (predicate) {
+            case 0:
+                return A::compare("v", A::CompareOp::GE, A::Literal::int32(5));
+            case 1:
+                return A::is_null("v");
+            case 2:
+                return A::and_filter(A::is_not_null("v"),
+                                     A::compare("w", A::CompareOp::LE,
+                                                A::Literal::float64(1006)));
+            case 3:
+                return A::or_filter(
+                    A::is_null("v"),
+                    A::compare("f", A::CompareOp::LT, A::Literal::float64(6)));
+            case 4:
+                return A::not_filter(
+                    A::compare("f", A::CompareOp::LT, A::Literal::int32(6)));
+            case 5:
+                return A::compare("flag", A::CompareOp::EQ,
+                                  A::Literal::boolean(true));
+            case 6:
+                return A::compare("s", A::CompareOp::EQ,
+                                  A::Literal::string(std::string("a\0b", 3)));
+            case 7:
+                return A::is_null("ghost");
+            case 8:
+                return A::compare("w", A::CompareOp::GT,
+                                  A::Literal::int64(1000000));
+            default:
+                return A::is_not_null("anchor");
+        }
+    };
+    for (bool mixed : {false, true}) {
+        write_layouts(mixed);
+        // With no projected/reference series carrying timestamps, an
+        // independent device has no candidate rows. Aligned devices retain
+        // their shared timestamps, including all-NULL projections.
+        Rows missing, null_values;
+        if (mixed) {
+            for (int device : {0, 2}) {
+                for (int r = 0; r < 12; ++r) {
+                    missing.push_back({device * 20 + r, kNull});
+                    if (r % 3 == 0)
+                        null_values.push_back({device * 20 + r, kNull});
+                }
+            }
+        }
+        EXPECT_EQ(scan({"ghost"}, A::is_null("ghost")), missing);
+        EXPECT_TRUE(scan({"ghost"}, A::is_not_null("ghost")).empty());
+        EXPECT_EQ(scan({"v"}, A::is_null("v")), null_values);
+        for (int window : {0, 1, 2, 3}) {
+            const int64_t start = window == 1 ? 5 : window == 3 ? 100 : 0;
+            const int64_t end = window == 1 ? 28 : window == 3 ? 200 : 11;
+            for (int predicate = 0; predicate < 10; ++predicate) {
+                Rows expected;
+                for (int device = 0; device < 3; ++device) {
+                    for (int r = 0; r < 12; ++r) {
+                        const int64_t time = device * 20 + r;
+                        if (window != 0 && (time < start || time > end))
+                            continue;
+                        const bool has_v = device != 1 && r % 3 != 0;
+                        const bool has_w = r % 2 != 0;
+                        const bool has_f = r % 4 != 0;
+                        const bool less_f = r != 5 && r < 6;
+                        const int64_t v = device * 1000 + r;
+                        bool pass = false;
+                        switch (predicate) {
+                            case 0:
+                                pass = has_v && v >= 5;
+                                break;
+                            case 1:
+                                pass = !has_v;
+                                break;
+                            case 2:
+                                pass = has_v && has_w && v <= 1006;
+                                break;
+                            case 3:
+                                pass = !has_v || (has_f && less_f);
+                                break;
+                            case 4:
+                                pass = has_f && !less_f;
+                                break;
+                            case 5:
+                                pass = r % 4 == 0;
+                                break;
+                            case 6:
+                                pass = r % 3 != 1 && r % 2 == 0;
+                                break;
+                            case 7:
+                                pass = true;
+                                break;
+                            case 8:
+                                pass = false;
+                                break;
+                            default:
+                                pass = true;
+                                break;
+                        }
+                        if (pass)
+                            expected.push_back({time, device * 100 + r,
+                                                has_v ? v : kNull,
+                                                device * 100 + r});
+                    }
+                }
+                for (int offset : {0, 3}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << mixed << ":" << window << ":" << predicate
+                                 << ":" << offset);
+                    const size_t begin =
+                        std::min(expected.size(), size_t(offset));
+                    const size_t end_row =
+                        offset == 0 ? expected.size()
+                                    : std::min(expected.size(), begin + 4);
+                    EXPECT_EQ(
+                        scan({"anchor", "v", "anchor"}, make_filter(predicate),
+                             offset, offset == 0 ? -1 : 4,
+                             window == 0
+                                 ? nullptr
+                                 : TimeFilter::between(start, end, false)),
+                        Rows(expected.begin() + begin,
+                             expected.begin() + end_row));
+                }
+            }
+        }
+    }
+}
 
 TEST_P(AlignedFieldFilterRegressionTest, FloatingStatisticsKeepNaNRowsCorrect) {
     write_floats();

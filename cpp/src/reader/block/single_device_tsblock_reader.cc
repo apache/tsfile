@@ -401,19 +401,6 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
     }
 
-    if (aligned_field_filter_ != nullptr && !all_aligned_ &&
-        !field_column_contexts_.empty()) {
-        // Missing metadata (or unequal chunk counts) can make an aligned
-        // device use per-column contexts. Keep the row merge for that case,
-        // with absent FIELDs exposed as NULL, but still reject non-aligned
-        // sources for the aligned-only structured filter.
-        for (const auto* ts_index : time_series_indexs) {
-            if (ts_index != nullptr && !ts_index->is_aligned()) {
-                return common::E_NOT_SUPPORT;
-            }
-        }
-    }
-
     if (field_column_contexts_.empty()) {
         return common::E_OK;
     }
@@ -818,10 +805,10 @@ int SingleDeviceTsBlockReader::satisfy_field_filter(bool& satisfied) {
         fields.push_back({name, schema.data_type_, value, length});
     }
     if (aligned_field_filter_ != nullptr) {
-        // Aligned devices missing one of the requested measurements cannot
-        // use the shared multi-column SSI. Evaluate their merged row through
-        // the same typed column-view evaluator, including explicit NULL
-        // views for measurements that have no metadata on this device.
+        // Non-aligned devices and aligned devices missing a measurement use
+        // the row merge instead of the shared multi-column SSI. Evaluate the
+        // merged row through the same typed evaluator, including explicit
+        // NULL views for missing measurements or timestamps.
         const uint8_t notnull = 0x80;
         std::vector<common::String> strings(fields.size());
         std::vector<AlignedFieldFilter::ColumnView> views;

@@ -34,9 +34,10 @@
 namespace storage {
 class TableSchema;
 
-// Column-aware predicate used by aligned batch readers. It deliberately does
-// not implement TableFieldFilter::satisfy_row(); aligned execution evaluates
-// it against a whole TsBlock selection.
+// Column-aware FIELD predicate. Aligned sources use batch evaluation and page
+// pruning when possible; non-aligned sources use the table reader's timestamp
+// merge and typed row evaluation. Mixed-device files may use both paths.
+// It deliberately does not implement TableFieldFilter::satisfy_row().
 class AlignedFieldFilter : public Filter {
    public:
     enum class Kind { COMPARISON, IS_NULL, IS_NOT_NULL, AND, OR, NOT };

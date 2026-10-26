@@ -324,7 +324,10 @@ int TsFileIOReader::alloc_multi_ssi(
         ssi->destroy();
         mem_free(ssi);
         ssi = nullptr;
-        return E_NOT_SUPPORT;
+        // An empty measurement list requests only the shared aligned clock.
+        // Independent series have no such clock and yield no candidate rows.
+        // Named requests still fall back to individual column contexts.
+        return measurement_names.empty() ? E_NO_MORE_DATA : E_NOT_SUPPORT;
     }
 
     // Get time column metadata

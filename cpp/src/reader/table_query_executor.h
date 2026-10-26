@@ -71,6 +71,12 @@ class TableQueryExecutor {
             tsfile_io_reader_ = nullptr;
         }
     }
+    // FIELD filters apply to both aligned and non-aligned table devices.
+    // AlignedFieldFilter uses batch/page pruning where possible and otherwise
+    // evaluates merged rows. In the non-aligned path, candidate timestamps are
+    // the union of the projected and filter-referenced FIELD series; values
+    // absent at a candidate timestamp are NULL. OFFSET/LIMIT count accepted
+    // rows. A valid empty time range returns an empty result for either layout.
     int query(const std::string& table_name,
               const std::vector<std::string>& columns, Filter* time_filter,
               Filter* tag_filter, Filter* field_filter, ResultSet*& ret_qds);
