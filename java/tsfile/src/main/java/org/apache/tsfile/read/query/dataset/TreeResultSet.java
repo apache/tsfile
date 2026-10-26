@@ -21,10 +21,14 @@ package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.write.record.TSRecord;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -37,6 +41,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class TreeResultSet extends AbstractResultSet {
+  private static final Logger LOGGER = LoggerFactory.getLogger(TreeResultSet.class);
   private QueryDataSet queryDataSet;
   private List<String> deviceList;
   private List<String> measurementList;
@@ -79,7 +84,11 @@ public class TreeResultSet extends AbstractResultSet {
 
   @TsFileApi
   public void close() {
-    // nothing to be done
+    try {
+      queryDataSet.close();
+    } catch (IOException e) {
+      LOGGER.error(Messages.get("log.read.tree_result_set_close_error"), e);
+    }
   }
 
   @Override

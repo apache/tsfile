@@ -45,7 +45,12 @@ char* PageArena::alloc(uint32_t size) {
         return new_page->alloc(size);
     } else {
         void* ptr = base_allocator_.alloc(size + sizeof(Page), mid_);
-        Page* new_page = new (ptr) Page(dummy_head_.next_);
+        if (UNLIKELY(ptr == nullptr)) {
+            return nullptr;
+        }
+        Page* new_page = new (ptr) Page(size, dummy_head_.next_);
+        // A dedicated oversized page is fully consumed and cannot be reused.
+        new_page->cur_alloc_ = new_page->page_end_;
         dummy_head_.next_ = new_page;
         return reinterpret_cast<char*>(new_page) + sizeof(Page);
     }

@@ -67,6 +67,7 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
     if (chunkReader != null && chunkReader.hasNextSatisfiedPage()) {
       return true;
     }
+    closeChunkReader();
 
     // current chunk does not have additional batch, init new chunk reader
     while (chunkToRead < chunkMetadataList.size()) {
@@ -82,6 +83,7 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
       if (chunkReader.hasNextSatisfiedPage()) {
         return true;
       }
+      closeChunkReader();
     }
     return false;
   }
@@ -97,7 +99,22 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
 
   @Override
   public void close() throws IOException {
-    chunkLoader.close();
+    try {
+      closeChunkReader();
+    } finally {
+      chunkLoader.close();
+    }
+  }
+
+  /** Releases the current chunk without closing the shared file loader. */
+  public void closeChunkReader() throws IOException {
+    if (chunkReader != null) {
+      try {
+        chunkReader.close();
+      } finally {
+        chunkReader = null;
+      }
+    }
   }
 
   private IChunkMetadata nextChunkMeta() {

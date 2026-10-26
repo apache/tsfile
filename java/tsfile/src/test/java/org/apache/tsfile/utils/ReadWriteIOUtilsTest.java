@@ -27,7 +27,9 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -42,6 +44,35 @@ import static org.junit.Assert.fail;
 public class ReadWriteIOUtilsTest {
 
   protected static final int DEFAULT_BUFFER_SIZE = 4096;
+
+  @Test
+  public void testReadLongFromFragmentedStream() throws IOException {
+    long expected = 0x8123456789ABCDEFL;
+    byte[] encoded = ByteBuffer.allocate(Long.BYTES).putLong(expected).array();
+    InputStream input =
+        new ByteArrayInputStream(encoded) {
+          private boolean zeroRead = true;
+
+          @Override
+          public synchronized int read(byte[] bytes, int offset, int length) {
+            if (zeroRead) {
+              zeroRead = false;
+              return 0;
+            }
+            return super.read(bytes, offset, Math.min(length, 2));
+          }
+        };
+    Assert.assertEquals(expected, ReadWriteIOUtils.readLong(input));
+    Assert.assertEquals(-1, input.read());
+  }
+
+  @Test
+  public void testReadLongRejectsEveryTruncatedLength() {
+    for (int length = 0; length < Long.BYTES; length++) {
+      InputStream input = new ByteArrayInputStream(new byte[length]);
+      Assert.assertThrows(EOFException.class, () -> ReadWriteIOUtils.readLong(input));
+    }
+  }
 
   @Test
   public void testReadStringRejectsOversizedLength() {

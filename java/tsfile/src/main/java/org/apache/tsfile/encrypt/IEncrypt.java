@@ -18,9 +18,13 @@
  */
 package org.apache.tsfile.encrypt;
 
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.i18n.Messages;
+
+import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
-public interface IEncrypt {
+public interface IEncrypt extends AutoCloseable {
 
   static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
       new ConcurrentHashMap<>();
@@ -30,4 +34,64 @@ public interface IEncrypt {
   IDecryptor getDecryptor();
 
   IEncryptor getEncryptor();
+
+  /**
+   * Returns the fixed number of bytes added to every encrypted page body by this profile.
+   *
+   * <p>Page AEAD providers must override this method. The value is part of the profile contract and
+   * must not change while files using that profile exist.
+   */
+  default int getPageBodyOverhead() {
+    return -1;
+  }
+
+  /** Returns the exact encoded size, including profile-specific framing and padding. */
+  default int getEncryptedPageBodySize(int plaintextSize) {
+    int overhead = getPageBodyOverhead();
+    if (plaintextSize < 0 || overhead <= 0) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return Math.addExact(plaintextSize, overhead);
+  }
+
+  /**
+   * Returns the candidate compressed plaintext size from a bounded, read-only encoded body. This is
+   * untrusted framing until decryptPage authenticates it together with the page context.
+   * Implementations must not decrypt, allocate based on this value, or modify the input.
+   */
+  default int getPagePlaintextSize(ByteBuffer encryptedBody) {
+    int overhead = getPageBodyOverhead();
+    if (overhead <= 0 || encryptedBody.remaining() < overhead) {
+      throw new EncryptException(Messages.get("error.encrypt.invalid_page_body_lengths"));
+    }
+    return encryptedBody.remaining() - overhead;
+  }
+
+  /**
+   * Returns this immutable profile's chunk-position proof size. Page-AEAD providers must override
+   * this method; unsupported providers fail closed. The size must be positive and no larger than
+   * {@link ChunkCryptoContext#MAX_AUTHENTICATION_SIZE}.
+   */
+  default int getChunkAuthenticationSize() {
+    return -1;
+  }
+
+  /**
+   * Returns a fixed-size opaque proof authenticating a chunk's physical position. The proof is
+   * exactly {@link #getChunkAuthenticationSize()} bytes. Providers using AEAD must use a fresh
+   * nonce under the file DEK, independently of page encryption calls.
+   */
+  default byte[] authenticateChunk(ChunkCryptoContext context) {
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
+  }
+
+  /** Verifies the proof before a chunk identity is used; unsupported providers fail closed. */
+  default void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+    throw new EncryptException(
+        Messages.format("error.encrypt.chunk_authentication_unsupported", getClass().getName()));
+  }
+
+  @Override
+  default void close() {}
 }

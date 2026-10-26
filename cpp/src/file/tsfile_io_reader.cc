@@ -733,7 +733,7 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
     int64_t measurement_ie_end_offset = 0;
     if (RET_FAIL(load_measurement_index_entry(measurement_name, top_node,
                                               measurement_index_entry,
-                                              measurement_ie_end_offset))) {
+                                              measurement_ie_end_offset, pa))) {
         return ret;
     } else if (RET_FAIL(do_load_timeseries_index(
                    measurement_name, measurement_index_entry->get_offset(),
@@ -800,7 +800,7 @@ int TsFileIOReader::load_measurement_index_entry(
     const std::string& measurement_name_str,
     std::shared_ptr<MetaIndexNode> top_node,
     std::shared_ptr<IMetaIndexEntry>& ret_measurement_index_entry,
-    int64_t& ret_end_offset) {
+    int64_t& ret_end_offset, common::PageArena& result_pa) {
     int ret = E_OK;
     // search from top_node in top-down way
     auto measurement_name =
@@ -808,11 +808,11 @@ int TsFileIOReader::load_measurement_index_entry(
     if (top_node->node_type_ == LEAF_MEASUREMENT) {
         ret = top_node->binary_search_children(
             measurement_name, /*exact*/ false, ret_measurement_index_entry,
-            ret_end_offset);
+            ret_end_offset, result_pa);
     } else {
         ret = search_from_internal_node(measurement_name, false, top_node,
                                         ret_measurement_index_entry,
-                                        ret_end_offset);
+                                        ret_end_offset, &result_pa);
     }
     if (ret == E_NOT_EXIST) {
         ret = E_MEASUREMENT_NOT_EXIST;
@@ -945,7 +945,7 @@ int TsFileIOReader::get_timeseries_indexes(
         timeseries_indexs[idx] = nullptr;
         ret = load_measurement_index_entry(measurement_name, top_node,
                                            measurement_index_entry,
-                                           measurement_ie_end_offset);
+                                           measurement_ie_end_offset, pa);
         if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_NOT_EXIST) {
             ret = E_OK;
             idx++;
@@ -997,16 +997,18 @@ int TsFileIOReader::search_from_leaf_node(
 int TsFileIOReader::search_from_internal_node(
     std::shared_ptr<IComparable> target_name, bool is_device,
     std::shared_ptr<MetaIndexNode> index_node,
-    std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
-    int64_t& ret_end_offset) {
+    std::shared_ptr<IMetaIndexEntry>& ret_index_entry, int64_t& ret_end_offset,
+    common::PageArena* result_pa) {
     int ret = E_OK;
+    PageArena& output_pa = result_pa == nullptr ? *index_node->pa_ : *result_pa;
     std::shared_ptr<IMetaIndexEntry> index_entry;
     int64_t end_offset = 0;
 
     ASSERT(index_node->node_type_ == INTERNAL_MEASUREMENT ||
            index_node->node_type_ == INTERNAL_DEVICE);
     if (RET_FAIL(index_node->binary_search_children(
-            target_name, /*exact=*/false, index_entry, end_offset))) {
+            target_name, /*exact=*/false, index_entry, end_offset,
+            output_pa))) {
         return ret;
     }
 
@@ -1045,17 +1047,20 @@ int TsFileIOReader::search_from_internal_node(
         }
         if (cur_level_index_node->node_type_ == LEAF_DEVICE) {
             ret = cur_level_index_node->binary_search_children(
-                target_name, /*exact=*/true, ret_index_entry, ret_end_offset);
+                target_name, /*exact=*/true, ret_index_entry, ret_end_offset,
+                output_pa);
             cur_level_index_node->destroy();
             return ret;  //// FIXME
         } else if (cur_level_index_node->node_type_ == LEAF_MEASUREMENT) {
             ret = cur_level_index_node->binary_search_children(
-                target_name, /*exact=*/false, ret_index_entry, ret_end_offset);
+                target_name, /*exact=*/false, ret_index_entry, ret_end_offset,
+                output_pa);
             cur_level_index_node->destroy();
             return ret;  //// FIXME
         } else {
             ret = cur_level_index_node->binary_search_children(
-                target_name, /*exact=*/false, index_entry, end_offset);
+                target_name, /*exact=*/false, index_entry, end_offset,
+                output_pa);
             cur_level_index_node->destroy();
         }
     }

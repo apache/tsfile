@@ -166,7 +166,7 @@ class TsFileIOReader {
         const std::string& measurement_name,
         std::shared_ptr<MetaIndexNode> top_node,
         std::shared_ptr<IMetaIndexEntry>& ret_measurement_index_entry,
-        int64_t& ret_end_offset);
+        int64_t& ret_end_offset, common::PageArena& result_pa);
 
     int load_all_measurement_index_entry(
         int64_t start_offset, int64_t end_offset, common::PageArena& pa,
@@ -204,7 +204,7 @@ class TsFileIOReader {
         std::shared_ptr<IComparable> target_name, bool is_device,
         std::shared_ptr<MetaIndexNode> index_node,
         std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
-        int64_t& ret_end_offset);
+        int64_t& ret_end_offset, common::PageArena* result_pa = nullptr);
 
     bool filter_stasify(ITimeseriesIndex* ts_index, Filter* time_filter);
 

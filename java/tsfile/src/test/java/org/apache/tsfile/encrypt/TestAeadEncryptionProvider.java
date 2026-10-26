@@ -1,0 +1,350 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.tsfile.encrypt;
+
+import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
+
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/** JDK-only AEAD provider used to exercise the generic TsFile encryption SPI. */
+public final class TestAeadEncryptionProvider implements IEncryptProvider {
+
+  public static final TestAeadEncryptionProvider INSTANCE = new TestAeadEncryptionProvider();
+  public static final String PROVIDER_ID = "test-aead-provider";
+  public static final String PROFILE_ID = "AES_GCM_128_AES_WRAP_128_V1";
+  public static final String MAC_PROFILE_ID = "TEST_AES_GCM_HMAC_SHA256_V1";
+  public static final String PADDED_PROFILE_ID = "TEST_PADDED_AES_GCM_V1";
+
+  private static final int IV_LENGTH = 12;
+  private static final int TAG_LENGTH = 16;
+
+  private static final byte[] TEST_KEY_ENCRYPTION_KEY =
+      new byte[] {
+        0x10, 0x32, 0x54, 0x76, 0x01, 0x23, 0x45, 0x67, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x00
+      };
+  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+  private static final AtomicInteger CREATE_COUNT = new AtomicInteger();
+  private static final AtomicInteger CLOSE_COUNT = new AtomicInteger();
+
+  private TestAeadEncryptionProvider() {}
+
+  @Override
+  public String getProviderId() {
+    return PROVIDER_ID;
+  }
+
+  @Override
+  public IEncrypt create(EncryptParameter encryptParameter) {
+    if (!PROFILE_ID.equals(encryptParameter.getProfileId())
+        && !MAC_PROFILE_ID.equals(encryptParameter.getProfileId())
+        && !PADDED_PROFILE_ID.equals(encryptParameter.getProfileId())) {
+      throw new EncryptException("unsupported test encryption profile");
+    }
+    CREATE_COUNT.incrementAndGet();
+    return new TestAeadEncrypt(
+        resolveDataKey(encryptParameter),
+        MAC_PROFILE_ID.equals(encryptParameter.getProfileId()),
+        PADDED_PROFILE_ID.equals(encryptParameter.getProfileId()));
+  }
+
+  public static EncryptParameter createParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, PROFILE_ID);
+  }
+
+  /** Test-only 32-byte proof profile; page bodies still use the existing AES-GCM test cipher. */
+  public static EncryptParameter createMacParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, MAC_PROFILE_ID);
+  }
+
+  public static EncryptParameter createPaddedParameter(byte[] dataKey, byte[] fileCryptoId) {
+    return createParameter(dataKey, fileCryptoId, PADDED_PROFILE_ID);
+  }
+
+  private static EncryptParameter createParameter(
+      byte[] dataKey, byte[] fileCryptoId, String profile) {
+    return EncryptParameter.pageAeadBuilder()
+        .key(dataKey)
+        .providerId(PROVIDER_ID)
+        .profileId(profile)
+        .keyId("test-key")
+        .keyVersion("1")
+        .wrappedDataKey(wrapDataKey(dataKey))
+        .fileCryptoId(fileCryptoId)
+        .build();
+  }
+
+  public static int getCreateCount() {
+    return CREATE_COUNT.get();
+  }
+
+  public static int getCloseCount() {
+    return CLOSE_COUNT.get();
+  }
+
+  public static void resetCreateCount() {
+    CREATE_COUNT.set(0);
+  }
+
+  private static byte[] resolveDataKey(EncryptParameter parameter) {
+    byte[] dataKey = parameter.getKey();
+    if (dataKey != null) {
+      return Arrays.copyOf(dataKey, dataKey.length);
+    }
+    try {
+      Cipher cipher = Cipher.getInstance("AESWrap");
+      cipher.init(Cipher.UNWRAP_MODE, new SecretKeySpec(TEST_KEY_ENCRYPTION_KEY, "AES"));
+      SecretKey unwrapped =
+          (SecretKey) cipher.unwrap(parameter.getWrappedDataKey(), "AES", Cipher.SECRET_KEY);
+      return unwrapped.getEncoded();
+    } catch (GeneralSecurityException e) {
+      throw new EncryptException("test data key unwrap failed", e);
+    }
+  }
+
+  private static byte[] wrapDataKey(byte[] dataKey) {
+    try {
+      Cipher cipher = Cipher.getInstance("AESWrap");
+      cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(TEST_KEY_ENCRYPTION_KEY, "AES"));
+      return cipher.wrap(new SecretKeySpec(dataKey, "AES"));
+    } catch (GeneralSecurityException e) {
+      throw new EncryptException("test data key wrap failed", e);
+    }
+  }
+
+  private static final class TestAeadEncrypt implements IEncrypt {
+
+    private final byte[] dataKey;
+    private final boolean macProof;
+    private final boolean padded;
+
+    private TestAeadEncrypt(byte[] dataKey, boolean macProof, boolean padded) {
+      this.dataKey = dataKey;
+      this.macProof = macProof;
+      this.padded = padded;
+    }
+
+    @Override
+    public IDecryptor getDecryptor() {
+      return new AeadDecryptor(dataKey, padded);
+    }
+
+    @Override
+    public IEncryptor getEncryptor() {
+      return new AeadEncryptor(dataKey, padded);
+    }
+
+    @Override
+    public int getPageBodyOverhead() {
+      return padded ? -1 : IV_LENGTH + TAG_LENGTH;
+    }
+
+    @Override
+    public int getEncryptedPageBodySize(int plaintextSize) {
+      return padded
+          ? 32 + (plaintextSize / 16 + 1) * 16
+          : IEncrypt.super.getEncryptedPageBodySize(plaintextSize);
+    }
+
+    @Override
+    public int getPagePlaintextSize(java.nio.ByteBuffer body) {
+      if (!padded) {
+        return IEncrypt.super.getPagePlaintextSize(body);
+      }
+      if (body.remaining() < 48) {
+        throw new EncryptException("Truncated test padded page");
+      }
+      return body.getInt();
+    }
+
+    @Override
+    public int getChunkAuthenticationSize() {
+      return macProof ? 32 : IV_LENGTH + TAG_LENGTH;
+    }
+
+    @Override
+    public byte[] authenticateChunk(ChunkCryptoContext context) {
+      if (macProof) {
+        return chunkMac(context);
+      }
+      return new AeadEncryptor(dataKey)
+          .encryptWithAad(new byte[0], 0, 0, context.getAssociatedData());
+    }
+
+    @Override
+    public void verifyChunkAuthentication(byte[] authentication, ChunkCryptoContext context) {
+      if (macProof) {
+        if (!java.security.MessageDigest.isEqual(authentication, chunkMac(context))) {
+          throw new EncryptException("Test chunk MAC mismatch");
+        }
+        return;
+      }
+      byte[] plaintext =
+          new AeadDecryptor(dataKey)
+              .decryptWithAad(
+                  authentication, 0, authentication.length, context.getAssociatedData());
+      if (plaintext.length != 0) {
+        throw new EncryptException("Unexpected chunk authentication plaintext");
+      }
+    }
+
+    private byte[] chunkMac(ChunkCryptoContext context) {
+      try {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(dataKey, "HmacSHA256"));
+        return mac.doFinal(context.getAssociatedData());
+      } catch (GeneralSecurityException e) {
+        throw new EncryptException("Test chunk MAC failed", e);
+      }
+    }
+
+    @Override
+    public void close() {
+      Arrays.fill(dataKey, (byte) 0);
+      CLOSE_COUNT.incrementAndGet();
+    }
+  }
+
+  private static final class AeadEncryptor implements IEncryptor {
+
+    private final byte[] dataKey;
+    private final boolean padded;
+
+    private AeadEncryptor(byte[] dataKey) {
+      this(dataKey, false);
+    }
+
+    private AeadEncryptor(byte[] dataKey, boolean padded) {
+      this.dataKey = dataKey;
+      this.padded = padded;
+    }
+
+    @Override
+    public byte[] encrypt(byte[] data) {
+      return encrypt(data, 0, data.length);
+    }
+
+    @Override
+    public byte[] encrypt(byte[] data, int offset, int size) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public byte[] encryptPage(
+        byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
+      if (!padded) {
+        return encryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      }
+      byte[] input = new byte[(size / 16 + 1) * 16];
+      System.arraycopy(data, offset, input, 0, size);
+      byte[] encrypted =
+          encryptWithAad(input, 0, input.length, pageCryptoContext.getAssociatedData());
+      return java.nio.ByteBuffer.allocate(4 + encrypted.length).putInt(size).put(encrypted).array();
+    }
+
+    private byte[] encryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {
+      byte[] iv = new byte[IV_LENGTH];
+      SECURE_RANDOM.nextBytes(iv);
+      try {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+            Cipher.ENCRYPT_MODE,
+            new SecretKeySpec(dataKey, "AES"),
+            new GCMParameterSpec(TAG_LENGTH * Byte.SIZE, iv));
+        cipher.updateAAD(associatedData);
+        byte[] ciphertext = cipher.doFinal(data, offset, size);
+        byte[] pageBody = new byte[iv.length + ciphertext.length];
+        System.arraycopy(iv, 0, pageBody, 0, iv.length);
+        System.arraycopy(ciphertext, 0, pageBody, iv.length, ciphertext.length);
+        return pageBody;
+      } catch (GeneralSecurityException e) {
+        throw new EncryptException("test page encryption failed", e);
+      }
+    }
+
+    @Override
+    public EncryptionType getEncryptionType() {
+      return EncryptionType.NewWay;
+    }
+  }
+
+  private static final class AeadDecryptor implements IDecryptor {
+
+    private final byte[] dataKey;
+    private final boolean padded;
+
+    private AeadDecryptor(byte[] dataKey) {
+      this(dataKey, false);
+    }
+
+    private AeadDecryptor(byte[] dataKey, boolean padded) {
+      this.dataKey = dataKey;
+      this.padded = padded;
+    }
+
+    @Override
+    public byte[] decrypt(byte[] data) {
+      return decrypt(data, 0, data.length);
+    }
+
+    @Override
+    public byte[] decrypt(byte[] data, int offset, int size) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public byte[] decryptPage(
+        byte[] data, int offset, int size, PageCryptoContext pageCryptoContext) {
+      if (!padded) {
+        return decryptWithAad(data, offset, size, pageCryptoContext.getAssociatedData());
+      }
+      byte[] decoded =
+          decryptWithAad(data, offset + 4, size - 4, pageCryptoContext.getAssociatedData());
+      return Arrays.copyOf(decoded, pageCryptoContext.getCompressedPlaintextSize());
+    }
+
+    private byte[] decryptWithAad(byte[] data, int offset, int size, byte[] associatedData) {
+      try {
+        GCMParameterSpec spec =
+            new GCMParameterSpec(TAG_LENGTH * Byte.SIZE, data, offset, IV_LENGTH);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(dataKey, "AES"), spec);
+        cipher.updateAAD(associatedData);
+        return cipher.doFinal(data, offset + IV_LENGTH, size - IV_LENGTH);
+      } catch (GeneralSecurityException e) {
+        throw new EncryptException("test page decryption failed", e);
+      }
+    }
+
+    @Override
+    public EncryptionType getEncryptionType() {
+      return EncryptionType.NewWay;
+    }
+  }
+}
