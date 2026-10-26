@@ -66,6 +66,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int fill_ids();
     int satisfy_field_filter(bool& satisfied);
     int advance_column(MeasurementColumnContext* column_context);
+    void remove_column_context(MeasurementColumnContext* column_context);
     int32_t compute_dense_row_count(
         const std::vector<ITimeseriesIndex*>& ts_indexes);
     // Fast path for aligned data: all columns share the same timestamps,

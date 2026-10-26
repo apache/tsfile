@@ -58,6 +58,7 @@ struct ChunkPageInfo {
 // decode or lazily by the single-thread page-plan path, then consumed by the
 // scatter loop.
 struct PageDecodedState {
+    uint32_t row_count = 0;
     std::vector<uint8_t> notnull_bitmap;
     std::vector<char> predecoded_values;
     std::vector<common::String> predecoded_strings;
@@ -127,7 +128,8 @@ class AlignedChunkReader : public IChunkReader {
         field_filter_ = field_filter;
     }
     bool field_filter_applied() const {
-        return field_filter_ != nullptr && page_plan_built_;
+        return field_filter_ != nullptr && page_plan_built_ &&
+               multi_page_error_ == common::E_OK;
     }
     void reset() override;
     void destroy() override;
@@ -135,7 +137,7 @@ class AlignedChunkReader : public IChunkReader {
 
     bool has_more_data() const override {
         if (multi_value_mode_) {
-            return has_more_data_multi();
+            return multi_page_error_ != common::E_OK || has_more_data_multi();
         }
         return prev_value_page_not_finish() || prev_time_page_not_finish() ||
                (value_chunk_visit_offset_ -
@@ -152,6 +154,8 @@ class AlignedChunkReader : public IChunkReader {
     int load_by_aligned_meta_multi(ChunkMeta* time_meta,
                                    const std::vector<ChunkMeta*>& value_metas);
 
+    // In multi-value mode a hard read/decode error remains terminal until
+    // reset(). E_OVERFLOW and end-of-stream do not poison the reader.
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
@@ -245,6 +249,12 @@ class AlignedChunkReader : public IChunkReader {
     int get_next_page_multi(common::TsBlock* ret_tsblock,
                             Filter* oneshoot_filter, common::PageArena& pa,
                             int& row_offset);
+    // Hard decode/I/O errors are terminal until reset(); partially decoded
+    // pages must never be reused by a subsequent read.
+    int get_next_page_multi_impl(common::TsBlock* ret_tsblock,
+                                 Filter* oneshoot_filter, common::PageArena& pa,
+                                 int& row_offset);
+    int validate_page_slot(size_t page_idx) const;
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
                                    common::PageArena& pa, int& row_offset);
     int skip_cur_page_multi();
@@ -327,6 +337,7 @@ class AlignedChunkReader : public IChunkReader {
     // ── Page-plan state ────────────────────────────────────────────────
     std::vector<ChunkPageInfo> chunk_pages_;
     std::vector<std::vector<int64_t>> per_page_times_;
+    int multi_page_error_ = common::E_OK;
     bool page_plan_built_ = false;
     bool page_plan_lazy_ = true;
     bool current_page_loaded_ = false;

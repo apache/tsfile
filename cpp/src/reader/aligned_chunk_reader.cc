@@ -51,6 +51,8 @@ int AlignedChunkReader::init(RandomAccessReadFile* read_file, String m_name,
 }
 
 void AlignedChunkReader::reset() {
+    multi_page_error_ = E_OK;
+    current_page_field_mask_valid_ = false;
     time_chunk_meta_ = nullptr;
     value_chunk_meta_ = nullptr;
     time_chunk_header_.reset();
@@ -1337,6 +1339,9 @@ int AlignedChunkReader::count_non_null_prefix(
     if (row_limit <= 0 || bitmap.empty()) {
         return 0;
     }
+    if (static_cast<uint64_t>(row_limit) >
+        static_cast<uint64_t>(bitmap.size()) * 8U)
+        return -1;
     const uint32_t mask_base = 1 << 7;
     int count = 0;
     for (int32_t i = 0; i < row_limit; i++) {
@@ -1427,6 +1432,11 @@ int AlignedChunkReader::decode_time_page_with(const ChunkPageInfo& page_info,
         out_times.insert(out_times.end(), batch, batch + actual);
     }
     compressor->after_uncompress(uncompressed_buf);
+    if (IS_SUCC(ret) &&
+        (page_info.row_begin < 0 || page_info.row_end < page_info.row_begin ||
+         static_cast<size_t>(page_info.row_end) > out_times.size())) {
+        return E_TSFILE_CORRUPTED;
+    }
     return ret;
 }
 
@@ -1461,8 +1471,11 @@ int AlignedChunkReader::evaluate_page_field_mask(size_t page_idx) {
         view.notnull_bitmap_size =
             static_cast<uint32_t>(pps.notnull_bitmap.size());
         view.row_offset = static_cast<uint32_t>(page_info.row_begin);
-        view.nonnull_start = static_cast<uint32_t>(
-            count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin));
+        const int prefix =
+            count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin);
+        if (prefix < 0) return E_TSFILE_CORRUPTED;
+        view.nonnull_start = static_cast<uint32_t>(prefix);
+        view.value_count = static_cast<uint32_t>(pps.predecoded_count);
         if (view.type == common::STRING || view.type == common::TEXT ||
             view.type == common::BLOB) {
             view.string_values = pps.predecoded_strings.data();
@@ -1703,6 +1716,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     auto* col = value_columns_[col_idx];
     auto& pps = col->per_page_state[page_idx];
 
+    pps.row_count = 0;
     pps.notnull_bitmap.clear();
     pps.predecoded_values.clear();
     pps.predecoded_strings.clear();
@@ -1767,11 +1781,15 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     uint32_t offset = 0;
     uint32_t data_num = SerializationUtil::read_ui32(uncompressed_buf);
     offset += sizeof(uint32_t);
-    uint32_t bitmap_bytes = (data_num + 7) / 8;
-    if (uncompressed_size - offset < bitmap_bytes) {
+    uint32_t bitmap_bytes = data_num / 8 + (data_num % 8 != 0);
+    if (data_num > static_cast<uint32_t>(INT32_MAX) ||
+        page_info.row_begin < 0 || page_info.row_end < page_info.row_begin ||
+        data_num < static_cast<uint32_t>(page_info.row_end) ||
+        uncompressed_size - offset < bitmap_bytes) {
         col->compressor->after_uncompress(uncompressed_buf);
         return E_TSFILE_CORRUPTED;
     }
+    pps.row_count = data_num;
     pps.notnull_bitmap.resize(bitmap_bytes);
     memcpy(pps.notnull_bitmap.data(), uncompressed_buf + offset, bitmap_bytes);
     offset += bitmap_bytes;
@@ -1787,6 +1805,10 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
                                               static_cast<int32_t>(data_num));
     int prefix_nonnull =
         count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin);
+    if (nonnull_total < 0 || prefix_nonnull < 0) {
+        col->compressor->after_uncompress(uncompressed_buf);
+        return E_TSFILE_CORRUPTED;
+    }
     pps.predecoded_read_pos = prefix_nonnull;
 
     auto cleanup = [&]() {
@@ -2027,9 +2049,43 @@ void AlignedChunkReader::release_page_slot(size_t page_idx) {
     }
 }
 
+int AlignedChunkReader::validate_page_slot(size_t page_idx) const {
+    const auto& page = chunk_pages_[page_idx];
+    const auto& times = per_page_times_[page_idx];
+    if (page.row_begin < 0 || page.row_end < page.row_begin ||
+        static_cast<size_t>(page.row_end) > times.size()) {
+        return E_TSFILE_CORRUPTED;
+    }
+    const bool outputs_skipped =
+        field_filter_ != nullptr && current_page_field_mask_.empty();
+    for (size_t c = 0; c < value_columns_.size(); ++c) {
+        // An empty FIELD mask deliberately leaves output-only columns unread.
+        if (outputs_skipped && !filter_column_mask_[c]) continue;
+        const auto& pps = value_columns_[c]->per_page_state[page_idx];
+        // A zero-size value page represents an entirely NULL measurement.
+        if (page.value_compressed_sizes[c] != 0 &&
+            pps.row_count != times.size())
+            return E_TSFILE_CORRUPTED;
+    }
+    return E_OK;
+}
+
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
                                             PageArena& pa, int& row_offset) {
+    if (multi_page_error_ != E_OK) return multi_page_error_;
+    const int ret =
+        get_next_page_multi_impl(ret_tsblock, oneshoot_filter, pa, row_offset);
+    if (ret != E_OK && ret != E_NO_MORE_DATA && ret != E_OVERFLOW) {
+        multi_page_error_ = ret;
+    }
+    return ret;
+}
+
+int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
+                                                 Filter* oneshoot_filter,
+                                                 PageArena& pa,
+                                                 int& row_offset) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
@@ -2106,6 +2162,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                 return ret;
             }
         }
+        if (RET_FAIL(validate_page_slot(current_page_plan_index_))) return ret;
         // Lazy decoding may already have produced the mask, including an
         // empty one that deliberately left output columns undecoded.
         if (field_filter_ != nullptr && current_page_field_mask_.empty()) {

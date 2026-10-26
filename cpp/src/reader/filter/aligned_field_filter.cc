@@ -350,9 +350,9 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
         case Kind::IS_NOT_NULL:
             return is_null(node->column_);
         case Kind::NOT:
-            // Repeated negation must not erase a missing operand either.
-            if (!node->left_) return node;
-            return std::move(node->left_);
+            // Only invalid markers remain after NOT pushdown. Repeated
+            // negation must preserve them instead of erasing an invalid tree.
+            return node;
         case Kind::AND:
             return or_filter(negate(std::move(node->left_)),
                              negate(std::move(node->right_)));
@@ -392,7 +392,8 @@ bool AlignedFieldFilter::is_valid() const {
         case Kind::IS_NOT_NULL:
             return true;
         case Kind::NOT:
-            return left_ != nullptr && left_->is_valid();
+            // Valid NOTs are pushed to leaves; only invalid markers remain.
+            return false;
         case Kind::AND:
         case Kind::OR:
             return left_ != nullptr && right_ != nullptr && left_->is_valid() &&
@@ -402,11 +403,11 @@ bool AlignedFieldFilter::is_valid() const {
 }
 
 int AlignedFieldFilter::bind(TableSchema& schema) {
-    if (kind_ == Kind::AND || kind_ == Kind::OR || kind_ == Kind::NOT) {
-        if (!left_ || (kind_ != Kind::NOT && !right_))
-            return common::E_INVALID_ARG;
+    if (kind_ == Kind::NOT) return common::E_INVALID_ARG;
+    if (kind_ == Kind::AND || kind_ == Kind::OR) {
+        if (!left_ || !right_) return common::E_INVALID_ARG;
         const int ret = left_->bind(schema);
-        if (ret != common::E_OK || kind_ == Kind::NOT) return ret;
+        if (ret != common::E_OK) return ret;
         return right_->bind(schema);
     }
     const common::ColumnSchema column = schema.get_column_schema(column_);
@@ -694,14 +695,9 @@ int AlignedFieldFilter::evaluate(common::TsBlock& block,
             postorder.push_back(node);
             traversal.pop_back();
         } else if (node->kind_ == Kind::NOT) {
-            if (!node->left_) return common::E_INVALID_ARG;
-            if (frame.state == 0) {
-                frame.state = 1;
-                traversal.push_back({node->left_.get(), 0});
-            } else {
-                postorder.push_back(node);
-                traversal.pop_back();
-            }
+            // Inverting a one-bit mask would incorrectly select NULL rows.
+            // Factory-built NOTs have already been pushed to the leaves.
+            return common::E_INVALID_ARG;
         } else {
             if (!node->left_ || !node->right_) return common::E_INVALID_ARG;
             if (frame.state == 0) {
@@ -726,9 +722,6 @@ int AlignedFieldFilter::evaluate(common::TsBlock& block,
             int ret = node->evaluate_leaf(block, column_index, leaf_mask);
             if (ret != common::E_OK) return ret;
             masks.push_back(std::move(leaf_mask));
-        } else if (node->kind_ == Kind::NOT) {
-            if (masks.empty()) return common::E_INVALID_ARG;
-            masks.back().invert();
         } else {
             if (masks.size() < 2) return common::E_INVALID_ARG;
             SelectionMask right = std::move(masks.back());
@@ -767,14 +760,9 @@ int AlignedFieldFilter::evaluate_columns(const std::vector<ColumnView>& columns,
             postorder.push_back(node);
             traversal.pop_back();
         } else if (node->kind_ == Kind::NOT) {
-            if (!node->left_) return common::E_INVALID_ARG;
-            if (frame.state == 0) {
-                frame.state = 1;
-                traversal.push_back({node->left_.get(), 0});
-            } else {
-                postorder.push_back(node);
-                traversal.pop_back();
-            }
+            // Inverting a one-bit mask would incorrectly select NULL rows.
+            // Factory-built NOTs have already been pushed to the leaves.
+            return common::E_INVALID_ARG;
         } else {
             if (!node->left_ || !node->right_) return common::E_INVALID_ARG;
             if (frame.state == 0) {
@@ -802,9 +790,6 @@ int AlignedFieldFilter::evaluate_columns(const std::vector<ColumnView>& columns,
                                           leaf_mask);
             if (ret != common::E_OK) return ret;
             masks.push_back(std::move(leaf_mask));
-        } else if (node->kind_ == Kind::NOT) {
-            if (masks.empty()) return common::E_INVALID_ARG;
-            masks.back().invert();
         } else {
             if (masks.size() < 2) return common::E_INVALID_ARG;
             SelectionMask right = std::move(masks.back());
@@ -825,12 +810,20 @@ int AlignedFieldFilter::evaluate_leaf(const ColumnView& column,
                                       uint32_t row_count,
                                       SelectionMask& mask) const {
     if (column.type == common::INVALID_DATATYPE) return common::E_INVALID_ARG;
+    if ((column.notnull_bitmap != nullptr &&
+         static_cast<uint64_t>(column.row_offset) + row_count >
+             static_cast<uint64_t>(column.notnull_bitmap_size) * 8U) ||
+        column.nonnull_start > column.value_count) {
+        return common::E_INVALID_ARG;
+    }
     uint32_t nonnull_index = column.nonnull_start;
     for (uint32_t row = 0; row < row_count; ++row) {
-        const uint32_t source_row = column.row_offset + row;
+        const uint64_t source_row =
+            static_cast<uint64_t>(column.row_offset) + row;
         bool is_null = true;
         if (column.notnull_bitmap != nullptr &&
-            source_row < column.notnull_bitmap_size * 8U) {
+            source_row <
+                static_cast<uint64_t>(column.notnull_bitmap_size) * 8U) {
             is_null = (column.notnull_bitmap[source_row / 8U] &
                        (0x80U >> (source_row % 8U))) == 0;
         }
@@ -838,6 +831,8 @@ int AlignedFieldFilter::evaluate_leaf(const ColumnView& column,
         const char* data = nullptr;
         uint32_t len = 0;
         if (!is_null) {
+            if (nonnull_index >= column.value_count)
+                return common::E_INVALID_ARG;
             if (column.type == common::STRING || column.type == common::TEXT ||
                 column.type == common::BLOB) {
                 if (column.string_values == nullptr) {

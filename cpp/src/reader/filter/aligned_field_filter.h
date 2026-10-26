@@ -53,6 +53,8 @@ class AlignedFieldFilter : public Filter {
         uint32_t notnull_bitmap_size = 0;
         uint32_t row_offset = 0;
         uint32_t nonnull_start = 0;
+        // Number of accessible non-NULL entries in the value buffer.
+        uint32_t value_count = 0;
     };
 
     struct Literal {

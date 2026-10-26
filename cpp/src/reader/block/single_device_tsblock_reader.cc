@@ -626,7 +626,7 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
         uint32_t avail = aligned_vec_[0]->available_rows();
         if (avail == 0) {
             for (auto* ctx : aligned_vec_) {
-                ctx->remove_from(field_column_contexts_);
+                remove_column_context(ctx);
             }
             aligned_vec_.clear();
             break;
@@ -645,7 +645,7 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
         }
         if (batch == 0) {
             for (auto* ctx : aligned_vec_) {
-                ctx->remove_from(field_column_contexts_);
+                remove_column_context(ctx);
             }
             aligned_vec_.clear();
             break;
@@ -819,7 +819,8 @@ int SingleDeviceTsBlockReader::satisfy_field_filter(bool& satisfied) {
             view.name = field.name;
             view.type = field.type;
             view.notnull_bitmap = field.is_null() ? nullptr : &notnull;
-            view.notnull_bitmap_size = 1;
+            view.notnull_bitmap_size = field.is_null() ? 0 : 1;
+            view.value_count = field.is_null() ? 0 : 1;
             if (field.type == common::STRING || field.type == common::TEXT ||
                 field.type == common::BLOB) {
                 strings[i] = common::String(field.data, field.size);
@@ -842,10 +843,17 @@ int SingleDeviceTsBlockReader::advance_column(
     MeasurementColumnContext* column_context) {
     int ret = column_context->move_iter();
     if (ret == common::E_NO_MORE_DATA) {
-        column_context->remove_from(field_column_contexts_);
+        remove_column_context(column_context);
         ret = common::E_OK;
     }
     return ret;
+}
+
+void SingleDeviceTsBlockReader::remove_column_context(
+    MeasurementColumnContext* column_context) {
+    // remove_from() deletes the context. Clear borrowed state first.
+    if (time_only_context_ == column_context) time_only_context_ = nullptr;
+    column_context->remove_from(field_column_contexts_);
 }
 
 void SingleMeasurementColumnContext::remove_from(
@@ -910,6 +918,7 @@ void SingleDeviceTsBlockReader::close() {
     for (auto& column_context : field_column_contexts_) {
         unique_contexts.insert(column_context.second);
     }
+    field_column_contexts_.clear();
     for (auto* ctx : unique_contexts) {
         delete ctx;
     }

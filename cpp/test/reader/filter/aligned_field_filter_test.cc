@@ -59,6 +59,46 @@ TEST(AlignedFieldFilterTest, MissingNotOperandsStayInvalidAfterRewriting) {
     }
 }
 
+TEST(AlignedFieldFilterTest, ColumnViewsRejectTruncatedBuffersAndOffsets) {
+    using namespace common;
+    using A = AlignedFieldFilter;
+    const uint8_t bitmap = 0x90;  // rows 0 and 3 have values
+    const int64_t values[] = {4, 9};
+    const String strings[] = {String("a", 1), String("b", 1)};
+    for (bool text : {false, true}) {
+        A::ColumnView view;
+        view.name = "v";
+        view.type = text ? STRING : INT64;
+        view.notnull_bitmap = &bitmap;
+        view.notnull_bitmap_size = 1;
+        view.fixed_values = reinterpret_cast<const char*>(values);
+        view.string_values = strings;
+        view.value_count = 2;
+        auto filter = A::is_not_null("v");
+        SelectionMask mask;
+        ASSERT_EQ(filter->evaluate_columns({view}, 4, mask), E_OK);
+        EXPECT_EQ(mask.count_ones(), 2U);
+        view.value_count = 1;
+        EXPECT_EQ(filter->evaluate_columns({view}, 4, mask), E_INVALID_ARG);
+        view.value_count = 2;
+        view.row_offset = 8;
+        EXPECT_EQ(filter->evaluate_columns({view}, 1, mask), E_INVALID_ARG);
+        view.row_offset = UINT32_MAX;
+        EXPECT_EQ(filter->evaluate_columns({view}, 2, mask), E_INVALID_ARG);
+        view.row_offset = 3;
+        view.nonnull_start = 1;
+        ASSERT_EQ(filter->evaluate_columns({view}, 1, mask), E_OK);
+        EXPECT_TRUE(mask.test(0));
+        view.nonnull_start = 2;
+        EXPECT_EQ(filter->evaluate_columns({view}, 1, mask), E_INVALID_ARG);
+        view.notnull_bitmap = nullptr;
+        view.nonnull_start = 0;
+        view.value_count = 0;
+        ASSERT_EQ(A::is_null("v")->evaluate_columns({view}, 4, mask), E_OK);
+        EXPECT_EQ(mask.count_ones(), 4U);
+    }
+}
+
 TEST(AlignedFieldFilterTest, NumericBindingMatchesJavaNumberConversions) {
     using namespace common;
     using A = AlignedFieldFilter;

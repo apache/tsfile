@@ -349,6 +349,9 @@ int TsFileIOReader::alloc_multi_ssi(
     }
     auto* multi_idx = new (multi_buf) MultiAlignedTimeseriesIndex;
     multi_idx->time_ts_idx_ = time_ts_idx;
+    // Publish ownership before any later failure so destroy() releases the
+    // vector backing storage, including a partially resolved name list.
+    ssi->itimeseries_index_ = multi_idx;
 
     // Batch-load all measurement TimeseriesIndex entries in a single pass over
     // the index tree — cheaper than N separate binary searches + file reads.
@@ -384,8 +387,6 @@ int TsFileIOReader::alloc_multi_ssi(
         }
         multi_idx->value_ts_idxs_.push_back(it->second);
     }
-
-    ssi->itimeseries_index_ = multi_idx;
 
     // Skip global statistic filter for multi — per-chunk filtering still works.
 
