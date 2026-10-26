@@ -33,6 +33,32 @@
 namespace storage {
 namespace {
 
+TEST(AlignedFieldFilterTest, MissingNotOperandsStayInvalidAfterRewriting) {
+    using namespace common;
+    using A = AlignedFieldFilter;
+    TableSchema schema(
+        "t", {{"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+    for (int shape = 0; shape < 5; ++shape) {
+        A::Ptr filter;
+        if (shape > 0) {
+            auto left = shape % 2 == 0 ? A::Ptr() : A::is_null("v");
+            auto right = shape % 2 == 0 ? A::is_null("v") : A::Ptr();
+            filter = shape <= 2
+                         ? A::and_filter(std::move(left), std::move(right))
+                         : A::or_filter(std::move(left), std::move(right));
+        }
+        for (int depth = 1; depth <= 8; ++depth) {
+            SCOPED_TRACE(::testing::Message() << shape << ":" << depth);
+            filter = A::not_filter(std::move(filter));
+            ASSERT_NE(filter, nullptr);
+            EXPECT_FALSE(filter->is_valid());
+            EXPECT_EQ(filter->bind(schema), E_INVALID_ARG);
+            SelectionMask mask;
+            EXPECT_EQ(filter->evaluate_columns({}, 0, mask), E_INVALID_ARG);
+        }
+    }
+}
+
 TEST(AlignedFieldFilterTest, NumericBindingMatchesJavaNumberConversions) {
     using namespace common;
     using A = AlignedFieldFilter;

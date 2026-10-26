@@ -78,6 +78,8 @@ class AlignedFieldFilter : public Filter {
     static Ptr compare(std::string column, CompareOp op, Literal literal);
     static Ptr is_null(std::string column);
     static Ptr is_not_null(std::string column);
+    // Logical operands must be non-null. A missing operand remains an invalid
+    // non-null tree, rejected with E_INVALID_ARG when bound or queried.
     static Ptr and_filter(Ptr left, Ptr right);
     static Ptr or_filter(Ptr left, Ptr right);
     static Ptr not_filter(Ptr child);

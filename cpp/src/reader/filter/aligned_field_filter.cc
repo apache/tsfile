@@ -321,7 +321,11 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::not_filter(Ptr child) {
 }
 
 AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
-    if (node == nullptr) return nullptr;
+    if (node == nullptr) {
+        // Preserve the invalid operand so query validation cannot mistake
+        // this predicate for the optional "no FIELD filter" argument.
+        return Ptr(new AlignedFieldFilter(Kind::NOT, nullptr, nullptr));
+    }
     switch (node->kind_) {
         case Kind::COMPARISON: {
             // The literal type does not identify the column type: an integer
@@ -346,6 +350,8 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
         case Kind::IS_NOT_NULL:
             return is_null(node->column_);
         case Kind::NOT:
+            // Repeated negation must not erase a missing operand either.
+            if (!node->left_) return node;
             return std::move(node->left_);
         case Kind::AND:
             return or_filter(negate(std::move(node->left_)),
@@ -354,7 +360,7 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
             return and_filter(negate(std::move(node->left_)),
                               negate(std::move(node->right_)));
     }
-    return nullptr;
+    return node;
 }
 
 std::vector<std::string> AlignedFieldFilter::referenced_columns() const {

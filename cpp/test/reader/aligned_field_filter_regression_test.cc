@@ -485,37 +485,51 @@ TEST_P(AlignedFieldFilterRegressionTest,
             ASSERT_EQ(writer.close(), E_OK);
         }
         for (int mode : {0, 1, 2}) {
-            for (bool conjunction : {false, true}) {
-                for (bool malformed : {false, true}) {
-                    SCOPED_TRACE(::testing::Message()
-                                 << populated << ":" << mode << ":"
-                                 << conjunction << ":" << malformed);
-                    auto left = A::is_not_null("v");
-                    auto right = malformed ? A::Ptr() : A::is_null("v");
-                    auto filter =
-                        conjunction
-                            ? A::and_filter(std::move(left), std::move(right))
-                            : A::or_filter(std::move(left), std::move(right));
-                    LocalRandomAccessReadFile file;
-                    ASSERT_EQ(file.open(filename_), E_OK);
-                    TableQueryExecutor executor(&file, std::get<1>(GetParam()));
-                    ResultSet* result = nullptr;
-                    const int ret =
-                        mode == 0 ? executor.query("t", {"v"}, nullptr, nullptr,
-                                                   filter.release(), result)
-                                  : executor.query("t", {"v"}, nullptr, nullptr,
-                                                   filter.release(), 0,
-                                                   mode == 2 ? 0 : -1, result);
-                    EXPECT_EQ(ret, malformed ? E_INVALID_ARG : E_OK);
-                    if (malformed) EXPECT_EQ(result, nullptr);
-                    if (result != nullptr) {
-                        if (!malformed) {
-                            bool next = false;
-                            EXPECT_EQ(result->next(next), E_OK);
-                            EXPECT_EQ(next,
-                                      populated && mode != 2 && !conjunction);
+            for (int kind : {0, 1, 2}) {
+                for (int negations : {0, 1, 2, 3}) {
+                    for (bool malformed : {false, true}) {
+                        SCOPED_TRACE(::testing::Message()
+                                     << populated << ":" << mode << ":" << kind
+                                     << ":" << negations << ":" << malformed);
+                        auto left = A::is_not_null("v");
+                        auto right = malformed ? A::Ptr() : A::is_null("v");
+                        A::Ptr filter;
+                        if (kind == 0) {
+                            filter = A::and_filter(std::move(left),
+                                                   std::move(right));
+                        } else if (kind == 1) {
+                            filter =
+                                A::or_filter(std::move(left), std::move(right));
+                        } else {
+                            filter = A::not_filter(std::move(right));
                         }
-                        executor.destroy_query_data_set(result);
+                        for (int n = 0; n < negations; ++n)
+                            filter = A::not_filter(std::move(filter));
+                        LocalRandomAccessReadFile file;
+                        ASSERT_EQ(file.open(filename_), E_OK);
+                        TableQueryExecutor executor(&file,
+                                                    std::get<1>(GetParam()));
+                        ResultSet* result = nullptr;
+                        const int ret =
+                            mode == 0
+                                ? executor.query("t", {"v"}, nullptr, nullptr,
+                                                 filter.release(), result)
+                                : executor.query("t", {"v"}, nullptr, nullptr,
+                                                 filter.release(), 0,
+                                                 mode == 2 ? 0 : -1, result);
+                        EXPECT_EQ(ret, malformed ? E_INVALID_ARG : E_OK);
+                        if (malformed) EXPECT_EQ(result, nullptr);
+                        if (result != nullptr) {
+                            if (!malformed) {
+                                bool next = false;
+                                EXPECT_EQ(result->next(next), E_OK);
+                                const bool matches =
+                                    (kind != 0) != (negations % 2 != 0);
+                                EXPECT_EQ(next,
+                                          populated && mode != 2 && matches);
+                            }
+                            executor.destroy_query_data_set(result);
+                        }
                     }
                 }
             }
