@@ -319,6 +319,126 @@ TEST_P(AlignedFieldFilterRegressionTest, NotPreservesFloatingNaNRowSemantics) {
     }
 }
 
+TEST_P(AlignedFieldFilterRegressionTest,
+       JavaNumericLiteralsUseTheDeclaredColumnType) {
+    write_floats();
+    for (const std::string column : {"v", "f", "d"}) {
+        for (const auto& literal :
+             {A::Literal::int32(1), A::Literal::int64(1),
+              A::Literal::float32(1), A::Literal::float64(1)}) {
+            for (auto op :
+                 {A::CompareOp::EQ, A::CompareOp::NE, A::CompareOp::LT,
+                  A::CompareOp::LE, A::CompareOp::GT, A::CompareOp::GE}) {
+                for (bool negate : {false, true}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << column << ":" << int(literal.type) << ":"
+                                 << int(op) << ":" << negate);
+                    auto filter = A::compare(column, op, literal);
+                    if (negate) filter = A::not_filter(std::move(filter));
+                    Rows expected;
+                    for (int device = 0; device < 3; ++device) {
+                        for (uint32_t r = 0; r < float_values_.size(); ++r) {
+                            if (column != "v" && device == 2) continue;
+                            const double value = column == "v"
+                                                     ? device * 100 + r
+                                                     : float_values_[r];
+                            if (compare(value, 1, op) != negate)
+                                expected.push_back({r, device * 100 + r});
+                        }
+                    }
+                    EXPECT_EQ(scan({"v"}, std::move(filter)), expected);
+                }
+            }
+        }
+    }
+}
+
+TEST_P(AlignedFieldFilterRegressionTest,
+       InvalidLiteralTypesFailBeforeReadingAnyData) {
+    for (int contents : {0, 1, 2}) {
+        {
+            TableSchema schema(
+                "t",
+                {{"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+                 {"anchor", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+                 {"flag", BOOLEAN, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+                 {"s", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+            WriteFile file;
+            create(file);
+            TsFileTableWriter writer(&file, &schema);
+            if (contents > 0) {
+                Tablet tablet("t", {"anchor", "v", "flag", "s"},
+                              {INT64, INT64, BOOLEAN, STRING},
+                              {ColumnCategory::FIELD, ColumnCategory::FIELD,
+                               ColumnCategory::FIELD, ColumnCategory::FIELD},
+                              2);
+                for (int r = 0; r < 2; ++r) {
+                    ASSERT_EQ(tablet.add_timestamp(r, r), E_OK);
+                    ASSERT_EQ(tablet.add_value(r, "anchor", int64_t(r)), E_OK);
+                    if (contents == 2) {
+                        ASSERT_EQ(tablet.add_value(r, "v", int64_t(r + 1)),
+                                  E_OK);
+                        ASSERT_EQ(tablet.add_value(r, "flag", true), E_OK);
+                        ASSERT_EQ(tablet.add_value(r, "s", "value"), E_OK);
+                    }
+                }
+                ASSERT_EQ(writer.write_table(tablet), E_OK);
+            }
+            ASSERT_EQ(writer.close(), E_OK);
+        }
+        // Schema-only, all-NULL, and populated tables must reject the same
+        // invalid types, including LIMIT 0 and both query overloads.
+        for (int mode : {0, 1, 2}) {
+            for (int shape = 0; shape < 6; ++shape) {
+                SCOPED_TRACE(::testing::Message()
+                             << contents << ":" << mode << ":" << shape);
+                A::Ptr filter;
+                if (shape == 0) {
+                    filter = A::compare("v", A::CompareOp::EQ,
+                                        A::Literal::string("wrong"));
+                } else if (shape == 1) {
+                    filter = A::compare("v", A::CompareOp::EQ,
+                                        A::Literal::boolean(true));
+                } else if (shape == 2) {
+                    filter =
+                        A::compare("s", A::CompareOp::EQ, A::Literal::int64(1));
+                } else if (shape == 3) {
+                    filter = A::compare("flag", A::CompareOp::EQ,
+                                        A::Literal::int32(1));
+                } else if (shape == 4) {
+                    filter =
+                        A::and_filter(A::compare("v", A::CompareOp::GT,
+                                                 A::Literal::int64(100)),
+                                      A::compare("v", A::CompareOp::EQ,
+                                                 A::Literal::string("wrong")));
+                } else {
+                    filter = A::or_filter(
+                        A::compare("v", A::CompareOp::GE, A::Literal::int64(0)),
+                        A::compare("v", A::CompareOp::EQ,
+                                   A::Literal::boolean(true)));
+                }
+                LocalRandomAccessReadFile file;
+                ASSERT_EQ(file.open(filename_), E_OK);
+                TableQueryExecutor executor(&file, std::get<1>(GetParam()));
+                ResultSet* result = nullptr;
+                const int ret =
+                    mode == 0 ? executor.query("t", {"v"}, nullptr, nullptr,
+                                               filter.release(), result)
+                              : executor.query("t", {"v"}, nullptr, nullptr,
+                                               filter.release(), 0,
+                                               mode == 1 ? 0 : -1, result);
+                EXPECT_EQ(ret, E_NOT_SUPPORT);
+                EXPECT_EQ(result, nullptr);
+                if (result != nullptr) executor.destroy_query_data_set(result);
+            }
+        }
+        const Rows expected = contents == 2 ? Rows{{0, 1}, {1, 2}} : Rows{};
+        EXPECT_EQ(scan({"v"},
+                       A::compare("v", A::CompareOp::GE, A::Literal::int32(1))),
+                  expected);
+    }
+}
+
 TEST_P(AlignedFieldFilterRegressionTest, IncompleteOrCannotBypassEvaluation) {
     write_floats();
     // Every row of every page satisfies the left operand, so page statistics

@@ -32,6 +32,7 @@
 #include "reader/filter/selection_mask.h"
 
 namespace storage {
+class TableSchema;
 
 // Column-aware predicate used by aligned batch readers. It deliberately does
 // not implement TableFieldFilter::satisfy_row(); aligned execution evaluates
@@ -93,6 +94,13 @@ class AlignedFieldFilter : public Filter {
     // as a full-page match and skip evaluation.
     bool is_valid() const;
 
+    // Bind once before execution: validate FIELD references and literal types,
+    // and convert numeric constants to the declared column type using Java's
+    // Number.intValue/longValue/floatValue/doubleValue rules. Comparisons and
+    // statistics pruning then use the same normalized constant, even on empty
+    // or all-NULL inputs.
+    int bind(TableSchema& schema);
+
     // Conservatively decides whether any row in a page can satisfy the filter.
     // Missing or unsupported statistics always return true.
     bool may_match(const std::map<std::string, Statistic*>& statistics,
@@ -125,8 +133,9 @@ class AlignedFieldFilter : public Filter {
     std::string column_;
     CompareOp compare_op_ = CompareOp::EQ;
     Literal literal_;
-    // True when this comparison leaf negates an ordered FLOAT/DOUBLE
-    // comparison. Flipping the operator is not equivalent there: NaN makes
+    // True when this leaf negates an ordered comparison. Preserve it until
+    // binding identifies the column type. Flipping the operator is not
+    // equivalent for FLOAT/DOUBLE: NaN makes
     // every ordered comparison false, so the negation must be evaluated as
     // !(value <op> literal). NULL still never satisfies either form.
     bool negated_ = false;

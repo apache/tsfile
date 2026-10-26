@@ -52,17 +52,10 @@ class ColumnMapping {
         return common::E_OK;
     }
 
-    int add_filter_columns(const AlignedFieldFilter& filter,
-                           TableSchema& schema) {
+    int add_filter_columns(AlignedFieldFilter& filter, TableSchema& schema) {
+        const int ret = filter.bind(schema);
+        if (ret != common::E_OK) return ret;
         for (const auto& column_name : filter.referenced_columns()) {
-            const int column_index = schema.find_column_index(column_name);
-            if (column_index < 0) {
-                return common::E_COLUMN_NOT_EXIST;
-            }
-            if (schema.get_column_categories()[column_index] !=
-                common::ColumnCategory::FIELD) {
-                return common::E_INVALID_ARG;
-            }
             field_columns_.insert(column_name);
         }
         return common::E_OK;

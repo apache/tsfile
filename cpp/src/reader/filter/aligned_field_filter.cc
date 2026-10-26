@@ -23,8 +23,10 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <utility>
 
+#include "common/schema.h"
 #include "common/statistic.h"
 
 namespace storage {
@@ -102,6 +104,121 @@ bool has_nan_statistics(const S& statistic) {
 bool is_string_type(common::TSDataType type) {
     return type == common::STRING || type == common::TEXT ||
            type == common::BLOB;
+}
+
+bool is_numeric_type(common::TSDataType type) {
+    return type == common::INT32 || type == common::INT64 ||
+           type == common::FLOAT || type == common::DOUBLE ||
+           type == common::DATE || type == common::TIMESTAMP;
+}
+
+template <typename T, typename S>
+T java_number_cast(S value) {
+    return static_cast<T>(value);
+}
+
+// Java narrows integral values by retaining the low bits, while narrowing a
+// floating-point value saturates and maps NaN to zero. Avoid C++'s undefined
+// floating-to-integer overflow and implementation-defined signed narrowing.
+template <>
+int32_t java_number_cast<int32_t, int64_t>(int64_t value) {
+    const uint32_t bits = static_cast<uint32_t>(value);
+    int32_t result;
+    std::memcpy(&result, &bits, sizeof(result));
+    return result;
+}
+
+template <typename T, typename S>
+T java_floating_to_integer(S value) {
+    if (std::isnan(value)) return 0;
+    if (value >= static_cast<S>(std::numeric_limits<T>::max()))
+        return std::numeric_limits<T>::max();
+    if (value <= static_cast<S>(std::numeric_limits<T>::min()))
+        return std::numeric_limits<T>::min();
+    return static_cast<T>(value);
+}
+
+template <>
+int32_t java_number_cast<int32_t, float>(float value) {
+    return java_floating_to_integer<int32_t>(value);
+}
+template <>
+int32_t java_number_cast<int32_t, double>(double value) {
+    return java_floating_to_integer<int32_t>(value);
+}
+template <>
+int64_t java_number_cast<int64_t, float>(float value) {
+    return java_floating_to_integer<int64_t>(value);
+}
+template <>
+int64_t java_number_cast<int64_t, double>(double value) {
+    return java_floating_to_integer<int64_t>(value);
+}
+
+template <>
+float java_number_cast<float, double>(double value) {
+    const double maximum = std::numeric_limits<float>::max();
+    // Round values just above Float.MAX_VALUE back to the maximum; the
+    // halfway point to the next exponent rounds to infinity in Java.
+    const double overflow =
+        maximum + std::ldexp(1.0, std::numeric_limits<float>::max_exponent -
+                                      std::numeric_limits<float>::digits - 1);
+    if (value > maximum)
+        return value >= overflow ? std::numeric_limits<float>::infinity()
+                                 : std::numeric_limits<float>::max();
+    if (value < -maximum)
+        return value <= -overflow ? -std::numeric_limits<float>::infinity()
+                                  : -std::numeric_limits<float>::max();
+    return static_cast<float>(value);
+}
+
+template <typename T>
+T java_number_value(const AlignedFieldFilter::Literal& literal) {
+    switch (literal.type) {
+        case common::DATE:
+        case common::INT32:
+            return java_number_cast<T>(literal.int32_value);
+        case common::TIMESTAMP:
+        case common::INT64:
+            return java_number_cast<T>(literal.int64_value);
+        case common::FLOAT:
+            return java_number_cast<T>(literal.float_value);
+        case common::DOUBLE:
+            return java_number_cast<T>(literal.double_value);
+        default:
+            ASSERT(false);
+            return T();
+    }
+}
+
+int bind_literal(AlignedFieldFilter::Literal& literal,
+                 common::TSDataType column_type) {
+    using Literal = AlignedFieldFilter::Literal;
+    if (is_numeric_type(column_type) && is_numeric_type(literal.type)) {
+        switch (column_type) {
+            case common::DATE:
+            case common::INT32:
+                literal = Literal::int32(java_number_value<int32_t>(literal));
+                break;
+            case common::TIMESTAMP:
+            case common::INT64:
+                literal = Literal::int64(java_number_value<int64_t>(literal));
+                break;
+            case common::FLOAT:
+                literal = Literal::float32(java_number_value<float>(literal));
+                break;
+            case common::DOUBLE:
+                literal = Literal::float64(java_number_value<double>(literal));
+                break;
+            default:
+                return common::E_NOT_SUPPORT;
+        }
+        return common::E_OK;
+    }
+    if ((column_type == common::BOOLEAN && literal.type == common::BOOLEAN) ||
+        (is_string_type(column_type) && is_string_type(literal.type)))
+        return common::E_OK;
+    return common::E_NOT_SUPPORT;
 }
 
 std::string normalize_column_name(const std::string& column) {
@@ -207,19 +324,15 @@ AlignedFieldFilter::Ptr AlignedFieldFilter::negate(Ptr node) {
     if (node == nullptr) return nullptr;
     switch (node->kind_) {
         case Kind::COMPARISON: {
-            // Flipping an ordered operator is not the same as negating the
-            // comparison when the value is NaN: every ordered comparison with
-            // NaN is false, so NOT (x < 5) is true for a NaN value while
-            // x >= 5 stays false. Keep the operand and mark the leaf negated;
-            // evaluation then computes !(value <op> literal) for non-null
-            // rows. Equality negation stays exact (NOT (x == v) is x != v for
-            // every value), so it keeps its operator flip and its pruning.
+            // The literal type does not identify the column type: an integer
+            // constant can bind to a floating-point column. Preserve ordered
+            // negation until binding so NOT (NaN < 5) remains true, while NULL
+            // remains unknown. Equality can still flip its operator directly.
             const bool ordered = node->compare_op_ == CompareOp::LT ||
                                  node->compare_op_ == CompareOp::LE ||
                                  node->compare_op_ == CompareOp::GT ||
                                  node->compare_op_ == CompareOp::GE;
-            if (ordered && (node->literal_.type == common::FLOAT ||
-                            node->literal_.type == common::DOUBLE)) {
+            if (ordered) {
                 return Ptr(new AlignedFieldFilter(
                     Kind::COMPARISON, node->column_, node->compare_op_,
                     node->literal_, !node->negated_));
@@ -282,6 +395,31 @@ bool AlignedFieldFilter::is_valid() const {
     return false;
 }
 
+int AlignedFieldFilter::bind(TableSchema& schema) {
+    if (kind_ == Kind::AND || kind_ == Kind::OR || kind_ == Kind::NOT) {
+        if (!left_ || (kind_ != Kind::NOT && !right_))
+            return common::E_INVALID_ARG;
+        const int ret = left_->bind(schema);
+        if (ret != common::E_OK || kind_ == Kind::NOT) return ret;
+        return right_->bind(schema);
+    }
+    const common::ColumnSchema column = schema.get_column_schema(column_);
+    if (!column.is_valid()) return common::E_COLUMN_NOT_EXIST;
+    if (column.column_category_ != common::ColumnCategory::FIELD)
+        return common::E_INVALID_ARG;
+    if (kind_ != Kind::COMPARISON) return common::E_OK;
+    const int ret = bind_literal(literal_, column.data_type_);
+    if (ret != common::E_OK) return ret;
+    // Integral, Boolean, and string columns have no NaN values. Canonicalize
+    // their bound operators once, retaining the existing execution fast path.
+    if (negated_ && column.data_type_ != common::FLOAT &&
+        column.data_type_ != common::DOUBLE) {
+        compare_op_ = negate_comparison(compare_op_);
+        negated_ = false;
+    }
+    return common::E_OK;
+}
+
 bool AlignedFieldFilter::may_match(
     const std::map<std::string, Statistic*>& statistics,
     int64_t row_count) const {
@@ -314,7 +452,7 @@ bool AlignedFieldFilter::may_match(
 
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return true;
-        switch (compare_op_) {
+        switch (negated_ ? negate_comparison(compare_op_) : compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.int32_value &&
                        literal_.int32_value <= typed->max_value_;
@@ -334,7 +472,7 @@ bool AlignedFieldFilter::may_match(
     }
     if (auto* typed = dynamic_cast<Int64Statistic*>(statistic)) {
         if (literal_.type != common::INT64) return true;
-        switch (compare_op_) {
+        switch (negated_ ? negate_comparison(compare_op_) : compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ <= literal_.int64_value &&
                        literal_.int64_value <= typed->max_value_;
@@ -442,7 +580,7 @@ bool AlignedFieldFilter::all_match(
 
     if (auto* typed = dynamic_cast<Int32Statistic*>(statistic)) {
         if (literal_.type != common::INT32) return false;
-        switch (compare_op_) {
+        switch (negated_ ? negate_comparison(compare_op_) : compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.int32_value &&
                        typed->max_value_ == literal_.int32_value;
@@ -461,7 +599,7 @@ bool AlignedFieldFilter::all_match(
     }
     if (auto* typed = dynamic_cast<Int64Statistic*>(statistic)) {
         if (literal_.type != common::INT64) return false;
-        switch (compare_op_) {
+        switch (negated_ ? negate_comparison(compare_op_) : compare_op_) {
             case CompareOp::EQ:
                 return typed->min_value_ == literal_.int64_value &&
                        typed->max_value_ == literal_.int64_value;

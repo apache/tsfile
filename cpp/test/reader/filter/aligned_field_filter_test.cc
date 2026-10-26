@@ -24,12 +24,90 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <tuple>
 
+#include "common/schema.h"
 #include "common/statistic.h"
 #include "reader/filter/selection_mask.h"
 
 namespace storage {
 namespace {
+
+TEST(AlignedFieldFilterTest, NumericBindingMatchesJavaNumberConversions) {
+    using namespace common;
+    using A = AlignedFieldFilter;
+    using L = A::Literal;
+    using Case = std::tuple<TSDataType, L, L>;
+    const double infinity = std::numeric_limits<double>::infinity();
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const float maximum = std::numeric_limits<float>::max();
+    const double overflow = double(maximum) + std::ldexp(1.0, 103);
+    // Golden results verified against Java ValueFilterApi.eq, including
+    // narrowing, saturation, rounding, NaN, signed zero, and date aliases.
+    const std::vector<Case> cases{
+        {INT64, L::int32(10), L::int64(10)},
+        {INT32, L::int64(4294967297LL), L::int32(1)},
+        {INT32, L::int64(INT64_MAX), L::int32(-1)},
+        {INT32, L::int64(INT64_MIN), L::int32(0)},
+        {INT32, L::float64(1.9), L::int32(1)},
+        {INT32, L::float32(-1.9F), L::int32(-1)},
+        {INT32, L::float64(infinity), L::int32(INT32_MAX)},
+        {INT32, L::float64(-infinity), L::int32(INT32_MIN)},
+        {INT64, L::float64(nan), L::int64(0)},
+        {INT64, L::float64(infinity), L::int64(INT64_MAX)},
+        {INT64, L::float32(-infinity), L::int64(INT64_MIN)},
+        {INT64, L::float64(std::ldexp(1.0, 63)), L::int64(INT64_MAX)},
+        {INT64, L::float64(std::nextafter(std::ldexp(1.0, 63), 0.0)),
+         L::int64(9223372036854774784LL)},
+        {DATE, L::int64(4294967297LL), L::int32(1)},
+        {TIMESTAMP, L::int32(10), L::int64(10)},
+        {FLOAT, L::int64(16777217), L::float32(16777216)},
+        {DOUBLE, L::int64(9007199254740993LL), L::float64(9007199254740992.0)},
+        {FLOAT, L::float64(std::nextafter(double(maximum), infinity)),
+         L::float32(maximum)},
+        {FLOAT, L::float64(std::nextafter(overflow, 0.0)), L::float32(maximum)},
+        {FLOAT, L::float64(overflow), L::float32(infinity)},
+        {FLOAT, L::float64(std::nextafter(-overflow, 0.0)),
+         L::float32(-maximum)},
+        {FLOAT, L::float64(-overflow), L::float32(-infinity)},
+        {FLOAT, L::float64(nan), L::float32(nan)},
+        {FLOAT, L::float64(-0.0), L::float32(-0.0F)},
+        {DOUBLE, L::float32(1.9F), L::float64(1.89999997615814208984375)}};
+    for (const auto& item : cases) {
+        const TSDataType type = std::get<0>(item);
+        const L& input = std::get<1>(item);
+        const L& expected = std::get<2>(item);
+        SCOPED_TRACE(::testing::Message()
+                     << int(type) << ":" << int(input.type));
+        TableSchema schema(
+            "t", {{"v", type, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+        auto filter = A::compare("v", A::CompareOp::EQ, input);
+        ASSERT_EQ(filter->bind(schema), E_OK);
+        const L& actual = filter->literal();
+        ASSERT_EQ(actual.type, expected.type);
+        if (actual.type == INT32) {
+            EXPECT_EQ(actual.int32_value, expected.int32_value);
+        } else if (actual.type == INT64) {
+            EXPECT_EQ(actual.int64_value, expected.int64_value);
+        } else if (actual.type == FLOAT) {
+            if (std::isnan(expected.float_value)) {
+                EXPECT_TRUE(std::isnan(actual.float_value));
+            } else {
+                EXPECT_EQ(actual.float_value, expected.float_value);
+                EXPECT_EQ(std::signbit(actual.float_value),
+                          std::signbit(expected.float_value));
+            }
+        } else {
+            if (std::isnan(expected.double_value)) {
+                EXPECT_TRUE(std::isnan(actual.double_value));
+            } else {
+                EXPECT_EQ(actual.double_value, expected.double_value);
+                EXPECT_EQ(std::signbit(actual.double_value),
+                          std::signbit(expected.double_value));
+            }
+        }
+    }
+}
 
 TEST(SelectionMaskTest, BooleanOperationsAndTrailingBits) {
     SelectionMask left(70);
