@@ -23,6 +23,7 @@
 #include "common/logger/elog.h"
 #include "compress/compressor_factory.h"
 #include "encoding/encoder_factory.h"
+#include "encoding/ts2diff_encoder.h"
 
 using namespace common;
 
@@ -86,17 +87,30 @@ int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
 }
 
 int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
-                          CompressionType compression) {
+                          CompressionType compression, int max_point_number) {
     int ret = E_OK;
     data_type_ = data_type;
     if (nullptr == (value_encoder_ = EncoderFactory::alloc_value_encoder(
                         encoding, data_type))) {
         ret = E_OOM;
-    } else if (nullptr ==
-               (statistic_ = StatisticFactory::alloc_statistic(data_type))) {
-        ret = E_OOM;
-    } else if (nullptr == (compressor_ = CompressorFactory::alloc_compressor(
-                               compression))) {
+    } else {
+        if (encoding == TS_2DIFF && max_point_number >= 0) {
+            if (data_type == FLOAT) {
+                static_cast<FloatTS2DIFFEncoder*>(value_encoder_)
+                    ->set_max_point_number(max_point_number);
+            } else if (data_type == DOUBLE) {
+                static_cast<DoubleTS2DIFFEncoder*>(value_encoder_)
+                    ->set_max_point_number(max_point_number);
+            }
+        }
+        if (nullptr ==
+            (statistic_ = StatisticFactory::alloc_statistic(data_type))) {
+            ret = E_OOM;
+        }
+    }
+    if (ret == E_OK && nullptr ==
+                            (compressor_ = CompressorFactory::alloc_compressor(
+                                 compression))) {
         ret = E_OOM;
     }
     if (ret != E_OK) {

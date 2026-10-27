@@ -52,6 +52,23 @@ TEST(MeasurementSchemaTest, JavaCppGap) {
 }
 #endif
 
+TEST(MeasurementSchemaTest, SerializesProperties) {
+    MeasurementSchema original("temperature", common::FLOAT,
+                               common::TS_2DIFF, common::UNCOMPRESSED);
+    original.props_["max_point_number"] = "0";
+
+    common::ByteStream encoded(1024, common::MOD_DEFAULT);
+    ASSERT_EQ(common::E_OK, original.serialize_to(encoded));
+    std::vector<char> bytes(encoded.total_size());
+    common::copy_bs_to_buf(encoded, bytes.data(), bytes.size());
+
+    common::ByteStream input(1024, common::MOD_DEFAULT);
+    input.wrap_from(bytes.data(), bytes.size());
+    MeasurementSchema decoded;
+    ASSERT_EQ(common::E_OK, decoded.deserialize_from(input));
+    EXPECT_EQ(original.props_, decoded.props_);
+}
+
 TEST(MeasurementSchemaTest, ParameterizedConstructor) {
     MeasurementSchema schema("test_measurement", common::TSDataType::BOOLEAN,
                              common::TSEncoding::RLE,

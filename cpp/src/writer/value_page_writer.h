@@ -99,7 +99,7 @@ class ValuePageWriter {
           size_(0) {}
     ~ValuePageWriter() { destroy(); }
     int init(common::TSDataType data_type, common::TSEncoding encoding,
-             common::CompressionType compression);
+             common::CompressionType compression, int max_point_number = -1);
     void reset();
     void destroy();
 

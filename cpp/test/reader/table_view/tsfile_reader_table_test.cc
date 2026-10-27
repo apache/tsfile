@@ -212,7 +212,61 @@ class TsFileTableReaderTest : public ::testing::Test {
     }
 };
 
+class ConstantFieldFilter final : public Filter {
+   public:
+    ConstantFieldFilter(int* calls, bool accept)
+        : calls_(calls), accept_(accept) {}
+    bool satisfy(int64_t, int64_t) override {
+        ++*calls_;
+        return accept_;
+    }
+    bool satisfy(int64_t, common::String) override {
+        ++*calls_;
+        return accept_;
+    }
+
+   private:
+    int* calls_;
+    bool accept_;
+};
+
 TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
+
+TEST_F(TsFileTableReaderTest, FieldFilterControlsRowsAndIsInvoked) {
+    auto table_schema = gen_table_schema(0);
+    TsFileTableWriter writer(&write_file_, table_schema);
+    auto tablet = gen_tablet(table_schema, 0, 1, 1);
+    ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer.flush(), common::E_OK);
+    ASSERT_EQ(writer.close(), common::E_OK);
+
+    LocalRandomAccessReadFile read_file;
+    ASSERT_EQ(read_file.open(file_name_), common::E_OK);
+    TableQueryExecutor executor(&read_file);
+    for (int mode : {0, 1, 2}) {
+        int filter_calls = 0;
+        Filter* field_filter = mode == 0
+                                   ? nullptr
+                                   : new ConstantFieldFilter(&filter_calls,
+                                                             mode == 1);
+        ResultSet* result = nullptr;
+        ASSERT_EQ(executor.query(table_schema->get_table_name(), {"s0"},
+                                 nullptr, nullptr, field_filter, result),
+                  common::E_OK);
+        ASSERT_NE(result, nullptr);
+        int rows = 0;
+        bool has_next = false;
+        int ret = common::E_OK;
+        while ((ret = result->next(has_next)) == common::E_OK && has_next) {
+            ++rows;
+        }
+        EXPECT_EQ(ret, common::E_OK);
+        EXPECT_EQ(filter_calls, mode == 0 ? 0 : 1);
+        EXPECT_EQ(rows, mode == 2 ? 0 : 1);
+        executor.destroy_query_data_set(result);
+    }
+    delete table_schema;
+}
 
 class TsFileTableReaderTimeFilterTest
     : public TsFileTableReaderTest,

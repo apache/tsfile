@@ -20,6 +20,7 @@
 #include "tsfile_writer.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <iomanip>
 #include <map>
 #include <set>
@@ -533,9 +534,14 @@ int TsFileWriter::do_check_schema(
             MeasurementSchema* ms = ms_iter->second;
             if (IS_NULL(ms->chunk_writer_)) {
                 ms->chunk_writer_ = new ChunkWriter;
-                ret = ms->chunk_writer_->init(ms->measurement_name_,
-                                              ms->data_type_, ms->encoding_,
-                                              ms->compression_type_);
+                int max_point_number = -1;
+                auto property = ms->props_.find("max_point_number");
+                if (property != ms->props_.end()) {
+                    max_point_number = std::atoi(property->second.c_str());
+                }
+                ret = ms->chunk_writer_->init(
+                    ms->measurement_name_, ms->data_type_, ms->encoding_,
+                    ms->compression_type_, max_point_number);
                 if (IS_SUCC(ret)) {
                     chunk_writers.push_back(ms->chunk_writer_);
                 } else {
@@ -567,9 +573,15 @@ int TsFileWriter::ensure_aligned_value_chunk_writer(
     if (IS_NULL(value_chunk_writer)) {
         return E_OOM;
     }
+    int max_point_number = -1;
+    auto property = measurement_schema->props_.find("max_point_number");
+    if (property != measurement_schema->props_.end()) {
+        max_point_number = std::atoi(property->second.c_str());
+    }
     int ret = value_chunk_writer->init(
         measurement_schema->measurement_name_, measurement_schema->data_type_,
-        measurement_schema->encoding_, measurement_schema->compression_type_);
+        measurement_schema->encoding_, measurement_schema->compression_type_,
+        max_point_number);
     if (RET_FAIL(ret)) {
         delete value_chunk_writer;
         return (ret == E_OOM) ? ret : common::E_INVALID_ARG;
@@ -694,9 +706,14 @@ int TsFileWriter::do_check_schema_table(
             MeasurementSchema* ms = ms_iter->second;
             if (IS_NULL(ms->value_chunk_writer_)) {
                 ms->value_chunk_writer_ = new ValueChunkWriter;
+                int max_point_number = -1;
+                auto property = ms->props_.find("max_point_number");
+                if (property != ms->props_.end()) {
+                    max_point_number = std::atoi(property->second.c_str());
+                }
                 ret = ms->value_chunk_writer_->init(
                     ms->measurement_name_, ms->data_type_, ms->encoding_,
-                    ms->compression_type_);
+                    ms->compression_type_, max_point_number);
                 if (IS_SUCC(ret)) {
                     value_chunk_writers.push_back(ms->value_chunk_writer_);
                 } else {

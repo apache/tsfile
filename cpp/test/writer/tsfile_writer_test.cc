@@ -285,6 +285,37 @@ TEST_F(TsFileWriterTest, RegisterTimeSeries) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
+TEST_F(TsFileWriterTest, AppliesMaxPointNumberPropertyToTs2DiffWriter) {
+    const std::string device = "root.precision.d";
+    auto* schema = new MeasurementSchema(
+        "v", TSDataType::FLOAT, TSEncoding::TS_2DIFF,
+        CompressionType::UNCOMPRESSED);
+    schema->props_["max_point_number"] = "0";
+    tsfile_writer_->set_generate_table_schema(false);
+    std::vector<MeasurementSchema*> schemas = {schema};
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, schemas), E_OK);
+
+    TsRecord record(1, device);
+    record.add_point("v", 1.23456f);
+    ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* result = nullptr;
+    std::vector<std::string> select_list = {device + ".v"};
+    ASSERT_EQ(reader.query(select_list, 1, 2, result), E_OK);
+    auto* qds = static_cast<QDSWithoutTimeGenerator*>(result);
+    bool has_next = false;
+    ASSERT_EQ(qds->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_FLOAT_EQ(qds->get_value<float>(2), 1.0f);
+    ASSERT_EQ(qds->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+    reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
 TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";

@@ -20,6 +20,7 @@
 #include "single_device_tsblock_reader.h"
 
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <set>
 
@@ -230,7 +231,7 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     bool used_multi = false;
     std::set<std::string> multi_names;
     {
-        bool can_multi = !time_series_indexs.empty();
+        bool can_multi = field_filter == nullptr && !time_series_indexs.empty();
         auto& meas_cols =
             device_query_task->get_column_mapping()->get_measurement_columns();
         for (const auto& ts_idx : time_series_indexs) {
@@ -365,7 +366,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
     }
 
     // Detect aligned fast path: every field column comes from an aligned chunk.
-    if (!field_column_contexts_.empty() && dense_row_count_ >= 0 &&
+    if (field_filter_ == nullptr && !field_column_contexts_.empty() &&
+        dense_row_count_ >= 0 &&
         aligned_col_count_ == field_column_contexts_.size()) {
         all_aligned_ = true;
         aligned_vec_.reserve(field_column_contexts_.size());
@@ -636,8 +638,22 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
 int SingleDeviceTsBlockReader::fill_measurements(
     std::vector<MeasurementColumnContext*>& column_contexts) {
     int ret = common::E_OK;
-    if (field_filter_ ==
-        nullptr /*TODO: || field_filter_->satisfy(column_contexts)*/) {
+    bool row_satisfies = true;
+    if (field_filter_ != nullptr) {
+        for (auto* column_context : column_contexts) {
+            auto* single_context =
+                dynamic_cast<SingleMeasurementColumnContext*>(column_context);
+            if (single_context == nullptr) return common::E_NOT_SUPPORT;
+            bool column_satisfies = false;
+            int filter_ret = single_context->satisfy_field_filter(
+                field_filter_, next_time_, column_satisfies);
+            if (RET_FAIL(filter_ret)) return filter_ret;
+            row_satisfies = row_satisfies && column_satisfies;
+            if (!row_satisfies) break;
+        }
+    }
+
+    if (row_satisfies) {
         row_appender_->add_row();
         if (!col_appenders_[time_column_index_]->add_row()) {
             assert(false);
@@ -652,11 +668,8 @@ int SingleDeviceTsBlockReader::fill_measurements(
             col_appenders_[time_in_query_index]->append(
                 (const char*)&next_time_, sizeof(next_time_));
         }
-        for (auto& column_context : column_contexts) {
+        for (auto* column_context : column_contexts) {
             column_context->fill_into(col_appenders_);
-            if (RET_FAIL(advance_column(column_context))) {
-                break;
-            }
         }
 
         // Align all columns, filling with nulls where data is missing.
@@ -673,6 +686,11 @@ int SingleDeviceTsBlockReader::fill_measurements(
                 col_appender->append_null();
             }
         }
+    }
+
+    for (auto* column_context : column_contexts) {
+        ret = advance_column(column_context);
+        if (RET_FAIL(ret)) break;
     }
     return ret;
 }
@@ -894,6 +912,43 @@ int SingleMeasurementColumnContext::get_current_value(char*& value,
     bool is_null = false;
     value = value_iter_->read(&len, &is_null);
     return common::E_OK;
+}
+
+int SingleMeasurementColumnContext::satisfy_field_filter(
+    Filter* field_filter, int64_t time, bool& satisfies) {
+    char* value = nullptr;
+    uint32_t len = 0;
+    int ret = get_current_value(value, len);
+    if (ret != common::E_OK) return ret;
+    if (value == nullptr) {
+        satisfies = false;
+        return common::E_OK;
+    }
+
+    switch (value_iter_->get_data_type()) {
+        case common::INT32: {
+            int32_t typed_value;
+            if (len != sizeof(typed_value)) return common::E_INVALID_ARG;
+            std::memcpy(&typed_value, value, sizeof(typed_value));
+            satisfies = field_filter->satisfy(time, typed_value);
+            return common::E_OK;
+        }
+        case common::INT64: {
+            int64_t typed_value;
+            if (len != sizeof(typed_value)) return common::E_INVALID_ARG;
+            std::memcpy(&typed_value, value, sizeof(typed_value));
+            satisfies = field_filter->satisfy(time, typed_value);
+            return common::E_OK;
+        }
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB:
+            satisfies = field_filter->satisfy(time,
+                                               common::String(value, len));
+            return common::E_OK;
+        default:
+            return common::E_NOT_SUPPORT;
+    }
 }
 
 int SingleMeasurementColumnContext::move_iter() {
