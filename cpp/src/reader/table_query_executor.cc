@@ -31,6 +31,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     ret_qds = nullptr;
     if (RET_FAIL(tsfile_io_reader_->get_tsfile_meta(file_metadata))) {
         delete time_filter;
+        delete field_filter;
         return ret;
     }
     common::PageArena pa;
@@ -44,6 +45,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     if (RET_FAIL(file_metadata->get_table_schema(table_name, table_schema))) {
         ret_qds = nullptr;
         delete time_filter;
+        delete field_filter;
         return ret;
     }
     file_metadata->get_table_metaindex_node(table_name, table_root);
@@ -63,11 +65,22 @@ int TableQueryExecutor::query(const std::string& table_name,
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
             delete time_filter;
+            delete field_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
     }
-    // column_mapping.add(*measurement_filter);
+    if (auto* aligned_filter =
+            dynamic_cast<AlignedFieldFilter*>(field_filter)) {
+        ret = aligned_filter->is_valid() ? column_mapping->add_filter_columns(
+                                               *aligned_filter, *table_schema)
+                                         : common::E_INVALID_ARG;
+        if (ret != common::E_OK) {
+            delete time_filter;
+            delete field_filter;
+            return ret;
+        }
+    }
 
     auto device_task_iterator =
         std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
@@ -85,6 +98,7 @@ int TableQueryExecutor::query(const std::string& table_name,
         case TableQueryOrdering::TIME:
         default:
             delete time_filter;
+            delete field_filter;
             ret_qds = nullptr;
             return common::E_UNSUPPORTED_ORDER;
     }
@@ -105,6 +119,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     ret_qds = nullptr;
     if (RET_FAIL(tsfile_io_reader_->get_tsfile_meta(file_metadata))) {
         delete time_filter;
+        delete field_filter;
         return ret;
     }
     common::PageArena pa;
@@ -114,6 +129,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     if (RET_FAIL(file_metadata->get_table_schema(table_name, table_schema))) {
         ret_qds = nullptr;
         delete time_filter;
+        delete field_filter;
         return ret;
     }
     file_metadata->get_table_metaindex_node(table_name, table_root);
@@ -133,9 +149,21 @@ int TableQueryExecutor::query(const std::string& table_name,
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
             delete time_filter;
+            delete field_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
+    }
+    if (auto* aligned_filter =
+            dynamic_cast<AlignedFieldFilter*>(field_filter)) {
+        ret = aligned_filter->is_valid() ? column_mapping->add_filter_columns(
+                                               *aligned_filter, *table_schema)
+                                         : common::E_INVALID_ARG;
+        if (ret != common::E_OK) {
+            delete time_filter;
+            delete field_filter;
+            return ret;
+        }
     }
 
     auto device_task_iterator =
@@ -155,6 +183,7 @@ int TableQueryExecutor::query(const std::string& table_name,
         case TableQueryOrdering::TIME:
         default:
             delete time_filter;
+            delete field_filter;
             ret_qds = nullptr;
             return common::E_UNSUPPORTED_ORDER;
     }

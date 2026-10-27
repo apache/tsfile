@@ -21,6 +21,7 @@
 
 #include "common/schema.h"
 #include "expression.h"
+#include "reader/filter/aligned_field_filter.h"
 namespace storage {
 class ColumnMapping {
    public:
@@ -48,6 +49,15 @@ class ColumnMapping {
     int add(const Expression& measurementFilter) {
         // TODO: get measurements in the filter and add them to
         // field_columns_
+        return common::E_OK;
+    }
+
+    int add_filter_columns(AlignedFieldFilter& filter, TableSchema& schema) {
+        const int ret = filter.bind(schema);
+        if (ret != common::E_OK) return ret;
+        for (const auto& column_name : filter.referenced_columns()) {
+            field_columns_.insert(column_name);
+        }
         return common::E_OK;
     }
 

@@ -44,17 +44,17 @@ jobs:
       max-parallel: 15
       matrix:
         include:
-          # Linux all
-          - os: ubuntu-latest
+          # Pin the Linux image to keep the CI toolchain stable.
+          - os: ubuntu-24.04
             build_type: Debug
             enable_asan: Asan
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             build_type: Debug
             enable_asan: NoAsan
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             build_type: Release
             enable_asan: Asan
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             build_type: Release
             enable_asan: NoAsan
 

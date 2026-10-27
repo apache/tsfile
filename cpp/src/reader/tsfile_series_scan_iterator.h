@@ -29,6 +29,7 @@
 #include "file/random_access_read_file.h"
 #include "file/tsfile_io_reader.h"
 #include "reader/chunk_reader.h"
+#include "reader/filter/aligned_field_filter.h"
 #include "reader/filter/filter.h"
 #include "utils/util_define.h"
 
@@ -51,6 +52,7 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
+          field_filter_(nullptr),
           prepared_(),
           is_aligned_(false),
           is_multi_value_(false),
@@ -61,12 +63,14 @@ class TsFileSeriesScanIterator {
     int init(std::shared_ptr<IDeviceID> device_id,
              const std::string& measurement_name,
              RandomAccessReadFile* read_file, Filter* time_filter,
-             common::PageArena& data_pa) {
+             common::PageArena& data_pa,
+             AlignedFieldFilter* field_filter = nullptr) {
         ASSERT(read_file != nullptr);
         device_id_ = device_id;
         measurement_name_ = measurement_name;
         read_file_ = read_file;
         time_filter_ = time_filter;
+        field_filter_ = field_filter;
         data_pa_ = &data_pa;
         return common::E_OK;
     }
@@ -114,6 +118,12 @@ class TsFileSeriesScanIterator {
                  Filter* oneshoot_filter = nullptr,
                  int64_t min_time_hint = std::numeric_limits<int64_t>::min());
     void revert_tsblock();
+
+    bool field_filter_applied_in_chunk() const {
+        if (!is_multi_value_ || chunk_reader_ == nullptr) return false;
+        auto* aligned = dynamic_cast<AlignedChunkReader*>(chunk_reader_);
+        return aligned != nullptr && aligned->field_filter_applied();
+    }
 
     // Multi-value: number of value columns in the TsBlock
     uint32_t get_value_column_count() const {
@@ -225,6 +235,7 @@ class TsFileSeriesScanIterator {
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
+    AlignedFieldFilter* field_filter_;
     // Keeps the arena-backed index alive until the chunk reader has released
     // every pointer into it. Empty for the legacy path-owned metadata arena.
     std::shared_ptr<PreparedSeries> prepared_;

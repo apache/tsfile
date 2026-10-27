@@ -297,8 +297,8 @@ int TsFileIOReader::alloc_prepared_multi_ssi(
 int TsFileIOReader::alloc_multi_ssi(
     std::shared_ptr<IDeviceID> device_id,
     const std::vector<std::string>& measurement_names,
-    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
-    Filter* time_filter) {
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa, Filter* time_filter,
+    AlignedFieldFilter* field_filter) {
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
 
@@ -307,7 +307,7 @@ int TsFileIOReader::alloc_multi_ssi(
     if (IS_NULL(ssi_buf)) return E_OOM;
     ssi = new (ssi_buf) TsFileSeriesScanIterator;
     ssi->init(device_id, measurement_names.empty() ? "" : measurement_names[0],
-              read_file_, time_filter, pa);
+              read_file_, time_filter, pa, field_filter);
 
     auto& ssi_pa = ssi->timeseries_index_pa_;
 
@@ -324,7 +324,10 @@ int TsFileIOReader::alloc_multi_ssi(
         ssi->destroy();
         mem_free(ssi);
         ssi = nullptr;
-        return E_NOT_SUPPORT;
+        // An empty measurement list requests only the shared aligned clock.
+        // Independent series have no such clock and yield no candidate rows.
+        // Named requests still fall back to individual column contexts.
+        return measurement_names.empty() ? E_NO_MORE_DATA : E_NOT_SUPPORT;
     }
 
     // Get time column metadata
@@ -346,6 +349,9 @@ int TsFileIOReader::alloc_multi_ssi(
     }
     auto* multi_idx = new (multi_buf) MultiAlignedTimeseriesIndex;
     multi_idx->time_ts_idx_ = time_ts_idx;
+    // Publish ownership before any later failure so destroy() releases the
+    // vector backing storage, including a partially resolved name list.
+    ssi->itimeseries_index_ = multi_idx;
 
     // Batch-load all measurement TimeseriesIndex entries in a single pass over
     // the index tree — cheaper than N separate binary searches + file reads.
@@ -381,8 +387,6 @@ int TsFileIOReader::alloc_multi_ssi(
         }
         multi_idx->value_ts_idxs_.push_back(it->second);
     }
-
-    ssi->itimeseries_index_ = multi_idx;
 
     // Skip global statistic filter for multi — per-chunk filtering still works.
 

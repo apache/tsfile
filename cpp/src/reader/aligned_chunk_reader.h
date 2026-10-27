@@ -25,6 +25,7 @@
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
 #include "file/random_access_read_file.h"
+#include "reader/filter/aligned_field_filter.h"
 #include "reader/filter/filter.h"
 #include "reader/ichunk_reader.h"
 
@@ -57,6 +58,7 @@ struct ChunkPageInfo {
 // decode or lazily by the single-thread page-plan path, then consumed by the
 // scatter loop.
 struct PageDecodedState {
+    uint32_t row_count = 0;
     std::vector<uint8_t> notnull_bitmap;
     std::vector<char> predecoded_values;
     std::vector<common::String> predecoded_strings;
@@ -122,13 +124,20 @@ class AlignedChunkReader : public IChunkReader {
           cur_value_index(-1) {}
     int init(RandomAccessReadFile* read_file, common::String m_name,
              common::TSDataType data_type, Filter* time_filter) override;
+    void set_field_filter(AlignedFieldFilter* field_filter) {
+        field_filter_ = field_filter;
+    }
+    bool field_filter_applied() const {
+        return field_filter_ != nullptr && page_plan_built_ &&
+               multi_page_error_ == common::E_OK;
+    }
     void reset() override;
     void destroy() override;
     ~AlignedChunkReader() override = default;
 
     bool has_more_data() const override {
         if (multi_value_mode_) {
-            return has_more_data_multi();
+            return multi_page_error_ != common::E_OK || has_more_data_multi();
         }
         return prev_value_page_not_finish() || prev_time_page_not_finish() ||
                (value_chunk_visit_offset_ -
@@ -145,6 +154,8 @@ class AlignedChunkReader : public IChunkReader {
     int load_by_aligned_meta_multi(ChunkMeta* time_meta,
                                    const std::vector<ChunkMeta*>& value_metas);
 
+    // In multi-value mode a hard read/decode error remains terminal until
+    // reset(). E_OVERFLOW and end-of-stream do not poison the reader.
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
@@ -219,10 +230,6 @@ class AlignedChunkReader : public IChunkReader {
                                                common::TsBlock* ret_tsblock,
                                                Filter* filter,
                                                common::PageArena* pa);
-    int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
-                                         common::ByteStream& value_in,
-                                         common::RowAppender& row_appender,
-                                         Filter* filter);
     // Unified fixed-width aligned time+value page decode for
     // INT32/INT64/FLOAT/DOUBLE.  Defined in the .cc; instantiated there for
     // each value type by decode_tv_buf_into_tsblock_by_datatype().
@@ -242,6 +249,12 @@ class AlignedChunkReader : public IChunkReader {
     int get_next_page_multi(common::TsBlock* ret_tsblock,
                             Filter* oneshoot_filter, common::PageArena& pa,
                             int& row_offset);
+    // Hard decode/I/O errors are terminal until reset(); partially decoded
+    // pages must never be reused by a subsequent read.
+    int get_next_page_multi_impl(common::TsBlock* ret_tsblock,
+                                 Filter* oneshoot_filter, common::PageArena& pa,
+                                 int& row_offset);
+    int validate_page_slot(size_t page_idx) const;
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
                                    common::PageArena& pa, int& row_offset);
     int skip_cur_page_multi();
@@ -261,6 +274,9 @@ class AlignedChunkReader : public IChunkReader {
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
     int build_page_plan(Filter* filter, int& row_offset);
+    void build_filter_column_mask();
+    int evaluate_page_field_mask(size_t page_idx);
+    int decode_output_columns_for_page(size_t page_idx);
     int decode_time_page_direct(const ChunkPageInfo& page_info,
                                 std::vector<int64_t>& out_times);
     int decode_time_page_with(const ChunkPageInfo& page_info,
@@ -296,6 +312,7 @@ class AlignedChunkReader : public IChunkReader {
     Compressor* time_compressor_;
     Compressor* value_compressor_;
     Filter* time_filter_;
+    AlignedFieldFilter* field_filter_ = nullptr;
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
@@ -320,13 +337,18 @@ class AlignedChunkReader : public IChunkReader {
     // ── Page-plan state ────────────────────────────────────────────────
     std::vector<ChunkPageInfo> chunk_pages_;
     std::vector<std::vector<int64_t>> per_page_times_;
+    int multi_page_error_ = common::E_OK;
     bool page_plan_built_ = false;
+    bool page_plan_lazy_ = true;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;
+    std::vector<bool> filter_column_mask_;
+    SelectionMask current_page_field_mask_;
+    bool current_page_field_mask_valid_ = false;
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned
-    // Per-worker time decoder + compressor pool for parallel time-page decode.
+    // Per-task time decoder + compressor pool for parallel time-page decode.
     // Sized to decode_pool_->num_threads() on first use, owned by this reader.
     std::vector<Decoder*> time_decoder_pool_;
     std::vector<Compressor*> time_compressor_pool_;
