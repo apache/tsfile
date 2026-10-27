@@ -167,6 +167,8 @@ class SingleMeasurementColumnContext : public MeasurementColumnContext {
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;
+    int satisfy_field_filter(Filter* field_filter, int64_t time,
+                             bool& satisfies);
     int move_iter() override;
     uint32_t available_rows() const override;
     int bulk_copy_into(std::vector<common::ColAppender*>& col_appenders,
