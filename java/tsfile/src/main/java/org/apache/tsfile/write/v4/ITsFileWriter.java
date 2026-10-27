@@ -26,6 +26,10 @@ import org.apache.tsfile.write.record.Tablet;
 
 import java.io.IOException;
 
+/**
+ * Public v4 TsFile writing contract. Implementations must document schema registration,
+ * record/tablet lifecycle, flush behavior, close requirements, and all checked exceptions.
+ */
 public interface ITsFileWriter extends AutoCloseable {
 
   @TsFileApi

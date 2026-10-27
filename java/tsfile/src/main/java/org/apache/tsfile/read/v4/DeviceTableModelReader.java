@@ -48,6 +48,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Reads table-model data for one device. Table and column names are normalized according to the
+ * reader's case rules; tagFilter applies only to tag columns. close() releases reader resources and
+ * may suppress close-time I/O failures.
+ */
 public class DeviceTableModelReader implements ITsFileReader {
 
   protected TsFileSequenceReader fileReader;
