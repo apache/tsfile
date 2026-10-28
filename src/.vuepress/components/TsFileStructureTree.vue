@@ -48,7 +48,6 @@ const messages = {
     offset: 'Offset',
     size: 'Size',
     layout: 'Physical layout',
-    exactSyntax: 'Exact syntax',
     details: 'Open format details',
   },
   zh: {
@@ -61,7 +60,6 @@ const messages = {
     offset: '偏移',
     size: '长度',
     layout: '物理布局',
-    exactSyntax: '精确语法',
     details: '查看格式详情',
   },
 } as const;
@@ -302,10 +300,6 @@ function collapseAll(): void {
                   </div>
                 </div>
               </div>
-              <details class="tsfile-layout-grammar">
-                <summary>{{ ui.exactSyntax }}</summary>
-                <code>{{ selectedText.layout }}</code>
-              </details>
             </div>
           </div>
         </div>
@@ -622,25 +616,6 @@ function collapseAll(): void {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-}
-
-.tsfile-layout-grammar {
-  margin-top: 0.15rem;
-  color: var(--vp-c-text-mute);
-  font-size: 0.78rem;
-}
-
-.tsfile-layout-grammar summary {
-  cursor: pointer;
-}
-
-.tsfile-layout-grammar code {
-  padding: 0.45rem 0.55rem;
-  margin-top: 0.35rem;
-  border: 1px solid var(--vp-c-border);
-  border-radius: 5px;
-  white-space: pre-wrap;
-  background: var(--vp-c-bg);
 }
 
 .tsfile-detail-note {
