@@ -21,8 +21,8 @@ export const zhNavbar = navbar([
   {
     text: '文档',
     children: [
-      { text: 'v2.x', link: '/zh/UserGuide/latest/QuickStart/QuickStart' },
-      { text: 'v1.x', link: '/zh/UserGuide/v1.x/QuickStart/QuickStart' },
+      { text: 'v2.x', link: '/zh/UserGuide/latest/QuickStart/Navigating_Time_Series_Data' },
+      { text: 'v1.x', link: '/zh/UserGuide/v1.x/QuickStart/Navigating_Time_Series_Data' },
     ],
   },
   {
