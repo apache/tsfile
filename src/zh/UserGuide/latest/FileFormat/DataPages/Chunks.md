@@ -30,21 +30,21 @@ TsFile 数据区由 marker 引导的 Chunk Group、Chunk 和 Operation Index Ran
 
 ```text
 FilePrefix  := magic[6] version[1] FileEncryptionHeader?
-DataSection := (ChunkGroup | OperationIndexRange)*
+DataSection := (ChunkGroup+ OperationIndexRange?)*
 ChunkGroup  := ChunkGroupHeader Chunk*
 Separator   := byte(0x02)
 ```
 
-数据区之后紧接 `0x02` 分隔符，它不属于任何 Chunk Group。Chunk Group 自身没有总长度
-字段。读取完一个 Chunk 后，要看下一个标记：如果仍是 Chunk，就继续读取；如果是新的
+每个批次包含一个或多个 ChunkGroup，随后可选一条 OperationIndexRange。数据区之后紧接
+`0x02` 分隔符，它不属于任何 Chunk Group。Chunk Group 自身没有总长度字段。读取完一个 Chunk 后，要看下一个标记：如果仍是 Chunk，就继续读取；如果是新的
 Chunk Group、操作索引记录或分隔符，当前分组就结束了。
 
 ```text
 File
 └── Chunk Group                 一个设备的一批数据
-    ├── Non-aligned Chunk       自带时间流的一个测量列
+    ├── Non-aligned Chunk       自带时间流的一个测点列
     │   └── Page(s)
-    └── Aligned Chunk Set       多个测量列共享时间列
+    └── Aligned Chunk Set       多个测点列共享时间列
         ├── Time Chunk
         │   └── Time Page(s)
         └── Value Chunk(s)

@@ -114,7 +114,9 @@ separator. To find the end of a structure, add its length to its start offset us
 
 ## Reading Layout Examples
 
-In layout examples, `?` marks an optional field or structure, `*` allows zero or more repetitions,
-and `[n]` means n elements. The surrounding description or a preceding length field determines
+In layout examples, `|` separates alternatives, parentheses group a sequence, `?` marks an
+optional field or structure, `*` allows zero or more repetitions, `+` requires one or more
+repetitions, and `[n]` means n elements. For example, `(A | B)*` means zero or more entries, each
+of which is either A or B. The surrounding description or a preceding length field determines
 which case applies. `remaining bytes` means the unused bytes up to the enclosing payload boundary;
 for a Page layout, that is the end of its decrypted, decompressed payload.

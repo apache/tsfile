@@ -289,7 +289,7 @@ SchemaProperty :=
 | 3 | `TIME` |
 
 Schema 保留列顺序，其中 TAG 列的顺序决定 DeviceID 片段的顺序。FIELD Chunk 通过
-`measurement_id` 标识测量列，其物理排列顺序不必与 Schema 中 FIELD 列的顺序相同。
+`measurement_id` 标识测点列，其物理排列顺序不必与 Schema 中 FIELD 列的顺序相同。
 
 `TAG` 列标识设备，`FIELD` 列保存测量值，`ATTRIBUTE` 列描述实体，`TIME` 标识时间列。
 列类别说明这一列的用途，`data_type` 说明它保存哪种值，两者共同决定列的含义。

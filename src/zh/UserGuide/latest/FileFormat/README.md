@@ -37,11 +37,13 @@ TsFile 按列保存时序数据。写入时，数据按设备分组依次追加�
 - **Chunk Group** 保存同一设备的一组 Chunk。随着数据分批刷出，一个设备可以在文件中
   出现多次，对应多个 Chunk Group。
 
-**非对齐数据**的每个测量列各自保存时间戳和值。**对齐数据**把共享的时间戳放在
-Time Chunk 中，各测量列分别放在 Value Chunk 中，再用位图记录哪些位置有值。
+**非对齐数据**的每个测点列各自保存时间戳和值。**对齐数据**把共享的时间戳放在
+Time Chunk 中，各测点列分别放在 Value Chunk 中，再用位图记录哪些位置有值。
 两种布局的细节见[数据页](DataPages/README.md)。
 
 <TsFileStructureTree locale="zh" />
+
+<div id="physical-regions"></div>
 
 ## 物理区域
 

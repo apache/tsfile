@@ -26,12 +26,27 @@ export type TsFileStructureKind =
   | 'field'
   | 'choice';
 
+export type TsFileStructureLayoutRule =
+  | 'optional'
+  | 'repeated'
+  | 'one-or-more'
+  | 'one-of';
+
+export interface TsFileStructureLayoutRow {
+  text: string;
+  rule?: TsFileStructureLayoutRule;
+  note?: string;
+  children?: TsFileStructureLayoutRow[];
+}
+
 export interface TsFileStructureText {
   title: string;
   description: string;
   offset?: string;
   size?: string;
   layout?: string;
+  layoutNotes?: string[];
+  layoutRows?: TsFileStructureLayoutRow[];
   note?: string;
 }
 
@@ -41,6 +56,75 @@ export interface TsFileStructureNode {
   text: Record<TsFileStructureLocale, TsFileStructureText>;
   link?: string;
   children?: TsFileStructureNode[];
+}
+
+type PageDataText = Pick<
+  TsFileStructureText,
+  'description' | 'layout' | 'layoutNotes' | 'note'
+>;
+
+function pageHeaderNode(id: string): TsFileStructureNode {
+  return {
+    id,
+    kind: 'record',
+    link: 'DataPages/index.html#page-header',
+    text: {
+      en: {
+        title: 'Page Header',
+        description:
+          'Sizes and optional Statistics for one Page. An empty aligned Value Page has no Header.',
+        offset: 'start of the Page',
+        size: 'header bytes',
+        layout: 'UVarInt uncompressed_size | UVarInt compressed_size | Statistics?',
+        layoutNotes: [
+          'Page payload length after decryption and decompression',
+          'Stored payload length, including compression and encryption overhead',
+          'Present for every non-empty Page in a multi-Page Chunk; absent for a single-Page Chunk',
+        ],
+        note: 'An empty aligned Value Page stores only UVarInt(0); it has no compressed_size, Statistics, or payload.',
+      },
+      zh: {
+        title: '页头（Page Header）',
+        description: '一个 Page 的两个长度字段和可选 Statistics；空的对齐 Value Page 没有 Header。',
+        offset: 'Page 起始处',
+        size: 'Header 字节数',
+        layout: 'UVarInt uncompressed_size | UVarInt compressed_size | Statistics?',
+        layoutNotes: [
+          '解密、解压后的 Page 载荷长度',
+          '磁盘载荷长度，包含压缩和加密开销',
+          '多 Page Chunk 的每个非空 Page 都有；单 Page Chunk 没有',
+        ],
+        note: '空的对齐 Value Page 只保存 UVarInt(0)，没有 compressed_size、Statistics 或载荷。',
+      },
+    },
+  };
+}
+
+function pageDataNode(
+  id: string,
+  link: string,
+  en: PageDataText,
+  zh: PageDataText,
+): TsFileStructureNode {
+  return {
+    id,
+    kind: 'record',
+    link,
+    text: {
+      en: {
+        title: 'Page Data',
+        offset: 'after the Page Header',
+        size: 'compressed_size on disk / uncompressed_size decoded',
+        ...en,
+      },
+      zh: {
+        title: '页数据（Page Data）',
+        offset: 'Page Header 之后',
+        size: '磁盘 compressed_size / 解码后 uncompressed_size',
+        ...zh,
+      },
+    },
+  };
 }
 
 export const tsFileStructure: TsFileStructureNode = {
@@ -69,7 +153,7 @@ export const tsFileStructure: TsFileStructureNode = {
     {
       id: 'file-header',
       kind: 'region',
-      link: 'Binary-Representation.html',
+      link: 'index.html#physical-regions',
       text: {
         en: {
           title: 'File Header',
@@ -138,17 +222,43 @@ export const tsFileStructure: TsFileStructureNode = {
         en: {
           title: 'File Encryption Header (optional)',
           description: 'An optional header at offset 7 selects Page AEAD. It identifies the provider, profile, file crypto ID, and wrapped data key.',
-          offset: '7 … 6 + E; absent when E = 0',
+          offset: '7 (when present)',
           size: 'E = 1 + UVarInt-size(payload_size) + payload_size',
           layout: '06 | payload_size | 01 | provider_id | profile_id | key_id | key_version | file_crypto_id_size | file_crypto_id | wrapped_data_key_size | wrapped_data_key',
+          layoutNotes: [
+            'Encryption header marker (ENCRYPTION_HEADER)',
+            'UVarInt length of the following payload',
+            'Header version (0x01)',
+            'Encryption provider identifier',
+            'Encryption profile identifier',
+            'Key identifier',
+            'Key version',
+            'UVarInt file crypto ID length (must be 16)',
+            '16-byte file crypto ID',
+            'UVarInt wrapped data key length',
+            'Wrapped data key bytes',
+          ],
           note: 'The header selects the AEAD layout even though legacy footer encryptLevel is 0. E is its total serialized size; E = 0 when absent.',
         },
         zh: {
           title: '文件加密头（可选）',
           description: '偏移 7 处的可选加密头用于选择 Page AEAD，记录 provider、profile、文件加密 ID 和封装数据密钥。',
-          offset: '7 … 6 + E；E = 0 时不存在',
+          offset: '7（存在时）',
           size: 'E = 1 + UVarInt-size(payload_size) + payload_size',
           layout: '06 | payload_size | 01 | provider_id | profile_id | key_id | key_version | file_crypto_id_size | file_crypto_id | wrapped_data_key_size | wrapped_data_key',
+          layoutNotes: [
+            '加密头标记（ENCRYPTION_HEADER）',
+            '后续载荷的 UVarInt 长度',
+            '头部版本（0x01）',
+            '加密 provider 标识',
+            '加密 profile 标识',
+            '密钥标识',
+            '密钥版本',
+            '文件加密 ID 的 UVarInt 长度（必须为 16）',
+            '16 字节文件加密 ID',
+            '封装数据密钥的 UVarInt 长度',
+            '封装数据密钥字节',
+          ],
           note: '即使旧版 Footer 的 encryptLevel 为 0，也以该头选择 AEAD 布局。E 是该头的总序列化长度，不存在时为 0。',
         },
       },
@@ -161,17 +271,55 @@ export const tsFileStructure: TsFileStructureNode = {
         en: {
           title: 'Data Section',
           description:
-            'Chunk Groups and operation-index records appear here in write order. The section begins after any file encryption header and ends before the separator.',
+            'Chunk Groups and operation-index records appear here in write order, grouped by flush batch. The section begins after any file encryption header and ends before the separator.',
           offset: '7 + E … meta_offset - 1',
           size: 'variable',
-          layout: '(ChunkGroup | OperationIndexRange)*',
+          layout: '(ChunkGroup+ OperationIndexRange?)*',
+          layoutRows: [
+            {
+              text: 'Batch',
+              rule: 'repeated',
+              note: 'Zero or more flush batches.',
+              children: [
+                {
+                  text: 'ChunkGroup',
+                  rule: 'one-or-more',
+                  note: 'Each batch starts with one or more ChunkGroups.',
+                },
+                {
+                  text: 'OperationIndexRange',
+                  rule: 'optional',
+                  note: 'At most one record after each batch.',
+                },
+              ],
+            },
+          ],
         },
         zh: {
           title: '数据区',
-          description: '这里按写入顺序保存 Chunk Group 和操作索引记录，从可选文件加密头之后开始，到分隔符之前结束。',
+          description: '这里按写入顺序保存 Chunk Group 和操作索引记录，并按刷出批次分组；从可选文件加密头之后开始，到分隔符之前结束。',
           offset: '7 + E … meta_offset - 1',
           size: '可变',
-          layout: '(ChunkGroup | OperationIndexRange)*',
+          layout: '(ChunkGroup+ OperationIndexRange?)*',
+          layoutRows: [
+            {
+              text: '批次',
+              rule: 'repeated',
+              note: '零个或多个刷出批次。',
+              children: [
+                {
+                  text: 'ChunkGroup',
+                  rule: 'one-or-more',
+                  note: '每批以至少一个 ChunkGroup 开始。',
+                },
+                {
+                  text: 'OperationIndexRange',
+                  rule: 'optional',
+                  note: '每批之后最多一条。',
+                },
+              ],
+            },
+          ],
         },
       },
       children: [
@@ -210,7 +358,7 @@ export const tsFileStructure: TsFileStructureNode = {
                   layout: 'marker 0x00 | DeviceID',
                 },
                 zh: {
-                  title: 'Chunk Group 头部',
+                  title: '设备分组头部（Chunk Group Header）',
                   description: '开始一个设备分组，并保存 DeviceID：先记录片段数量，再依次记录各个带长度的字符串片段。',
                   offset: 'chunk_group_offset',
                   size: '可变',
@@ -232,7 +380,7 @@ export const tsFileStructure: TsFileStructureNode = {
                   layout: 'Non-aligned Chunk | Aligned Chunk Set',
                 },
                 zh: {
-                  title: 'Chunk 布局',
+                  title: '数据块布局（Chunk Layout）',
                   description: '非对齐 Chunk 把时间和值放在一起；对齐 Chunk 集用一个 Time Chunk 保存共享时间戳，再用各个 Value Chunk 保存测量值。',
                   offset: 'Chunk Group Header 之后',
                   size: '可变 · 重复',
@@ -250,15 +398,17 @@ export const tsFileStructure: TsFileStructureNode = {
                       description:
                         'Stores one measurement with its own timestamps. Each Page contains a time stream and a value stream with matching point counts.',
                       offset: 'chunk_offset',
-                      size: 'header + data_size',
+                      size: 'Chunk Header length + data_size',
                       layout: 'Chunk Header | Non-aligned Page*',
+                          note: 'data_size counts Page Headers and stored Page data; it excludes the Chunk Header. Add the full Header length (including an AEAD suffix) for the total span.',
                     },
                     zh: {
-                      title: '非对齐 Chunk',
+                      title: '非对齐数据块（Non-aligned Chunk）',
                       description: '保存一个测量及其独立的时间戳。每个 Page 都有时间流和值流，两者解码后的数据点数量相同。',
                       offset: 'chunk_offset',
-                      size: 'header + data_size',
+                      size: 'Chunk Header 长度 + data_size',
                       layout: 'Chunk Header | 非对齐 Page*',
+                          note: 'data_size 统计 Page Header 和已保存 Page 数据的长度，不包含 Chunk Header；总长度需加上完整 Header 长度（含 AEAD 后缀）。',
                     },
                   },
                   children: [
@@ -275,15 +425,33 @@ export const tsFileStructure: TsFileStructureNode = {
                           size: 'variable',
                           layout:
                             'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type | AEAD suffix?',
+                          layoutNotes: [
+                            'Chunk role and Page-count marker',
+                            'Measurement identifier',
+                            'Byte length of Page Headers and stored Page data',
+                            'Value type',
+                            'Compression method',
+                            'Value encoding (time encoding for a Time Chunk)',
+                            'AEAD suffix: int64 ordinal, int32 proof length, and proof bytes',
+                          ],
                           note: 'encoding_type describes values; time encoding is external configuration (default TS_2DIFF). The AEAD suffix is int64 ordinal | int32 proof_size | proof[proof_size], outside data_size.',
                         },
                         zh: {
-                          title: 'Chunk 头部',
+                          title: '数据块头部（Chunk Header）',
                           description: '记录测量名及编解码方式。data_size 统计头部之后全部 Page Header 和载荷的长度，读取器无需解码值就能定位下一个 Chunk。',
                           offset: 'chunk_offset',
                           size: '可变',
                           layout:
                             'chunk_type | measurement_id | data_size | data_type | compression_type | encoding_type | AEAD suffix?',
+                          layoutNotes: [
+                            'Chunk 角色与 Page 数量标记',
+                            '测量标识',
+                            'Page Header 与已保存 Page 数据的字节长度',
+                            '值类型',
+                            '压缩方式',
+                            '值编码（Time Chunk 为时间编码）',
+                            'AEAD 后缀：int64 序号、int32 证明长度、证明字节',
+                          ],
                           note: 'encoding_type 描述值流；时间编码来自外部配置，默认 TS_2DIFF。AEAD 后缀为 int64 序号 | int32 证明长度 | 证明字节，不计入 data_size。',
                         },
                       },
@@ -296,23 +464,49 @@ export const tsFileStructure: TsFileStructureNode = {
                         en: {
                           title: 'Non-aligned Page',
                           description:
-                            'After decryption and decompression, the payload starts with the time-stream length and time bytes. The value stream fills the rest of the payload.',
+                            'One Page of a non-aligned Chunk: a Header followed by the encoded time and value streams.',
                           offset: 'inside Chunk data_size',
                           size: 'variable · repeated',
-                          layout:
-                            'Page Header | time_stream_size | encoded_time_stream | encoded_value_stream',
+                          layout: 'Page Header | Page Data',
                           note: 'Time and values pair by position. Their codecs can differ; the time codec comes from shared configuration.',
                         },
                         zh: {
-                          title: '非对齐 Page',
-                          description: '解密、解压后的载荷先保存时间流长度和时间流字节，剩余部分保存值流。',
+                          title: '非对齐数据页（Non-aligned Page）',
+                          description: '非对齐 Chunk 的一个 Page：Header 之后是编码后的时间流和值流。',
                           offset: 'Chunk data_size 内部',
                           size: '可变 · 重复',
-                          layout:
-                            'Page Header | time_stream_size | encoded_time_stream | encoded_value_stream',
+                          layout: 'Page Header | Page Data',
                           note: '时间戳和值按位置配对，可以使用不同编码；时间编码由共享配置提供。',
                         },
                       },
+                      children: [
+                        pageHeaderNode('non-aligned-page-header'),
+                        pageDataNode(
+                          'non-aligned-page-data',
+                          'DataPages/index.html#non-aligned-page',
+                          {
+                            description:
+                              'Logical payload after decryption and decompression: the time stream comes first, then the value stream.',
+                            layout: 'time_stream_size | encoded_time_stream | encoded_value_stream',
+                            layoutNotes: [
+                              'UVarInt length of the time stream',
+                              'Encoded time stream',
+                              'Encoded value stream; fills the remaining bytes',
+                            ],
+                            note: 'On disk the whole payload is stored_data[compressed_size], compressed and possibly encrypted.',
+                          },
+                          {
+                            description: '解密、解压后的逻辑载荷：先时间流，后值流。',
+                            layout: 'time_stream_size | encoded_time_stream | encoded_value_stream',
+                            layoutNotes: [
+                              '时间流的 UVarInt 长度',
+                              '编码后的时间流',
+                              '编码后的值流；占据剩余字节',
+                            ],
+                            note: '磁盘上整个载荷是 stored_data[compressed_size]，经过压缩并可能加密。',
+                          },
+                        ),
+                      ],
                     },
                   ],
                 },
@@ -330,7 +524,7 @@ export const tsFileStructure: TsFileStructureNode = {
                       layout: 'Time Chunk | Value Chunk*',
                     },
                     zh: {
-                      title: '对齐 Chunk 集',
+                      title: '对齐数据块集（Aligned Chunk Set）',
                       description: '一个 Time Chunk 后跟若干 Value Chunk。每个 Value Chunk 的第 i 个 Page 对应 Time Chunk 的第 i 个 Page，集合本身没有额外头部。',
                       offset: '第一个对齐 Chunk 的偏移',
                       size: '可变 · 重复',
@@ -347,17 +541,68 @@ export const tsFileStructure: TsFileStructureNode = {
                           title: 'Time Chunk',
                           description: 'Stores the timestamps shared by the aligned measurements. Its Header names the time codec, and each Time Page defines positions for the corresponding Value Pages.',
                           offset: 'time_chunk_offset',
-                          size: 'header + data_size',
+                          size: 'Chunk Header length + data_size',
                           layout: 'Time Chunk Header | Time Page*',
+                          note: 'data_size counts Page Headers and stored Page data; it excludes the Chunk Header. Add the full Header length (including an AEAD suffix) for the total span.',
                         },
                         zh: {
                           title: '时间列（Time Chunk）',
                           description: '保存各对齐测量共享的时间戳。头部说明时间编码，每个 Time Page 确定对应 Value Page 使用的那组位置。',
                           offset: 'time_chunk_offset',
-                          size: 'header + data_size',
+                          size: 'Chunk Header 长度 + data_size',
                           layout: 'Time Chunk Header | Time Page*',
+                          note: 'data_size 统计 Page Header 和已保存 Page 数据的长度，不包含 Chunk Header；总长度需加上完整 Header 长度（含 AEAD 后缀）。',
                         },
                       },
+                      children: [
+                        {
+                          id: 'time-page',
+                          kind: 'repeated',
+                          link: 'DataPages/index.html#aligned-time-page',
+                          text: {
+                            en: {
+                              title: 'Time Page',
+                              description: 'One Page of encoded timestamps shared by the matching Value Pages.',
+                              offset: 'inside Time Chunk data_size',
+                              size: 'variable · repeated',
+                              layout: 'Page Header | Page Data',
+                              note: 'A Time Page has no bitmap; every position has a timestamp.',
+                            },
+                            zh: {
+                              title: '时间页（Time Page）',
+                              description: '一个编码时间戳 Page，对应 Value Page 使用它的位置序列。',
+                              offset: 'Time Chunk data_size 内部',
+                              size: '可变 · 重复',
+                              layout: 'Page Header | Page Data',
+                              note: 'Time Page 没有位图；每个位置都有时间戳。',
+                            },
+                          },
+                          children: [
+                            pageHeaderNode('time-page-header'),
+                            pageDataNode(
+                              'time-page-data',
+                              'DataPages/index.html#aligned-time-page',
+                              {
+                                description:
+                                  'Logical payload after decryption and decompression: the encoded time stream.',
+                                layout: 'encoded_time_stream',
+                                layoutNotes: [
+                                  'Encoded timestamps for the positions shared by the matching Value Pages',
+                                ],
+                                note: 'On disk this is stored_data[compressed_size].',
+                              },
+                              {
+                                description: '解密、解压后的逻辑载荷：编码后的时间流。',
+                                layout: 'encoded_time_stream',
+                                layoutNotes: [
+                                  '对应 Value Page 共享位置的编码时间戳',
+                                ],
+                                note: '磁盘上是 stored_data[compressed_size]。',
+                              },
+                            ),
+                          ],
+                        },
+                      ],
                     },
                     {
                       id: 'value-chunk',
@@ -369,17 +614,75 @@ export const tsFileStructure: TsFileStructureNode = {
                           description:
                             'Stores one aligned measurement. Its Page bitmaps place the stored values at the matching timestamps and leave other positions null.',
                           offset: 'value_chunk_offset',
-                          size: 'header + data_size · repeated',
+                          size: 'Chunk Header length + data_size · repeated',
                           layout: 'Value Chunk Header | Value Page*',
+                          note: 'data_size counts Page Headers and stored Page data; it excludes the Chunk Header. Add the full Header length (including an AEAD suffix) for the total span.',
                         },
                         zh: {
-                          title: '测量列（Value Chunk）',
-                          description: '保存一个对齐测量列，通过各 Page 的位图把值对应到时间戳，其余位置为 null。',
+                          title: '测点列（Value Chunk）',
+                          description: '保存一个对齐测点列，通过各 Page 的位图把值对应到时间戳，其余位置为 null。',
                           offset: 'value_chunk_offset',
-                          size: 'header + data_size · 重复',
+                          size: 'Chunk Header 长度 + data_size · 重复',
                           layout: 'Value Chunk Header | Value Page*',
+                          note: 'data_size 统计 Page Header 和已保存 Page 数据的长度，不包含 Chunk Header；总长度需加上完整 Header 长度（含 AEAD 后缀）。',
                         },
                       },
+                      children: [
+                        {
+                          id: 'value-page',
+                          kind: 'repeated',
+                          link: 'DataPages/index.html#aligned-value-page',
+                          text: {
+                            en: {
+                              title: 'Value Page',
+                              description: 'One Page of values for an aligned measurement; its bitmap maps stored values onto positions from the matching Time Page.',
+                              offset: 'inside Value Chunk data_size',
+                              size: 'variable · repeated',
+                              layout: 'Page Header | Page Data',
+                              note: 'An all-null Value Page is only UVarInt(0); it has no Header or Data.',
+                            },
+                            zh: {
+                              title: '测点页（Value Page）',
+                              description: '单个对齐测点的一个 Page；位图把值映射到对应 Time Page 的位置。',
+                              offset: 'Value Chunk data_size 内部',
+                              size: '可变 · 重复',
+                              layout: 'Page Header | Page Data',
+                              note: '全 null 的 Value Page 只保存 UVarInt(0)，没有 Header 或 Data。',
+                            },
+                          },
+                          children: [
+                            pageHeaderNode('value-page-header'),
+                            pageDataNode(
+                              'value-page-data',
+                              'DataPages/index.html#aligned-value-page',
+                              {
+                                description:
+                                  'Logical payload after decryption and decompression: the position count, present bitmap, and non-null values.',
+                                layout:
+                                  'position_count | present_bitmap | encoded_non_null_values',
+                                layoutNotes: [
+                                  'int32 position count, equal to the matching Time Page',
+                                  'Bitmap with ceil(position_count / 8) bytes; a set bit means a value is present',
+                                  'Encoded non-null values, in position order',
+                                ],
+                                note: 'On disk this is stored_data[compressed_size]; an all-null Value Page is only UVarInt(0).',
+                              },
+                              {
+                                description:
+                                  '解密、解压后的逻辑载荷：位置数、存在位图和非 null 值。',
+                                layout:
+                                  'position_count | present_bitmap | encoded_non_null_values',
+                                layoutNotes: [
+                                  'int32 位置数，等于对应 Time Page 的位置数',
+                                  '位图长度为 ceil(position_count / 8)；置位表示该位置有值',
+                                  '按位置顺序编码的非 null 值',
+                                ],
+                                note: '磁盘上是 stored_data[compressed_size]；全 null 的 Value Page 只保存 UVarInt(0)。',
+                              },
+                            ),
+                          ],
+                        },
+                      ],
                     },
                   ],
                 },
@@ -443,6 +746,9 @@ export const tsFileStructure: TsFileStructureNode = {
           offset: 'meta_offset + 1 … file_metadata_pos - 1',
           size: 'variable',
           layout: '(TimeseriesMetadata | MetadataIndexNode)*',
+          layoutNotes: [
+            'Zero or more entries; each entry is either a TimeseriesMetadata or a MetadataIndexNode. The two kinds may be interleaved.',
+          ],
         },
         zh: {
           title: '索引元数据区',
@@ -450,6 +756,9 @@ export const tsFileStructure: TsFileStructureNode = {
           offset: 'meta_offset + 1 … file_metadata_pos - 1',
           size: '可变',
           layout: '(TimeseriesMetadata | MetadataIndexNode)*',
+          layoutNotes: [
+            '零个或多个条目；每条是 TimeseriesMetadata 或 MetadataIndexNode，两者可以交错出现。',
+          ],
         },
       },
       children: [
@@ -465,6 +774,14 @@ export const tsFileStructure: TsFileStructureNode = {
               size: 'variable · repeated',
               layout:
                 'timeseries_type | measurement_id | data_type | chunk_metadata_list_size | Statistics | ChunkMetadata*',
+              layoutNotes: [
+                'Column role and Chunk Metadata layout flags',
+                'Measurement identifier',
+                'Physical value type',
+                'Byte length of the Chunk Metadata list',
+                'Series-level Statistics',
+                'Chunk Metadata records; one record per Chunk',
+              ],
             },
             zh: {
               title: '时间序列元数据',
@@ -473,8 +790,80 @@ export const tsFileStructure: TsFileStructureNode = {
               size: '可变 · 重复',
               layout:
                 'timeseries_type | measurement_id | data_type | chunk_metadata_list_size | Statistics | ChunkMetadata*',
+              layoutNotes: [
+                '列角色与 Chunk Metadata 布局标志',
+                '测量标识',
+                '物理值类型',
+                'Chunk Metadata 列表的字节长度',
+                '序列级 Statistics',
+                'Chunk Metadata 记录；每个 Chunk 一条',
+              ],
             },
           },
+          children: [
+            {
+              id: 'series-statistics',
+              kind: 'record',
+              link: 'Metadata.html#statistics',
+              text: {
+                en: {
+                  title: 'Series Statistics',
+                  description: 'Aggregated Statistics for the whole series. The common prefix is followed by fields selected by data_type.',
+                  offset: 'inside Timeseries Metadata',
+                  size: 'variable',
+                  layout: 'UVarInt count | int64 start_time | int64 end_time | type-specific fields',
+                  layoutNotes: [
+                    'Number of values represented by this record',
+                    'Inclusive start time',
+                    'Inclusive end time',
+                    'Fields selected by data_type (min, max, first, last, sum, or none)',
+                  ],
+                },
+                zh: {
+                  title: '统计信息（Statistics）',
+                  description: '整个序列的汇总 Statistics；公共前缀之后是按 data_type 选择的类型字段。',
+                  offset: '时间序列元数据内部',
+                  size: '可变',
+                  layout: 'UVarInt count | int64 start_time | int64 end_time | type-specific fields',
+                  layoutNotes: [
+                    '该记录覆盖的值数量',
+                    '包含首部的开始时间',
+                    '包含尾部的结束时间',
+                    '按 data_type 选择的字段（min / max / first / last / sum 或无）',
+                  ],
+                },
+              },
+            },
+            {
+              id: 'chunk-metadata',
+              kind: 'repeated',
+              link: 'Metadata.html#chunk-metadata',
+              text: {
+                en: {
+                  title: 'Chunk Metadata',
+                  description: 'One record per Chunk. It points to the Chunk Header in the data section; its Statistics are omitted when the series has only one Chunk.',
+                  offset: 'referenced by a Chunk Metadata list entry',
+                  size: 'variable · repeated',
+                  layout: 'int64 offset_of_chunk_header | Statistics?',
+                  layoutNotes: [
+                    'Absolute offset of the Chunk marker',
+                    'Chunk-level Statistics; present only when the series has multiple Chunks',
+                  ],
+                },
+                zh: {
+                  title: '数据块元数据（Chunk Metadata）',
+                  description: '每个 Chunk 一条记录，指向数据区的 Chunk Header；序列只有一个 Chunk 时省略这里的 Statistics。',
+                  offset: '由 Chunk Metadata 列表条目引用',
+                  size: '可变 · 重复',
+                  layout: 'int64 offset_of_chunk_header | Statistics?',
+                  layoutNotes: [
+                    'Chunk marker 的绝对偏移',
+                    'Chunk 级 Statistics；仅当序列包含多个 Chunk 时存在',
+                  ],
+                },
+              },
+            },
+          ],
         },
         {
           id: 'metadata-index',
@@ -554,7 +943,7 @@ export const tsFileStructure: TsFileStructureNode = {
               size: 'variable · repeated',
             },
             zh: {
-              title: '表 Schema',
+              title: '表结构（Schema）',
               description: '按声明顺序描述表的列，记录列名、类型和类别；FIELD Chunk 通过测量名与列对应。',
               offset: 'TsFileMetadata 内部',
               size: '可变 · 重复',

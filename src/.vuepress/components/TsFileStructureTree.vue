@@ -48,6 +48,7 @@ const messages = {
     offset: 'Offset',
     size: 'Size',
     layout: 'Physical layout',
+    exactSyntax: 'Exact syntax',
     details: 'Open format details',
   },
   zh: {
@@ -60,6 +61,7 @@ const messages = {
     offset: '偏移',
     size: '长度',
     layout: '物理布局',
+    exactSyntax: '精确语法',
     details: '查看格式详情',
   },
 } as const;
@@ -102,15 +104,23 @@ const selectedNode = computed(() => {
 
 const selectedText = computed(() => selectedNode.value.text[props.locale]);
 
-function splitLayout(layout: string | undefined): string[] {
-  if (!layout) return [];
+type LayoutRule = 'optional' | 'repeated' | 'one-or-more' | 'one-of';
+
+interface LayoutRow {
+  text: string;
+  rule?: LayoutRule;
+  note?: string;
+  children?: LayoutRow[];
+}
+
+function splitTopLevel(value: string, separator: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
-  for (const char of layout) {
+  for (const char of value) {
     if (char === '(' || char === '[' || char === '{') depth += 1;
     else if (char === ')' || char === ']' || char === '}') depth = Math.max(0, depth - 1);
-    if (char === '|' && depth === 0) {
+    if (char === separator && depth === 0) {
       if (current.trim()) parts.push(current.trim());
       current = '';
     } else {
@@ -121,7 +131,57 @@ function splitLayout(layout: string | undefined): string[] {
   return parts;
 }
 
-const selectedLayoutParts = computed(() => splitLayout(selectedText.value.layout));
+function parseLayoutPart(part: string): LayoutRow {
+  let text = part.trim();
+  let rule: LayoutRule | undefined;
+
+  const groupMatch = text.match(/^\((.*)\)([*+?])$/);
+  if (groupMatch) {
+    const inner = groupMatch[1].trim();
+    rule =
+      groupMatch[2] === '*' ? 'repeated' : groupMatch[2] === '+' ? 'one-or-more' : 'optional';
+    const alternatives = splitTopLevel(inner, '|');
+    if (alternatives.length > 1) {
+      const children = alternatives.map((item) => ({ text: item.trim() }));
+      const joiner = props.locale === 'zh' ? ' 或 ' : ' or ';
+      return {
+        text: children.map((child) => child.text).join(joiner),
+        rule,
+        children,
+      };
+    }
+    return { text: inner, rule };
+  }
+
+  const suffixMatch = text.match(/^(.*?)([*+?])$/);
+  if (suffixMatch) {
+    text = suffixMatch[1].trim();
+    rule =
+      suffixMatch[2] === '*' ? 'repeated' : suffixMatch[2] === '+' ? 'one-or-more' : 'optional';
+  }
+
+  return { text, rule };
+}
+
+function parseLayout(layout: string | undefined, notes: string[] | undefined): LayoutRow[] {
+  if (!layout) return [];
+  return splitTopLevel(layout, '|').map((part, index) => {
+    const row = parseLayoutPart(part);
+    if (notes?.[index]) row.note = notes[index];
+    return row;
+  });
+}
+
+const selectedLayoutRows = computed(
+  () => selectedText.value.layoutRows ?? parseLayout(selectedText.value.layout, selectedText.value.layoutNotes),
+);
+
+const ruleLabels = computed<Record<LayoutRule, string>>(() => ({
+  optional: props.locale === 'zh' ? '可选' : 'optional',
+  repeated: '0..N',
+  'one-or-more': '1..N',
+  'one-of': props.locale === 'zh' ? '二选一' : 'one of',
+}));
 
 const detailsLink = computed(() => {
   if (!selectedNode.value.link) return undefined;
@@ -213,8 +273,39 @@ function collapseAll(): void {
             <div v-if="selectedText.layout" class="tsfile-detail-layout">
               <span>{{ ui.layout }}</span>
               <div class="tsfile-layout-flow">
-                <code v-for="(part, index) in selectedLayoutParts" :key="index">{{ part }}</code>
+                <div
+                  v-for="(row, index) in selectedLayoutRows"
+                  :key="index"
+                  class="tsfile-layout-row"
+                >
+                  <div class="tsfile-layout-head">
+                    <code>{{ row.text }}</code>
+                    <span v-if="row.rule" class="tsfile-layout-rule">
+                      {{ ruleLabels[row.rule] }}
+                    </span>
+                  </div>
+                  <span v-if="row.note" class="tsfile-layout-note">{{ row.note }}</span>
+                  <div v-if="row.children?.length" class="tsfile-layout-children">
+                    <div
+                      v-for="(child, childIndex) in row.children"
+                      :key="childIndex"
+                      class="tsfile-layout-child"
+                    >
+                      <div class="tsfile-layout-head">
+                        <code>{{ child.text }}</code>
+                        <span v-if="child.rule" class="tsfile-layout-rule">
+                          {{ ruleLabels[child.rule] }}
+                        </span>
+                      </div>
+                      <span v-if="child.note" class="tsfile-layout-note">{{ child.note }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
+              <details class="tsfile-layout-grammar">
+                <summary>{{ ui.exactSyntax }}</summary>
+                <code>{{ selectedText.layout }}</code>
+              </details>
             </div>
           </div>
         </div>
@@ -485,9 +576,71 @@ function collapseAll(): void {
 .tsfile-layout-flow {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.55rem;
   padding-left: 0.7rem;
   border-left: 1px solid var(--vp-c-border);
+}
+
+.tsfile-layout-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tsfile-layout-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.tsfile-layout-rule {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  color: var(--tree-accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: var(--tree-accent-bg);
+}
+
+.tsfile-layout-note {
+  color: var(--vp-c-text-mute);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.tsfile-layout-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.1rem 0 0 0.7rem;
+  padding-left: 0.55rem;
+  border-left: 1px dashed var(--vp-c-border);
+}
+
+.tsfile-layout-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.tsfile-layout-grammar {
+  margin-top: 0.15rem;
+  color: var(--vp-c-text-mute);
+  font-size: 0.78rem;
+}
+
+.tsfile-layout-grammar summary {
+  cursor: pointer;
+}
+
+.tsfile-layout-grammar code {
+  padding: 0.45rem 0.55rem;
+  margin-top: 0.35rem;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 5px;
+  white-space: pre-wrap;
+  background: var(--vp-c-bg);
 }
 
 .tsfile-detail-note {

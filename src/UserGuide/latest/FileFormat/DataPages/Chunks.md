@@ -30,13 +30,14 @@ The top-level grammar is:
 
 ```text
 FilePrefix  := magic[6] version[1] FileEncryptionHeader?
-DataSection := (ChunkGroup | OperationIndexRange)*
+DataSection := (ChunkGroup+ OperationIndexRange?)*
 ChunkGroup  := ChunkGroupHeader Chunk*
 Separator   := byte(0x02)
 ```
 
-The `0x02` separator follows the data section; it is not part of a Chunk Group. A Chunk Group
-has no total-length field. After reading each Chunk, the reader examines the next marker: another
+Each batch contains one or more ChunkGroups followed by an optional OperationIndexRange. The
+`0x02` separator follows the data section; it is not part of a Chunk Group. A Chunk Group has no
+total-length field. After reading each Chunk, the reader examines the next marker: another
 Chunk continues the group, while a new group, operation-index record, or separator ends it.
 
 ```text
