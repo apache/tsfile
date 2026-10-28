@@ -36,7 +36,6 @@ export const enSidebar = {
     {
       text: 'File Format',
       collapsible: true,
-      expanded: true,
       prefix: '/UserGuide/latest/FileFormat/',
       link: '/UserGuide/latest/FileFormat/',
       children: [
@@ -49,7 +48,6 @@ export const enSidebar = {
         {
           text: 'Data Pages',
           collapsible: true,
-          expanded: true,
           prefix: '/UserGuide/latest/FileFormat/DataPages/',
           link: '/UserGuide/latest/FileFormat/DataPages/',
           children: [
