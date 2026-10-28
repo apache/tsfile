@@ -154,7 +154,6 @@ export const tsFileStructure: TsFileStructureNode = {
     {
       id: 'file-header',
       kind: 'region',
-      link: 'index.html#physical-regions',
       text: {
         en: {
           title: 'File Header',
