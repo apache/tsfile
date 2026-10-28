@@ -36,7 +36,6 @@ export const zhSidebar = {
     {
       text: '文件格式',
       collapsible: true,
-      expanded: true,
       prefix: '/zh/UserGuide/latest/FileFormat/',
       link: '/zh/UserGuide/latest/FileFormat/',
       children: [
@@ -49,7 +48,6 @@ export const zhSidebar = {
         {
           text: '数据页',
           collapsible: true,
-          expanded: true,
           prefix: '/zh/UserGuide/latest/FileFormat/DataPages/',
           link: '/zh/UserGuide/latest/FileFormat/DataPages/',
           children: [
