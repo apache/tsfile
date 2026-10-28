@@ -18,6 +18,29 @@
  */
 
 // place your custom styles here
+/* Technical documentation: do not insert automatic hyphenation. */
+.theme-hope-content,
+.theme-hope-content p,
+.theme-hope-content li {
+  hyphens: manual !important;
+}
+
+/* The right TOC and print control overflow the layout below 1440px. */
+@media (max-width: 1439px) {
+  .vp-toc-placeholder > aside {
+    display: none;
+  }
+}
+
+/* Keep tree controls tappable on narrow screens. */
+@media (max-width: 768px) {
+  .tsfile-structure-actions button,
+  .tsfile-structure .tsfile-tree-toggle,
+  .tsfile-structure .tsfile-tree-label {
+    min-height: 2.75rem !important;
+  }
+}
+
 #main-description {
   max-width: 55rem;
   font-weight: 400;

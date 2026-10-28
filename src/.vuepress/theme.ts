@@ -34,8 +34,9 @@ export default hopeTheme({
   breadcrumb: false,
   darkmode: 'toggle',
   contributors: false,
+  pageInfo: false,
 
-  lastUpdated: true,
+  lastUpdated: false,
   
   navbarLayout: {
     start: ['Brand'],
