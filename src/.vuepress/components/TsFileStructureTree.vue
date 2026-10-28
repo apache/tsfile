@@ -48,6 +48,7 @@ const messages = {
     offset: 'Offset',
     size: 'Size',
     layout: 'Physical layout',
+    or: 'or',
     details: 'Open format details',
   },
   zh: {
@@ -60,6 +61,7 @@ const messages = {
     offset: '偏移',
     size: '长度',
     layout: '物理布局',
+    or: '或',
     details: '查看格式详情',
   },
 } as const;
@@ -108,6 +110,7 @@ interface LayoutRow {
   text: string;
   rule?: LayoutRule;
   note?: string;
+  alternatives?: boolean;
   children?: LayoutRow[];
 }
 
@@ -145,6 +148,7 @@ function parseLayoutPart(part: string): LayoutRow {
       return {
         text: children.map((child) => child.text).join(joiner),
         rule,
+        alternatives: true,
         children,
       };
     }
@@ -284,19 +288,20 @@ function collapseAll(): void {
                   </div>
                   <span v-if="row.note" class="tsfile-layout-note">{{ row.note }}</span>
                   <div v-if="row.children?.length" class="tsfile-layout-children">
-                    <div
-                      v-for="(child, childIndex) in row.children"
-                      :key="childIndex"
-                      class="tsfile-layout-child"
-                    >
-                      <div class="tsfile-layout-head">
-                        <code>{{ child.text }}</code>
-                        <span v-if="child.rule" class="tsfile-layout-rule">
-                          {{ ruleLabels[child.rule] }}
-                        </span>
+                    <template v-for="(child, childIndex) in row.children" :key="childIndex">
+                      <span v-if="childIndex > 0 && row.alternatives" class="tsfile-layout-or">
+                        {{ ui.or }}
+                      </span>
+                      <div class="tsfile-layout-child">
+                        <div class="tsfile-layout-head">
+                          <code>{{ child.text }}</code>
+                          <span v-if="child.rule" class="tsfile-layout-rule">
+                            {{ ruleLabels[child.rule] }}
+                          </span>
+                        </div>
+                        <span v-if="child.note" class="tsfile-layout-note">{{ child.note }}</span>
                       </div>
-                      <span v-if="child.note" class="tsfile-layout-note">{{ child.note }}</span>
-                    </div>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -616,6 +621,15 @@ function collapseAll(): void {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+}
+
+.tsfile-layout-or {
+  padding-left: 0.1rem;
+  color: var(--tree-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .tsfile-detail-note {

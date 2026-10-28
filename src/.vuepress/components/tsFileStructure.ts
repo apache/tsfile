@@ -36,6 +36,7 @@ export interface TsFileStructureLayoutRow {
   text: string;
   rule?: TsFileStructureLayoutRule;
   note?: string;
+  alternatives?: boolean;
   children?: TsFileStructureLayoutRow[];
 }
 
@@ -378,6 +379,23 @@ export const tsFileStructure: TsFileStructureNode = {
                   offset: 'after Chunk Group Header',
                   size: 'variable · repeated',
                   layout: 'Non-aligned Chunk | Aligned Chunk Set',
+                  layoutRows: [
+                    {
+                      text: 'Non-aligned Chunk or Aligned Chunk Set',
+                      rule: 'one-of',
+                      alternatives: true,
+                      children: [
+                        {
+                          text: 'Non-aligned Chunk',
+                          note: 'Timestamps and values live in the same Chunk; every measurement carries its own time stream.',
+                        },
+                        {
+                          text: 'Aligned Chunk Set',
+                          note: 'One Time Chunk holds the shared timestamps, and each Value Chunk holds one measurement.',
+                        },
+                      ],
+                    },
+                  ],
                 },
                 zh: {
                   title: '数据块布局（Chunk Layout）',
@@ -385,6 +403,23 @@ export const tsFileStructure: TsFileStructureNode = {
                   offset: 'Chunk Group Header 之后',
                   size: '可变 · 重复',
                   layout: '非对齐 Chunk | 对齐 Chunk 集',
+                  layoutRows: [
+                    {
+                      text: '非对齐 Chunk 或 对齐 Chunk 集',
+                      rule: 'one-of',
+                      alternatives: true,
+                      children: [
+                        {
+                          text: '非对齐 Chunk',
+                          note: '时间和值在同一个 Chunk 内，每个测点各自带时间流。',
+                        },
+                        {
+                          text: '对齐 Chunk 集',
+                          note: '一个 Time Chunk 保存共享时间戳，每个 Value Chunk 保存一个测点。',
+                        },
+                      ],
+                    },
+                  ],
                 },
               },
               children: [
