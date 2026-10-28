@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class SprintzDecoderTest {
@@ -48,6 +50,167 @@ public class SprintzDecoderTest {
   private static final List<Long> longList = new ArrayList<>();
 
   private static final List<Integer> iterations = new ArrayList<>();
+
+  // Byte-for-byte identical to the C++ encoder's output for the regression sequence.
+  private static final String[] CPP_SPRINTZ_GOLDEN = {
+    "0100ff882320030800000000800000007fffffffffffffff00000001c00000003fffffff0000002a810401030100",
+    "010000000000000000ff8843400308000000000000000080000000000000007fffffffffffffffffffffffffffffff0000000000000001c0000000000000003fffffffffffffff000000000000002a810401030100",
+    "1f00000000fdfffffe03fffffc03fffff807fffff007ffffe00fffffc01fffff803fffff8800000000c00e0fffbfffffd000000017fbfffff5000000015fc00000d0000000160200000081422a0000c4cf7a80",
+    "3f0000000000000000ffbffffffffffffe007ffffffffffffc007ffffffffffff800fffffffffffff000ffffffffffffe001ffffffffffffc003ffffffffffff8007ffffffffffff880000000000000000c00381ffff7ffffffffffffd00000000000000017ff7ffffffffffff500000000000000015ff8000000000000d0000000000000001600400000000000000814045400000000000c23ffbd4",
+  };
+
+  private static String toHex(byte[] bytes) {
+    StringBuilder hex = new StringBuilder();
+    for (byte value : bytes) {
+      hex.append(Character.forDigit((value >>> 4) & 15, 16));
+      hex.append(Character.forDigit(value & 15, 16));
+    }
+    return hex.toString();
+  }
+
+  @Test
+  public void testIntFullBlocksAndExtremeTransitions() throws IOException {
+    String method = "fire";
+    int[] edgeValues = {
+      0,
+      Integer.MIN_VALUE,
+      Integer.MAX_VALUE,
+      -1,
+      1,
+      Integer.MIN_VALUE / 2,
+      Integer.MAX_VALUE / 2,
+      42,
+      0
+    };
+    for (int count : new int[] {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+      IntSprintzEncoder encoder = new IntSprintzEncoder();
+      for (int round = 0; round < 2; round++) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int i = 0; i < count; i++) {
+          encoder.encode(i < 9 ? (int) i : edgeValues[i % edgeValues.length], out);
+        }
+        encoder.flush(out);
+        if (count == 18) {
+          assertEquals(CPP_SPRINTZ_GOLDEN[0], toHex(out.toByteArray()));
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(out.toByteArray());
+        IntSprintzDecoder decoder = new IntSprintzDecoder();
+        for (int i = 0; i < count; i++) {
+          assertTrue(method + ":" + count + ":" + i, decoder.hasNext(buffer));
+          int actual = decoder.readInt(buffer);
+          int expected = i < 9 ? (int) i : edgeValues[i % edgeValues.length];
+          assertEquals(expected, actual);
+        }
+        assertFalse(decoder.hasNext(buffer));
+      }
+    }
+  }
+
+  @Test
+  public void testLongFullBlocksAndExtremeTransitions() throws IOException {
+    String method = "fire";
+    long[] edgeValues = {
+      0, Long.MIN_VALUE, Long.MAX_VALUE, -1, 1, Long.MIN_VALUE / 2, Long.MAX_VALUE / 2, 42, 0
+    };
+    for (int count : new int[] {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+      LongSprintzEncoder encoder = new LongSprintzEncoder();
+      for (int round = 0; round < 2; round++) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int i = 0; i < count; i++) {
+          encoder.encode(i < 9 ? (long) i : edgeValues[i % edgeValues.length], out);
+        }
+        encoder.flush(out);
+        if (count == 18) {
+          assertEquals(CPP_SPRINTZ_GOLDEN[1], toHex(out.toByteArray()));
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(out.toByteArray());
+        LongSprintzDecoder decoder = new LongSprintzDecoder();
+        for (int i = 0; i < count; i++) {
+          assertTrue(method + ":" + count + ":" + i, decoder.hasNext(buffer));
+          long actual = decoder.readLong(buffer);
+          long expected = i < 9 ? (long) i : edgeValues[i % edgeValues.length];
+          assertEquals(expected, actual);
+        }
+        assertFalse(decoder.hasNext(buffer));
+      }
+    }
+  }
+
+  @Test
+  public void testFloatFullBlocksAndExtremeTransitions() throws IOException {
+    String method = "fire";
+    float[] edgeValues = {
+      0.0f,
+      -0.0f,
+      Float.MAX_VALUE,
+      -Float.MAX_VALUE,
+      Float.MIN_VALUE,
+      -Float.MIN_VALUE,
+      1,
+      -1,
+      42.5f
+    };
+    for (int count : new int[] {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+      FloatSprintzEncoder encoder = new FloatSprintzEncoder();
+      for (int round = 0; round < 2; round++) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int i = 0; i < count; i++) {
+          encoder.encode(i < 9 ? (float) i : edgeValues[i % edgeValues.length], out);
+        }
+        encoder.flush(out);
+        if (count == 18) {
+          assertEquals(CPP_SPRINTZ_GOLDEN[2], toHex(out.toByteArray()));
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(out.toByteArray());
+        FloatSprintzDecoder decoder = new FloatSprintzDecoder();
+        for (int i = 0; i < count; i++) {
+          assertTrue(method + ":" + count + ":" + i, decoder.hasNext(buffer));
+          float actual = decoder.readFloat(buffer);
+          float expected = i < 9 ? (float) i : edgeValues[i % edgeValues.length];
+          assertEquals(Float.floatToIntBits(expected), Float.floatToIntBits(actual));
+        }
+        assertFalse(decoder.hasNext(buffer));
+      }
+    }
+  }
+
+  @Test
+  public void testDoubleFullBlocksAndExtremeTransitions() throws IOException {
+    String method = "fire";
+    double[] edgeValues = {
+      0.0,
+      -0.0,
+      Double.MAX_VALUE,
+      -Double.MAX_VALUE,
+      Double.MIN_VALUE,
+      -Double.MIN_VALUE,
+      1,
+      -1,
+      42.5
+    };
+    for (int count : new int[] {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+      DoubleSprintzEncoder encoder = new DoubleSprintzEncoder();
+      for (int round = 0; round < 2; round++) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int i = 0; i < count; i++) {
+          encoder.encode(i < 9 ? (double) i : edgeValues[i % edgeValues.length], out);
+        }
+        encoder.flush(out);
+        if (count == 18) {
+          assertEquals(CPP_SPRINTZ_GOLDEN[3], toHex(out.toByteArray()));
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(out.toByteArray());
+        DoubleSprintzDecoder decoder = new DoubleSprintzDecoder();
+        for (int i = 0; i < count; i++) {
+          assertTrue(method + ":" + count + ":" + i, decoder.hasNext(buffer));
+          double actual = decoder.readDouble(buffer);
+          double expected = i < 9 ? (double) i : edgeValues[i % edgeValues.length];
+          assertEquals(Double.doubleToLongBits(expected), Double.doubleToLongBits(actual));
+        }
+        assertFalse(decoder.hasNext(buffer));
+      }
+    }
+  }
 
   @BeforeClass
   public static void setUp() {

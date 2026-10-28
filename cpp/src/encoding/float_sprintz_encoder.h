@@ -76,13 +76,31 @@ class FloatSprintzEncoder : public SprintzEncoder {
         values_.push_back(value);
 
         if (values_.size() == (size_t)block_size_ + 1) {
+            const std::vector<float> raw_values(values_);
+            unsafe_residual_ = false;
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 convert_buffer_[i - 1] = predict(values_[i], values_[i - 1]);
             }
-            bit_pack();
-            is_first_cached_ = false;
-            values_.clear();
+            if (unsafe_residual_) {
+                // Reuse the existing raw fallback format; retain the ninth
+                // value as the start of the next block.
+                common::SerializationUtil::
+                    write_int_little_endian_padded_on_bit_width(
+                        block_size_ | 0x80, byte_cache_, 1);
+                FloatGorillaEncoder encoder;
+                for (int i = 0; i < block_size_; ++i) {
+                    if (RET_FAIL(encoder.encode(raw_values[i], byte_cache_)))
+                        return ret;
+                }
+                if (RET_FAIL(encoder.flush(byte_cache_))) return ret;
+                values_.assign(1, raw_values.back());
+                is_first_cached_ = true;
+            } else {
+                bit_pack();
+                is_first_cached_ = false;
+                values_.clear();
+            }
             group_num_++;
             if (group_num_ == group_max_) {
                 if (RET_FAIL(flush(out_stream))) return ret;
@@ -149,20 +167,29 @@ class FloatSprintzEncoder : public SprintzEncoder {
         int32_t prev_bits = common::float_to_int(prev_value);
         int32_t raw_pred = 0;
         if (predict_method_ == "delta") {
-            raw_pred = curr_bits - prev_bits;
+            raw_pred = static_cast<int32_t>(static_cast<uint32_t>(curr_bits) -
+                                            static_cast<uint32_t>(prev_bits));
         } else if (predict_method_ == "fire") {
             int32_t pred = fire_pred_.predict(prev_bits);
-            int32_t err = curr_bits - pred;
+            int32_t err = static_cast<int32_t>(
+                static_cast<uint32_t>(curr_bits) - static_cast<uint32_t>(pred));
             fire_pred_.train(prev_bits, curr_bits, err);
             raw_pred = err;
         } else {
             // unsupported
             ASSERT(false);
         }
+        // The historical mapping is only reversible within this range.
+        const int32_t limit = int32_t(1) << 30;
+        if (raw_pred <= -limit || raw_pred >= limit) {
+            unsafe_residual_ = true;
+            return 0;
+        }
         return (raw_pred <= 0) ? -2 * raw_pred : 2 * raw_pred - 1;
     }
 
    private:
+    bool unsafe_residual_ = false;
     std::vector<float> values_;
     std::vector<int32_t> convert_buffer_;
     std::shared_ptr<Int32Packer> packer_;

@@ -86,9 +86,8 @@ class FloatSprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& input) override {
-        size_t min_length = sizeof(uint32_t) + 1;
         return (is_block_read_ && current_count_ < decode_size_) ||
-               input.remaining_size() >= min_length;
+               input.has_remaining();
     }
 
     int read_float(float& ret_value, common::ByteStream& input) override {
@@ -127,6 +126,14 @@ class FloatSprintzDecoder : public SprintzDecoder {
                     return ret;
                 }
             }
+            // Java's Gorilla decoder eagerly consumes a byte after a
+            // byte-aligned terminator. Match it before the next Sprintz block.
+            if (decoder.bits_left_ == 0) {
+                uint8_t padding;
+                uint32_t read_len;
+                if (RET_FAIL(input.read_buf(&padding, 1, read_len))) return ret;
+            }
+
         } else {
             // packed block
             decode_size_ = block_size_ + 1;
@@ -162,8 +169,8 @@ class FloatSprintzDecoder : public SprintzDecoder {
             std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
             // Java: convertBuffer[0] = convertBuffer[0] +
             // Float.floatToIntBits(preValue);
-            int32_t corrected0 =
-                convert_buffer_[0] + static_cast<int32_t>(prev_bits);
+            int32_t corrected0 = static_cast<int32_t>(
+                static_cast<uint32_t>(convert_buffer_[0]) + prev_bits);
             convert_buffer_[0] = corrected0;
             // Java: currentBuffer[1] = Float.intBitsToFloat(convertBuffer[0]);
             float f0;
@@ -172,7 +179,9 @@ class FloatSprintzDecoder : public SprintzDecoder {
 
             for (int i = 1; i < block_size_; ++i) {
                 // Java: convertBuffer[i] += convertBuffer[i - 1];
-                convert_buffer_[i] += convert_buffer_[i - 1];
+                convert_buffer_[i] = static_cast<int32_t>(
+                    static_cast<uint32_t>(convert_buffer_[i]) +
+                    static_cast<uint32_t>(convert_buffer_[i - 1]));
                 int32_t bits = convert_buffer_[i];
                 float fi;
                 std::memcpy(&fi, &bits, sizeof(bits));
@@ -186,7 +195,8 @@ class FloatSprintzDecoder : public SprintzDecoder {
             // Java: int p = firePred.predict(Float.floatToIntBits(preValue));
             int32_t p = fire_pred_.predict(prev_bits);
             int32_t e0 = convert_buffer_[0];
-            int32_t corrected0 = p + e0;
+            int32_t corrected0 = static_cast<int32_t>(
+                static_cast<uint32_t>(p) + static_cast<uint32_t>(e0));
             convert_buffer_[0] = corrected0;
             float f0;
             std::memcpy(&f0, &corrected0, sizeof(corrected0));
@@ -201,7 +211,8 @@ class FloatSprintzDecoder : public SprintzDecoder {
                             sizeof(prev_bits_i));
                 int32_t err = convert_buffer_[i];
                 int32_t pred = fire_pred_.predict(prev_bits_i);
-                int32_t corrected = pred + err;
+                int32_t corrected = static_cast<int32_t>(
+                    static_cast<uint32_t>(pred) + static_cast<uint32_t>(err));
                 convert_buffer_[i] = corrected;
                 float fi;
                 std::memcpy(&fi, &corrected, sizeof(corrected));

@@ -62,12 +62,12 @@ class Int64SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& in) override {
-        return (is_block_read_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < decode_size_) ||
                in.has_remaining();
     }
 
     bool has_next(common::ByteStream& input) {
-        return (is_block_read_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < decode_size_) ||
                input.remaining_size() > 0;
     }
 
@@ -167,14 +167,17 @@ class Int64SprintzDecoder : public SprintzDecoder {
 
         if (predict_scheme_ == "delta") {
             for (int i = 1; i <= block_size_; ++i) {
-                current_buffer_[i] += current_buffer_[i - 1];
+                current_buffer_[i] = static_cast<int64_t>(
+                    static_cast<uint64_t>(current_buffer_[i]) +
+                    static_cast<uint64_t>(current_buffer_[i - 1]));
             }
         } else if (predict_scheme_ == "fire") {
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 int64_t pred = fire_pred_.predict(current_buffer_[i - 1]);
                 int64_t err = current_buffer_[i];
-                current_buffer_[i] = pred + err;
+                current_buffer_[i] = static_cast<int64_t>(
+                    static_cast<uint64_t>(pred) + static_cast<uint64_t>(err));
                 fire_pred_.train(current_buffer_[i - 1], current_buffer_[i],
                                  err);
             }
