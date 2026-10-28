@@ -916,20 +916,99 @@ export const tsFileStructure: TsFileStructureNode = {
         {
           id: 'table-index-roots',
           kind: 'repeated',
+          link: 'Metadata.html#file-metadata',
           text: {
             en: {
               title: 'Table Index Roots',
-              description: 'Stores each table\'s device-index root. Follow a root to find a device, then its measurements.',
+              description: 'Entry point for each table\'s device-index tree. Look up the table root, descend to a device, then follow that device\'s measurement index to the Timeseries Metadata.',
               offset: 'inside TsFileMetadata',
               size: 'variable · repeated',
+              layout: 'VarString table_name | MetadataIndexNode device_index_root',
+              layoutNotes: [
+                'Table name: the actual table name, or the first DeviceID segment for tree-model data',
+                'Root node of the table\'s device-level metadata index',
+              ],
+              note: 'Lookup path: table root -> device index -> measurement index -> Timeseries Metadata -> Chunk Metadata.',
             },
             zh: {
-              title: '表索引根',
-              description: '保存各表的设备索引根。从根节点查找设备，再查找设备下的测量。',
+              title: '表索引根（Table Index Root）',
+              description: '每张表的设备索引树入口：先按表名找到根，再向下定位设备，最后通过设备的测量索引找到 Timeseries Metadata。',
               offset: 'TsFileMetadata 内部',
               size: '可变 · 重复',
+              layout: 'VarString table_name | MetadataIndexNode device_index_root',
+              layoutNotes: [
+                '表名：表模型为实际表名；树模型为 DeviceID 的第一段',
+                '该表设备级元数据索引的根节点',
+              ],
+              note: '查找路径：表根 → 设备索引 → 测量索引 → Timeseries Metadata → Chunk Metadata。',
             },
           },
+          children: [
+            {
+              id: 'device-index-root',
+              kind: 'record',
+              link: 'Metadata.html#metadata-index',
+              text: {
+                en: {
+                  title: 'Device Index Root',
+                  description: 'Root of the device-level index tree. Its entries locate a device and, through the entry offset, that device\'s measurement index.',
+                  offset: 'device_index_root',
+                  size: 'variable',
+                  layout: 'child_count | DeviceIndexEntry* | end_offset | node_type',
+                  layoutNotes: [
+                    'Number of child entries',
+                    'Device entries: DeviceID plus an absolute offset',
+                    'End offset of this node\'s byte range',
+                    'LEAF_DEVICE points directly to measurement indexes; INTERNAL_DEVICE points to another device-index node',
+                  ],
+                },
+                zh: {
+                  title: '设备索引根（Device Index Root）',
+                  description: '设备级索引树的根；条目定位设备，并通过条目 offset 找到该设备的测量索引。',
+                  offset: 'device_index_root',
+                  size: '可变',
+                  layout: 'child_count | DeviceIndexEntry* | end_offset | node_type',
+                  layoutNotes: [
+                    '子条目数量',
+                    '设备条目：DeviceID 加绝对偏移',
+                    '该节点字节范围的结束偏移',
+                    'LEAF_DEVICE 直接指向测量索引；INTERNAL_DEVICE 指向下一级设备索引节点',
+                  ],
+                },
+              },
+              children: [
+                {
+                  id: 'device-index-entry',
+                  kind: 'repeated',
+                  link: 'Metadata.html#metadata-index',
+                  text: {
+                    en: {
+                      title: 'Device Index Entry',
+                      description: 'One device entry in a device-index node. The entry key is the first DeviceID in its range.',
+                      offset: 'inside a device-index node',
+                      size: 'variable · repeated',
+                      layout: 'DeviceID first_device_id | int64 offset',
+                      layoutNotes: [
+                        'First DeviceID covered by this entry',
+                        'Absolute offset to the measurement index root (LEAF_DEVICE) or to a child device-index node (INTERNAL_DEVICE)',
+                      ],
+                    },
+                    zh: {
+                      title: '设备索引条目（Device Index Entry）',
+                      description: '设备索引节点中的一个设备条目；条目 key 是它覆盖范围里的第一个 DeviceID。',
+                      offset: '设备索引节点内部',
+                      size: '可变 · 重复',
+                      layout: 'DeviceID first_device_id | int64 offset',
+                      layoutNotes: [
+                        '该条目覆盖范围里的第一个 DeviceID',
+                        '绝对偏移：LEAF_DEVICE 指向测量索引根，INTERNAL_DEVICE 指向下一级设备索引节点',
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          ],
         },
         {
           id: 'table-schemas',
