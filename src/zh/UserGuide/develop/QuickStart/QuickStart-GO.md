@@ -22,17 +22,41 @@
 
 ## 依赖与安装
 
-Go 包 `github.com/apache/tsfile/go/tsfile` 是基于 C++ 实现的 cgo 绑定，因此必须先准备好原生库，Go 代码才能编译。
-绑定会相对 Go 模块的位置查找仓库检出目录下的 `cpp/target/build/include` 头文件和 `cpp/target/build/lib` 动态库。
+Go 包 `github.com/apache/tsfile/go/tsfile` 是基于 C++ 实现的 cgo 绑定，因此必须先有一份 C/C++ 构建产物，Go 代码才能编译。
+获取方式有两种：
+
+- 安装我们发布的 C/C++ 包或 SDK，无需自行构建 C++，适用于 Linux 和 macOS。
+- 从源码构建 C++ 库，适用于所有平台；Windows 上只支持这一种方式，Go 绑定是在 MinGW 下针对源码构建验证的。
+
+两种方式下 Go 模块都从 GitHub 获取，目前尚未发布到模块代理。
 
 ### 依赖
 
 - Go >= 1.22，且 `CGO_ENABLED=1`
-- C/C++ 编译工具链和 CMake
+- C/C++ 编译工具链和 CMake，仅在从源码构建原生库时需要
 - JDK >= 17 和 Maven，仅在从源码构建原生库时需要
 - Windows 上受支持的 cgo 工具链为 MinGW-w64
 
-### 构建原生库
+### 方式一：使用已发布的 C/C++ 包（Linux / macOS）
+
+按[下载与安装页面](../../../Download/README.md#cpp-packages)安装运行库和开发包，可以是 SDK 压缩包、DEB/RPM 包或 Homebrew Formula。
+头文件安装在 `include/tsfile` 子目录下，因此需要把 cgo 的头文件路径指向该目录，库路径指向安装前缀的库目录：
+
+```bash
+export TSFILE_HOME=/path/to/tsfile-sdk   # 或：$(brew --prefix local/tsfile250/tsfile)
+export CGO_CFLAGS="-I$TSFILE_HOME/include/tsfile"
+export CGO_LDFLAGS="-L$TSFILE_HOME/lib -Wl,-rpath,$TSFILE_HOME/lib"
+```
+
+其中 `-rpath` 让编译出的程序在运行时能找到 `libtsfile`；如果共享库安装在系统标准目录下可以去掉。
+对于安装在 `/usr` 下的系统包，链接器无需 `-L` 就能找到库，但头文件仍需要 `-I/usr/include/tsfile`。
+这些环境变量会追加到包内自带的编译参数之后，而包内参数指向源码检出的 `cpp/target/build` 目录；使用已安装的包时
+该目录并不存在，链接器会打印一条搜索路径警告，可以忽略。
+
+cgo 只在编译该包时读取这些变量，因此需要在每个构建程序的终端里设置，或者用
+`go env -w CGO_CFLAGS=... CGO_LDFLAGS=...` 记录下来。运行已经编译好的程序时不需要它们。
+
+### 方式二：从源码构建原生库
 
 克隆源码，并在仓库根目录构建 C++ 库：
 
@@ -42,13 +66,32 @@ cd tsfile
 ./mvnw -P with-cpp -DskipTests package
 ```
 
-Windows 上使用 `mvnw.cmd`。构建完成后会在 `cpp/target/build/include` 生成头文件，在 `cpp/target/build/lib` 生成
-Go 包所链接的库。
+构建完成后会在 `cpp/target/build/include` 生成头文件、在 `cpp/target/build/lib` 生成库，Go 包默认就链接这里。
+
+Windows 上需要使用 MinGW 构建，并把构建输出目录和 MinGW 运行库目录加入 `PATH`。Windows 的链接器不会记录库搜索路径，
+缺少这两项时 Go 程序启动会因找不到 `tsfile.dll` 而失败：
+
+```powershell
+.\mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -DskipTests package
+$env:Path = "$PWD\cpp\target\build\lib;C:\mingw64\bin;$env:Path"
+```
+
+每打开一个新的终端，都要在运行 Go 程序前执行上面的 `PATH` 设置，或者把 `cpp\target\build\lib\tsfile.dll`
+复制到编译出的可执行文件旁边。`C:\mingw64\bin` 指 MinGW-w64 的安装目录，它提供 MinGW 构建所依赖的 GCC 运行库 DLL。
 
 ### 在项目中使用该模块
 
-Go 模块目前尚未发布到模块代理，因此需要通过 `replace` 指令从源码检出目录引用。`replace` 的目标必须是仓库检出目录下的
-`go` 目录，且该检出目录中已经构建好原生库，因为头文件和库路径是相对模块位置解析的：
+使用已安装的包（方式一）时，可以直接在你的 Go 项目中拉取模块：
+
+```bash
+go get github.com/apache/tsfile/go@develop
+go mod tidy
+```
+
+模块目前还没有发布 tag，`@develop` 会解析成分支头部的伪版本号。为了构建可复现，请把该伪版本号记录在 `go.mod` 中，
+或者固定到某个具体 commit。
+
+使用源码构建（方式二）时，用 `replace` 指向检出目录下的 `go` 目录，Go 包就会使用它旁边构建好的头文件和库：
 
 ```bash
 go mod edit -replace github.com/apache/tsfile/go=/path/to/tsfile/go

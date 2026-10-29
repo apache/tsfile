@@ -22,18 +22,46 @@
 
 ## Dependencies and Installation
 
-The Go package `github.com/apache/tsfile/go/tsfile` is a cgo binding over the C++ implementation, so the native
-library must exist before Go code can be built. The binding locates the headers and the shared library relative to
-the Go module, under `cpp/target/build/include` and `cpp/target/build/lib` in the repository checkout.
+The Go package `github.com/apache/tsfile/go/tsfile` is a cgo binding over the C++ implementation, so a C/C++
+build of TsFile must be available before Go code can be built. There are two ways to get it:
+
+- Install the published C/C++ packages or SDK. No C++ build is needed; this works on Linux and macOS.
+- Build the C++ library from source. This works on every platform and is the supported route on Windows, where the
+  Go binding is validated with MinGW against a source build.
+
+The Go module itself is fetched from GitHub in both cases; it is not published to the module proxy yet.
 
 ### Dependencies
 
 - Go >= 1.22 with `CGO_ENABLED=1`
-- A C/C++ toolchain and CMake
-- JDK >= 17 and Maven, needed only to build the native library from source
+- A C/C++ toolchain and CMake, needed only when building the native library from source
+- JDK >= 17 and Maven, needed only when building the native library from source
 - On Windows, MinGW-w64 is the supported cgo toolchain
 
-### Build the native library
+### Option 1: Use the published C/C++ packages (Linux / macOS)
+
+Install the runtime and development files as described on the
+[download and installation page](../../../Download/README.md#cpp-packages), for example the SDK archive, the DEB/RPM
+packages, or the Homebrew formula. Headers are installed under an `include/tsfile` subdirectory, so point cgo at
+that directory and at the library directory of the install prefix:
+
+```bash
+export TSFILE_HOME=/path/to/tsfile-sdk   # or: $(brew --prefix local/tsfile250/tsfile)
+export CGO_CFLAGS="-I$TSFILE_HOME/include/tsfile"
+export CGO_LDFLAGS="-L$TSFILE_HOME/lib -Wl,-rpath,$TSFILE_HOME/lib"
+```
+
+The `-rpath` entry lets the compiled program find `libtsfile` at run time; drop it when the shared library is
+installed in a standard system directory. For a system installation under `/usr`, the compiler finds the library
+without `-L`, but the headers still need `-I/usr/include/tsfile`. The environment variables are added to the
+package's own flags, whose paths point at a source checkout under `cpp/target/build`; when you use the installed
+packages those paths do not exist, and the linker prints a search-path warning that can be ignored.
+
+cgo reads these variables when it compiles the package, so set them in every shell where you build a program that
+links against the installed library, or record them with `go env -w CGO_CFLAGS=... CGO_LDFLAGS=...`. They are not
+needed when running an already built program.
+
+### Option 2: Build the native library from source
 
 Clone the source code and build the C++ library in the repository root:
 
@@ -43,14 +71,36 @@ cd tsfile
 ./mvnw -P with-cpp -DskipTests package
 ```
 
-Use `mvnw.cmd` on Windows. This produces the headers under `cpp/target/build/include` and the library under
-`cpp/target/build/lib` that the Go package links against.
+This produces the headers under `cpp/target/build/include` and the library under `cpp/target/build/lib` that the
+Go package links against by default.
+
+On Windows, build with MinGW and add the build output directory and the MinGW runtime directory to `PATH`. The
+Windows linker does not record a library search path, so without these entries a Go program exits at start-up
+because `tsfile.dll` cannot be found:
+
+```powershell
+.\mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -DskipTests package
+$env:Path = "$PWD\cpp\target\build\lib;C:\mingw64\bin;$env:Path"
+```
+
+Run that `PATH` assignment in every new terminal before running Go programs, or copy
+`cpp\target\build\lib\tsfile.dll` next to the built executable. `C:\mingw64\bin` stands for the MinGW-w64
+installation directory and supplies the GCC runtime DLLs that a MinGW build depends on.
 
 ### Use the module in your project
 
-The Go module is not published to the module proxy yet, so consume it from the source checkout with a `replace`
-directive. The replace target must be the `go` directory of a checkout that has the native library built next to it,
-because the include and library paths are resolved from the module location:
+With the installed packages (option 1), fetch the module directly in your Go project:
+
+```bash
+go get github.com/apache/tsfile/go@develop
+go mod tidy
+```
+
+The module has no tagged release yet, so `@develop` resolves to a pseudo-version of the branch head. Record that
+pseudo-version in `go.mod`, or pin a specific commit, for reproducible builds.
+
+With a source build (option 2), replace the module with the `go` directory of your checkout; the package then
+finds the headers and the library built next to it:
 
 ```bash
 go mod edit -replace github.com/apache/tsfile/go=/path/to/tsfile/go
