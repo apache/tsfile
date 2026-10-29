@@ -56,13 +56,10 @@ static void ScalarEncodeValues(const T* values, uint32_t count, uint8_t factor,
 }
 
 template <typename T>
-static void ExpectSimdMatchesScalar(const std::vector<T>& values) {
+static void ExpectSimdMatchesScalarForPair(const std::vector<T>& values,
+                                           uint8_t factor, uint8_t exponent) {
     typedef AlpTypeTraits<T> Traits;
     ASSERT_FALSE(values.empty());
-    uint8_t factor = 0;
-    uint8_t exponent = 0;
-    ASSERT_TRUE(AlpChooseFactorExponent(
-        &values[0], static_cast<uint32_t>(values.size()), factor, exponent));
 
     const uint32_t count = static_cast<uint32_t>(values.size());
     std::vector<typename Traits::Encoded> scalar_encoded(count, 0);
@@ -102,6 +99,15 @@ static void ExpectSimdMatchesScalar(const std::vector<T>& values) {
         EXPECT_TRUE(Traits::BitwiseEqual(values[i], simd_decoded[i]))
             << "index " << i;
     }
+}
+
+template <typename T>
+static void ExpectSimdMatchesScalar(const std::vector<T>& values) {
+    uint8_t factor = 0;
+    uint8_t exponent = 0;
+    ASSERT_TRUE(AlpChooseFactorExponent(
+        &values[0], static_cast<uint32_t>(values.size()), factor, exponent));
+    ExpectSimdMatchesScalarForPair(values, factor, exponent);
 }
 
 TEST(AlpSimdeTest, FloatValuesMatchScalar) {
@@ -144,6 +150,93 @@ TEST(AlpSimdeTest, SpecialValuesMatchScalar) {
                                    std::numeric_limits<double>::denorm_min(),
                                    std::numeric_limits<double>::max()};
     ExpectSimdMatchesScalar(doubles);
+}
+
+// The scale factors are applied in the same order by both implementations, so
+// a SIMD build and a scalar build must emit identical bytes for every
+// (factor, exponent) pair -- including the pairs that only reject values.
+template <typename T>
+static void ExpectSimdMatchesScalarAcrossPairs(double magnitude) {
+    std::vector<T> values(64);
+    uint64_t state = 0x9e3779b97f4a7c15ULL;
+    for (size_t i = 0; i < values.size(); ++i) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        const double fraction = static_cast<double>(state % 100000) / 100000.0;
+        values[i] = static_cast<T>(fraction * magnitude);
+    }
+    typedef AlpTypeTraits<T> Traits;
+    for (uint8_t exponent = 0; exponent <= Traits::MaxExponent(); ++exponent) {
+        for (uint8_t factor = 0; factor <= exponent; ++factor) {
+            ExpectSimdMatchesScalarForPair(values, factor, exponent);
+        }
+    }
+}
+
+TEST(AlpSimdeTest, DoubleEncodeMatchesScalarAcrossPairs) {
+    ExpectSimdMatchesScalarAcrossPairs<double>(1.0);
+    ExpectSimdMatchesScalarAcrossPairs<double>(1.0e-6);
+    ExpectSimdMatchesScalarAcrossPairs<double>(1.0e6);
+    ExpectSimdMatchesScalarAcrossPairs<double>(1.0e12);
+}
+
+TEST(AlpSimdeTest, FloatEncodeMatchesScalarAcrossPairs) {
+    ExpectSimdMatchesScalarAcrossPairs<float>(1.0);
+    ExpectSimdMatchesScalarAcrossPairs<float>(1.0e-5);
+    ExpectSimdMatchesScalarAcrossPairs<float>(1.0e5);
+}
+
+// A packed field wider than 57 bits cannot be reconstructed from a single
+// 64-bit window, so the SIMD unpack must leave it to the scalar tail. Compare
+// the production entry point against a bit-by-bit reference for every width.
+template <typename Unsigned>
+static Unsigned ReferenceUnpack(const uint8_t* body, uint32_t index,
+                                uint8_t bit_width) {
+    Unsigned value = 0;
+    for (uint8_t b = 0; b < bit_width; ++b) {
+        const uint64_t bit_pos = static_cast<uint64_t>(index) * bit_width + b;
+        const uint8_t bit =
+            static_cast<uint8_t>((body[bit_pos >> 3] >> (bit_pos & 7u)) & 1u);
+        value |= static_cast<Unsigned>(bit) << b;
+    }
+    return value;
+}
+
+template <typename Unsigned>
+static void ExpectUnpackMatchesReference(uint8_t bit_width) {
+    const uint32_t count = 64;
+    const Unsigned mask =
+        bit_width >= sizeof(Unsigned) * 8
+            ? static_cast<Unsigned>(~static_cast<Unsigned>(0))
+            : static_cast<Unsigned>((static_cast<uint64_t>(1) << bit_width) -
+                                    1);
+    std::vector<Unsigned> values(count);
+    uint64_t state = 0x243f6a8885a308d3ULL;
+    for (size_t i = 0; i < values.size(); ++i) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        values[i] = static_cast<Unsigned>(state) & mask;
+    }
+    std::vector<uint8_t> body;
+    AlpPackBits(&values[0], count, bit_width, body);
+    const uint8_t dummy = 0;
+    const uint8_t* body_ptr = body.empty() ? &dummy : &body[0];
+
+    std::vector<Unsigned> unpacked(count, 0);
+    ASSERT_TRUE(AlpUnpackBits(body_ptr, static_cast<uint32_t>(body.size()),
+                              count, bit_width, unpacked));
+    for (uint32_t i = 0; i < count; ++i) {
+        EXPECT_EQ(ReferenceUnpack<Unsigned>(body_ptr, i, bit_width),
+                  unpacked[i])
+            << "bit_width=" << static_cast<int>(bit_width) << " index=" << i;
+    }
+}
+
+TEST(AlpSimdeTest, UnpackMatchesReferenceAcrossBitWidths) {
+    for (uint8_t bit_width = 1; bit_width <= 64; ++bit_width) {
+        ExpectUnpackMatchesReference<uint64_t>(bit_width);
+    }
+    for (uint8_t bit_width = 1; bit_width <= 32; ++bit_width) {
+        ExpectUnpackMatchesReference<uint32_t>(bit_width);
+    }
 }
 
 #endif  // ENABLE_SIMD

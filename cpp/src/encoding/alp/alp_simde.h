@@ -42,11 +42,15 @@ struct AlpSimdKernel<float> {
                                   float* exceptions,
                                   uint32_t* exception_count) {
         typedef AlpTypeTraits<float> Traits;
-        const float scale = ALP_FLOAT_EXP[exponent] * ALP_FLOAT_FRAC[factor];
         const float factor_value = static_cast<float>(ALP_FACT[factor]);
         const float frac_value = ALP_FLOAT_FRAC[exponent];
 
-        const simde__m256 vscale = simde_mm256_set1_ps(scale);
+        // Scale in the same order as AlpTypeTraits<float>::EncodeValue --
+        // (value * 10^exponent) * 10^-factor -- so a SIMD build and a scalar
+        // build produce identical bytes for the same input.
+        const simde__m256 vexp = simde_mm256_set1_ps(ALP_FLOAT_EXP[exponent]);
+        const simde__m256 vfrac_factor =
+            simde_mm256_set1_ps(ALP_FLOAT_FRAC[factor]);
         const simde__m256 vmagic = simde_mm256_set1_ps(ALP_FLOAT_MAGIC);
         const simde__m256 vfactor = simde_mm256_set1_ps(factor_value);
         const simde__m256 vfrac = simde_mm256_set1_ps(frac_value);
@@ -62,7 +66,8 @@ struct AlpSimdKernel<float> {
         uint32_t i = 0;
         for (; i + 7 < count; i += 8) {
             const simde__m256 v = simde_mm256_loadu_ps(values + i);
-            const simde__m256 scaled = simde_mm256_mul_ps(v, vscale);
+            const simde__m256 scaled =
+                simde_mm256_mul_ps(simde_mm256_mul_ps(v, vexp), vfrac_factor);
             const simde__m256 rounded =
                 simde_mm256_sub_ps(simde_mm256_add_ps(scaled, vmagic), vmagic);
             const simde__m256i vi = simde_mm256_cvttps_epi32(rounded);
@@ -164,11 +169,14 @@ struct AlpSimdKernel<double> {
                                   double* exceptions,
                                   uint32_t* exception_count) {
         typedef AlpTypeTraits<double> Traits;
-        const double scale = ALP_DOUBLE_EXP[exponent] * ALP_DOUBLE_FRAC[factor];
         const double factor_value = static_cast<double>(ALP_FACT[factor]);
         const double frac_value = ALP_DOUBLE_FRAC[exponent];
 
-        const simde__m128d vscale = simde_mm_set1_pd(scale);
+        // Same multiplication order as the scalar reference (see the float
+        // kernel above).
+        const simde__m128d vexp = simde_mm_set1_pd(ALP_DOUBLE_EXP[exponent]);
+        const simde__m128d vfrac_factor =
+            simde_mm_set1_pd(ALP_DOUBLE_FRAC[factor]);
         const simde__m128d vmagic = simde_mm_set1_pd(ALP_DOUBLE_MAGIC);
         const simde__m128d vfactor = simde_mm_set1_pd(factor_value);
         const simde__m128d vfrac = simde_mm_set1_pd(frac_value);
@@ -184,7 +192,8 @@ struct AlpSimdKernel<double> {
         uint32_t i = 0;
         for (; i + 1 < count; i += 2) {
             const simde__m128d v = simde_mm_loadu_pd(values + i);
-            const simde__m128d scaled = simde_mm_mul_pd(v, vscale);
+            const simde__m128d scaled =
+                simde_mm_mul_pd(simde_mm_mul_pd(v, vexp), vfrac_factor);
             const simde__m128d rounded =
                 simde_mm_sub_pd(simde_mm_add_pd(scaled, vmagic), vmagic);
             const simde__m128i vi = simde_mm_cvttpd_epi64(rounded);
@@ -299,6 +308,9 @@ struct AlpSimdUnpackKernel;
 
 template <>
 struct AlpSimdUnpackKernel<uint32_t> {
+    // A 32-bit value plus a 0..7 bit offset still fits in the gathered word.
+    static uint8_t SafeBitWidth() { return 32; }
+
     static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
                        uint32_t* out) {
         if (bit_width == 0) {
@@ -343,6 +355,11 @@ struct AlpSimdUnpackKernel<uint32_t> {
 
 template <>
 struct AlpSimdUnpackKernel<uint64_t> {
+    // Each lane gathers a single 64-bit window and shifts it right by the bit
+    // offset, so at most 64 - 7 bits survive. Wider fields are decoded by the
+    // scalar tail, which spans two words.
+    static uint8_t SafeBitWidth() { return 57; }
+
     static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
                        uint64_t* out) {
         if (bit_width == 0) {

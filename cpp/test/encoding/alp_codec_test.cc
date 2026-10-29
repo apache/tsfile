@@ -34,6 +34,17 @@ static bool BitEqual(T lhs, T rhs) {
 }
 
 template <typename T>
+static AlpBlockHeader FirstBlockHeader(const std::vector<uint8_t>& encoded) {
+    AlpBlockHeader header;
+    std::memset(&header, 0, sizeof(header));
+    uint32_t pos = ALP_PAGE_HEADER_SIZE;
+    EXPECT_TRUE(AlpParseBlockHeader(encoded.empty() ? NULL : &encoded[0],
+                                    static_cast<uint32_t>(encoded.size()), pos,
+                                    header));
+    return header;
+}
+
+template <typename T>
 static void ExpectRoundTrip(const std::vector<T>& values) {
     std::vector<uint8_t> encoded;
     ASSERT_EQ(ALP_OK,
@@ -141,15 +152,106 @@ TEST(AlpCodecTest, TruncatedPayloadReturnsError) {
                                     decoded));
 }
 
-template <typename T>
-static AlpBlockHeader FirstBlockHeader(const std::vector<uint8_t>& encoded) {
-    AlpBlockHeader header;
-    std::memset(&header, 0, sizeof(header));
-    uint32_t pos = ALP_PAGE_HEADER_SIZE;
-    EXPECT_TRUE(AlpParseBlockHeader(encoded.empty() ? NULL : &encoded[0],
-                                    static_cast<uint32_t>(encoded.size()), pos,
-                                    header));
-    return header;
+// The block header indexes the power-of-ten tables, so a damaged factor or
+// exponent must be rejected rather than used to read past their end.
+TEST(AlpCodecTest, CorruptFactorExponentRejected) {
+    std::vector<double> values;
+    for (int i = 0; i < 64; ++i) {
+        values.push_back(static_cast<double>(i) * 0.25);
+    }
+    std::vector<uint8_t> encoded;
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
+    const uint32_t factor_offset = ALP_PAGE_HEADER_SIZE + 1;
+    const uint32_t exponent_offset = ALP_PAGE_HEADER_SIZE + 2;
+
+    std::vector<uint8_t> corrupt = encoded;
+    corrupt[factor_offset] = 200;
+    std::vector<double> decoded;
+    EXPECT_EQ(ALP_MALFORMED,
+              AlpDecodePage(&corrupt[0], static_cast<uint32_t>(corrupt.size()),
+                            decoded));
+
+    corrupt = encoded;
+    corrupt[factor_offset] = corrupt[exponent_offset] + 1;
+    decoded.clear();
+    EXPECT_EQ(ALP_MALFORMED,
+              AlpDecodePage(&corrupt[0], static_cast<uint32_t>(corrupt.size()),
+                            decoded));
+
+    corrupt = encoded;
+    corrupt[exponent_offset] = 200;
+    decoded.clear();
+    EXPECT_EQ(ALP_MALFORMED,
+              AlpDecodePage(&corrupt[0], static_cast<uint32_t>(corrupt.size()),
+                            decoded));
+
+    decoded.clear();
+    EXPECT_EQ(ALP_OK,
+              AlpDecodePage(&encoded[0], static_cast<uint32_t>(encoded.size()),
+                            decoded));
+}
+
+// Likewise for the page header: the value/block counts must stay inside what
+// the buffer could possibly describe, or decode would reserve gigabytes.
+TEST(AlpCodecTest, CorruptPageCountsRejected) {
+    std::vector<double> values;
+    for (int i = 0; i < 64; ++i) {
+        values.push_back(static_cast<double>(i) * 0.25);
+    }
+    std::vector<uint8_t> encoded;
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
+
+    const uint32_t value_count_offset = 4;
+    const uint32_t block_count_offset = 8;
+    std::vector<uint8_t> corrupt = encoded;
+    for (uint32_t i = 0; i < 4; ++i) {
+        corrupt[value_count_offset + i] = 0xFF;
+    }
+    std::vector<double> decoded;
+    EXPECT_EQ(ALP_MALFORMED,
+              AlpDecodePage(&corrupt[0], static_cast<uint32_t>(corrupt.size()),
+                            decoded));
+
+    corrupt = encoded;
+    for (uint32_t i = 0; i < 4; ++i) {
+        corrupt[block_count_offset + i] = 0xFF;
+    }
+    decoded.clear();
+    EXPECT_EQ(ALP_MALFORMED,
+              AlpDecodePage(&corrupt[0], static_cast<uint32_t>(corrupt.size()),
+                            decoded));
+}
+
+// A block whose adjusted range is wide has a large bit width, which makes the
+// size estimate of a candidate that rejects the sample look cheaper than the
+// one that encodes it. The search must still pick a candidate that actually
+// represents the values instead of degrading to PLAIN.
+TEST(AlpCodecTest, WideRangeIntegersKeepAlpScheme) {
+    std::vector<double> values(ALP_BLOCK_SIZE);
+    for (size_t i = 0; i < values.size(); ++i) {
+        values[i] = std::ldexp(static_cast<double>(i), 49);
+    }
+    std::vector<uint8_t> encoded;
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
+    const AlpBlockHeader header = FirstBlockHeader<double>(encoded);
+    EXPECT_EQ(ALP_SCHEME_ALP, header.scheme);
+    EXPECT_GT(header.bit_width, 57u);
+    EXPECT_LT(encoded.size(), values.size() * sizeof(double));
+
+    std::vector<double> decoded;
+    ASSERT_EQ(ALP_OK,
+              AlpDecodePage(&encoded[0], static_cast<uint32_t>(encoded.size()),
+                            decoded));
+    ASSERT_EQ(values.size(), decoded.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        EXPECT_TRUE(BitEqual(values[i], decoded[i])) << "index " << i;
+    }
 }
 
 TEST(AlpCodecTest, DecimalDataUsesAlpScheme) {
