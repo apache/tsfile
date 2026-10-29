@@ -82,8 +82,10 @@ cd tsfile
 
 构建完成后会在 `cpp/target/build/include` 生成头文件、在 `cpp/target/build/lib` 生成库，Go 包默认就链接这里。
 
-Windows 上需要使用 MinGW 构建。源码构建会把 `tsfile.dll` 输出到 `cpp\target\build\lib`（而不是发布包的 `bin` 目录），
-因此除了编译器所在的 MinGW-w64 `bin` 目录外，还要把该目录加入 `PATH`（或把 DLL 复制到可执行文件旁边）：
+Windows 上需要使用 MinGW 构建。MinGW-w64 既是本项目在 Windows 上默认的 C++ 生成器，也是 cgo 编译 Go 包所用的编译器，
+因此 `-Dcpp.toolchain=mingw` 构建出的 DLL 和导入库可以直接配合 Go 工具链使用。源码构建会把 `tsfile.dll` 输出到
+`cpp\target\build\lib`（而不是发布包的 `bin` 目录），因此除了编译器所在的 MinGW-w64 `bin` 目录外，还要把该目录加入
+`PATH`（或把 DLL 复制到可执行文件旁边）：
 
 ```powershell
 .\mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -DskipTests package

@@ -87,7 +87,9 @@ cd tsfile
 This produces the headers under `cpp/target/build/include` and the library under `cpp/target/build/lib` that the
 Go package links against by default.
 
-On Windows, build with MinGW. The build writes `tsfile.dll` to `cpp\target\build\lib` instead of a package's
+On Windows, build with MinGW. MinGW-w64 is this project's default C++ generator on Windows, and it is the compiler
+that cgo uses for the Go package, so `-Dcpp.toolchain=mingw` makes the build produce a DLL and an import library that
+match the Go toolchain directly. The build writes `tsfile.dll` to `cpp\target\build\lib` instead of a package's
 `bin` directory, so point `PATH` there (or copy the DLL next to the executable) in addition to the MinGW-w64 `bin`
 directory that provides the compiler:
 
