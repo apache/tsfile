@@ -37,7 +37,9 @@ class ByteBuffer {
           reserved_size_(0) {}
 
     ~ByteBuffer() {
-        if (data_ && (reserved_size_ > 0)) {
+        // A zero-sized buffer still owns the allocator's header block, so the
+        // decision to free must key off the pointer, not the reserved size.
+        if (data_ != nullptr) {
             mem_free(data_);
             data_ = nullptr;
             real_data_size_ = 0;

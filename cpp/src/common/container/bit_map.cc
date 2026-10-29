@@ -24,7 +24,9 @@
 namespace common {
 
 BitMap::~BitMap() {
-    if (bitmap_ && (size_ > 0)) {
+    // init(0) still allocates the allocator's 8-byte header block, so free on
+    // the pointer rather than on the size the bits need.
+    if (bitmap_ != nullptr) {
         mem_free(bitmap_);
         bitmap_ = nullptr;
         size_ = 0;

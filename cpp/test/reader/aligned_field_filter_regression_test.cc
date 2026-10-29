@@ -934,6 +934,91 @@ TEST_P(AlignedFieldFilterRegressionTest,
     }
 }
 
+// A TsBlock whose capacity is below the decoder's fixed 129-row batch used to
+// stall the first ResultSet::next() forever: the single-column aligned decode
+// demanded a full batch before consuming input, so no block could ever be
+// filled and the caller retried without progress.
+TEST_P(AlignedFieldFilterRegressionTest,
+       SmallTsBlockCapacityResumesAlignedReads) {
+    g_config_value_.page_writer_max_point_num_ = 5;
+    g_config_value_.tsblock_max_memory_ = 128;
+    TableSchema schema(
+        "t", {{"id", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::TAG},
+              {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+              {"w", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+              {"ghost", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
+    WriteFile file;
+    create(file);
+    TsFileTableWriter writer(&file, &schema);
+    for (int chunk = 0; chunk < 3; ++chunk)
+        for (int device = 0; device < 3; ++device) {
+            std::vector<std::string> names{"id", "w"};
+            std::vector<TSDataType> types{STRING, INT64};
+            std::vector<ColumnCategory> categories{ColumnCategory::TAG,
+                                                   ColumnCategory::FIELD};
+            if (device != 1) {
+                names.push_back("v");
+                types.push_back(INT64);
+                categories.push_back(ColumnCategory::FIELD);
+            }
+            Tablet tablet("t", names, types, categories, 7);
+            const std::string id = "d" + std::to_string(device);
+            for (int r = 0; r < 7; ++r) {
+                const int t = chunk * 7 + r;
+                ASSERT_EQ(tablet.add_timestamp(r, t), E_OK);
+                ASSERT_EQ(tablet.add_value(r, "id", id.c_str()), E_OK);
+                if (t % 3 != 0) {
+                    ASSERT_EQ(
+                        tablet.add_value(r, "w", int64_t(device * 1000 + t)),
+                        E_OK);
+                }
+                if (device != 1 && t % 4 != 0) {
+                    ASSERT_EQ(
+                        tablet.add_value(r, "v", int64_t(device * 100 + t)),
+                        E_OK);
+                }
+            }
+            ASSERT_EQ(writer.write_table(tablet), E_OK);
+            ASSERT_EQ(writer.flush(), E_OK);
+        }
+    ASSERT_EQ(writer.close(), E_OK);
+
+    Rows expected;
+    for (int device = 0; device < 3; ++device)
+        for (int t = 0; t < 21; ++t) {
+            const int64_t v =
+                (device != 1 && t % 4 != 0) ? device * 100 + t : kNull;
+            const int64_t w = t % 3 != 0 ? device * 1000 + t : kNull;
+            expected.push_back({t, v, kNull, w});
+        }
+    // The bug is completeness, not the device interleaving of the output.
+    Rows actual = scan({"v", "ghost", "w"}, nullptr);
+    std::sort(actual.begin(), actual.end());
+    std::sort(expected.begin(), expected.end());
+    EXPECT_EQ(actual, expected);
+}
+
+// A block that cannot hold even one row has no supported capacity; the read
+// must surface an error instead of reporting empty successful blocks forever.
+TEST_P(AlignedFieldFilterRegressionTest, UnusableTsBlockCapacityReportsError) {
+    g_config_value_.tsblock_max_memory_ = 8;
+    write_missing_columns();
+    LocalRandomAccessReadFile file;
+    ASSERT_EQ(file.open(filename_), E_OK);
+    TableQueryExecutor executor(&file, std::get<1>(GetParam()));
+    ResultSet* result = nullptr;
+    int ret = executor.query("t", {"v", "ghost"}, nullptr, nullptr, nullptr, 0,
+                             -1, result);
+    if (ret == E_OK) {
+        ASSERT_NE(result, nullptr);
+        bool next = false;
+        ret = result->next(next);
+        EXPECT_FALSE(next);
+        executor.destroy_query_data_set(result);
+    }
+    EXPECT_EQ(ret, E_INVALID_ARG);
+}
+
 INSTANTIATE_TEST_SUITE_P(RowAndBatchParallelModes,
                          AlignedFieldFilterRegressionTest,
                          ::testing::Combine(::testing::Bool(),

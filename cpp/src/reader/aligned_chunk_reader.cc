@@ -719,8 +719,15 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         }
         value_page_col_notnull_bitmap_.clear();
         value_page_col_notnull_bitmap_.shrink_to_fit();
-    } else {
+    } else if (ret_tsblock != nullptr && ret_tsblock->get_row_count() > 0) {
+        // Block is full but holds rows: keep the unfinished page so the
+        // caller drains this block and comes back for the rest.
         ret = E_OK;
+    } else {
+        // E_OVERFLOW with nothing appended means the block could not hold a
+        // single row.  No input was consumed either, so reporting success
+        // would make the caller retry the same decode without progress.
+        ret = E_INVALID_ARG;
     }
     return ret;
 }
@@ -832,7 +839,15 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
     const uint32_t null_mask_base = 1 << 7;
 
     while (time_decoder_->has_remaining(time_in)) {
-        if (row_appender.remaining() < (uint32_t)BATCH) {
+        // Cap each pass to what the appender can still hold; mirrors
+        // multi_DECODE_TV_BATCH and ChunkReader's per-type batch loops.  A
+        // blanket "remaining < BATCH" guard could never be satisfied by a
+        // TsBlock whose capacity is below BATCH rows, and it returned
+        // E_OVERFLOW before consuming any input, so the caller kept retrying
+        // a block it could never fill.
+        const int eff_batch =
+            std::min(BATCH, static_cast<int>(row_appender.remaining()));
+        if (eff_batch <= 0) {
             ret = E_OVERFLOW;
             break;
         }
@@ -872,8 +887,8 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
         }
 
         int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
-                                                     time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, eff_batch,
+                                                     time_count, time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -2685,8 +2700,12 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock_multi(
         if (!prev_time_page_not_finish()) {
             time_in_.reset();
         }
-    } else {
+    } else if (ret_tsblock != nullptr && ret_tsblock->get_row_count() > 0) {
         ret = E_OK;
+    } else {
+        // Same no-progress case as the single-column path: an empty block
+        // that cannot hold a row would otherwise be retried forever.
+        ret = E_INVALID_ARG;
     }
     return ret;
 }
