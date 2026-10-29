@@ -137,6 +137,64 @@ def test_row_record_write_and_read():
             os.remove("record_write_and_read.tsfile")
 
 
+def test_alp_encoding_round_trip():
+    assert TSEncoding.ALP == 15
+
+    file_path = "alp_encoding_round_trip.tsfile"
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        writer = TsFileWriter(file_path)
+        writer.register_timeseries(
+            "root.alp",
+            TimeseriesSchema(
+                "f", TSDataType.FLOAT, TSEncoding.ALP, Compressor.UNCOMPRESSED
+            ),
+        )
+        writer.register_timeseries(
+            "root.alp",
+            TimeseriesSchema(
+                "d", TSDataType.DOUBLE, TSEncoding.ALP, Compressor.UNCOMPRESSED
+            ),
+        )
+
+        row_count = 32
+        for i in range(row_count):
+            writer.write_row_record(
+                RowRecord(
+                    "root.alp",
+                    i,
+                    [
+                        Field("f", i * 0.1, TSDataType.FLOAT),
+                        Field("d", i * 0.1, TSDataType.DOUBLE),
+                    ],
+                )
+            )
+        writer.close()
+
+        reader = TsFileReader(file_path)
+        result = reader.query_timeseries("root.alp", ["f", "d"], 0, 100)
+        values = []
+        while result.next():
+            values.append(
+                (
+                    result.get_value_by_index(2),
+                    result.get_value_by_index(3),
+                )
+            )
+        result.close()
+        reader.close()
+
+        assert len(values) == row_count
+        for i, (f, d) in enumerate(values):
+            assert f == pytest.approx(i * 0.1, abs=1e-6)
+            assert d == pytest.approx(i * 0.1, abs=1e-12)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
 def test_tree_query_to_dataframe_variants():
     file_path = "tree_query_to_dataframe.tsfile"
     device_ids = [
