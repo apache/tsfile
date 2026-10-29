@@ -74,7 +74,7 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 
     // Validate input parameters
     ASSERT(dtype >= BOOLEAN && dtype <= STRING);
-    ASSERT(encoding >= PLAIN && encoding <= CAMEL);
+    ASSERT(encoding >= PLAIN && encoding <= ALP);
 
     // Check encoding support for each data type
     switch (dtype) {

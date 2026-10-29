@@ -327,7 +327,7 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
     // Invalid enum bytes indicate corrupted chunk metadata, not an allocator
     // failure.  Reject them before asking the factory for a decoder.
-    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+    if (encoding < common::PLAIN || encoding > common::ALP) {
         return E_TSFILE_CORRUPTED;
     }
     if (decoder != nullptr) {

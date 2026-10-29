@@ -129,12 +129,17 @@ inline bool AlpUnpackBits(const uint8_t* body, uint32_t body_bytes,
     // overlapping 64-bit loads and remains portable C++11.
     uint32_t i = 0;
 #ifdef ENABLE_SIMD
-    const uint32_t simd_count = count & ~static_cast<uint32_t>(3);
-    if (simd_count > 0 &&
-        !AlpSimdUnpackBits(body, simd_count, bit_width, &out[0])) {
-        return false;
+    // The kernels reconstruct one value from a single 64-bit window, so they
+    // are only valid while the value plus its bit offset fits in that window.
+    // Wider fields fall through to the scalar tail, which reads two words.
+    if (bit_width <= AlpSimdUnpackKernel<Unsigned>::SafeBitWidth()) {
+        const uint32_t simd_count = count & ~static_cast<uint32_t>(3);
+        if (simd_count > 0 &&
+            !AlpSimdUnpackBits(body, simd_count, bit_width, &out[0])) {
+            return false;
+        }
+        i = simd_count;
     }
-    i = simd_count;
 #endif
     const uint64_t mask = bit_width >= 64
                               ? ~static_cast<uint64_t>(0)
@@ -245,7 +250,8 @@ inline AlpStatus AlpDecodeValues(
 template <typename T>
 inline uint64_t AlpEstimateCandidate(const T* samples, uint32_t sample_count,
                                      uint32_t block_count, uint8_t factor,
-                                     uint8_t exponent, bool verify) {
+                                     uint8_t exponent, bool verify,
+                                     uint32_t* sample_exceptions_out = NULL) {
     typedef AlpTypeTraits<T> Traits;
     typedef typename Traits::Encoded Encoded;
     typedef typename Traits::Unsigned Unsigned;
@@ -289,6 +295,9 @@ inline uint64_t AlpEstimateCandidate(const T* samples, uint32_t sample_count,
     const uint64_t body_bytes =
         AlpEstimatedBodyBytes<T>(block_count, bit_width);
     const uint64_t bitmap_bytes = (static_cast<uint64_t>(block_count) + 7) / 8;
+    if (sample_exceptions_out != NULL) {
+        *sample_exceptions_out = sample_exceptions;
+    }
     return body_bytes + bitmap_bytes + exception_estimate * Traits::ValueSize();
 }
 
@@ -316,12 +325,37 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
     uint8_t top_factor[kShortlist];
     uint8_t top_exponent[kShortlist];
     uint32_t top_count = 0;
+    // The shortlist is ranked by an estimate that shrinks to zero body bytes
+    // as a candidate rejects more samples, so candidates that encode nothing
+    // look cheap. Track the candidate with the fewest sample exceptions
+    // separately and always evaluate it in stage 2. Otherwise a block whose
+    // adjusted range is wide (large bit width) can be represented on the
+    // shortlist only by candidates that reject the whole block, and the block
+    // silently degrades to PLAIN.
+    //
+    // Ties resolve towards the smallest exponent: a larger one only survives
+    // the 8-sample screen when the sampled magnitudes happen to fit, and it
+    // is far more likely to overflow on the values the screen never saw.
+    uint32_t clean_exceptions = std::numeric_limits<uint32_t>::max();
+    uint8_t clean_factor = 0;
+    uint8_t clean_exponent = 0;
+    bool has_clean = false;
 
     for (uint8_t e = 0; e <= Traits::MaxExponent(); ++e) {
         for (uint8_t f = 0; f <= e; ++f) {
-            const uint64_t estimate =
-                AlpEstimateCandidate(samples.empty() ? NULL : &samples[0],
-                                     stage1_count, count, f, e, true);
+            uint32_t candidate_exceptions = 0;
+            const uint64_t estimate = AlpEstimateCandidate(
+                samples.empty() ? NULL : &samples[0], stage1_count, count, f, e,
+                true, &candidate_exceptions);
+            if (!has_clean || candidate_exceptions < clean_exceptions ||
+                (candidate_exceptions == clean_exceptions &&
+                 (e < clean_exponent ||
+                  (e == clean_exponent && f < clean_factor)))) {
+                has_clean = true;
+                clean_exceptions = candidate_exceptions;
+                clean_factor = f;
+                clean_exponent = e;
+            }
             int pos = static_cast<int>(top_count);
             for (uint32_t i = 0; i < top_count; ++i) {
                 if (estimate < top_estimate[i] ||
@@ -354,12 +388,44 @@ inline bool AlpChooseFactorExponent(const T* values, uint32_t count,
     }
 
     // Stage 2: exact round-trip check on the shortlisted candidates using the
-    // full sample.
+    // full sample, plus the fewest-exception candidate and the unscaled
+    // (factor 0, exponent 0) candidate from stage 1. The unscaled candidate
+    // loses no precision, so it is the only one that can represent integers
+    // wider than the mantissa.
+    uint8_t candidate_factor[kShortlist + 2];
+    uint8_t candidate_exponent[kShortlist + 2];
+    uint32_t candidate_count = top_count;
+    for (uint32_t i = 0; i < top_count; ++i) {
+        candidate_factor[i] = top_factor[i];
+        candidate_exponent[i] = top_exponent[i];
+    }
+    const uint8_t extra_factor[2] = {clean_factor, 0};
+    const uint8_t extra_exponent[2] = {clean_exponent, 0};
+    const bool extra_enabled[2] = {has_clean, true};
+    for (uint32_t extra = 0; extra < 2; ++extra) {
+        if (!extra_enabled[extra]) {
+            continue;
+        }
+        bool present = false;
+        for (uint32_t i = 0; i < candidate_count; ++i) {
+            if (candidate_factor[i] == extra_factor[extra] &&
+                candidate_exponent[i] == extra_exponent[extra]) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) {
+            candidate_factor[candidate_count] = extra_factor[extra];
+            candidate_exponent[candidate_count] = extra_exponent[extra];
+            ++candidate_count;
+        }
+    }
+
     uint64_t best_size = std::numeric_limits<uint64_t>::max();
     bool found = false;
-    for (uint32_t i = 0; i < top_count; ++i) {
-        const uint8_t f = top_factor[i];
-        const uint8_t e = top_exponent[i];
+    for (uint32_t i = 0; i < candidate_count; ++i) {
+        const uint8_t f = candidate_factor[i];
+        const uint8_t e = candidate_exponent[i];
         const uint64_t estimate =
             AlpEstimateCandidate(samples.empty() ? NULL : &samples[0],
                                  sample_count, count, f, e, true);
@@ -503,6 +569,13 @@ inline AlpStatus AlpDecodeBlock(const uint8_t* data, uint32_t size,
         header.bit_width > Traits::MaxBitWidth()) {
         return ALP_MALFORMED;
     }
+    // factor/exponent index the static power-of-ten tables, so they must be
+    // validated before any decode: a damaged block header otherwise reads
+    // past the end of those tables.
+    if (header.factor > header.exponent ||
+        header.exponent > Traits::MaxExponent()) {
+        return ALP_MALFORMED;
+    }
 
     if (header.scheme == ALP_SCHEME_PLAIN) {
         if (header.body_bytes !=
@@ -636,6 +709,15 @@ inline AlpStatus AlpDecodePage(const uint8_t* data, uint32_t size,
     if (page.version != ALP_FORMAT_VERSION ||
         page.data_type != AlpTypeTraits<T>::DataType() || page.reserved != 0 ||
         page.reserved2 != 0) {
+        return ALP_MALFORMED;
+    }
+    // Every block occupies at least its header, so these two bounds follow
+    // from the buffer size alone. They keep a corrupt page header from driving
+    // a huge reservation below (or an absurd block loop).
+    if (page.block_count >
+            (size - ALP_PAGE_HEADER_SIZE) / ALP_BLOCK_HEADER_WIRE_SIZE ||
+        static_cast<uint64_t>(page.value_count) >
+            static_cast<uint64_t>(page.block_count) * ALP_BLOCK_SIZE) {
         return ALP_MALFORMED;
     }
 

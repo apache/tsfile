@@ -27,11 +27,12 @@ Status: draft for the C++-first implementation on `colin/alp-codec`.
 
 - This work is C++-only. The Java implementation is intentionally untouched.
 - ALP is an opt-in encoding for `FLOAT` and `DOUBLE` only.
-- The existing Gorilla default is preserved. ALP is enabled through an
-  experimental build option until the format is accepted by the community.
+- The existing Gorilla default is preserved. A column selects ALP by asking
+  for `TSEncoding::ALP`; there is no build flag. Readers that predate the
+  encoding reject the chunk instead of misreading it.
 - The format is language-neutral so a Java decoder can be added later without
   changing encoded bytes.
-- Python will reuse the C++ implementation through the C wrapper.
+- Python reuses the C++ implementation through the C wrapper.
 
 ## Relationship to TS_2DIFF
 
@@ -103,7 +104,11 @@ must produce and consume the same bytes.
 1. Buffer values per page.
 2. Split the buffered values into blocks of at most 1024 values.
 3. For each block, sample values and choose the best `(factor, exponent)`
-   combination using the estimated compressed size.
+   combination using the estimated compressed size. The search screens
+   candidates on a small sample and then re-scores a shortlist on the full
+   sample; the fewest-exception candidate of the screen and the unscaled
+   `(0, 0)` candidate are always re-scored too, because the screen ranks a
+   candidate that rejects every sample as the cheapest one.
 4. Encode each value with the chosen pair. A value is an exception when it is
    non-finite, `-0.0`, outside the safe integer range, or when the reference
    decode does not reproduce the original bit pattern.
@@ -119,8 +124,14 @@ be bit-exactly reproducible by the decoder.
 
 ## Decoding
 
-1. Parse and validate the page header.
-2. For each block, parse and validate the block header.
+1. Parse and validate the page header: version, data type, reserved fields, and
+   that the block/value counts fit in the buffer the header was read from.
+2. For each block, parse and validate the block header: `value_count` within
+   one block, `exception_count <= value_count`, `factor <= exponent` and
+   `exponent` within the table range, `bit_width` within the type's maximum,
+   and `body_bytes` equal to the padded size implied by `value_count` and
+   `bit_width`. The factor and exponent are table indices, so they are checked
+   before any decode.
 3. For `PLAIN`, copy raw values.
 4. For `ALP`, unpack adjusted integers, add `for_base`, apply the reference
    decode, and overwrite exception positions from the exception array.
@@ -139,7 +150,12 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
   x86. Do not apply AVX2 flags to baseline TsFile translation units.
 - On AArch64 the same SIMDe source maps to NEON without the AVX2 flag.
 - Add a scalar fallback used when SIMD is disabled or unavailable.
-- Dispatch once per block through a function table. Do not branch per value.
+- Select the kernel at compile time through `ENABLE_SIMD`; there is no runtime
+  dispatch or function table yet.
+- The 64-bit unpack kernel reconstructs one value from a single 64-bit window,
+  so it only handles fields up to 57 bits wide; wider fields are decoded by
+  the scalar tail, which reads two overlapping words. Keep that limit in sync
+  with `AlpSimdUnpackKernel<Unsigned>::SafeBitWidth()`.
 - Add an optional AVX-512 translation unit later. The wire format must not
   depend on the availability of AVX-512.
 

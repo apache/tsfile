@@ -62,6 +62,10 @@ struct AlpBlockHeader {
 };
 
 static const uint32_t ALP_PAGE_HEADER_SIZE = 16;
+// Serialized block header. Note that sizeof(AlpBlockHeader) is larger because
+// for_base forces 8-byte alignment; only the wire size may be used to reason
+// about encoded bytes.
+static const uint32_t ALP_BLOCK_HEADER_WIRE_SIZE = 28;
 static const uint32_t ALP_BLOCK_HEADER_SIZE = 32;
 
 inline uint32_t AlpAlignUp(uint32_t value, uint32_t alignment) {
