@@ -1020,9 +1020,10 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
             ret = E_NOT_SUPPORT;
             ASSERT(false);
     }
-    if (ret_tsblock->get_row_count() == 0 && ret == E_OK) {
-        ret = E_NO_MORE_DATA;
-    }
+    // An empty result only means every row of this page was filtered out; the
+    // chunk may still hold further pages.  Reporting E_NO_MORE_DATA here made
+    // the series iterator advance past the rest of the chunk (or end the
+    // series when no successor chunk existed).
     return ret;
 }
 
