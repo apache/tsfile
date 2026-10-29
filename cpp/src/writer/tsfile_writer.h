@@ -167,14 +167,14 @@ class TsFileWriter {
 
     template <typename MeasurementNamesGetter>
     int do_check_schema(
-        std::shared_ptr<IDeviceID> device_id,
+        const std::shared_ptr<IDeviceID>& device_id,
         MeasurementNamesGetter& measurement_names,
         common::SimpleVector<storage::ChunkWriter*>& chunk_writers,
         common::SimpleVector<common::TSDataType>& data_types);
 
     template <typename MeasurementNamesGetter>
     int do_check_schema_aligned(
-        std::shared_ptr<IDeviceID> device_id,
+        const std::shared_ptr<IDeviceID>& device_id,
         MeasurementNamesGetter& measurement_names,
         storage::TimeChunkWriter*& time_chunk_writer,
         common::SimpleVector<storage::ValueChunkWriter*>& value_chunk_writers,
