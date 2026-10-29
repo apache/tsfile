@@ -121,8 +121,8 @@ func (w *Writer) Close() error
 
 `Writer` 会串行化对原生 writer 的访问，因此可以在多个 goroutine 中调用其方法。
 
-`WriteTableTablet` 要求 tablet 的列与 writer schema 按名称和类型一一匹配：缺少列返回 `ErrColumnNotExist`，
-类型不一致返回 `ErrTypeMismatch`。
+`WriteTableTablet` 要求 tablet 的列数与 writer schema 完全一致：列数不同返回 `ErrInvalidSchema`，
+列名不在 schema 中返回 `ErrColumnNotExist`，类型不一致返回 `ErrTypeMismatch`。
 
 ### Tablet
 
@@ -184,7 +184,7 @@ func (t *Tablet) Close() error
 | `DataTypeFloat` | `arrow.PrimitiveTypes.Float32` |
 | `DataTypeDouble` | `arrow.PrimitiveTypes.Float64` |
 | `DataTypeText`、`DataTypeString` | `arrow.BinaryTypes.String` |
-| `DataTypeTimestamp` | `arrow.TimestampType{Unit: arrow.Nanosecond}` |
+| `DataTypeTimestamp` | `&arrow.TimestampType{Unit: arrow.Nanosecond}` |
 | `DataTypeDate` | `arrow.FixedWidthTypes.Date32` |
 | `DataTypeBlob` | `arrow.BinaryTypes.Binary` |
 

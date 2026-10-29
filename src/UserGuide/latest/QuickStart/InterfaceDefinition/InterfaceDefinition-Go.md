@@ -123,8 +123,9 @@ func (w *Writer) Close() error
 
 A `Writer` serializes access to the native writer, so its methods may be called from multiple goroutines.
 
-`WriteTableTablet` requires the tablet columns to match the writer schema by name and type; a missing column
-returns `ErrColumnNotExist` and a type difference returns `ErrTypeMismatch`.
+`WriteTableTablet` requires the tablet to carry exactly one column per schema column: a different column count
+returns `ErrInvalidSchema`, a column name that is not in the schema returns `ErrColumnNotExist`, and a type
+difference returns `ErrTypeMismatch`.
 
 ### Tablet
 
@@ -187,7 +188,7 @@ without a time zone and must not contain nulls; any other null column is written
 | `DataTypeFloat` | `arrow.PrimitiveTypes.Float32` |
 | `DataTypeDouble` | `arrow.PrimitiveTypes.Float64` |
 | `DataTypeText`, `DataTypeString` | `arrow.BinaryTypes.String` |
-| `DataTypeTimestamp` | `arrow.TimestampType{Unit: arrow.Nanosecond}` |
+| `DataTypeTimestamp` | `&arrow.TimestampType{Unit: arrow.Nanosecond}` |
 | `DataTypeDate` | `arrow.FixedWidthTypes.Date32` |
 | `DataTypeBlob` | `arrow.BinaryTypes.Binary` |
 
