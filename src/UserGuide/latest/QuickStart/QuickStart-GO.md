@@ -25,9 +25,8 @@
 The Go package `github.com/apache/tsfile/go/tsfile` is a cgo binding over the C++ implementation, so a C/C++
 build of TsFile must be available before Go code can be built. There are two ways to get it:
 
-- Install the published C/C++ packages or SDK. No C++ build is needed; this works on Linux and macOS.
-- Build the C++ library from source. This works on every platform and is the supported route on Windows, where the
-  Go binding is validated with MinGW against a source build.
+- Install the published C/C++ packages or SDK. No C++ build is needed; this works on Linux, macOS, and Windows.
+- Build the C++ library from source. Use this to change TsFile or on a platform without a published package.
 
 The Go module itself is fetched from GitHub in both cases; it is not published to the module proxy yet.
 
@@ -38,12 +37,12 @@ The Go module itself is fetched from GitHub in both cases; it is not published t
 - JDK >= 17 and Maven, needed only when building the native library from source
 - On Windows, MinGW-w64 is the supported cgo toolchain
 
-### Option 1: Use the published C/C++ packages (Linux / macOS)
+### Option 1: Use the published C/C++ packages (Linux, macOS, Windows)
 
 Install the runtime and development files as described on the
 [download and installation page](../../../Download/README.md#cpp-packages), for example the SDK archive, the DEB/RPM
-packages, or the Homebrew formula. Headers are installed under an `include/tsfile` subdirectory, so point cgo at
-that directory and at the library directory of the install prefix:
+packages, the Homebrew formula, or the Windows ZIP. Headers are installed under an `include/tsfile` subdirectory,
+so point cgo at that directory and at the library directory of the install prefix:
 
 ```bash
 export TSFILE_HOME=/path/to/tsfile-sdk   # or: $(brew --prefix local/tsfile250/tsfile)
@@ -56,6 +55,20 @@ installed in a standard system directory. For a system installation under `/usr`
 without `-L`, but the headers still need `-I/usr/include/tsfile`. The environment variables are added to the
 package's own flags, whose paths point at a source checkout under `cpp/target/build`; when you use the installed
 packages those paths do not exist, and the linker prints a search-path warning that can be ignored.
+
+On Windows, extract the ZIP and set the same variables in PowerShell. The ZIP ships `bin\tsfile.dll` and an import
+library in `lib\tsfile.lib` that the MinGW linker accepts, so `-ltsfile` resolves through `-L` as usual:
+
+```powershell
+$env:TSFILE_HOME = "C:\path\to\tsfile-2.5.0-windows-x86_64"
+$env:CGO_CFLAGS = "-I$env:TSFILE_HOME\include\tsfile"
+$env:CGO_LDFLAGS = "-L$env:TSFILE_HOME\lib -ltsfile"
+$env:Path = "$env:TSFILE_HOME\bin;$env:Path"
+```
+
+Windows has no run-time library search path, so the compiled program finds `tsfile.dll` through `PATH`; keep
+`bin` on `PATH`, or copy `tsfile.dll` next to the executable. The DLL links the C runtime statically and depends
+only on the system libraries, so no Visual C++ redistributable is required.
 
 cgo reads these variables when it compiles the package, so set them in every shell where you build a program that
 links against the installed library, or record them with `go env -w CGO_CFLAGS=... CGO_LDFLAGS=...`. They are not
@@ -74,18 +87,16 @@ cd tsfile
 This produces the headers under `cpp/target/build/include` and the library under `cpp/target/build/lib` that the
 Go package links against by default.
 
-On Windows, build with MinGW and add the build output directory and the MinGW runtime directory to `PATH`. The
-Windows linker does not record a library search path, so without these entries a Go program exits at start-up
-because `tsfile.dll` cannot be found:
+On Windows, build with MinGW. The build writes `tsfile.dll` to `cpp\target\build\lib` instead of a package's
+`bin` directory, so point `PATH` there (or copy the DLL next to the executable) in addition to the MinGW-w64 `bin`
+directory that provides the compiler:
 
 ```powershell
 .\mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -DskipTests package
 $env:Path = "$PWD\cpp\target\build\lib;C:\mingw64\bin;$env:Path"
 ```
 
-Run that `PATH` assignment in every new terminal before running Go programs, or copy
-`cpp\target\build\lib\tsfile.dll` next to the built executable. `C:\mingw64\bin` stands for the MinGW-w64
-installation directory and supplies the GCC runtime DLLs that a MinGW build depends on.
+Run that `PATH` assignment in every new terminal before building or running Go programs.
 
 ### Use the module in your project
 
