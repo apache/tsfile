@@ -30,6 +30,10 @@ export const zhNavbar = navbar([
     link: '/zh/Download/',
   },
   {
+    text: '在线预览',
+    link: '/zh/preview/',
+  },
+  {
     text: '社区',
     children: [
       { text: '关于社区', link: '/zh/Community/About' },
