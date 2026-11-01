@@ -33,6 +33,8 @@ bash build.sh
 bash build.sh -t=Debug
 bash build.sh -t=RelWithDebInfo
 bash build.sh -a=ON              # Enable AddressSanitizer
+bash build.sh -a=ON --sanitizer-shared-runtime=ON \
+  --sanitizer-checks=address     # For the Python bindings (see python/SANITIZER.md)
 bash build.sh -c=ON              # Enable code coverage
 
 # Disable optional compression libraries
@@ -69,6 +71,8 @@ All `ON` by default unless noted:
 | `ENABLE_LZMA2` | LZMA2 compression (`OFF` by default; bundled XZ requires CMake 3.20+) |
 | `ENABLE_THREADS` | Multi-threaded read/write via pthreads |
 | `ENABLE_ASAN` | AddressSanitizer (`OFF` by default) |
+| `TSFILE_SANITIZER_CHECKS` | `-fsanitize=` list used by `ENABLE_ASAN` (default `address,undefined`) |
+| `TSFILE_SANITIZER_SHARED_RUNTIME` | Link the sanitizer runtime dynamically into shared libraries; required when Python bindings preload it (`OFF` by default) |
 | `ENABLE_SIMD` | SIMD acceleration |
 
 ## Source Structure

@@ -61,6 +61,17 @@ Build by python command:
 python setup.py build_ext --inplace
 ```
 
+## Sanitizer builds
+
+To build the C++ library and every Python native extension with
+AddressSanitizer/LeakSanitizer and run the ownership scenarios in isolated
+subprocesses, see [SANITIZER.md](SANITIZER.md):
+
+```sh
+./mvnw -P with-python -Dtsfile.sanitizer=address -Dbuild.type=RelWithDebInfo \
+  -Dbuild.test=OFF clean test-compile
+```
+
 ## Dataset read resource limits
 
 `TsFileDataFrame` accepts keyword-only resource options when `use_index=True`:

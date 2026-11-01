@@ -454,9 +454,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     float tsfile_result_set_get_value_by_index_float(ResultSet result_set, uint32_t column_index);
     double tsfile_result_set_get_value_by_index_double(ResultSet result_set, uint32_t column_index);
     char * tsfile_result_set_get_value_by_index_string(ResultSet result_set, uint32_t column_index);
+    ErrorCode tsfile_result_set_get_value_by_index_binary(ResultSet result_set, uint32_t column_index, uint8_t ** out_value, uint32_t * out_length);
 
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
+    void tsfile_free_buffer(void * buffer);
 
     # Arrow structures
     ctypedef struct ArrowSchema:

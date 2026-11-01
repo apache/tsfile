@@ -18,10 +18,12 @@
 
 """Read native SDK build metadata and prepare runtime-only wheel files."""
 
+import importlib.machinery
 import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 MSVC_RUNTIME_FLAGS = {
     "MultiThreaded": "/MT",
@@ -99,3 +101,113 @@ def strip_wheel_binaries(build_lib, platform):
             subprocess.run(
                 ["codesign", "--force", "--sign", "-", str(path)], check=True
             )
+
+
+SANITIZER_SYMBOL_PREFIX = "__asan_"
+
+
+def is_runtime_library(path):
+    return Path(path).name.startswith(("libtsfile", "tsfile.dll"))
+
+
+def native_binaries(root):
+    """Return the binaries built for the running interpreter under *root*.
+
+    Only the current platform/ABI extension suffix is matched, so stale
+    artifacts from another OS or Python version in a reused tree are ignored.
+    The copied TsFile runtime library is included explicitly.
+    """
+    extension_suffix = importlib.machinery.EXTENSION_SUFFIXES[0]
+    root = Path(root)
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (path.name.endswith(extension_suffix) or is_runtime_library(path))
+    )
+
+
+SANITIZER_RUNTIME_HINTS = ("libasan", "libclang_rt.asan")
+
+
+def _run_tool(command, path):
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"{command[0]} is required to verify sanitizer instrumentation"
+        ) from exc
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"failed to inspect {path} with {command[0]}: {completed.stderr.strip()}"
+        )
+    return completed.stdout
+
+
+def _sanitizer_symbols(path):
+    # Linux lists both defined and undefined dynamic symbols with -D; macOS
+    # -gU lists only undefined external symbols, which is where the ASan
+    # instrumentation references appear in a shared object.
+    if sys.platform.startswith("linux"):
+        command = ["nm", "-D", str(path)]
+    elif sys.platform == "darwin":
+        command = ["nm", "-gU", str(path)]
+    else:
+        raise RuntimeError(
+            f"Sanitizer instrumentation checks are not supported on {sys.platform}"
+        )
+    return _run_tool(command, path)
+
+
+def _linked_libraries(path):
+    if sys.platform.startswith("linux"):
+        command = ["readelf", "-d", str(path)]
+    elif sys.platform == "darwin":
+        command = ["otool", "-L", str(path)]
+    else:
+        raise RuntimeError(f"Sanitizer link checks are not supported on {sys.platform}")
+    return _run_tool(command, path)
+
+
+def is_sanitizer_instrumented(path):
+    return SANITIZER_SYMBOL_PREFIX in _sanitizer_symbols(path)
+
+
+def links_sanitizer_runtime(path):
+    """True when the binary records a dependency on the sanitizer runtime."""
+    linked = _linked_libraries(path)
+    return any(hint in linked for hint in SANITIZER_RUNTIME_HINTS)
+
+
+def verify_sanitizer_instrumentation(paths, expect_instrumented):
+    """Check each native binary and return the inspected (path, bool) pairs.
+
+    Instrumented binaries must have both compile-time ASan references and a
+    link-time dependency on the sanitizer runtime. Raises RuntimeError with
+    every offending path when a binary does not match *expect_instrumented*.
+    Printing happens here so build logs show which artifacts were verified.
+    """
+    inspected = []
+    failures = []
+    for path in paths:
+        path = Path(path)
+        if not path.is_file():
+            raise RuntimeError(f"Missing native binary: {path}")
+        instrumented = is_sanitizer_instrumented(path)
+        if expect_instrumented:
+            instrumented = instrumented and links_sanitizer_runtime(path)
+        inspected.append((path, instrumented))
+        if instrumented != expect_instrumented:
+            failures.append(path)
+        state = "instrumented" if instrumented else "not instrumented"
+        print(f"sanitizer check: {state}: {path}")
+
+    if failures:
+        expected = "instrumented" if expect_instrumented else "uninstrumented"
+        details = "\n".join(f"  {path}" for path in failures)
+        raise RuntimeError(
+            f"Expected every native binary to be {expected}:\n{details}\n"
+            "Use '-Dtsfile.sanitizer=<checks>' for a coordinated sanitizer "
+            "build, or run a clean normal build for release artifacts."
+        )
+    return inspected

@@ -128,3 +128,84 @@ jobs:
           name: tsfile-${{ runner.os }}-py${{ matrix.python-version }}-whl
           path: python/dist/tsfile-*.whl
           retention-days: 1
+
+  # AddressSanitizer/LeakSanitizer coverage for the complete Python -> Cython
+  # -> C wrapper -> C++ chain. The build instruments libtsfile and every
+  # extension with the same compiler and check set; the scenarios run in fresh
+  # interpreters with leak detection on. See python/SANITIZER.md.
+  python-sanitizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: corretto
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uuid-dev binutils
+
+      - name: Build with ASan/LSan
+        shell: bash
+        run: |
+          # One compiler (and therefore one sanitizer runtime) for CMake,
+          # distutils and the preload below.
+          export CC=gcc CXX=g++
+          ./mvnw -P with-python \
+            -Dtsfile.sanitizer=address \
+            -Dbuild.type=RelWithDebInfo \
+            -Dbuild.test=OFF \
+            -Dspotless.skip=true \
+            clean test-compile
+
+      - name: Verify sanitizer instrumentation
+        shell: bash
+        run: |
+          python/venv/bin/python python/check_sanitizer_build.py python/tsfile
+
+      - name: Run ownership scenarios under ASan/LSan
+        shell: bash
+        run: |
+          set -o pipefail
+          # Suppressions must stay scoped to third-party/interpreter frames.
+          if grep -v '^#' python/tests/sanitizer/lsan_suppressions.txt \
+              | grep -Eqi 'tsfile|dataset/_merge|dataset/_index'; then
+            echo "::error::suppression file must not match TsFile modules"
+            exit 1
+          fi
+          ASAN_LIB="$(gcc -print-file-name=libasan.so)"
+          LIBSTDCXX="$(gcc -print-file-name=libstdc++.so.6)"
+          if [ ! -f "$ASAN_LIB" ] || [ ! -f "$LIBSTDCXX" ]; then
+            echo "::error::AddressSanitizer or libstdc++ runtime not found for gcc"
+            exit 1
+          fi
+          # The pytest runner itself does not load tsfile; each scenario child
+          # re-enables leak detection (see test_sanitizer_ownership.py).
+          #
+          # libasan must stay first (runtime-first check); libstdc++ follows so
+          # ASan's __cxa_throw interceptor can resolve the real symbol. Without
+          # it, any C++ exception aborts with "CHECK failed ... __cxa_throw".
+          export TSFILE_SANITIZER=address
+          export ASAN_OPTIONS="detect_leaks=0:abort_on_error=1:halt_on_error=1"
+          export LSAN_OPTIONS="suppressions=$PWD/python/tests/sanitizer/lsan_suppressions.txt"
+          LD_PRELOAD="$ASAN_LIB:$LIBSTDCXX" python/venv/bin/python -m pytest \
+            python/tests/test_sanitizer_ownership.py -v

@@ -49,7 +49,7 @@ cdef class TsFileWriterPy:
             errno = tsfile_writer_register_timeseries_py_cpp(self.writer, device_name, c_schema)
             check_error(errno)
         finally:
-            free_c_timeseries_schema(c_schema)
+            free_c_timeseries_schema_allocated(c_schema)
 
     def register_device(self, device_schema : DeviceSchemaPy):
         """
@@ -62,7 +62,7 @@ cdef class TsFileWriterPy:
             errno = tsfile_writer_register_device_py_cpp(self.writer, device_schema_c)
             check_error(errno)
         finally:
-            free_c_device_schema(device_schema_c)
+            free_c_device_schema_allocated(device_schema_c)
 
     def register_table(self, table_schema : TableSchemaPy):
         """
@@ -75,7 +75,7 @@ cdef class TsFileWriterPy:
             errno = tsfile_writer_register_table_py_cpp(self.writer, c_schema)
             check_error(errno)
         finally:
-            free_c_table_schema(c_schema)
+            free_c_table_schema_allocated(c_schema)
 
     def write_tablet(self, tablet : TabletPy):
         """

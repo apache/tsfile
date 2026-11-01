@@ -48,6 +48,12 @@ pytest tests/
 # Run a single test
 pytest tests/test_write_and_read.py -k "test_name"
 
+# ASan/LSan coverage of the bindings (Linux; see SANITIZER.md)
+./mvnw -P with-python -Dtsfile.sanitizer=address -Dbuild.type=RelWithDebInfo \
+  -Dbuild.test=OFF clean test-compile
+LD_PRELOAD="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" \
+  python/venv/bin/python -m pytest python/tests/test_sanitizer_ownership.py -v
+
 # Format code
 cd ../ && ./mvnw spotless:apply   # Uses Black 26.3.1
 ```

@@ -2170,6 +2170,8 @@ ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
         return common::E_INVALID_ARG;
     }
 
+    TsFileProperty* properties = nullptr;
+    uint32_t property_index = 0;
     try {
         auto* r = static_cast<storage::TsFileReader*>(reader);
         storage::TsFileProperties cpp_properties = r->get_tsfile_properties();
@@ -2183,14 +2185,13 @@ ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
             return common::E_OK;
         }
 
-        auto* properties = static_cast<TsFileProperty*>(
+        properties = static_cast<TsFileProperty*>(
             malloc(sizeof(TsFileProperty) * cpp_properties.size()));
         if (properties == nullptr) {
             return common::E_OOM;
         }
         memset(properties, 0, sizeof(TsFileProperty) * cpp_properties.size());
 
-        uint32_t property_index = 0;
         for (const auto& cpp_property : cpp_properties) {
             TsFileProperty& property = properties[property_index];
             if (cpp_property.first.size() >
@@ -2241,6 +2242,8 @@ ERRNO tsfile_reader_get_tsfile_properties(TsFileReader reader,
         *out_length = static_cast<uint32_t>(cpp_properties.size());
         return common::E_OK;
     } catch (const std::bad_alloc&) {
+        // get_tsfile_properties() can throw after the array was allocated.
+        tsfile_free_tsfile_properties(properties, property_index + 1);
         return common::E_OOM;
     }
 }
@@ -2295,6 +2298,8 @@ void free_table_schema(TableSchema schema) {
     }
 }
 void free_column_schema(ColumnSchema schema) { free(schema.column_name); }
+
+void tsfile_free_buffer(void* buffer) { free(buffer); }
 
 void free_write_file(WriteFile* write_file) {
     auto f = static_cast<storage::WriteFile*>(*write_file);

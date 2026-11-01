@@ -1251,6 +1251,17 @@ void free_table_schema(TableSchema schema);
 void free_column_schema(ColumnSchema schema);
 void free_write_file(WriteFile* write_file);
 
+/**
+ * @brief Releases a buffer allocated by this C wrapper.
+ *
+ * Result-value getters such as tsfile_result_set_get_value_by_index_string()
+ * and tsfile_result_set_get_value_by_index_binary() return caller-owned
+ * buffers. Release them here instead of calling free() in a binding: the
+ * deallocator then lives in the same module (and CRT) as the allocator, which
+ * matters for static-runtime builds where each DLL owns a separate heap.
+ */
+void tsfile_free_buffer(void* buffer);
+
 // ---------- Generic Writer API ----------
 //
 // Safety rules:
