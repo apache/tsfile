@@ -352,6 +352,115 @@ TEST_P(TsFileTableReaderTimeFilterTest, QueryContinuesAfterEmptyPageInChunk) {
     }
 }
 
+// Regression for #1038: a page whose rows are all rejected by the time filter
+// must not end the series.  Requesting the never-written measurement "ghost"
+// (and omitting "v" on one device) forces the per-column aligned read path,
+// where a decode that produced no rows used to be reported as
+// E_NO_MORE_DATA, so the rest of the chunk — including the matching final
+// page — was skipped.
+TEST_P(TsFileTableReaderTimeFilterTest,
+       TimeInContinuesAfterFullyFilteredAlignedPage) {
+    g_config_value_.page_writer_max_point_num_ = 5;
+    g_config_value_.tsblock_max_memory_ = 4096;
+
+    std::vector<ColumnSchema> columns;
+    columns.emplace_back("id", STRING, UNCOMPRESSED, PLAIN,
+                         ColumnCategory::TAG);
+    for (const char* name : {"v", "w", "ghost"}) {
+        columns.emplace_back(name, INT64, UNCOMPRESSED, PLAIN,
+                             ColumnCategory::FIELD);
+    }
+    TableSchema table_schema("t", columns);
+    TsFileTableWriter writer(&write_file_, &table_schema);
+    for (int chunk = 0; chunk < 3; ++chunk) {
+        for (int device = 0; device < 3; ++device) {
+            const bool has_v = device != 1;
+            std::vector<std::string> names{"id", "w"};
+            std::vector<TSDataType> types{STRING, INT64};
+            std::vector<ColumnCategory> categories{ColumnCategory::TAG,
+                                                   ColumnCategory::FIELD};
+            if (has_v) {
+                names.emplace_back("v");
+                types.push_back(INT64);
+                categories.push_back(ColumnCategory::FIELD);
+            }
+            Tablet tablet("t", names, types, categories, 7);
+            for (int row = 0; row < 7; ++row) {
+                const int64_t time = chunk * 7 + row;
+                ASSERT_EQ(tablet.add_timestamp(row, time), common::E_OK);
+                const std::string id = "d" + std::to_string(device);
+                ASSERT_EQ(tablet.add_value(row, "id", id.c_str()),
+                          common::E_OK);
+                if (time % 3 != 0) {
+                    ASSERT_EQ(tablet.add_value(row, "w",
+                                               int64_t(device * 1000 + time)),
+                              common::E_OK);
+                }
+                if (has_v && time % 4 != 0) {
+                    ASSERT_EQ(tablet.add_value(row, "v",
+                                               int64_t(device * 100 + time)),
+                              common::E_OK);
+                }
+            }
+            ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+            // Each flush ends a chunk; the third one has no successor chunk.
+            ASSERT_EQ(writer.flush(), common::E_OK);
+        }
+    }
+    ASSERT_EQ(writer.close(), common::E_OK);
+
+    LocalRandomAccessReadFile read_file;
+    ASSERT_EQ(read_file.open(file_name_), common::E_OK);
+    // A 4096-byte budget holds the decoder's 129-row batch for these blocks.
+    TableQueryExecutor executor(&read_file);
+    const std::vector<std::string> query_columns{"v", "ghost", "w", "v"};
+    auto collect_times = [&](Filter* time_filter, std::vector<int64_t>& times) {
+        ResultSet* result = nullptr;
+        ASSERT_EQ(executor.query("t", query_columns, time_filter, nullptr,
+                                 nullptr, 0, -1, result),
+                  common::E_OK);
+        bool has_next = false;
+        int ret = common::E_OK;
+        while ((ret = result->next(has_next)) == common::E_OK && has_next) {
+            times.push_back(result->get_value<int64_t>(1));
+        }
+        EXPECT_EQ(ret, common::E_OK);
+        executor.destroy_query_data_set(result);
+    };
+
+    const std::vector<std::vector<int64_t>> selected_time_lists{
+        // Fully filtered pages in earlier chunks (with successors) and in the
+        // final chunk followed by the matching page [19, 20].
+        {0, 2, 3, 6, 7, 10, 13, 19, 20},
+        // Only the matching page of the final chunk is selected.
+        {19, 20},
+        // Matching rows in the first chunk only; every later page is empty.
+        {0}};
+    for (const auto& selected_times : selected_time_lists) {
+        SCOPED_TRACE(::testing::Message()
+                     << "parallel=" << GetParam() << ", selected_times="
+                     << ::testing::PrintToString(selected_times));
+        std::vector<int64_t> times;
+        collect_times(new TimeIn(selected_times, false), times);
+        std::vector<int64_t> expected;
+        for (int device = 0; device < 3; ++device) {
+            expected.insert(expected.end(), selected_times.begin(),
+                            selected_times.end());
+        }
+        EXPECT_EQ(times, expected);
+    }
+
+    // All-matching control: every row of every device is returned.
+    std::vector<int64_t> times;
+    collect_times(nullptr, times);
+    EXPECT_EQ(times.size(), 63u);
+
+    // No-matching control: the series is empty and still terminates.
+    times.clear();
+    collect_times(new TimeIn({100}, false), times);
+    EXPECT_TRUE(times.empty());
+}
+
 INSTANTIATE_TEST_SUITE_P(SerialAndParallel, TsFileTableReaderTimeFilterTest,
                          ::testing::Bool());
 

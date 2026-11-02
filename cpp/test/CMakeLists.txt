@@ -283,6 +283,15 @@ endif ()
 if (${COV_ENABLED})
     message("Enable code cov...")
     add_compile_options(-fprofile-arcs -ftest-coverage)
+    # This executable is instrumented too, so it needs the coverage runtime on
+    # its own link line. libtsfile links it PRIVATE, which does not propagate
+    # to consumers, and the linker does not search a shared library's own
+    # dependencies for these symbols.
+    if (APPLE)
+        set(TSFILE_TEST_COV_LINK_LIB --coverage)
+    else ()
+        set(TSFILE_TEST_COV_LINK_LIB gcov)
+    endif ()
 endif ()
 
 add_executable(TsFile_Test ${TEST_SRCS})
@@ -332,6 +341,9 @@ if (ENABLE_ANTLR4)
 endif ()
 if (BUILD_TOOLS)
     target_link_libraries(TsFile_Test tsfile_cli_obj)
+endif ()
+if (${COV_ENABLED})
+    target_link_libraries(TsFile_Test ${TSFILE_TEST_COV_LINK_LIB})
 endif ()
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
