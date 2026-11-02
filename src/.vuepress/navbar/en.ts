@@ -29,6 +29,10 @@ export const enNavbar = navbar([
     text: 'Download',
     link: '/Download/',
   },
+  {
+    text: 'Preview',
+    link: '/preview/',
+  },
   // {
   //   text: 'Community',
   //   children: [

@@ -1,0 +1,317 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  KIND, either express or implied.  See the License for the
+  specific language governing permissions and limitations
+  under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TsFile Preview</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --font: -apple-system, "system-ui", "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, "Noto Sans", STHeiti, "Microsoft YaHei",
+          SimSun, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+          "Segoe UI Symbol", "Noto Color Emoji";
+        --bg: #ffffff;
+        --panel: #ffffff;
+        --text: rgb(60, 60, 67);
+        --heading: #000000;
+        --muted: #80808a;
+        --border: #c2c2c4;
+        --accent: rgb(75, 41, 138);
+        --accent-soft: rgba(75, 41, 138, 0.07);
+        --line: rgb(96, 52, 177);
+        --grid: rgba(60, 60, 67, 0.1);
+        --danger: #c0392b;
+      }
+      /* The docs page mirrors its own toggle onto <html data-theme>. */
+      html[data-theme="dark"] {
+        --bg: #1b1b1f;
+        --panel: #1b1b1f;
+        --text: rgba(235, 235, 245, 0.86);
+        --heading: #ffffff;
+        --muted: rgba(235, 235, 245, 0.55);
+        --border: #3c3f44;
+        --accent: rgb(122, 78, 203);
+        --accent-soft: rgba(122, 78, 203, 0.14);
+        --line: rgb(145, 108, 224);
+        --grid: rgba(235, 235, 245, 0.12);
+        --danger: #e08a78;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) {
+          --bg: #1b1b1f;
+          --panel: #1b1b1f;
+          --text: rgba(235, 235, 245, 0.86);
+          --heading: #ffffff;
+          --muted: rgba(235, 235, 245, 0.55);
+          --border: #3c3f44;
+          --accent: rgb(122, 78, 203);
+          --accent-soft: rgba(122, 78, 203, 0.14);
+          --line: rgb(145, 108, 224);
+          --grid: rgba(235, 235, 245, 0.12);
+          --danger: #e08a78;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+      }
+
+      body {
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap {
+        max-width: 68rem;
+        margin: 0 auto;
+        padding: 0 0 1rem;
+      }
+
+      .notice {
+        background: var(--accent-soft);
+        border-inline-start: 4px solid var(--accent);
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.95rem;
+      }
+      .notice strong { color: var(--heading); font-weight: 600; }
+      .notice a { color: var(--accent); text-decoration: underline; }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+      }
+
+      #drop {
+        border: 2px dashed var(--border);
+        border-radius: 8px;
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--muted);
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      #drop:hover,
+      #drop.hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      #drop strong {
+        display: block;
+        color: var(--heading);
+        font-weight: 600;
+        margin-bottom: 0.15rem;
+      }
+      #dropHint { display: block; }
+
+      .actions { margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+      button {
+        font-family: var(--font);
+        font-size: 0.95rem;
+        line-height: 1.4;
+        padding: 0.6rem 1.5rem;
+        border-radius: 2rem;
+        border: 1px solid var(--accent);
+        background: transparent;
+        color: var(--accent);
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s, opacity 0.2s;
+      }
+      button:hover:enabled {
+        background: var(--accent);
+        color: #fff;
+      }
+      button:disabled { opacity: 0.45; cursor: default; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 1rem 1.25rem;
+      }
+      .field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+      .field > label { color: var(--muted); font-size: 0.85rem; }
+      .field.wide { grid-column: 1 / -1; }
+
+      select,
+      input[type="text"] {
+        font-family: var(--font);
+        font-size: 0.92rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        width: 100%;
+      }
+      select:focus,
+      input[type="text"]:focus { outline: none; border-color: var(--accent); }
+      select:disabled,
+      input[type="text"]:disabled { opacity: 0.55; }
+
+      .measures {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        max-height: 9.5rem;
+        overflow: auto;
+        display: grid;
+        gap: 0.2rem 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+      }
+      .measures label {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.9rem;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .measures .empty-hint { color: var(--muted); font-size: 0.9rem; }
+
+      .range-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+      }
+      .range-row input[type="text"] { flex: 1 1 12rem; width: auto; }
+      .range-row button { padding: 0.5rem 1.1rem; font-size: 0.9rem; }
+      .hint { color: var(--muted); font-size: 0.85rem; }
+
+      #error { color: var(--danger); font-size: 0.9rem; min-height: 1.4rem; margin-top: 0.75rem; }
+      #error a { color: inherit; text-decoration: underline; }
+
+      #meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
+
+      #chartWrap { position: relative; height: 24rem; }
+      canvas { width: 100%; height: 100%; display: block; }
+
+      .empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 0.95rem;
+        text-align: center;
+        padding: 0 1.5rem;
+        pointer-events: none;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+        margin-top: 0.85rem;
+        font-size: 0.9rem;
+      }
+      .legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+      .legend i {
+        width: 1rem;
+        height: 0.22rem;
+        border-radius: 2px;
+        display: inline-block;
+      }
+
+      .hidden { display: none; }
+
+      @media (max-width: 720px) {
+        #chartWrap { height: 18rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="notice">
+        <strong>File size:</strong>
+        this page holds the whole file in memory and works best for files
+        <strong>under 100 MB</strong>. Larger files should use the standalone
+        TsFile Viewer deployment.
+      </div>
+
+      <section class="card">
+        <div id="drop">
+          <strong>Drop a .tsfile here, or click to choose</strong>
+          <span id="dropHint">Nothing is uploaded — decoding runs in your browser.</span>
+          <input id="file" type="file" accept=".tsfile" class="hidden" />
+        </div>
+        <div class="actions">
+          <button id="sample" type="button">Load sample data</button>
+        </div>
+      </section>
+
+      <section class="card hidden" id="selectorCard">
+        <div class="grid">
+          <div class="field hidden" id="tableField">
+            <label for="table">Table</label>
+            <select id="table"></select>
+          </div>
+          <div class="field">
+            <label for="device">Device</label>
+            <select id="device"></select>
+          </div>
+          <div class="field wide">
+            <label>Measurements</label>
+            <div class="measures" id="measures">
+              <span class="empty-hint">Load a file first</span>
+            </div>
+          </div>
+          <div class="field wide">
+            <label>Time range</label>
+            <div class="range-row">
+              <input id="start" type="text" inputmode="numeric" disabled />
+              <span class="hint">→</span>
+              <input id="end" type="text" inputmode="numeric" disabled />
+              <button id="resetRange" type="button" disabled>Full range</button>
+              <span class="hint" id="unit"></span>
+            </div>
+          </div>
+        </div>
+        <div id="error"></div>
+      </section>
+
+      <section class="card">
+        <div id="meta"></div>
+        <div id="chartWrap">
+          <canvas id="chart"></canvas>
+          <div class="empty" id="empty">No data to plot yet</div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </section>
+    </div>
+    <script src="tsfile.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

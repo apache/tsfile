@@ -13,6 +13,10 @@ heroText: 工业时序数据集的开源文件格式
 tagline: TsFile 是一种为工业时序数据设计的高性能列式存储文件格式，支持多语言接口、高压缩比、高读写吞吐、快速随机访问。适用于构建高质量数据集、数据资产管理、数据分析与 AI 模型训练等场景。
 heroFullScreen: true
 actions:
+  - text: 在线预览
+    link: ./preview/
+    type: primary
+
   - text: 下载
     link: ./Download/
     type: primary

@@ -77,3 +77,33 @@
 .vp-hero-infos {
   flex: 6;
 }
+
+// The WebAssembly preview sizes itself from inside the frame.
+.tsfile-preview-frame {
+  display: block;
+  width: 100%;
+  min-height: 42rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+// The preview is a tool, not prose: on the page that hosts it, drop the
+// reading column and the right-hand "On This Page" gutter, and keep the
+// heading, intro and the frame on one centred column.
+html .theme-container:has(.tsfile-preview-frame) .vp-page {
+  padding-inline: 0;
+}
+.theme-container:has(.tsfile-preview-frame) .vp-sidebar {
+  display: none;
+}
+html .theme-container:has(.tsfile-preview-frame) .theme-hope-content {
+  max-width: 68rem;
+  margin-inline: auto;
+}
+// The page title keeps the theme's own 780px column otherwise, which pushes
+// it out of line with the body and the frame.
+html .theme-container:has(.tsfile-preview-frame) .vp-page-title {
+  max-width: 68rem;
+  margin-inline: auto;
+}
