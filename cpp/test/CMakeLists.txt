@@ -348,6 +348,32 @@ endif ()
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
 
+if (BUILD_SQLITE_EXTENSION)
+    add_executable(TsFile_Sqlite_Test sqlite/tsfile_sqlite_test.cc)
+    target_include_directories(TsFile_Sqlite_Test PRIVATE
+            ${VENDORED_GTEST_INCLUDE_DIRS}
+            ${SQLite3_INCLUDE_DIRS})
+    target_link_libraries(TsFile_Sqlite_Test
+            GTest::gtest_main
+            tsfile
+            ${SQLite3_LIBRARIES})
+    add_dependencies(TsFile_Sqlite_Test tsfile_sqlite)
+    target_compile_definitions(TsFile_Sqlite_Test PRIVATE
+            TSFILE_SQLITE_EXTENSION_PATH="$<TARGET_FILE:tsfile_sqlite>")
+    set_target_properties(TsFile_Sqlite_Test PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR}
+            SKIP_BUILD_RPATH FALSE
+            BUILD_RPATH "$<TARGET_FILE_DIR:tsfile>")
+    add_test(NAME TsFileSqliteTest COMMAND TsFile_Sqlite_Test)
+    if (APPLE)
+        set_tests_properties(TsFileSqliteTest PROPERTIES
+                ENVIRONMENT "DYLD_LIBRARY_PATH=$<TARGET_FILE_DIR:tsfile>")
+    else ()
+        set_tests_properties(TsFileSqliteTest PROPERTIES
+                ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:tsfile>")
+    endif ()
+endif()
+
 # On Windows, copy tsfile DLL next to the test exe so it can load at runtime
 # (and when gtest_discover_tests runs the exe). Use TARGET_FILE so the path
 # is correct for the current build config (e.g. Release).

@@ -258,3 +258,7 @@ install(EXPORT TsFileTargets
         NAMESPACE TsFile::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/TsFile
         COMPONENT development)
+
+if (BUILD_SQLITE_EXTENSION)
+    add_subdirectory(sqlite)
+endif ()
