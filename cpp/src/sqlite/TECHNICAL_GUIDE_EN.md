@@ -250,12 +250,15 @@ Additional subprocess checks reopen databases after abrupt exit before or after
 seal commit in both DELETE and WAL journal modes. These checks cover those
 boundaries, not every power-loss or filesystem fault. Build and test commands are provided in the [user guide](USER_GUIDE_EN.md).
 
-Queries, seal and compact currently materialize rows; export copies files and its
-cost scales with file size; whole-file fingerprint checks add I/O. Field pushdown
-covers BINARY integer, string and exactly representable double comparisons;
-FLOAT and BOOLEAN non-equality comparisons remain SQLite residual predicates.
-This is a functional implementation, not a bounded-memory streaming or
-performance-tuned engine. There is no schema migration for the prototype shadow
-layout, background seal, retention, historical correction, multi-file
-registration, or full database backup/restore. Linux-specific publication code
-needs Linux CI; local validation was on macOS with Homebrew SQLite.
+Queries and compact currently materialize rows; seal streams the hot shadow table in
+fixed-size chunks, so its memory no longer grows linearly with the total hot row
+count. Export copies files and its cost scales with file size; whole-file
+fingerprint checks add I/O. Query results are still materialized rather than
+streamed. Field pushdown covers BINARY integer, string and exactly representable
+double comparisons; FLOAT and BOOLEAN non-equality comparisons remain SQLite
+residual predicates. This is a functional implementation, not a bounded-memory
+streaming or performance-tuned engine. There is no schema migration for the
+prototype shadow layout, background seal, retention, historical correction,
+multi-file registration, or full database backup/restore. Linux-specific
+publication code needs Linux CI; local validation was on macOS with Homebrew
+SQLite.

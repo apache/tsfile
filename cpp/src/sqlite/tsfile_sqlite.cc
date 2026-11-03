@@ -2400,20 +2400,43 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
         return SQLITE_CONSTRAINT;
     int rc = check_segment_stamps(table);
     if (rc != SQLITE_OK) return rc;
-    HybridCursor cursor;
-    cursor.table = table;
-    std::vector<int> projection;
-    for (size_t i = 0; i < table->columns.size(); ++i)
-        projection.push_back(static_cast<int>(i));
-    rc = read_hot(&cursor, {}, nullptr, kNoWatermark, true,
-                  std::numeric_limits<int64_t>::max(), true, {}, projection);
-    if (rc != SQLITE_OK) return rc;
-    if (cursor.rows.empty()) {
-        if (sealed != nullptr) *sealed = 0;
-        return SQLITE_OK;
+
+    // Seal streams the hot shadow table in bounded chunks. Materializing every
+    // hot row at once is prohibitive for large hot areas (100M rows consume
+    // tens of gigabytes before any output file is written).
+    const size_t kChunkRows = 4 * 1024 * 1024;
+    std::string select = "SELECT ";
+    for (size_t i = 0; i < table->columns.size(); ++i) {
+        if (i) select += ',';
+        select += quote_id(table->columns[i].name);
     }
+    select += " FROM " + shadow_name(table, "_data");
+    sqlite3_stmt* stmt = nullptr;
+    rc = sqlite3_prepare_v2(table->db, select.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return rc;
+
     std::map<std::string, int64_t> device_max;
-    for (const Row& row : cursor.rows) {
+    std::vector<PendingFile> files;
+    std::vector<int64_t> counts;
+    std::vector<Row> chunk;
+    chunk.reserve(kChunkRows);
+    int64_t total = 0;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Row row;
+        row.values.resize(table->columns.size());
+        bool valid = true;
+        for (size_t i = 0; i < table->columns.size(); ++i) {
+            if (!row_value_from_sqlite(stmt, static_cast<int>(i),
+                                       table->columns[i], row.values[i])) {
+                valid = false;
+                break;
+            }
+        }
+        if (!valid) {
+            sqlite3_finalize(stmt);
+            discard_files(files);
+            return SQLITE_MISMATCH;
+        }
         std::string key = device_key(table, row.values);
         int64_t timestamp = row.values[table->time_index].i64;
         auto it = device_max.find(key);
@@ -2421,12 +2444,34 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
             device_max[key] = timestamp;
         else
             it->second = std::max(it->second, timestamp);
+        chunk.push_back(std::move(row));
+        ++total;
+        if (chunk.size() >= kChunkRows) {
+            rc = write_limited_files(table, std::move(chunk),
+                                     max_file_size_mb * 1024 * 1024, files,
+                                     counts);
+            if (rc != SQLITE_OK) {
+                sqlite3_finalize(stmt);
+                return rc;
+            }
+            chunk.clear();
+            chunk.reserve(kChunkRows);
+        }
     }
-    std::vector<PendingFile> files;
-    std::vector<int64_t> counts;
-    rc = write_limited_files(table, std::move(cursor.rows),
-                             max_file_size_mb * 1024 * 1024, files, counts);
-    if (rc != SQLITE_OK) return rc;
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        discard_files(files);
+        return rc;
+    }
+    if (total == 0) {
+        if (sealed != nullptr) *sealed = 0;
+        return SQLITE_OK;
+    }
+    if (!chunk.empty()) {
+        rc = write_limited_files(table, std::move(chunk),
+                                 max_file_size_mb * 1024 * 1024, files, counts);
+        if (rc != SQLITE_OK) return rc;
+    }
 
     for (size_t i = 0; i < files.size(); ++i) {
         std::string insert =
@@ -2491,8 +2536,6 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
             return rc;
         }
     }
-    int64_t total = 0;
-    for (int64_t count : counts) total += count;
     for (PendingFile& file : files) table->pending.push_back(std::move(file));
     if (sealed != nullptr) *sealed = total;
     return SQLITE_OK;
