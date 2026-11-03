@@ -464,12 +464,14 @@ public class BytesUtilsTest {
   @Test
   public void testInputStreamReadersRejectTruncatedInput() {
     for (int length = 0; length < Integer.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
-          IOException.class, () -> BytesUtils.readInt(new ByteArrayInputStream(new byte[length])));
+          IOException.class, () -> BytesUtils.readInt(new ByteArrayInputStream(truncated)));
     }
     for (int length = 0; length < Long.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
-          IOException.class, () -> BytesUtils.readLong(new ByteArrayInputStream(new byte[length])));
+          IOException.class, () -> BytesUtils.readLong(new ByteArrayInputStream(truncated)));
     }
   }
 

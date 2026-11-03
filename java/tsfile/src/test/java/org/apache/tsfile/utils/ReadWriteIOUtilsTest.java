@@ -137,24 +137,28 @@ public class ReadWriteIOUtilsTest {
   @Test
   public void testFixedWidthReadersRejectEveryTruncatedLength() {
     for (int length = 0; length < Integer.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
           IOException.class,
-          () -> ReadWriteIOUtils.readInt(new ByteArrayInputStream(new byte[length])));
+          () -> ReadWriteIOUtils.readInt(new ByteArrayInputStream(truncated)));
     }
     for (int length = 0; length < Short.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
           IOException.class,
-          () -> ReadWriteIOUtils.readShort(new ByteArrayInputStream(new byte[length])));
+          () -> ReadWriteIOUtils.readShort(new ByteArrayInputStream(truncated)));
     }
     for (int length = 0; length < Float.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
           IOException.class,
-          () -> ReadWriteIOUtils.readFloat(new ByteArrayInputStream(new byte[length])));
+          () -> ReadWriteIOUtils.readFloat(new ByteArrayInputStream(truncated)));
     }
     for (int length = 0; length < Double.BYTES; length++) {
+      final byte[] truncated = new byte[length];
       Assert.assertThrows(
           IOException.class,
-          () -> ReadWriteIOUtils.readDouble(new ByteArrayInputStream(new byte[length])));
+          () -> ReadWriteIOUtils.readDouble(new ByteArrayInputStream(truncated)));
     }
   }
 
