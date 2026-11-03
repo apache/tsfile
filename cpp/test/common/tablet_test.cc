@@ -24,6 +24,159 @@
 
 namespace storage {
 
+// Fail the first allocation so large capacities can be checked without
+// reserving GiBs. The allocator must receive the full timestamp byte count.
+TEST(TabletTest, LargeCapacityAttemptsFullAllocationAndReturnsOom) {
+    if (sizeof(size_t) < sizeof(uint64_t)) GTEST_SKIP();
+    const std::vector<common::TSDataType> types = {
+        common::BOOLEAN, common::INT32,     common::DATE,   common::FLOAT,
+        common::INT64,   common::TIMESTAMP, common::DOUBLE, common::TEXT,
+        common::BLOB,    common::STRING};
+    const uint32_t capacities[] = {1u << 29, (1u << 30) - 2, (1u << 30) - 1,
+                                   UINT32_MAX};
+    for (auto type : types) {
+        for (auto capacity : capacities) {
+            SCOPED_TRACE(::testing::Message()
+                         << "type=" << static_cast<int>(type)
+                         << " rows=" << capacity);
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
+            Tablet tablet({"value"}, {type}, capacity);
+            ASSERT_EQ(tablet.err_code_, common::E_OOM);
+            EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(),
+                      static_cast<uint64_t>(capacity) * sizeof(int64_t));
+            EXPECT_EQ(tablet.get_cur_row_size(), 0u);
+            EXPECT_EQ(tablet.add_timestamp(0, 1), common::E_OOM);
+            // The allocation failure is one-shot.
+            Tablet next({"value"}, {type}, 1u);
+            EXPECT_EQ(next.err_code_, common::E_OK);
+        }
+    }
+}
+
+TEST(TabletTest, CapacityCheckedByEveryConstructor) {
+    std::vector<std::string> names = {"value"};
+    std::vector<common::TSDataType> types = {common::DOUBLE};
+    auto schema = std::make_shared<std::vector<MeasurementSchema>>();
+    schema->emplace_back("value", common::DOUBLE, common::PLAIN,
+                         common::UNCOMPRESSED);
+    for (int capacity : {0, -1, 1 << 29, (1 << 30) - 1, INT32_MAX}) {
+        if (capacity > 0 && sizeof(size_t) < sizeof(uint64_t)) continue;
+        const int expected =
+            capacity <= 0 ? common::E_INVALID_ARG : common::E_OOM;
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
+        Tablet from_schema("dev", schema, capacity);
+        EXPECT_EQ(from_schema.err_code_, expected);
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
+        Tablet from_lists("dev", &names, &types, capacity);
+        EXPECT_EQ(from_lists.err_code_, expected);
+        if (capacity > 0)
+            common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 0);
+        Tablet with_categories("table", names, types,
+                               {common::ColumnCategory::FIELD}, capacity);
+        EXPECT_EQ(with_categories.err_code_, expected);
+    }
+    Tablet zero(names, types, 0u);
+    EXPECT_EQ(zero.err_code_, common::E_INVALID_ARG);
+}
+
+TEST(TabletTest, StringColumnsPreallocate32BytesPerRow) {
+    const uint32_t rows = 1u << 16;
+    for (auto type : {common::TEXT, common::BLOB, common::STRING}) {
+        const int64_t before =
+            common::ModStat::get_instance().get_stat(common::MOD_TABLET);
+        // timestamps, matrix, StringColumn, offsets, then the data buffer.
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, 4);
+        {
+            Tablet tablet({"value"}, {type}, rows);
+            EXPECT_EQ(tablet.err_code_, common::E_OOM);
+            EXPECT_EQ(common::TEST_get_failed_mem_alloc_size(),
+                      static_cast<size_t>(rows) * 32);
+        }
+        EXPECT_EQ(common::ModStat::get_instance().get_stat(common::MOD_TABLET),
+                  before);
+    }
+}
+
+TEST(TabletTest, AllocationFailuresReturnOomAndReleasePartialBuffers) {
+    // timestamps, matrix, INT32, STRING object/offsets/data, DOUBLE,
+    // BLOB object/offsets/data, bitmap array, and four bitmap buffers.
+    for (uint32_t fail_after = 0; fail_after < 15; ++fail_after) {
+        SCOPED_TRACE(fail_after);
+        const int64_t before =
+            common::ModStat::get_instance().get_stat(common::MOD_TABLET);
+        common::TEST_fail_mem_alloc_after(common::MOD_TABLET, fail_after);
+        {
+            Tablet tablet(
+                {"i", "s", "d", "b"},
+                {common::INT32, common::STRING, common::DOUBLE, common::BLOB},
+                8u);
+            EXPECT_EQ(tablet.err_code_, common::E_OOM);
+            EXPECT_EQ(tablet.get_cur_row_size(), 0u);
+            EXPECT_EQ(tablet.add_timestamp(0, 1), common::E_OOM);
+            common::TSDataType type;
+            EXPECT_EQ(tablet.get_value(0, 0u, type), nullptr);
+            tablet.reset();
+            EXPECT_EQ(tablet.get_cur_row_size(), 0u);
+        }
+        EXPECT_EQ(common::ModStat::get_instance().get_stat(common::MOD_TABLET),
+                  before);
+        // Each injection is one-shot; a subsequent tablet must work normally.
+        Tablet next({"value"}, {common::INT64}, 1u);
+        EXPECT_EQ(next.err_code_, common::E_OK);
+    }
+}
+
+TEST(TabletTest, MillionRowsSupportsNumericAndStringColumns) {
+    const uint32_t rows = 1u << 20;
+    Tablet tablet({"d", "text", "blob", "string"},
+                  {common::DOUBLE, common::TEXT, common::BLOB, common::STRING},
+                  rows);
+    ASSERT_EQ(tablet.err_code_, common::E_OK);
+    const std::string text = "value-中文";
+    const common::String value(text);
+    for (uint32_t row = 0; row < rows; ++row) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), common::E_OK);
+        ASSERT_EQ(tablet.add_value(row, 0u, static_cast<double>(row)),
+                  common::E_OK);
+        for (uint32_t col = 1; col < 4; ++col) {
+            ASSERT_EQ(tablet.add_value(row, col, value), common::E_OK);
+        }
+    }
+    ASSERT_EQ(tablet.get_cur_row_size(), rows);
+    for (uint32_t row = 0; row < rows; ++row) {
+        common::TSDataType type;
+        auto* number = static_cast<double*>(tablet.get_value(row, 0u, type));
+        ASSERT_NE(number, nullptr);
+        ASSERT_EQ(*number, static_cast<double>(row));
+        for (uint32_t col = 1; col < 4; ++col) {
+            auto* stored =
+                static_cast<common::String*>(tablet.get_value(row, col, type));
+            ASSERT_NE(stored, nullptr);
+            ASSERT_EQ(stored->len_, text.size());
+            ASSERT_EQ(memcmp(stored->buf_, text.data(), text.size()), 0);
+        }
+    }
+}
+
+TEST(TabletTest, StringBytesMustFitSignedOffsets) {
+    Tablet tablet({"value"}, {common::STRING}, 2u);
+    ASSERT_EQ(tablet.err_code_, common::E_OK);
+    ASSERT_EQ(tablet.add_value(0u, 0u, common::String("x", 1)), common::E_OK);
+    // This length used to wrap buf_used + len and skip the growth check.
+    EXPECT_EQ(tablet.add_value(1u, 0u, common::String("x", UINT32_MAX)),
+              common::E_OVERFLOW);
+    EXPECT_EQ(tablet.set_column_string_repeated(0u, "x", 1u << 30, 2u),
+              common::E_OVERFLOW);
+    common::TSDataType type;
+    auto* stored = static_cast<common::String*>(tablet.get_value(0u, 0u, type));
+    ASSERT_NE(stored, nullptr);
+    ASSERT_EQ(stored->len_, 1u);
+    EXPECT_EQ(stored->buf_[0], 'x');
+    EXPECT_EQ(tablet.add_value(1u, 0u, common::String("ok", 2)), common::E_OK);
+}
+
 TEST(TabletTest, BasicFunctionality) {
     std::string device_name = "test_device";
     std::vector<MeasurementSchema> schema_vec;
