@@ -126,8 +126,11 @@ public enum TSDataType {
   private final int dataTypeSize;
   private final boolean numeric;
   private final boolean comparable;
-  private final SingleValueCaster singleValueCaster;
-  private final ArrayCaster arrayCaster;
+  // Java serializes an enum constant by its name only, so these never need to be serialized.
+  // They are transient because some tools, such as Flink's ClosureCleaner, still check every
+  // non-transient field and reject a function that holds a TSDataType.
+  private final transient SingleValueCaster singleValueCaster;
+  private final transient ArrayCaster arrayCaster;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
 
   static {
