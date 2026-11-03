@@ -154,7 +154,8 @@ public class ReadWriteIOUtilsTest {
     for (int length = 0; length < Double.BYTES; length++) {
       final byte[] truncated = new byte[length];
       Assert.assertThrows(
-          IOException.class, () -> ReadWriteIOUtils.readDouble(new ByteArrayInputStream(truncated)));
+          IOException.class,
+          () -> ReadWriteIOUtils.readDouble(new ByteArrayInputStream(truncated)));
     }
   }
 
