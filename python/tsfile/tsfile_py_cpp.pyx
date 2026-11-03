@@ -75,12 +75,14 @@ cdef object from_c_column_schema(ColumnSchema schema):
     return ColumnSchemaPy(column_name, data_type, category_type)
 
 cdef object from_c_table_schema(TableSchema schema):
+    """Convert a by-value C schema. The caller keeps ownership of the C data
+    and releases it after this returns (see get_table_schema and
+    tsfile_free_table_schema_array)."""
     cdef int i
     table_name = schema.table_name.decode('utf-8')
     columns = []
     for i in range(schema.column_num):
         columns.append(from_c_column_schema(schema.column_schemas[i]))
-    free_c_table_schema(&schema)
     return TableSchemaPy(table_name, columns)
 
 cdef object from_c_timeseries_schema(TimeseriesSchema schema):
@@ -91,12 +93,14 @@ cdef object from_c_timeseries_schema(TimeseriesSchema schema):
     return TimeseriesSchemaPy(timeseries_name, data_type, encoding, compression)
 
 cdef object from_c_device_schema(DeviceSchema schema):
+    """Convert a by-value C schema. The caller keeps ownership of the C data
+    and releases it after this returns (see
+    tsfile_free_device_schema_array)."""
     cdef int i
     device_name = schema.device_name.decode('utf-8')
     timeseries = []
     for i in range(schema.timeseries_num):
         timeseries.append(from_c_timeseries_schema(schema.timeseries_schema[i]))
-    free_c_device_schema(&schema)
     return DeviceSchemaPy(device_name, timeseries)
 
 # Convert from python to c struct
@@ -176,54 +180,75 @@ cdef CompressionType to_c_compression_type(object compression_type):
 
 cdef TimeseriesSchema * to_c_timeseries_schema(object py_schema):
     cdef TimeseriesSchema * c_schema
+    cdef TSDataType data_type
+    cdef TSEncoding encoding
+    cdef CompressionType compression
+    # Convert before allocating: a conversion error must not leak the schema.
+    if py_schema.data_type is None:
+        raise ValueError("data_type cannot be None")
+    if py_schema.encoding_type is None:
+        raise ValueError("encoding_type cannot be None")
+    if py_schema.compression_type is None:
+        raise ValueError("compression_type cannot be None")
+    data_type = to_c_data_type(py_schema.data_type)
+    encoding = to_c_encoding_type(py_schema.encoding_type)
+    compression = to_c_compression_type(py_schema.compression_type)
     c_schema = <TimeseriesSchema *> malloc(sizeof(TimeseriesSchema))
     c_schema.timeseries_name = strdup(py_schema.timeseries_name.encode('utf-8'))
-    if py_schema.data_type is not None:
-        c_schema.data_type = to_c_data_type(py_schema.data_type)
-    else:
-        raise ValueError("data_type cannot be None")
-    if py_schema.encoding_type is not None:
-        c_schema.encoding = to_c_encoding_type(py_schema.encoding_type)
-    else:
-        raise ValueError("encoding_type cannot be None")
-    if py_schema.compression_type is not None:
-        c_schema.compression = to_c_compression_type(py_schema.compression_type)
-    else:
-        raise ValueError("compression_type cannot be None")
+    c_schema.data_type = data_type
+    c_schema.encoding = encoding
+    c_schema.compression = compression
     return c_schema
 
 cdef DeviceSchema * to_c_device_schema(object py_schema):
     cdef DeviceSchema * c_schema
+    cdef Py_ssize_t i
+    cdef list names = []
+    cdef list data_types = []
+    cdef list encodings = []
+    cdef list compressions = []
+    # Convert before allocating so a bad timeseries entry cannot leak the
+    # partially built device schema.
+    for timeseries in py_schema.timeseries_list:
+        names.append(timeseries.timeseries_name.encode('utf-8'))
+        data_types.append(to_c_data_type(timeseries.data_type))
+        encodings.append(to_c_encoding_type(timeseries.encoding_type))
+        compressions.append(to_c_compression_type(timeseries.compression_type))
     c_schema = <DeviceSchema *> malloc(sizeof(DeviceSchema))
     c_schema.device_name = strdup(py_schema.device_name.encode('utf-8'))
-    c_schema.timeseries_num = len(py_schema.timeseries_list)
+    c_schema.timeseries_num = len(names)
     c_schema.timeseries_schema = <TimeseriesSchema *> malloc(c_schema.timeseries_num * sizeof(TimeseriesSchema))
     for i in range(c_schema.timeseries_num):
-        c_schema.timeseries_schema[i].timeseries_name = strdup(
-            py_schema.timeseries_list[i].timeseries_name.encode('utf-8'))
-        c_schema.timeseries_schema[i].data_type = to_c_data_type(py_schema.timeseries_list[i].data_type)
-        c_schema.timeseries_schema[i].encoding = to_c_encoding_type(py_schema.timeseries_list[i].encoding_type)
-        c_schema.timeseries_schema[i].compression = to_c_compression_type(py_schema.timeseries_list[i].compression_type)
+        c_schema.timeseries_schema[i].timeseries_name = strdup(names[i])
+        c_schema.timeseries_schema[i].data_type = <TSDataType>data_types[i]
+        c_schema.timeseries_schema[i].encoding = <TSEncoding>encodings[i]
+        c_schema.timeseries_schema[i].compression = <CompressionType>compressions[i]
     return c_schema
 
 cdef ColumnSchema * to_c_column_schema(object py_schema):
     cdef ColumnSchema * c_schema
+    cdef TSDataType data_type = to_c_data_type(py_schema.data_type)
     c_schema = <ColumnSchema *> malloc(sizeof(ColumnSchema))
-    c_schema.data_type = to_c_data_type(py_schema.data_type)
+    c_schema.data_type = data_type
     c_schema.column_category = py_schema.category
     c_schema.column_name = strdup(py_schema.column_name.encode('utf-8'))
     return c_schema
 
 cdef TableSchema * to_c_table_schema(object py_schema):
     cdef TableSchema * c_schema
+    cdef Py_ssize_t i
+    cdef list columns = py_schema.columns
+    cdef list names = [column.column_name.encode('utf-8') for column in columns]
+    cdef list categories = [to_c_category_type(column.category) for column in columns]
+    cdef list data_types = [to_c_data_type(column.data_type) for column in columns]
     c_schema = <TableSchema *> malloc(sizeof(TableSchema))
     c_schema.table_name = strdup(py_schema.table_name.encode('utf-8'))
-    c_schema.column_num = len(py_schema.columns)
+    c_schema.column_num = len(columns)
     c_schema.column_schemas = <ColumnSchema *> malloc(c_schema.column_num * sizeof(ColumnSchema))
     for i in range(c_schema.column_num):
-        c_schema.column_schemas[i].column_name = strdup(py_schema.columns[i].column_name.encode('utf-8'))
-        c_schema.column_schemas[i].column_category = to_c_category_type(py_schema.columns[i].category)
-        c_schema.column_schemas[i].data_type = to_c_data_type(py_schema.columns[i].data_type)
+        c_schema.column_schemas[i].column_name = strdup(names[i])
+        c_schema.column_schemas[i].column_category = <ColumnCategory>categories[i]
+        c_schema.column_schemas[i].data_type = <TSDataType>data_types[i]
     return c_schema
 
 cdef Tablet to_c_tablet(object tablet):
@@ -766,6 +791,24 @@ cdef void free_c_device_schema(DeviceSchema * c_schema):
         free_c_timeseries_schema(&(c_schema.timeseries_schema[i]))
     free(c_schema.timeseries_schema)
 
+# The helpers above free only the contents. They are used for schemas built by
+# to_c_*_schema, where this extension owns both the allocation and the
+# deallocation. Reader-owned schemas are released through the C API instead
+# (free_table_schema / tsfile_free_*_schema_array), so the allocator and the
+# deallocator stay in the same module. These variants also release the struct
+# itself and are used by writer callers.
+cdef void free_c_timeseries_schema_allocated(TimeseriesSchema * c_schema):
+    free_c_timeseries_schema(c_schema)
+    free(c_schema)
+
+cdef void free_c_device_schema_allocated(DeviceSchema * c_schema):
+    free_c_device_schema(c_schema)
+    free(c_schema)
+
+cdef void free_c_table_schema_allocated(TableSchema * c_schema):
+    free_c_table_schema(c_schema)
+    free(c_schema)
+
 cdef void free_c_tablet(Tablet tablet):
     free_tablet(&tablet)
 
@@ -1243,7 +1286,12 @@ cdef object get_table_schema(TsFileReader reader, object table_name):
     code = tsfile_reader_get_table_schema_checked(
         reader, table_name_c, &schema)
     check_error(code)
-    return from_c_table_schema(schema)
+    try:
+        return from_c_table_schema(schema)
+    finally:
+        # Release through the C API so the allocator and the deallocator live
+        # in the same module (see tsfile_free_buffer).
+        free_table_schema(schema)
 
 cdef object get_all_table_schema(TsFileReader reader):
     cdef uint32_t table_num = 0
@@ -1253,11 +1301,16 @@ cdef object get_all_table_schema(TsFileReader reader):
 
     table_schemas = {}
     schemas = tsfile_reader_get_all_table_schemas_with_error(reader, &table_num, &error_code)
-    check_error(error_code)
-    for i in range(table_num):
-        schema_py = from_c_table_schema(schemas[i])
-        table_schemas.update([(schema_py.get_table_name(), schema_py)])
-    free(schemas)
+    try:
+        check_error(error_code)
+        for i in range(table_num):
+            schema_py = from_c_table_schema(schemas[i])
+            table_schemas.update([(schema_py.get_table_name(), schema_py)])
+    finally:
+        # Frees every element's contents and the array itself inside the C
+        # wrapper, including when conversion fails mid-loop. table_num is zero
+        # (and schemas NULL) when the C call reported an error.
+        tsfile_free_table_schema_array(schemas, table_num)
     return table_schemas
 
 cdef object get_all_timeseries_schema(TsFileReader reader):
@@ -1269,11 +1322,13 @@ cdef object get_all_timeseries_schema(TsFileReader reader):
     device_schemas = {}
     error_code = tsfile_reader_get_all_timeseries_schemas_checked(
         reader, &schemas, &device_num)
-    check_error(error_code)
-    for i in range(device_num):
-        schema_py = from_c_device_schema(schemas[i])
-        device_schemas.update([(schema_py.get_device_name(), schema_py)])
-    free(schemas)
+    try:
+        check_error(error_code)
+        for i in range(device_num):
+            schema_py = from_c_device_schema(schemas[i])
+            device_schemas.update([(schema_py.get_device_name(), schema_py)])
+    finally:
+        tsfile_free_device_schema_array(schemas, device_num)
     return device_schemas
 
 cdef object _c_str_to_py_utf8_or_none(char* p):

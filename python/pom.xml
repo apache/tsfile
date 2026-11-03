@@ -36,6 +36,14 @@
             -Dtsfile.cpp.build=<path>.
         -->
         <tsfile.cpp.build>${project.basedir}/../cpp/target/build</tsfile.cpp.build>
+        <!--
+            Sanitizer check set for the Cython extensions. Empty means a normal
+            build; the with-sanitizer profile fills this from
+            -Dtsfile.sanitizer=<checks>. A sanitizer reactor never packages a
+            wheel, so sanitizer artifacts cannot be mistaken for releases.
+        -->
+        <tsfile.python.sanitizer/>
+        <tsfile.python.wheel.skip>false</tsfile.python.wheel.skip>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
@@ -84,6 +92,7 @@
                     -->
                     <environmentVariables>
                         <TSFILE_CPP_BUILD>${tsfile.cpp.build}</TSFILE_CPP_BUILD>
+                        <TSFILE_SANITIZER>${tsfile.python.sanitizer}</TSFILE_SANITIZER>
                     </environmentVariables>
                 </configuration>
                 <executions>
@@ -209,6 +218,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
+                            <skip>${tsfile.python.wheel.skip}</skip>
                             <executable>${python.venv.bin}${python.exe.bin}</executable>
                             <arguments>
                                 <argument>setup.py</argument>
@@ -275,4 +285,51 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>with-sanitizer</id>
+            <!--
+                Activated by -Dtsfile.sanitizer=<checks>. The C++ module builds
+                with the same checks and a dynamic sanitizer runtime (see
+                cpp/pom.xml); setup.py instruments every native extension.
+
+                Wheel packaging and the ordinary pytest execution are both
+                disabled: sanitizer binaries must never be published, and the
+                pytest process cannot import the instrumented extensions unless
+                the sanitizer runtime is preloaded first (Maven does not do
+                that). Build with test-compile and run the ownership suite as
+                described in python/SANITIZER.md.
+            -->
+            <activation>
+                <property>
+                    <name>tsfile.sanitizer</name>
+                </property>
+            </activation>
+            <properties>
+                <tsfile.python.sanitizer>${tsfile.sanitizer}</tsfile.python.sanitizer>
+                <tsfile.python.wheel.skip>true</tsfile.python.wheel.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <!--
+                                Merge with the base execution of the same id and
+                                override its skip; ${skipTests} would otherwise
+                                still be false.
+                            -->
+                            <execution>
+                                <id>run-python-tests</id>
+                                <configuration>
+                                    <skip>true</skip>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

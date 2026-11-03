@@ -919,7 +919,8 @@ TSFILE_RESULT_SET_GET_VALUE_BY_NAME(double);
 /**
  * @brief Gets string value from current row by column name.
  *
- * @return char* - String pointer. Caller must free this ptr after usage.
+ * @return char* - String pointer. The caller owns it and must release it with
+ * tsfile_free_buffer() so the deallocator matches the allocating module.
  */
 char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char* column_name);
@@ -946,7 +947,8 @@ TSFILE_RESULT_SET_GET_VALUE_BY_INDEX(bool);
 /**
  * @brief Gets string value from current row by column index.
  *
- * @return char* - String pointer. Caller must free this ptr after usage.
+ * @return char* - String pointer. The caller owns it and must release it with
+ * tsfile_free_buffer() so the deallocator matches the allocating module.
  */
 char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index);
@@ -954,8 +956,10 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
 /**
  * @brief Copies a binary value from the current row by 1-based column index.
  *
- * The caller owns the returned buffer and must release it with free(). An
- * empty non-null value returns E_OK with a NULL buffer and length zero.
+ * The caller owns the returned buffer and must release it with
+ * tsfile_free_buffer(). An empty non-null value returns E_OK with a NULL
+ * buffer and length zero. A NULL cell returns E_INVALID_ARG; check
+ * tsfile_result_set_is_null_by_index() first.
  */
 ERRNO tsfile_result_set_get_value_by_index_binary(ResultSet result_set,
                                                   uint32_t column_index,
@@ -1049,8 +1053,8 @@ ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
  * @return Schema array, or NULL when there are no tables or an error occurs.
  * Use tsfile_reader_get_all_table_schemas_checked() when the error code is
  * required.
- * @note size is zero on failure. Release each schema with free_table_schema(),
- * then release the array with free().
+ * @note size is zero on failure. Release the result with
+ * tsfile_free_table_schema_array().
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
@@ -1060,8 +1064,8 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
  * Both output parameters are required. Non-null outputs are set to NULL/0
  * before work begins and remain empty on failure. An empty file result is
  * successful with RET_OK and NULL/0 outputs.
- * @note On success, release each schema with free_table_schema(), then free()
- * the array. Partial results are released internally on failure.
+ * @note On success, release the result with tsfile_free_table_schema_array().
+ * Partial results are released internally on failure.
  */
 ERRNO tsfile_reader_get_all_table_schemas_checked(TsFileReader reader,
                                                   TableSchema** out_schemas,
@@ -1081,8 +1085,8 @@ TableSchema* tsfile_reader_get_all_table_schemas_with_error(TsFileReader reader,
  * Use tsfile_reader_get_all_timeseries_schemas_checked() when the error code
  * is required.
  * @return Array on success, or NULL for an empty result or an error.
- * @note size is zero on failure. Release each schema with free_device_schema(),
- * then release the array with free().
+ * @note size is zero on failure. Release the result with
+ * tsfile_free_device_schema_array().
  */
 DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                        uint32_t* size);
@@ -1092,8 +1096,9 @@ DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
  * Both output parameters are required. Non-null outputs are set to NULL/0
  * before work begins and remain empty on failure. No devices is a successful
  * result with RET_OK and NULL/0 outputs.
- * @note On success, release each schema with free_device_schema(), then free()
- * the array. Partial results are released internally on failure.
+ * @note On success, release the result with
+ * tsfile_free_device_schema_array(). Partial results are released internally
+ * on failure.
  */
 ERRNO tsfile_reader_get_all_timeseries_schemas_checked(
     TsFileReader reader, DeviceSchema** out_schemas, uint32_t* out_size);
@@ -1250,6 +1255,29 @@ void free_timeseries_schema(TimeseriesSchema schema);
 void free_table_schema(TableSchema schema);
 void free_column_schema(ColumnSchema schema);
 void free_write_file(WriteFile* write_file);
+
+/**
+ * @brief Releases a schema array returned by the reader APIs.
+ *
+ * Frees the contents of every schema, then the array itself, with the same
+ * allocator that produced them. Use this for
+ * tsfile_reader_get_all_table_schemas*() and
+ * tsfile_reader_get_all_timeseries_schemas*() results instead of freeing
+ * elements and the array individually from another module.
+ */
+void tsfile_free_table_schema_array(TableSchema* schemas, uint32_t length);
+void tsfile_free_device_schema_array(DeviceSchema* schemas, uint32_t length);
+
+/**
+ * @brief Releases a buffer allocated by this C wrapper.
+ *
+ * Result-value getters such as tsfile_result_set_get_value_by_index_string()
+ * and tsfile_result_set_get_value_by_index_binary() return caller-owned
+ * buffers. Release them here instead of calling free() in a binding: the
+ * deallocator then lives in the same module (and CRT) as the allocator, which
+ * matters for static-runtime builds where each DLL owns a separate heap.
+ */
+void tsfile_free_buffer(void* buffer);
 
 // ---------- Generic Writer API ----------
 //

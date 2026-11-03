@@ -23,7 +23,6 @@ import weakref
 from typing import List, Optional, Dict
 
 import pandas as pd
-from libc.string cimport strlen
 from libc.stdlib cimport free, malloc
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython.ref cimport PyObject
@@ -80,9 +79,11 @@ cdef class ResultSetPy:
         cdef ResultSetMetaData metadata_c
         self.result = result
         metadata_c = tsfile_result_set_get_metadata(self.result)
-        self.metadata = from_c_result_set_meta_data(metadata_c)
-        self.metadata.set_table_name(device_name)
-        free_result_set_meta_data(metadata_c)
+        try:
+            self.metadata = from_c_result_set_meta_data(metadata_c)
+            self.metadata.set_table_name(device_name)
+        finally:
+            free_result_set_meta_data(metadata_c)
 
     def next(self):
         """
@@ -210,6 +211,9 @@ cdef class ResultSetPy:
         NOTE: index start from 1.
         """
         cdef char * string = NULL
+        cdef uint8_t * blob = NULL
+        cdef uint32_t blob_len = 0
+        cdef ErrorCode binary_code = 0
         self.check_result_set_invalid()
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
@@ -230,21 +234,25 @@ cdef class ResultSetPy:
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
         elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT:
+            string = tsfile_result_set_get_value_by_index_string(self.result, index)
+            if string == NULL:
+                return None
             try:
-                string = tsfile_result_set_get_value_by_index_string(self.result, index)
-                if string == NULL:
-                    return None
                 return string.decode('utf-8')
             finally:
-                pass
+                tsfile_free_buffer(string)
         elif data_type == TSDataTypePy.BLOB:
+            binary_code = tsfile_result_set_get_value_by_index_binary(
+                self.result, index, &blob, &blob_len)
             try:
-                string = tsfile_result_set_get_value_by_index_string(self.result, index)
-                if string == NULL:
-                    return None
-                return PyBytes_FromStringAndSize(string, strlen(string))
+                check_error(binary_code)
+                if blob == NULL:
+                    return b""
+                # Use the length-returning getter: strlen would truncate a
+                # BLOB at its first NUL byte.
+                return PyBytes_FromStringAndSize(<const char*>blob, blob_len)
             finally:
-                pass
+                tsfile_free_buffer(blob)
 
     def get_value_by_name(self, column_name : str):
         """

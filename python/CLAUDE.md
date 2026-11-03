@@ -48,6 +48,18 @@ pytest tests/
 # Run a single test
 pytest tests/test_write_and_read.py -k "test_name"
 
+# ASan/LSan coverage of the bindings (Linux; run from the repo root; see
+# SANITIZER.md). TSFILE_SANITIZER is required or test_sanitizer_ownership.py
+# skips every case, and the runtime must be preloaded or the instrumented
+# extensions abort on import.
+./mvnw -P with-python -Dtsfile.sanitizer=address -Dbuild.type=RelWithDebInfo \
+  -Dbuild.test=OFF clean test-compile
+TSFILE_SANITIZER=address \
+ASAN_OPTIONS="detect_leaks=0:abort_on_error=1:halt_on_error=1" \
+LSAN_OPTIONS="suppressions=$PWD/python/tests/sanitizer/lsan_suppressions.txt" \
+LD_PRELOAD="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" \
+  python/venv/bin/python -m pytest python/tests/test_sanitizer_ownership.py -v
+
 # Format code
 cd ../ && ./mvnw spotless:apply   # Uses Black 26.3.1
 ```

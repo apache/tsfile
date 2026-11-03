@@ -28,6 +28,9 @@ enable_cov=0
 debug_se=0
 run_cov_only=0
 enable_antlr4=ON
+enable_asan=OFF
+sanitizer_checks=address,undefined
+sanitizer_shared_runtime=OFF
 
 enable_snappy=ON
 enable_lz4=ON
@@ -56,6 +59,13 @@ Commands:
 Options:
   -t=<type>, -t <type>   Build type: Debug, Release, RelWithDebInfo, MinSizeRel.
   -a=<ON|OFF>            Enable or disable AddressSanitizer.
+  --sanitizer-checks=<list>
+                         Checks passed to -fsanitize= when ASan is enabled
+                         (default: address,undefined).
+  --sanitizer-shared-runtime=<ON|OFF>
+                         Link the sanitizer runtime dynamically into shared
+                         libraries; required when building the Python bindings,
+                         which preload libasan (default: OFF).
   -c=<ON|OFF>            Enable or disable code coverage.
   --build-shared=<ON|OFF>
                          Build libtsfile as a shared library (default: ON).
@@ -89,6 +99,8 @@ function print_config()
   echo "use_cpp11=$use_cpp11"
   echo "enable_cov=$enable_cov"
   echo "enable_asan=$enable_asan"
+  echo "sanitizer_checks=$sanitizer_checks"
+  echo "sanitizer_shared_runtime=$sanitizer_shared_runtime"
   echo "enable_antlr4=$enable_antlr4"
   echo "enable_snappy=$enable_snappy"
   echo "enable_lz4=$enable_lz4"
@@ -125,6 +137,10 @@ parse_options()
     -a)
       shift
       enable_asan=$(get_key_value "$1");;
+    --sanitizer-checks=*)
+      sanitizer_checks=$(get_key_value "$1");;
+    --sanitizer-shared-runtime=*)
+      sanitizer_shared_runtime=$(get_key_value "$1");;
     -c=*)
       enable_cov=$(get_key_value "$1");;
     -c)
@@ -223,6 +239,9 @@ cmake ../../                           \
   -DCMAKE_BUILD_TYPE=$build_type       \
   -DUSE_CPP11=$use_cpp11               \
   -DENABLE_COV=$enable_cov             \
+  -DENABLE_ASAN=$enable_asan           \
+  -DTSFILE_SANITIZER_CHECKS=$sanitizer_checks \
+  -DTSFILE_SANITIZER_SHARED_RUNTIME=$sanitizer_shared_runtime \
   -DDEBUG_SE=$debug_se                 \
   -DENABLE_ANTLR4=$enable_antlr4       \
   -DBUILD_TSFILE_ONLY=$build_tsfile_only \

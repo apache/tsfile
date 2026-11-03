@@ -1,0 +1,49 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# LeakSanitizer suppressions for the Python binding sanitizer job.
+#
+# Policy:
+#   * Prefer no suppressions. The import-only baseline scenario exists to show
+#     whether interpreter or third-party noise exists at all.
+#   * Every entry must be narrowly scoped to a third-party library or the
+#     Python interpreter itself (a specific module and symbol, never a wildcard
+#     module).
+#   * Never suppress anything under tsfile/, libtsfile, or the Cython extension
+#     modules. A leak there is a defect this job exists to find.
+#   * Never disable leak detection globally; ASAN_OPTIONS/LSAN_OPTIONS keep
+#     detect_leaks=1 for every scenario process.
+#
+# Syntax (one rule per line, same as the compiler suppression format):
+#   leak:<module>:<symbol-pattern>
+# Add rules below this line only with a comment explaining the upstream cause.
+
+# CPython does not release every import-time object (code objects, interned
+# strings, thread locks) before the sanitizer performs its exit-time check.
+# These rules match the CPython allocator functions, not any TsFile frame:
+# a native buffer leaked by libtsfile is allocated with malloc() directly and
+# still has a TsFile frame at the top of its stack.
+leak:PyObject_Malloc
+leak:PyMem_Malloc
+leak:PyMem_RawMalloc
+leak:PyThread_allocate_lock
+
+# Process-lifetime caches in third-party extension modules.
+leak:_multiarray_umath
+leak:libarrow
+leak:lib.cpython

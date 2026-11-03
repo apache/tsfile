@@ -379,6 +379,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     void tsfile_free_device_id_array(DeviceID * devices,
                                       uint32_t length);
 
+    void free_table_schema(TableSchema schema);
+    void free_device_schema(DeviceSchema schema);
+    void tsfile_free_table_schema_array(TableSchema * schemas,
+                                        uint32_t length);
+    void tsfile_free_device_schema_array(DeviceSchema * schemas,
+                                         uint32_t length);
+
     ErrorCode tsfile_reader_get_timeseries_metadata_all(
         TsFileReader reader, DeviceTimeseriesMetadataMap * out_map);
     ErrorCode tsfile_reader_get_timeseries_metadata_for_devices(
@@ -454,9 +461,11 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     float tsfile_result_set_get_value_by_index_float(ResultSet result_set, uint32_t column_index);
     double tsfile_result_set_get_value_by_index_double(ResultSet result_set, uint32_t column_index);
     char * tsfile_result_set_get_value_by_index_string(ResultSet result_set, uint32_t column_index);
+    ErrorCode tsfile_result_set_get_value_by_index_binary(ResultSet result_set, uint32_t column_index, uint8_t ** out_value, uint32_t * out_length);
 
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
+    void tsfile_free_buffer(void * buffer);
 
     # Arrow structures
     ctypedef struct ArrowSchema:

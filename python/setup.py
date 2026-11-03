@@ -18,6 +18,7 @@
 
 import os
 import platform
+import re
 import shutil
 import sys
 
@@ -37,11 +38,28 @@ sys.path.insert(0, str(ROOT))
 from _build_support import (
     copy_runtime_library,
     msvc_runtime_flag,
+    native_binaries,
     read_sdk_config,
     strip_wheel_binaries,
+    verify_sanitizer_instrumentation,
 )
 
 version = "2.5.1.dev"
+
+# Comma-separated GCC/Clang sanitizer checks (for example "address"). Empty
+# means a normal build. Maven sets this from -Dtsfile.sanitizer=<checks>.
+SANITIZER = os.environ.get("TSFILE_SANITIZER", "").strip()
+SANITIZER_SUPPORTED = sys.platform.startswith("linux") or sys.platform == "darwin"
+if SANITIZER and not re.fullmatch(r"[A-Za-z0-9,_+-]+", SANITIZER):
+    raise RuntimeError(
+        f"Invalid TSFILE_SANITIZER value: {SANITIZER!r}; expected a "
+        "comma-separated -fsanitize= list such as 'address'."
+    )
+if SANITIZER and not SANITIZER_SUPPORTED:
+    raise RuntimeError(
+        "Sanitizer builds of the Python bindings are supported on Linux and "
+        "macOS only."
+    )
 
 
 def _find_cpp_build():
@@ -96,6 +114,9 @@ shutil.copytree(CPP_INC, PKG / "include")
 # "mingw" links against a MinGW import library (libtsfile.dll.a).
 win_toolchain = None
 
+# Destination of the copied C++ runtime library, used by the sanitizer check.
+runtime_lib_dst = None
+
 if sys.platform.startswith("linux"):
     candidates = sorted(
         CPP_LIB.rglob("libtsfile.so*"), key=lambda p: len(p.name), reverse=True
@@ -104,7 +125,7 @@ if sys.platform.startswith("linux"):
         raise FileNotFoundError("missing libtsfile.so* in build output")
     src = candidates[0]
     sdk_config = read_sdk_config(CPP_OUT, src)
-    copy_runtime_library(PKG, src, sdk_config)
+    runtime_lib_dst = copy_runtime_library(PKG, src, sdk_config)
     native_link_dir = src.parent
 
 elif sys.platform == "darwin":
@@ -115,7 +136,7 @@ elif sys.platform == "darwin":
         raise FileNotFoundError("missing libtsfile*.dylib in build output")
     src = candidates[0]
     sdk_config = read_sdk_config(CPP_OUT, src)
-    copy_runtime_library(PKG, src, sdk_config)
+    runtime_lib_dst = copy_runtime_library(PKG, src, sdk_config)
     native_link_dir = src.parent
 
 elif sys.platform == "win32":
@@ -144,6 +165,7 @@ elif sys.platform == "win32":
     # table and Windows must find it by that exact name at runtime.
     sdk_config = read_sdk_config(CPP_OUT, dll_src)
     dll_dst = copy_runtime_library(PKG, dll_src, sdk_config)
+    runtime_lib_dst = dll_dst
     native_link_dir = PKG
 
     # Copy import library with a name matching the DLL.
@@ -224,9 +246,37 @@ class BuildPy(build_py):
 
 class BuildExt(build_ext):
     def run(self):
+        wheel_build = (
+            "bdist_wheel" in self.distribution.script_args and not self.inplace
+        )
+        if wheel_build and SANITIZER:
+            raise RuntimeError(
+                "Refusing to package a wheel from a sanitizer build. "
+                "Unset TSFILE_SANITIZER and run a clean build for release "
+                "artifacts; sanitizer binaries never ship."
+            )
+
         super().run()
-        if "bdist_wheel" in self.distribution.script_args and not self.inplace:
+
+        if wheel_build:
+            # Distutils can reuse object files from a previous sanitizer build
+            # in the same directory; never let them into a wheel.
+            staged = Path(self.build_lib) / "tsfile"
+            if staged.is_dir() and SANITIZER_SUPPORTED:
+                verify_sanitizer_instrumentation(
+                    native_binaries(staged), expect_instrumented=False
+                )
             strip_wheel_binaries(self.build_lib, sys.platform)
+            return
+
+        if not SANITIZER:
+            return
+        targets = [
+            Path(self.get_ext_fullpath(extension.name)) for extension in self.extensions
+        ]
+        if runtime_lib_dst is not None:
+            targets.append(Path(runtime_lib_dst))
+        verify_sanitizer_instrumentation(targets, expect_instrumented=True)
 
     def finalize_options(self):
         # MinGW must be requested explicitly; MSVC is the default Windows
@@ -246,14 +296,28 @@ sdk_include = PKG / "include" / "tsfile"
 if sdk_include.is_dir():
     include_dirs.append(str(sdk_include))
 
+# Link arguments that carry the sanitizer runtime into every extension,
+# including the ones that do not link libtsfile.
+sanitizer_link_args = []
+
 if sys.platform.startswith("linux"):
     libraries = ["tsfile"]
-    extra_compile_args += ["-O3", "-std=c++11", "-fvisibility=hidden", "-fPIC"]
+    extra_compile_args += [
+        "-O1" if SANITIZER else "-O3",
+        "-std=c++11",
+        "-fvisibility=hidden",
+        "-fPIC",
+    ]
     runtime_library_dirs = ["$ORIGIN"]
     extra_link_args += ["-Wl,-rpath,$ORIGIN"]
 elif sys.platform == "darwin":
     libraries = ["tsfile"]
-    extra_compile_args += ["-O3", "-std=c++11", "-fvisibility=hidden", "-fPIC"]
+    extra_compile_args += [
+        "-O1" if SANITIZER else "-O3",
+        "-std=c++11",
+        "-fvisibility=hidden",
+        "-fPIC",
+    ]
     extra_link_args += ["-Wl,-rpath,@loader_path", "-stdlib=libc++"]
 elif sys.platform == "win32":
     if win_toolchain == "mingw":
@@ -293,6 +357,23 @@ elif sys.platform == "win32":
 else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
+if SANITIZER:
+    # -O1 keeps reports readable; frame pointers and debug info make the
+    # allocation/free stacks actionable. Every extension is instrumented and
+    # linked with the same check set as libtsfile.
+    extra_compile_args += [
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fno-optimize-sibling-calls",
+        f"-fsanitize={SANITIZER}",
+    ]
+    sanitizer_link_args.append(f"-fsanitize={SANITIZER}")
+    extra_link_args += sanitizer_link_args
+    print(
+        "setup.py: sanitizer build enabled: "
+        f"checks={SANITIZER} (extensions use -O1, -g, -fno-omit-frame-pointer)"
+    )
+
 common = dict(
     language="c++",
     include_dirs=include_dirs,
@@ -307,7 +388,9 @@ merge_common = common.copy()
 merge_common.update(
     library_dirs=[],
     libraries=[],
-    extra_link_args=[],
+    # These extensions do not link libtsfile, but they still contain
+    # instrumented code and need the sanitizer runtime at link time.
+    extra_link_args=list(sanitizer_link_args),
     runtime_library_dirs=[],
 )
 
