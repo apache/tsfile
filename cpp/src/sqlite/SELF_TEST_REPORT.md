@@ -2011,90 +2011,120 @@ C++ 驱动使用 prepared INSERT 逐行写入，每 100 万行提交并 seal；�
 
 ```text
 输入:
-1000 万行热数据。
+1000 台设备 × 每台 10000 行 = 1000 万行热数据，单次 seal，max_file_size_mb=512。
 
 构造/执行:
-原实现一次性读取全部热行，修复后按 400 万行分块读取。
+$ ./sqlite_bench --devices 1000 --rows-per-round 10000 --rounds 1 \
+    --seal-mb 512 --batch-rows 1000000 \
+    --db <TMP>/sensor.db --dir <TMP>/segments \
+    --ext <BUILD>/lib/tsfile_sqlite.so
 
-实际输出:
-峰值从 11.0GB 降到 4.7GB，耗时从 46.1 秒降到 34.3 秒。
+实际执行:
+EVENT insert_round_done round=1 rows=10000000 elapsed_s=130.060 rows_per_s=76887.6
+EVENT seal round=1 rc=0 elapsed_s=34.330 hot_expected=10000000 files=3 file_mb=114.2 peak_rss_mb=4712.8
+
+修复前同一场景:
+EVENT seal round=1 rc=0 elapsed_s=46.130 hot_expected=10000000 files=1 file_mb=118.0 peak_rss_mb=10975.2
 ```
 
-- **输入是什么**：1000 万行热数据。
-- **测试的是什么**：峰值内存从线性增长降为有界。
-- **结果是什么**：峰值从 11.0GB 降到 4.7GB，耗时从 46.1 秒降到 34.3 秒。
-- **是否符合预期**：是。
+- **输入是什么**：1000 万行热数据，单次 seal，512MB 文件上限。
+- **测试的是什么**：seal 的峰值内存是否随热行数线性增长。
+- **结果是什么**：流式版本峰值 4.7GB、34.3 秒；复测前的物化版本峰值 11.0GB、46.1 秒。
+- **是否符合预期**：是，峰值已降为有界值。
 
 ### 5.2 TEXT FIELD 条件误判
 
 ```text
-输入:
-`label='alpha'` 和 `label='ALPHA'`。
+输入 SQL:
+CREATE VIRTUAL TABLE typed USING tsfile_hybrid(
+  time TIMESTAMP TIME, device STRING TAG, label TEXT FIELD,
+  directory='<TMP>/typed', timestamp_precision='ms');
+INSERT INTO typed VALUES(1,'d0','alpha'),(2,'d0','beta');
+SELECT tsfile_seal('main.typed',2);
+SELECT count(*) FROM typed WHERE label='alpha';
+SELECT count(*) FROM typed WHERE label='ALPHA';
 
-构造/执行:
-字段下推后执行文本等值查询。
-
-实际输出:
-分别命中 1 和 0。通过。
+实际执行:
+2
+1
+0
 ```
 
-- **输入是什么**：`label='alpha'` 和 `label='ALPHA'`。
-- **测试的是什么**：只作为 FIELD 条件处理，大小写敏感。
-- **结果是什么**：分别命中 1 和 0。通过。
+- **输入是什么**：TEXT FIELD 上大小写不同的两个等值条件。
+- **测试的是什么**：TEXT FIELD 条件是否被误当作 TAG 条件，以及大小写语义。
+- **结果是什么**：seal 返回 2；`label='alpha'` 命中 1；`label='ALPHA'` 命中 0。
 - **是否符合预期**：是。
 
 ### 5.3 回滚后 DETACH 锁定
 
 ```text
-输入:
-约束失败后的写入，然后 `DETACH`。
+输入 SQL:
+ATTACH '<TMP>/lock.db' AS persisted;
+CREATE VIRTUAL TABLE persisted.t USING tsfile_hybrid(
+  time TIMESTAMP TIME, device STRING TAG, value DOUBLE FIELD,
+  directory='<TMP>/lock-hot', timestamp_precision='ms');
+INSERT INTO persisted.t VALUES(1,'d0',1.5);
+INSERT INTO persisted.t VALUES(1,'d0',2.5);   -- 唯一键冲突
+DETACH persisted;
+SELECT 'detached';
 
-构造/执行:
-触发错误，再 DETACH。
-
-实际输出:
-修复后返回 OK。通过。
+实际执行:
+Error in 5th command line argument: constraint failed
+detached
 ```
 
-- **输入是什么**：约束失败后的写入，然后 `DETACH`。
-- **测试的是什么**：DETACH 成功。
-- **结果是什么**：修复后返回 OK。通过。
+- **输入是什么**：一次成功写入、一次唯一键失败写入，然后 `DETACH`。
+- **测试的是什么**：失败写入后是否残留读事务导致 DETACH 被锁。
+- **结果是什么**：第二条插入返回 `constraint failed`；DETACH 成功并返回 `detached`。
 - **是否符合预期**：是。
 
 ### 5.4 DROP 遗留设备影子表
 
 ```text
-输入:
-已封存的表执行 `DROP TABLE`。
+输入 SQL:
+CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
+  time TIMESTAMP TIME, device STRING TAG, temperature DOUBLE FIELD,
+  directory='<TMP>/sensor', timestamp_precision='ms');
+INSERT INTO sensor VALUES(1,'d0',1.5);
+SELECT tsfile_seal('main.sensor',2);
+DROP TABLE sensor;
+SELECT count(*) FROM sqlite_master WHERE name LIKE 'sensor_tsfile$%';
 
-构造/执行:
-DROP 后检查 `sqlite_master` 和目录。
-
-实际输出:
-影子表 0 行；文件和标记存在。通过。
+实际执行:
+1
+0
+files:
+tsfilesensor-10063-0.tsfile
+owner marker:
+.tsfile-owner exists
 ```
 
-- **输入是什么**：已封存的表执行 `DROP TABLE`。
-- **测试的是什么**：hot/segments/devices/config 全部删除，文件和 `.tsfile-owner` 保留。
-- **结果是什么**：影子表 0 行；文件和标记存在。通过。
+- **输入是什么**：已封存的表，执行 `DROP TABLE`。
+- **测试的是什么**：DROP 是否清理 hot/segments/devices/config 四个影子表，同时保留 TsFile 和目录标记。
+- **结果是什么**：seal 返回 1；影子表查询返回 0；TsFile 和 `.tsfile-owner` 仍存在。
 - **是否符合预期**：是。
 
 ### 5.5 冷数据 OR 查询丢行
 
 ```text
-输入:
-`device='d0' OR temperature>5`。
+输入 SQL:
+CREATE VIRTUAL TABLE ops USING tsfile_hybrid(
+  time TIMESTAMP TIME, device STRING TAG, temperature DOUBLE FIELD,
+  directory='<TMP>/ops', timestamp_precision='ms');
+INSERT INTO ops VALUES
+  (1,'d0',1.5),(2,'d0',2.5),(3,'d0',3.5),
+  (4,'d1',4.5),(5,'d1',NULL),(6,'d1',6.5);
+SELECT tsfile_seal('main.ops',64);
+SELECT count(*) FROM ops WHERE device='d0' OR temperature>5;
 
-构造/执行:
-seal 后执行 MULTI-INDEX OR；两次扫描按过滤结果生成行号。
-
-实际输出:
-修复前 3 行；改为基于段、时间和 TAG 的稳定冷行号后 4 行。通过。
+实际执行:
+6
+4
 ```
 
-- **输入是什么**：`device='d0' OR temperature>5`。
-- **测试的是什么**：两个分支的行都返回，共 4 行。
-- **结果是什么**：修复前 3 行；改为基于段、时间和 TAG 的稳定冷行号后 4 行。通过。
+- **输入是什么**：封存后的冷数据，条件 `device='d0' OR temperature>5`。
+- **测试的是什么**：MULTI-INDEX OR 两次扫描的行号是否稳定，是否会因去重丢行。
+- **结果是什么**：seal 返回 6；OR 查询返回 4 行（修复前为 3 行）。
 - **是否符合预期**：是。
 
 ## 6. 未覆盖范围
