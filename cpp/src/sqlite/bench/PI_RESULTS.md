@@ -1,0 +1,115 @@
+<!--
+
+    Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+-->
+
+# 树莓派 SQLite + TsFile 写入/seal 测试结果
+
+日期：2026-11-03
+
+脚本：[pi_write_seal_bench.py](pi_write_seal_bench.py)、
+[run_pi_matrix.sh](run_pi_matrix.sh)、[summarize_pi.py](summarize_pi.py)
+
+原始指标汇总：[PI_RESULTS.csv](PI_RESULTS.csv)。
+
+## 1. 环境
+
+| 项目 | 配置 |
+| --- | --- |
+| 机器 | Raspberry Pi 4 Model B Rev 1.5，8GB |
+| CPU | Cortex-A72 ×4 @1.8GHz，aarch64 |
+| 存储 | microSD 59.5GB，根分区可用约 38GB |
+| 系统 | Ubuntu 24.04.4 LTS，内核 6.8.0-1064-raspi |
+| Python | 3.12.3 |
+| SQLite | 3.45.1，`enable_load_extension` 可用 |
+| 扩展 | `/root/tsfile-src/cpp/build/pi/lib/tsfile_sqlite.so` |
+| 扩展 SHA256 | `57145b883bc37b3ae75aadc1198b1e6b68e059e4c8f64943c71873fba79a509` |
+| 温度/节流 | 测试前 39.9°C；`get_throttled=0x50000`（发生过欠压/节流，当前位为 0） |
+
+## 2. 测试方法
+
+- 表结构：`time TIMESTAMP TIME`、`device STRING TAG`、N 个 `DOUBLE FIELD`（N=5/15/30）。
+- 每个配置固定写 **2,000,000 行**，每行是一台设备某一时刻的全部测点。
+- 设备数：100 / 500 / 2,000；每设备测点数：5 / 15 / 30；共 9 个主配置。
+- 不模拟 1Hz；每批 1,000 行提交一次，按批尽快写入。
+- 主矩阵 seal 触发行数：**50,000**。
+- seal 扫描：固定 D500-M15，触发行数 **20,000 / 50,000 / 100,000**。
+- 补充：D2000-M30 使用 **30,000** 行 seal，验证峰值能否压到 500MB 以内。
+- 每组独立进程、数据库和段目录；seal 后校验热区归零、单设备行数和抽样值。
+- 不测并发客户端、不测查询压测。
+
+## 3. 主矩阵结果（2,000,000 行/组，seal 50,000 行）
+
+| 配置 | 行/秒 | 点/秒 | 写入 s | seal 次数 | seal 总 s | RSS 均值 | RSS 峰值 | DB | TsFile 字节 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| D100-M5 | 5,942 | 29,708 | 336.6 | 40 | 46.1 | 74MB | 77MB | 5.5MB | 71.5MB |
+| D100-M15 | 5,076 | 76,138 | 394.0 | 40 | 103.2 | 147MB | 152MB | 10.0MB | 213.0MB |
+| D100-M30 | 3,617 | 108,504 | 553.0 | 40 | 160.3 | 380MB | 390MB | 16.5MB | 425.3MB |
+| D500-M5 | 5,720 | 28,600 | 349.7 | 40 | 48.1 | 78MB | 82MB | 5.5MB | 77.1MB |
+| D500-M15 | 4,765 | 71,479 | 419.7 | 40 | 107.1 | 159MB | 164MB | 9.9MB | 226.5MB |
+| D500-M30 | 3,477 | 104,310 | 575.2 | 40 | 176.3 | 402MB | 415MB | 16.5MB | 450.5MB |
+| D2000-M5 | 7,246 | 36,231 | 276.0 | 40 | 69.9 | 104MB | 109MB | 5.6MB | 114.6MB |
+| D2000-M15 | 5,607 | 84,105 | 356.7 | 40 | 138.0 | 224MB | 233MB | 10.0MB | 324.5MB |
+| D2000-M30 | 3,886 | 116,581 | 514.7 | 40 | 246.3 | **524MB** | **541MB** | 16.6MB | 639.4MB |
+
+唯一超过 500MB 的是 D2000-M30 在 50k seal 下，峰值 541MB；其他配置均低于 500MB。
+
+## 4. seal 触发量扫描（D500-M15，2,000,000 行）
+
+| seal 行数 | seal 次数 | 行/秒 | 点/秒 | 写入 s | seal 总 s | RSS 均值 | RSS 峰值 | DB | TsFile 字节 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20,000 | 100 | 6,444 | 96,658 | 310.4 | 121.8 | 84MB | 90MB | 4.0MB | 274.2MB |
+| 50,000 | 40 | 4,787 | 71,805 | 417.8 | 108.5 | 159MB | 165MB | 9.9MB | 226.5MB |
+| 100,000 | 20 | 2,987 | 44,804 | 669.6 | 92.8 | 394MB | 420MB | 19.8MB | 213.7MB |
+
+说明：
+
+- seal 峰值随触发行数近似线性增长：20k→90MB，50k→165MB，100k→420MB。
+- 本组写入吞吐随触发行数增大而下降，可能包含运行顺序、SD 卡状态和 `get_throttled=0x50000` 的节流影响；单次运行，不能单独归因于 seal 大小。
+- 100k 的 seal 总时间反而低于 20k（92.8s vs 121.8s），说明频繁 seal 的固定开销占主导。
+
+## 5. D2000-M30 低 seal 补充
+
+| seal 行数 | seal 次数 | 行/秒 | 点/秒 | 写入 s | seal 总 s | RSS 均值 | RSS 峰值 | DB | TsFile 字节 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 30,000 | 67 | 4,790 | 143,692 | 417.6 | 331.9 | 259MB | **315MB** | 10.0MB | 801.1MB |
+| 50,000 | 40 | 3,886 | 116,581 | 514.7 | 246.3 | 524MB | 541MB | 16.6MB | 639.4MB |
+
+D2000-M30 把 seal 从 50k 降到 30k 后，峰值从 541MB 降到 315MB，满足 <500MB 目标；代价是 seal 次数从 40 增加到 67，总 seal 时间从 246s 增加到 332s。
+
+## 6. 观察
+
+1. **测点数影响**：同样 200 万行，M5/M15/M30 的写入行/秒约为 5.7k–7.2k / 4.8k–5.6k / 3.5k–3.9k；点/秒约为 2.9万–3.6万 / 7.1万–8.4万 / 10.4万–11.7万。宽行增加了单行值数量，行吞吐下降，但点吞吐上升。
+2. **设备数影响**：设备数从 100 增至 2000，行/秒总体略有上升（D2000-M5 7.2k vs D100-M5 5.9k），但 2000 设备的元数据/索引开销使 M30 的 RSS 明显高于 D100/D500。
+3. **seal 内存**：seal 峰值由“行数 × 列数”决定，而不是仅由行数决定。M30 的 50k 行约为 160 万 cell，峰值 390–541MB；30k 行约 96 万 cell，峰值 315MB。
+4. **目标 <500MB**：主矩阵 50k seal 下，除 D2000-M30（541MB）外全部达标；D2000-M30 建议使用 30k seal（315MB）。D500-M15 的 100k seal 为 420MB，也可作为 M15 的上限参考。
+5. **单次运行限制**：每组只跑一次，且测试前已出现 `get_throttled=0x50000` 历史节流标记；写入吞吐受 SD 卡和温度影响，结论应看数量级和趋势，不宜当作精确上限。
+
+## 7. 结论
+
+- 在 2,000,000 行/配置的规模下，9 个主配置全部成功，无写入/seal 失败，校验通过。
+- 峰值 RSS 与“seal 行数 × 列数”强相关：
+  - M5/M15 在 50k seal 下均低于 250MB；
+  - M30 在 50k seal 下约 390–541MB；
+  - M30 + 2000 设备使用 30k seal 可降到 315MB。
+- 以 <500MB 为目标，建议：
+  - 100/500 设备、M5/M15/M30：50k seal；
+  - 2000 设备、M30：30k seal；
+  - 2000 设备、M5/M15：50k seal 下分别为 109MB/233MB，仍有充足余量。
+- 原始结果位于 `/root/tsfile-bench/results/`（Pi）和本次归档的 `results/` JSON。
