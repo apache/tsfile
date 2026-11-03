@@ -1074,4 +1074,290 @@ TEST_F(TsFileSqliteTest, SchemaFunctionWorksForInferredFileTables) {
                        "WHERE name='device'"));
 }
 
+TEST_F(TsFileSqliteTest, ManagementFunctionGuardsAndValidation) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(SQLITE_MISUSE,
+              exec_raw("SELECT tsfile_seal('main.sensor','bad')"));
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_seal('main.missing',2)"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("SELECT tsfile_seal('main.sensor',0)"));
+    EXPECT_EQ(SQLITE_MISUSE,
+              exec_raw("SELECT tsfile_compact('main.sensor','bad',20)"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("SELECT tsfile_compact('main.sensor',0,20)"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("SELECT tsfile_compact('main.sensor',20,10)"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("SELECT tsfile_compact('main.sensor',"
+                       "9223372036854775807,9223372036854775807)"));
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_compact('main.missing',1,2)"));
+    EXPECT_EQ(SQLITE_MISUSE, exec_raw("SELECT tsfile_export('main.sensor',1)"));
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_export('main.missing'," +
+                                  quote(directory_ + "-guard-missing")));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT tsfile_export('main.sensor'," +
+                       quote(directory_ + "-guard-parent-missing/child")));
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_export('main.sensor'," +
+                                  quote(directory_ + "/inside") + ")"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT tsfile_seal('main.sensor',2) FROM sensor"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT tsfile_compact('main.sensor',1,2) FROM sensor"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT tsfile_export('main.sensor'," +
+                       quote(directory_ + "-row-export") + ") FROM sensor"));
+
+    ASSERT_EQ(SQLITE_OK, exec("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_FALSE(path.empty());
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE readonly USING tsfile_hybrid(file=" +
+                   quote(path) + ",source_table='sensor')"));
+    EXPECT_EQ(SQLITE_READONLY,
+              exec_raw("SELECT tsfile_seal('main.readonly',2)"));
+    EXPECT_EQ(SQLITE_READONLY,
+              exec_raw("SELECT tsfile_compact('main.readonly',1,2)"));
+    EXPECT_EQ(1, count("SELECT tsfile_export('main.readonly'," +
+                       quote(directory_ + "-readonly-export") + ")"));
+}
+
+TEST_F(TsFileSqliteTest, VerifyReportsUnregisteredCorruptAndMismatch) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_FALSE(path.empty());
+
+    const std::string unknown = directory_ + "/unknown.tsfile";
+    {
+        std::ofstream out(unknown);
+        out << "not registered";
+    }
+    EXPECT_EQ(1, count("SELECT count(*) FROM tsfile_verify('main.sensor') "
+                       "WHERE status='UNREGISTERED'"));
+    ASSERT_EQ(0, unlink(unknown.c_str()));
+
+    ASSERT_EQ(SQLITE_OK, exec("CREATE VIRTUAL TABLE other USING tsfile_hybrid("
+                              "directory='" +
+                              directory_ +
+                              "-other',timestamp_precision='ms',"
+                              "time TIMESTAMP TIME,device STRING TAG,"
+                              "temperature DOUBLE FIELD)"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO other VALUES(7,'x',9.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.other',2)"));
+    const std::string other_path = find_tsfile(directory_ + "-other");
+    ASSERT_FALSE(other_path.empty());
+    {
+        std::ifstream in(other_path, std::ios::binary);
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << in.rdbuf();
+    }
+    EXPECT_EQ(1, count("SELECT count(*) FROM tsfile_verify('main.sensor') "
+                       "WHERE status='MISMATCH'"));
+
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << "corrupt";
+    }
+    EXPECT_EQ(1, count("SELECT count(*) FROM tsfile_verify('main.sensor') "
+                       "WHERE status='CORRUPT'"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT * FROM tsfile_verify('main.missing')"));
+}
+
+TEST_F(TsFileSqliteTest, DiagnosticsExposeSourceAndEmptyNoTagDevices) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    EXPECT_EQ(1, count("SELECT directory IS NOT NULL FROM "
+                       "tsfile_table_info('main.sensor')"));
+    EXPECT_EQ(1, count("SELECT source_file IS NULL FROM "
+                       "tsfile_table_info('main.sensor')"));
+    EXPECT_EQ(1, count("SELECT source_table IS NULL FROM "
+                       "tsfile_table_info('main.sensor')"));
+
+    const std::string path = source_file();
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("CREATE VIRTUAL TABLE source_info USING tsfile_hybrid(file=" +
+             quote(path) + ",source_table='sensor')"));
+    EXPECT_EQ(path, scalar_text("SELECT source_file FROM "
+                                "tsfile_table_info('main.source_info')"));
+    EXPECT_EQ("sensor", scalar_text("SELECT source_table FROM "
+                                    "tsfile_table_info('main.source_info')"));
+    EXPECT_EQ(1, count("SELECT source_max_time=1 FROM "
+                       "tsfile_table_info('main.source_info')"));
+    EXPECT_EQ("readonly", scalar_text("SELECT mode FROM "
+                                      "tsfile_table_info('main.source_info')"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT * FROM tsfile_table_info('main.missing')"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT * FROM tsfile_device_info('main.missing')"));
+
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE empty_notags USING tsfile_hybrid("
+                   "time TIMESTAMP TIME,value DOUBLE FIELD,directory=" +
+                   quote(directory_ + "-empty-notags") +
+                   ",timestamp_precision='ms')"));
+    EXPECT_EQ(1, count("SELECT device_count FROM "
+                       "tsfile_table_info('main.empty_notags')"));
+    EXPECT_EQ(1, count("SELECT watermark=-9223372036854775808 FROM "
+                       "tsfile_table_info('main.empty_notags')"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    EXPECT_EQ(0, count("SELECT length(device_key) FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    EXPECT_EQ(1, count("SELECT watermark=-9223372036854775808 FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    EXPECT_EQ(1, count("SELECT max_time IS NULL FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    EXPECT_EQ(0, count("SELECT hot_rows FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO empty_notags VALUES(5,1.5)"));
+    EXPECT_EQ(1, count("SELECT max_time=5 FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+    EXPECT_EQ(1, count("SELECT hot_rows FROM "
+                       "tsfile_device_info('main.empty_notags')"));
+}
+
+TEST_F(TsFileSqliteTest, CompactRejectsOversizedRowAndChangedFile) {
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE bigrow USING tsfile_hybrid("
+                   "time TIMESTAMP TIME,device STRING TAG,payload BLOB FIELD,"
+                   "directory=" +
+                   quote(directory_ + "-compact-edge") +
+                   ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO bigrow VALUES(1,'d0',X'00')"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.bigrow',64)"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO bigrow VALUES(2,'d0',randomblob(1200000))"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.bigrow',64)"));
+    const std::string dir = directory_ + "-compact-edge";
+    EXPECT_EQ(2, count_tsfiles(dir));
+    EXPECT_EQ(0, count("SELECT tsfile_compact('main.bigrow',1,2)"));
+    EXPECT_EQ(2, count_tsfiles(dir));
+
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("SELECT tsfile_compact('main.bigrow',10,1)"));
+    EXPECT_EQ(2, count_tsfiles(dir));
+    EXPECT_EQ(2, count("SELECT count(*) FROM bigrow"));
+
+    const auto files = list_tsfiles(dir);
+    ASSERT_EQ(2u, files.size());
+    {
+        std::ofstream out(files[0], std::ios::binary | std::ios::trunc);
+        out << "changed";
+    }
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT tsfile_compact('main.bigrow',10,10)"));
+    EXPECT_EQ(2, count_tsfiles(dir));
+    EXPECT_EQ(2, count("SELECT file_count FROM "
+                       "tsfile_table_info('main.bigrow')"));
+}
+
+TEST_F(TsFileSqliteTest, ExportRejectsChangedSourceAndDuplicateNames) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_FALSE(path.empty());
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE changed USING tsfile_hybrid(file=" +
+                   quote(path) + ",source_table='sensor')"));
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << "changed source";
+    }
+    const std::string changed_out = directory_ + "-changed-export";
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_export('main.changed'," +
+                                  quote(changed_out) + ")"));
+    EXPECT_NE(0, access(changed_out.c_str(), F_OK));
+
+    const std::string dir_a = directory_ + "-dupA";
+    const std::string dir_b = directory_ + "-dupB";
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE dupa USING tsfile_hybrid(directory='" +
+                   dir_a +
+                   "',timestamp_precision='ms',time TIMESTAMP TIME,"
+                   "device STRING TAG,value DOUBLE FIELD)"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO dupa VALUES(1,'d0',1.0)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.dupa',2)"));
+    const std::string dupa_file = find_tsfile(dir_a);
+    ASSERT_FALSE(dupa_file.empty());
+    const std::string same_a = dir_a + "/same.tsfile";
+    ASSERT_EQ(0, rename(dupa_file.c_str(), same_a.c_str()));
+    ASSERT_EQ(0, mkdir(dir_b.c_str(), 0755));
+    const std::string same_b = dir_b + "/same.tsfile";
+    {
+        std::ofstream out(same_b);
+        out << "same basename";
+    }
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE dupsrc USING tsfile_hybrid(file=" +
+                   quote(dir_a) + ",source_table='dupa')"));
+    struct stat st {};
+    ASSERT_EQ(0, stat(same_b.c_str(), &st));
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("INSERT INTO \"dupsrc_tsfile$segments\" VALUES(" + quote(same_b) +
+             ",0,1,'dupa','x'," +
+             std::to_string(static_cast<long long>(st.st_size)) + ",0,0)"));
+    const std::string dup_out = directory_ + "-duplicate-export";
+    EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_export('main.dupsrc'," +
+                                  quote(dup_out) + ")"));
+    EXPECT_NE(0, access(dup_out.c_str(), F_OK));
+}
+
+TEST_F(TsFileSqliteTest, HybridModuleLifecycleAndTagUpdates) {
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("ALTER TABLE sensor RENAME TO sensor_renamed"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sqlite_master "
+                       "WHERE name='sensor'"));
+
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO sensor VALUES(1,'d0',1),(2,'d0',2)"));
+    ASSERT_EQ(SQLITE_OK, exec("UPDATE sensor SET device='d1' "
+                              "WHERE time=2 AND device='d0'"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor WHERE device='d0'"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor "
+                       "WHERE device='d1' AND time=2"));
+    EXPECT_EQ(1, count("SELECT hot_rows FROM tsfile_device_info('main.sensor') "
+                       "WHERE device_key='d0'"));
+    EXPECT_EQ(1, count("SELECT hot_rows FROM tsfile_device_info('main.sensor') "
+                       "WHERE device_key='d1'"));
+    EXPECT_EQ(1,
+              count("SELECT max_time=2 FROM tsfile_device_info('main.sensor') "
+                    "WHERE device_key='d1'"));
+
+    ASSERT_EQ(SQLITE_OK,
+              exec("DELETE FROM sensor WHERE time=2 AND device='d1'"));
+    EXPECT_EQ(0, count("SELECT hot_rows FROM tsfile_device_info('main.sensor') "
+                       "WHERE device_key='d1'"));
+    EXPECT_EQ(SQLITE_OK,
+              exec_raw("INSERT OR IGNORE INTO sensor VALUES(1,'d0',9)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor "
+                       "WHERE device='d0' AND time=1"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("INSERT OR FAIL INTO sensor VALUES(1,'d0',9)"));
+
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_FALSE(path.empty());
+    ASSERT_EQ(SQLITE_OK, exec("DROP TABLE sensor"));
+    EXPECT_EQ(0, count("SELECT count(*) FROM sqlite_master "
+                       "WHERE name='sensor'"));
+    EXPECT_EQ(0, count("SELECT count(*) FROM sqlite_master "
+                       "WHERE name LIKE 'sensor_tsfile$%'"));
+    EXPECT_EQ(0, access(path.c_str(), F_OK));
+    EXPECT_EQ(0, access((directory_ + "/.tsfile-owner").c_str(), F_OK));
+}
+
+TEST_F(TsFileSqliteTest, ExportCountsEverySealedFile) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(2,'d0',2)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string output = directory_ + "-multi-export";
+    EXPECT_EQ(
+        2, count("SELECT tsfile_export('main.sensor'," + quote(output) + ")"));
+    EXPECT_EQ(2, count_tsfiles(output));
+}
+
 }  // namespace

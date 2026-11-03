@@ -1411,6 +1411,10 @@ int xDestroy(sqlite3_vtab* vtab) {
                       table);
     if (rc == SQLITE_OK)
         rc = exec_sql(table->db,
+                      "DROP TABLE IF EXISTS " + shadow_name(table, "_devices"),
+                      table);
+    if (rc == SQLITE_OK)
+        rc = exec_sql(table->db,
                       "DROP TABLE IF EXISTS " + shadow_name(table, "_config"),
                       table);
     release_new_directory(table);
