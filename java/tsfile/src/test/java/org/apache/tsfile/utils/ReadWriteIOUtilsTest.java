@@ -135,6 +135,55 @@ public class ReadWriteIOUtilsTest {
   }
 
   @Test
+  public void testReadAsPossibleRetriesZeroAtPosition() throws IOException {
+    TsFileInput input = Mockito.mock(TsFileInput.class);
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+    Mockito.when(input.read(buffer, 7L))
+        .thenReturn(0)
+        .thenAnswer(
+            invocation -> {
+              buffer.put(new byte[] {1, 2, 3, 4});
+              return Integer.BYTES;
+            });
+
+    Assert.assertEquals(Integer.BYTES, ReadWriteIOUtils.readAsPossible(input, 7L, buffer));
+    Mockito.verify(input, Mockito.times(2)).read(buffer, 7L);
+  }
+
+  @Test
+  public void testReadAsPossibleRetriesZeroAtCurrentPosition() throws IOException {
+    TsFileInput input = Mockito.mock(TsFileInput.class);
+    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+    Mockito.when(input.read(buffer))
+        .thenReturn(0)
+        .thenAnswer(
+            invocation -> {
+              buffer.put(new byte[] {1, 2, 3, 4});
+              return Integer.BYTES;
+            });
+
+    Assert.assertEquals(Integer.BYTES, ReadWriteIOUtils.readAsPossible(input, buffer));
+    Mockito.verify(input, Mockito.times(2)).read(buffer);
+  }
+
+  @Test
+  public void testReadAsPossibleRetriesZeroForLimitedRead() throws IOException {
+    TsFileInput input = Mockito.mock(TsFileInput.class);
+    ByteBuffer buffer = ByteBuffer.allocate(2 * Integer.BYTES);
+    Mockito.when(input.read(buffer, 11L))
+        .thenReturn(0)
+        .thenAnswer(
+            invocation -> {
+              buffer.put(new byte[] {1, 2, 3, 4});
+              return Integer.BYTES;
+            });
+
+    Assert.assertEquals(Integer.BYTES, ReadWriteIOUtils.readAsPossible(input, buffer, 11L, 4));
+    Assert.assertEquals(2 * Integer.BYTES, buffer.limit());
+    Mockito.verify(input, Mockito.times(2)).read(buffer, 11L);
+  }
+
+  @Test
   public void testFixedWidthReadersRejectEveryTruncatedLength() {
     for (int length = 0; length < Integer.BYTES; length++) {
       final byte[] truncated = new byte[length];

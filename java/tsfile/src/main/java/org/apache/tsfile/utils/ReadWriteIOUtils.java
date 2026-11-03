@@ -842,8 +842,11 @@ public class ReadWriteIOUtils {
     int length = 0;
     while (buffer.hasRemaining()) {
       int read = input.read(buffer, position);
-      if (read <= 0) {
+      if (read < 0) {
         break;
+      }
+      if (read == 0) {
+        continue;
       }
       length += read;
       position += read;
@@ -856,8 +859,11 @@ public class ReadWriteIOUtils {
     int length = 0;
     while (buffer.hasRemaining()) {
       int read = input.read(buffer);
-      if (read <= 0) {
+      if (read < 0) {
         break;
+      }
+      if (read == 0) {
+        continue;
       }
       length += read;
     }
@@ -874,8 +880,11 @@ public class ReadWriteIOUtils {
     }
     while (length < len && target.hasRemaining()) {
       int read = input.read(target, offset);
-      if (read <= 0) {
+      if (read < 0) {
         break;
+      }
+      if (read == 0) {
+        continue;
       }
       length += read;
       offset += read;
