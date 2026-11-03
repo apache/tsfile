@@ -1688,3 +1688,180 @@ rename 与提交之间进程崩溃、权限变化导致 staging 清理失败。�
 - 流式 seal 已消除大热区 seal 的主要 OOM 风险；剩余风险集中在查询结果物化、
   compact 内存和低内存边缘设备的块大小上。
 - 当前版本可以进入评审/联调。
+
+## 附录 A：实际执行输出
+
+以下输出来自 2026-11-03 在本机对当前工作树的实际执行。
+
+### A.1 自动化测试
+
+执行命令：
+
+```bash
+DYLD_LIBRARY_PATH=build/develop/lib \
+  build/develop/test/lib/TsFile_Sqlite_Test
+```
+
+实际输出末尾：
+
+```text
+[----------] 47 tests from TsFileSqliteTest (200 ms total)
+
+[----------] Global test environment tear-down
+[==========] 47 tests from 1 test suite ran. (200 ms total)
+[  PASSED  ] 47 tests.
+```
+
+### A.2 手工 SQL 冒烟
+
+执行命令：
+
+```bash
+bash /tmp/sqlite_selftest.sh
+```
+
+实际输出：
+
+```text
+PASS  initial row count  -> 1
+PASS  row count after insert  -> 4
+PASS  update/delete  -> 1
+PASS  query after delete  -> 3
+PASS  field filter hot  -> 2
+PASS  seal return rows  -> 3
+PASS  query cold  -> 3
+PASS  field filter cold  -> 2
+PASS  time+tag+field pushdown  -> 2
+PASS  table_info hot_rows  -> 0
+PASS  table_info device_count  -> 2
+PASS  table_info file_count  -> 1
+PASS  table_info watermark  -> 2001
+PASS  device_info rows  -> 2
+PASS  device d1 watermark  -> 2001
+PASS  device d2 watermark  -> 3001
+PASS  schema column count  -> 8
+PASS  schema time type  -> TIMESTAMP:TIME
+PASS  schema tag type  -> STRING:TAG
+PASS  schema field type  -> DOUBLE:FIELD
+PASS  schema order  -> time,group_id,device_id,v1,v2,v3,v4,v5
+PASS  export files  -> 1
+PASS  exported file exists  -> 1
+PASS  readonly file query  -> 3
+PASS  readonly file field filter  -> 2
+PASS  readonly insert rejected  (rejected: Error in 5th command line argument: table is readonly)
+PASS  directory source query  -> 3
+PASS  readonly table_info mode  -> readonly
+PASS  compact no-op  -> 0
+PASS  verify sensor  -> 1
+PASS  verify history  -> 1
+PASS  duplicate key rejected  (rejected: Error in 5th command line argument: row is outside the mutable watermark or violates NOT NULL)
+PASS  watermark rejected  (rejected: Error in 5th command line argument: row is outside the mutable watermark or violates NOT NULL)
+PASS  readonly delete rejected  (rejected: Error in 5th command line argument: table is readonly)
+PASS  missing table rejected  (rejected: Error in 5th command line argument: TsFile table not found: main.missing)
+----------------------------------------
+PASS=35 FAIL=0
+```
+
+### A.3 代表性 SQL 结果集
+
+以下命令在独立的 `:memory:` 数据库中执行，`<TMP>` 使用 `/tmp/tsfile-report-output`。
+
+#### A.3.1 2.1.1 可空逻辑键
+
+实际输出：
+
+```text
+3
+1
+1
+1
+4.0
+duplicate NULL key:
+Error in 5th command line argument: constraint failed
+```
+
+#### A.3.2 2.2.6 全部字段类型
+
+实际输出：
+
+```text
+3
+3|2|2|2|2|2|2|2|2|2|2
+|0||
+12
+```
+
+#### A.3.3 2.3.3 时间边界
+
+实际输出：
+
+```text
+5
+5
+2
+0
+3
+max||9223372036854775807
+min|-9223372036854775807|-9223372036854775808
+neg|0|-1
+one|2|1
+zero|1|0
+```
+
+#### A.3.4 2.3.4 谓词矩阵
+
+实际输出：
+
+```text
+6
+1
+4
+2
+2
+2
+1
+2
+4
+2
+6,5
+```
+
+#### A.3.5 2.10.3 设备状态
+
+实际输出：
+
+```text
+2
+d0|2|1|0
+d1|6|5|0
+2|2
+```
+
+#### A.3.6 2.10.5 schema 函数
+
+实际输出：
+
+```text
+0|time|TIMESTAMP|TIME|INTEGER|1
+1|group_id|STRING|TAG|TEXT|0
+2|device_id|STRING|TAG|TEXT|0
+3|d|DOUBLE|FIELD|REAL|0
+4|i64|INT64|FIELD|INTEGER|0
+5|i32|INT32|FIELD|INTEGER|0
+6|flag|BOOLEAN|FIELD|INTEGER|0
+7|label|TEXT|FIELD|TEXT|0
+8|payload|BLOB|FIELD|BLOB|0
+9|day|DATE|FIELD|INTEGER|0
+```
+
+#### A.3.7 2.6.1 seal 与 export
+
+实际输出：
+
+```text
+2
+1
+0|2|1|2
+-rw-r--r--  1 colin  wheel  723  ...  tsfilesensor-84694-0.tsfile
+```
+
