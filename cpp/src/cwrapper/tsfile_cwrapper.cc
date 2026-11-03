@@ -1173,6 +1173,14 @@ static void free_device_schema_array(DeviceSchema* schemas, size_t size) {
     free(schemas);
 }
 
+void tsfile_free_table_schema_array(TableSchema* schemas, uint32_t length) {
+    free_table_schema_array(schemas, length);
+}
+
+void tsfile_free_device_schema_array(DeviceSchema* schemas, uint32_t length) {
+    free_device_schema_array(schemas, length);
+}
+
 ERRNO tsfile_reader_get_table_schema_checked(TsFileReader reader,
                                              const char* table_name,
                                              TableSchema* out_schema) {

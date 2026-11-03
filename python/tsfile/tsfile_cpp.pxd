@@ -379,6 +379,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     void tsfile_free_device_id_array(DeviceID * devices,
                                       uint32_t length);
 
+    void free_table_schema(TableSchema schema);
+    void free_device_schema(DeviceSchema schema);
+    void tsfile_free_table_schema_array(TableSchema * schemas,
+                                        uint32_t length);
+    void tsfile_free_device_schema_array(DeviceSchema * schemas,
+                                         uint32_t length);
+
     ErrorCode tsfile_reader_get_timeseries_metadata_all(
         TsFileReader reader, DeviceTimeseriesMetadataMap * out_map);
     ErrorCode tsfile_reader_get_timeseries_metadata_for_devices(

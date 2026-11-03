@@ -70,12 +70,17 @@ projects reset `CMAKE_CXX_FLAGS`.
 * exports `TSFILE_SANITIZER=<checks>` to `setup.py`, which instruments every
   extension (including `python_random_access_read_file.cc`) and verifies the
   result;
-* disables wheel packaging. Sanitizer binaries are never release artifacts.
+* disables wheel packaging and the ordinary pytest execution. Sanitizer
+  binaries are never release artifacts, and the pytest process would abort
+  while importing the instrumented extensions without the preloaded runtime.
+  Use `test-compile` and run the ownership suite by hand (see Run below);
+  `mvn test`/`mvn verify` are not supported in this mode.
 
 `RelWithDebInfo` is recommended: it provides `-O2 -g`, and the sanitizer mode
 additionally adds `-g`. Release builds skip LTO when ASan is enabled because LTO
 removes the frames reports need. `-Dbuild.test=OFF` only skips the C++ gtest
-target; the Python module is still built and tested.
+target; the Python module is still built (and the ownership suite is run
+separately, as described below).
 
 ### Direct CMake + setup.py
 
@@ -100,7 +105,9 @@ verification is ASan-specific.
 and `readelf`/`otool` and fails if any of them lacks ASan references **or** a
 link-time dependency on the sanitizer runtime. It also refuses `bdist_wheel`
 and refuses to package any staged binary that carries `__asan_` symbols, so a
-stale sanitizer object cannot slip into a release wheel.
+stale sanitizer object cannot slip into a release wheel. This makes `nm`
+(`binutils` on Linux) a build-time requirement for every wheel build, not just
+sanitizer builds.
 
 ## Run
 

@@ -75,12 +75,14 @@ cdef object from_c_column_schema(ColumnSchema schema):
     return ColumnSchemaPy(column_name, data_type, category_type)
 
 cdef object from_c_table_schema(TableSchema schema):
+    """Convert a by-value C schema. The caller keeps ownership of the C data
+    and releases it after this returns (see get_table_schema and
+    tsfile_free_table_schema_array)."""
     cdef int i
     table_name = schema.table_name.decode('utf-8')
     columns = []
     for i in range(schema.column_num):
         columns.append(from_c_column_schema(schema.column_schemas[i]))
-    free_c_table_schema(&schema)
     return TableSchemaPy(table_name, columns)
 
 cdef object from_c_timeseries_schema(TimeseriesSchema schema):
@@ -91,12 +93,14 @@ cdef object from_c_timeseries_schema(TimeseriesSchema schema):
     return TimeseriesSchemaPy(timeseries_name, data_type, encoding, compression)
 
 cdef object from_c_device_schema(DeviceSchema schema):
+    """Convert a by-value C schema. The caller keeps ownership of the C data
+    and releases it after this returns (see
+    tsfile_free_device_schema_array)."""
     cdef int i
     device_name = schema.device_name.decode('utf-8')
     timeseries = []
     for i in range(schema.timeseries_num):
         timeseries.append(from_c_timeseries_schema(schema.timeseries_schema[i]))
-    free_c_device_schema(&schema)
     return DeviceSchemaPy(device_name, timeseries)
 
 # Convert from python to c struct
@@ -787,9 +791,12 @@ cdef void free_c_device_schema(DeviceSchema * c_schema):
         free_c_timeseries_schema(&(c_schema.timeseries_schema[i]))
     free(c_schema.timeseries_schema)
 
-# The helpers above free only the contents because readers also call them on
-# by-value stack copies. These variants own the struct allocated by the
-# corresponding to_c_*_schema converter and must be used by writer callers.
+# The helpers above free only the contents. They are used for schemas built by
+# to_c_*_schema, where this extension owns both the allocation and the
+# deallocation. Reader-owned schemas are released through the C API instead
+# (free_table_schema / tsfile_free_*_schema_array), so the allocator and the
+# deallocator stay in the same module. These variants also release the struct
+# itself and are used by writer callers.
 cdef void free_c_timeseries_schema_allocated(TimeseriesSchema * c_schema):
     free_c_timeseries_schema(c_schema)
     free(c_schema)
@@ -1279,7 +1286,12 @@ cdef object get_table_schema(TsFileReader reader, object table_name):
     code = tsfile_reader_get_table_schema_checked(
         reader, table_name_c, &schema)
     check_error(code)
-    return from_c_table_schema(schema)
+    try:
+        return from_c_table_schema(schema)
+    finally:
+        # Release through the C API so the allocator and the deallocator live
+        # in the same module (see tsfile_free_buffer).
+        free_table_schema(schema)
 
 cdef object get_all_table_schema(TsFileReader reader):
     cdef uint32_t table_num = 0
@@ -1295,7 +1307,10 @@ cdef object get_all_table_schema(TsFileReader reader):
             schema_py = from_c_table_schema(schemas[i])
             table_schemas.update([(schema_py.get_table_name(), schema_py)])
     finally:
-        free(schemas)
+        # Frees every element's contents and the array itself inside the C
+        # wrapper, including when conversion fails mid-loop. table_num is zero
+        # (and schemas NULL) when the C call reported an error.
+        tsfile_free_table_schema_array(schemas, table_num)
     return table_schemas
 
 cdef object get_all_timeseries_schema(TsFileReader reader):
@@ -1313,7 +1328,7 @@ cdef object get_all_timeseries_schema(TsFileReader reader):
             schema_py = from_c_device_schema(schemas[i])
             device_schemas.update([(schema_py.get_device_name(), schema_py)])
     finally:
-        free(schemas)
+        tsfile_free_device_schema_array(schemas, device_num)
     return device_schemas
 
 cdef object _c_str_to_py_utf8_or_none(char* p):
