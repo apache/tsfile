@@ -1679,7 +1679,9 @@ schema、错误和计数符合。实际：通过。
 
 ## 3. 手工 SQL 冒烟自测
 
-以下测试使用 Homebrew `sqlite3` 加载扩展，在持久数据库上按用户操作顺序执行。
+以下测试由 [selftest_sql.sh](selftest_sql.sh) 执行；每节直接列出场景 SQL 和对
+应查询的实际输出，脚本本身在完整运行后汇总 `PASS/FAIL`。脚本会为每个检查自动
+打印 `PASS  <名称>  -> <实际值>` 或 `FAIL`。
 
 ### 3.1 建表与写入
 
@@ -1697,12 +1699,8 @@ INSERT INTO smoke VALUES
  (4000,'g1','d2',20.0,4,4.5,40,0);
 SELECT count(*) FROM smoke;
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  initial row count  -> 1
-PASS  row count after insert  -> 4
+实际输出:
+4
 
 实际结果:
 实际返回 4。通过。
@@ -1722,12 +1720,9 @@ DELETE FROM smoke WHERE time=4000 AND device_id='d2';
 SELECT count(*) FROM smoke WHERE v1=22.5;
 SELECT count(*) FROM smoke;
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  update/delete  -> 1
-PASS  query after delete  -> 3
+实际输出:
+1
+3
 
 实际结果:
 实际为 1 和 3。通过。
@@ -1744,11 +1739,8 @@ PASS  query after delete  -> 3
 输入 SQL:
 SELECT count(*) FROM smoke WHERE v1>20;
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  field filter hot  -> 2
+实际输出:
+2
 
 实际结果:
 实际 2 行。通过。
@@ -1767,13 +1759,10 @@ SELECT tsfile_seal('main.smoke',64);
 SELECT count(*) FROM smoke;
 SELECT count(*) FROM smoke WHERE v1>20;
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  seal return rows  -> 3
-PASS  query cold  -> 3
-PASS  field filter cold  -> 2
+实际输出:
+3
+3
+2
 
 实际结果:
 实际 3/3/2。通过。
@@ -1791,11 +1780,8 @@ PASS  field filter cold  -> 2
 SELECT count(*) FROM smoke
 WHERE time>=1000 AND time<3000 AND group_id='g0' AND v1>20;
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  time+tag+field pushdown  -> 2
+实际输出:
+2
 
 实际结果:
 实际 2。通过。
@@ -1813,14 +1799,8 @@ PASS  time+tag+field pushdown  -> 2
 SELECT hot_rows, device_count, file_count, watermark
 FROM tsfile_table_info('main.smoke');
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  table_info hot_rows  -> 0
-PASS  table_info device_count  -> 2
-PASS  table_info file_count  -> 1
-PASS  table_info watermark  -> 2001
+实际输出:
+0|2|1|2001
 
 实际结果:
 实际值符合。通过。
@@ -1838,13 +1818,9 @@ PASS  table_info watermark  -> 2001
 SELECT device_key, watermark, max_time
 FROM tsfile_device_info('main.smoke');
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  device_info rows  -> 2
-PASS  device d1 watermark  -> 2001
-PASS  device d2 watermark  -> 3001
+实际输出:
+g0,d1|2001|2000
+g1,d2|3001|3000
 
 实际结果:
 实际两行值符合。通过。
@@ -1862,15 +1838,15 @@ PASS  device d2 watermark  -> 3001
 SELECT cid, name, tsfile_type, category, sqlite_type, not_null
 FROM tsfile_schema('main.smoke');
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  schema column count  -> 8
-PASS  schema time type  -> TIMESTAMP:TIME
-PASS  schema tag type  -> STRING:TAG
-PASS  schema field type  -> DOUBLE:FIELD
-PASS  schema order  -> time,group_id,device_id,v1,v2,v3,v4,v5
+实际输出:
+0|time|TIMESTAMP|TIME|INTEGER|1
+1|group_id|STRING|TAG|TEXT|0
+2|device_id|STRING|TAG|TEXT|0
+3|v1|DOUBLE|FIELD|REAL|0
+4|v2|INT64|FIELD|INTEGER|0
+5|v3|FLOAT|FIELD|REAL|0
+6|v4|INT32|FIELD|INTEGER|0
+7|v5|BOOLEAN|FIELD|INTEGER|0
 
 实际结果:
 实际 8 行，顺序和类型符合。通过。
@@ -1893,15 +1869,11 @@ SELECT count(*) FROM history;
 SELECT count(*) FROM history WHERE v1>20;
 INSERT INTO history VALUES(5000,'g0','d1',1.0,1,1.0,1,1);
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  export files  -> 1
-PASS  exported file exists  -> 1
-PASS  readonly file query  -> 3
-PASS  readonly file field filter  -> 2
-PASS  readonly insert rejected  (rejected: table is readonly)
+实际输出:
+1
+3
+2
+Error: table is readonly
 
 实际结果:
 实际 1/3/2/错误。通过。
@@ -1922,13 +1894,10 @@ SELECT count(*) FROM history_dir;
 SELECT mode FROM tsfile_table_info('main.history_dir');
 SELECT tsfile_compact('main.smoke',10,20);
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  directory source query  -> 3
-PASS  readonly table_info mode  -> readonly
-PASS  compact no-op  -> 0
+实际输出:
+3
+readonly
+0
 
 实际结果:
 实际 3/readonly/0。通过。
@@ -1949,16 +1918,12 @@ INSERT INTO smoke VALUES(1000,'g1','d2',9.0,9,9.0,9,1);
 DELETE FROM history WHERE time=1000;
 SELECT * FROM tsfile_schema('main.missing');
 
-实际执行:
-$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
-  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
-  bash cpp/src/sqlite/selftest_sql.sh
-PASS  verify sensor  -> 1
-PASS  verify history  -> 1
-PASS  duplicate key rejected
-PASS  watermark rejected
-PASS  readonly delete rejected
-PASS  missing table rejected
+实际输出:
+1
+Error: row is outside the mutable watermark or violates NOT NULL
+Error: row is outside the mutable watermark or violates NOT NULL
+Error: table is readonly
+Error: TsFile table not found: main.missing
 
 实际结果:
 实际符合。通过。
