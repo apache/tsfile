@@ -28,7 +28,8 @@ Sealing moves them into TsFile: they remain queryable but can no longer be chang
 This manual walks through creating a table, writing and querying rows, exporting,
 and reopening the exported data. It then covers daily operations and troubleshooting.
 Examples use the SQLite CLI; applications can execute the same SQL.
-[中文](USER_GUIDE.md) · [Technical report](TECHNICAL_GUIDE_EN.md)
+[中文](USER_GUIDE.md) · [Technical report](TECHNICAL_GUIDE_EN.md) ·
+[Build and test](TESTING.md) · [Self-test report](SELF_TEST_REPORT.md)
 
 ## 1. Prepare your environment
 

@@ -31,6 +31,8 @@ Documentation:
   [Chinese](USER_GUIDE.md).
 - Technical report: [English](TECHNICAL_GUIDE_EN.md) |
   [Chinese](TECHNICAL_GUIDE.md).
+- Build and test guide: [TESTING.md](TESTING.md).
+- Self-test report: [SELF_TEST_REPORT.md](SELF_TEST_REPORT.md).
 
 Build from the repository root:
 

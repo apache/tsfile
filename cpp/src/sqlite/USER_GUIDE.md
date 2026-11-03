@@ -27,7 +27,8 @@
 
 本手册带你完成一次建表、读写、导出和重新读取，然后介绍日常使用与排障。
 示例使用 SQLite 命令行；应用程序也可以执行相同的 SQL。
-[English](USER_GUIDE_EN.md) · [技术报告](TECHNICAL_GUIDE.md)
+[English](USER_GUIDE_EN.md) · [技术报告](TECHNICAL_GUIDE.md) ·
+[构建与测试](TESTING.md) · [自测报告](SELF_TEST_REPORT.md)
 
 ## 1. 准备运行环境
 
