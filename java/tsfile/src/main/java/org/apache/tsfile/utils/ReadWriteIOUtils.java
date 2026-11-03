@@ -26,6 +26,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.reader.TsFileInput;
 
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -78,14 +79,14 @@ public class ReadWriteIOUtils {
 
   /** read a bool from inputStream. */
   public static boolean readBool(InputStream inputStream) throws IOException {
-    int flag = inputStream.read();
+    int flag = readRequiredByte(inputStream);
     return flag == 1;
   }
 
   // used by generated code
   @SuppressWarnings("unused")
   public static boolean readBoolean(InputStream inputStream) throws IOException {
-    int flag = inputStream.read();
+    int flag = readRequiredByte(inputStream);
     return flag == 1;
   }
 
@@ -512,13 +513,13 @@ public class ReadWriteIOUtils {
 
   /** read a byte var from inputStream. */
   public static byte readByte(InputStream inputStream) throws IOException {
-    return (byte) inputStream.read();
+    return (byte) readRequiredByte(inputStream);
   }
 
   /** read a short var from inputStream. */
   public static short readShort(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[SHORT_LEN];
-    int readLen = inputStream.read(bytes);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != SHORT_LEN) {
       throw new IOException(String.format(RETURN_ERROR, SHORT_LEN, readLen));
     }
@@ -533,7 +534,7 @@ public class ReadWriteIOUtils {
   /** Read a float var from inputStream. */
   public static float readFloat(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[FLOAT_LEN];
-    int readLen = inputStream.read(bytes);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != FLOAT_LEN) {
       throw new IOException(String.format(RETURN_ERROR, FLOAT_LEN, readLen));
     }
@@ -550,7 +551,7 @@ public class ReadWriteIOUtils {
   /** Read a double var from inputStream. */
   public static double readDouble(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[DOUBLE_LEN];
-    int readLen = inputStream.read(bytes);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != DOUBLE_LEN) {
       throw new IOException(String.format(RETURN_ERROR, DOUBLE_LEN, readLen));
     }
@@ -567,7 +568,7 @@ public class ReadWriteIOUtils {
   /** Read an int var from inputStream. */
   public static int readInt(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[INT_LEN];
-    int readLen = inputStream.read(bytes);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != INT_LEN) {
       throw new IOException(String.format(RETURN_ERROR, INT_LEN, readLen));
     }
@@ -594,9 +595,9 @@ public class ReadWriteIOUtils {
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
     byte[] bytes = new byte[LONG_LEN];
-    int readLen = inputStream.read(bytes);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != LONG_LEN) {
-      throw new IOException(String.format(RETURN_ERROR, LONG_LEN, readLen));
+      throw new EOFException(String.format(RETURN_ERROR, LONG_LEN, readLen));
     }
     return BytesUtils.bytesToLong(bytes);
   }
@@ -615,7 +616,7 @@ public class ReadWriteIOUtils {
       return "";
     }
     byte[] bytes = new byte[strLength];
-    int readLen = inputStream.read(bytes, 0, strLength);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
@@ -631,11 +632,31 @@ public class ReadWriteIOUtils {
       return "";
     }
     byte[] bytes = new byte[strLength];
-    int readLen = inputStream.read(bytes, 0, strLength);
+    int readLen = readAtMost(inputStream, bytes);
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
     return new String(bytes, 0, strLength);
+  }
+
+  private static int readAtMost(InputStream inputStream, byte[] bytes) throws IOException {
+    int readLen = 0;
+    while (readLen < bytes.length) {
+      int count = inputStream.read(bytes, readLen, bytes.length - readLen);
+      if (count < 0) {
+        break;
+      }
+      if (count == 0) {
+        int value = inputStream.read();
+        if (value < 0) {
+          break;
+        }
+        bytes[readLen++] = (byte) value;
+      } else {
+        readLen += count;
+      }
+    }
+    return readLen;
   }
 
   /** Read string from byteBuffer. */
@@ -714,13 +735,16 @@ public class ReadWriteIOUtils {
    */
   public static byte[] readBytes(InputStream inputStream, int length) throws IOException {
     byte[] bytes = new byte[length];
-    int offset = 0;
-    int len;
-    while (bytes.length - offset > 0
-        && (len = inputStream.read(bytes, offset, bytes.length - offset)) != NO_BYTE_TO_READ) {
-      offset += len;
-    }
+    readAtMost(inputStream, bytes);
     return bytes;
+  }
+
+  private static int readRequiredByte(InputStream inputStream) throws IOException {
+    int value = inputStream.read();
+    if (value < 0) {
+      throw new EOFException(String.format(RETURN_ERROR, 1, 0));
+    }
+    return value;
   }
 
   public static Map<String, String> readMap(ByteBuffer buffer) {
@@ -818,11 +842,16 @@ public class ReadWriteIOUtils {
   public static int readAsPossible(TsFileInput input, long position, ByteBuffer buffer)
       throws IOException {
     int length = 0;
-    int read;
-    while (buffer.hasRemaining() && (read = input.read(buffer, position)) != NO_BYTE_TO_READ) {
+    while (buffer.hasRemaining()) {
+      int read = input.read(buffer, position);
+      if (read < 0) {
+        break;
+      }
+      if (read == 0) {
+        continue;
+      }
       length += read;
       position += read;
-      input.read(buffer, position);
     }
     return length;
   }
@@ -830,8 +859,14 @@ public class ReadWriteIOUtils {
   /** read util to the end of buffer. */
   public static int readAsPossible(TsFileInput input, ByteBuffer buffer) throws IOException {
     int length = 0;
-    int read;
-    while (buffer.hasRemaining() && (read = input.read(buffer)) != NO_BYTE_TO_READ) {
+    while (buffer.hasRemaining()) {
+      int read = input.read(buffer);
+      if (read < 0) {
+        break;
+      }
+      if (read == 0) {
+        continue;
+      }
       length += read;
     }
     return length;
@@ -845,10 +880,14 @@ public class ReadWriteIOUtils {
     if (target.remaining() > len) {
       target.limit(target.position() + len);
     }
-    int read;
-    while (length < len
-        && target.hasRemaining()
-        && (read = input.read(target, offset)) != NO_BYTE_TO_READ) {
+    while (length < len && target.hasRemaining()) {
+      int read = input.read(target, offset);
+      if (read < 0) {
+        break;
+      }
+      if (read == 0) {
+        continue;
+      }
       length += read;
       offset += read;
     }
