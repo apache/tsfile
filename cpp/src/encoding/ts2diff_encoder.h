@@ -578,26 +578,39 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
 
 // Java Math.round(x) == floor(x + 0.5) (ties go towards +infinity),
 // unlike std::lround's ties-away-from-zero (-2.5 -> -2, not -3).
-// Math.round saturates at the integer limits; a plain static_cast of the
-// boundary value (e.g. INT64_MAX rounding up from below, or 2^63 passing
-// the <= (double)INT64_MAX gate) would be undefined behaviour, so the
-// conversion clamps first.  The 64-bit upper bound is compared against
-// 2^63 rather than (double)INT64_MAX, which rounds up to 2^63 and would
-// let exactly 2^63 through; the lower limits are exactly representable.
+// Round the IEEE significand using integer arithmetic: ties go toward
+// positive infinity, NaN becomes zero, and out-of-range results saturate.
+// Adding 0.5 before floor can itself round (just below 0.5, or above 2^52).
 template <typename Int>
-inline Int java_round(double x) {
-    const double r = std::floor(x + 0.5);
-    if (sizeof(Int) < 8) {
-        if (r > static_cast<double>(std::numeric_limits<Int>::max())) {
-            return std::numeric_limits<Int>::max();
-        }
-    } else if (r >= 9223372036854775808.0) {  // 2^63
-        return std::numeric_limits<Int>::max();
+FORCE_INLINE Int java_round(double x) {
+    const uint64_t bits = static_cast<uint64_t>(common::double_to_long(x));
+    const uint64_t fraction = bits & 0x000FFFFFFFFFFFFFULL;
+    const unsigned exponent = static_cast<unsigned>((bits >> 52) & 0x7FF);
+    const bool negative = (bits >> 63) != 0;
+    if (exponent < 1022) return 0;  // Magnitude below one half.
+    if (exponent >= 1023 + std::numeric_limits<Int>::digits) {
+        if (exponent == 0x7FF && fraction != 0) return 0;
+        return negative ? std::numeric_limits<Int>::min()
+                        : std::numeric_limits<Int>::max();
     }
-    if (r < static_cast<double>(std::numeric_limits<Int>::min())) {
-        return std::numeric_limits<Int>::min();
+    const uint64_t significand = fraction | (uint64_t{1} << 52);
+    const int shift = 1075 - static_cast<int>(exponent);
+    uint64_t rounded = 0;
+    if (shift > 0) {
+        const uint64_t remainder = significand & ((uint64_t{1} << shift) - 1);
+        const uint64_t threshold = (uint64_t{1} << (shift - 1)) + negative;
+        rounded = (significand >> shift) + (remainder >= threshold);
+    } else {
+        // Here the value is already integral; the range gate bounds this
+        // left shift to 0..10 for int64_t (unreachable for int32_t).
+        rounded = significand << -shift;
     }
-    return static_cast<Int>(r);
+    if (rounded > static_cast<uint64_t>(std::numeric_limits<Int>::max())) {
+        return negative ? std::numeric_limits<Int>::min()
+                        : std::numeric_limits<Int>::max();
+    }
+    const Int result = static_cast<Int>(rounded);
+    return negative ? -result : result;
 }
 
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
@@ -635,7 +648,7 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
     int encode(double value, common::ByteStream& out_stream);
 
    private:
-    int32_t convert_float_to_int(float value) {
+    FORCE_INLINE int32_t convert_float_to_int(float value) {
         const double scaled = static_cast<double>(value) * max_point_value_;
         if (scaled > static_cast<double>(std::numeric_limits<int32_t>::max()) ||
             scaled < static_cast<double>(std::numeric_limits<int32_t>::min())) {
@@ -711,7 +724,7 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
     int encode(double value, common::ByteStream& out_stream);
 
    private:
-    int64_t convert_double_to_long(double value) {
+    FORCE_INLINE int64_t convert_double_to_long(double value) {
         const double scaled = value * max_point_value_;
         if (scaled > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
             scaled < static_cast<double>(std::numeric_limits<int64_t>::min())) {
@@ -887,7 +900,13 @@ FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         return common::E_OK;
     }
     const int num_values = static_cast<int>(underflow_flags_.size());
-    if (has_overflow()) {
+    // The two largest precisions collide with the leading overflow tags.
+    // Always wrap them, even for all-scaled zeroes, so the actual precision
+    // appears after the bitmap where both Java and C++ read it as a value.
+    if (has_overflow() ||
+        max_point_number_ >=
+            static_cast<int>(
+                ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW)) {
         std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
         std::vector<uint8_t> raw_bits_bitmap(
@@ -957,7 +976,10 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
         return common::E_OK;
     }
     const int num_values = static_cast<int>(underflow_flags_.size());
-    if (has_overflow()) {
+    if (has_overflow() ||
+        max_point_number_ >=
+            static_cast<int>(
+                ts2diff_java_detail::FLAG_ORIGINAL_VALUE_OVERFLOW)) {
         std::vector<uint8_t> scaled_bitmap(
             static_cast<size_t>(num_values / 8 + 1), 0);
         std::vector<uint8_t> raw_bits_bitmap(

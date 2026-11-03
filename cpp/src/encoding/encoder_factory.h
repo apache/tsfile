@@ -28,6 +28,7 @@
 #include "encoder.h"
 #include "encoding/int32_rle_encoder.h"
 #include "encoding/int64_rle_encoder.h"
+#include "encoding_props.h"
 #include "float_sprintz_encoder.h"
 #include "gorilla_encoder.h"
 #include "int32_sprintz_encoder.h"
@@ -212,6 +213,27 @@ class EncoderFactory {
                 return nullptr;
         }
         return nullptr;
+    }
+
+    static Encoder* alloc_value_encoder(
+        common::TSEncoding encoding, common::TSDataType data_type,
+        const std::map<std::string, std::string>& props) {
+        Encoder* encoder = alloc_value_encoder(encoding, data_type);
+        if (encoder == nullptr || props.empty() ||
+            encoding != common::TS_2DIFF ||
+            (data_type != common::FLOAT && data_type != common::DOUBLE)) {
+            return encoder;
+        }
+        const int precision = detail::max_point_number(props);
+        if (precision == 2) return encoder;  // Already the encoder default.
+        if (data_type == common::FLOAT) {
+            static_cast<FloatTS2DIFFEncoder*>(encoder)->set_max_point_number(
+                precision);
+        } else {
+            static_cast<DoubleTS2DIFFEncoder*>(encoder)->set_max_point_number(
+                precision);
+        }
+        return encoder;
     }
 
     static void free(Encoder* encoder) {
