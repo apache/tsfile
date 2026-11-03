@@ -50,8 +50,7 @@ public class FloatSprintzDecoder extends SprintzDecoder {
 
   @Override
   public boolean hasNext(ByteBuffer buffer) throws IOException {
-    int minLenth = Float.BYTES + 1;
-    return (isBlockReaded && currentCount < Block_size) || buffer.remaining() >= minLenth;
+    return (isBlockReaded && currentCount < decodeSize) || buffer.hasRemaining();
   }
 
   @Override

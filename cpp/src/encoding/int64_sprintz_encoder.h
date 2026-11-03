@@ -78,6 +78,8 @@ class Int64SprintzEncoder : public SprintzEncoder {
 
         if (values_.size() == (size_t)block_size_ + 1) {
             int64_t prev = values_[0];
+            const std::vector<int64_t> raw_values(values_);
+            unsafe_residual_ = false;
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 int64_t temp = values_[i];
@@ -85,9 +87,25 @@ class Int64SprintzEncoder : public SprintzEncoder {
                 prev = temp;
             }
 
-            bit_pack();
-            is_first_cached_ = false;
-            values_.clear();
+            if (unsafe_residual_) {
+                // Reuse the existing raw fallback format; retain the ninth
+                // value as the start of the next block.
+                common::SerializationUtil::
+                    write_int_little_endian_padded_on_bit_width(
+                        block_size_ | 0x80, byte_cache_, 1);
+                Int64RleEncoder encoder;
+                for (int i = 0; i < block_size_; ++i) {
+                    if (RET_FAIL(encoder.encode(raw_values[i], byte_cache_)))
+                        return ret;
+                }
+                if (RET_FAIL(encoder.flush(byte_cache_))) return ret;
+                values_.assign(1, raw_values.back());
+                is_first_cached_ = true;
+            } else {
+                bit_pack();
+                is_first_cached_ = false;
+                values_.clear();
+            }
             group_num_++;
 
             if (group_num_ == group_max_) {
@@ -167,19 +185,30 @@ class Int64SprintzEncoder : public SprintzEncoder {
             ASSERT(false);
         }
 
+        // The historical mapping is only reversible within this range.
+        const int64_t limit = int64_t(1) << 62;
+        if (pred <= -limit || pred >= limit) {
+            unsafe_residual_ = true;
+            return 0;
+        }
         return (pred <= 0) ? -2 * pred : 2 * pred - 1;
     }
 
-    int64_t delta(int64_t value, int64_t prev) { return value - prev; }
+    int64_t delta(int64_t value, int64_t prev) {
+        return static_cast<int64_t>(static_cast<uint64_t>(value) -
+                                    static_cast<uint64_t>(prev));
+    }
 
     int64_t fire(int64_t value, int64_t prev) {
         int64_t pred = fire_pred_.predict(prev);
-        int64_t err = value - pred;
+        int64_t err = static_cast<int64_t>(static_cast<uint64_t>(value) -
+                                           static_cast<uint64_t>(pred));
         fire_pred_.train(prev, value, err);
         return err;
     }
 
    private:
+    bool unsafe_residual_ = false;
     std::vector<int64_t> values_;
     std::shared_ptr<Int64Packer> packer_;
     LongFire fire_pred_;

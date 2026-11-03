@@ -21,6 +21,7 @@
 #include <cfloat>
 #include <climits>
 #include <cmath>
+#include <limits>
 
 #include "common/allocator/byte_stream.h"
 #include "encoding/double_sprintz_decoder.h"
@@ -78,6 +79,240 @@ class SprintzCodecTest : public ::testing::Test {
         if (int_list.empty()) PrepareHybridData();
     }
 };
+
+// Produced by Java Sprintz encoders with FIRE: one packed block, then
+// extreme transitions requiring the existing raw fallback representation.
+const char* java_sprintz_golden[] = {
+    "0100ff882320030800000000800000007fffffffffffffff00000001c00000003fffffff00"
+    "00002a810401030100",
+    "010000000000000000ff8843400308000000000000000080000000000000007fffffffffff"
+    "ffffffffffffffffffff0000000000000001c0000000000000003fffffffffffffff000000"
+    "000000002a810401030100",
+    "1f00000000fdfffffe03fffffc03fffff807fffff007ffffe00fffffc01fffff803fffff88"
+    "00000000c00e0fffbfffffd000000017fbfffff5000000015fc00000d00000001602000000"
+    "81422a0000c4cf7a80",
+    "3f0000000000000000ffbffffffffffffe007ffffffffffffc007ffffffffffff800ffffff"
+    "fffffff000ffffffffffffe001ffffffffffffc003ffffffffffff8007ffffffffffff8800"
+    "00000000000000c00381ffff7ffffffffffffd00000000000000017ff7ffffffffffff5000"
+    "00000000000015ff8000000000000d00000000000000016004000000000000008140454000"
+    "00000000c23ffbd4",
+};
+
+std::string StreamHex(ByteStream& stream) {
+    static const char digits[] = "0123456789abcdef";
+    std::string hex;
+    std::vector<uint8_t> bytes;
+    uint8_t byte;
+    uint32_t read_len;
+    while (stream.has_remaining()) {
+        if (stream.read_buf(&byte, 1, read_len) != E_OK) break;
+        bytes.push_back(byte);
+        hex += digits[byte >> 4];
+        hex += digits[byte & 15];
+    }
+    stream.reset();
+    stream.write_buf(bytes.data(), bytes.size());
+    return hex;
+}
+
+TEST_F(SprintzCodecTest, FireMatchesJavaWrappingArithmetic) {
+    IntFire int_fire(2);
+    LongFire long_fire(3);
+    const int32_t ints[] = {0,   INT32_MIN, 123456789, INT32_MAX,
+                            -42, 1 << 30,   23};
+    const int64_t longs[] = {0,
+                             int64_t(1) << 40,
+                             (int64_t(1) << 40) + (int64_t(1) << 30),
+                             int64_t(1) << 55,
+                             INT64_MAX,
+                             -42,
+                             23};
+    const int32_t java_int_predictions[] = {
+        0, INT32_MIN, 129748245, 2145006038, 6291414, 1077936126, 7340055};
+    const int64_t java_long_predictions[] = {0,
+                                             1099511627776LL,
+                                             1100585369600LL,
+                                             36026597995708416LL,
+                                             INT64_MAX,
+                                             -140737488355370LL,
+                                             22};
+    for (int i = 0; i < 7; ++i) {
+        ASSERT_EQ(int_fire.predict(ints[i]), java_int_predictions[i]);
+        ASSERT_EQ(long_fire.predict(longs[i]), java_long_predictions[i]);
+        int_fire.train(ints[i], ints[(i + 1) % 7], 1);
+        long_fire.train(longs[i], longs[(i + 1) % 7], 1);
+    }
+}
+
+TEST_F(SprintzCodecTest, Int32FullBlocksAndExtremeTransitions) {
+    const std::vector<int32_t> edge_values = {
+        0, INT32_MIN, INT32_MAX, -1, 1, INT32_MIN / 2, INT32_MAX / 2, 42, 0};
+    for (const std::string method : {"fire", "delta"}) {
+        for (int count : {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+            SCOPED_TRACE(method + ":" + std::to_string(count));
+            Int32SprintzEncoder encoder;
+            encoder.set_predict_method(method);
+            for (int round = 0; round < 2; ++round) {
+                ByteStream stream(128, MOD_ENCODER_OBJ);
+                for (int i = 0; i < count; ++i) {
+                    // Also exercise a safe packed block before raw fallbacks.
+                    int32_t value = i < 9 ? static_cast<int32_t>(i)
+                                          : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(encoder.encode(value, stream), E_OK);
+                }
+                ASSERT_EQ(encoder.flush(stream), E_OK);
+                if (method == "fire" && count == 18) {
+                    ASSERT_EQ(StreamHex(stream), java_sprintz_golden[0]);
+                }
+                Int32SprintzDecoder decoder;
+                decoder.set_predict_method(method);
+                for (int i = 0; i < count; ++i) {
+                    SCOPED_TRACE(i);
+                    ASSERT_TRUE(decoder.has_remaining(stream));
+                    int32_t actual;
+                    ASSERT_EQ(decoder.read_int32(actual, stream), E_OK);
+                    int32_t expected =
+                        i < 9 ? static_cast<int32_t>(i)
+                              : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(actual, expected);
+                }
+                ASSERT_FALSE(decoder.has_remaining(stream));
+            }
+        }
+    }
+}
+
+TEST_F(SprintzCodecTest, Int64FullBlocksAndExtremeTransitions) {
+    const std::vector<int64_t> edge_values = {
+        0, INT64_MIN, INT64_MAX, -1, 1, INT64_MIN / 2, INT64_MAX / 2, 42, 0};
+    for (const std::string method : {"fire", "delta"}) {
+        for (int count : {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+            SCOPED_TRACE(method + ":" + std::to_string(count));
+            Int64SprintzEncoder encoder;
+            encoder.set_predict_method(method);
+            for (int round = 0; round < 2; ++round) {
+                ByteStream stream(128, MOD_ENCODER_OBJ);
+                for (int i = 0; i < count; ++i) {
+                    // Also exercise a safe packed block before raw fallbacks.
+                    int64_t value = i < 9 ? static_cast<int64_t>(i)
+                                          : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(encoder.encode(value, stream), E_OK);
+                }
+                ASSERT_EQ(encoder.flush(stream), E_OK);
+                if (method == "fire" && count == 18) {
+                    ASSERT_EQ(StreamHex(stream), java_sprintz_golden[1]);
+                }
+                Int64SprintzDecoder decoder;
+                decoder.set_predict_method(method);
+                for (int i = 0; i < count; ++i) {
+                    SCOPED_TRACE(i);
+                    ASSERT_TRUE(decoder.has_remaining(stream));
+                    int64_t actual;
+                    ASSERT_EQ(decoder.read_int64(actual, stream), E_OK);
+                    int64_t expected =
+                        i < 9 ? static_cast<int64_t>(i)
+                              : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(actual, expected);
+                }
+                ASSERT_FALSE(decoder.has_remaining(stream));
+            }
+        }
+    }
+}
+
+TEST_F(SprintzCodecTest, FloatFullBlocksAndExtremeTransitions) {
+    const std::vector<float> edge_values = {
+        0.0f,
+        -0.0f,
+        FLT_MAX,
+        -FLT_MAX,
+        std::numeric_limits<float>::denorm_min(),
+        -std::numeric_limits<float>::denorm_min(),
+        1.0f,
+        -1.0f,
+        42.5f};
+    for (const std::string method : {"fire", "delta"}) {
+        for (int count : {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+            SCOPED_TRACE(method + ":" + std::to_string(count));
+            FloatSprintzEncoder encoder;
+            encoder.set_predict_method(method);
+            for (int round = 0; round < 2; ++round) {
+                ByteStream stream(128, MOD_ENCODER_OBJ);
+                for (int i = 0; i < count; ++i) {
+                    // Also exercise a safe packed block before raw fallbacks.
+                    float value = i < 9 ? static_cast<float>(i)
+                                        : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(encoder.encode(value, stream), E_OK);
+                }
+                ASSERT_EQ(encoder.flush(stream), E_OK);
+                if (method == "fire" && count == 18) {
+                    ASSERT_EQ(StreamHex(stream), java_sprintz_golden[2]);
+                }
+                FloatSprintzDecoder decoder;
+                decoder.set_predict_method(method);
+                for (int i = 0; i < count; ++i) {
+                    SCOPED_TRACE(i);
+                    ASSERT_TRUE(decoder.has_remaining(stream));
+                    float actual;
+                    ASSERT_EQ(decoder.read_float(actual, stream), E_OK);
+                    float expected = i < 9
+                                         ? static_cast<float>(i)
+                                         : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(common::float_to_int(actual),
+                              common::float_to_int(expected));
+                }
+                ASSERT_FALSE(decoder.has_remaining(stream));
+            }
+        }
+    }
+}
+
+TEST_F(SprintzCodecTest, DoubleFullBlocksAndExtremeTransitions) {
+    const std::vector<double> edge_values = {
+        0.0,
+        -0.0,
+        DBL_MAX,
+        -DBL_MAX,
+        std::numeric_limits<double>::denorm_min(),
+        -std::numeric_limits<double>::denorm_min(),
+        1.0,
+        -1.0,
+        42.5};
+    for (const std::string method : {"fire", "delta"}) {
+        for (int count : {1, 8, 9, 10, 16, 18, 32, 143, 144, 145, 4096}) {
+            SCOPED_TRACE(method + ":" + std::to_string(count));
+            DoubleSprintzEncoder encoder;
+            encoder.set_predict_method(method);
+            for (int round = 0; round < 2; ++round) {
+                ByteStream stream(128, MOD_ENCODER_OBJ);
+                for (int i = 0; i < count; ++i) {
+                    // Also exercise a safe packed block before raw fallbacks.
+                    double value = i < 9 ? static_cast<double>(i)
+                                         : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(encoder.encode(value, stream), E_OK);
+                }
+                ASSERT_EQ(encoder.flush(stream), E_OK);
+                if (method == "fire" && count == 18) {
+                    ASSERT_EQ(StreamHex(stream), java_sprintz_golden[3]);
+                }
+                DoubleSprintzDecoder decoder;
+                decoder.set_predict_method(method);
+                for (int i = 0; i < count; ++i) {
+                    SCOPED_TRACE(i);
+                    ASSERT_TRUE(decoder.has_remaining(stream));
+                    double actual;
+                    ASSERT_EQ(decoder.read_double(actual, stream), E_OK);
+                    double expected = i < 9
+                                          ? static_cast<double>(i)
+                                          : edge_values[i % edge_values.size()];
+                    ASSERT_EQ(common::double_to_long(actual),
+                              common::double_to_long(expected));
+                }
+                ASSERT_FALSE(decoder.has_remaining(stream));
+            }
+        }
+    }
+}
 
 TEST_F(SprintzCodecTest, Int32SingleValue) {
     Int32SprintzEncoder encoder;

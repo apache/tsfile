@@ -64,16 +64,21 @@ class IntFire : public Fire<int> {
 
     int predict(int value) override {
         int alpha = accumulator_ >> learn_shift_;
-        int diff = static_cast<int>((static_cast<int64_t>(alpha) * delta_)) >>
+        int diff = static_cast<int32_t>(static_cast<uint32_t>(alpha) *
+                                        static_cast<uint32_t>(delta_)) >>
                    bit_width_;
-
-        return value + diff;
+        return static_cast<int32_t>(static_cast<uint32_t>(value) +
+                                    static_cast<uint32_t>(diff));
     }
 
     void train(int pre, int val, int err) override {
-        int gradient = err > 0 ? -delta_ : delta_;
-        accumulator_ -= gradient;
-        delta_ = val - pre;
+        uint32_t gradient = err > 0
+                                ? uint32_t(0) - static_cast<uint32_t>(delta_)
+                                : static_cast<uint32_t>(delta_);
+        accumulator_ = static_cast<int32_t>(
+            static_cast<uint32_t>(accumulator_) - gradient);
+        delta_ = static_cast<int32_t>(static_cast<uint32_t>(val) -
+                                      static_cast<uint32_t>(pre));
     }
 };
 
@@ -92,30 +97,23 @@ class LongFire : public Fire<int64_t> {
 
     int64_t predict(int64_t value) override {
         int64_t alpha = accumulator_ >> learn_shift_;
-        int64_t diff = safe_mul_shift(alpha, delta_, bit_width_);
-        return value + diff;
+        // Java wraps the product to 64 bits before the arithmetic shift.
+        int64_t diff = static_cast<int64_t>(static_cast<uint64_t>(alpha) *
+                                            static_cast<uint64_t>(delta_)) >>
+                       bit_width_;
+        return static_cast<int64_t>(static_cast<uint64_t>(value) +
+                                    static_cast<uint64_t>(diff));
     }
 
     void train(int64_t pre, int64_t val, int64_t err) override {
-        int64_t gradient = err > 0 ? -delta_ : delta_;
-        accumulator_ -= gradient;
-        delta_ = val - pre;
-    }
-
-   private:
-    /** (alpha * delta_) >> shift without signed overflow; both args are
-     * int64_t. */
-    static int64_t safe_mul_shift(int64_t alpha, int64_t delta, int shift) {
-#if defined(__SIZEOF_INT128__) && __SIZEOF_INT128__ >= 16
-        __int128 product = static_cast<__int128>(alpha) * delta;
-        return static_cast<int64_t>(product >> shift);
-#else
-        /* Portable fallback: use double for product. Exact for |alpha|,|delta|
-         * < 2^53. */
-        double prod = static_cast<double>(alpha) * static_cast<double>(delta);
-        double div = static_cast<double>(1LL << shift);
-        return static_cast<int64_t>(prod / div);
-#endif
+        uint64_t gradient = err > 0
+                                ? uint64_t(0) - static_cast<uint64_t>(delta_)
+                                : static_cast<uint64_t>(delta_);
+        accumulator_ =
+            static_cast<int32_t>(static_cast<uint32_t>(accumulator_) -
+                                 static_cast<uint32_t>(gradient));
+        delta_ = static_cast<int64_t>(static_cast<uint64_t>(val) -
+                                      static_cast<uint64_t>(pre));
     }
 };
 

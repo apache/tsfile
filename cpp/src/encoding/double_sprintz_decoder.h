@@ -100,9 +100,8 @@ class DoubleSprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& input) override {
-        uint32_t min_length = sizeof(uint32_t) + 1;
         return (is_block_read_ && current_count_ < decode_size_) ||
-               input.remaining_size() >= min_length;
+               input.has_remaining();
     }
 
    protected:
@@ -126,6 +125,14 @@ class DoubleSprintzDecoder : public SprintzDecoder {
                     return ret;
                 }
             }
+            // Java's Gorilla decoder eagerly consumes a byte after a
+            // byte-aligned terminator. Match it before the next Sprintz block.
+            if (decoder.bits_left_ == 0) {
+                uint8_t padding;
+                uint32_t read_len;
+                if (RET_FAIL(input.read_buf(&padding, 1, read_len))) return ret;
+            }
+
         } else {
             decode_size_ = block_size_ + 1;
             common::SerializationUtil::read_double(pre_value_, input);
@@ -156,15 +163,17 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         if (predict_scheme_ == "delta") {
             uint64_t prev_bits;
             std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
-            int64_t corrected0 =
-                convert_buffer_[0] + static_cast<int64_t>(prev_bits);
+            int64_t corrected0 = static_cast<int64_t>(
+                static_cast<uint64_t>(convert_buffer_[0]) + prev_bits);
             convert_buffer_[0] = corrected0;
             double d0;
             std::memcpy(&d0, &corrected0, sizeof(corrected0));
             current_buffer_[1] = d0;
 
             for (int i = 1; i < block_size_; ++i) {
-                convert_buffer_[i] += convert_buffer_[i - 1];
+                convert_buffer_[i] = static_cast<int64_t>(
+                    static_cast<uint64_t>(convert_buffer_[i]) +
+                    static_cast<uint64_t>(convert_buffer_[i - 1]));
                 int64_t bits = convert_buffer_[i];
                 double di;
                 std::memcpy(&di, &bits, sizeof(bits));
@@ -177,7 +186,8 @@ class DoubleSprintzDecoder : public SprintzDecoder {
             std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
             int64_t p = fire_pred_.predict(prev_bits);
             int64_t e0 = convert_buffer_[0];
-            int64_t corrected0 = p + e0;
+            int64_t corrected0 = static_cast<int64_t>(
+                static_cast<uint64_t>(p) + static_cast<uint64_t>(e0));
             convert_buffer_[0] = corrected0;
             double d0;
             std::memcpy(&d0, &corrected0, sizeof(corrected0));
@@ -190,7 +200,8 @@ class DoubleSprintzDecoder : public SprintzDecoder {
                             sizeof(prev_bits_i));
                 int64_t err = convert_buffer_[i];
                 int64_t pred = fire_pred_.predict(prev_bits_i);
-                int64_t corrected = pred + err;
+                int64_t corrected = static_cast<int64_t>(
+                    static_cast<uint64_t>(pred) + static_cast<uint64_t>(err));
                 convert_buffer_[i] = corrected;
                 double di;
                 std::memcpy(&di, &corrected, sizeof(corrected));

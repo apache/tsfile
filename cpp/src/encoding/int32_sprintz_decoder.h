@@ -56,9 +56,8 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& in) override {
-        uint32_t min_len = sizeof(int32_t) + 1;
-        return (is_block_read_ && current_count_ < block_size_) ||
-               in.remaining_size() >= min_len;
+        return (is_block_read_ && current_count_ < decode_size_) ||
+               in.has_remaining();
     }
 
     int read_boolean(bool& ret_value, common::ByteStream& in) override {
@@ -103,9 +102,8 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_next(common::ByteStream& input) {
-        uint32_t min_length = sizeof(int32_t) + 1;
-        return (is_block_read_ && current_count_ < block_size_) ||
-               input.remaining_size() >= min_length;
+        return (is_block_read_ && current_count_ < decode_size_) ||
+               input.has_remaining();
     }
 
    protected:
@@ -166,14 +164,17 @@ class Int32SprintzDecoder : public SprintzDecoder {
 
         if (predict_scheme_ == "delta") {
             for (size_t i = 1; i < current_buffer_.size(); ++i) {
-                current_buffer_[i] += current_buffer_[i - 1];
+                current_buffer_[i] = static_cast<int32_t>(
+                    static_cast<uint32_t>(current_buffer_[i]) +
+                    static_cast<uint32_t>(current_buffer_[i - 1]));
             }
         } else if (predict_scheme_ == "fire") {
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 int32_t pred = fire_pred_.predict(current_buffer_[i - 1]);
                 int32_t err = current_buffer_[i];
-                current_buffer_[i] = pred + err;
+                current_buffer_[i] = static_cast<int32_t>(
+                    static_cast<uint32_t>(pred) + static_cast<uint32_t>(err));
                 fire_pred_.train(current_buffer_[i - 1], current_buffer_[i],
                                  err);
             }
