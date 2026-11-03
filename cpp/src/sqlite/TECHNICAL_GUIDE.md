@@ -163,7 +163,9 @@ fsync 父目录。失败清理本次已知 staging 文件，进程中断可以�
 `tsfile_table_info` 从当前事务视图读取模式、精度、设备数、设备 watermark 最小值、
 源表最大时间、热行数、登记文件数及路径信息；空表 watermark 为 INT64_MIN，只读表
 为 NULL。`tsfile_device_info` 按完整 TAG 组合返回解码后的键、watermark、当前最大
-时间（含热行）和该设备热行数。
+时间（含热行）和该设备热行数。`tsfile_schema` 按声明顺序返回 cid、列名、原始
+TsFile 类型、类别（TIME/TAG/FIELD）、SQLite 映射类型和是否非空；它不依赖 SQLite
+的类型亲和，因此能区分同为 INTEGER 的 TIME、TAG、INT32、INT64 等语义。
 
 `tsfile_verify` 检查登记文件是否存在、Reader 是否可解析元数据、指定表 schema 是否
 存在，以及全文指纹是否一致；它完整读取文件计算指纹，但不会逐页解码业务数据。

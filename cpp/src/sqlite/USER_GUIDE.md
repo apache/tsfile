@@ -413,6 +413,18 @@ FROM tsfile_device_info('main.continued');
 watermark 是该设备新写入的最小允许时间；max_time 是该设备当前最大时间。状态只反映
 查询当时的情况，最终以写操作结果为准。
 
+需要重建表或交给其他 TsFile 工具时，用 `tsfile_schema` 查看原始列定义：
+
+```sql
+SELECT cid, name, tsfile_type, category, sqlite_type, not_null
+FROM tsfile_schema('main.continued');
+```
+
+它按声明顺序返回每列在 TsFile 中的类型（TIMESTAMP、STRING、DOUBLE、INT32 等）、
+类别（TIME、TAG、FIELD）、对应的 SQLite 类型以及是否非空。SQLite 的 `DESC` 或
+`PRAGMA table_info` 只显示映射后的 INTEGER/REAL/TEXT/BLOB，无法区分 TAG 和 FIELD，
+`tsfile_schema` 补上这部分信息。
+
 若某设备的最大时间已达到 INT64_MAX，它的 watermark 为 NULL，不能再向该设备追加
 更晚数据；其他设备仍可写入。原有数据仍可查询和导出。seal 可以封存时间为
 INT64_MAX 的热行，并把该设备 watermark 置为 NULL。

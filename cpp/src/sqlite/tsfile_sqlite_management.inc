@@ -427,7 +427,7 @@ void compact_function(sqlite3_context* context, int, sqlite3_value** argv) {
     sqlite3_result_int64(context, files);
 }
 
-enum class DiagnosticKind { TableInfo, DeviceInfo, Verify };
+enum class DiagnosticKind { TableInfo, DeviceInfo, Schema, Verify };
 
 struct DiagnosticTable : sqlite3_vtab {
     sqlite3* db = nullptr;
@@ -451,6 +451,46 @@ Value int_cell(sqlite3_int64 value) {
     v.is_null = false;
     v.i64 = value;
     return v;
+}
+
+std::string tsfile_type_name(common::TSDataType type) {
+    switch (type) {
+        case common::BOOLEAN:
+            return "BOOLEAN";
+        case common::INT32:
+            return "INT32";
+        case common::INT64:
+            return "INT64";
+        case common::FLOAT:
+            return "FLOAT";
+        case common::DOUBLE:
+            return "DOUBLE";
+        case common::TEXT:
+            return "TEXT";
+        case common::STRING:
+            return "STRING";
+        case common::BLOB:
+            return "BLOB";
+        case common::TIMESTAMP:
+            return "TIMESTAMP";
+        case common::DATE:
+            return "DATE";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+std::string column_category_name(common::ColumnCategory category) {
+    switch (category) {
+        case common::ColumnCategory::TIME:
+            return "TIME";
+        case common::ColumnCategory::TAG:
+            return "TAG";
+        case common::ColumnCategory::FIELD:
+            return "FIELD";
+        default:
+            return "UNKNOWN";
+    }
 }
 
 std::string device_key_text(const std::string& key) {
@@ -486,10 +526,14 @@ int diagnostic_connect(sqlite3* db, void* aux, int, const char* const* argv,
     table->db = db;
     table->connection = static_cast<Connection*>(aux);
     std::string name = argv[0];
-    table->kind = name == "tsfile_verify" ? DiagnosticKind::Verify
-                                          : (name == "tsfile_device_info"
-                                                 ? DiagnosticKind::DeviceInfo
-                                                 : DiagnosticKind::TableInfo);
+    if (name == "tsfile_verify")
+        table->kind = DiagnosticKind::Verify;
+    else if (name == "tsfile_device_info")
+        table->kind = DiagnosticKind::DeviceInfo;
+    else if (name == "tsfile_schema")
+        table->kind = DiagnosticKind::Schema;
+    else
+        table->kind = DiagnosticKind::TableInfo;
     const char* schema =
         table->kind == DiagnosticKind::Verify
             ? "CREATE TABLE x(segment_id INTEGER,path TEXT,status TEXT,detail "
@@ -498,11 +542,18 @@ int diagnostic_connect(sqlite3* db, void* aux, int, const char* const* argv,
                    ? "CREATE TABLE x(device_key TEXT,watermark "
                      "INTEGER,max_time "
                      "INTEGER,hot_rows INTEGER,requested_table TEXT HIDDEN)"
-                   : "CREATE TABLE x(table_name TEXT,mode TEXT,"
-                     "timestamp_precision TEXT,device_count INTEGER,watermark "
-                     "INTEGER,source_max_time INTEGER,hot_rows INTEGER,"
-                     "file_count INTEGER,directory TEXT,source_file TEXT,"
-                     "source_table TEXT,requested_table TEXT HIDDEN)");
+                   : (table->kind == DiagnosticKind::Schema
+                          ? "CREATE TABLE x(cid INTEGER,name TEXT,tsfile_type "
+                            "TEXT,category TEXT,sqlite_type TEXT,not_null "
+                            "INTEGER,requested_table TEXT HIDDEN)"
+                          : "CREATE TABLE x(table_name TEXT,mode TEXT,"
+                            "timestamp_precision TEXT,device_count INTEGER,"
+                            "watermark INTEGER,source_max_time "
+                            "INTEGER,hot_rows "
+                            "INTEGER,file_count INTEGER,directory TEXT,"
+                            "source_file TEXT,source_table "
+                            "TEXT,requested_table "
+                            "TEXT HIDDEN)"));
     int rc = sqlite3_declare_vtab(db, schema);
     if (rc != SQLITE_OK) return rc;
     sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
@@ -510,10 +561,10 @@ int diagnostic_connect(sqlite3* db, void* aux, int, const char* const* argv,
     return SQLITE_OK;
 }
 int diagnostic_best(sqlite3_vtab* base, sqlite3_index_info* info) {
-    int hidden =
-        static_cast<DiagnosticTable*>(base)->kind == DiagnosticKind::TableInfo
-            ? 11
-            : 4;
+    DiagnosticKind kind = static_cast<DiagnosticTable*>(base)->kind;
+    int hidden = kind == DiagnosticKind::TableInfo
+                     ? 11
+                     : (kind == DiagnosticKind::Schema ? 6 : 4);
     for (int i = 0; i < info->nConstraint; ++i) {
         if (info->aConstraint[i].iColumn == hidden &&
             info->aConstraint[i].op == SQLITE_INDEX_CONSTRAINT_EQ &&
@@ -585,6 +636,22 @@ int diagnostic_filter(sqlite3_vtab_cursor* base, int, const char*, int argc,
         return SQLITE_ERROR;
     }
     sqlite3_stmt* stmt = nullptr;
+    if (diagnostic->kind == DiagnosticKind::Schema) {
+        for (size_t i = 0; i < table->columns.size(); ++i) {
+            const Column& column = table->columns[i];
+            std::vector<Value> row;
+            row.push_back(int_cell(static_cast<sqlite3_int64>(i)));
+            row.push_back(text_cell(column.name));
+            row.push_back(text_cell(tsfile_type_name(column.type)));
+            row.push_back(text_cell(column_category_name(column.category)));
+            row.push_back(text_cell(sqlite_type(column.type)));
+            row.push_back(
+                int_cell(column.category == ColumnCategory::TIME ? 1 : 0));
+            row.push_back(text_cell(requested));
+            cursor->rows.push_back(std::move(row));
+        }
+        return SQLITE_OK;
+    }
     if (diagnostic->kind == DiagnosticKind::DeviceInfo) {
         std::string sql;
         if (table->readonly) {
@@ -791,6 +858,9 @@ int register_management(sqlite3* db, Connection* connection) {
     if (rc == SQLITE_OK)
         rc = sqlite3_create_module_v2(db, "tsfile_device_info",
                                       &kDiagnosticModule, connection, nullptr);
+    if (rc == SQLITE_OK)
+        rc = sqlite3_create_module_v2(db, "tsfile_schema", &kDiagnosticModule,
+                                      connection, nullptr);
     if (rc == SQLITE_OK)
         rc = sqlite3_create_module_v2(db, "tsfile_verify", &kDiagnosticModule,
                                       connection, nullptr);

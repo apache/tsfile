@@ -222,7 +222,10 @@ watermark, source maximum time, hot rows, file count and path information in the
 caller's transaction view. An empty table reports INT64_MIN for watermark; a
 read-only table reports NULL. `tsfile_device_info` returns each complete TAG
 combination's decoded key, watermark, current maximum time (including hot rows)
-and hot row count.
+and hot row count. `tsfile_schema` returns, in declaration order, cid, column
+name, original TsFile type, category (TIME/TAG/FIELD), mapped SQLite type and
+nullability. It does not rely on SQLite type affinity, so INTEGER-mapped TIME,
+TAG, INT32, INT64 and similar columns remain distinguishable.
 
 `tsfile_verify` enumerates registered files and checks Reader metadata, selected
 schema existence and content fingerprint. It reads each file in full to compute

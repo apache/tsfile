@@ -452,6 +452,20 @@ count. watermark is the minimum allowed time for new rows on that device;
 max_time is that device's current maximum. This describes the current view; the
 actual write result is authoritative.
 
+To recreate a table or hand it to other TsFile tools, use `tsfile_schema` to see
+the original column definitions:
+
+```sql
+SELECT cid, name, tsfile_type, category, sqlite_type, not_null
+FROM tsfile_schema('main.continued');
+```
+
+It returns, in declaration order, each column's TsFile type (TIMESTAMP, STRING,
+DOUBLE, INT32 and so on), category (TIME, TAG or FIELD), mapped SQLite type and
+nullability. SQLite's `DESC` or `PRAGMA table_info` only shows the mapped
+INTEGER/REAL/TEXT/BLOB declarations and cannot distinguish TAG from FIELD;
+`tsfile_schema` supplies that information.
+
 If a device reaches INT64_MAX, its watermark becomes NULL and that device cannot
 accept later data; other devices can still write. Existing data remains readable
 and exportable. Seal can seal a hot row at INT64_MAX and set that device's

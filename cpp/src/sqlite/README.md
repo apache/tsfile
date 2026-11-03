@@ -81,6 +81,7 @@ SELECT tsfile_export('main.sensor', '/export/sensor-001');
 SELECT tsfile_compact('main.sensor', 50, 200);
 SELECT * FROM tsfile_table_info('main.sensor');
 SELECT * FROM tsfile_device_info('main.sensor');
+SELECT * FROM tsfile_schema('main.sensor');
 SELECT * FROM tsfile_verify('main.sensor');
 ```
 

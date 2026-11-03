@@ -1005,4 +1005,73 @@ TEST_F(TsFileSqliteTest, FieldPredicatesSupportTypedFields) {
     EXPECT_EQ(1, count("SELECT count(*) FROM typed WHERE label IS NULL"));
 }
 
+TEST_F(TsFileSqliteTest, SchemaFunctionListsTsfileTypes) {
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec(
+            "CREATE VIRTUAL TABLE typed_schema USING tsfile_hybrid("
+            "time TIMESTAMP TIME,group_id STRING TAG,device_id STRING TAG,"
+            "d DOUBLE FIELD,i64 INT64 FIELD,i32 INT32 FIELD,flag BOOLEAN FIELD,"
+            "label TEXT FIELD,payload BLOB FIELD,day DATE FIELD,directory=" +
+            quote(directory_ + "-schema") + ",timestamp_precision='ms')"));
+    EXPECT_EQ(10,
+              count("SELECT count(*) FROM tsfile_schema('main.typed_schema')"));
+    EXPECT_EQ(
+        "TIMESTAMP",
+        scalar_text("SELECT tsfile_type FROM "
+                    "tsfile_schema('main.typed_schema') WHERE name='time'"));
+    EXPECT_EQ(
+        "TAG",
+        scalar_text("SELECT category FROM tsfile_schema('main.typed_schema') "
+                    "WHERE name='group_id'"));
+    EXPECT_EQ(
+        "FIELD",
+        scalar_text("SELECT category FROM tsfile_schema('main.typed_schema') "
+                    "WHERE name='label'"));
+    EXPECT_EQ("REAL",
+              scalar_text("SELECT sqlite_type FROM "
+                          "tsfile_schema('main.typed_schema') WHERE name='d'"));
+    EXPECT_EQ(
+        "INTEGER",
+        scalar_text("SELECT sqlite_type FROM "
+                    "tsfile_schema('main.typed_schema') WHERE name='i32'"));
+    EXPECT_EQ("BLOB", scalar_text("SELECT sqlite_type FROM tsfile_schema('main."
+                                  "typed_schema') WHERE name='payload'"));
+    EXPECT_EQ(1,
+              count("SELECT not_null FROM tsfile_schema('main.typed_schema') "
+                    "WHERE name='time'"));
+    EXPECT_EQ(0,
+              count("SELECT not_null FROM tsfile_schema('main.typed_schema') "
+                    "WHERE name='label'"));
+    EXPECT_EQ("time,group_id,device_id,d,i64,i32,flag,label,payload,day",
+              scalar_text("SELECT group_concat(name, ',') FROM "
+                          "tsfile_schema('main.typed_schema')"));
+    EXPECT_NE(SQLITE_OK,
+              exec_raw("SELECT * FROM tsfile_schema('main.missing')"));
+}
+
+TEST_F(TsFileSqliteTest, SchemaFunctionWorksForInferredFileTables) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("CREATE VIRTUAL TABLE history_schema USING tsfile_hybrid(file=" +
+             quote(path) + ",source_table='sensor')"));
+    EXPECT_EQ(3, count("SELECT count(*) FROM "
+                       "tsfile_schema('main.history_schema')"));
+    EXPECT_EQ("TIMESTAMP", scalar_text("SELECT tsfile_type FROM "
+                                       "tsfile_schema('main.history_schema') "
+                                       "WHERE name='time'"));
+    EXPECT_EQ("TAG", scalar_text("SELECT category FROM "
+                                 "tsfile_schema('main.history_schema') "
+                                 "WHERE name='device'"));
+    EXPECT_EQ("DOUBLE", scalar_text("SELECT tsfile_type FROM "
+                                    "tsfile_schema('main.history_schema') "
+                                    "WHERE name='temperature'"));
+    EXPECT_EQ(0, count("SELECT not_null FROM "
+                       "tsfile_schema('main.history_schema') "
+                       "WHERE name='device'"));
+}
+
 }  // namespace
