@@ -1698,7 +1698,9 @@ INSERT INTO smoke VALUES
 SELECT count(*) FROM smoke;
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  initial row count  -> 1
 PASS  row count after insert  -> 4
 
@@ -1721,7 +1723,9 @@ SELECT count(*) FROM smoke WHERE v1=22.5;
 SELECT count(*) FROM smoke;
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  update/delete  -> 1
 PASS  query after delete  -> 3
 
@@ -1741,7 +1745,9 @@ PASS  query after delete  -> 3
 SELECT count(*) FROM smoke WHERE v1>20;
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  field filter hot  -> 2
 
 实际结果:
@@ -1762,7 +1768,9 @@ SELECT count(*) FROM smoke;
 SELECT count(*) FROM smoke WHERE v1>20;
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  seal return rows  -> 3
 PASS  query cold  -> 3
 PASS  field filter cold  -> 2
@@ -1784,7 +1792,9 @@ SELECT count(*) FROM smoke
 WHERE time>=1000 AND time<3000 AND group_id='g0' AND v1>20;
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  time+tag+field pushdown  -> 2
 
 实际结果:
@@ -1804,7 +1814,9 @@ SELECT hot_rows, device_count, file_count, watermark
 FROM tsfile_table_info('main.smoke');
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  table_info hot_rows  -> 0
 PASS  table_info device_count  -> 2
 PASS  table_info file_count  -> 1
@@ -1827,7 +1839,9 @@ SELECT device_key, watermark, max_time
 FROM tsfile_device_info('main.smoke');
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  device_info rows  -> 2
 PASS  device d1 watermark  -> 2001
 PASS  device d2 watermark  -> 3001
@@ -1849,7 +1863,9 @@ SELECT cid, name, tsfile_type, category, sqlite_type, not_null
 FROM tsfile_schema('main.smoke');
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  schema column count  -> 8
 PASS  schema time type  -> TIMESTAMP:TIME
 PASS  schema tag type  -> STRING:TAG
@@ -1878,7 +1894,9 @@ SELECT count(*) FROM history WHERE v1>20;
 INSERT INTO history VALUES(5000,'g0','d1',1.0,1,1.0,1,1);
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  export files  -> 1
 PASS  exported file exists  -> 1
 PASS  readonly file query  -> 3
@@ -1905,7 +1923,9 @@ SELECT mode FROM tsfile_table_info('main.history_dir');
 SELECT tsfile_compact('main.smoke',10,20);
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  directory source query  -> 3
 PASS  readonly table_info mode  -> readonly
 PASS  compact no-op  -> 0
@@ -1930,7 +1950,9 @@ DELETE FROM history WHERE time=1000;
 SELECT * FROM tsfile_schema('main.missing');
 
 实际执行:
-$ bash /tmp/sqlite_selftest.sh
+$ SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+  TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+  bash cpp/src/sqlite/selftest_sql.sh
 PASS  verify sensor  -> 1
 PASS  verify history  -> 1
 PASS  duplicate key rejected

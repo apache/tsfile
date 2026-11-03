@@ -174,8 +174,32 @@ sqlite3_load_extension(db, "./build/sqlite/lib/tsfile_sqlite.dylib",
 
 ## 5. Manual smoke checks
 
-The following sequence exercises the main user-facing paths. Expected values are
-for the exact SQL shown.
+For a repeatable 35-check smoke test, use
+[`selftest_sql.sh`](selftest_sql.sh). It loads the extension, creates a writable
+table, exercises hot CRUD, seal, diagnostics, export, read-only tables, directory
+sources, compact and expected error paths, and prints one PASS/FAIL line per
+check:
+
+```bash
+SQLITE=/opt/homebrew/opt/sqlite/bin/sqlite3 \
+TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.dylib \
+bash cpp/src/sqlite/selftest_sql.sh
+```
+
+On Linux, use a system `sqlite3` and the `.so` extension path:
+
+```bash
+SQLITE=sqlite3 \
+TSFILE_SQLITE_EXTENSION=build/develop/lib/tsfile_sqlite.so \
+bash cpp/src/sqlite/selftest_sql.sh
+```
+
+The script creates a fresh temporary directory by default. Set `SELFTEST_DIR` to
+keep the database and generated files in a specific location. A successful run
+ends with `PASS=35 FAIL=0`.
+
+The following sequence exercises the main user-facing paths interactively.
+Expected values are for the exact SQL shown.
 
 ```sql
 -- Prepare
