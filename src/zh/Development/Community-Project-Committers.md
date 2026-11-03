@@ -71,7 +71,7 @@
 我们的社区存在以下四种身份
 
 - PMC
-- Committe
+- Committer
 - Contributor
 - User
 
@@ -79,5 +79,5 @@
 
 - 若想了解四种身份的详细内容，请查看[社区组织架构](../Community/About.md)
 - 若想成为 PMC ，请查看：[社区评选规章](../Community/About.md#pmc)
-- 若想成为 Committe ，请查看：[社区评选规章](../Community/About.md#committe)
+- 若想成为 Committer ，请查看：[社区评选规章](../Community/About.md#committer)
 - 若想成为 Contributor ，请查看：[社区评选规章](../Community/About.md#contributor)
