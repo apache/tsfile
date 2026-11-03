@@ -1954,7 +1954,14 @@ PASS  missing table rejected
 ### 4.1 本地 macOS
 
 ```text
-输入:
+输入 SQL:
+CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
+  time TIMESTAMP TIME, group_id STRING TAG, device_id STRING TAG,
+  v1 DOUBLE FIELD, v2 INT64 FIELD, v3 DOUBLE FIELD,
+  v4 INT32 FIELD, v5 DOUBLE FIELD,
+  directory='<TMP>/sensor', timestamp_precision='ms');
+
+输入规模:
 1000 设备，每设备 1 万行，共 1000 万行；每 100 万行 seal。
 
 构造/执行:
@@ -1972,7 +1979,14 @@ C++ 驱动使用 prepared INSERT 逐行写入，每 100 万行提交并 seal；�
 ### 4.2 datadev 每 10 万行 seal
 
 ```text
-输入:
+输入 SQL:
+CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
+  time TIMESTAMP TIME, group_id STRING TAG, device_id STRING TAG,
+  v1 DOUBLE FIELD, v2 INT64 FIELD, v3 DOUBLE FIELD,
+  v4 INT32 FIELD, v5 DOUBLE FIELD,
+  directory='<TMP>/sensor', timestamp_precision='ms');
+
+输入规模:
 1000 设备，每轮每设备 100 行，累计 10 万行 seal。
 
 构造/执行:
@@ -1990,7 +2004,14 @@ C++ 驱动使用 prepared INSERT 逐行写入，每 100 万行提交并 seal；�
 ### 4.3 datadev 单次 1000 万行 seal
 
 ```text
-输入:
+输入 SQL:
+CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
+  time TIMESTAMP TIME, group_id STRING TAG, device_id STRING TAG,
+  v1 DOUBLE FIELD, v2 INT64 FIELD, v3 DOUBLE FIELD,
+  v4 INT32 FIELD, v5 DOUBLE FIELD,
+  directory='<TMP>/sensor', timestamp_precision='ms');
+
+输入规模:
 1000 万行热数据。
 
 构造/执行:
@@ -2010,7 +2031,14 @@ C++ 驱动使用 prepared INSERT 逐行写入，每 100 万行提交并 seal；�
 ### 5.1 seal 内存放大
 
 ```text
-输入:
+输入 SQL:
+CREATE VIRTUAL TABLE sensor USING tsfile_hybrid(
+  time TIMESTAMP TIME, group_id STRING TAG, device_id STRING TAG,
+  v1 DOUBLE FIELD, v2 INT64 FIELD, v3 DOUBLE FIELD,
+  v4 INT32 FIELD, v5 DOUBLE FIELD,
+  directory='<TMP>/sensor', timestamp_precision='ms');
+
+输入规模:
 1000 台设备 × 每台 10000 行 = 1000 万行热数据，单次 seal，max_file_size_mb=512。
 
 构造/执行:
