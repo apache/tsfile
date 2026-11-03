@@ -106,6 +106,11 @@ run_scan() {
     done
 }
 
+run_supp() {
+    # D2000-M30 exceeds the 500MB target at 50k seal; 30k keeps peak lower.
+    run_one 2000 30 "$ROWS" 30000 supp
+}
+
 case "$STAGE" in
     smoke) run_smoke ;;
     main) run_main ;;
@@ -114,6 +119,7 @@ case "$STAGE" in
         run_smoke
         run_main
         run_scan
+        run_supp
         ;;
     *)
         echo "usage: $0 [smoke|main|scan|all]" >&2
