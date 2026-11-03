@@ -900,7 +900,19 @@ public class BytesUtils {
     byte[] bytes = new byte[count];
     int readCount = 0;
     while (readCount < count) {
-      readCount += in.read(bytes, readCount, count - readCount);
+      int currentRead = in.read(bytes, readCount, count - readCount);
+      if (currentRead < 0) {
+        throw new IOException(Messages.format("error.utils.rwio_short_read", count, readCount));
+      }
+      if (currentRead == 0) {
+        int value = in.read();
+        if (value < 0) {
+          throw new IOException(Messages.format("error.utils.rwio_short_read", count, readCount));
+        }
+        bytes[readCount++] = (byte) value;
+      } else {
+        readCount += currentRead;
+      }
     }
     return bytes;
   }
