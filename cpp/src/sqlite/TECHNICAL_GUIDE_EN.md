@@ -81,8 +81,9 @@ returns the decoded, human-readable value.
 
 The private hot row-ID column chooses an unused name starting at `tsfile$rowid`.
 Business columns named `rowid`, `oid` or `_rowid_` do not control internal row
-identity. Cold rows receive negative synthetic IDs; these identify immutable
-rows during an operation and are not stable business keys.
+identity. Cold rows receive negative synthetic IDs derived from the segment
+ordinal, time and TAG values, so MULTI-INDEX OR scans assign the same ID to the
+same cold row. They are not stable business keys and may change after compact.
 
 For each TAG the unique index contains `(tag IS NULL)` and `coalesce(tag,'')`,
 followed by TIME after all TAG components. This makes two NULL key components

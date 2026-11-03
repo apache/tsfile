@@ -1764,15 +1764,37 @@ std::shared_ptr<TableSchema> build_tsfile_schema(const HybridTable* table) {
     return std::make_shared<TableSchema>(table->table_name, columns);
 }
 
-sqlite3_int64 cold_rowid(uint64_t segment_ordinal, uint64_t row_ordinal) {
-    // Keep cold rowids negative and deterministic for a segment traversal.
-    // The high/low split leaves enough room for ordinary segment and row
-    // counts while avoiding collisions with SQLite's positive hot rowids.
-    const uint64_t max_code =
-        static_cast<uint64_t>(std::numeric_limits<sqlite3_int64>::max()) - 1;
-    uint64_t code = (segment_ordinal << 32) | (row_ordinal & 0xffffffffULL);
-    if (code > max_code) code = max_code;
-    return -static_cast<sqlite3_int64>(code + 1);
+void hash_bytes(uint64_t& hash, const void* data, size_t size) {
+    const unsigned char* bytes = static_cast<const unsigned char*>(data);
+    for (size_t i = 0; i < size; ++i) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL;
+    }
+}
+
+sqlite3_int64 cold_rowid(uint64_t segment_ordinal, const HybridTable* table,
+                         const Row& row) {
+    // MULTI-INDEX OR runs several scans and deduplicates by rowid. A rowid
+    // derived from the filtered result position would give the same row
+    // different ids in different scans, so derive it from the row identity
+    // (segment, time and TAG values) instead.
+    uint64_t hash = 14695981039346656037ULL;
+    hash_bytes(hash, &segment_ordinal, sizeof(segment_ordinal));
+    int64_t timestamp = row.values[table->time_index].i64;
+    hash_bytes(hash, &timestamp, sizeof(timestamp));
+    for (int index : table->tag_indexes) {
+        const Value& value = row.values[index];
+        unsigned char is_null = value.is_null ? 1 : 0;
+        hash_bytes(hash, &is_null, sizeof(is_null));
+        if (!value.is_null) {
+            uint64_t length = value.bytes.size();
+            hash_bytes(hash, &length, sizeof(length));
+            hash_bytes(hash, value.bytes.data(), value.bytes.size());
+        }
+    }
+    // Keep cold rowids negative and non-zero; the hot shadow table uses
+    // positive SQLite rowids.
+    return -static_cast<sqlite3_int64>((hash & 0x7fffffffffffffffULL) | 1);
 }
 
 int read_result_row(HybridTable* table, ResultSet* result,
@@ -1827,12 +1849,12 @@ int read_result_row(HybridTable* table, ResultSet* result,
 
 int append_result_row(HybridCursor* cursor, ResultSet* result,
                       const std::vector<int>& value_indexes,
-                      sqlite3_int64 rowid) {
+                      uint64_t segment_ordinal) {
     HybridTable* table = cursor->table;
     Row row;
-    row.rowid = rowid;
     if (read_result_row(table, result, value_indexes, row) != SQLITE_OK)
         return SQLITE_ERROR;
+    row.rowid = cold_rowid(segment_ordinal, table, row);
     if (row_matches(row, table, kNoWatermark, true,
                     std::numeric_limits<int64_t>::max(), true, {}))
         cursor->rows.push_back(std::move(row));
@@ -1930,11 +1952,9 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
         }
         bool has_next = false;
         int next_rc = common::E_OK;
-        uint64_t row_ordinal = 0;
         while ((next_rc = result->next(has_next)) == common::E_OK && has_next) {
             if (append_result_row(cursor, result, value_indexes,
-                                  cold_rowid(segment_ordinal, row_ordinal++)) !=
-                SQLITE_OK) {
+                                  segment_ordinal) != SQLITE_OK) {
                 executor.destroy_query_data_set(result);
                 delete tag_filter;
                 sqlite3_finalize(stmt);

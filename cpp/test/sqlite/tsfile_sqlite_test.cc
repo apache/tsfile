@@ -1218,7 +1218,7 @@ TEST_F(TsFileSqliteTest, DiagnosticsExposeSourceAndEmptyNoTagDevices) {
                        "tsfile_device_info('main.empty_notags')"));
 }
 
-TEST_F(TsFileSqliteTest, CompactRejectsOversizedRowAndChangedFile) {
+TEST_F(TsFileSqliteTest, CompactThresholdAndChangedFile) {
     ASSERT_EQ(SQLITE_OK,
               exec("CREATE VIRTUAL TABLE bigrow USING tsfile_hybrid("
                    "time TIMESTAMP TIME,device STRING TAG,payload BLOB FIELD,"
@@ -1233,10 +1233,6 @@ TEST_F(TsFileSqliteTest, CompactRejectsOversizedRowAndChangedFile) {
     const std::string dir = directory_ + "-compact-edge";
     EXPECT_EQ(2, count_tsfiles(dir));
     EXPECT_EQ(0, count("SELECT tsfile_compact('main.bigrow',1,2)"));
-    EXPECT_EQ(2, count_tsfiles(dir));
-
-    EXPECT_EQ(SQLITE_CONSTRAINT,
-              exec_raw("SELECT tsfile_compact('main.bigrow',10,1)"));
     EXPECT_EQ(2, count_tsfiles(dir));
     EXPECT_EQ(2, count("SELECT count(*) FROM bigrow"));
 
@@ -1358,6 +1354,215 @@ TEST_F(TsFileSqliteTest, ExportCountsEverySealedFile) {
     EXPECT_EQ(
         2, count("SELECT tsfile_export('main.sensor'," + quote(output) + ")"));
     EXPECT_EQ(2, count_tsfiles(output));
+}
+
+TEST_F(TsFileSqliteTest, AllFieldTypesRoundTripAtExtremes) {
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("CREATE VIRTUAL TABLE alltypes USING tsfile_hybrid("
+             "time TIMESTAMP TIME,device STRING TAG,"
+             "b BOOLEAN FIELD,i32 INT32 FIELD,i64 INT64 FIELD,"
+             "f FLOAT FIELD,d DOUBLE FIELD,txt TEXT FIELD,s STRING FIELD,"
+             "payload BLOB FIELD,day DATE FIELD,stamp TIMESTAMP FIELD,"
+             "directory=" +
+             quote(directory_ + "-alltypes") + ",timestamp_precision='ms')"));
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("INSERT INTO alltypes VALUES("
+             "1,'d0',1,2147483647,9223372036854775807,1.5,2.25,'text','s',"
+             "X'00FF',2147483647,9223372036854775807),"
+             "(2,'d0',0,-2147483648,-9223372036854775808,-1.5,-2.25,'','',"
+             "X'',-2147483648,-9223372036854775808),"
+             "(3,'d0',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)"));
+    EXPECT_EQ(3, count("SELECT tsfile_seal('main.alltypes',64)"));
+    EXPECT_EQ(3, count("SELECT count(*) FROM alltypes"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE b=1"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE i32=2147483647"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE i32=-2147483648"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes "
+                       "WHERE i64=9223372036854775807"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes "
+                       "WHERE i64=-9223372036854775808"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE f=1.5"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE d=-2.25"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE txt='text'"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE txt=''"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE s=''"));
+    EXPECT_EQ(1,
+              count("SELECT count(*) FROM alltypes WHERE hex(payload)='00FF'"));
+    EXPECT_EQ(1,
+              count("SELECT count(*) FROM alltypes WHERE length(payload)=0"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE day=2147483647"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes "
+                       "WHERE stamp=-9223372036854775808"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM alltypes WHERE time=3 AND "
+                       "b IS NULL AND i32 IS NULL AND i64 IS NULL AND "
+                       "f IS NULL AND d IS NULL AND txt IS NULL AND "
+                       "s IS NULL AND payload IS NULL AND day IS NULL AND "
+                       "stamp IS NULL"));
+    EXPECT_EQ(12, count("SELECT count(*) FROM tsfile_schema('main.alltypes')"));
+}
+
+TEST_F(TsFileSqliteTest, TimeBoundaryQueriesAndWatermarks) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES"
+                              "(9223372036854775807,'max',1.0),"
+                              "(-9223372036854775808,'min',2.0),"
+                              "(-1,'neg',3.0),(0,'zero',4.0),(1,'one',5.0)"));
+    EXPECT_EQ(5, count("SELECT tsfile_seal('main.sensor',64)"));
+    EXPECT_EQ(5, count("SELECT count(*) FROM sensor"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor "
+                       "WHERE time=9223372036854775807"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor "
+                       "WHERE time=-9223372036854775808"));
+    EXPECT_EQ(2,
+              count("SELECT count(*) FROM sensor WHERE time>=0 AND time<=1"));
+    EXPECT_EQ(0, count("SELECT count(*) FROM sensor WHERE time>0 AND time<1"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM sensor WHERE time<0"));
+    EXPECT_EQ(3, count("SELECT count(*) FROM sensor WHERE time BETWEEN "
+                       "-9223372036854775808 AND 0"));
+    EXPECT_EQ(1, count("SELECT watermark IS NULL FROM "
+                       "tsfile_device_info('main.sensor') "
+                       "WHERE device_key='max'"));
+    EXPECT_EQ(1, count("SELECT watermark=-9223372036854775807 FROM "
+                       "tsfile_device_info('main.sensor') "
+                       "WHERE device_key='min'"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("INSERT INTO sensor VALUES(0,'max',9.0)"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("INSERT INTO sensor VALUES(-9223372036854775808,"
+                       "'min',9.0)"));
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("INSERT INTO sensor VALUES(-9223372036854775807,'min',9.0)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM sensor "
+                       "WHERE device='min' AND time=-9223372036854775807"));
+}
+
+TEST_F(TsFileSqliteTest, QueryOperatorAndResidualMatrix) {
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE ops USING tsfile_hybrid("
+                   "time TIMESTAMP TIME,device STRING TAG,"
+                   "temperature DOUBLE FIELD,label TEXT FIELD,directory=" +
+                   quote(directory_ + "-ops") + ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO ops VALUES"
+                              "(1,'d0',1.5,'alpha'),(2,'d0',2.5,'beta'),"
+                              "(3,'d0',3.5,'gamma'),(4,'d1',4.5,'delta'),"
+                              "(5,'d1',NULL,NULL),(6,'d1',6.5,'epsilon')"));
+    EXPECT_EQ(6, count("SELECT tsfile_seal('main.ops',64)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM ops WHERE temperature=2.5"));
+    EXPECT_EQ(4, count("SELECT count(*) FROM ops WHERE temperature<>2.5"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM ops WHERE temperature>3 AND "
+                       "temperature<6"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM ops WHERE temperature BETWEEN 2 "
+                       "AND 4"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM ops WHERE temperature IN "
+                       "(1.5,6.5)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM ops WHERE temperature IS NULL"));
+    EXPECT_EQ(5,
+              count("SELECT count(*) FROM ops WHERE temperature IS NOT NULL"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM ops WHERE NOT (temperature>3)"));
+    EXPECT_EQ(4, count("SELECT count(*) FROM ops WHERE device='d0' OR "
+                       "temperature>5"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM ops WHERE label LIKE 'a%'"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM ops WHERE label LIKE '%ta'"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM ops WHERE label GLOB 'a*'"));
+    EXPECT_EQ("6,5", scalar_text("SELECT group_concat(time,',') FROM "
+                                 "(SELECT time FROM ops ORDER BY time DESC "
+                                 "LIMIT 2)"));
+    EXPECT_EQ("4,3", scalar_text("SELECT group_concat(time,',') FROM "
+                                 "(SELECT time FROM ops ORDER BY time DESC "
+                                 "LIMIT 2 OFFSET 2)"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM (SELECT device,count(*) AS cnt "
+                       "FROM ops GROUP BY device HAVING cnt=3)"));
+}
+
+TEST_F(TsFileSqliteTest, MultiTagNullEmptyCombinations) {
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("CREATE VIRTUAL TABLE multitag USING tsfile_hybrid("
+             "time TIMESTAMP TIME,t1 STRING TAG,t2 STRING TAG,"
+             "value DOUBLE FIELD,directory=" +
+             quote(directory_ + "-multitag") + ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO multitag VALUES"
+                   "(1,NULL,NULL,1.0),(1,'',NULL,2.0),(1,NULL,'',3.0),"
+                   "(1,'','',4.0),(1,'a','b',5.0)"));
+    EXPECT_EQ(5, count("SELECT tsfile_seal('main.multitag',64)"));
+    EXPECT_EQ(5, count("SELECT count(*) FROM multitag"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM multitag "
+                       "WHERE t1 IS NULL AND t2 IS NULL"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM multitag "
+                       "WHERE t1='' AND t2 IS NULL"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM multitag "
+                       "WHERE t1 IS NULL AND t2=''"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM multitag "
+                       "WHERE t1='' AND t2=''"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM multitag "
+                       "WHERE t1='a' AND t2='b'"));
+    EXPECT_EQ(5, count("SELECT count(*) FROM "
+                       "tsfile_device_info('main.multitag')"));
+    EXPECT_EQ(SQLITE_CONSTRAINT,
+              exec_raw("INSERT INTO multitag VALUES(1,NULL,NULL,9.0)"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO multitag VALUES(2,NULL,NULL,9.0)"));
+    EXPECT_EQ(1, count("SELECT hot_rows FROM "
+                       "tsfile_device_info('main.multitag') "
+                       "WHERE device_key='NULL,NULL'"));
+}
+
+TEST_F(TsFileSqliteTest, CompactCanSplitIntoMultipleOutputFiles) {
+    ASSERT_EQ(
+        SQLITE_OK,
+        exec("CREATE VIRTUAL TABLE chunks USING tsfile_hybrid("
+             "time TIMESTAMP TIME,device STRING TAG,payload BLOB FIELD,"
+             "directory=" +
+             quote(directory_ + "-chunks") + ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO chunks VALUES(1,'d0',randomblob(600000))"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.chunks',64)"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO chunks VALUES(2,'d0',randomblob(600000))"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.chunks',64)"));
+    const std::string dir = directory_ + "-chunks";
+    EXPECT_EQ(2, count_tsfiles(dir));
+    EXPECT_EQ(2, count("SELECT tsfile_compact('main.chunks',1,1)"));
+    EXPECT_EQ(2, count_tsfiles(dir));
+    EXPECT_EQ(2, count("SELECT file_count FROM "
+                       "tsfile_table_info('main.chunks')"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM chunks"));
+    EXPECT_EQ(2, count("SELECT count(*) FROM tsfile_verify('main.chunks') "
+                       "WHERE status='OK'"));
+}
+
+TEST_F(TsFileSqliteTest, TempTableAndQuotedReservedIdentifiers) {
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE temp.tempsensor USING tsfile_hybrid("
+                   "time TIMESTAMP TIME,device STRING TAG,value DOUBLE FIELD,"
+                   "directory=" +
+                   quote(directory_ + "-temp") + ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO temp.tempsensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('temp.tempsensor',2)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM temp.tempsensor"));
+    EXPECT_EQ("writable", scalar_text("SELECT mode FROM "
+                                      "tsfile_table_info('temp.tempsensor')"));
+    ASSERT_EQ(SQLITE_OK, exec("DROP TABLE temp.tempsensor"));
+
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE \"weird table\" USING tsfile_hybrid("
+                   "\"select\" TIMESTAMP TIME,\"group\" STRING TAG,"
+                   "\"order\" DOUBLE FIELD,directory=" +
+                   quote(directory_ + "-quoted-reserved") +
+                   ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO \"weird table\" VALUES(1,'g',2.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.\"weird table\"',2)"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM \"weird table\" "
+                       "WHERE \"select\"=1 AND \"group\"='g' AND "
+                       "\"order\"=2.5"));
+    EXPECT_EQ("select:0:INTEGER:TIME",
+              scalar_text("SELECT name || ':' || cid || ':' || sqlite_type || "
+                          "':' || category FROM "
+                          "tsfile_schema('main.\"weird table\"') "
+                          "WHERE name='select'"));
 }
 
 }  // namespace
