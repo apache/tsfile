@@ -378,9 +378,9 @@ The target cannot be smaller than the threshold.
 
 Compact only touches sealed files in the table's own directory, never external
 source files. New files are registered atomically and old files are deleted after
-the transaction commits; on failure the originals remain and no partial result is
-published. Hot rows and device watermarks are unchanged. It returns the number of
-output files, or 0 when there are not enough mergeable files.
+the compact transaction commits; on failure the originals remain and no partial
+result is published. Hot rows and device watermarks are unchanged. It returns the
+number of output files, or 0 when there are not enough mergeable files.
 
 ## 5. Export and deliver data
 
@@ -428,6 +428,72 @@ An interrupted process may leave a temporary directory containing
 saves table data, not the complete SQLite database, business configuration or
 hot/cold state. Empty exports do not preserve a table definition. Export cannot
 replace a complete application database backup.
+
+### Full backup and restore
+
+A writable virtual table consists of two parts:
+
+1. the SQLite database: virtual-table definition, shadow tables, hot rows,
+   segment registry, and `_config`;
+2. the TsFile directory: sealed files plus the `.tsfile-owner` marker.
+
+Backing up only the SQLite database loses the cold segments; copying only the
+TsFile directory loses hot rows and the segment registry. A complete backup
+must include both the DB and the entire `_config.directory`, including
+`.tsfile-owner`:
+
+```bash
+sqlite3 /data/app.db ".backup '/backup/app.db'"
+cp -a /data/app-segments /backup/app-segments
+```
+
+The reliable restore is to put both back at their **original absolute paths**
+and reopen the connection:
+
+```bash
+cp /backup/app.db /data/app.db
+cp -a /backup/app-segments /data/app-segments
+sqlite3 /data/app.db "SELECT tsfile_verify('main.sensor');"
+```
+
+Do not simply move the backup database to a new path and query a writable
+table: `_config.directory` and `.tsfile-owner` are bound to the original DB
+path and table name. A new path fails with
+`TsFile directory belongs to a different SQLite database or table`.
+
+For delivery to a new directory:
+
+- **cold data only**: seal, then `tsfile_export`, and create a read-only
+  `file=` table at the new location;
+- **writable table**: create a new table in an empty directory, write the data
+  again, and seal it; the current version has no `tsfile_relocate` API and does
+  not adopt an existing directory automatically;
+- **hot rows only**: seal first; exported TsFiles do not contain hot rows.
+
+After restoring with `sqlite3 .dump`, reopen the connection before querying.
+Do not run `.read` and an immediate `SELECT` in the same CLI session; the
+virtual-table schema/connection cache has not been refreshed.
+
+### Long read transactions and compact
+
+`compact` may delete old segment files when it commits. SQLite WAL snapshots
+protect database pages, not these external TsFiles. A long read transaction
+that keeps its old snapshot across a compact may therefore see:
+
+```text
+failed to read sealed file: <path>: missing or changed file;
+if a compact ran concurrently, reopen the transaction
+```
+
+The current version does not support an old snapshot across compact. On this
+error:
+
+1. end the current transaction;
+2. start a new transaction;
+3. run the query again.
+
+If the workload needs long-lived consistent snapshots, stop such readers before
+compact, or wait for a future segment-retirement/reader-lease mechanism.
 
 ## 6. Check status and troubleshoot
 
@@ -506,6 +572,17 @@ Verify reports only. It does not repair, register or delete files, or inspect ot
 files beside an external source. It reads each registered file in full and
 computes its content fingerprint, so large files add overhead; ordinary queries
 compare only size, modification time and inode metadata.
+
+When `file=` points at a directory, any unreadable `.tsfile` makes the whole
+directory fail to load, including a 0-byte file:
+
+```text
+failed to read source file: <dir>/empty.tsfile (empty file)
+```
+
+Empty files are not skipped silently; move or fix them and create the table
+again. A writable table's own directory only follows `_segments`, so unregistered
+0-byte `.tsfile` files do not affect queries.
 
 ### Loading or creating a table fails
 

@@ -23,7 +23,8 @@
 
 日期：2026-11-04  
 分支：`experiment-sqlite`  
-范围：CMP-05、CMP-02、`.tmp` 清理  
+范围：CMP-05、CMP-02、`.tmp` 清理、0 字节源文件
+
 构建：macOS + Homebrew SQLite 3.53.3
 
 ## 1. 本次修改
@@ -33,6 +34,7 @@
 | CMP-05 | 不增加内容变更识别；补全冷文件读取失败的错误信息，并附带 TsFile 原始错误码 |
 | CMP-02 | tree model 文件明确报 `tree model is not supported` |
 | `.tmp` | 只在 `tsfile_compact`、`tsfile_export` 成功后清理；普通连接和 `tsfile_seal` 不做清理 |
+| 0 字节源文件 | `file=` 目录中的 0 字节 `.tsfile` 直接报 `failed to read source file ... (empty file)`，不跳过 |
 | QR-09 | 按约定忽略，本次不处理 |
 
 ## 2. 测试环境与构建
@@ -137,12 +139,12 @@ CREATE VIRTUAL TABLE corrupt USING tsfile_hybrid(
 [       OK ] TsFileSqliteTest.CorruptSourceFileReportsTsfileErrorCode (1 ms)
 
 实际结果:
-cannot read source file: <TMP>-corrupt.tsfile
+failed to read source file: <TMP>-corrupt.tsfile
 (tsfile E_TSFILE_CORRUPTED=35)
 ```
 
 - **输入是什么**：一个内容不是合法 TsFile 的普通文件，通过 `file=` 建表。
-- **测试的是什么**：建表阶段的读取失败应带出 TsFile reader 的原始错误码，而不是只有一句通用的 `cannot read source file`。
+- **测试的是什么**：建表阶段的读取失败应带出 TsFile reader 的原始错误码，而不是只有一句通用的 `failed to read source file`。
 - **结果是什么**：错误信息包含 `E_TSFILE_CORRUPTED=35`。
 - **是否符合预期**：是。
 
@@ -163,13 +165,13 @@ seal 后用 unlink() 删除 <TMP>/tsfilesensor-<pid>-0.tsfile。
 [       OK ] TsFileSqliteTest.QueryReportsDeletedSealedFile (2 ms)
 
 实际结果:
-SQLite error: missing or changed file for sensor:
-<TMP>/tsfilesensor-<pid>-0.tsfile
+SQLite error: failed to read sealed file: <TMP>/tsfilesensor-<pid>-0.tsfile:
+missing or changed file; if a compact ran concurrently, reopen the transaction
 ```
 
 - **输入是什么**：seal 一行数据，然后从文件系统删除对应段文件，再查询。
 - **测试的是什么**：查询冷段时不能静默返回旧值；文件缺失应返回错误。
-- **结果是什么**：查询返回 SQLite 错误，错误信息包含 `missing or changed file`。
+- **结果是什么**：查询返回 SQLite 错误，错误信息包含 `missing or changed file` 和“reopen the transaction”提示。
 - **是否符合预期**：是。
 
 ### 4.4 `OrphanTempFileIsKeptAfterSeal`
@@ -281,6 +283,33 @@ export 后 access(stale, F_OK) != 0，文件已被删除。
 - **结果是什么**：文件删除，export 成功。
 - **是否符合预期**：是。
 
+### 4.8 `EmptySourceFileIsRejectedWithPath`
+
+```text
+输入 SQL:
+CREATE VIRTUAL TABLE empty_source USING tsfile_hybrid(
+  file='<TMP>-empty-source',
+  source_table='sensor',
+  directory='<TMP>-empty-source-hot');
+
+数据库外操作:
+创建目录，放入一个有效 .tsfile 和一个 0 字节 empty.tsfile，
+再用 file= 指向该目录。
+
+实际执行:
+[ RUN      ] TsFileSqliteTest.EmptySourceFileIsRejectedWithPath
+[       OK ] TsFileSqliteTest.EmptySourceFileIsRejectedWithPath (2 ms)
+
+实际结果:
+failed to read source file: <TMP>-empty-source/empty.tsfile (empty file)
+```
+
+- **输入是什么**：一个同时包含有效 TsFile 和 0 字节 `.tsfile` 的源目录。
+- **测试的是什么**：0 字节文件不能被静默跳过，建表应直接失败，并给出文件路径和 “empty file”。
+- **结果是什么**：建表失败，错误信息包含 `failed to read source file`、`empty.tsfile` 和 `empty file`。
+- **是否符合预期**：是。
+
+
 ## 5. 全量回归
 
 执行完整 SQLite 测试：
@@ -293,14 +322,15 @@ DYLD_LIBRARY_PATH=cpp/build/sqlite-homebrew/lib \
 结果：
 
 ```text
-[==========] 54 tests from 1 test suite ran. (575 ms total)
-[  PASSED  ] 54 tests.
+[==========] 56 tests from 1 test suite ran.
+[  PASSED  ] 56 tests.
 ```
 
 ## 6. 边界与未覆盖项
 
 - **CMP-05 不做内容变更识别**：同 size、同 mtime 的原地改写仍可能绕过 stamp 校验；如果损坏页让 reader 卡住，本次修改不会打断。当前只保证“TsFile reader 返回错误时，错误信息可读且带错误码”。
 - **QR-09 未处理**：按约定忽略。
+- **P1-1 长读事务跨 compact 未处理**：当前仍返回缺失文件错误；reader lease/延迟回收留到后续版本。
 - **`.tmp` 清理范围**：只在 compact/export 成功后执行；普通连接和 seal 不清理。symlink、活跃 PID、当前 `pending` 文件不会被删除。
 - **平台**：本次在 macOS 上完成构建和测试；未在树莓派/x86 上重跑。代码使用 POSIX 文件接口，Linux 路径与 macOS 逻辑一致，但仍建议在目标平台补一次回归。
 
@@ -308,4 +338,4 @@ DYLD_LIBRARY_PATH=cpp/build/sqlite-homebrew/lib \
 
 - CMP-02、`.tmp` 清理已按约定完成。
 - CMP-05 的错误报告已补全，并附带 TsFile 错误码；内容变更识别留待后续单独设计。
-- 新增 7 个针对性用例，完整 SQLite 套件 54/54 通过。
+- 新增 8 个针对性用例，完整 SQLite 套件 56/56 通过。

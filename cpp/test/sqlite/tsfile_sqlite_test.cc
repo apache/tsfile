@@ -1258,6 +1258,38 @@ TEST_F(TsFileSqliteTest, SegmentTimeBoundsAreRecorded) {
                           "row_count FROM \"sensor_tsfile$segments\""));
 }
 
+TEST_F(TsFileSqliteTest, EmptySourceFileIsRejectedWithPath) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string valid = source_file();
+    ASSERT_FALSE(valid.empty());
+
+    const std::string dir = directory_ + "-empty-source";
+    ASSERT_EQ(0, mkdir(dir.c_str(), 0755));
+    {
+        std::ifstream in(valid, std::ios::binary);
+        std::ofstream out(dir + "/good.tsfile", std::ios::binary);
+        out << in.rdbuf();
+    }
+    { std::ofstream out(dir + "/empty.tsfile"); }
+
+    char* error = nullptr;
+    int rc = sqlite3_exec(
+        db_,
+        ("CREATE VIRTUAL TABLE empty_source USING tsfile_hybrid(file=" +
+         quote(dir) + ",source_table='sensor',directory=" +
+         quote(directory_ + "-empty-source-hot") + ")")
+            .c_str(),
+        nullptr, nullptr, &error);
+    EXPECT_NE(SQLITE_OK, rc);
+    std::string message = error == nullptr ? "" : error;
+    sqlite3_free(error);
+    EXPECT_NE(std::string::npos, message.find("failed to read source file"))
+        << message;
+    EXPECT_NE(std::string::npos, message.find("empty.tsfile")) << message;
+    EXPECT_NE(std::string::npos, message.find("empty file")) << message;
+}
+
 TEST_F(TsFileSqliteTest, ExportRejectsChangedSourceAndDuplicateNames) {
     ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
     EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));

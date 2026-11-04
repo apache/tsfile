@@ -886,14 +886,19 @@ bool infer_source(HybridTable* table, std::string& error) {
     struct stat path_stat {};
     if (stat(table->source_file.c_str(), &path_stat) != 0 ||
         (!S_ISREG(path_stat.st_mode) && !S_ISDIR(path_stat.st_mode))) {
-        error = "cannot read source file: " + table->source_file;
+        error = "failed to read source file: " + table->source_file;
+        return false;
+    }
+    if (S_ISREG(path_stat.st_mode) && path_stat.st_size == 0) {
+        error = "failed to read source file: " + table->source_file +
+                " (empty file)";
         return false;
     }
     std::vector<std::string> paths;
     if (S_ISDIR(path_stat.st_mode)) {
         DIR* dir = opendir(table->source_file.c_str());
         if (dir == nullptr) {
-            error = "cannot read source directory: " + table->source_file;
+            error = "failed to read source directory: " + table->source_file;
             return false;
         }
         while (dirent* entry = readdir(dir)) {
@@ -905,6 +910,11 @@ bool infer_source(HybridTable* table, std::string& error) {
             if (lstat(path.c_str(), &file_stat) != 0 ||
                 !S_ISREG(file_stat.st_mode))
                 continue;
+            if (file_stat.st_size == 0) {
+                closedir(dir);
+                error = "failed to read source file: " + path + " (empty file)";
+                return false;
+            }
             paths.push_back(path);
         }
         closedir(dir);
@@ -933,7 +943,7 @@ bool infer_source(HybridTable* table, std::string& error) {
         TsFileReader reader;
         int open_rc = reader.open(path);
         if (identity.empty() || open_rc != common::E_OK) {
-            error = "cannot read source file: " + path;
+            error = "failed to read source file: " + path;
             if (open_rc != common::E_OK)
                 error += tsfile_error_detail(open_rc);
             else
@@ -2119,8 +2129,9 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             stamp.size != sqlite3_column_int64(stmt, 3) ||
             stamp.mtime_ns != sqlite3_column_int64(stmt, 4) ||
             stamp.inode != sqlite3_column_int64(stmt, 5)) {
-            set_error(table, "missing or changed file for " +
-                                 table->table_name + ": " + read_path);
+            set_error(table, "failed to read sealed file: " + read_path +
+                                 ": missing or changed file; if a compact ran "
+                                 "concurrently, reopen the transaction");
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
         }

@@ -351,8 +351,9 @@ SELECT tsfile_compact('main.continued', 50, 200);
 （包括上次 compact 的产物）不再参与。目标大小不能小于小文件阈值。
 
 compact 只处理该表自有目录中的已封存文件，不动外部源文件。合并结果作为新文件
-原子登记，旧文件在事务提交后删除；失败时保留原文件，不发布部分结果。热区和各设备
+原子登记，旧文件在 compact 提交后删除；失败时保留原文件，不发布部分结果。热区和各设备
 watermark 不受影响。返回本次生成的文件数；没有足够的可合并文件时返回 0。
+
 
 ## 5. 导出和交付数据
 
@@ -391,6 +392,62 @@ export 不保存热区数据。若导出后还需要近期记录可修改，请�
 进程中断可能留下名称包含 `.tsfile-export-` 的临时目录，不要把它当作已完成的交付
 结果。导出保存表数据，不保存原 SQLite 数据库的全部表、业务配置或冷热状态。空表
 导出也不保存表定义。它不能替代完整的业务数据库备份。
+
+### 完整备份与恢复
+
+一张可写虚拟表由两部分组成：
+
+1. SQLite 数据库：虚拟表定义、shadow 表、热行、段登记和 `_config`；
+2. TsFile 目录：冷段文件，以及记录目录归属的 `.tsfile-owner`。
+
+只备份 SQLite 数据库会丢失冷段；只复制 TsFile 目录会丢失热行和段登记。完整备份必须
+同时包含 DB 和 `_config.directory` 指向的整个目录，包括 `.tsfile-owner`：
+
+```bash
+sqlite3 /data/app.db ".backup '/backup/app.db'"
+cp -a /data/app-segments /backup/app-segments
+```
+
+恢复时最可靠的方式是把 DB 和 TsFile 目录恢复到**原来的绝对路径**，然后重开连接：
+
+```bash
+cp /backup/app.db /data/app.db
+cp -a /backup/app-segments /data/app-segments
+sqlite3 /data/app.db "SELECT tsfile_verify('main.sensor');"
+```
+
+不要只把备份 DB 换到一个新路径就查询可写表：`_config.directory` 和
+`.tsfile-owner` 绑定了原 DB 路径和表名，换路径会报
+`TsFile directory belongs to a different SQLite database or table`。
+
+如果需要把数据交付到新目录：
+
+- **只需要冷数据**：先 seal，再 `tsfile_export`，在新位置用 `file=` 创建只读表；
+- **需要可写表**：在新空目录创建虚拟表，把数据重新写入并 seal；当前版本不支持把一个
+  可写表自动迁移到已有目录，也没有 `tsfile_relocate` 接口；
+- **只有热行**：必须先 seal，否则导出的 TsFile 不包含这些行。
+
+如果使用 `sqlite3 .dump` 恢复，恢复后要**重新打开连接**再查询；不要在同一个 CLI
+会话里 `.read` 后立刻 `SELECT`，因为虚拟表的 schema/连接缓存尚未刷新。
+
+### 长读事务与 compact
+
+`compact` 提交后可能删除旧段文件。SQLite 的 WAL 快照只保护数据库页，不保护这些外部
+TsFile。因此，一个长读事务在 compact 之后继续查询旧快照时，可能报：
+
+```text
+failed to read sealed file: <path>: missing or changed file;
+if a compact ran concurrently, reopen the transaction
+```
+
+当前版本不支持“长读事务跨 compact 的旧快照”。遇到这个错误时：
+
+1. 结束当前事务；
+2. 重新开始事务；
+3. 重新查询。
+
+如果业务需要长时间一致性快照，应在 compact 前停止这类读者，或等待后续版本提供段级
+延迟回收/读者租约机制。
 
 ## 6. 查看状态和处理常见问题
 
@@ -460,6 +517,16 @@ SELECT path, status, detail FROM tsfile_verify('main.continued');
 verify 只检查和报告，不修复、注册或删除文件。它也不会扫描外部源文件旁边的其他
 文件。检查会完整读取文件并计算内容指纹，因此大文件有额外开销；普通查询只比较
 文件大小、修改时间和 inode 等轻量元数据。
+
+用 `file=` 指向目录时，目录里任意一个 `.tsfile` 读取失败都会让整个目录建表失败，
+包括 0 字节文件：
+
+```text
+failed to read source file: <dir>/empty.tsfile (empty file)
+```
+
+0 字节文件不会被静默跳过；先移走或修复它，再重新建表。可写表自己的目录只按
+`_segments` 登记工作，未登记的 0 字节 `.tsfile` 不会影响查询。
 
 ### 加载扩展或建表失败
 
