@@ -39,7 +39,7 @@
 # nullPatterns: '|' separated NONE/MIXED/ALL values.
 # pageRows: 0 keeps the writer default (10000). chunks: flush boundaries.
 # devices: number of devices (and therefore chunk groups) in one file.
-# valueProfile: default|ts2diff|ts2diff_mpn0|sprintz|runs|strings|dict_high|blob.
+# valueProfile: default|ts2diff|ts2diff_mpn0|rle_overflow|sprintz|runs|strings|dict_high|blob.
 # A 'no' in any write/read column is a declared gap and gapReason must explain
 # it. Known unsupported combinations that are not in this matrix at all:
 #   - DIFF, BITMAP, REGULAR, FREQ: deprecated and not writable by either side.
@@ -210,6 +210,7 @@ table_float_rle_r10,table,FLOAT,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 table_float_rle_r1000,table,FLOAT,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 table_float_rle_r100000,table,FLOAT,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
 table_float_rle_r1000000,table,FLOAT,RLE,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,runs,NONE,yes,yes,yes,yes,
+table_float_rle_overflow,table,FLOAT,RLE,ALL,257,64,1,1,rle_overflow,NONE,yes,yes,yes,yes,
 table_float_gorilla_v1_r10,table,FLOAT,GORILLA_V1,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 table_float_gorilla_v1_r1000,table,FLOAT,GORILLA_V1,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 table_float_gorilla_v1_r100000,table,FLOAT,GORILLA_V1,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
@@ -250,6 +251,7 @@ table_double_rle_r10,table,DOUBLE,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 table_double_rle_r1000,table,DOUBLE,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 table_double_rle_r100000,table,DOUBLE,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
 table_double_rle_r1000000,table,DOUBLE,RLE,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,runs,NONE,yes,yes,yes,yes,
+table_double_rle_overflow,table,DOUBLE,RLE,ALL,257,64,1,1,rle_overflow,NONE,yes,yes,yes,yes,
 table_double_gorilla_v1_r10,table,DOUBLE,GORILLA_V1,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 table_double_gorilla_v1_r1000,table,DOUBLE,GORILLA_V1,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 table_double_gorilla_v1_r100000,table,DOUBLE,GORILLA_V1,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
@@ -496,6 +498,7 @@ tree_float_rle_r10,tree,FLOAT,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 tree_float_rle_r1000,tree,FLOAT,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 tree_float_rle_r100000,tree,FLOAT,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
 tree_float_rle_r1000000,tree,FLOAT,RLE,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,runs,NONE,yes,yes,yes,yes,
+tree_float_rle_overflow,tree,FLOAT,RLE,ALL,257,64,1,1,rle_overflow,NONE,yes,yes,yes,yes,
 tree_float_gorilla_v1_r10,tree,FLOAT,GORILLA_V1,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 tree_float_gorilla_v1_r1000,tree,FLOAT,GORILLA_V1,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 tree_float_gorilla_v1_r100000,tree,FLOAT,GORILLA_V1,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
@@ -536,6 +539,7 @@ tree_double_rle_r10,tree,DOUBLE,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 tree_double_rle_r1000,tree,DOUBLE,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 tree_double_rle_r100000,tree,DOUBLE,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
 tree_double_rle_r1000000,tree,DOUBLE,RLE,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,runs,NONE,yes,yes,yes,yes,
+tree_double_rle_overflow,tree,DOUBLE,RLE,ALL,257,64,1,1,rle_overflow,NONE,yes,yes,yes,yes,
 tree_double_gorilla_v1_r10,tree,DOUBLE,GORILLA_V1,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 tree_double_gorilla_v1_r1000,tree,DOUBLE,GORILLA_V1,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 tree_double_gorilla_v1_r100000,tree,DOUBLE,GORILLA_V1,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,

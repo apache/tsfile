@@ -119,6 +119,7 @@ enum class ValueProfile {
     DEFAULT,
     TS2DIFF,
     TS2DIFF_MPN0,
+    RLE_OVERFLOW,
     SPRINTZ,
     RUNS,
     STRINGS,
@@ -150,6 +151,8 @@ const char* ProfileName(ValueProfile profile) {
             return "TS2DIFF";
         case ValueProfile::TS2DIFF_MPN0:
             return "TS2DIFF_MPN0";
+        case ValueProfile::RLE_OVERFLOW:
+            return "RLE_OVERFLOW";
         case ValueProfile::SPRINTZ:
             return "SPRINTZ";
         case ValueProfile::RUNS:
@@ -289,6 +292,68 @@ const uint64_t kTs2DiffDoubleBits[] = {
     UINT64_C(0xc1cd6f3458800000), UINT64_C(0x430c6bf526340000),
     UINT64_C(0x3ff0000000000000), UINT64_C(0x0000000000000000),
 };
+
+// Eight-value runs, grouped into 64-row pages: ordinary scaled values,
+// scaled overflow without raw bits, then mixed scaled/unscaled/raw values.
+// The fourth page repeats the ordinary values to catch stale overflow state.
+const float kRleOverflowFloatValues[] = {
+    1.25f,
+    -1.25f,
+    0.0f,
+    42.125f,
+    -42.125f,
+    2.375f,
+    -2.375f,
+    0.5f,
+    1.25f,
+    1.5e9f,
+    -1.5e9f,
+    1.0e8f,
+    -1.0e8f,
+    42.125f,
+    0.0f,
+    -1.25f,
+    std::numeric_limits<float>::quiet_NaN(),
+    std::numeric_limits<float>::infinity(),
+    -std::numeric_limits<float>::infinity(),
+    std::numeric_limits<float>::max(),
+    -std::numeric_limits<float>::max(),
+    1.5e9f,
+    1.25f,
+    -1.25f,
+};
+
+const double kRleOverflowDoubleValues[] = {
+    1.25,
+    -1.25,
+    0.0,
+    42.125,
+    -42.125,
+    2.375,
+    -2.375,
+    0.5,
+    1.25,
+    1.0e18,
+    -1.0e18,
+    2.0e17,
+    -2.0e17,
+    42.125,
+    0.0,
+    -1.25,
+    std::numeric_limits<double>::quiet_NaN(),
+    std::numeric_limits<double>::infinity(),
+    -std::numeric_limits<double>::infinity(),
+    std::numeric_limits<double>::max(),
+    -std::numeric_limits<double>::max(),
+    1.0e18,
+    1.25,
+    -1.25,
+};
+
+int RleOverflowIndex(int row) {
+    const int index = (row / 8) % 32;
+    return index < 24 ? index : index - 24;
+}
 
 // SPRINTZ predicts from first-order differences of the stored integers; a
 // block spanning INT_MIN and INT_MAX overflows the predictor, so this profile
@@ -475,6 +540,8 @@ int32_t DateValue(const FixtureCase& fixture_case, int row) {
 
 float FloatValue(const FixtureCase& fixture_case, int row) {
     switch (fixture_case.profile) {
+        case ValueProfile::RLE_OVERFLOW:
+            return kRleOverflowFloatValues[RleOverflowIndex(row)];
         case ValueProfile::TS2DIFF:
         case ValueProfile::TS2DIFF_MPN0:
             return BitsToFloat(FloatBitsAt(kTs2DiffFloatBits, row));
@@ -489,6 +556,8 @@ float FloatValue(const FixtureCase& fixture_case, int row) {
 
 double DoubleValue(const FixtureCase& fixture_case, int row) {
     switch (fixture_case.profile) {
+        case ValueProfile::RLE_OVERFLOW:
+            return kRleOverflowDoubleValues[RleOverflowIndex(row)];
         case ValueProfile::TS2DIFF:
         case ValueProfile::TS2DIFF_MPN0:
             return BitsToDouble(DoubleBitsAt(kTs2DiffDoubleBits, row));
@@ -639,8 +708,9 @@ bool ParseProfile(const std::string& value, ValueProfile& out) {
     static const ValueProfile kProfiles[] = {
         ValueProfile::DEFAULT,      ValueProfile::TS2DIFF,
         ValueProfile::TS2DIFF_MPN0, ValueProfile::SPRINTZ,
-        ValueProfile::RUNS,         ValueProfile::STRINGS,
-        ValueProfile::DICT_HIGH,    ValueProfile::BLOB,
+        ValueProfile::RLE_OVERFLOW, ValueProfile::RUNS,
+        ValueProfile::STRINGS,      ValueProfile::DICT_HIGH,
+        ValueProfile::BLOB,
     };
     for (ValueProfile profile : kProfiles) {
         if (upper == ProfileName(profile)) {
@@ -1839,6 +1909,76 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
         }
     }
     EXPECT_EQ(0, missing);
+}
+
+// Run the overflow formats and page resets even without fixture directories.
+TEST_F(EncodingCompressionCompatibilityTest, FloatingRleOverflowPages) {
+    int tested = 0;
+    for (const FixtureCase& fixture_case : ReadSpec(ResolveSpecPath())) {
+        if (fixture_case.profile != ValueProfile::RLE_OVERFLOW ||
+            fixture_case.model != Model::TABLE ||
+            fixture_case.compression != UNCOMPRESSED) {
+            continue;
+        }
+        SCOPED_TRACE(fixture_case.Describe());
+        std::unique_ptr<Encoder, decltype(&EncoderFactory::free)> encoder(
+            EncoderFactory::alloc_value_encoder(RLE, fixture_case.data_type),
+            EncoderFactory::free);
+        std::unique_ptr<Decoder, decltype(&DecoderFactory::free)> decoder(
+            DecoderFactory::alloc_value_decoder(RLE, fixture_case.data_type),
+            DecoderFactory::free);
+        ASSERT_NE(nullptr, encoder);
+        ASSERT_NE(nullptr, decoder);
+        ASSERT_EQ(64, fixture_case.page_rows);
+        ASSERT_EQ(257, fixture_case.row_count);
+        const uint32_t markers[] = {2, 2147483647U, 2147483646U, 2, 2};
+        for (int page = 0; page < 5; ++page) {
+            common::ByteStream data(1024, common::MOD_DEFAULT);
+            const int start = page * fixture_case.page_rows;
+            const int end = std::min(start + fixture_case.page_rows,
+                                     fixture_case.row_count);
+            for (int row = start; row < end; ++row) {
+                ASSERT_EQ(
+                    E_OK,
+                    fixture_case.data_type == FLOAT
+                        ? encoder->encode(FloatValue(fixture_case, row), data)
+                        : encoder->encode(DoubleValue(fixture_case, row),
+                                          data));
+            }
+            ASSERT_EQ(E_OK, encoder->flush(data));
+            std::vector<char> bytes(data.total_size());
+            uint32_t read_len = 0;
+            ASSERT_EQ(E_OK,
+                      data.read_buf(bytes.data(), bytes.size(), read_len));
+            ASSERT_EQ(bytes.size(), read_len);
+            uint32_t marker = 0;
+            ASSERT_EQ(E_OK, SerializationUtil::read_var_uint(
+                                marker, bytes.data(), bytes.size()));
+            ASSERT_EQ(markers[page], marker) << "page " << page;
+            common::ByteStream input;
+            input.wrap_from(bytes.data(), bytes.size());
+            decoder->reset();
+            for (int row = start; row < end; ++row) {
+                if (fixture_case.data_type == FLOAT) {
+                    float actual = 0;
+                    ASSERT_EQ(E_OK, decoder->read_float(actual, input));
+                    EXPECT_EQ(FloatBits(ExpectedFloatValue(fixture_case, row)),
+                              FloatBits(actual))
+                        << "row " << row;
+                } else {
+                    double actual = 0;
+                    ASSERT_EQ(E_OK, decoder->read_double(actual, input));
+                    EXPECT_EQ(
+                        DoubleBits(ExpectedDoubleValue(fixture_case, row)),
+                        DoubleBits(actual))
+                        << "row " << row;
+                }
+            }
+            EXPECT_FALSE(decoder->has_remaining(input));
+        }
+        ++tested;
+    }
+    EXPECT_EQ(2, tested);
 }
 
 TEST_F(EncodingCompressionCompatibilityTest, GenerateFixtures) {

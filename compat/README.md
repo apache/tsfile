@@ -97,11 +97,17 @@ wrote it.
 | `default` | Type-specific values including numeric extremes and repeated values. |
 | `ts2diff` | FLOAT/DOUBLE TS_2DIFF values covering scaled, scale-overflow and raw-bit forms (NaN, infinities) across the 129-value block boundary. |
 | `ts2diff_mpn0` | Same values written with an explicit `max_point_number=0` property (Java only; the C++ writer has no property path). |
+| `rle_overflow` | FLOAT/DOUBLE RLE with 8-value runs in 64-row pages: ordinary scaled values, scaled overflow only, mixed scaled/unscaled/raw IEEE values (NaN, infinities and finite extremes), then ordinary values again and a single-row final page. |
 | `sprintz` | Values inside a range the SPRINTZ FIR predictor can encode (about ±1e8 for INT32 and ±1e12 for INT64). Outside it the predictor itself overflows, which is a codec limitation rather than a cross-language difference. |
 | `runs` | Long runs for RLE encodings. |
 | `strings` | Empty string, embedded NUL, multi-byte UTF-8, repeated values, long values. |
 | `dict_high` | One distinct string per row to stress dictionary growth. |
 | `blob` | Empty, all-zero, binary and text-like byte arrays. |
+
+The `rle_overflow` fixtures cover both models and all six compressions in both
+directions. The normal unit suites also verify their three page-header forms
+and reuse the encoder/decoder across pages, so overflow state cannot leak into
+the following ordinary page unnoticed.
 
 ## Running locally
 

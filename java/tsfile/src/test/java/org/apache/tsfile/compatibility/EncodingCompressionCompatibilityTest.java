@@ -21,7 +21,10 @@ package org.apache.tsfile.compatibility;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.FloatDecoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encoding.encoder.FloatEncoder;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
@@ -46,6 +49,7 @@ import org.apache.tsfile.read.query.dataset.ResultSetMetadata;
 import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.read.v4.TsFileReaderBuilder;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.record.TSRecord;
@@ -65,8 +69,10 @@ import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -167,6 +173,7 @@ public class EncodingCompressionCompatibilityTest {
     DEFAULT,
     TS2DIFF,
     TS2DIFF_MPN0,
+    RLE_OVERFLOW,
     SPRINTZ,
     RUNS,
     STRINGS,
@@ -302,6 +309,59 @@ public class EncodingCompressionCompatibilityTest {
           "compatibility-matrix.csv does not declare Java-writable cases for: "
               + String.join(", ", missing));
     }
+  }
+
+  @Test
+  public void floatingRleOverflowPages() throws Exception {
+    int tested = 0;
+    for (FixtureCase fixtureCase : readSpec(resolveSpecPath())) {
+      if (fixtureCase.profile != ValueProfile.RLE_OVERFLOW
+          || fixtureCase.model != Model.TABLE
+          || fixtureCase.compression != CompressionType.UNCOMPRESSED) {
+        continue;
+      }
+      Encoder encoder = new FloatEncoder(TSEncoding.RLE, fixtureCase.dataType, 2);
+      Decoder decoder = new FloatDecoder(TSEncoding.RLE, fixtureCase.dataType);
+      assertEquals(64, fixtureCase.pageRows);
+      assertEquals(257, fixtureCase.rowCount);
+      int[] markers = {2, Integer.MAX_VALUE, Integer.MAX_VALUE - 1, 2, 2};
+      for (int page = 0; page < markers.length; page++) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int start = page * fixtureCase.pageRows;
+        int end = Math.min(start + fixtureCase.pageRows, fixtureCase.rowCount);
+        for (int row = start; row < end; row++) {
+          if (fixtureCase.dataType == TSDataType.FLOAT) {
+            encoder.encode(floatValue(fixtureCase, row), out);
+          } else {
+            encoder.encode(doubleValue(fixtureCase, row), out);
+          }
+        }
+        encoder.flush(out);
+        ByteBuffer data = ByteBuffer.wrap(out.toByteArray());
+        assertEquals(
+            fixtureCase.id + " page " + page,
+            markers[page],
+            ReadWriteForEncodingUtils.readUnsignedVarInt(data));
+        data.rewind();
+        decoder.reset();
+        for (int row = start; row < end; row++) {
+          if (fixtureCase.dataType == TSDataType.FLOAT) {
+            assertEquals(
+                fixtureCase.id + " row " + row,
+                Float.floatToIntBits(expectedFloatValue(fixtureCase, row)),
+                Float.floatToIntBits(decoder.readFloat(data)));
+          } else {
+            assertEquals(
+                fixtureCase.id + " row " + row,
+                Double.doubleToLongBits(expectedDoubleValue(fixtureCase, row)),
+                Double.doubleToLongBits(decoder.readDouble(data)));
+          }
+        }
+        assertFalse(decoder.hasNext(data));
+      }
+      tested++;
+    }
+    assertEquals(2, tested);
   }
 
   @Test
@@ -829,6 +889,67 @@ public class EncodingCompressionCompatibilityTest {
     0x0000000000000000L
   };
 
+  // Eight-value runs in 64-row pages: scaled, scaled-overflow, mixed raw bits,
+  // then ordinary scaled values again to catch stale state from the prior page.
+  private static final float[] RLE_OVERFLOW_FLOAT_VALUES = {
+    1.25f,
+    -1.25f,
+    0.0f,
+    42.125f,
+    -42.125f,
+    2.375f,
+    -2.375f,
+    0.5f,
+    1.25f,
+    1.5e9f,
+    -1.5e9f,
+    1.0e8f,
+    -1.0e8f,
+    42.125f,
+    0.0f,
+    -1.25f,
+    Float.NaN,
+    Float.POSITIVE_INFINITY,
+    Float.NEGATIVE_INFINITY,
+    Float.MAX_VALUE,
+    -Float.MAX_VALUE,
+    1.5e9f,
+    1.25f,
+    -1.25f
+  };
+
+  private static final double[] RLE_OVERFLOW_DOUBLE_VALUES = {
+    1.25,
+    -1.25,
+    0.0,
+    42.125,
+    -42.125,
+    2.375,
+    -2.375,
+    0.5,
+    1.25,
+    1.0e18,
+    -1.0e18,
+    2.0e17,
+    -2.0e17,
+    42.125,
+    0.0,
+    -1.25,
+    Double.NaN,
+    Double.POSITIVE_INFINITY,
+    Double.NEGATIVE_INFINITY,
+    Double.MAX_VALUE,
+    -Double.MAX_VALUE,
+    1.0e18,
+    1.25,
+    -1.25
+  };
+
+  private static int rleOverflowIndex(int row) {
+    int index = (row / 8) % 32;
+    return index < 24 ? index : index - 24;
+  }
+
   // SPRINTZ predicts from first-order differences of the stored integers; a
   // block that spans INT_MIN and INT_MAX overflows the predictor, so these
   // values stay inside a safe range (see compat/README.md).
@@ -1009,6 +1130,8 @@ public class EncodingCompressionCompatibilityTest {
 
   private static float floatValue(FixtureCase fixtureCase, int row) {
     switch (fixtureCase.profile) {
+      case RLE_OVERFLOW:
+        return RLE_OVERFLOW_FLOAT_VALUES[rleOverflowIndex(row)];
       case TS2DIFF:
       case TS2DIFF_MPN0:
         return Float.intBitsToFloat(TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
@@ -1023,6 +1146,8 @@ public class EncodingCompressionCompatibilityTest {
 
   private static double doubleValue(FixtureCase fixtureCase, int row) {
     switch (fixtureCase.profile) {
+      case RLE_OVERFLOW:
+        return RLE_OVERFLOW_DOUBLE_VALUES[rleOverflowIndex(row)];
       case TS2DIFF:
       case TS2DIFF_MPN0:
         return Double.longBitsToDouble(TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
