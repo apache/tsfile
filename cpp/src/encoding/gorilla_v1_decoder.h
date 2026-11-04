@@ -45,6 +45,7 @@ class GorillaV1DecoderBase : public Decoder {
         is_end_ = false;
         buffer_ = 0;
         bits_left_ = 0;
+        read_error_ = common::E_OK;
     }
 
     bool read_bit(common::ByteStream& in) {
@@ -65,8 +66,11 @@ class GorillaV1DecoderBase : public Decoder {
             buffer_ = byte;
             bits_left_ = 8;
         } else {
+            // A stream truncated mid-value must not be decoded as a run of
+            // zero bits; latch the error so read_float/read_double surface it.
             buffer_ = -1;
             bits_left_ = -1;
+            read_error_ = common::E_BUF_NOT_ENOUGH;
         }
     }
 
@@ -84,6 +88,7 @@ class GorillaV1DecoderBase : public Decoder {
     bool is_end_ = false;
     int buffer_ = 0;
     int bits_left_ = 0;
+    int read_error_ = common::E_OK;
 };
 
 class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
@@ -111,11 +116,11 @@ class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
                 number_of_trailing_zeros(static_cast<int32_t>(pre_value_));
             ret_value = common::int_to_float(static_cast<int32_t>(pre_value_));
             prefetch(in);
-            return common::E_OK;
+            return read_error_;
         }
         ret_value = common::int_to_float(static_cast<int32_t>(pre_value_));
         prefetch(in);
-        return common::E_OK;
+        return read_error_;
     }
 
     int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
@@ -148,7 +153,7 @@ class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
         if (!next_flag2) {
             const int len = 32 - leading_zero_num_ - trailing_zero_num_;
             if (len < 0 || len > 32) {
-                is_end_ = true;
+                read_error_ = common::E_DECODE_ERR;
                 return;
             }
             uint32_t xor_value = 0;
@@ -161,7 +166,7 @@ class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
             const int leading = read_bits_as_int(in, 5);
             const int len = read_bits_as_int(in, 6);
             if (len < 0 || leading < 0 || leading + len > 32) {
-                is_end_ = true;
+                read_error_ = common::E_DECODE_ERR;
                 return;
             }
             uint32_t xor_value = 0;
@@ -210,11 +215,11 @@ class DoubleGorillaV1Decoder : public GorillaV1DecoderBase {
             ret_value =
                 common::long_to_double(static_cast<int64_t>(pre_value_));
             prefetch(in);
-            return common::E_OK;
+            return read_error_;
         }
         ret_value = common::long_to_double(static_cast<int64_t>(pre_value_));
         prefetch(in);
-        return common::E_OK;
+        return read_error_;
     }
 
     int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
@@ -246,7 +251,7 @@ class DoubleGorillaV1Decoder : public GorillaV1DecoderBase {
         if (!next_flag2) {
             const int len = 64 - leading_zero_num_ - trailing_zero_num_;
             if (len < 0 || len > 64) {
-                is_end_ = true;
+                read_error_ = common::E_DECODE_ERR;
                 return;
             }
             uint64_t xor_value = 0;
@@ -259,7 +264,7 @@ class DoubleGorillaV1Decoder : public GorillaV1DecoderBase {
             const int leading = read_bits_as_int(in, 6);
             const int len = read_bits_as_int(in, 7);
             if (len < 0 || leading < 0 || leading + len > 64) {
-                is_end_ = true;
+                read_error_ = common::E_DECODE_ERR;
                 return;
             }
             uint64_t xor_value = 0;

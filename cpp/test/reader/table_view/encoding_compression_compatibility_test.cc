@@ -377,7 +377,9 @@ int32_t IntAt(const int32_t (&values)[N], int row) {
 }
 
 // Mirrors Java Math.round(x) == floor(x + 0.5).
-double JavaRound(double x) { return std::floor(x + 0.5); }
+double JavaRound(double x) {
+    return static_cast<double>(java_round_to_long(x));
+}
 
 uint32_t FloatBits(float value) {
     uint32_t bits;
@@ -986,6 +988,10 @@ void WriteSummary(const std::string& directory, const std::string& name,
         }
         if (row.status.find("skipped") == 0) {
             skipped++;
+            gaps.push_back(row.id + ": " + row.detail);
+        } else if (row.status == "not-mine") {
+            // A writer-side gap this language does not produce; list its
+            // reason without counting it as a skipped reader validation.
             gaps.push_back(row.id + ": " + row.detail);
         }
     }
@@ -1768,6 +1774,9 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
                               fixture_case.encoding, fixture_case.compression));
         }
         if (fixture_case.cpp_read) {
+            EXPECT_TRUE(
+                DecoderSupported(fixture_case.encoding, fixture_case.data_type))
+                << "C++ cannot build a decoder for " << fixture_case.Describe();
             read_coverage.insert(
                 CapabilityKey(fixture_case.model, fixture_case.data_type,
                               fixture_case.encoding, fixture_case.compression));

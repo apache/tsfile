@@ -47,31 +47,41 @@ class GorillaV1EncoderBase : public Encoder {
         bits_in_buffer_ = 0;
     }
 
-    void write_bit(bool bit, common::ByteStream& out_stream) {
+    int write_bit(bool bit, common::ByteStream& out_stream) {
         buffer_ = static_cast<uint8_t>(buffer_ << 1);
         if (bit) {
             buffer_ |= 1u;
         }
         if (++bits_in_buffer_ == 8) {
-            clear_buffer(out_stream);
+            return clear_buffer(out_stream);
         }
+        return common::E_OK;
     }
 
-    void write_bits(uint64_t num, common::ByteStream& out_stream, int start,
-                    int end) {
+    int write_bits(uint64_t num, common::ByteStream& out_stream, int start,
+                   int end) {
         for (int i = start; i >= end; i--) {
-            write_bit(((num >> i) & 1ULL) != 0, out_stream);
+            int ret = write_bit(((num >> i) & 1ULL) != 0, out_stream);
+            if (ret != common::E_OK) {
+                return ret;
+            }
         }
+        return common::E_OK;
     }
 
-    void clear_buffer(common::ByteStream& out_stream) {
+    int clear_buffer(common::ByteStream& out_stream) {
         if (bits_in_buffer_ == 0) {
-            return;
+            return common::E_OK;
         }
         buffer_ = static_cast<uint8_t>(buffer_ << (8 - bits_in_buffer_));
-        out_stream.write_buf(&buffer_, 1);
-        bits_in_buffer_ = 0;
-        buffer_ = 0;
+        // Only clear the buffered byte after it has been committed to the
+        // stream; an allocation failure must leave it for the caller to retry.
+        int ret = out_stream.write_buf(&buffer_, 1);
+        if (ret == common::E_OK) {
+            bits_in_buffer_ = 0;
+            buffer_ = 0;
+        }
+        return ret;
     }
 
     bool flag_ = false;
@@ -101,8 +111,9 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
             return out_stream.write_buf(bytes, 4);
         }
         const uint32_t xor_value = next_value ^ pre_value_;
+        int ret = common::E_OK;
         if (xor_value == 0) {
-            write_bit(false, out_stream);
+            ret = write_bit(false, out_stream);
         } else {
             const int leading =
                 number_of_leading_zeros(static_cast<int32_t>(xor_value));
@@ -110,17 +121,33 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
                 number_of_trailing_zeros(static_cast<int32_t>(xor_value));
             if (leading >= leading_zero_num_ &&
                 trailing >= trailing_zero_num_) {
-                write_bit(true, out_stream);
-                write_bit(false, out_stream);
-                write_bits(xor_value, out_stream, 31 - leading_zero_num_,
-                           trailing_zero_num_);
+                ret = write_bit(true, out_stream);
+                if (ret == common::E_OK) {
+                    ret = write_bit(false, out_stream);
+                }
+                if (ret == common::E_OK) {
+                    ret =
+                        write_bits(xor_value, out_stream,
+                                   31 - leading_zero_num_, trailing_zero_num_);
+                }
             } else {
-                write_bit(true, out_stream);
-                write_bit(true, out_stream);
-                write_bits(static_cast<uint64_t>(leading), out_stream, 4, 0);
-                write_bits(static_cast<uint64_t>(32 - leading - trailing),
-                           out_stream, 5, 0);
-                write_bits(xor_value, out_stream, 31 - leading, trailing);
+                ret = write_bit(true, out_stream);
+                if (ret == common::E_OK) {
+                    ret = write_bit(true, out_stream);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(static_cast<uint64_t>(leading), out_stream,
+                                     4, 0);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(
+                        static_cast<uint64_t>(32 - leading - trailing),
+                        out_stream, 5, 0);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(xor_value, out_stream, 31 - leading,
+                                     trailing);
+                }
             }
         }
         pre_value_ = next_value;
@@ -128,7 +155,7 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
             number_of_leading_zeros(static_cast<int32_t>(pre_value_));
         trailing_zero_num_ =
             number_of_trailing_zeros(static_cast<int32_t>(pre_value_));
-        return common::E_OK;
+        return ret;
     }
 
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
@@ -150,12 +177,14 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
 
     int flush(common::ByteStream& out_stream) override {
         int ret = encode(std::nanf(""), out_stream);
-        if (RET_FAIL(ret)) {
+        if (ret != common::E_OK) {
             return ret;
         }
-        clear_buffer(out_stream);
-        reset();
-        return common::E_OK;
+        ret = clear_buffer(out_stream);
+        if (ret == common::E_OK) {
+            reset();
+        }
+        return ret;
     }
 
     int get_max_byte_size() override { return 12; }
@@ -192,8 +221,9 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
             return out_stream.write_buf(bytes, 8);
         }
         const uint64_t xor_value = next_value ^ pre_value_;
+        int ret = common::E_OK;
         if (xor_value == 0) {
-            write_bit(false, out_stream);
+            ret = write_bit(false, out_stream);
         } else {
             const int leading =
                 number_of_leading_zeros(static_cast<int64_t>(xor_value));
@@ -201,17 +231,33 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
                 number_of_trailing_zeros(static_cast<int64_t>(xor_value));
             if (leading >= leading_zero_num_ &&
                 trailing >= trailing_zero_num_) {
-                write_bit(true, out_stream);
-                write_bit(false, out_stream);
-                write_bits(xor_value, out_stream, 63 - leading_zero_num_,
-                           trailing_zero_num_);
+                ret = write_bit(true, out_stream);
+                if (ret == common::E_OK) {
+                    ret = write_bit(false, out_stream);
+                }
+                if (ret == common::E_OK) {
+                    ret =
+                        write_bits(xor_value, out_stream,
+                                   63 - leading_zero_num_, trailing_zero_num_);
+                }
             } else {
-                write_bit(true, out_stream);
-                write_bit(true, out_stream);
-                write_bits(static_cast<uint64_t>(leading), out_stream, 5, 0);
-                write_bits(static_cast<uint64_t>(64 - leading - trailing),
-                           out_stream, 6, 0);
-                write_bits(xor_value, out_stream, 63 - leading, trailing);
+                ret = write_bit(true, out_stream);
+                if (ret == common::E_OK) {
+                    ret = write_bit(true, out_stream);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(static_cast<uint64_t>(leading), out_stream,
+                                     5, 0);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(
+                        static_cast<uint64_t>(64 - leading - trailing),
+                        out_stream, 6, 0);
+                }
+                if (ret == common::E_OK) {
+                    ret = write_bits(xor_value, out_stream, 63 - leading,
+                                     trailing);
+                }
             }
         }
         pre_value_ = next_value;
@@ -219,7 +265,7 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
             number_of_leading_zeros(static_cast<int64_t>(pre_value_));
         trailing_zero_num_ =
             number_of_trailing_zeros(static_cast<int64_t>(pre_value_));
-        return common::E_OK;
+        return ret;
     }
 
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
@@ -241,12 +287,14 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
 
     int flush(common::ByteStream& out_stream) override {
         int ret = encode(std::nan(""), out_stream);
-        if (RET_FAIL(ret)) {
+        if (ret != common::E_OK) {
             return ret;
         }
-        clear_buffer(out_stream);
-        reset();
-        return common::E_OK;
+        ret = clear_buffer(out_stream);
+        if (ret == common::E_OK) {
+            reset();
+        }
+        return ret;
     }
 
     int get_max_byte_size() override { return 20; }

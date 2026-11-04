@@ -23,6 +23,8 @@
 #include <sys/types.h>
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <type_traits>
 #include <vector>
@@ -576,25 +578,53 @@ int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
     return Encoder::encode_batch(values, count, out);
 }
 
-// Java Math.round(x) == floor(x + 0.5) (ties go towards +infinity),
-// unlike std::lround's ties-away-from-zero (-2.5 -> -2, not -3).
-// Math.round saturates at the integer limits; a plain static_cast of the
-// boundary value (e.g. INT64_MAX rounding up from below, or 2^63 passing
-// the <= (double)INT64_MAX gate) would be undefined behaviour, so the
-// conversion clamps first.  The 64-bit upper bound is compared against
-// 2^63 rather than (double)INT64_MAX, which rounds up to 2^63 and would
-// let exactly 2^63 through; the lower limits are exactly representable.
+// Exact translation of Java's Math.round(double), which rounds half up
+// (ties towards +infinity).  A literal floor(x + 0.5) is not equivalent for
+// large doubles: once |x| >= 2^52, x + 0.5 rounds back to x, so a value just
+// below a half-integer boundary (e.g. 45035996273704.97 at maxPointNumber 2)
+// would round the wrong way.  Java computes the result from the IEEE bits
+// instead, so mirror that here.  Math.round saturates at the integer limits;
+// a plain static_cast of the boundary value (e.g. INT64_MAX rounding up from
+// below, or 2^63 passing the <= (double)INT64_MAX gate) would be undefined
+// behaviour, so the conversion clamps first.  The 64-bit upper bound is
+// compared against 2^63 rather than (double)INT64_MAX, which rounds up to
+// 2^63 and would let exactly 2^63 through; the lower limits are exactly
+// representable.
+inline int64_t java_round_to_long(double x) {
+    uint64_t bits = 0;
+    std::memcpy(&bits, &x, sizeof(bits));
+    const uint64_t kExpMask = UINT64_C(0x7FF0000000000000);
+    const uint64_t kSignifMask = UINT64_C(0x000FFFFFFFFFFFFF);
+    const uint64_t kSignBit = UINT64_C(0x8000000000000000);
+    const int kSignificandWidth = 53;
+    const int kExpBias = 1023;
+    const int64_t biased_exp =
+        static_cast<int64_t>((bits & kExpMask) >> (kSignificandWidth - 1));
+    const int64_t shift = (kSignificandWidth - 2 + kExpBias) - biased_exp;
+    if ((shift & -64) == 0) {  // 0 <= shift < 64
+        int64_t r =
+            static_cast<int64_t>((bits & kSignifMask) | (kSignifMask + 1));
+        if ((bits & kSignBit) != 0) {
+            r = -r;
+        }
+        return ((r >> shift) + 1) >> 1;
+    }
+    // Zero, infinities, NaN, or |x| large enough that ulp(x) >= 1.0: Java
+    // returns the value unchanged (the double-to-long cast truncates).
+    return static_cast<int64_t>(x);
+}
+
 template <typename Int>
 inline Int java_round(double x) {
-    const double r = std::floor(x + 0.5);
+    const int64_t r = java_round_to_long(x);
     if (sizeof(Int) < 8) {
-        if (r > static_cast<double>(std::numeric_limits<Int>::max())) {
+        if (r > static_cast<int64_t>(std::numeric_limits<Int>::max())) {
             return std::numeric_limits<Int>::max();
         }
-    } else if (r >= 9223372036854775808.0) {  // 2^63
+    } else if (r == INT64_C(0x7FFFFFFFFFFFFFFF) + 1) {  // 2^63, out of range
         return std::numeric_limits<Int>::max();
     }
-    if (r < static_cast<double>(std::numeric_limits<Int>::min())) {
+    if (r < static_cast<int64_t>(std::numeric_limits<Int>::min())) {
         return std::numeric_limits<Int>::min();
     }
     return static_cast<Int>(r);

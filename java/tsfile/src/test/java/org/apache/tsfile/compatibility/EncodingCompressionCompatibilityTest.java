@@ -689,6 +689,10 @@ public class EncodingCompressionCompatibilityTest {
       if (row[1].startsWith("skipped")) {
         skipped++;
         gaps.add(row[0] + ": " + row[2]);
+      } else if ("not-mine".equals(row[1])) {
+        // A writer-side gap this language does not produce; list its reason
+        // without counting it as a skipped reader validation.
+        gaps.add(row[0] + ": " + row[2]);
       }
     }
     Map<String, Integer> byModel = new LinkedHashMap<>();
@@ -1390,54 +1394,53 @@ public class EncodingCompressionCompatibilityTest {
         assertEquals(TSDataType.INT64, metadata.getColumnType(4));
       }
 
-      Map<String, List<Long>> rowsByDevice = new LinkedHashMap<>();
-      Map<String, Map<Long, Object[]>> valuesByDevice = new LinkedHashMap<>();
+      // Rows arrive grouped by device, each device's rows time-ordered.  Verify
+      // inline instead of buffering every row, so a 1M-row fixture does not keep
+      // millions of boxed values and arrays alive until the query finishes.
+      int device = 0;
+      int expectedTime = start;
+      int rowsInDevice = 0;
+      int totalRows = 0;
+      boolean tagVerified = false;
       while (resultSet.next()) {
+        totalRows++;
+        if (!tagVerified) {
+          assertFalse(
+              "tag is null at " + fixtureCase.id + " t=" + resultSet.getLong(1),
+              resultSet.isNull(2));
+          assertEquals(fixtureCase.id + " tag", deviceId(device), resultSet.getString(2));
+          tagVerified = true;
+        }
+
         long time = resultSet.getLong(1);
-        String device = resultSet.getString(2);
-        rowsByDevice.computeIfAbsent(device, key -> new ArrayList<>()).add(time);
+        assertEquals(fixtureCase.id + " timestamp", expectedTime, time);
+
         boolean isNull = resultSet.isNull(3);
-        Object value = isNull ? null : readResultValue(fixtureCase, resultSet, 3);
-        Long anchor = null;
+        boolean expectedNull = isNull(fixtureCase, expectedTime);
+        assertEquals(fixtureCase.id + " null at t=" + expectedTime, expectedNull, isNull);
+        if (!expectedNull) {
+          assertValue(
+              fixtureCase,
+              expectedValue(fixtureCase, expectedTime),
+              readResultValue(fixtureCase, resultSet, 3),
+              expectedTime);
+        }
         if (withAnchor) {
           assertFalse("anchor null at " + fixtureCase.id + " t=" + time, resultSet.isNull(4));
-          anchor = resultSet.getLong(4);
+          assertEquals(
+              fixtureCase.id + " anchor at t=" + expectedTime, expectedTime, resultSet.getLong(4));
         }
-        valuesByDevice
-            .computeIfAbsent(device, key -> new LinkedHashMap<>())
-            .put(time, new Object[] {isNull, value, anchor});
-      }
 
-      assertEquals(fixtureCase.id + " devices", fixtureCase.devices, rowsByDevice.size());
-      for (int device = 0; device < fixtureCase.devices; device++) {
-        String deviceKey = deviceId(device);
-        List<Long> times = rowsByDevice.get(deviceKey);
-        assertNotNull("missing device " + deviceKey + " in " + fixtureCase.id, times);
-        assertEquals(fixtureCase.id + " rows for " + deviceKey, end - start + 1, times.size());
-        Map<Long, Object[]> values = valuesByDevice.get(deviceKey);
-        long expectedTime = start;
-        for (Long time : times) {
-          assertEquals(fixtureCase.id + " timestamp", expectedTime, time.longValue());
-          Object[] entry = values.get(time);
-          assertNotNull(entry);
-          boolean expectedNull = isNull(fixtureCase, (int) expectedTime);
-          assertEquals(fixtureCase.id + " null at t=" + expectedTime, expectedNull, entry[0]);
-          if (!expectedNull) {
-            assertValue(
-                fixtureCase,
-                expectedValue(fixtureCase, (int) expectedTime),
-                entry[1],
-                expectedTime);
-          }
-          if (withAnchor) {
-            assertEquals(
-                fixtureCase.id + " anchor at t=" + expectedTime,
-                expectedTime,
-                ((Long) entry[2]).longValue());
-          }
-          expectedTime++;
+        expectedTime++;
+        if (++rowsInDevice == end - start + 1) {
+          device++;
+          expectedTime = start;
+          rowsInDevice = 0;
+          tagVerified = false;
         }
       }
+      assertEquals(fixtureCase.id + " devices", fixtureCase.devices, device);
+      assertEquals(fixtureCase.id + " rows", fixtureCase.devices * (end - start + 1), totalRows);
     }
   }
 

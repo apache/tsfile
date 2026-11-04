@@ -29,16 +29,22 @@ on:
       - 'mvnw'
       - 'pom.xml'
       # The binary-format surface: the Java/C++ sources that define how data
-      # is encoded, compressed, and laid out on disk. Test/example/tool/doc
-      # changes do not affect the format and are deliberately excluded so a
-      # routine PR does not pay the ~30 minute cross-language matrix.
+      # is encoded, compressed, and laid out on disk, plus the module POMs
+      # that select/version the compression dependencies, and the compatibility
+      # harness itself.  Unrelated test/example/tool/doc changes are excluded
+      # so a routine PR does not pay the ~30 minute cross-language matrix.
       - 'compat/**'
       - 'java/common/src/main/**'
       - 'java/tsfile/src/main/**'
+      - 'java/pom.xml'
+      - 'java/common/pom.xml'
+      - 'java/tsfile/pom.xml'
+      - 'java/tsfile/src/test/java/org/apache/tsfile/compatibility/**'
       - 'cpp/src/**'
       - 'cpp/CMakeLists.txt'
       - 'cpp/cmake/**'
       - 'cpp/third_party/**'
+      - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
   pull_request:
     branches:
       - develop
@@ -51,16 +57,22 @@ on:
       - 'mvnw'
       - 'pom.xml'
       # The binary-format surface: the Java/C++ sources that define how data
-      # is encoded, compressed, and laid out on disk. Test/example/tool/doc
-      # changes do not affect the format and are deliberately excluded so a
-      # routine PR does not pay the ~30 minute cross-language matrix.
+      # is encoded, compressed, and laid out on disk, plus the module POMs
+      # that select/version the compression dependencies, and the compatibility
+      # harness itself.  Unrelated test/example/tool/doc changes are excluded
+      # so a routine PR does not pay the ~30 minute cross-language matrix.
       - 'compat/**'
       - 'java/common/src/main/**'
       - 'java/tsfile/src/main/**'
+      - 'java/pom.xml'
+      - 'java/common/pom.xml'
+      - 'java/tsfile/pom.xml'
+      - 'java/tsfile/src/test/java/org/apache/tsfile/compatibility/**'
       - 'cpp/src/**'
       - 'cpp/CMakeLists.txt'
       - 'cpp/cmake/**'
       - 'cpp/third_party/**'
+      - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
   workflow_dispatch:
     inputs:
       forceUpdates:
