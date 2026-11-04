@@ -108,10 +108,29 @@ FORCE_INLINE int64_t java_double_to_long(double value) {
 }
 
 FORCE_INLINE int64_t java_math_round(double value) {
-    if (value != value) {
+    // Exact translation of Java's Math.round(double) (round half up), matching
+    // java_round_to_long in ts2diff_encoder.h.  A literal floor(value + 0.5)
+    // is not equivalent once |value| >= 2^52, where value + 0.5 rounds back to
+    // value and a value just below a half-integer boundary rounds the wrong
+    // way; Java computes the result from the IEEE bits instead.
+    if (value != value) {  // NaN
         return 0;
     }
-    return java_double_to_long(floor(value + 0.5));
+    const uint64_t bits = double_to_raw_bits(value);
+    const uint64_t kExpMask = UINT64_C(0x7FF0000000000000);
+    const uint64_t kSignifMask = UINT64_C(0x000FFFFFFFFFFFFF);
+    const uint64_t kSignBit = UINT64_C(0x8000000000000000);
+    const int64_t biased_exp = static_cast<int64_t>((bits & kExpMask) >> 52);
+    const int64_t shift = (53 - 2 + 1023) - biased_exp;
+    if ((shift & -64) == 0) {  // 0 <= shift < 64
+        int64_t r =
+            static_cast<int64_t>((bits & kSignifMask) | (kSignifMask + 1));
+        if ((bits & kSignBit) != 0) {
+            r = -r;
+        }
+        return ((r >> shift) + 1) >> 1;
+    }
+    return java_double_to_long(value);
 }
 
 FORCE_INLINE uint64_t add_as_java_long(int64_t left, int64_t right) {
