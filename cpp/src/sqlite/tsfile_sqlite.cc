@@ -199,9 +199,19 @@ struct PendingFile {
 };
 
 struct SourceSegment {
+    SourceSegment() = default;
+    SourceSegment(std::string path_in, std::string identity_in, int64_t rows_in,
+                  int64_t min_in = kNoWatermark, int64_t max_in = kNoWatermark)
+        : path(std::move(path_in)),
+          identity(std::move(identity_in)),
+          rows(rows_in),
+          min_time(min_in),
+          max_time(max_in) {}
     std::string path;
     std::string identity;
     int64_t rows;
+    int64_t min_time = kNoWatermark;
+    int64_t max_time = kNoWatermark;
 };
 
 struct HybridTable;
@@ -1027,12 +1037,18 @@ bool infer_source(HybridTable* table, std::string& error) {
         }
         bool next = false;
         int64_t rows = 0;
+        int64_t file_min = kNoWatermark;
+        int64_t file_max = kNoWatermark;
         std::vector<Value> values(table->columns.size());
         while ((rc = result->next(next)) == common::E_OK && next) {
             has_rows = true;
             ++rows;
             int64_t timestamp = result->get_value<int64_t>(1);
             global_max = std::max(global_max, timestamp);
+            if (file_min == kNoWatermark || timestamp < file_min)
+                file_min = timestamp;
+            if (file_max == kNoWatermark || timestamp > file_max)
+                file_max = timestamp;
             values[0].type = common::TIMESTAMP;
             values[0].is_null = false;
             values[0].i64 = timestamp;
@@ -1066,7 +1082,8 @@ bool infer_source(HybridTable* table, std::string& error) {
             error = "source file changed during creation: " + path;
             return false;
         }
-        table->source_segments.push_back({path, identity, rows});
+        table->source_segments.push_back(
+            {path, identity, rows, file_min, file_max});
     }
 
     if (!first_schema) {
@@ -1122,9 +1139,10 @@ int create_shadow_tables(HybridTable* table, bool insert_config) {
     std::ostringstream segments;
     segments << "CREATE TABLE " << shadow_name(table, "_segments")
              << " (path TEXT PRIMARY KEY, cutoff INTEGER NOT NULL, row_count "
-                "INTEGER NOT NULL, source_table TEXT NOT NULL, identity TEXT "
-                "NOT NULL, file_size INTEGER NOT NULL, mtime_ns INTEGER NOT "
-                "NULL, inode INTEGER NOT NULL)";
+                "INTEGER NOT NULL, min_time INTEGER, max_time INTEGER, "
+                "source_table TEXT NOT NULL, identity TEXT NOT NULL, file_size "
+                "INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, inode INTEGER "
+                "NOT NULL)";
     rc = exec_sql(table->db, segments.str(), table);
     if (rc != SQLITE_OK) return rc;
 
@@ -1192,6 +1210,42 @@ int load_config(HybridTable* table) {
     }
     sqlite3_finalize(stmt);
     return rc;
+}
+
+// Older databases predate the segment-level time bounds. Add the nullable
+// columns in place; existing rows keep NULL and fall back to the full scan.
+int ensure_segment_time_columns(HybridTable* table) {
+    std::string pragma = "PRAGMA " + quote_id(table->db_name) + ".table_info(" +
+                         quote_id(table->table_name + "_tsfile$segments") + ")";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(table->db, pragma.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return rc;
+    bool has_min = false;
+    bool has_max = false;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const unsigned char* name = sqlite3_column_text(stmt, 1);
+        if (name == nullptr) continue;
+        std::string column = reinterpret_cast<const char*>(name);
+        if (column == "min_time") has_min = true;
+        if (column == "max_time") has_max = true;
+    }
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) return rc;
+    if (!has_min) {
+        rc = exec_sql(table->db,
+                      "ALTER TABLE " + shadow_name(table, "_segments") +
+                          " ADD COLUMN min_time INTEGER",
+                      table);
+        if (rc != SQLITE_OK) return rc;
+    }
+    if (!has_max) {
+        rc = exec_sql(table->db,
+                      "ALTER TABLE " + shadow_name(table, "_segments") +
+                          " ADD COLUMN max_time INTEGER",
+                      table);
+        if (rc != SQLITE_OK) return rc;
+    }
+    return SQLITE_OK;
 }
 
 int declare_table(HybridTable* table) {
@@ -1476,16 +1530,25 @@ int init_table(HybridTable* table, int argc, const char* const* argv,
         for (const SourceSegment& segment : table->source_segments) {
             FileStamp stamp;
             if (!file_stamp(segment.path, stamp)) return SQLITE_CANTOPEN;
-            rc = exec_sql(table->db,
-                          "INSERT INTO " + shadow_name(table, "_segments") +
-                              " VALUES(" + quote_sql(segment.path) + ",0," +
-                              std::to_string(segment.rows) + "," +
-                              quote_sql(table->source_table) + "," +
-                              quote_sql(segment.identity) + "," +
-                              std::to_string(stamp.size) + "," +
-                              std::to_string(stamp.mtime_ns) + "," +
-                              std::to_string(stamp.inode) + ")",
-                          table);
+            std::string min_time = segment.min_time == kNoWatermark
+                                       ? "NULL"
+                                       : std::to_string(segment.min_time);
+            std::string max_time = segment.max_time == kNoWatermark
+                                       ? "NULL"
+                                       : std::to_string(segment.max_time);
+            rc = exec_sql(
+                table->db,
+                "INSERT INTO " + shadow_name(table, "_segments") +
+                    " (path,cutoff,row_count,min_time,max_time,source_table,"
+                    "identity,file_size,mtime_ns,inode) VALUES(" +
+                    quote_sql(segment.path) + ",0," +
+                    std::to_string(segment.rows) + "," + min_time + "," +
+                    max_time + "," + quote_sql(table->source_table) + "," +
+                    quote_sql(segment.identity) + "," +
+                    std::to_string(stamp.size) + "," +
+                    std::to_string(stamp.mtime_ns) + "," +
+                    std::to_string(stamp.inode) + ")",
+                table);
             if (rc != SQLITE_OK) return rc;
         }
         for (const auto& device : table->source_devices) {
@@ -1513,6 +1576,8 @@ int init_table(HybridTable* table, int argc, const char* const* argv,
         }
     } else {
         int rc = load_config(table);
+        if (rc != SQLITE_OK) return rc;
+        rc = ensure_segment_time_columns(table);
         if (rc != SQLITE_OK) return rc;
     }
     return SQLITE_OK;
@@ -2023,7 +2088,8 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
               const std::vector<int>& projection) {
     HybridTable* table = cursor->table;
     std::string sql =
-        "SELECT path,source_table,file_size,mtime_ns,inode FROM " +
+        "SELECT rowid,path,source_table,file_size,mtime_ns,inode,min_time,"
+        "max_time FROM " +
         shadow_name(table, "_segments") + " ORDER BY path";
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(table->db, sql.c_str(), -1, &stmt, nullptr);
@@ -2036,26 +2102,37 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
         value_columns.push_back(table->columns[column].name);
         value_indexes.push_back(column);
     }
-    uint64_t segment_ordinal = 0;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const unsigned char* path = sqlite3_column_text(stmt, 0);
+        uint64_t segment_ordinal =
+            static_cast<uint64_t>(sqlite3_column_int64(stmt, 0));
+        const unsigned char* path = sqlite3_column_text(stmt, 1);
         if (path == nullptr) continue;
         std::string read_path = reinterpret_cast<const char*>(path);
         std::string selected =
-            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
         for (const auto& pending : table->pending)
             if (pending.final_path == read_path && !pending.temporary.empty() &&
                 !pending.renamed)
                 read_path = pending.temporary;
         FileStamp stamp;
         if (!file_stamp(read_path, stamp) ||
-            stamp.size != sqlite3_column_int64(stmt, 2) ||
-            stamp.mtime_ns != sqlite3_column_int64(stmt, 3) ||
-            stamp.inode != sqlite3_column_int64(stmt, 4)) {
+            stamp.size != sqlite3_column_int64(stmt, 3) ||
+            stamp.mtime_ns != sqlite3_column_int64(stmt, 4) ||
+            stamp.inode != sqlite3_column_int64(stmt, 5)) {
             set_error(table, "missing or changed file for " +
                                  table->table_name + ": " + read_path);
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
+        }
+        bool has_bounds = sqlite3_column_type(stmt, 6) != SQLITE_NULL &&
+                          sqlite3_column_type(stmt, 7) != SQLITE_NULL;
+        if (has_bounds) {
+            int64_t segment_min = sqlite3_column_int64(stmt, 6);
+            int64_t segment_max = sqlite3_column_int64(stmt, 7);
+            if (lower != kNoWatermark && segment_max < lower) continue;
+            if (upper != std::numeric_limits<int64_t>::max() &&
+                segment_min > upper)
+                continue;
         }
         storage::Filter* tag_filter = nullptr;
         storage::TagFilterBuilder tag_builder(schema.get());
@@ -2129,7 +2206,6 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
         }
-        ++segment_ordinal;
     }
     sqlite3_finalize(stmt);
     return rc == SQLITE_DONE ? SQLITE_OK : rc;
@@ -2512,10 +2588,19 @@ void discard_files(std::vector<PendingFile>& files) {
 
 int write_limited_files(HybridTable* table, std::vector<Row> rows,
                         int64_t limit_bytes, std::vector<PendingFile>& files,
-                        std::vector<int64_t>& counts) {
+                        std::vector<int64_t>& counts,
+                        std::vector<int64_t>& min_times,
+                        std::vector<int64_t>& max_times) {
     std::function<int(std::vector<Row>)> write =
         [&](std::vector<Row> chunk) -> int {
         if (chunk.empty()) return SQLITE_OK;
+        int64_t chunk_min = std::numeric_limits<int64_t>::max();
+        int64_t chunk_max = std::numeric_limits<int64_t>::min();
+        for (const Row& row : chunk) {
+            int64_t timestamp = row.values[table->time_index].i64;
+            if (timestamp < chunk_min) chunk_min = timestamp;
+            if (timestamp > chunk_max) chunk_max = timestamp;
+        }
         PendingFile file;
         int64_t count = 0;
         int rc = write_rows_file(table, chunk, file, count);
@@ -2528,6 +2613,8 @@ int write_limited_files(HybridTable* table, std::vector<Row> rows,
         if (st.st_size <= limit_bytes) {
             files.push_back(std::move(file));
             counts.push_back(count);
+            min_times.push_back(chunk_min);
+            max_times.push_back(chunk_max);
             return SQLITE_OK;
         }
         unlink(file.temporary.c_str());
@@ -2546,6 +2633,8 @@ int write_limited_files(HybridTable* table, std::vector<Row> rows,
     if (rc != SQLITE_OK) {
         discard_files(files);
         counts.clear();
+        min_times.clear();
+        max_times.clear();
     }
     return rc;
 }
@@ -2604,6 +2693,8 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
     std::map<std::string, int64_t> device_max;
     std::vector<PendingFile> files;
     std::vector<int64_t> counts;
+    std::vector<int64_t> min_times;
+    std::vector<int64_t> max_times;
     std::vector<Row> chunk;
     chunk.reserve(kChunkRows);
     int64_t total = 0;
@@ -2635,7 +2726,7 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
         if (chunk.size() >= kChunkRows) {
             rc = write_limited_files(table, std::move(chunk),
                                      max_file_size_mb * 1024 * 1024, files,
-                                     counts);
+                                     counts, min_times, max_times);
             if (rc != SQLITE_OK) {
                 sqlite3_finalize(stmt);
                 return rc;
@@ -2655,15 +2746,16 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
     }
     if (!chunk.empty()) {
         rc = write_limited_files(table, std::move(chunk),
-                                 max_file_size_mb * 1024 * 1024, files, counts);
+                                 max_file_size_mb * 1024 * 1024, files, counts,
+                                 min_times, max_times);
         if (rc != SQLITE_OK) return rc;
     }
 
     for (size_t i = 0; i < files.size(); ++i) {
         std::string insert =
             "INSERT INTO " + shadow_name(table, "_segments") +
-            "(path,cutoff,row_count,source_table,identity,file_size,mtime_ns,"
-            "inode) VALUES(?,?,?,?,?,?,?,?)";
+            "(path,cutoff,row_count,min_time,max_time,source_table,identity,"
+            "file_size,mtime_ns,inode) VALUES(?,?,?,?,?,?,?,?,?,?)";
         sqlite3_stmt* stmt = nullptr;
         rc = sqlite3_prepare_v2(table->db, insert.c_str(), -1, &stmt, nullptr);
         if (rc == SQLITE_OK) {
@@ -2678,12 +2770,14 @@ int seal(HybridTable* table, int64_t max_file_size_mb,
                               SQLITE_TRANSIENT);
             sqlite3_bind_int64(stmt, 2, 0);
             sqlite3_bind_int64(stmt, 3, counts[i]);
-            sqlite3_bind_text(stmt, 4, table->table_name.c_str(), -1,
+            sqlite3_bind_int64(stmt, 4, min_times[i]);
+            sqlite3_bind_int64(stmt, 5, max_times[i]);
+            sqlite3_bind_text(stmt, 6, table->table_name.c_str(), -1,
                               SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt, 5, identity.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_int64(stmt, 6, stamp.size);
-            sqlite3_bind_int64(stmt, 7, stamp.mtime_ns);
-            sqlite3_bind_int64(stmt, 8, stamp.inode);
+            sqlite3_bind_text(stmt, 7, identity.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_int64(stmt, 8, stamp.size);
+            sqlite3_bind_int64(stmt, 9, stamp.mtime_ns);
+            sqlite3_bind_int64(stmt, 10, stamp.inode);
             rc = sqlite3_step(stmt);
         }
         sqlite3_finalize(stmt);
@@ -2846,8 +2940,11 @@ int compact(HybridTable* table, int64_t min_file_size_mb,
     }
     std::vector<PendingFile> files;
     std::vector<int64_t> counts;
+    std::vector<int64_t> min_times;
+    std::vector<int64_t> max_times;
     rc = write_limited_files(table, std::move(rows),
-                             target_file_size_mb * 1024 * 1024, files, counts);
+                             target_file_size_mb * 1024 * 1024, files, counts,
+                             min_times, max_times);
     if (rc != SQLITE_OK) return rc;
     for (size_t i = 0; i < files.size(); ++i) {
         std::string identity = file_identity(files[i].temporary);
@@ -2858,8 +2955,8 @@ int compact(HybridTable* table, int64_t min_file_size_mb,
         }
         std::string insert =
             "INSERT INTO " + shadow_name(table, "_segments") +
-            "(path,cutoff,row_count,source_table,identity,file_size,mtime_ns,"
-            "inode) VALUES(?,?,?,?,?,?,?,?)";
+            "(path,cutoff,row_count,min_time,max_time,source_table,identity,"
+            "file_size,mtime_ns,inode) VALUES(?,?,?,?,?,?,?,?,?,?)";
         stmt = nullptr;
         rc = sqlite3_prepare_v2(table->db, insert.c_str(), -1, &stmt, nullptr);
         if (rc == SQLITE_OK) {
@@ -2867,12 +2964,14 @@ int compact(HybridTable* table, int64_t min_file_size_mb,
                               SQLITE_TRANSIENT);
             sqlite3_bind_int64(stmt, 2, 0);
             sqlite3_bind_int64(stmt, 3, counts[i]);
-            sqlite3_bind_text(stmt, 4, table->table_name.c_str(), -1,
+            sqlite3_bind_int64(stmt, 4, min_times[i]);
+            sqlite3_bind_int64(stmt, 5, max_times[i]);
+            sqlite3_bind_text(stmt, 6, table->table_name.c_str(), -1,
                               SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt, 5, identity.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_int64(stmt, 6, stamp.size);
-            sqlite3_bind_int64(stmt, 7, stamp.mtime_ns);
-            sqlite3_bind_int64(stmt, 8, stamp.inode);
+            sqlite3_bind_text(stmt, 7, identity.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_int64(stmt, 8, stamp.size);
+            sqlite3_bind_int64(stmt, 9, stamp.mtime_ns);
+            sqlite3_bind_int64(stmt, 10, stamp.inode);
             rc = sqlite3_step(stmt);
         }
         sqlite3_finalize(stmt);

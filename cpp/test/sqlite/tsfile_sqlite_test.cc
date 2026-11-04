@@ -1249,6 +1249,15 @@ TEST_F(TsFileSqliteTest, CompactThresholdAndChangedFile) {
                        "tsfile_table_info('main.bigrow')"));
 }
 
+TEST_F(TsFileSqliteTest, SegmentTimeBoundsAreRecorded) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1000,'d0',1),"
+                              "(5000,'d0',2),(2000,'d0',3)"));
+    EXPECT_EQ(3, count("SELECT tsfile_seal('main.sensor',2)"));
+    EXPECT_EQ("1000,5000,3",
+              scalar_text("SELECT min_time || ',' || max_time || ',' || "
+                          "row_count FROM \"sensor_tsfile$segments\""));
+}
+
 TEST_F(TsFileSqliteTest, ExportRejectsChangedSourceAndDuplicateNames) {
     ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
     EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
@@ -1293,7 +1302,7 @@ TEST_F(TsFileSqliteTest, ExportRejectsChangedSourceAndDuplicateNames) {
     ASSERT_EQ(
         SQLITE_OK,
         exec("INSERT INTO \"dupsrc_tsfile$segments\" VALUES(" + quote(same_b) +
-             ",0,1,'dupa','x'," +
+             ",0,1,NULL,NULL,'dupa','x'," +
              std::to_string(static_cast<long long>(st.st_size)) + ",0,0)"));
     const std::string dup_out = directory_ + "-duplicate-export";
     EXPECT_NE(SQLITE_OK, exec_raw("SELECT tsfile_export('main.dupsrc'," +
