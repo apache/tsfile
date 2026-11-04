@@ -123,7 +123,11 @@ def label(ax, x, y, text, dx=8, dy=0, color=INK2, size=8.5, ha="left"):
 def save(fig, name):
     FIGURES.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES / f"{name}.png", dpi=220, bbox_inches="tight")
-    fig.savefig(FIGURES / f"{name}.svg", bbox_inches="tight")
+    svg = FIGURES / f"{name}.svg"
+    fig.savefig(svg, bbox_inches="tight")
+    svg.write_text(
+        "\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n"
+    )
     plt.close(fig)
 
 
@@ -475,7 +479,7 @@ def fig_seal_scan(scan):
         color=INK,
         fontsize=13,
     )
-    save(fig, "fig5_seal_threshold")
+    save(fig, "fig6_seal_threshold")
 
 
 def fig_d2000_tradeoff(main, supp):
@@ -558,7 +562,40 @@ def fig_d2000_tradeoff(main, supp):
         color=INK,
         fontsize=13,
     )
-    save(fig, "fig6_d2000_tradeoff")
+    save(fig, "fig7_d2000_tradeoff")
+
+
+def fig_seal_rss_cycle(main, supp):
+    by = {(d, m): r for r in main for d, m, _ in [cfg(r)]}
+    fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.4))
+    panels = (
+        (axes[0], by[(100, 30)], "D100-M30 / 50k"),
+        (axes[1], supp, "D2000-M30 / 30k"),
+    )
+    for ax, run, title in panels:
+        before = [s["rss_before_kb"] / 1024 for s in run["seals"]]
+        peak = [s["rss_peak_kb"] / 1024 for s in run["seals"]]
+        xs = list(range(1, len(peak) + 1))
+        ax.plot(xs, before, color=BLUE_LIGHT, linewidth=2, label="seal 前")
+        ax.plot(xs, peak, color=BLUE_DARK, linewidth=2, label="seal 峰值")
+        label(ax, xs[-1], before[-1], f"{before[-1]:.0f}MB")
+        label(ax, xs[-1], peak[-1], f"{peak[-1]:.0f}MB")
+        ax.set_xlim(0, max(xs) * 1.32)
+        ax.set_ylim(0, 450)
+        ax.set_xlabel("seal 次序")
+        ax.set_ylabel("RSS（MB）")
+        ax.set_title(title, loc="left", color=INK, fontsize=11)
+        style(ax)
+        ax.legend(loc="lower right", frameon=False, handlelength=2.4)
+    fig.suptitle(
+        "seal 前 RSS 与 seal 峰值：是否回落取决于配置",
+        x=0.01,
+        y=1.03,
+        ha="left",
+        color=INK,
+        fontsize=13,
+    )
+    save(fig, "fig5_seal_rss_cycle")
 
 
 def main():
@@ -572,6 +609,7 @@ def main():
     fig_rss_timeline(main_runs, supp)
     fig_seal_scan(scan)
     fig_d2000_tradeoff(main_runs, supp)
+    fig_seal_rss_cycle(main_runs, supp)
     print(
         f"wrote {len(list(FIGURES.glob('*.png')))} PNG and {len(list(FIGURES.glob('*.svg')))} SVG figures to {FIGURES}"
     )
