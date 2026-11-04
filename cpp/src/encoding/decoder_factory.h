@@ -28,7 +28,9 @@
 #include "double_sprintz_decoder.h"
 #include "encoding/int32_rle_decoder.h"
 #include "encoding/int64_rle_decoder.h"
+#include "float_rle_decoder.h"
 #include "float_sprintz_decoder.h"
+#include "gorilla_v1_decoder.h"
 #include "gorilla_decoder.h"
 #include "int32_sprintz_decoder.h"
 #include "int64_sprintz_decoder.h"
@@ -89,6 +91,10 @@ class DecoderFactory {
                     case INT64:
                     case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(Int64RleDecoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatRLEDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleRLEDecoder);
                     default:
                         return nullptr;
                 }
@@ -144,8 +150,10 @@ class DecoderFactory {
             case ZIGZAG:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_DECODER(IntZigzagDecoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(LongZigzagDecoder);
                     default:
                         return nullptr;
@@ -154,8 +162,10 @@ class DecoderFactory {
             case SPRINTZ:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_DECODER(Int32SprintzDecoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(Int64SprintzDecoder);
                     case FLOAT:
                         ALLOC_AND_RETURN_DECODER(FloatSprintzDecoder);
@@ -185,6 +195,16 @@ class DecoderFactory {
                 switch (data_type) {
                     case DOUBLE:
                         ALLOC_AND_RETURN_DECODER(CamelDecoder);
+                    default:
+                        return nullptr;
+                }
+
+            case GORILLA_V1:
+                switch (data_type) {
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatGorillaV1Decoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleGorillaV1Decoder);
                     default:
                         return nullptr;
                 }
