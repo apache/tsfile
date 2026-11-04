@@ -25,6 +25,8 @@
 
 图表版报告：[PI_REPORT.md](PI_REPORT.md)。
 
+查询性能测试：[PI_QUERY_RESULTS.md](PI_QUERY_RESULTS.md)。
+
 脚本：[pi_write_seal_bench.py](pi_write_seal_bench.py)、
 [run_pi_matrix.sh](run_pi_matrix.sh)、[summarize_pi.py](summarize_pi.py)
 

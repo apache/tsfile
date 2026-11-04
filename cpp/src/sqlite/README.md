@@ -35,6 +35,7 @@ Documentation:
 - Self-test report: [SELF_TEST_REPORT.md](SELF_TEST_REPORT.md).
 - Self-test report for the nonconformance fixes (2026-11-04): [SELF_TEST_REPORT_20261104.md](SELF_TEST_REPORT_20261104.md).
 - Raspberry Pi benchmark report (Chinese, with charts): [PI_REPORT.md](PI_REPORT.md); raw metrics: [PI_RESULTS.md](PI_RESULTS.md), [PI_RESULTS.csv](PI_RESULTS.csv).
+- Raspberry Pi query benchmark: [PI_QUERY_RESULTS.md](PI_QUERY_RESULTS.md); script: [pi_query_bench.py](bench/pi_query_bench.py).
 
 Build from the repository root:
 
