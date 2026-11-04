@@ -23,6 +23,8 @@
 
 日期：2026-11-03
 
+图表版报告：[PI_REPORT.md](PI_REPORT.md)。
+
 脚本：[pi_write_seal_bench.py](pi_write_seal_bench.py)、
 [run_pi_matrix.sh](run_pi_matrix.sh)、[summarize_pi.py](summarize_pi.py)
 
