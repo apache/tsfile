@@ -74,6 +74,18 @@ namespace {
 const char* const kSpecEnv = "TSFILE_COMPAT_SPEC";
 const char* const kGenerateDirEnv = "TSFILE_COMPAT_GENERATE_DIR";
 const char* const kValidateDirEnv = "TSFILE_COMPAT_VALIDATE_DIR";
+const char* const kShardIndexEnv = "TSFILE_COMPAT_SHARD_INDEX";
+const char* const kShardCountEnv = "TSFILE_COMPAT_SHARD_COUNT";
+
+int GetShardIndex() {
+    const char* value = std::getenv(kShardIndexEnv);
+    return value == nullptr ? 0 : std::atoi(value);
+}
+
+int GetShardCount() {
+    const char* value = std::getenv(kShardCountEnv);
+    return value == nullptr ? 1 : std::atoi(value);
+}
 const char* const kDefaultSpec = "compat/compatibility-matrix.csv";
 const char* const kLanguage = "cpp";
 
@@ -1838,7 +1850,15 @@ TEST_F(EncodingCompressionCompatibilityTest, GenerateFixtures) {
     std::vector<FixtureCase> cases = ReadSpec(ResolveSpecPath());
     std::vector<FixtureCase> written;
     std::vector<ReportRow> report;
+    const int shard_index = GetShardIndex();
+    const int shard_count = GetShardCount();
+    int case_index = 0;
     for (const FixtureCase& fixture_case : cases) {
+        const int assigned_shard = case_index % shard_count;
+        ++case_index;
+        if (assigned_shard != shard_index) {
+            continue;
+        }
         if (!fixture_case.cpp_write) {
             report.push_back(
                 {fixture_case.id, "not-mine", fixture_case.gap_reason});
@@ -1881,10 +1901,14 @@ TEST_F(EncodingCompressionCompatibilityTest, ValidateFixtures) {
     for (const ManifestEntry& entry : manifest) {
         manifest_ids.insert(entry.fixture_case.id);
     }
-    for (const std::string& id : expected_ids) {
-        if (manifest_ids.count(id) == 0) {
-            ADD_FAILURE() << "manifest for " << producer
-                          << " is missing declared case " << id;
+    // When sharded, each shard's manifest is a partial subset, so the
+    // "missing" check is skipped; the "undeclared" check still holds.
+    if (GetShardCount() <= 1) {
+        for (const std::string& id : expected_ids) {
+            if (manifest_ids.count(id) == 0) {
+                ADD_FAILURE() << "manifest for " << producer
+                              << " is missing declared case " << id;
+            }
         }
     }
     for (const std::string& id : manifest_ids) {

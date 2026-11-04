@@ -101,6 +101,17 @@ public class EncodingCompressionCompatibilityTest {
   private static final String SPEC_PROPERTY = "tsfile.compat.spec";
   private static final String GENERATE_DIR_PROPERTY = "tsfile.compat.generate.dir";
   private static final String VALIDATE_DIR_PROPERTY = "tsfile.compat.validate.dir";
+  private static final String SHARD_INDEX_PROPERTY = "tsfile.compat.shardIndex";
+  private static final String SHARD_COUNT_PROPERTY = "tsfile.compat.shardCount";
+
+  private static int shardIndex() {
+    return Integer.getInteger(SHARD_INDEX_PROPERTY, 0);
+  }
+
+  private static int shardCount() {
+    return Integer.getInteger(SHARD_COUNT_PROPERTY, 1);
+  }
+
   private static final String DEFAULT_SPEC = "compat/compatibility-matrix.csv";
 
   private static final String MANIFEST_FILE = "manifest.csv";
@@ -304,7 +315,15 @@ public class EncodingCompressionCompatibilityTest {
     List<FixtureCase> cases = readSpec(resolveSpecPath());
     List<FixtureCase> written = new ArrayList<>();
     List<String[]> report = new ArrayList<>();
+    int shardIndex = shardIndex();
+    int shardCount = shardCount();
+    int caseIndex = 0;
     for (FixtureCase fixtureCase : cases) {
+      int assignedShard = caseIndex % shardCount;
+      caseIndex++;
+      if (assignedShard != shardIndex) {
+        continue;
+      }
       if (!fixtureCase.javaWrite) {
         report.add(new String[] {fixtureCase.id, "not-mine", fixtureCase.gapReason});
         continue;
@@ -353,7 +372,9 @@ public class EncodingCompressionCompatibilityTest {
     missing.removeAll(manifestIds);
     List<String> extra = new ArrayList<>(manifestIds);
     extra.removeAll(expectedIds);
-    if (!missing.isEmpty() || !extra.isEmpty()) {
+    // When sharded, each shard's manifest is a partial subset, so the
+    // "missing" check is skipped; the "extra" check still holds.
+    if (!extra.isEmpty() || (shardCount() <= 1 && !missing.isEmpty())) {
       fail(
           "manifest for "
               + producer

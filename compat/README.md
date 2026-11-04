@@ -61,19 +61,19 @@ as new encodings are added.
 
 ## Data scale and page-size tiers
 
-Every (type, encoding, compression) combination is generated at the three
-smaller data scales — 10, 1000 and 100000 rows — with a page size that crosses
-page boundaries at that scale. The 1M scale uses a reduced, representative
-encoding set per type, because cross-language compatibility is already fully
-covered at the smaller scales and the 1M tier exists to stress the
-page/chunk/index machinery at scale (largely encoding-independent):
+Every (type, encoding, compression) combination is generated at four data
+scales — 10, 1000, 100000 and 1000000 rows — with a page size that crosses
+page boundaries at that scale. To keep each CI job within its timeout the
+fixture generation is sharded: the test takes a `shardIndex`/`shardCount` and
+only emits the cases whose index falls into that shard, and the CI matrix runs
+one job per shard in parallel.
 
-| Scale | Page size | Page structure it exercises | Encoding coverage |
-| --- | --- | --- | --- |
-| 10 rows | 4 | 3 pages with a partial last page (4+4+2) | full cartesian |
-| 1000 rows | 100 | 10 pages | full cartesian |
-| 100000 rows | 10000 | 10 pages (writer default) | full cartesian |
-| 1000000 rows | 10000 | 100 pages (writer default) | PLAIN / TS_2DIFF / RLE / GORILLA / DICTIONARY |
+| Scale | Page size | Page structure it exercises |
+| --- | --- | --- |
+| 10 rows | 4 | 3 pages with a partial last page (4+4+2) |
+| 1000 rows | 100 | 10 pages |
+| 100000 rows | 10000 | 10 pages (writer default) |
+| 1000000 rows | 10000 | 100 pages (writer default) |
 
 `UNCOMPRESSED` is dropped at the 1M tier: a million raw values (or long
 repeated strings) is a multi-megabyte file per case for no extra coverage, and
