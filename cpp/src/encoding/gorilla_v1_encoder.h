@@ -104,10 +104,10 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
         if (xor_value == 0) {
             write_bit(false, out_stream);
         } else {
-            const int leading = number_of_leading_zeros(
-                static_cast<int32_t>(xor_value));
-            const int trailing = number_of_trailing_zeros(
-                static_cast<int32_t>(xor_value));
+            const int leading =
+                number_of_leading_zeros(static_cast<int32_t>(xor_value));
+            const int trailing =
+                number_of_trailing_zeros(static_cast<int32_t>(xor_value));
             if (leading >= leading_zero_num_ &&
                 trailing >= trailing_zero_num_) {
                 write_bit(true, out_stream);
@@ -118,9 +118,8 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
                 write_bit(true, out_stream);
                 write_bit(true, out_stream);
                 write_bits(static_cast<uint64_t>(leading), out_stream, 4, 0);
-                write_bits(
-                    static_cast<uint64_t>(32 - leading - trailing),
-                    out_stream, 5, 0);
+                write_bits(static_cast<uint64_t>(32 - leading - trailing),
+                           out_stream, 5, 0);
                 write_bits(xor_value, out_stream, 31 - leading, trailing);
             }
         }
@@ -135,16 +134,13 @@ class FloatGorillaV1Encoder : public GorillaV1EncoderBase {
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int32_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int64_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int64_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(double /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(double /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int encode(common::String /*value*/,
@@ -185,10 +181,10 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
         if (!flag_) {
             flag_ = true;
             pre_value_ = next_value;
-            leading_zero_num_ = number_of_leading_zeros(
-                static_cast<int64_t>(pre_value_));
-            trailing_zero_num_ = number_of_trailing_zeros(
-                static_cast<int64_t>(pre_value_));
+            leading_zero_num_ =
+                number_of_leading_zeros(static_cast<int64_t>(pre_value_));
+            trailing_zero_num_ =
+                number_of_trailing_zeros(static_cast<int64_t>(pre_value_));
             uint8_t bytes[8];
             for (int i = 0; i < 8; i++) {
                 bytes[i] = static_cast<uint8_t>(pre_value_ >> (i * 8));
@@ -199,10 +195,10 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
         if (xor_value == 0) {
             write_bit(false, out_stream);
         } else {
-            const int leading = number_of_leading_zeros(
-                static_cast<int64_t>(xor_value));
-            const int trailing = number_of_trailing_zeros(
-                static_cast<int64_t>(xor_value));
+            const int leading =
+                number_of_leading_zeros(static_cast<int64_t>(xor_value));
+            const int trailing =
+                number_of_trailing_zeros(static_cast<int64_t>(xor_value));
             if (leading >= leading_zero_num_ &&
                 trailing >= trailing_zero_num_) {
                 write_bit(true, out_stream);
@@ -213,33 +209,29 @@ class DoubleGorillaV1Encoder : public GorillaV1EncoderBase {
                 write_bit(true, out_stream);
                 write_bit(true, out_stream);
                 write_bits(static_cast<uint64_t>(leading), out_stream, 5, 0);
-                write_bits(
-                    static_cast<uint64_t>(64 - leading - trailing),
-                    out_stream, 6, 0);
+                write_bits(static_cast<uint64_t>(64 - leading - trailing),
+                           out_stream, 6, 0);
                 write_bits(xor_value, out_stream, 63 - leading, trailing);
             }
         }
         pre_value_ = next_value;
-        leading_zero_num_ = number_of_leading_zeros(
-            static_cast<int64_t>(pre_value_));
-        trailing_zero_num_ = number_of_trailing_zeros(
-            static_cast<int64_t>(pre_value_));
+        leading_zero_num_ =
+            number_of_leading_zeros(static_cast<int64_t>(pre_value_));
+        trailing_zero_num_ =
+            number_of_trailing_zeros(static_cast<int64_t>(pre_value_));
         return common::E_OK;
     }
 
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int32_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int64_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int64_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(float /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(float /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int encode(common::String /*value*/,

@@ -98,9 +98,8 @@ const char* const kAllCompressions[] = {"UNCOMPRESSED", "SNAPPY", "GZIP",
                                         "LZ4",          "ZSTD",   "LZMA2"};
 
 // Concrete storage types covered by the matrix; see the Java counterpart.
-const TSDataType kMatrixDataTypes[] = {BOOLEAN, INT32,    INT64, TIMESTAMP,
-                                       DATE,    FLOAT,    DOUBLE, TEXT,
-                                       STRING,  BLOB};
+const TSDataType kMatrixDataTypes[] = {BOOLEAN, INT32,  INT64, TIMESTAMP, DATE,
+                                       FLOAT,   DOUBLE, TEXT,  STRING,    BLOB};
 
 enum class Model { TABLE, TREE };
 enum class NullPattern { NONE, MIXED, ALL };
@@ -284,14 +283,27 @@ const uint64_t kTs2DiffDoubleBits[] = {
 // stays inside a safe range. Streaming numeric extremes are covered under the
 // other encodings.
 const int32_t kSprintzIntValues[] = {
-    0,          1,          -1,         7,        -8,   1024, -1024, 123456,
-    -654321,    100000000,  -100000000, 42,       42,   0,    -8,    2048,
+    0,       1,         -1,         7,  -8, 1024, -1024, 123456,
+    -654321, 100000000, -100000000, 42, 42, 0,    -8,    2048,
 };
 
 const int64_t kSprintzLongValues[] = {
-    0LL, 1LL, -1LL, 7LL, -8LL, 1234567890LL, -987654321LL, 4294967296LL,
-    -4294967296LL, 1000000000000LL, -1000000000000LL, 42LL, 42LL,
-    0LL, -8LL, 2048LL,
+    0LL,
+    1LL,
+    -1LL,
+    7LL,
+    -8LL,
+    1234567890LL,
+    -987654321LL,
+    4294967296LL,
+    -4294967296LL,
+    1000000000000LL,
+    -1000000000000LL,
+    42LL,
+    42LL,
+    0LL,
+    -8LL,
+    2048LL,
 };
 
 const uint32_t kSprintzFloatBits[] = {
@@ -721,8 +733,10 @@ std::vector<FixtureCase> ReadSpec(const std::string& path) {
         std::string data_type_name = parts[ColumnIndex(columns, "dataType")];
         std::string encoding_name = parts[ColumnIndex(columns, "encoding")];
         std::string compressions = parts[ColumnIndex(columns, "compressions")];
-        int row_count = std::atoi(parts[ColumnIndex(columns, "rowCount")].c_str());
-        int page_rows = std::atoi(parts[ColumnIndex(columns, "pageRows")].c_str());
+        int row_count =
+            std::atoi(parts[ColumnIndex(columns, "rowCount")].c_str());
+        int page_rows =
+            std::atoi(parts[ColumnIndex(columns, "pageRows")].c_str());
         int chunks = std::atoi(parts[ColumnIndex(columns, "chunks")].c_str());
         int devices = std::atoi(parts[ColumnIndex(columns, "devices")].c_str());
         std::string profile_name = parts[ColumnIndex(columns, "valueProfile")];
@@ -777,8 +791,8 @@ std::vector<FixtureCase> ReadSpec(const std::string& path) {
                 fixture_case.id = spec_id + "." + Lower(compression_name) +
                                   "." + Lower(pattern_name);
                 if (!ids.insert(fixture_case.id).second) {
-                    ADD_FAILURE() << "Duplicate expanded case id "
-                                  << fixture_case.id;
+                    ADD_FAILURE()
+                        << "Duplicate expanded case id " << fixture_case.id;
                 }
                 fixture_case.model = model;
                 fixture_case.data_type = data_type;
@@ -1091,25 +1105,24 @@ TableSchema* CreateTableSchema(const FixtureCase& fixture_case) {
     measurement_schemas.emplace_back(
         new MeasurementSchema(kTagColumn, STRING, PLAIN, UNCOMPRESSED));
     column_categories.emplace_back(ColumnCategory::TAG);
-    measurement_schemas.emplace_back(new MeasurementSchema(
-        kValueColumn, fixture_case.data_type, fixture_case.encoding,
-        fixture_case.compression));
+    measurement_schemas.emplace_back(
+        new MeasurementSchema(kValueColumn, fixture_case.data_type,
+                              fixture_case.encoding, fixture_case.compression));
     column_categories.emplace_back(ColumnCategory::FIELD);
     if (fixture_case.null_pattern != NullPattern::NONE) {
         measurement_schemas.emplace_back(new MeasurementSchema(
             kAnchorColumn, INT64, PLAIN, fixture_case.compression));
         column_categories.emplace_back(ColumnCategory::FIELD);
     }
-    return new TableSchema(kTableName, measurement_schemas,
-                           column_categories);
+    return new TableSchema(kTableName, measurement_schemas, column_categories);
 }
 
 void AddTabletValue(Tablet& tablet, const FixtureCase& fixture_case,
                     uint32_t index, int row) {
     switch (fixture_case.data_type) {
         case BOOLEAN:
-            EXPECT_EQ(E_OK, tablet.add_value(index, kValueColumn,
-                                             BooleanValue(row)));
+            EXPECT_EQ(E_OK,
+                      tablet.add_value(index, kValueColumn, BooleanValue(row)));
             break;
         case INT32:
             EXPECT_EQ(E_OK, tablet.add_value(index, kValueColumn,
@@ -1153,11 +1166,10 @@ void AddTabletValue(Tablet& tablet, const FixtureCase& fixture_case,
 
 Tablet CreateTablet(TableSchema* table_schema, const FixtureCase& fixture_case,
                     int device, int start, int end) {
-    Tablet tablet(table_schema->get_table_name(),
-                  table_schema->get_measurement_names(),
-                  table_schema->get_data_types(),
-                  table_schema->get_column_categories(),
-                  static_cast<uint32_t>(std::max(1, end - start)));
+    Tablet tablet(
+        table_schema->get_table_name(), table_schema->get_measurement_names(),
+        table_schema->get_data_types(), table_schema->get_column_categories(),
+        static_cast<uint32_t>(std::max(1, end - start)));
     uint32_t index = 0;
     for (int row = start; row < end; row++, index++) {
         EXPECT_EQ(E_OK, tablet.add_timestamp(index, row));
@@ -1189,33 +1201,28 @@ void AddRecordPoint(TsRecord& record, std::string& keep_alive,
                     const FixtureCase& fixture_case, int row) {
     switch (fixture_case.data_type) {
         case BOOLEAN:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn, BooleanValue(row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn, BooleanValue(row)));
             break;
         case INT32:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn, IntValue(fixture_case, row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn,
+                                             IntValue(fixture_case, row)));
             break;
         case DATE:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn,
-                                       DateValue(fixture_case, row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn,
+                                             DateValue(fixture_case, row)));
             break;
         case INT64:
         case TIMESTAMP:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn,
-                                       LongValue(fixture_case, row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn,
+                                             LongValue(fixture_case, row)));
             break;
         case FLOAT:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn,
-                                       FloatValue(fixture_case, row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn,
+                                             FloatValue(fixture_case, row)));
             break;
         case DOUBLE:
-            EXPECT_EQ(E_OK,
-                      record.add_point(kValueColumn,
-                                       DoubleValue(fixture_case, row)));
+            EXPECT_EQ(E_OK, record.add_point(kValueColumn,
+                                             DoubleValue(fixture_case, row)));
             break;
         case TEXT:
         case STRING:
@@ -1288,9 +1295,9 @@ void WriteTreeFixture(const std::string& directory,
                     points++;
                 }
                 if (fixture_case.null_pattern != NullPattern::NONE) {
-                    EXPECT_EQ(E_OK, record.add_point(
-                                        kAnchorColumn,
-                                        static_cast<int64_t>(row)));
+                    EXPECT_EQ(E_OK,
+                              record.add_point(kAnchorColumn,
+                                               static_cast<int64_t>(row)));
                     points++;
                 }
                 if (points > 0) {
@@ -1318,8 +1325,8 @@ void AssertOnWireCodec(const std::string& directory,
     std::vector<std::shared_ptr<IDeviceID>> devices;
     if (fixture_case.model == Model::TABLE) {
         MetaIndexNode* table_root = nullptr;
-        ASSERT_EQ(E_OK,
-                  tsfile_meta->get_table_metaindex_node(kTableName, table_root));
+        ASSERT_EQ(E_OK, tsfile_meta->get_table_metaindex_node(kTableName,
+                                                              table_root));
         ASSERT_NE(nullptr, table_root);
         for (const std::shared_ptr<IMetaIndexEntry>& entry :
              table_root->children_) {
@@ -1343,8 +1350,8 @@ void AssertOnWireCodec(const std::string& directory,
     for (const std::shared_ptr<IDeviceID>& device_id : devices) {
         std::vector<ITimeseriesIndex*> indexes(1, nullptr);
         std::unordered_set<std::string> measurements = {kValueColumn};
-        ASSERT_EQ(E_OK, io_reader.get_timeseries_indexes(device_id, measurements,
-                                                         indexes, arena));
+        ASSERT_EQ(E_OK, io_reader.get_timeseries_indexes(
+                            device_id, measurements, indexes, arena));
         ASSERT_NE(nullptr, indexes.front());
         common::SimpleList<ChunkMeta*>* chunks =
             indexes.front()->get_value_chunk_meta_list();
@@ -1358,9 +1365,9 @@ void AssertOnWireCodec(const std::string& directory,
             ASSERT_NE(nullptr, chunk);
             char header_buf[1024];
             int32_t read_len = 0;
-            ASSERT_EQ(E_OK, read_file.read(chunk->offset_of_chunk_header_,
-                                           header_buf, sizeof(header_buf),
-                                           read_len));
+            ASSERT_EQ(E_OK,
+                      read_file.read(chunk->offset_of_chunk_header_, header_buf,
+                                     sizeof(header_buf), read_len));
             ASSERT_GE(read_len, 7);
             common::ByteStream stream;
             stream.wrap_from(header_buf, read_len);
@@ -1412,8 +1419,7 @@ void ExpectTableValue(const FixtureCase& fixture_case, int row,
             EXPECT_EQ(BooleanValue(row), result_set->get_bool_at(3));
             break;
         case INT32:
-            EXPECT_EQ(IntValue(fixture_case, row),
-                      result_set->get_int32_at(3));
+            EXPECT_EQ(IntValue(fixture_case, row), result_set->get_int32_at(3));
             break;
         case DATE:
             EXPECT_EQ(DateValue(fixture_case, row),
@@ -1455,8 +1461,7 @@ void ExpectFieldValue(const FixtureCase& fixture_case, int row, Field* field) {
             EXPECT_EQ(BooleanValue(row), field->get_value<bool>());
             break;
         case INT32:
-            EXPECT_EQ(IntValue(fixture_case, row),
-                      field->get_value<int32_t>());
+            EXPECT_EQ(IntValue(fixture_case, row), field->get_value<int32_t>());
             break;
         case DATE:
             EXPECT_EQ(DateValue(fixture_case, row),
@@ -1501,11 +1506,10 @@ std::vector<Range> QueryRanges(const FixtureCase& fixture_case) {
     int page_rows = fixture_case.page_rows;
     if (fixture_case.null_pattern != NullPattern::NONE && page_rows > 0 &&
         fixture_case.row_count > 2 * page_rows) {
-        ranges.push_back(
-            {page_rows - 1,
-             std::min(fixture_case.row_count - 1, 2 * page_rows + 1)});
-        ranges.push_back(
-            {page_rows, std::min(fixture_case.row_count - 1, 2 * page_rows - 1)});
+        ranges.push_back({page_rows - 1, std::min(fixture_case.row_count - 1,
+                                                  2 * page_rows + 1)});
+        ranges.push_back({page_rows, std::min(fixture_case.row_count - 1,
+                                              2 * page_rows - 1)});
     }
     return ranges;
 }
@@ -1530,8 +1534,8 @@ void ValidateTableRange(const std::string& directory,
     auto cleanup = [&reader](ResultSet* result) {
         reader.destroy_query_data_set(result);
     };
-    std::unique_ptr<ResultSet, decltype(cleanup)> owned_result(
-        raw_result_set, cleanup);
+    std::unique_ptr<ResultSet, decltype(cleanup)> owned_result(raw_result_set,
+                                                               cleanup);
     std::shared_ptr<ResultSetMetadata> metadata = owned_result->get_metadata();
     ASSERT_EQ(with_anchor ? 4U : 3U, metadata->get_column_count());
     ASSERT_EQ("time", metadata->get_column_name(1));
@@ -1575,9 +1579,8 @@ void ValidateTableRange(const std::string& directory,
         const bool expected_null = IsNull(fixture_case, expected_time);
         EXPECT_EQ(expected_null, owned_result->is_null(3));
         if (!expected_null) {
-            ASSERT_NO_FATAL_FAILURE(
-                ExpectTableValue(fixture_case, expected_time,
-                                 owned_result.get()));
+            ASSERT_NO_FATAL_FAILURE(ExpectTableValue(
+                fixture_case, expected_time, owned_result.get()));
         }
 
         if (with_anchor) {
@@ -1634,8 +1637,7 @@ void ValidateTreeRange(const std::string& directory,
             }
         }
         ASSERT_LE(expected_time, range.end);
-        EXPECT_EQ(static_cast<int64_t>(expected_time),
-                  record->get_timestamp());
+        EXPECT_EQ(static_cast<int64_t>(expected_time), record->get_timestamp());
         Field* value_field = record->get_field(1);
         ASSERT_NE(nullptr, value_field);
         bool is_null = value_field->type_ == NULL_TYPE;
@@ -1725,9 +1727,9 @@ CompressionType ParseCompressionOrFail(const std::string& name) {
 
 std::string CapabilityKey(Model model, TSDataType data_type,
                           TSEncoding encoding, CompressionType compression) {
-    return std::string(ModelName(model)) + "/" +
-           get_data_type_name(data_type) + "/" + get_encoding_name(encoding) +
-           "/" + get_compression_name(compression);
+    return std::string(ModelName(model)) + "/" + get_data_type_name(data_type) +
+           "/" + get_encoding_name(encoding) + "/" +
+           get_compression_name(compression);
 }
 
 }  // namespace
@@ -1757,18 +1759,18 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
             EXPECT_TRUE(fixture_case.cpp_read)
                 << "a C++-written case must also be C++-readable: "
                 << fixture_case.Describe();
-            EXPECT_TRUE(EncoderSupported(fixture_case.encoding,
-                                         fixture_case.data_type))
+            EXPECT_TRUE(
+                EncoderSupported(fixture_case.encoding, fixture_case.data_type))
                 << "C++ cannot build an encoder for "
                 << fixture_case.Describe();
-            write_coverage.insert(CapabilityKey(
-                fixture_case.model, fixture_case.data_type,
-                fixture_case.encoding, fixture_case.compression));
+            write_coverage.insert(
+                CapabilityKey(fixture_case.model, fixture_case.data_type,
+                              fixture_case.encoding, fixture_case.compression));
         }
         if (fixture_case.cpp_read) {
-            read_coverage.insert(CapabilityKey(
-                fixture_case.model, fixture_case.data_type,
-                fixture_case.encoding, fixture_case.compression));
+            read_coverage.insert(
+                CapabilityKey(fixture_case.model, fixture_case.data_type,
+                              fixture_case.encoding, fixture_case.compression));
         }
     }
 
@@ -1795,8 +1797,8 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
                      available_compressions) {
                     CompressionType compression =
                         ParseCompressionOrFail(compression_name);
-                    std::string key = CapabilityKey(model, data_type, encoding,
-                                                    compression);
+                    std::string key =
+                        CapabilityKey(model, data_type, encoding, compression);
                     if (can_write && write_coverage.count(key) == 0) {
                         ADD_FAILURE()
                             << "compatibility-matrix.csv does not declare a "
@@ -1896,8 +1898,8 @@ TEST_F(EncodingCompressionCompatibilityTest, ValidateFixtures) {
         const FixtureCase& fixture_case = it->second;
         ASSERT_NO_FATAL_FAILURE(ExpectSameCase(fixture_case, produced));
         if (!fixture_case.Reads(kLanguage)) {
-            report.push_back({produced.id, "skipped-declared-gap",
-                              fixture_case.gap_reason});
+            report.push_back(
+                {produced.id, "skipped-declared-gap", fixture_case.gap_reason});
             continue;
         }
         std::string path = JoinPath(input_dir, produced.FileName());

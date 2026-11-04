@@ -160,8 +160,8 @@ class Int64RleDecoder : public Decoder {
             if (RET_FAIL(common::SerializationUtil::read_ui8(b, byte_cache_))) {
                 return ret;
             }
-            value = static_cast<int64_t>(
-                (static_cast<uint64_t>(value) << 8) | b);
+            value =
+                static_cast<int64_t>((static_cast<uint64_t>(value) << 8) | b);
         }
         rle_value_ = value;
         is_rle_run_ = true;

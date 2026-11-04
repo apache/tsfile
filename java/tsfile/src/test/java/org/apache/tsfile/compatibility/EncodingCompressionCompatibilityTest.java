@@ -48,8 +48,8 @@ import org.apache.tsfile.read.v4.TsFileReaderBuilder;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
-import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.DateDataPoint;
@@ -232,16 +232,7 @@ public class EncodingCompressionCompatibilityTest {
     }
 
     String describe() {
-      return id
-          + " ("
-          + model
-          + "/"
-          + dataType
-          + "/"
-          + encoding
-          + "/"
-          + compression
-          + ")";
+      return id + " (" + model + "/" + dataType + "/" + encoding + "/" + compression + ")";
     }
   }
 
@@ -263,7 +254,8 @@ public class EncodingCompressionCompatibilityTest {
       if (fixtureCase.gapReason.isEmpty()) {
         assertTrue(
             "gapReason is required when a case declares a gap: " + fixtureCase.describe(),
-            fixtureCase.javaWrite && fixtureCase.cppWrite
+            fixtureCase.javaWrite
+                && fixtureCase.cppWrite
                 && fixtureCase.javaRead
                 && fixtureCase.cppRead);
       }
@@ -274,8 +266,7 @@ public class EncodingCompressionCompatibilityTest {
         Encoder encoder =
             TSEncodingBuilder.getEncodingBuilder(fixtureCase.encoding)
                 .getEncoder(fixtureCase.dataType);
-        assertNotNull(
-            "Java cannot build an encoder for " + fixtureCase.describe(), encoder);
+        assertNotNull("Java cannot build an encoder for " + fixtureCase.describe(), encoder);
         covered.add(capabilityKey(fixtureCase));
       }
     }
@@ -306,8 +297,7 @@ public class EncodingCompressionCompatibilityTest {
   public void generateFixtures() throws Exception {
     String outputDir = System.getProperty(GENERATE_DIR_PROPERTY);
     Assume.assumeTrue(
-        GENERATE_DIR_PROPERTY + " is not set",
-        outputDir != null && !outputDir.isEmpty());
+        GENERATE_DIR_PROPERTY + " is not set", outputDir != null && !outputDir.isEmpty());
     Path directory = Paths.get(outputDir);
     Files.createDirectories(directory);
 
@@ -316,8 +306,7 @@ public class EncodingCompressionCompatibilityTest {
     List<String[]> report = new ArrayList<>();
     for (FixtureCase fixtureCase : cases) {
       if (!fixtureCase.javaWrite) {
-        report.add(
-            new String[] {fixtureCase.id, "not-mine", fixtureCase.gapReason});
+        report.add(new String[] {fixtureCase.id, "not-mine", fixtureCase.gapReason});
         continue;
       }
       writeFixture(directory, fixtureCase);
@@ -342,7 +331,8 @@ public class EncodingCompressionCompatibilityTest {
     List<ManifestEntry> manifest = readManifest(directory);
     String producer = manifest.isEmpty() ? "" : manifest.get(0).producer;
     assertFalse("empty manifest in " + directory, manifest.isEmpty());
-    assertTrue("unexpected producer " + producer, "java".equals(producer) || "cpp".equals(producer));
+    assertTrue(
+        "unexpected producer " + producer, "java".equals(producer) || "cpp".equals(producer));
 
     Map<String, FixtureCase> spec = new LinkedHashMap<>();
     for (FixtureCase fixtureCase : readSpec(resolveSpecPath())) {
@@ -410,7 +400,9 @@ public class EncodingCompressionCompatibilityTest {
       return path;
     }
     Path directory = Paths.get("").toAbsolutePath();
-    for (int depth = 0; depth < 8 && directory != null; depth++, directory = directory.getParent()) {
+    for (int depth = 0;
+        depth < 8 && directory != null;
+        depth++, directory = directory.getParent()) {
       Path candidate = directory.resolve(DEFAULT_SPEC);
       if (Files.isRegularFile(candidate)) {
         return candidate;
@@ -719,9 +711,7 @@ public class EncodingCompressionCompatibilityTest {
         out.append("- ").append(gap).append("\n");
       }
     }
-    Files.write(
-        directory.resolve(name),
-        out.toString().getBytes(StandardCharsets.UTF_8));
+    Files.write(directory.resolve(name), out.toString().getBytes(StandardCharsets.UTF_8));
     System.out.println(out);
   }
 
@@ -741,14 +731,41 @@ public class EncodingCompressionCompatibilityTest {
   // ---------------------------------------------------------------------------
 
   private static final int[] INT_VALUES = {
-    0, 1, -1, 7, -8, 1024, -1024, 123456, -654321,
-    Integer.MAX_VALUE - 1024, Integer.MIN_VALUE + 1024, 42, 42, 0, -8, 2048
+    0,
+    1,
+    -1,
+    7,
+    -8,
+    1024,
+    -1024,
+    123456,
+    -654321,
+    Integer.MAX_VALUE - 1024,
+    Integer.MIN_VALUE + 1024,
+    42,
+    42,
+    0,
+    -8,
+    2048
   };
 
   private static final long[] LONG_VALUES = {
-    0L, 1L, -1L, 7L, -8L, 1_234_567_890L, -987_654_321L, 4_294_967_296L,
-    -4_294_967_296L, 1_234_567_890_123L, -1_234_567_890_123L,
-    Long.MAX_VALUE - 4096, Long.MIN_VALUE + 4096, 42L, 42L, 0L
+    0L,
+    1L,
+    -1L,
+    7L,
+    -8L,
+    1_234_567_890L,
+    -987_654_321L,
+    4_294_967_296L,
+    -4_294_967_296L,
+    1_234_567_890_123L,
+    -1_234_567_890_123L,
+    Long.MAX_VALUE - 4096,
+    Long.MIN_VALUE + 4096,
+    42L,
+    42L,
+    0L
   };
 
   private static final int[] FLOAT_BITS = {
@@ -785,14 +802,26 @@ public class EncodingCompressionCompatibilityTest {
   // block that spans INT_MIN and INT_MAX overflows the predictor, so these
   // values stay inside a safe range (see compat/README.md).
   private static final int[] SPRINTZ_INT_VALUES = {
-    0, 1, -1, 7, -8, 1024, -1024, 123456, -654321,
-    100_000_000, -100_000_000, 42, 42, 0, -8, 2048
+    0, 1, -1, 7, -8, 1024, -1024, 123456, -654321, 100_000_000, -100_000_000, 42, 42, 0, -8, 2048
   };
 
   private static final long[] SPRINTZ_LONG_VALUES = {
-    0L, 1L, -1L, 7L, -8L, 1_234_567_890L, -987_654_321L, 4_294_967_296L,
-    -4_294_967_296L, 1_000_000_000_000L, -1_000_000_000_000L,
-    42L, 42L, 0L, -8L, 2048L
+    0L,
+    1L,
+    -1L,
+    7L,
+    -8L,
+    1_234_567_890L,
+    -987_654_321L,
+    4_294_967_296L,
+    -4_294_967_296L,
+    1_000_000_000_000L,
+    -1_000_000_000_000L,
+    42L,
+    42L,
+    0L,
+    -8L,
+    2048L
   };
 
   private static final int[] SPRINTZ_FLOAT_BITS = {
@@ -908,10 +937,8 @@ public class EncodingCompressionCompatibilityTest {
   // TS_2DIFF and RLE for FLOAT/DOUBLE scale by 10^maxPointNumber before
   // storing an integer and divide on the way out.
   private static boolean isFloatEncoderCase(FixtureCase fixtureCase) {
-    return (fixtureCase.encoding == TSEncoding.TS_2DIFF
-            || fixtureCase.encoding == TSEncoding.RLE)
-        && (fixtureCase.dataType == TSDataType.FLOAT
-            || fixtureCase.dataType == TSDataType.DOUBLE);
+    return (fixtureCase.encoding == TSEncoding.TS_2DIFF || fixtureCase.encoding == TSEncoding.RLE)
+        && (fixtureCase.dataType == TSDataType.FLOAT || fixtureCase.dataType == TSDataType.DOUBLE);
   }
 
   private static double maxPointValue(FixtureCase fixtureCase) {
@@ -953,13 +980,11 @@ public class EncodingCompressionCompatibilityTest {
     switch (fixtureCase.profile) {
       case TS2DIFF:
       case TS2DIFF_MPN0:
-        return Float.intBitsToFloat(
-            TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
+        return Float.intBitsToFloat(TS_2DIFF_FLOAT_BITS[row % TS_2DIFF_FLOAT_BITS.length]);
       case RUNS:
         return (float) ((row / 256) % 4 - 1);
       case SPRINTZ:
-        return Float.intBitsToFloat(
-            SPRINTZ_FLOAT_BITS[row % SPRINTZ_FLOAT_BITS.length]);
+        return Float.intBitsToFloat(SPRINTZ_FLOAT_BITS[row % SPRINTZ_FLOAT_BITS.length]);
       default:
         return Float.intBitsToFloat(FLOAT_BITS[row % FLOAT_BITS.length]);
     }
@@ -969,13 +994,11 @@ public class EncodingCompressionCompatibilityTest {
     switch (fixtureCase.profile) {
       case TS2DIFF:
       case TS2DIFF_MPN0:
-        return Double.longBitsToDouble(
-            TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
+        return Double.longBitsToDouble(TS_2DIFF_DOUBLE_BITS[row % TS_2DIFF_DOUBLE_BITS.length]);
       case RUNS:
         return (double) ((row / 256) % 4 - 1);
       case SPRINTZ:
-        return Double.longBitsToDouble(
-            SPRINTZ_DOUBLE_BITS[row % SPRINTZ_DOUBLE_BITS.length]);
+        return Double.longBitsToDouble(SPRINTZ_DOUBLE_BITS[row % SPRINTZ_DOUBLE_BITS.length]);
       default:
         return Double.longBitsToDouble(DOUBLE_BITS[row % DOUBLE_BITS.length]);
     }
@@ -1056,19 +1079,14 @@ public class EncodingCompressionCompatibilityTest {
   private static void assertOnWireCodec(File file, FixtureCase fixtureCase) throws IOException {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getPath())) {
       List<IDeviceID> devices = reader.getAllDevices();
-      assertEquals(
-          fixtureCase.id + " device count on wire", fixtureCase.devices, devices.size());
+      assertEquals(fixtureCase.id + " device count on wire", fixtureCase.devices, devices.size());
       for (IDeviceID device : devices) {
-        List<ChunkMetadata> chunks =
-            reader.getChunkMetadataList(device, VALUE_COLUMN, false);
-        assertEquals(
-            fixtureCase.id + " chunk count on wire", fixtureCase.chunks, chunks.size());
+        List<ChunkMetadata> chunks = reader.getChunkMetadataList(device, VALUE_COLUMN, false);
+        assertEquals(fixtureCase.id + " chunk count on wire", fixtureCase.chunks, chunks.size());
         for (ChunkMetadata chunk : chunks) {
           ChunkHeader header = reader.readChunkHeader(chunk.getOffsetOfChunkHeader());
           assertEquals(
-              fixtureCase.id + " encoding on wire",
-              fixtureCase.encoding,
-              header.getEncodingType());
+              fixtureCase.id + " encoding on wire", fixtureCase.encoding, header.getEncodingType());
           assertEquals(
               fixtureCase.id + " compression on wire",
               fixtureCase.compression,
@@ -1116,10 +1134,7 @@ public class EncodingCompressionCompatibilityTest {
             writer.registerTimeseries(
                 devicePath,
                 new MeasurementSchema(
-                    ANCHOR_COLUMN,
-                    TSDataType.INT64,
-                    TSEncoding.PLAIN,
-                    fixtureCase.compression));
+                    ANCHOR_COLUMN, TSDataType.INT64, TSEncoding.PLAIN, fixtureCase.compression));
           }
         }
         for (int device = 0; device < fixtureCase.devices; device++) {
@@ -1182,11 +1197,7 @@ public class EncodingCompressionCompatibilityTest {
             ? Collections.singletonMap(Encoder.MAX_POINT_NUMBER, "0")
             : null;
     return new MeasurementSchema(
-        VALUE_COLUMN,
-        fixtureCase.dataType,
-        fixtureCase.encoding,
-        fixtureCase.compression,
-        props);
+        VALUE_COLUMN, fixtureCase.dataType, fixtureCase.encoding, fixtureCase.compression, props);
   }
 
   private static TableSchema tableSchema(FixtureCase fixtureCase) {
@@ -1194,20 +1205,14 @@ public class EncodingCompressionCompatibilityTest {
     List<ColumnCategory> categories = new ArrayList<>();
     schemas.add(
         new MeasurementSchema(
-            TAG_COLUMN,
-            TSDataType.STRING,
-            TSEncoding.PLAIN,
-            CompressionType.UNCOMPRESSED));
+            TAG_COLUMN, TSDataType.STRING, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
     categories.add(ColumnCategory.TAG);
     schemas.add(valueSchema(fixtureCase));
     categories.add(ColumnCategory.FIELD);
     if (fixtureCase.nullPattern != NullPattern.NONE) {
       schemas.add(
           new MeasurementSchema(
-              ANCHOR_COLUMN,
-              TSDataType.INT64,
-              TSEncoding.PLAIN,
-              fixtureCase.compression));
+              ANCHOR_COLUMN, TSDataType.INT64, TSEncoding.PLAIN, fixtureCase.compression));
       categories.add(ColumnCategory.FIELD);
     }
     return new TableSchema(TABLE_NAME, schemas, categories);
@@ -1238,8 +1243,7 @@ public class EncodingCompressionCompatibilityTest {
     return tablet;
   }
 
-  private static void addTabletValue(
-      Tablet tablet, FixtureCase fixtureCase, int index, int row) {
+  private static void addTabletValue(Tablet tablet, FixtureCase fixtureCase, int index, int row) {
     Object value = valueFor(fixtureCase, row);
     switch (fixtureCase.dataType) {
       case BOOLEAN:
@@ -1359,8 +1363,7 @@ public class EncodingCompressionCompatibilityTest {
   private static void validateTableFixture(File file, FixtureCase fixtureCase) throws Exception {
     boolean nulls = fixtureCase.nullPattern != NullPattern.NONE;
     for (long[] range : queryRanges(fixtureCase)) {
-      validateTableRange(
-          file, fixtureCase, (int) range[0], (int) range[1], false);
+      validateTableRange(file, fixtureCase, (int) range[0], (int) range[1], false);
       if (nulls) {
         validateTableRange(file, fixtureCase, (int) range[0], (int) range[1], true);
       }
@@ -1368,8 +1371,7 @@ public class EncodingCompressionCompatibilityTest {
   }
 
   private static void validateTableRange(
-      File file, FixtureCase fixtureCase, int start, int end, boolean withAnchor)
-      throws Exception {
+      File file, FixtureCase fixtureCase, int start, int end, boolean withAnchor) throws Exception {
     List<String> columns = new ArrayList<>(Arrays.asList(TAG_COLUMN, VALUE_COLUMN));
     if (withAnchor) {
       columns.add(ANCHOR_COLUMN);
@@ -1406,8 +1408,7 @@ public class EncodingCompressionCompatibilityTest {
             .put(time, new Object[] {isNull, value, anchor});
       }
 
-      assertEquals(
-          fixtureCase.id + " devices", fixtureCase.devices, rowsByDevice.size());
+      assertEquals(fixtureCase.id + " devices", fixtureCase.devices, rowsByDevice.size());
       for (int device = 0; device < fixtureCase.devices; device++) {
         String deviceKey = deviceId(device);
         List<Long> times = rowsByDevice.get(deviceKey);
@@ -1420,11 +1421,13 @@ public class EncodingCompressionCompatibilityTest {
           Object[] entry = values.get(time);
           assertNotNull(entry);
           boolean expectedNull = isNull(fixtureCase, (int) expectedTime);
-          assertEquals(
-              fixtureCase.id + " null at t=" + expectedTime, expectedNull, entry[0]);
+          assertEquals(fixtureCase.id + " null at t=" + expectedTime, expectedNull, entry[0]);
           if (!expectedNull) {
             assertValue(
-                fixtureCase, expectedValue(fixtureCase, (int) expectedTime), entry[1], expectedTime);
+                fixtureCase,
+                expectedValue(fixtureCase, (int) expectedTime),
+                entry[1],
+                expectedTime);
           }
           if (withAnchor) {
             assertEquals(
@@ -1442,23 +1445,16 @@ public class EncodingCompressionCompatibilityTest {
     boolean nulls = fixtureCase.nullPattern != NullPattern.NONE;
     for (long[] range : queryRanges(fixtureCase)) {
       for (int device = 0; device < fixtureCase.devices; device++) {
-        validateTreeRange(
-            file, fixtureCase, device, (int) range[0], (int) range[1], false);
+        validateTreeRange(file, fixtureCase, device, (int) range[0], (int) range[1], false);
         if (nulls) {
-          validateTreeRange(
-              file, fixtureCase, device, (int) range[0], (int) range[1], true);
+          validateTreeRange(file, fixtureCase, device, (int) range[0], (int) range[1], true);
         }
       }
     }
   }
 
   private static void validateTreeRange(
-      File file,
-      FixtureCase fixtureCase,
-      int device,
-      int start,
-      int end,
-      boolean withAnchor)
+      File file, FixtureCase fixtureCase, int device, int start, int end, boolean withAnchor)
       throws Exception {
     List<org.apache.tsfile.read.common.Path> paths = new ArrayList<>();
     paths.add(new org.apache.tsfile.read.common.Path(deviceId(device), VALUE_COLUMN, true));
@@ -1565,9 +1561,7 @@ public class EncodingCompressionCompatibilityTest {
         break;
       case FLOAT:
         assertEquals(
-            message,
-            Float.floatToIntBits((Float) expected),
-            Float.floatToIntBits((Float) actual));
+            message, Float.floatToIntBits((Float) expected), Float.floatToIntBits((Float) actual));
         break;
       case DOUBLE:
         assertEquals(
@@ -1622,8 +1616,7 @@ public class EncodingCompressionCompatibilityTest {
         assertEquals(message, expected, field.getBinaryV().getStringValue(StandardCharsets.UTF_8));
         break;
       case BLOB:
-        assertTrue(
-            message, Arrays.equals((byte[]) expected, field.getBinaryV().getValues()));
+        assertTrue(message, Arrays.equals((byte[]) expected, field.getBinaryV().getValues()));
         break;
       default:
         throw new IllegalArgumentException("Unsupported data type " + fixtureCase.dataType);

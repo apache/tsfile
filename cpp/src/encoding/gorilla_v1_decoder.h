@@ -118,8 +118,7 @@ class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
         return common::E_OK;
     }
 
-    int read_boolean(bool& /*ret_value*/,
-                     common::ByteStream& /*in*/) override {
+    int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_int32(int32_t& /*ret_value*/,
@@ -176,7 +175,8 @@ class FloatGorillaV1Decoder : public GorillaV1DecoderBase {
             number_of_leading_zeros(static_cast<int32_t>(pre_value_));
         trailing_zero_num_ =
             number_of_trailing_zeros(static_cast<int32_t>(pre_value_));
-        if (std::isnan(common::int_to_float(static_cast<int32_t>(pre_value_)))) {
+        if (std::isnan(
+                common::int_to_float(static_cast<int32_t>(pre_value_)))) {
             is_end_ = true;
         }
     }
@@ -217,8 +217,7 @@ class DoubleGorillaV1Decoder : public GorillaV1DecoderBase {
         return common::E_OK;
     }
 
-    int read_boolean(bool& /*ret_value*/,
-                     common::ByteStream& /*in*/) override {
+    int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_int32(int32_t& /*ret_value*/,
@@ -229,8 +228,7 @@ class DoubleGorillaV1Decoder : public GorillaV1DecoderBase {
                    common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_float(float& /*ret_value*/,
-                   common::ByteStream& /*in*/) override {
+    int read_float(float& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_String(common::String& /*ret_value*/, common::PageArena& /*pa*/,

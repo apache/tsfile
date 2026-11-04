@@ -51,8 +51,7 @@ class FloatRLEDecoder : public Decoder {
         return int_decoder_.has_remaining(buffer);
     }
 
-    int read_boolean(bool& /*ret_value*/,
-                     common::ByteStream& /*in*/) override {
+    int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_int32(int32_t& /*ret_value*/,
@@ -144,8 +143,7 @@ class DoubleRLEDecoder : public Decoder {
         return int_decoder_.has_remaining(buffer);
     }
 
-    int read_boolean(bool& /*ret_value*/,
-                     common::ByteStream& /*in*/) override {
+    int read_boolean(bool& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_int32(int32_t& /*ret_value*/,
@@ -156,8 +154,7 @@ class DoubleRLEDecoder : public Decoder {
                    common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_float(float& /*ret_value*/,
-                   common::ByteStream& /*in*/) override {
+    int read_float(float& /*ret_value*/, common::ByteStream& /*in*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_double(double& ret_value, common::ByteStream& in) override {

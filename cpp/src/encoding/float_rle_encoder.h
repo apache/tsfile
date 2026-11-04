@@ -54,19 +54,16 @@ class FloatRLEEncoder : public Encoder {
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int32_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int64_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int64_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int encode(float value, common::ByteStream& out_stream) override {
         return int_encoder_.encode(convert_float_to_int(value), out_stream);
     }
-    int encode(double /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(double /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int encode(common::String /*value*/,
@@ -113,13 +110,11 @@ class FloatRLEEncoder : public Encoder {
                 return ret;
             }
             const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
-            if (RET_FAIL(
-                    out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
+            if (RET_FAIL(out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
                 return ret;
             }
-            if (has_raw_bits &&
-                RET_FAIL(
-                    out_stream.write_buf(raw_bits_bitmap.data(), bm_len))) {
+            if (has_raw_bits && RET_FAIL(out_stream.write_buf(
+                                    raw_bits_bitmap.data(), bm_len))) {
                 return ret;
             }
         }
@@ -193,16 +188,13 @@ class DoubleRLEEncoder : public Encoder {
     int encode(bool /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int32_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int64_t /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(int64_t /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(float /*value*/,
-               common::ByteStream& /*out_stream*/) override {
+    int encode(float /*value*/, common::ByteStream& /*out_stream*/) override {
         return common::E_TYPE_NOT_MATCH;
     }
     int encode(double value, common::ByteStream& out_stream) override {
@@ -252,13 +244,11 @@ class DoubleRLEEncoder : public Encoder {
                 return ret;
             }
             const uint32_t bm_len = static_cast<uint32_t>(num_values / 8 + 1);
-            if (RET_FAIL(
-                    out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
+            if (RET_FAIL(out_stream.write_buf(scaled_bitmap.data(), bm_len))) {
                 return ret;
             }
-            if (has_raw_bits &&
-                RET_FAIL(
-                    out_stream.write_buf(raw_bits_bitmap.data(), bm_len))) {
+            if (has_raw_bits && RET_FAIL(out_stream.write_buf(
+                                    raw_bits_bitmap.data(), bm_len))) {
                 return ret;
             }
         }
@@ -284,7 +274,8 @@ class DoubleRLEEncoder : public Encoder {
         if (scaled > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
             scaled < static_cast<double>(std::numeric_limits<int64_t>::min())) {
             if (std::isnan(value) ||
-                value > static_cast<double>(std::numeric_limits<int64_t>::max()) ||
+                value >
+                    static_cast<double>(std::numeric_limits<int64_t>::max()) ||
                 value <
                     static_cast<double>(std::numeric_limits<int64_t>::min())) {
                 underflow_flags_.push_back(-1);
