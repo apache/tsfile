@@ -376,6 +376,7 @@ void export_function(sqlite3_context* context, int, sqlite3_value** argv) {
                          "failed");
         return;
     }
+    cleanup_orphan_temp_files(table);
     sqlite3_result_int64(context, static_cast<sqlite3_int64>(files.size()));
 }
 

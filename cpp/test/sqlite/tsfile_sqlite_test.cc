@@ -1565,4 +1565,130 @@ TEST_F(TsFileSqliteTest, TempTableAndQuotedReservedIdentifiers) {
                           "WHERE name='select'"));
 }
 
+TEST_F(TsFileSqliteTest, TreeModelSourceIsRejectedClearly) {
+    const std::string fixture = std::string(TSFILE_CPP_SOURCE_DIR) +
+                                "/test/tools/fixtures/complex_tree.tsfile";
+    const std::string sql =
+        "CREATE VIRTUAL TABLE tree USING tsfile_hybrid(file=" + quote(fixture) +
+        ",source_table='root',directory=" + quote(directory_ + "-tree") +
+        ",timestamp_precision='ms')";
+    char* error = nullptr;
+    int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error);
+    EXPECT_NE(SQLITE_OK, rc);
+    std::string message = error == nullptr ? "" : error;
+    sqlite3_free(error);
+    EXPECT_NE(std::string::npos, message.find("tree model")) << message;
+    EXPECT_NE(std::string::npos, message.find("not supported")) << message;
+}
+
+TEST_F(TsFileSqliteTest, CorruptSourceFileReportsTsfileErrorCode) {
+    const std::string path = directory_ + "-corrupt.tsfile";
+    {
+        std::ofstream out(path);
+        out << "not a tsfile";
+    }
+    const std::string sql =
+        "CREATE VIRTUAL TABLE corrupt USING tsfile_hybrid(file=" + quote(path) +
+        ",source_table='sensor',directory=" + quote(directory_ + "-corrupt") +
+        ",timestamp_precision='ms')";
+    char* error = nullptr;
+    int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error);
+    EXPECT_NE(SQLITE_OK, rc);
+    std::string message = error == nullptr ? "" : error;
+    sqlite3_free(error);
+    EXPECT_NE(std::string::npos, message.find("tsfile E_")) << message;
+    EXPECT_NE(std::string::npos, message.find('=')) << message;
+}
+
+TEST_F(TsFileSqliteTest, QueryReportsDeletedSealedFile) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string path = source_file();
+    ASSERT_FALSE(path.empty());
+    ASSERT_EQ(0, unlink(path.c_str()));
+
+    sqlite3_stmt* stmt = nullptr;
+    ASSERT_EQ(SQLITE_OK, sqlite3_prepare_v2(db_, "SELECT count(*) FROM sensor",
+                                            -1, &stmt, nullptr));
+    int rc = sqlite3_step(stmt);
+    std::string message = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    EXPECT_NE(SQLITE_ROW, rc);
+    EXPECT_NE(std::string::npos, message.find("missing or changed file"))
+        << message;
+}
+
+TEST_F(TsFileSqliteTest, OrphanTempFileIsKeptAfterSeal) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string stale = directory_ + "/tsfilesensor-99999999-0.tmp";
+    {
+        std::ofstream out(stale);
+        out << "stale";
+    }
+    ASSERT_EQ(0, access(stale.c_str(), F_OK));
+
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(2,'d0',2.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    EXPECT_EQ(0, access(stale.c_str(), F_OK));
+}
+
+TEST_F(TsFileSqliteTest, OrphanTempFileIsKeptOnReconnect) {
+    const std::string db_path = directory_ + "-temp-clean.db";
+    const std::string table_dir = directory_ + "-temp-clean";
+    ASSERT_EQ(SQLITE_OK, exec("ATTACH " + quote(db_path) + " AS persisted"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("CREATE VIRTUAL TABLE persisted.clean USING tsfile_hybrid("
+                   "time TIMESTAMP TIME,device STRING TAG,temperature DOUBLE "
+                   "FIELD,directory=" +
+                   quote(table_dir) + ",timestamp_precision='ms')"));
+    ASSERT_EQ(SQLITE_OK,
+              exec("INSERT INTO persisted.clean VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('persisted.clean',2)"));
+    ASSERT_EQ(SQLITE_OK, exec("DETACH persisted"));
+
+    const std::string stale = table_dir + "/tsfileclean-99999999-0.tmp";
+    {
+        std::ofstream out(stale);
+        out << "stale";
+    }
+    ASSERT_EQ(0, access(stale.c_str(), F_OK));
+
+    ASSERT_EQ(SQLITE_OK, exec("ATTACH " + quote(db_path) + " AS persisted"));
+    EXPECT_EQ(1, count("SELECT count(*) FROM persisted.clean"));
+    EXPECT_EQ(0, access(stale.c_str(), F_OK));
+    ASSERT_EQ(SQLITE_OK, exec("DETACH persisted"));
+}
+
+TEST_F(TsFileSqliteTest, OrphanTempFileIsCleanedAfterCompact) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(2,'d0',2.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string stale = directory_ + "/tsfilesensor-99999999-0.tmp";
+    {
+        std::ofstream out(stale);
+        out << "stale";
+    }
+    ASSERT_EQ(0, access(stale.c_str(), F_OK));
+
+    EXPECT_EQ(1, count("SELECT tsfile_compact('main.sensor',10,20)"));
+    EXPECT_NE(0, access(stale.c_str(), F_OK));
+}
+
+TEST_F(TsFileSqliteTest, OrphanTempFileIsCleanedAfterExport) {
+    ASSERT_EQ(SQLITE_OK, exec("INSERT INTO sensor VALUES(1,'d0',1.5)"));
+    EXPECT_EQ(1, count("SELECT tsfile_seal('main.sensor',2)"));
+    const std::string stale = directory_ + "/tsfilesensor-99999999-0.tmp";
+    {
+        std::ofstream out(stale);
+        out << "stale";
+    }
+    ASSERT_EQ(0, access(stale.c_str(), F_OK));
+
+    EXPECT_EQ(1, count("SELECT tsfile_export('main.sensor'," +
+                       quote(directory_ + "-export-clean") + ")"));
+    EXPECT_NE(0, access(stale.c_str(), F_OK));
+}
+
 }  // namespace

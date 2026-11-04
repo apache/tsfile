@@ -23,6 +23,7 @@ SQLITE_EXTENSION_INIT1
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -36,6 +37,7 @@ SQLITE_EXTENSION_INIT1
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <functional>
 #include <limits>
 #include <map>
@@ -63,6 +65,7 @@ SQLITE_EXTENSION_INIT1
 #include "reader/table_query_executor.h"
 #include "reader/tsfile_reader.h"
 #include "utils/db_utils.h"
+#include "utils/errno_define.h"
 #include "writer/tsfile_table_writer.h"
 
 namespace {
@@ -78,6 +81,94 @@ using storage::TsFileTableWriter;
 using storage::WriteFile;
 
 const int64_t kNoWatermark = std::numeric_limits<int64_t>::min();
+
+const char* tsfile_error_name(int code) {
+    switch (code) {
+        case common::E_OK:
+            return "E_OK";
+        case common::E_OOM:
+            return "E_OOM";
+        case common::E_NOT_EXIST:
+            return "E_NOT_EXIST";
+        case common::E_ALREADY_EXIST:
+            return "E_ALREADY_EXIST";
+        case common::E_INVALID_ARG:
+            return "E_INVALID_ARG";
+        case common::E_OUT_OF_RANGE:
+            return "E_OUT_OF_RANGE";
+        case common::E_PARTIAL_READ:
+            return "E_PARTIAL_READ";
+        case common::E_INVALID_SCHEMA:
+            return "E_INVALID_SCHEMA";
+        case common::E_OVERFLOW:
+            return "E_OVERFLOW";
+        case common::E_NO_MORE_DATA:
+            return "E_NO_MORE_DATA";
+        case common::E_OUT_OF_ORDER:
+            return "E_OUT_OF_ORDER";
+        case common::E_DATA_INCONSISTENCY:
+            return "E_DATA_INCONSISTENCY";
+        case common::E_TYPE_NOT_SUPPORTED:
+            return "E_TYPE_NOT_SUPPORTED";
+        case common::E_TYPE_NOT_MATCH:
+            return "E_TYPE_NOT_MATCH";
+        case common::E_FILE_OPEN_ERR:
+            return "E_FILE_OPEN_ERR";
+        case common::E_FILE_CLOSE_ERR:
+            return "E_FILE_CLOSE_ERR";
+        case common::E_FILE_WRITE_ERR:
+            return "E_FILE_WRITE_ERR";
+        case common::E_FILE_READ_ERR:
+            return "E_FILE_READ_ERR";
+        case common::E_FILE_SYNC_ERR:
+            return "E_FILE_SYNC_ERR";
+        case common::E_TSFILE_WRITER_META_ERR:
+            return "E_TSFILE_WRITER_META_ERR";
+        case common::E_FILE_STAT_ERR:
+            return "E_FILE_STAT_ERR";
+        case common::E_TSFILE_CORRUPTED:
+            return "E_TSFILE_CORRUPTED";
+        case common::E_BUF_NOT_ENOUGH:
+            return "E_BUF_NOT_ENOUGH";
+        case common::E_INVALID_PATH:
+            return "E_INVALID_PATH";
+        case common::E_NOT_MATCH:
+            return "E_NOT_MATCH";
+        case common::E_NOT_SUPPORT:
+            return "E_NOT_SUPPORT";
+        case common::E_INVALID_DATA_POINT:
+            return "E_INVALID_DATA_POINT";
+        case common::E_DEVICE_NOT_EXIST:
+            return "E_DEVICE_NOT_EXIST";
+        case common::E_MEASUREMENT_NOT_EXIST:
+            return "E_MEASUREMENT_NOT_EXIST";
+        case common::E_COMPRESS_ERR:
+            return "E_COMPRESS_ERR";
+        case common::E_TABLE_NOT_EXIST:
+            return "E_TABLE_NOT_EXIST";
+        case common::E_COLUMN_NOT_EXIST:
+            return "E_COLUMN_NOT_EXIST";
+        case common::E_UNSUPPORTED_ORDER:
+            return "E_UNSUPPORTED_ORDER";
+        case common::E_INVALID_NODE_TYPE:
+            return "E_INVALID_NODE_TYPE";
+        case common::E_ENCODE_ERR:
+            return "E_ENCODE_ERR";
+        case common::E_DECODE_ERR:
+            return "E_DECODE_ERR";
+        case common::E_FILE_MAP_ERR:
+            return "E_FILE_MAP_ERR";
+        case common::E_UNSUPPORTED_VERSION:
+            return "E_UNSUPPORTED_VERSION";
+        default:
+            return "E_UNKNOWN";
+    }
+}
+
+std::string tsfile_error_detail(int code) {
+    return std::string(" (tsfile ") + tsfile_error_name(code) + "=" +
+           std::to_string(code) + ")";
+}
 
 struct Column {
     std::string name;
@@ -464,6 +555,50 @@ std::string file_stem(const std::string& table_name) {
     return stem;
 }
 
+// Seal/compact create "<stem>-<pid>-<counter>.tmp" files before publishing
+// them with rename. A killed process can leave one behind. Remove only regular
+// files whose embedded PID is no longer alive, and never touch a file in this
+// table's current publish set. Symlinks are deliberately left alone: seal uses
+// O_EXCL and must not follow them.
+void cleanup_orphan_temp_files(HybridTable* table) {
+    if (table->directory.empty()) return;
+    DIR* dir = opendir(table->directory.c_str());
+    if (dir == nullptr) return;
+    const std::string prefix = file_stem(table->table_name) + "-";
+    const std::string suffix = ".tmp";
+    while (dirent* entry = readdir(dir)) {
+        std::string name = entry->d_name;
+        if (name.size() <= prefix.size() + suffix.size() ||
+            name.compare(0, prefix.size(), prefix) != 0 ||
+            name.compare(name.size() - suffix.size(), suffix.size(), suffix) !=
+                0)
+            continue;
+        std::string path = table->directory + "/" + name;
+        bool active = false;
+        for (const auto& pending : table->pending) {
+            if ((!pending.temporary.empty() && pending.temporary == path) ||
+                pending.final_path == path) {
+                active = true;
+                break;
+            }
+        }
+        if (active) continue;
+        struct stat st {};
+        if (lstat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
+
+        size_t pid_start = prefix.size();
+        size_t pid_end = name.find('-', pid_start);
+        if (pid_end == std::string::npos || pid_end == pid_start) continue;
+        std::string pid_text = name.substr(pid_start, pid_end - pid_start);
+        char* end = nullptr;
+        long pid = std::strtol(pid_text.c_str(), &end, 10);
+        if (end == nullptr || *end != '\0' || pid <= 0) continue;
+        if (kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM) continue;
+        unlink(path.c_str());
+    }
+    closedir(dir);
+}
+
 bool directory_exists(const std::string& path) {
     struct stat st {};
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
@@ -778,6 +913,7 @@ bool infer_source(HybridTable* table, std::string& error) {
     std::string time_name = "time";
     bool have_time_name = false;
     bool have_precision = false;
+    bool saw_tree_model = false;
     int64_t global_max = kNoWatermark;
     bool has_rows = false;
     std::map<std::string, int64_t> device_max;
@@ -785,15 +921,26 @@ bool infer_source(HybridTable* table, std::string& error) {
     for (const std::string& path : paths) {
         std::string identity = file_identity(path);
         TsFileReader reader;
-        if (identity.empty() || reader.open(path) != common::E_OK) {
+        int open_rc = reader.open(path);
+        if (identity.empty() || open_rc != common::E_OK) {
             error = "cannot read source file: " + path;
+            if (open_rc != common::E_OK)
+                error += tsfile_error_detail(open_rc);
+            else
+                error += " (cannot read file identity)";
             return false;
         }
         auto schema = source_schema(reader, table->source_table);
         if (!schema) {
+            bool tree_model = reader.get_all_table_schemas().empty();
             reader.close();
+            if (tree_model) saw_tree_model = true;
             if (paths.size() == 1) {
-                error = "source table not found: " + table->source_table;
+                error = tree_model
+                            ? "tree model is not supported; only table model "
+                              "files can be read: " +
+                                  path
+                            : "source table not found: " + table->source_table;
                 return false;
             }
             continue;
@@ -873,7 +1020,8 @@ bool infer_source(HybridTable* table, std::string& error) {
         int rc = reader.query(table->source_table, tag_names, kNoWatermark,
                               std::numeric_limits<int64_t>::max(), result);
         if (rc != common::E_OK) {
-            error = "cannot query source table: " + path;
+            error =
+                "cannot query source table: " + path + tsfile_error_detail(rc);
             reader.close();
             return false;
         }
@@ -909,16 +1057,23 @@ bool infer_source(HybridTable* table, std::string& error) {
         }
         reader.destroy_query_data_set(result);
         reader.close();
-        if (rc != common::E_OK || file_identity(path) != identity) {
-            error =
-                "source file unreadable or changed during creation: " + path;
+        if (rc != common::E_OK) {
+            error = "source file unreadable during creation: " + path +
+                    tsfile_error_detail(rc);
+            return false;
+        }
+        if (file_identity(path) != identity) {
+            error = "source file changed during creation: " + path;
             return false;
         }
         table->source_segments.push_back({path, identity, rows});
     }
 
     if (!first_schema) {
-        error = "source table not found: " + table->source_table;
+        error = saw_tree_model
+                    ? "tree model is not supported; only table model files can "
+                      "be read"
+                    : "source table not found: " + table->source_table;
         return false;
     }
     if (table->precision.empty()) table->precision = "unknown";
@@ -1929,7 +2084,10 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             continue;
         }
         storage::LocalRandomAccessReadFile read_file;
-        if (read_file.open(read_path) != common::E_OK) {
+        int open_rc = read_file.open(read_path);
+        if (open_rc != common::E_OK) {
+            set_error(table, "cannot open sealed file: " + read_path +
+                                 tsfile_error_detail(open_rc));
             delete tag_filter;
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
@@ -1946,6 +2104,8 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
             executor.query(selected, value_columns, time_filter, tag_filter,
                            field_filter.release(), result);
         if (query_rc != common::E_OK) {
+            set_error(table, "cannot query sealed file: " + read_path +
+                                 tsfile_error_detail(query_rc));
             delete tag_filter;
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
@@ -1964,6 +2124,8 @@ int read_cold(HybridCursor* cursor, const std::vector<ConstraintSpec>& specs,
         executor.destroy_query_data_set(result);
         delete tag_filter;
         if (next_rc != common::E_OK) {
+            set_error(table, "failed to read sealed file: " + read_path +
+                                 tsfile_error_detail(next_rc));
             sqlite3_finalize(stmt);
             return SQLITE_IOERR;
         }
@@ -2574,8 +2736,15 @@ bool path_is_inside(const std::string& directory, const std::string& path) {
 int read_segment_rows(HybridTable* table, const std::string& path,
                       const std::string& source_table, std::vector<Row>& rows) {
     TsFileReader reader;
-    if (reader.open(path) != common::E_OK) return SQLITE_IOERR;
+    int open_rc = reader.open(path);
+    if (open_rc != common::E_OK) {
+        set_error(table, "cannot open sealed file: " + path +
+                             tsfile_error_detail(open_rc));
+        return SQLITE_IOERR;
+    }
     if (!source_schema(reader, source_table)) {
+        set_error(table,
+                  "source table not found in sealed file: " + source_table);
         reader.close();
         return SQLITE_ERROR;
     }
@@ -2586,9 +2755,11 @@ int read_segment_rows(HybridTable* table, const std::string& path,
         indexes.push_back(static_cast<int>(i));
     }
     ResultSet* result = nullptr;
-    if (reader.query(source_table, names, kNoWatermark,
-                     std::numeric_limits<int64_t>::max(),
-                     result) != common::E_OK) {
+    int query_rc = reader.query(source_table, names, kNoWatermark,
+                                std::numeric_limits<int64_t>::max(), result);
+    if (query_rc != common::E_OK) {
+        set_error(table, "cannot query sealed file: " + path +
+                             tsfile_error_detail(query_rc));
         reader.close();
         return SQLITE_IOERR;
     }
@@ -2604,7 +2775,12 @@ int read_segment_rows(HybridTable* table, const std::string& path,
     }
     reader.destroy_query_data_set(result);
     reader.close();
-    return rc == common::E_OK ? SQLITE_OK : SQLITE_IOERR;
+    if (rc != common::E_OK) {
+        set_error(table, "failed to read sealed file: " + path +
+                             tsfile_error_detail(rc));
+        return SQLITE_IOERR;
+    }
+    return SQLITE_OK;
 }
 
 int compact(HybridTable* table, int64_t min_file_size_mb,
@@ -2725,6 +2901,7 @@ int compact(HybridTable* table, int64_t min_file_size_mb,
         table->pending_deletions.push_back(segment.path);
     sqlite3_int64 output_count = static_cast<sqlite3_int64>(files.size());
     for (PendingFile& file : files) table->pending.push_back(std::move(file));
+    cleanup_orphan_temp_files(table);
     if (compacted != nullptr) *compacted = output_count;
     return SQLITE_OK;
 }

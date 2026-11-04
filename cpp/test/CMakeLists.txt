@@ -359,7 +359,8 @@ if (BUILD_SQLITE_EXTENSION)
             ${SQLite3_LIBRARIES})
     add_dependencies(TsFile_Sqlite_Test tsfile_sqlite)
     target_compile_definitions(TsFile_Sqlite_Test PRIVATE
-            TSFILE_SQLITE_EXTENSION_PATH="$<TARGET_FILE:tsfile_sqlite>")
+            TSFILE_SQLITE_EXTENSION_PATH="$<TARGET_FILE:tsfile_sqlite>"
+            TSFILE_CPP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     set_target_properties(TsFile_Sqlite_Test PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR}
             SKIP_BUILD_RPATH FALSE
