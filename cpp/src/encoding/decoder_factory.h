@@ -216,7 +216,19 @@ class DecoderFactory {
         return nullptr;
     }
 
-    static void free(Decoder* decoder) { common::mem_free(decoder); }
+    // Placement-new'ed decoders must have their destructor run before the
+    // object memory is released: decoders such as Int32RleDecoder (and the
+    // FLOAT/DOUBLE RLE wrappers around them) hold heap buffers that are only
+    // freed by the destructor.  This mirrors EncoderFactory::free(), which
+    // runs destroy() before releasing the object, so callers must not call
+    // ~Decoder() themselves.
+    static void free(Decoder* decoder) {
+        if (decoder == nullptr) {
+            return;
+        }
+        decoder->~Decoder();
+        common::mem_free(decoder);
+    }
 };
 }  // end namespace storage
 #endif  // ENCODING_DECODER_FACTORY_H
