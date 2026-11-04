@@ -30,6 +30,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,8 +46,7 @@ public class ReadWriteIOUtilsTest {
   public void testReadLongFromFragmentedStream() throws IOException {
     long expected = 0x8123456789ABCDEFL;
     byte[] encoded = ByteBuffer.allocate(Long.BYTES).putLong(expected).array();
-    Assert.assertEquals(
-        expected, ReadWriteIOUtils.readLong(new FragmentedInputStream(encoded, 2)));
+    Assert.assertEquals(expected, ReadWriteIOUtils.readLong(new FragmentedInputStream(encoded, 2)));
   }
 
   @Test
