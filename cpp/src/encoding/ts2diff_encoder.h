@@ -610,7 +610,15 @@ inline int64_t java_round_to_long(double x) {
         return ((r >> shift) + 1) >> 1;
     }
     // Zero, infinities, NaN, or |x| large enough that ulp(x) >= 1.0: Java
-    // returns the value unchanged (the double-to-long cast truncates).
+    // returns the value unchanged (the double-to-long cast truncates).  Clamp
+    // first because (double)INT64_MAX rounds up to 2^63, which is out of the
+    // int64 range and would make a direct cast undefined behaviour.
+    if (x >= 9223372036854775808.0) {  // 2^63
+        return std::numeric_limits<int64_t>::max();
+    }
+    if (x <= -9223372036854775808.0) {  // -2^63
+        return std::numeric_limits<int64_t>::min();
+    }
     return static_cast<int64_t>(x);
 }
 
@@ -621,8 +629,6 @@ inline Int java_round(double x) {
         if (r > static_cast<int64_t>(std::numeric_limits<Int>::max())) {
             return std::numeric_limits<Int>::max();
         }
-    } else if (r == INT64_C(0x7FFFFFFFFFFFFFFF) + 1) {  // 2^63, out of range
-        return std::numeric_limits<Int>::max();
     }
     if (r < static_cast<int64_t>(std::numeric_limits<Int>::min())) {
         return std::numeric_limits<Int>::min();
