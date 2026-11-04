@@ -262,6 +262,7 @@ jobs:
             -Dsurefire.failIfNoSpecifiedTests=false \
             -Dtsfile.compat.spec="$PWD/compat/compatibility-matrix.csv" \
             -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.writer }}" \
+            -Dtsfile.compat.shardIndex="${{ matrix.shard }}" \
             -Dtsfile.compat.shardCount=3 \
             test
 
@@ -298,6 +299,7 @@ jobs:
         run: |
           TSFILE_COMPAT_SPEC="$PWD/compat/compatibility-matrix.csv" \
           TSFILE_COMPAT_VALIDATE_DIR="$PWD/compat-fixtures/${{ matrix.writer }}" \
+          TSFILE_COMPAT_SHARD_INDEX="${{ matrix.shard }}" \
           TSFILE_COMPAT_SHARD_COUNT=3 \
             ./cpp/target/build/test/lib/TsFile_Test \
             --gtest_filter=EncodingCompressionCompatibilityTest.ValidateFixtures

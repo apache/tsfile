@@ -358,9 +358,17 @@ public class EncodingCompressionCompatibilityTest {
       spec.put(fixtureCase.id, fixtureCase);
     }
 
+    // The generator partitions the spec by shardIndex % shardCount, so the
+    // validator applies the same partition to compute the expected subset for
+    // this shard (rather than expecting the whole spec in one manifest).
     Set<String> expectedIds = new LinkedHashSet<>();
+    int shardIndex = shardIndex();
+    int shardCount = shardCount();
+    int caseIndex = 0;
     for (FixtureCase fixtureCase : spec.values()) {
-      if (fixtureCase.writes(producer)) {
+      int assignedShard = caseIndex % shardCount;
+      caseIndex++;
+      if (assignedShard == shardIndex && fixtureCase.writes(producer)) {
         expectedIds.add(fixtureCase.id);
       }
     }
@@ -372,9 +380,7 @@ public class EncodingCompressionCompatibilityTest {
     missing.removeAll(manifestIds);
     List<String> extra = new ArrayList<>(manifestIds);
     extra.removeAll(expectedIds);
-    // When sharded, each shard's manifest is a partial subset, so the
-    // "missing" check is skipped; the "extra" check still holds.
-    if (!extra.isEmpty() || (shardCount() <= 1 && !missing.isEmpty())) {
+    if (!missing.isEmpty() || !extra.isEmpty()) {
       fail(
           "manifest for "
               + producer

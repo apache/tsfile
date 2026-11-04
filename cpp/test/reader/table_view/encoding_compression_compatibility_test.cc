@@ -1886,29 +1886,34 @@ TEST_F(EncodingCompressionCompatibilityTest, ValidateFixtures) {
     ASSERT_TRUE(producer == "java" || producer == "cpp")
         << "unexpected producer " << producer;
 
+    std::vector<FixtureCase> spec_cases = ReadSpec(ResolveSpecPath());
     std::map<std::string, FixtureCase> spec;
-    for (const FixtureCase& fixture_case : ReadSpec(ResolveSpecPath())) {
+    for (const FixtureCase& fixture_case : spec_cases) {
         spec[fixture_case.id] = fixture_case;
     }
 
+    // The generator partitions the spec by shardIndex % shardCount, so the
+    // validator applies the same partition to compute the expected subset for
+    // this shard (rather than expecting the whole spec in one manifest).
     std::unordered_set<std::string> expected_ids;
-    for (const auto& entry : spec) {
-        if (entry.second.Writes(producer)) {
-            expected_ids.insert(entry.first);
+    const int shard_index = GetShardIndex();
+    const int shard_count = GetShardCount();
+    int case_index = 0;
+    for (const FixtureCase& fixture_case : spec_cases) {
+        const int assigned_shard = case_index % shard_count;
+        ++case_index;
+        if (assigned_shard == shard_index && fixture_case.Writes(producer)) {
+            expected_ids.insert(fixture_case.id);
         }
     }
     std::unordered_set<std::string> manifest_ids;
     for (const ManifestEntry& entry : manifest) {
         manifest_ids.insert(entry.fixture_case.id);
     }
-    // When sharded, each shard's manifest is a partial subset, so the
-    // "missing" check is skipped; the "undeclared" check still holds.
-    if (GetShardCount() <= 1) {
-        for (const std::string& id : expected_ids) {
-            if (manifest_ids.count(id) == 0) {
-                ADD_FAILURE() << "manifest for " << producer
-                              << " is missing declared case " << id;
-            }
+    for (const std::string& id : expected_ids) {
+        if (manifest_ids.count(id) == 0) {
+            ADD_FAILURE() << "manifest for " << producer
+                          << " is missing declared case " << id;
         }
     }
     for (const std::string& id : manifest_ids) {
