@@ -427,4 +427,70 @@ public class BytesUtilsTest {
     InputStream in = new ByteArrayInputStream(bs);
     assertEquals(l, BytesUtils.readBool(in));
   }
+
+  @Test
+  public void testInputStreamReadersHandleFragmentedStream() throws IOException {
+    int intValue = 0x12345678;
+    Assert.assertEquals(
+        intValue,
+        BytesUtils.readInt(
+            new FragmentedInputStream(BytesUtils.intToBytes(intValue), Integer.BYTES - 1)));
+
+    long longValue = 0x123456789ABCDEFL;
+    Assert.assertEquals(
+        longValue,
+        BytesUtils.readLong(
+            new FragmentedInputStream(BytesUtils.longToBytes(longValue), Long.BYTES - 1)));
+
+    float floatValue = 1.25F;
+    Assert.assertEquals(
+        floatValue,
+        BytesUtils.readFloat(
+            new FragmentedInputStream(BytesUtils.floatToBytes(floatValue), Float.BYTES - 1)),
+        0.0F);
+
+    double doubleValue = 1.25D;
+    Assert.assertEquals(
+        doubleValue,
+        BytesUtils.readDouble(
+            new FragmentedInputStream(BytesUtils.doubleToBytes(doubleValue), Double.BYTES - 1)),
+        0.0D);
+
+    Assert.assertTrue(
+        BytesUtils.readBool(
+            new FragmentedInputStream(BytesUtils.boolToBytes(true), Integer.BYTES - 3)));
+  }
+
+  @Test
+  public void testInputStreamReadersRejectTruncatedInput() {
+    for (int length = 0; length < Integer.BYTES; length++) {
+      final byte[] truncated = new byte[length];
+      Assert.assertThrows(
+          IOException.class, () -> BytesUtils.readInt(new ByteArrayInputStream(truncated)));
+    }
+    for (int length = 0; length < Long.BYTES; length++) {
+      final byte[] truncated = new byte[length];
+      Assert.assertThrows(
+          IOException.class, () -> BytesUtils.readLong(new ByteArrayInputStream(truncated)));
+    }
+  }
+
+  private static final class FragmentedInputStream extends ByteArrayInputStream {
+    private final int maxReadLength;
+    private boolean returnZeroOnce = true;
+
+    private FragmentedInputStream(byte[] bytes, int maxReadLength) {
+      super(bytes);
+      this.maxReadLength = maxReadLength;
+    }
+
+    @Override
+    public synchronized int read(byte[] bytes, int offset, int length) {
+      if (returnZeroOnce) {
+        returnZeroOnce = false;
+        return 0;
+      }
+      return super.read(bytes, offset, Math.min(length, maxReadLength));
+    }
+  }
 }

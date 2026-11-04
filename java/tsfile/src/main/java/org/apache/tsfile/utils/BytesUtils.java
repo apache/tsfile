@@ -41,6 +41,9 @@ public class BytesUtils {
 
   private static final Logger LOG = LoggerFactory.getLogger(BytesUtils.class);
 
+  private static final String SHORT_READ_ERROR =
+      "Intend to read %d bytes but %d are actually returned";
+
   /**
    * integer convert to byte[4].
    *
@@ -892,7 +895,19 @@ public class BytesUtils {
     byte[] bytes = new byte[count];
     int readCount = 0;
     while (readCount < count) {
-      readCount += in.read(bytes, readCount, count - readCount);
+      int currentRead = in.read(bytes, readCount, count - readCount);
+      if (currentRead < 0) {
+        throw new IOException(String.format(SHORT_READ_ERROR, count, readCount));
+      }
+      if (currentRead == 0) {
+        int value = in.read();
+        if (value < 0) {
+          throw new IOException(String.format(SHORT_READ_ERROR, count, readCount));
+        }
+        bytes[readCount++] = (byte) value;
+      } else {
+        readCount += currentRead;
+      }
     }
     return bytes;
   }
