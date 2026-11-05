@@ -280,6 +280,16 @@ class Int32RleDecoder : public Decoder {
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(length_, buffer))) {
             return common::E_PARTIAL_READ;
+        }
+        // Prefer a read-only view over the caller's buffer instead of copying
+        // the whole pattern into tmp_buf_. `buffer` is the current value
+        // page's ByteStream and outlives the pattern decode; byte_cache_ only
+        // reads from it. Fall back to the copy when the stream is paged or
+        // shorter than the pattern.
+        if (buffer.is_wrapped() && buffer.remaining_size() >= length_) {
+            byte_cache_.wrap_from(buffer.get_wrapped_buf() + buffer.read_pos(),
+                                  static_cast<int32_t>(length_));
+            buffer.wrapped_buf_advance_read_pos(length_);
         } else {
             if (tmp_buf_) {
                 common::mem_free(tmp_buf_);
@@ -297,15 +307,15 @@ class Int32RleDecoder : public Decoder {
                 ret = common::E_PARTIAL_READ;
             }
             byte_cache_.wrap_from((char*)tmp_buf_, length_);
-            is_length_and_bitwidth_readed_ = true;
-            uint8_t tmp_bit_width;
-            common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);
-            bit_width_ = tmp_bit_width;
-            if (packer_ != nullptr) {
-                delete packer_;
-            }
-            init_packer();
         }
+        is_length_and_bitwidth_readed_ = true;
+        uint8_t tmp_bit_width;
+        common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);
+        bit_width_ = tmp_bit_width;
+        if (packer_ != nullptr) {
+            delete packer_;
+        }
+        init_packer();
         return ret;
     }
 
