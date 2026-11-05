@@ -101,7 +101,7 @@ struct MeasurementSchema {
                        compression_type_, out))) {
         }
         if (ret == common::E_OK) {
-            if (RET_FAIL(common::SerializationUtil::write_ui32(props_.size(),
+            if (RET_SUCC(common::SerializationUtil::write_ui32(props_.size(),
                                                                out))) {
                 for (const auto& prop : props_) {
                     if (RET_FAIL(common::SerializationUtil::write_str(
