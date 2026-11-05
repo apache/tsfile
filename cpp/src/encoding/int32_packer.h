@@ -24,14 +24,92 @@
 
 #include "encoder.h"
 
+#ifdef ENABLE_SIMD
+#include "common/simd_dispatch.h"
+#include "simde/x86/avx2.h"
+#ifdef TSFILE_X86_AVX2_DISPATCH
+#include <immintrin.h>
+#endif
+#endif
+
 namespace storage {
+
+#ifdef ENABLE_SIMD
+// SIMD decode of 4 big-endian bit-packed INT32 values. Uses the 64-bit gather
+// so all widths 1..32 fit without a width guard; the trailing permute packs
+// the low 32 bits of each 64-bit lane into four contiguous INT32 lanes.
+static inline void rle_simd_unpack_4_i32(const uint8_t* in, int32_t width,
+                                         int32_t index, int32_t out[4]) {
+    static const simde__m256i SHUF_REV8 = simde_mm256_setr_epi8(
+        7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2,
+        1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
+    const int32_t pos0 = index * width;
+    const int32_t pos[4] = {pos0, pos0 + width, pos0 + 2 * width,
+                            pos0 + 3 * width};
+    const int32_t bidx[4] = {pos[0] >> 3, pos[1] >> 3, pos[2] >> 3,
+                             pos[3] >> 3};
+    const int32_t off[4] = {pos[0] & 7, pos[1] & 7, pos[2] & 7, pos[3] & 7};
+    const simde__m128i IDX =
+        simde_mm_setr_epi32(bidx[0], bidx[1], bidx[2], bidx[3]);
+    const int32_t rshift = 64 - width;
+    simde__m256i w64_le =
+        simde_mm256_i32gather_epi64((const int64_t*)in, IDX, 1);
+    simde__m256i w64_be = simde_mm256_shuffle_epi8(w64_le, SHUF_REV8);
+    simde__m256i OFF64 = simde_mm256_cvtepu32_epi64(
+        simde_mm_setr_epi32(off[0], off[1], off[2], off[3]));
+    simde__m256i U64 = simde_mm256_sllv_epi64(w64_be, OFF64);
+    simde__m256i V64 =
+        simde_mm256_srl_epi64(U64, simde_mm_cvtsi32_si128(rshift));
+    const simde__m256i perm = simde_mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
+    simde__m256i comp = simde_mm256_permutevar8x32_epi32(V64, perm);
+    simde_mm_storeu_si128((simde__m128i*)out,
+                          simde_mm256_castsi256_si128(comp));
+}
+
+#ifdef TSFILE_X86_AVX2_DISPATCH
+// Native-AVX2 twin of rle_simd_unpack_4_i32; see int64_packer.h for why the
+// target attribute is required (simde otherwise emits its portable fallback).
+TSFILE_TARGET_AVX2
+static inline void rle_avx2_unpack_4_i32(const uint8_t* in, int32_t width,
+                                         int32_t index, int32_t out[4]) {
+    const __m256i SHUF_REV8 =
+        _mm256_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8,
+                         7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
+    const int32_t pos0 = index * width;
+    const int32_t pos[4] = {pos0, pos0 + width, pos0 + 2 * width,
+                            pos0 + 3 * width};
+    const __m128i IDX =
+        _mm_setr_epi32(pos[0] >> 3, pos[1] >> 3, pos[2] >> 3, pos[3] >> 3);
+    const int32_t rshift = 64 - width;
+    __m256i w64_le = _mm256_i32gather_epi64((const long long*)in, IDX, 1);
+    __m256i w64_be = _mm256_shuffle_epi8(w64_le, SHUF_REV8);
+    __m256i OFF64 = _mm256_cvtepu32_epi64(
+        _mm_setr_epi32(pos[0] & 7, pos[1] & 7, pos[2] & 7, pos[3] & 7));
+    __m256i U64 = _mm256_sllv_epi64(w64_be, OFF64);
+    __m256i V64 = _mm256_srl_epi64(U64, _mm_cvtsi32_si128(rshift));
+    const __m256i perm = _mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
+    __m256i comp = _mm256_permutevar8x32_epi32(V64, perm);
+    _mm_storeu_si128((__m128i*)out, _mm256_castsi256_si128(comp));
+}
+#endif  // TSFILE_X86_AVX2_DISPATCH
+#endif
 
 class Int32Packer {
    private:
     int width_;
+#ifdef TSFILE_X86_AVX2_DISPATCH
+    // Resolved once per packer (one per bit-width pattern) so the hot
+    // unpack loop pays no thread-safe-static guard on every group.
+    bool use_avx2_;
+#endif
 
    public:
-    Int32Packer(int width_) { this->width_ = width_; }
+#ifdef TSFILE_X86_AVX2_DISPATCH
+    Int32Packer(int width_)
+        : width_(width_), use_avx2_(common::cpu_has_avx2()) {}
+#else
+    Int32Packer(int width_) : width_(width_) {}
+#endif
     ~Int32Packer() { destroy(); }
 
     void destroy() { /* do nothing for IntPacker */
@@ -101,6 +179,20 @@ class Int32Packer {
      */
     void unpack_8values(const unsigned char buf[], int offset,
                         int32_t values[]) {
+#ifdef ENABLE_SIMD
+        // Every width 1..32 fits within the 8-byte gather, so no width guard
+        // is needed here (unlike the 64-bit packer).
+#ifdef TSFILE_X86_AVX2_DISPATCH
+        if (use_avx2_) {
+            rle_avx2_unpack_4_i32(buf + offset, width_, 0, values);
+            rle_avx2_unpack_4_i32(buf + offset, width_, 4, values + 4);
+            return;
+        }
+#endif
+        rle_simd_unpack_4_i32(buf + offset, width_, 0, values);
+        rle_simd_unpack_4_i32(buf + offset, width_, 4, values + 4);
+        return;
+#endif
         int byte_idx = offset;
         uint64_t buffer = 0;
         // total bits which have reader from 'buf' to 'buffer'. i.e.,

@@ -20,6 +20,8 @@
 #ifndef ENCODING_INT64RLE_DECODER_H
 #define ENCODING_INT64RLE_DECODER_H
 
+#include <algorithm>
+#include <cstring>
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
@@ -70,6 +72,55 @@ class Int64RleDecoder : public Decoder {
     }
     int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return read_int(ret_value, in);
+    }
+    int read_batch_int64(int64_t* out, int capacity, int& actual,
+                         common::ByteStream& in) override {
+        actual = 0;
+        int ret = common::E_OK;
+        while (actual < capacity && has_remaining(in)) {
+            if (!is_length_and_bitwidth_readed_) {
+                if (RET_FAIL(read_length_and_bitwidth(in))) {
+                    return ret;
+                }
+            }
+            if (current_count_ == 0) {
+                // Low bit = 0 => RLE run, = 1 => bit-packing group (same
+                // header dispatch as read_int).
+                uint32_t header_value = 0;
+                if (RET_FAIL(common::SerializationUtil::read_var_uint(
+                        header_value, byte_cache_))) {
+                    return ret;
+                }
+                if (header_value & 1) {
+                    if (RET_FAIL(call_read_bit_packing_buffer(header_value))) {
+                        return ret;
+                    }
+                } else {
+                    if (RET_FAIL(call_read_rle_run(header_value))) {
+                        return ret;
+                    }
+                }
+            }
+            const int n = std::min(current_count_, capacity - actual);
+            if (is_rle_run_) {
+                // The whole run holds the same value; a broadcast fill is
+                // auto-vectorized by the compiler.
+                std::fill(out + actual, out + actual + n, rle_value_);
+            } else {
+                // Bit-packing groups are already unpacked into current_buffer_
+                // by the packer, so the remaining values are a straight copy.
+                const int64_t* src =
+                    current_buffer_ + (bitpacking_num_ - current_count_);
+                std::memcpy(out + actual, src,
+                            static_cast<size_t>(n) * sizeof(int64_t));
+            }
+            actual += n;
+            current_count_ -= n;
+            if (!has_next_package()) {
+                is_length_and_bitwidth_readed_ = false;
+            }
+        }
+        return ret;
     }
     int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
@@ -209,13 +260,17 @@ class Int64RleDecoder : public Decoder {
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
             bytes_to_read = byte_cache_.remaining_size();
         }
-        std::vector<unsigned char> bytes(bytes_to_read);
+        // +8 zero padding: the SIMD unpack gathers 8 bytes per value and may
+        // read up to 7 bytes past the last group's end for small bit widths.
+        std::vector<unsigned char> bytes(bytes_to_read + 8, 0);
 
-        for (int i = 0; i < bytes_to_read; i++) {
-            if (RET_FAIL(common::SerializationUtil::read_ui8(bytes[i],
-                                                             byte_cache_))) {
-                return ret;
-            }
+        uint32_t got = 0;
+        if (RET_FAIL(byte_cache_.read_buf(
+                bytes.data(), static_cast<uint32_t>(bytes_to_read), got))) {
+            return ret;
+        }
+        if (got != static_cast<uint32_t>(bytes_to_read)) {
+            return common::E_PARTIAL_READ;
         }
 
         // save all int values in currentBuffer
