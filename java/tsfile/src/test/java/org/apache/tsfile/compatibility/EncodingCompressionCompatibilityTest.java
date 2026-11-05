@@ -290,7 +290,8 @@ public class EncodingCompressionCompatibilityTest {
     }
 
     List<String> missing = new ArrayList<>();
-    for (Model model : Model.values()) {
+    // Only the table model is exercised by the cross-language matrix.
+    for (Model model : new Model[] {Model.TABLE}) {
       for (TSDataType dataType : MATRIX_DATA_TYPES) {
         Set<TSEncoding> supported = TSEncoding.TYPE_SUPPORTED_ENCODINGS.get(dataType);
         assertNotNull("no supported encodings recorded for " + dataType, supported);
