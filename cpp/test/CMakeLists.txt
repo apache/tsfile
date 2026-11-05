@@ -227,6 +227,20 @@ add_test(
                 -DTEST_ANTLR4_ARCHIVE=${TSFILE_ANTLR4_ARCHIVE_RESOLVED}
                 -P ${CMAKE_SOURCE_DIR}/cmake/tests/ANTLR4DependencyTest.cmake)
 
+if (ENABLE_ASAN)
+    # Negative control for the sanitizer build: the program performs a
+    # deliberate out-of-bounds heap write. The driver script decides the
+    # outcome from the sanitizer report, because CTest treats the abort ASan
+    # uses on some platforms as a failure regardless of the exit status that
+    # PASS_REGULAR_EXPRESSION would otherwise absorb.
+    add_executable(asan_negative_control asan_negative_control.cc)
+    add_test(
+            NAME asan_negative_control
+            COMMAND ${CMAKE_COMMAND}
+                    "-DASAN_NEGATIVE_CONTROL=$<TARGET_FILE:asan_negative_control>"
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/asan_negative_control.cmake)
+endif ()
+
 file(GLOB_RECURSE TEST_SRCS
         "common/*_test.cc"
         "encoding/*_test.cc"

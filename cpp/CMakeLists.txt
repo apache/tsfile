@@ -161,13 +161,6 @@ option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 set(TSFILE_SANITIZER_CHECKS "address,undefined"
         CACHE STRING
         "Sanitizer checks passed to -fsanitize= when ENABLE_ASAN is ON (for example 'address' or 'address,undefined')")
-# Python bindings preload the sanitizer runtime, so instrumented shared
-# libraries must not embed a private copy of it. Keep this OFF for the C++ test
-# builds that use -static-libasan, and turn it ON for the coordinated
-# C++/Python binding build.
-option(TSFILE_SANITIZER_SHARED_RUNTIME
-        "Link the sanitizer runtime dynamically into shared libraries (for preloaded Python bindings)"
-        OFF)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
@@ -226,12 +219,9 @@ else ()
             # (see TSFILE_ENABLE_NATIVE_ARCH above): the default target for the
             # deployment platform is the portable baseline, and on macOS arm64
             # it still includes +crc so snappy's fast path stays available.
-            if (ENABLE_ASAN AND TSFILE_SANITIZER_SHARED_RUNTIME)
+            if (ENABLE_ASAN)
                 # LTO loses the stack frames sanitizer reports need, and its
                 # additional optimization pipeline complicates symbolization.
-                # Only the binding mode changes optimization: the C++ test mode
-                # keeps its historical flags so its static runtime stays in
-                # sync with how libtsfile is linked.
                 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
             elseif (MINGW OR WIN32)
                 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
@@ -251,8 +241,7 @@ endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 if (ENABLE_ASAN)
-    message("Address Sanitizer is enabled: checks=${TSFILE_SANITIZER_CHECKS}, "
-            "shared_runtime=${TSFILE_SANITIZER_SHARED_RUNTIME}")
+    message("Address Sanitizer is enabled: checks=${TSFILE_SANITIZER_CHECKS}")
     if (MSVC)
         # MSVC ships AddressSanitizer; it requires Visual Studio 2019 16.9 or
         # newer (MSVC_VERSION >= 1928). Only the address sanitizer is available
@@ -278,33 +267,24 @@ if (ENABLE_ASAN)
         endforeach ()
         add_link_options(/INCREMENTAL:NO /DEBUG)
     elseif (NOT WIN32)
-        # Compile flags here only survive until add_subdirectory(third_party)
-        # resets CMAKE_CXX_FLAGS. The binding mode re-applies them after that
-        # call; the C++ test mode keeps its historical behavior. Link flags set
-        # here persist.
-        set(CMAKE_CXX_FLAGS
-                "${CMAKE_CXX_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS} -fno-omit-frame-pointer")
-
-        if (TSFILE_SANITIZER_SHARED_RUNTIME)
-            # The runtime stays dynamic so one preloaded copy serves Python, the
-            # extensions and libtsfile. Debug info is required for useful
-            # reports in every build type.
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-            set(CMAKE_SHARED_LINKER_FLAGS
-                    "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS}")
-            set(CMAKE_EXE_LINKER_FLAGS
-                    "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS}")
-        elseif (NOT APPLE)
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libasan")
-            set(CMAKE_EXE_LINKER_FLAGS
-                    "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS} -static-libasan")
-            if (TSFILE_SANITIZER_CHECKS MATCHES "undefined")
-                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libubsan")
-            endif ()
-        else ()
-            set(CMAKE_EXE_LINKER_FLAGS
-                    "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS}")
-        endif ()
+        # Every TsFile target (libtsfile, the tools, the test executable) is
+        # compiled with instrumentation, and every binary that contains
+        # instrumented code links the sanitizer runtime dynamically: a macOS
+        # dylib cannot carry unresolved __asan_* symbols, and embedding a
+        # private runtime in both libtsfile and the executable is unsupported.
+        #
+        # Compile flags set here do not survive the CMAKE_CXX_FLAGS reset before
+        # add_subdirectory(third_party); they are stored in
+        # TSFILE_SANITIZER_COMPILE_FLAGS and re-applied for the TsFile targets
+        # once the bundled third-party code is configured (so that code stays
+        # uninstrumented). Link flags set here persist.
+        set(TSFILE_SANITIZER_COMPILE_FLAGS
+                "-fsanitize=${TSFILE_SANITIZER_CHECKS} -fno-omit-frame-pointer -g")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TSFILE_SANITIZER_COMPILE_FLAGS}")
+        set(CMAKE_SHARED_LINKER_FLAGS
+                "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS}")
+        set(CMAKE_EXE_LINKER_FLAGS
+                "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS}")
     else ()
         message(WARNING
             "ENABLE_ASAN on Windows is only supported with the MSVC toolchain; "
@@ -436,13 +416,11 @@ endif ()
 add_subdirectory(third_party)
 
 # third_party intentionally rebuilds with a minimal CMAKE_CXX_FLAGS so bundled
-# projects do not inherit TsFile's warning flags. The binding mode re-applies
-# the sanitizer instrumentation for the TsFile targets that follow. The C++
-# test mode keeps its historical static-runtime setup, so re-applying here
-# would mix a dynamic runtime in libtsfile with the executable's static one.
-if (ENABLE_ASAN AND TSFILE_SANITIZER_SHARED_RUNTIME AND NOT MSVC AND NOT WIN32)
-    set(CMAKE_CXX_FLAGS
-            "${CMAKE_CXX_FLAGS} -fsanitize=${TSFILE_SANITIZER_CHECKS} -fno-omit-frame-pointer -g")
+# projects do not inherit TsFile's warning flags. Re-apply the sanitizer
+# instrumentation for the TsFile targets that follow; without it TsFile sources
+# would link the sanitizer runtime but carry no compiler-inserted checks.
+if (ENABLE_ASAN AND NOT MSVC AND NOT WIN32)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TSFILE_SANITIZER_COMPILE_FLAGS}")
 endif ()
 
 # CMake 3.11 cannot call target_link_libraries() on object-library targets, but
