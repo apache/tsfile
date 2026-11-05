@@ -153,12 +153,10 @@ void AlignedChunkReader::destroy() {
     value_page_col_notnull_bitmap_.clear();
     value_page_col_notnull_bitmap_.shrink_to_fit();
     if (time_decoder_ != nullptr) {
-        time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);
         time_decoder_ = nullptr;
     }
     if (value_decoder_ != nullptr) {
-        value_decoder_->~Decoder();
         DecoderFactory::free(value_decoder_);
         value_decoder_ = nullptr;
     }
@@ -194,7 +192,6 @@ void AlignedChunkReader::destroy() {
     for (size_t ci = 0; ci < value_columns_.size(); ci++) {
         auto* col = value_columns_[ci];
         if (col->decoder != nullptr) {
-            col->decoder->~Decoder();
             DecoderFactory::free(col->decoder);
             col->decoder = nullptr;
         }
@@ -233,7 +230,6 @@ void AlignedChunkReader::destroy() {
     decode_pool_ = nullptr;  // borrowed, not owned
     for (auto* d : time_decoder_pool_) {
         if (d != nullptr) {
-            d->~Decoder();
             DecoderFactory::free(d);
         }
     }

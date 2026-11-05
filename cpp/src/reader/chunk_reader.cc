@@ -73,12 +73,10 @@ void ChunkReader::destroy() {
     value_in_.reset();
 
     if (time_decoder_ != nullptr) {
-        time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);
         time_decoder_ = nullptr;
     }
     if (value_decoder_ != nullptr) {
-        value_decoder_->~Decoder();
         DecoderFactory::free(value_decoder_);
         value_decoder_ = nullptr;
     }

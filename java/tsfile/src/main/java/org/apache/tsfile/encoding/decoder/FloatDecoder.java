@@ -200,6 +200,8 @@ public class FloatDecoder extends Decoder {
   public void reset() {
     this.decoder.reset();
     this.isMaxPointNumberRead = false;
+    this.isUnderflowInfo = null;
+    this.valueItselfOverflowInfo = null;
     this.position = 0;
   }
 }

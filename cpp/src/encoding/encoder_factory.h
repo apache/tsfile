@@ -28,8 +28,10 @@
 #include "encoder.h"
 #include "encoding/int32_rle_encoder.h"
 #include "encoding/int64_rle_encoder.h"
+#include "float_rle_encoder.h"
 #include "float_sprintz_encoder.h"
 #include "gorilla_encoder.h"
+#include "gorilla_v1_encoder.h"
 #include "int32_sprintz_encoder.h"
 #include "int64_sprintz_encoder.h"
 #include "plain_encoder.h"
@@ -95,12 +97,17 @@ class EncoderFactory {
 
             case RLE:
                 switch (data_type) {
+                    case BOOLEAN:
                     case INT32:
                     case DATE:
                         ALLOC_AND_RETURN_ENCODER(Int32RleEncoder);
                     case INT64:
                     case TIMESTAMP:
                         ALLOC_AND_RETURN_ENCODER(Int64RleEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatRLEEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleRLEEncoder);
                     default:
                         return nullptr;
                 }
@@ -156,8 +163,10 @@ class EncoderFactory {
             case ZIGZAG:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_ENCODER(IntZigzagEncoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_ENCODER(LongZigzagEncoder);
                     default:
                         return nullptr;
@@ -166,8 +175,10 @@ class EncoderFactory {
             case SPRINTZ:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_ENCODER(Int32SprintzEncoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_ENCODER(Int64SprintzEncoder);
                     case FLOAT:
                         ALLOC_AND_RETURN_ENCODER(FloatSprintzEncoder);
@@ -201,9 +212,18 @@ class EncoderFactory {
                         return nullptr;
                 }
 
+            case GORILLA_V1:
+                switch (data_type) {
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatGorillaV1Encoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleGorillaV1Encoder);
+                    default:
+                        return nullptr;
+                }
+
             case DIFF:
             case BITMAP:
-            case GORILLA_V1:
             case REGULAR:
             case FREQ:
                 return nullptr;

@@ -150,14 +150,18 @@ class Int64RleDecoder : public Decoder {
             return common::E_DECODE_ERR;
         }
         int byte_width = (bit_width_ + 7) / 8;
-        // Read the repeated value (stored as byte_width bytes, little-endian)
+        // The repeated value is stored big-endian (most significant byte
+        // first), matching the Java/IoTDB LongRleEncoder
+        // (BytesUtils.longToBytes(value, byteWidth)). This differs from the
+        // INT32 RLE path, which stores the repeated value little-endian.
         int64_t value = 0;
         for (int i = 0; i < byte_width; i++) {
             uint8_t b;
             if (RET_FAIL(common::SerializationUtil::read_ui8(b, byte_cache_))) {
                 return ret;
             }
-            value |= ((int64_t)b) << (i * 8);
+            value =
+                static_cast<int64_t>((static_cast<uint64_t>(value) << 8) | b);
         }
         rle_value_ = value;
         is_rle_run_ = true;

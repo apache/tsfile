@@ -26,10 +26,25 @@ on:
     paths:
       - '.github/workflows/compatibility-test.yml'
       - '.mvn/**'
-      - 'cpp/**'
-      - 'java/**'
       - 'mvnw'
       - 'pom.xml'
+      # The binary-format surface: the Java/C++ sources that define how data
+      # is encoded, compressed, and laid out on disk, plus the module POMs
+      # that select/version the compression dependencies, and the compatibility
+      # harness itself.  Unrelated test/example/tool/doc changes are excluded
+      # so a routine PR does not pay the ~30 minute cross-language matrix.
+      - 'compat/**'
+      - 'java/common/src/main/**'
+      - 'java/tsfile/src/main/**'
+      - 'java/pom.xml'
+      - 'java/common/pom.xml'
+      - 'java/tsfile/pom.xml'
+      - 'java/tsfile/src/test/java/org/apache/tsfile/compatibility/**'
+      - 'cpp/src/**'
+      - 'cpp/CMakeLists.txt'
+      - 'cpp/cmake/**'
+      - 'cpp/third_party/**'
+      - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
   pull_request:
     branches:
       - develop
@@ -39,10 +54,25 @@ on:
     paths:
       - '.github/workflows/compatibility-test.yml'
       - '.mvn/**'
-      - 'cpp/**'
-      - 'java/**'
       - 'mvnw'
       - 'pom.xml'
+      # The binary-format surface: the Java/C++ sources that define how data
+      # is encoded, compressed, and laid out on disk, plus the module POMs
+      # that select/version the compression dependencies, and the compatibility
+      # harness itself.  Unrelated test/example/tool/doc changes are excluded
+      # so a routine PR does not pay the ~30 minute cross-language matrix.
+      - 'compat/**'
+      - 'java/common/src/main/**'
+      - 'java/tsfile/src/main/**'
+      - 'java/pom.xml'
+      - 'java/common/pom.xml'
+      - 'java/tsfile/pom.xml'
+      - 'java/tsfile/src/test/java/org/apache/tsfile/compatibility/**'
+      - 'cpp/src/**'
+      - 'cpp/CMakeLists.txt'
+      - 'cpp/cmake/**'
+      - 'cpp/third_party/**'
+      - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
   workflow_dispatch:
     inputs:
       forceUpdates:
@@ -63,13 +93,16 @@ env:
 
 jobs:
   generate-fixtures:
-    name: Generate ${{ matrix.language }} fixtures
+    name: Generate ${{ matrix.language }} fixtures (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         language: [ java, cpp ]
+        # The full matrix is split into shards so each generation job stays
+        # within the timeout; the shards run in parallel.
+        shard: [ 0, 1, 2 ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -94,16 +127,27 @@ jobs:
           path: cpp/target/dependency-cache
           key: ${{ runner.os }}-tsfile-cpp-deps-${{ hashFiles('cpp/CMakeLists.txt', 'cpp/cmake/*Source.cmake', 'cpp/third_party/CMakeLists.txt') }}
 
-      - name: Generate Java table fixtures
+      - name: Generate Java compatibility fixtures
         if: matrix.language == 'java'
         shell: bash
         run: |
           mkdir -p compat-fixtures/java
           ./mvnw -P with-java \
-            -Dtest=TableModelEncodingCompressionCompatibilityTest#generateFixtures \
+            -Dtest=EncodingCompressionCompatibilityTest#generateFixtures \
             -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtsfile.compat.spec="$PWD/compat/compatibility-matrix.csv" \
             -Dtsfile.compat.generate.dir="$PWD/compat-fixtures/java" \
+            -Dtsfile.compat.shardIndex="${{ matrix.shard }}" \
+            -Dtsfile.compat.shardCount=3 \
             test
+
+      - name: Publish Java generation summary
+        if: matrix.language == 'java' && always()
+        shell: bash
+        run: |
+          if [ -f compat-fixtures/java/summary.md ]; then
+            cat compat-fixtures/java/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build C++ tests
         if: matrix.language == 'cpp'
@@ -115,34 +159,45 @@ jobs:
             -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
-            -Denable.snappy=OFF \
+            -Denable.snappy=ON \
             -Denable.lz4=ON \
             -Denable.lzokay=OFF \
-            -Denable.zlib=OFF \
+            -Denable.zlib=ON \
             -Denable.zstd=ON \
             -Denable.lzma2=ON \
             -Denable.simd=OFF \
             package
 
-      - name: Generate C++ table fixtures
+      - name: Generate C++ compatibility fixtures
         if: matrix.language == 'cpp'
         shell: bash
         run: |
           mkdir -p compat-fixtures/cpp
+          TSFILE_COMPAT_SPEC="$PWD/compat/compatibility-matrix.csv" \
           TSFILE_COMPAT_GENERATE_DIR="$PWD/compat-fixtures/cpp" \
+          TSFILE_COMPAT_SHARD_INDEX="${{ matrix.shard }}" \
+          TSFILE_COMPAT_SHARD_COUNT=3 \
             ./cpp/target/build/test/lib/TsFile_Test \
-            --gtest_filter=TableModelEncodingCompressionCompatibilityTest.GenerateFixtures
+            --gtest_filter=EncodingCompressionCompatibilityTest.GenerateFixtures
+
+      - name: Publish C++ generation summary
+        if: matrix.language == 'cpp' && always()
+        shell: bash
+        run: |
+          if [ -f compat-fixtures/cpp/summary.md ]; then
+            cat compat-fixtures/cpp/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload ${{ matrix.language }} fixtures
         uses: actions/upload-artifact@v7
         with:
-          name: tsfile-${{ matrix.language }}-compat-fixtures
+          name: tsfile-${{ matrix.language }}-compat-fixtures-shard-${{ matrix.shard }}
           path: compat-fixtures/${{ matrix.language }}/
           if-no-files-found: error
           retention-days: 1
 
   validate-fixtures:
-    name: Validate ${{ matrix.writer }} fixtures with ${{ matrix.reader }}
+    name: Validate ${{ matrix.writer }} shard ${{ matrix.shard }} with ${{ matrix.reader }}
     needs: generate-fixtures
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -152,8 +207,22 @@ jobs:
         include:
           - writer: java
             reader: cpp
+            shard: 0
+          - writer: java
+            reader: cpp
+            shard: 1
+          - writer: java
+            reader: cpp
+            shard: 2
           - writer: cpp
             reader: java
+            shard: 0
+          - writer: cpp
+            reader: java
+            shard: 1
+          - writer: cpp
+            reader: java
+            shard: 2
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -181,7 +250,7 @@ jobs:
       - name: Download ${{ matrix.writer }} fixtures
         uses: actions/download-artifact@v8
         with:
-          name: tsfile-${{ matrix.writer }}-compat-fixtures
+          name: tsfile-${{ matrix.writer }}-compat-fixtures-shard-${{ matrix.shard }}
           path: compat-fixtures/${{ matrix.writer }}
 
       - name: Validate ${{ matrix.writer }} fixtures with Java
@@ -189,10 +258,21 @@ jobs:
         shell: bash
         run: |
           ./mvnw -P with-java \
-            -Dtest=TableModelEncodingCompressionCompatibilityTest#validateFixtures \
+            -Dtest=EncodingCompressionCompatibilityTest#validateFixtures \
             -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtsfile.compat.spec="$PWD/compat/compatibility-matrix.csv" \
             -Dtsfile.compat.validate.dir="$PWD/compat-fixtures/${{ matrix.writer }}" \
+            -Dtsfile.compat.shardIndex="${{ matrix.shard }}" \
+            -Dtsfile.compat.shardCount=3 \
             test
+
+      - name: Publish Java validation summary
+        if: matrix.reader == 'java' && always()
+        shell: bash
+        run: |
+          if [ -f compat-fixtures/${{ matrix.writer }}/summary.md.validate ]; then
+            cat compat-fixtures/${{ matrix.writer }}/summary.md.validate >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build C++ tests
         if: matrix.reader == 'cpp'
@@ -204,10 +284,10 @@ jobs:
             -Dspotless.skip=true \
             -Dtsfile.dependency.source=BUNDLED \
             -Denable.antlr4=OFF \
-            -Denable.snappy=OFF \
+            -Denable.snappy=ON \
             -Denable.lz4=ON \
             -Denable.lzokay=OFF \
-            -Denable.zlib=OFF \
+            -Denable.zlib=ON \
             -Denable.zstd=ON \
             -Denable.lzma2=ON \
             -Denable.simd=OFF \
@@ -217,6 +297,17 @@ jobs:
         if: matrix.reader == 'cpp'
         shell: bash
         run: |
+          TSFILE_COMPAT_SPEC="$PWD/compat/compatibility-matrix.csv" \
           TSFILE_COMPAT_VALIDATE_DIR="$PWD/compat-fixtures/${{ matrix.writer }}" \
+          TSFILE_COMPAT_SHARD_INDEX="${{ matrix.shard }}" \
+          TSFILE_COMPAT_SHARD_COUNT=3 \
             ./cpp/target/build/test/lib/TsFile_Test \
-            --gtest_filter=TableModelEncodingCompressionCompatibilityTest.ValidateFixtures
+            --gtest_filter=EncodingCompressionCompatibilityTest.ValidateFixtures
+
+      - name: Publish C++ validation summary
+        if: matrix.reader == 'cpp' && always()
+        shell: bash
+        run: |
+          if [ -f compat-fixtures/${{ matrix.writer }}/summary.md.validate ]; then
+            cat compat-fixtures/${{ matrix.writer }}/summary.md.validate >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -28,8 +28,10 @@
 #include "double_sprintz_decoder.h"
 #include "encoding/int32_rle_decoder.h"
 #include "encoding/int64_rle_decoder.h"
+#include "float_rle_decoder.h"
 #include "float_sprintz_decoder.h"
 #include "gorilla_decoder.h"
+#include "gorilla_v1_decoder.h"
 #include "int32_sprintz_decoder.h"
 #include "int64_sprintz_decoder.h"
 #include "plain_decoder.h"
@@ -89,6 +91,10 @@ class DecoderFactory {
                     case INT64:
                     case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(Int64RleDecoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatRLEDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleRLEDecoder);
                     default:
                         return nullptr;
                 }
@@ -144,8 +150,10 @@ class DecoderFactory {
             case ZIGZAG:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_DECODER(IntZigzagDecoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(LongZigzagDecoder);
                     default:
                         return nullptr;
@@ -154,8 +162,10 @@ class DecoderFactory {
             case SPRINTZ:
                 switch (data_type) {
                     case INT32:
+                    case DATE:
                         ALLOC_AND_RETURN_DECODER(Int32SprintzDecoder);
                     case INT64:
+                    case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(Int64SprintzDecoder);
                     case FLOAT:
                         ALLOC_AND_RETURN_DECODER(FloatSprintzDecoder);
@@ -189,6 +199,16 @@ class DecoderFactory {
                         return nullptr;
                 }
 
+            case GORILLA_V1:
+                switch (data_type) {
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatGorillaV1Decoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleGorillaV1Decoder);
+                    default:
+                        return nullptr;
+                }
+
             default:
                 // Not supported encoding
                 return nullptr;
@@ -196,7 +216,19 @@ class DecoderFactory {
         return nullptr;
     }
 
-    static void free(Decoder* decoder) { common::mem_free(decoder); }
+    // Placement-new'ed decoders must have their destructor run before the
+    // object memory is released: decoders such as Int32RleDecoder (and the
+    // FLOAT/DOUBLE RLE wrappers around them) hold heap buffers that are only
+    // freed by the destructor.  This mirrors EncoderFactory::free(), which
+    // runs destroy() before releasing the object, so callers must not call
+    // ~Decoder() themselves.
+    static void free(Decoder* decoder) {
+        if (decoder == nullptr) {
+            return;
+        }
+        decoder->~Decoder();
+        common::mem_free(decoder);
+    }
 };
 }  // end namespace storage
 #endif  // ENCODING_DECODER_FACTORY_H
