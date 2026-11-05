@@ -79,7 +79,9 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
     // Check encoding support for each data type
     switch (dtype) {
         case BOOLEAN:
-            if (encoding_type != PLAIN) return E_NOT_SUPPORT;
+            if (encoding_type != PLAIN && encoding_type != RLE) {
+                return E_NOT_SUPPORT;
+            }
             g_config_value_.boolean_encoding_type_ = encoding_type;
             break;
 
@@ -101,7 +103,8 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
         case FLOAT:
             if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
                 encoding_type != GORILLA && encoding_type != SPRINTZ &&
-                encoding_type != CHIMP && encoding_type != RLBE) {
+                encoding_type != CHIMP && encoding_type != RLBE &&
+                encoding_type != RLE && encoding_type != GORILLA_V1) {
                 return E_NOT_SUPPORT;
             }
             g_config_value_.float_encoding_type_ = encoding_type;
@@ -111,7 +114,8 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
             if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
                 encoding_type != GORILLA && encoding_type != SPRINTZ &&
                 encoding_type != CHIMP && encoding_type != RLBE &&
-                encoding_type != CAMEL) {
+                encoding_type != CAMEL && encoding_type != RLE &&
+                encoding_type != GORILLA_V1) {
                 return E_NOT_SUPPORT;
             }
             g_config_value_.double_encoding_type_ = encoding_type;
