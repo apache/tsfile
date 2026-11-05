@@ -2194,12 +2194,20 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
         int32_t remaining_in_page = page_time_count_ - page_time_cursor_;
         uint32_t budget = row_appender.remaining();
 
-        // Fast path: FULL_PASS page, no nulls in any value column, types
-        // match destination, budget > 0.  Bulk-memcpys up to
+        // Fast path: FULL_PASS page, or a BOUNDARY page under a contiguous
+        // time filter (e.g. TimeBetween) whose whole [row_begin, row_end]
+        // range matches — no nulls in any value column, types match
+        // destination, budget > 0.  Bulk-memcpys up to
         // min(budget, remaining_in_page) rows from page_time_cursor_; tail
         // pages of an SSI tsblock still take the memcpy path instead of
-        // falling into the row-by-row scatter loop.
-        bool can_bulk = page_info.pass_type == PagePassType::FULL_PASS &&
+        // falling into the row-by-row scatter loop.  Discrete filters (TimeIn,
+        // NOT BETWEEN) keep the slow path because the compressed range can
+        // still contain unmatched timestamps.
+        const bool boundary_contiguous =
+            page_info.pass_type == PagePassType::BOUNDARY &&
+            (filter == nullptr || filter->is_contiguous_time_filter());
+        bool can_bulk = (page_info.pass_type == PagePassType::FULL_PASS ||
+                         boundary_contiguous) &&
                         remaining_in_page > 0 && budget > 0;
         if (can_bulk) {
             for (uint32_t c = 0; c < num_cols; c++) {
@@ -2209,7 +2217,7 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
                 if (dt == common::STRING || dt == common::TEXT ||
                     dt == common::BLOB ||
                     ret_tsblock->get_vector(c + 1)->get_vector_type() != dt ||
-                    pps.predecoded_count != page_time_count_) {
+                    pps.predecoded_count != pps.row_count) {
                     can_bulk = false;
                     break;
                 }
