@@ -123,6 +123,7 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 
         case STRING:
         case TEXT:
+        case BLOB:
             if (encoding_type != PLAIN && encoding_type != DICTIONARY) {
                 return E_NOT_SUPPORT;
             }
@@ -130,7 +131,9 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
             break;
 
         default:
-            break;
+            // VECTOR and UNKNOWN have no writable default encoding; reject them
+            // instead of silently ignoring the request.
+            return E_NOT_SUPPORT;
     }
     return E_OK;
 }
@@ -174,9 +177,12 @@ FORCE_INLINE uint8_t get_datatype_encoding(uint8_t data_type) {
             return static_cast<uint8_t>(g_config_value_.double_encoding_type_);
         case STRING:
         case TEXT:
+        case BLOB:
             return static_cast<uint8_t>(g_config_value_.string_encoding_type_);
         case DATE:
             return static_cast<uint8_t>(g_config_value_.int32_encoding_type_);
+        case TIMESTAMP:
+            return static_cast<uint8_t>(g_config_value_.int64_encoding_type_);
         default:
             return static_cast<uint8_t>(
                 PLAIN);  // Return default encoding for unknown types
