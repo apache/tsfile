@@ -202,10 +202,11 @@ class Int64Packer {
         }
 #endif
         // Scalar fallback for widths that can cross a ninth byte (59/61/62/63).
+#if defined(__SIZEOF_INT128__)
         // Decode whole bytes into a 128-bit buffer — ~8x fewer iterations than
-        // the old bit-by-bit loop — then shift out one width-wide value at a
-        // time. Widths up to 63 need up to 63 + 7 = 70 buffered bits, which the
-        // 64-bit int32-style buffer cannot hold; hence 128 bits.
+        // the bit-by-bit loop — then shift out one width-wide value at a time.
+        // Widths up to 63 need up to 63 + 7 = 70 buffered bits, which a 64-bit
+        // buffer cannot hold; hence 128 bits.
         int byte_idx = offset;
         unsigned __int128 buffer = 0;
         int total_bits = 0;
@@ -224,6 +225,37 @@ class Int64Packer {
                 buffer &= (((unsigned __int128)1 << total_bits) - 1);
             }
         }
+#else
+        // MSVC has no 128-bit integer; fall back to the portable bit-by-bit
+        // loop used before the wide-buffer variant.
+        int byte_idx = offset;
+        int value_idx = 0;
+        int left_bits = 8;
+        int total_bits = 0;
+        while (value_idx < 8) {
+            values[value_idx] = 0;
+            total_bits = 0;
+            while (total_bits < width_) {
+                if (width_ - total_bits >= left_bits) {
+                    values[value_idx] <<= left_bits;
+                    values[value_idx] |= static_cast<int64_t>(
+                        buf[byte_idx] & ((1 << left_bits) - 1));
+                    total_bits += left_bits;
+                    byte_idx++;
+                    left_bits = 8;
+                } else {
+                    int t = width_ - total_bits;
+                    values[value_idx] <<= t;
+                    values[value_idx] |= static_cast<int64_t>(
+                        (buf[byte_idx] & ((1 << left_bits) - 1)) >>
+                        (left_bits - t));
+                    left_bits -= t;
+                    total_bits += t;
+                }
+            }
+            value_idx++;
+        }
+#endif
     }
 
     /**
