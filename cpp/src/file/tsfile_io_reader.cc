@@ -904,8 +904,6 @@ int TsFileIOReader::get_timeseries_indexes(
     int ret = E_OK;
     std::shared_ptr<IMetaIndexEntry> device_index_entry;
     int64_t device_ie_end_offset = 0;
-    std::shared_ptr<IMetaIndexEntry> measurement_index_entry;
-    int64_t measurement_ie_end_offset = 0;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), device_index_entry,
             device_ie_end_offset))) {
@@ -936,48 +934,85 @@ int TsFileIOReader::get_timeseries_indexes(
     }
 
     bool is_aligned = is_aligned_device(top_node);
-    TimeseriesIndex* timeseries_index = nullptr;
+    TimeseriesIndex* time_timeseries_index = nullptr;
     if (is_aligned) {
-        if (RET_FAIL(
-                get_time_column_metadata(top_node, timeseries_index, pa))) {
+        if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index,
+                                              pa))) {
             return ret;
+        }
+    }
+
+    // Collect every measurement leaf once and read the whole (contiguous)
+    // timeseries-index range in a single pread, then deserialize each index
+    // directly into `pa`. The previous path did a binary search + a separate
+    // pread + a deserialize-into-temp-arena + clone per measurement (4500x for
+    // a wide table), which dominated index loading.
+    std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
+        leaf_entries;
+    if (RET_FAIL(get_all_leaf(top_node, leaf_entries, pa))) {
+        return ret;
+    }
+
+    std::unordered_map<std::string, ITimeseriesIndex*> name_to_index;
+    if (!leaf_entries.empty()) {
+        const int64_t ts_start_offset =
+            leaf_entries.front().first->get_offset();
+        const int64_t ts_end_offset = leaf_entries.back().second;
+        const int32_t ts_read_size = (int32_t)(ts_end_offset - ts_start_offset);
+        int32_t ts_read_len = 0;
+        char* ts_buf = (char*)pa.alloc(ts_read_size);
+        if (IS_NULL(ts_buf)) {
+            return E_OOM;
+        }
+        if (RET_FAIL(read_file_->read(ts_start_offset, ts_buf, ts_read_size,
+                                      ts_read_len))) {
+            return ret;
+        } else if (ts_read_len != ts_read_size) {
+            return E_FILE_READ_ERR;
+        }
+        ByteStream bs;
+        bs.wrap_from(ts_buf, ts_read_size);
+        while (bs.has_remaining()) {
+            const uint64_t relative_start = bs.read_pos();
+            void* ts_idx_buf = pa.alloc(sizeof(TimeseriesIndex));
+            if (IS_NULL(ts_idx_buf)) {
+                return E_OOM;
+            }
+            TimeseriesIndex* ts_idx = new (ts_idx_buf) TimeseriesIndex;
+            if (RET_FAIL(ts_idx->deserialize_from(bs, &pa))) {
+                return ret;
+            }
+            if (bs.read_pos() < relative_start ||
+                bs.read_pos() - relative_start > UINT32_MAX) {
+                return E_OVERFLOW;
+            }
+            ts_idx->set_metadata_range(
+                ts_start_offset + relative_start,
+                static_cast<uint32_t>(bs.read_pos() - relative_start));
+            if (ts_idx->get_measurement_name().len_ == 0) continue;
+            const std::string name =
+                ts_idx->get_measurement_name().to_std_string();
+            if (is_aligned) {
+                void* aligned_buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
+                if (IS_NULL(aligned_buf)) {
+                    return E_OOM;
+                }
+                AlignedTimeseriesIndex* aligned_ts_idx =
+                    new (aligned_buf) AlignedTimeseriesIndex;
+                aligned_ts_idx->value_ts_idx_ = ts_idx;
+                aligned_ts_idx->time_ts_idx_ = time_timeseries_index;
+                name_to_index[name] = aligned_ts_idx;
+            } else {
+                name_to_index[name] = ts_idx;
+            }
         }
     }
 
     int64_t idx = 0;
     for (const auto& measurement_name : measurement_names) {
-        timeseries_indexs[idx] = nullptr;
-        ret = load_measurement_index_entry(measurement_name, top_node,
-                                           measurement_index_entry,
-                                           measurement_ie_end_offset, pa);
-        if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_NOT_EXIST) {
-            ret = E_OK;
-            idx++;
-            continue;
-        }
-        if (RET_FAIL(ret)) {
-            return ret;
-        }
-
-        ret = do_load_timeseries_index(
-            measurement_name, measurement_index_entry->get_offset(),
-            measurement_ie_end_offset, pa, timeseries_indexs[idx], is_aligned);
-        if (ret == E_NOT_EXIST) {
-            ret = E_OK;
-            idx++;
-            continue;
-        }
-        if (RET_FAIL(ret)) {
-            return ret;
-        }
-        if (is_aligned) {
-            AlignedTimeseriesIndex* aligned_timeseries_index =
-                dynamic_cast<AlignedTimeseriesIndex*>(timeseries_indexs[idx]);
-            if (aligned_timeseries_index) {
-                aligned_timeseries_index->time_ts_idx_ = timeseries_index;
-            }
-        }
-
+        const auto it = name_to_index.find(measurement_name);
+        timeseries_indexs[idx] =
+            (it != name_to_index.end()) ? it->second : nullptr;
         idx++;
     }
     return ret;

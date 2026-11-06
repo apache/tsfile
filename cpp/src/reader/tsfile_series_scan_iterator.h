@@ -96,6 +96,20 @@ class TsFileSeriesScanIterator {
         max_block_rows_ = max_block_rows;
     }
 
+    // Optional factory for the output TsBlock. A device-ordered scan reads one
+    // series at a time and would otherwise allocate (and fault in) a fresh
+    // block plus all its per-column buffers for every device. The factory is
+    // handed the exact layout the block must have and may return a matching
+    // block that is reused across series; returning nullptr makes the iterator
+    // allocate a new one. The returned block must already be reset().
+    using TsBlockFactory = common::TsBlock* (*)(void* ctx,
+                                                common::TupleDesc& desc,
+                                                uint32_t max_block_rows);
+    void set_tsblock_factory(TsBlockFactory factory, void* ctx) {
+        tsblock_factory_ = factory;
+        tsblock_factory_ctx_ = ctx;
+    }
+
     /** Current row offset/limit after chunk/page skip; used to sync with QDS
      * for single-path. */
     int get_row_offset() const { return row_offset_; }
@@ -215,6 +229,8 @@ class TsFileSeriesScanIterator {
         ChunkMeta* time_cm, const std::vector<ChunkMeta*>& value_cms);
     common::TsBlock* alloc_tsblock();
     common::TsBlock* alloc_tsblock_multi();
+    // Reuse a block supplied by tsblock_factory_, or allocate a new one.
+    common::TsBlock* alloc_or_reuse_tsblock();
 
    private:
     RandomAccessReadFile* read_file_;
@@ -247,6 +263,8 @@ class TsFileSeriesScanIterator {
     uint32_t max_block_rows_;
     int row_offset_;
     int row_limit_;
+    TsBlockFactory tsblock_factory_ = nullptr;
+    void* tsblock_factory_ctx_ = nullptr;
 };
 
 }  // end namespace storage

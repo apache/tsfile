@@ -32,7 +32,8 @@ TEST(Int64PackerTest, SequentialValues) {
         for (int i = 0; i < 8; ++i) arr[i] = i;
         Int64Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int64_t res[8] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -49,7 +50,7 @@ TEST(Int64PackerTest, PackUnpackSingleBatchRandomPositiveLongs) {
 
     Int64Packer packer(byte_count);
     std::vector<uint64_t> pre_values;
-    std::vector<unsigned char> buffer(count * byte_count);
+    std::vector<unsigned char> buffer(count * byte_count + 8, 0);
     pre_values.reserve(total_values);
 
     int idx = 0;
@@ -72,8 +73,7 @@ TEST(Int64PackerTest, PackUnpackSingleBatchRandomPositiveLongs) {
     }
 
     std::vector<int64_t> result(total_values);
-    packer.unpack_all_values(buffer.data(), static_cast<int>(buffer.size()),
-                             result.data());
+    packer.unpack_all_values(buffer.data(), count * byte_count, result.data());
 
     for (int i = 0; i < total_values; ++i) {
         ASSERT_EQ(result[i], pre_values[i]) << "Mismatch at index " << i;
@@ -124,6 +124,8 @@ TEST(Int64PackerTest, PackAllManualBitWidth) {
 
     std::string packed_data = oss.str();
     ASSERT_EQ(static_cast<int>(packed_data.size()), 2 * bp_bit_width);
+    // +8: the SIMD unpack may read up to 7 bytes past the last group.
+    packed_data.append(8, '\0');
 
     // Decode
     int64_t read_array[16] = {0};
@@ -143,7 +145,8 @@ TEST(Int64PackerTest, AllZeroValues) {
         int64_t arr[NUM_OF_INTS] = {0};
         Int64Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int64_t res[NUM_OF_INTS] = {
             1};  // initialize non-zero to catch failures
@@ -160,7 +163,8 @@ TEST(Int64PackerTest, BoundaryWidthOneAlternating) {
     int64_t arr[NUM_OF_INTS] = {0, 1, 0, 1, 0, 1, 0, 1};
     Int64Packer packer(width);
     const int bufSize = NUM_OF_INTS * width / 8;
-    std::vector<unsigned char> buf(bufSize, 0);
+    // +8: the SIMD unpack may read up to 7 bytes past the last group.
+    std::vector<unsigned char> buf(bufSize + 8, 0);
     packer.pack_8values(arr, 0, buf.data());
     int64_t res[NUM_OF_INTS] = {0};
     packer.unpack_8values(buf.data(), 0, res);
@@ -183,7 +187,8 @@ TEST(Int64PackerTest, MaxWidth64Random) {
         }
         Int64Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int64_t res[NUM_OF_INTS] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -206,7 +211,8 @@ TEST(Int64PackerTest, AllNegative64Random) {
         }
         Int64Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int64_t res[NUM_OF_INTS] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -223,7 +229,7 @@ TEST(Int64PackerTest, UnpackAllValuesMultipleBlocks) {
     const int blocks = 10;
     Int64Packer packer(width);
     std::vector<int64_t> orig(blocks * NUM_OF_INTS);
-    std::vector<unsigned char> buf(blocks * width);
+    std::vector<unsigned char> buf(blocks * width + 8, 0);
 
     // Fill orig with pattern: block * 16 + index
     // Example: block 0 = [0,1,...,7], block 1 = [16,17,...,23], etc.
@@ -238,8 +244,7 @@ TEST(Int64PackerTest, UnpackAllValuesMultipleBlocks) {
 
     std::vector<int64_t> res(blocks * NUM_OF_INTS, 0);
     // Unpack all blocks at once
-    packer.unpack_all_values(buf.data(), static_cast<int>(buf.size()),
-                             res.data());
+    packer.unpack_all_values(buf.data(), blocks * width, res.data());
 
     // Verify each unpacked value matches the original sequence
     for (size_t i = 0; i < orig.size(); ++i) {
