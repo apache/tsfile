@@ -139,6 +139,7 @@ void AlignedChunkReader::destroy() {
     // LeakSanitizer doesn't flag the (rather large) ChunkPageInfo buffers.
     std::vector<ChunkPageInfo>{}.swap(chunk_pages_);
     std::vector<int64_t>{}.swap(page_all_times_);
+    std::vector<size_t>{}.swap(direct_col_off_);
     if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
         time_compressor_->after_uncompress(time_uncompressed_buf_);
         time_uncompressed_buf_ = nullptr;
@@ -1711,6 +1712,7 @@ void AlignedChunkReader::release_current_page_state() {
     direct_page_end_ = 0;
     direct_tsblock_ = nullptr;
     direct_base_row_ = 0;
+    direct_col_off_.clear();
     for (auto* col : value_columns_) {
         if (col->uncompressed_buf != nullptr && col->compressor != nullptr) {
             col->compressor->after_uncompress(col->uncompressed_buf);

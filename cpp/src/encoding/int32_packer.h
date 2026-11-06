@@ -176,6 +176,11 @@ class Int32Packer {
      * @param offset - offset of first byte to be decoded in buf
      * @param values - decoded result , the length of 'values' should be @{link
      * IntPacker#NUM_OF_INTS}
+     *
+     * The SIMD paths gather 8 bytes per value, so the buffer must hold at
+     * least 8 readable bytes past the packed group; callers allocate that
+     * padding (the RLE decoders zero it, the Sprintz decoders size their
+     * block buffer with +8).
      */
     void unpack_8values(const unsigned char buf[], int offset,
                         int32_t values[]) {
