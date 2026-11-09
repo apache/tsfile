@@ -31,7 +31,8 @@ TEST(IntPackerTest, SequentialValues) {
         for (int i = 0; i < 8; ++i) arr[i] = i;
         Int32Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int32_t res[8] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -50,7 +51,8 @@ TEST(IntPackerStressTest, PackUnpackRandomPositiveValues) {
     std::vector<int32_t> pre_values;
     std::vector<unsigned char> buffer;
     pre_values.reserve(total_values);
-    buffer.resize(count * width);
+    // +8: the SIMD unpack may read up to 7 bytes past the last group.
+    buffer.resize(count * width + 8, 0);
     int idx = 0;
     std::srand(12345);  // Optional: deterministic seed
     for (int i = 0; i < count; ++i) {
@@ -68,8 +70,7 @@ TEST(IntPackerStressTest, PackUnpackRandomPositiveValues) {
     }
 
     std::vector<int32_t> res(total_values);
-    packer.unpack_all_values(buffer.data(), static_cast<int>(buffer.size()),
-                             res.data());
+    packer.unpack_all_values(buffer.data(), count * width, res.data());
     std::string diff_msg;
     for (int i = 0; i < total_values; ++i) {
         if (res[i] != pre_values[i]) {
@@ -87,7 +88,8 @@ TEST(Int32PackerTest, AllZeroValues) {
         int32_t arr[NUM_OF_INTS] = {0};
         Int32Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int32_t res[NUM_OF_INTS] = {
             1};  // initialize non-zero to catch failures
@@ -104,7 +106,8 @@ TEST(Int32PackerTest, BoundaryWidthOneAlternating) {
     int32_t arr[NUM_OF_INTS] = {0, 1, 0, 1, 0, 1, 0, 1};
     Int32Packer packer(width);
     const int bufSize = NUM_OF_INTS * width / 8;
-    std::vector<unsigned char> buf(bufSize, 0);
+    // +8: the SIMD unpack may read up to 7 bytes past the last group.
+    std::vector<unsigned char> buf(bufSize + 8, 0);
     packer.pack_8values(arr, 0, buf.data());
     int32_t res[NUM_OF_INTS] = {0};
     packer.unpack_8values(buf.data(), 0, res);
@@ -127,7 +130,8 @@ TEST(Int32PackerTest, MaxWidth32Random) {
         }
         Int32Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int32_t res[NUM_OF_INTS] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -150,7 +154,8 @@ TEST(Int32PackerTest, AllNegative32Random) {
         }
         Int32Packer packer(width);
         const int bufSize = NUM_OF_INTS * width / 8;
-        std::vector<unsigned char> buf(bufSize, 0);
+        // +8: the SIMD unpack may read up to 7 bytes past the last group.
+        std::vector<unsigned char> buf(bufSize + 8, 0);
         packer.pack_8values(arr, 0, buf.data());
         int32_t res[NUM_OF_INTS] = {0};
         packer.unpack_8values(buf.data(), 0, res);
@@ -167,7 +172,7 @@ TEST(Int32PackerTest, UnpackAllValuesMultipleBlocks) {
     const int blocks = 10;
     Int32Packer packer(width);
     std::vector<int32_t> orig(blocks * NUM_OF_INTS);
-    std::vector<unsigned char> buf(blocks * width);
+    std::vector<unsigned char> buf(blocks * width + 8, 0);
 
     // Fill orig with pattern: block * 16 + index
     // Example: block 0 = [0,1,...,7], block 1 = [16,17,...,23], etc.
@@ -182,12 +187,44 @@ TEST(Int32PackerTest, UnpackAllValuesMultipleBlocks) {
 
     std::vector<int32_t> res(blocks * NUM_OF_INTS, 0);
     // Unpack all blocks at once
-    packer.unpack_all_values(buf.data(), static_cast<int>(buf.size()),
-                             res.data());
+    packer.unpack_all_values(buf.data(), blocks * width, res.data());
 
     // Verify each unpacked value matches the original sequence
     for (size_t i = 0; i < orig.size(); ++i) {
         EXPECT_EQ(res[i], orig[i]) << "Index=" << i;
+    }
+}
+
+// unpack_all_values must not require padding past the final group: it decodes
+// the last group from an internal zero-padded copy.
+TEST(Int32PackerTest, UnpackAllValuesWithoutTrailingPadding) {
+    const int width = 16;
+    const int blocks = 10;
+    Int32Packer packer(width);
+    std::vector<int32_t> orig(blocks * NUM_OF_INTS);
+    std::vector<unsigned char> buf(blocks * width);  // exact size, no +8
+    for (int b = 0; b < blocks; ++b) {
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            orig[b * NUM_OF_INTS + i] = (b << 4) | i;
+        }
+        packer.pack_8values(orig.data() + b * NUM_OF_INTS, 0,
+                            buf.data() + b * width);
+    }
+
+    std::vector<int32_t> res(blocks * NUM_OF_INTS, 0);
+    packer.unpack_all_values(buf.data(), blocks * width, res.data());
+    EXPECT_EQ(res, orig);
+}
+
+// A zero width is invalid; unpack_all_values must return instead of looping
+// forever without advancing.
+TEST(Int32PackerTest, ZeroWidthUnpackAllValuesDoesNotHang) {
+    Int32Packer packer(0);
+    unsigned char buf[8] = {0};
+    int32_t out[8] = {7, 7, 7, 7, 7, 7, 7, 7};
+    packer.unpack_all_values(buf, 8, out);
+    for (int i = 0; i < NUM_OF_INTS; ++i) {
+        EXPECT_EQ(out[i], 7);
     }
 }
 

@@ -293,4 +293,296 @@ TEST_F(Int32RleEncoderTest, ResetAfterDecodeNoCrash) {
     ASSERT_EQ(decoded, input);
 }
 
+namespace {
+
+void append_var_uint(std::vector<uint8_t>& out, uint32_t value) {
+    while (value & 0xFFFFFF80u) {
+        out.push_back(static_cast<uint8_t>((value & 0x7F) | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<uint8_t>(value));
+}
+
+// Build one length-prefixed RLE pattern: [length][bit width][body...].
+std::vector<char> make_rle_pattern(uint8_t bit_width,
+                                   const std::vector<uint8_t>& body) {
+    std::vector<uint8_t> pattern;
+    append_var_uint(pattern, static_cast<uint32_t>(body.size() + 1));
+    pattern.push_back(bit_width);
+    pattern.insert(pattern.end(), body.begin(), body.end());
+    return std::vector<char>(pattern.begin(), pattern.end());
+}
+
+std::vector<char> encode_int32_stream(const std::vector<int32_t>& input,
+                                      int split_at = -1) {
+    common::ByteStream stream(1024, common::MOD_ENCODER_OBJ);
+    Int32RleEncoder encoder;
+    for (size_t i = 0; i < input.size(); ++i) {
+        encoder.encode(input[i], stream);
+        if (split_at >= 0 && static_cast<int>(i) + 1 == split_at) {
+            encoder.flush(stream);
+        }
+    }
+    encoder.flush(stream);
+    std::vector<char> out;
+    if (stream.total_size() == 0) {
+        return out;
+    }
+    char* bytes = common::get_bytes_from_bytestream(stream);
+    out.assign(bytes, bytes + stream.total_size());
+    common::mem_free(bytes);
+    return out;
+}
+
+enum DecodeMode { kScalar = 0, kBatch = 1, kMixed = 2 };
+
+std::vector<int32_t> decode_int32(const std::vector<char>& bytes, bool wrapped,
+                                  DecodeMode mode, int capacity) {
+    std::vector<int32_t> out;
+    common::ByteStream owning(1024, common::MOD_DECODER_OBJ);
+    common::ByteStream wrapped_stream;
+    common::ByteStream* in = &owning;
+    if (wrapped) {
+        wrapped_stream.wrap_from(const_cast<char*>(bytes.data()),
+                                 static_cast<int32_t>(bytes.size()));
+        in = &wrapped_stream;
+    } else {
+        owning.write_buf(reinterpret_cast<const uint8_t*>(bytes.data()),
+                         static_cast<uint32_t>(bytes.size()));
+    }
+    Int32RleDecoder decoder;
+    decoder.reset();
+    if (mode == kScalar) {
+        while (decoder.has_remaining(*in)) {
+            int32_t v = 0;
+            if (decoder.read_int32(v, *in) != common::E_OK) {
+                break;
+            }
+            out.push_back(v);
+        }
+    } else if (mode == kBatch) {
+        std::vector<int32_t> buf(static_cast<size_t>(capacity));
+        while (decoder.has_remaining(*in)) {
+            int actual = 0;
+            if (decoder.read_batch_int32(buf.data(), capacity, actual, *in) !=
+                common::E_OK) {
+                break;
+            }
+            if (actual == 0) {
+                break;
+            }
+            out.insert(out.end(), buf.begin(), buf.begin() + actual);
+        }
+    } else {
+        size_t turn = 0;
+        while (decoder.has_remaining(*in)) {
+            if (turn++ % 2 == 0) {
+                int32_t v = 0;
+                if (decoder.read_int32(v, *in) != common::E_OK) {
+                    break;
+                }
+                out.push_back(v);
+            } else {
+                int32_t buf[5];
+                int actual = 0;
+                if (decoder.read_batch_int32(buf, 5, actual, *in) !=
+                    common::E_OK) {
+                    break;
+                }
+                if (actual == 0) {
+                    break;
+                }
+                out.insert(out.end(), buf, buf + actual);
+            }
+        }
+    }
+    return out;
+}
+
+int decode_int32_expect_error(const std::vector<char>& pattern) {
+    common::ByteStream in;
+    in.wrap_from(const_cast<char*>(pattern.data()),
+                 static_cast<int32_t>(pattern.size()));
+    Int32RleDecoder decoder;
+    decoder.reset();
+    int32_t value = 0;
+    return decoder.read_int32(value, in);
+}
+
+int decode_int32_batch_expect_error(const std::vector<char>& pattern) {
+    common::ByteStream in;
+    in.wrap_from(const_cast<char*>(pattern.data()),
+                 static_cast<int32_t>(pattern.size()));
+    Int32RleDecoder decoder;
+    decoder.reset();
+    int32_t values[8];
+    int actual = 0;
+    return decoder.read_batch_int32(values, 8, actual, in);
+}
+
+std::vector<std::vector<char>> malformed_patterns() {
+    std::vector<std::vector<char>> patterns;
+    // last_bit_packed_num = 0 (encoders write 1..8).
+    {
+        std::vector<uint8_t> body;
+        append_var_uint(body, (1u << 1) | 1u);
+        body.push_back(0);
+        body.insert(body.end(), 8, 0);
+        patterns.push_back(make_rle_pattern(8, body));
+    }
+    // last_bit_packed_num > 8.
+    {
+        std::vector<uint8_t> body;
+        append_var_uint(body, (1u << 1) | 1u);
+        body.push_back(9);
+        body.insert(body.end(), 8, 0);
+        patterns.push_back(make_rle_pattern(8, body));
+    }
+    // Group count claims more bytes than the pattern holds.
+    {
+        std::vector<uint8_t> body;
+        append_var_uint(body, (100u << 1) | 1u);
+        body.push_back(8);
+        body.insert(body.end(), 8, 0);
+        patterns.push_back(make_rle_pattern(8, body));
+    }
+    // The pre-fix overflow: width 255 * group count 0x01010101 wraps uint32.
+    {
+        std::vector<uint8_t> body;
+        append_var_uint(body, (0x01010101u << 1) | 1u);
+        body.push_back(8);
+        body.insert(body.end(), 16, 0);
+        patterns.push_back(make_rle_pattern(255, body));
+    }
+    // Invalid bit width 0.
+    {
+        std::vector<uint8_t> body;
+        append_var_uint(body, (1u << 1) | 1u);
+        body.push_back(8);
+        body.insert(body.end(), 8, 0);
+        patterns.push_back(make_rle_pattern(0, body));
+    }
+    // Length prefix larger than the available bytes.
+    {
+        std::vector<char> truncated;
+        truncated.push_back(32);  // claims 32 bytes
+        truncated.push_back(8);
+        truncated.push_back(3);
+        truncated.push_back(8);
+        truncated.push_back(0);
+        patterns.push_back(truncated);
+    }
+    return patterns;
+}
+
+}  // namespace
+
+TEST_F(Int32RleEncoderTest, BatchDecodeMatchesScalar) {
+    std::vector<std::vector<int32_t>> cases;
+    cases.push_back(std::vector<int32_t>(64, 0));
+    cases.push_back(std::vector<int32_t>(300, -7));
+    {
+        std::vector<int32_t> ascending;
+        for (int i = 0; i < 257; ++i) {
+            ascending.push_back(i);
+        }
+        cases.push_back(ascending);
+    }
+    {
+        std::vector<int32_t> random_values;
+        for (int i = 0; i < 513; ++i) {
+            random_values.push_back(static_cast<int32_t>(std::rand()));
+        }
+        cases.push_back(random_values);
+    }
+    {
+        std::vector<int32_t> negative_values;
+        for (int i = 0; i < 257; ++i) {
+            negative_values.push_back(
+                -1 - static_cast<int32_t>(std::rand() & 0x7FFFFFFF));
+        }
+        cases.push_back(negative_values);
+    }
+    cases.push_back(
+        std::vector<int32_t>({std::numeric_limits<int32_t>::min(),
+                              std::numeric_limits<int32_t>::max(), 0, -1, 1}));
+
+    for (size_t c = 0; c < cases.size(); ++c) {
+        const std::vector<int32_t>& input = cases[c];
+        const std::vector<char> bytes = encode_int32_stream(input);
+        ASSERT_EQ(decode_int32(bytes, false, kScalar, 0), input)
+            << "case=" << c;
+        ASSERT_EQ(decode_int32(bytes, true, kScalar, 0), input) << "case=" << c;
+        for (int capacity : {1, 3, 7, 64, 129, 1024}) {
+            ASSERT_EQ(decode_int32(bytes, false, kBatch, capacity), input)
+                << "case=" << c << " capacity=" << capacity;
+            ASSERT_EQ(decode_int32(bytes, true, kBatch, capacity), input)
+                << "case=" << c << " capacity=" << capacity;
+        }
+        ASSERT_EQ(decode_int32(bytes, true, kMixed, 0), input) << "case=" << c;
+    }
+}
+
+TEST_F(Int32RleEncoderTest, BatchDecodeSpansMultiplePatterns) {
+    std::vector<int32_t> input;
+    for (int i = 0; i < 200; ++i) {
+        input.push_back(i % 17);
+    }
+    // Two length-prefixed patterns in one stream; a single large batch call
+    // has to cross the pattern boundary.
+    const std::vector<char> bytes = encode_int32_stream(input, 37);
+    for (int capacity : {1, 37, 129, 1024}) {
+        ASSERT_EQ(decode_int32(bytes, true, kBatch, capacity), input)
+            << "capacity=" << capacity;
+    }
+}
+
+TEST_F(Int32RleEncoderTest, MalformedBitPackedInputIsRejected) {
+    const std::vector<std::vector<char>> patterns = malformed_patterns();
+    for (size_t i = 0; i < patterns.size(); ++i) {
+        EXPECT_NE(decode_int32_expect_error(patterns[i]), common::E_OK)
+            << "scalar malformed case " << i;
+        EXPECT_NE(decode_int32_batch_expect_error(patterns[i]), common::E_OK)
+            << "batch malformed case " << i;
+    }
+}
+
+TEST_F(Int32RleEncoderTest, ResetDropsBorrowedPatternView) {
+    std::vector<int32_t> first;
+    for (int i = 0; i < 100; ++i) {
+        first.push_back(i);
+    }
+    std::vector<int32_t> second;
+    for (int i = 0; i < 50; ++i) {
+        second.push_back(1000 + i);
+    }
+    std::vector<char> first_bytes = encode_int32_stream(first);
+    std::vector<char> second_bytes = encode_int32_stream(second);
+
+    common::ByteStream in;
+    in.wrap_from(first_bytes.data(), static_cast<int32_t>(first_bytes.size()));
+    Int32RleDecoder decoder;
+    decoder.reset();
+    int32_t value = 0;
+    ASSERT_EQ(decoder.read_int32(value, in), common::E_OK);
+    EXPECT_EQ(value, first[0]);
+
+    // Abandon the first pattern and switch to a second wrapped buffer.
+    decoder.reset();
+    // reset() must drop the borrowed view: an empty stream must not look
+    // like a partially consumed pattern.
+    common::ByteStream empty;
+    EXPECT_FALSE(decoder.has_remaining(empty));
+    in.wrap_from(second_bytes.data(),
+                 static_cast<int32_t>(second_bytes.size()));
+    std::vector<int32_t> decoded;
+    while (decoder.has_remaining(in)) {
+        if (decoder.read_int32(value, in) != common::E_OK) {
+            break;
+        }
+        decoded.push_back(value);
+    }
+    EXPECT_EQ(decoded, second);
+}
+
 }  // namespace storage

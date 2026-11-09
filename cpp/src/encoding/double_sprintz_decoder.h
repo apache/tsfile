@@ -127,10 +127,17 @@ class DoubleSprintzDecoder : public SprintzDecoder {
                 }
             }
         } else {
+            if (bit_width_ > 64) {
+                // Int64Packer supports at most 64 bits per value; the header
+                // byte is not otherwise validated.
+                return common::E_DECODE_ERR;
+            }
             decode_size_ = block_size_ + 1;
             common::SerializationUtil::read_double(pre_value_, input);
             current_buffer_[0] = pre_value_;
-            std::vector<uint8_t> pack_buf(bit_width_);
+            // +8 zero bytes: the SIMD unpack gathers 8 bytes per value and
+            // may read up to 7 bytes past the packed group.
+            std::vector<uint8_t> pack_buf(bit_width_ + 8, 0);
             uint32_t read_len = 0;
             input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
                            read_len);
