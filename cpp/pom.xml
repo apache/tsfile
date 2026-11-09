@@ -35,13 +35,12 @@
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
         <!--
-            Sanitizer details used when enable.asan is ON. The binding build
+            Sanitizer check set used when enable.asan is ON. The binding build
             (-Dtsfile.sanitizer=address) activates the with-sanitizer profile,
-            which selects the address-only check set and a dynamically linked
-            runtime that Python can preload.
+            which selects the address-only check set that setup.py applies to
+            the Cython extensions as well.
         -->
         <tsfile.sanitizer.checks>address,undefined</tsfile.sanitizer.checks>
-        <tsfile.sanitizer.shared.runtime>OFF</tsfile.sanitizer.shared.runtime>
         <build.test>ON</build.test>
         <tsfile.build.shared>ON</tsfile.build.shared>
         <tsfile.dependency.source>BUNDLED</tsfile.dependency.source>
@@ -119,7 +118,6 @@
                                 <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
                                 <option>-DENABLE_ASAN=${enable.asan}</option>
                                 <option>-DTSFILE_SANITIZER_CHECKS=${tsfile.sanitizer.checks}</option>
-                                <option>-DTSFILE_SANITIZER_SHARED_RUNTIME=${tsfile.sanitizer.shared.runtime}</option>
                                 <option>-DBUILD_TEST=${build.test}</option>
                                 <option>-DTSFILE_BUILD_SHARED=${tsfile.build.shared}</option>
                                 <option>-DTSFILE_DEPENDENCY_SOURCE=${tsfile.dependency.source}</option>
@@ -305,9 +303,10 @@
             <id>with-sanitizer</id>
             <!--
                 Activated by -Dtsfile.sanitizer=<checks> (for example
-                -Dtsfile.sanitizer=address). Selects ASan, keeps the sanitizer
-                runtime dynamic, and lets setup.py instrument every Python
-                extension with the same check set.
+                -Dtsfile.sanitizer=address). Selects ASan and lets setup.py
+                instrument every Python extension with the same check set.
+                libtsfile and the extensions share one dynamically linked
+                sanitizer runtime, which the interpreter preloads.
             -->
             <activation>
                 <property>
@@ -317,7 +316,6 @@
             <properties>
                 <enable.asan>ON</enable.asan>
                 <tsfile.sanitizer.checks>${tsfile.sanitizer}</tsfile.sanitizer.checks>
-                <tsfile.sanitizer.shared.runtime>ON</tsfile.sanitizer.shared.runtime>
             </properties>
         </profile>
         <profile>

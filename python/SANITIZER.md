@@ -43,10 +43,11 @@ across the language boundary.
 
 The CI job runs on `ubuntu-24.04` with the distribution GCC and Python 3.11.
 
-The C++-only `ENABLE_ASAN` jobs keep their historical static-runtime
-configuration; this mode is the coordinated C++ + bindings build, where the
-sanitizer compile flags are also re-applied after the bundled third-party
-projects reset `CMAKE_CXX_FLAGS`.
+Every `ENABLE_ASAN` build (C++ only or with bindings) now compiles the TsFile
+targets with `-fsanitize` and links the sanitizer runtime dynamically;
+`third_party` code stays uninstrumented. The bindings build additionally
+instruments the Cython extensions and preloads the single shared runtime into
+the interpreter.
 
 ## Build
 
@@ -64,9 +65,9 @@ projects reset `CMAKE_CXX_FLAGS`.
 `-Dtsfile.sanitizer=<checks>` is the single switch. It:
 
 * enables `ENABLE_ASAN` and passes `<checks>` to `-fsanitize=` for the C++
-  library, adding the same flags to the shared-library link step;
-* keeps the sanitizer runtime dynamic (`TSFILE_SANITIZER_SHARED_RUNTIME=ON`) so
-  one preloaded runtime can serve Python, the extensions and `libtsfile`;
+  library, adding the same flags to the shared-library and executable links;
+* keeps the sanitizer runtime dynamically linked so one preloaded runtime can
+  serve Python, the extensions and `libtsfile`;
 * exports `TSFILE_SANITIZER=<checks>` to `setup.py`, which instruments every
   extension (including `python_random_access_read_file.cc`) and verifies the
   result;
@@ -85,8 +86,8 @@ separately, as described below).
 ### Direct CMake + setup.py
 
 ```bash
-# 1. C++ library, dynamic sanitizer runtime
-bash cpp/build.sh -t=RelWithDebInfo -a=ON --sanitizer-shared-runtime=ON
+# 1. C++ library with dynamic sanitizer runtime
+bash cpp/build.sh -t=RelWithDebInfo -a=ON
 
 # 2. Point setup.py at that build and instrument the extensions
 cd python
